@@ -203,6 +203,34 @@ fn image_io_contains_the_codec_boundary() {
 }
 
 #[test]
+fn metadata_owns_exif_parsing_without_reaching_upward() {
+    let metadata = metadata();
+    let package = package_object(&metadata, "rusttable-metadata");
+    for required in ["rusttable-core", "rusttable-image", "kamadak-exif"] {
+        assert!(
+            package.contains(&format!("\"name\":\"{required}\"")),
+            "metadata is missing required dependency {required}: {package}"
+        );
+    }
+    for forbidden in [
+        "rusttable-app",
+        "rusttable-catalog-store",
+        "rusttable-image-io",
+        "rusttable-processing",
+        "rusttable-render",
+        "iced",
+        "gtk",
+        "bindgen",
+        "cmake",
+    ] {
+        assert!(
+            !package.contains(&format!("\"name\":\"{forbidden}\"")),
+            "metadata contains forbidden dependency {forbidden}: {package}"
+        );
+    }
+}
+
+#[test]
 fn render_depends_only_on_the_three_intended_lower_layers() {
     let metadata = metadata();
     let render = package_object(&metadata, "rusttable-render");
