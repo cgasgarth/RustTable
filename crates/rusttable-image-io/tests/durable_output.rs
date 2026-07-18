@@ -65,3 +65,19 @@ fn durable_jpeg_publishes_with_explicit_options() {
     );
     fs::remove_file(destination).expect("output removes");
 }
+
+#[test]
+fn durable_tiff_publishes_one_classic_image() {
+    let destination = destination("tiff.jpg");
+    let output = FileImageOutput::new(OutputLimits::new(4096).expect("limit"));
+    let receipt = output
+        .write_new_durable(&image(), &destination, OutputOptions::Tiff)
+        .expect("directory sync should be supported");
+    assert_eq!(receipt.format(), rusttable_image::OutputFormat::Tiff);
+    assert!(
+        fs::read(&destination)
+            .expect("output reads")
+            .starts_with(b"II*\0")
+    );
+    fs::remove_file(destination).expect("output removes");
+}

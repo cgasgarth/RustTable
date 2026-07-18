@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = "Explicit JPEG and PNG file input for `RustTable`."]
+#![doc = "Bounded JPEG, PNG, and classic-TIFF file input/output for `RustTable`."]
 
 mod input;
 mod output;
