@@ -3,6 +3,7 @@ members = [
     "crates/rusttable-app",
     "crates/rusttable-catalog",
     "crates/rusttable-core",
+    "crates/rusttable-catalog-store",
     "crates/rusttable-image",
     "crates/rusttable-image-io",
 ]

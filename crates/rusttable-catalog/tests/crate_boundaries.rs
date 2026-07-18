@@ -100,6 +100,9 @@ fn catalog_boundary_has_no_forbidden_integration_dependencies() {
         "bindgen",
         "cmake",
         "database",
+        "redb",
+        "postcard",
+        "serde",
         "jpeg",
         "png",
         "processing",
@@ -108,6 +111,39 @@ fn catalog_boundary_has_no_forbidden_integration_dependencies() {
         assert!(
             !catalog.contains(&format!("\"name\":\"{forbidden}\"")),
             "catalog contains forbidden dependency {forbidden}: {catalog}"
+        );
+    }
+}
+
+#[test]
+fn catalog_store_owns_persistence_dependencies() {
+    let metadata = metadata();
+    let store = package_object(&metadata, "rusttable-catalog-store");
+
+    for required in [
+        "rusttable-catalog",
+        "rusttable-core",
+        "rusttable-image",
+        "redb",
+        "postcard",
+        "serde",
+    ] {
+        assert!(
+            store.contains(&format!("\"name\":\"{required}\"")),
+            "catalog-store is missing required dependency {required}: {store}"
+        );
+    }
+    for forbidden in [
+        "rusttable-app",
+        "rusttable-image-io",
+        "iced",
+        "gtk",
+        "processing",
+        "ffi",
+    ] {
+        assert!(
+            !store.contains(&format!("\"name\":\"{forbidden}\"")),
+            "catalog-store contains forbidden dependency {forbidden}: {store}"
         );
     }
 }
