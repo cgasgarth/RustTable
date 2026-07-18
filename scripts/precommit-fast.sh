@@ -27,6 +27,10 @@ run_checks() {
   policy_pid=$!
   bun run test:computer-use >"$temporary_directory/computer-use.log" 2>&1 &
   computer_use_pid=$!
+  bash scripts/dev/test-doctor.sh >"$temporary_directory/doctor.log" 2>&1 &
+  doctor_pid=$!
+  bash scripts/dev/test-readme-contract.sh >"$temporary_directory/readme-contract.log" 2>&1 &
+  readme_contract_pid=$!
   bash scripts/test-pr-ci.sh >"$temporary_directory/pr-ci.log" 2>&1 &
   pr_ci_pid=$!
   bun run test:repository-policy >"$temporary_directory/repository-policy.log" 2>&1 &
@@ -48,6 +52,14 @@ run_checks() {
   if ! wait "$computer_use_pid"; then
     status=1
     cat "$temporary_directory/computer-use.log" >&2
+  fi
+  if ! wait "$doctor_pid"; then
+    status=1
+    cat "$temporary_directory/doctor.log" >&2
+  fi
+  if ! wait "$readme_contract_pid"; then
+    status=1
+    cat "$temporary_directory/readme-contract.log" >&2
   fi
   if ! wait "$pr_ci_pid"; then
     status=1
