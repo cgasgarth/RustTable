@@ -35,10 +35,20 @@ cheap_pids[4]=$!
   cheap_pids[7]=$!
   run_check workspace-rust-version bash -c 'bun run test:workspace-rust-version && bun run check:workspace-rust-version' &
   cheap_pids[8]=$!
+cheap_index=9
+if [[ "${RUSTTABLE_SKIP_BUN_PIN_REGRESSION:-0}" != 1 ]]; then
+  cheap_labels+=(bun-pin-fixtures bun-pin-policy)
+  run_check bun-pin-fixtures bash scripts/test-bun-pin.sh &
+  cheap_pids[$cheap_index]=$!
+  cheap_index=$((cheap_index + 1))
+  run_check bun-pin-policy bash scripts/check-bun-toolchain-policy.sh &
+  cheap_pids[$cheap_index]=$!
+  cheap_index=$((cheap_index + 1))
+fi
 if [[ "${RUSTTABLE_SKIP_PR_CI_REGRESSION:-0}" != 1 ]]; then
   cheap_labels+=(pr-ci)
   run_check pr-ci bash scripts/test-pr-ci.sh &
-  cheap_pids[9]=$!
+  cheap_pids[$cheap_index]=$!
 fi
 
 cheap_status=0

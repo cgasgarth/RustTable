@@ -39,6 +39,10 @@ run_checks() {
   repository_policy_pid=$!
   bash scripts/test-dependency-security.sh >"$temporary_directory/security.log" 2>&1 &
   security_pid=$!
+  bash scripts/test-bun-pin.sh >"$temporary_directory/bun-pin-fixtures.log" 2>&1 &
+  bun_pin_fixtures_pid=$!
+  bash scripts/check-bun-toolchain-policy.sh >"$temporary_directory/bun-pin-policy.log" 2>&1 &
+  bun_pin_policy_pid=$!
   if ! wait "$format_pid"; then
     status=1
     cat "$temporary_directory/fmt.log" >&2
@@ -78,6 +82,14 @@ run_checks() {
   if ! wait "$security_pid"; then
     status=1
     cat "$temporary_directory/security.log" >&2
+  fi
+  if ! wait "$bun_pin_fixtures_pid"; then
+    status=1
+    cat "$temporary_directory/bun-pin-fixtures.log" >&2
+  fi
+  if ! wait "$bun_pin_policy_pid"; then
+    status=1
+    cat "$temporary_directory/bun-pin-policy.log" >&2
   fi
   return "$status"
 }

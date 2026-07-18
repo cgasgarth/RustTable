@@ -69,7 +69,7 @@ run_pr_ci() {
   local output="$2"
   : >"$FAKE_MARKERS"
   local status=0
-  if FAKE_FAILS="$behavior" RUSTTABLE_SKIP_PR_CI_REGRESSION=1 PATH="$fake_tools:$PATH" \
+  if FAKE_FAILS="$behavior" RUSTTABLE_SKIP_BUN_PIN_REGRESSION=1 RUSTTABLE_SKIP_PR_CI_REGRESSION=1 PATH="$fake_tools:$PATH" \
     /bin/bash "$root_directory/scripts/pr-ci.sh" >"$output" 2>&1; then
     status=0
   else
