@@ -3,6 +3,7 @@ name = "rusttable-render"
 description = "Pure decoded-image render coordination for RustTable."
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [dependencies]

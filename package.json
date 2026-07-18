@@ -7,6 +7,8 @@
     "test:computer-use": "bun test scripts/dev/computer-use-app-install.test.ts scripts/dev/rusttable-app-bundle.test.ts",
     "test:doctor": "bash scripts/dev/test-doctor.sh",
     "test:readme-contract": "bash scripts/dev/test-readme-contract.sh",
+    "test:workspace-rust-version": "bun test scripts/workspace-rust-version.test.ts",
+    "check:workspace-rust-version": "bun scripts/workspace-rust-version.ts",
     "test:pr-ci": "bash scripts/test-pr-ci.sh",
     "test:repository-policy": "bun test scripts/github/repository-policy.test.ts",
     "check:repository-policy": "bun scripts/github/repository-policy.ts",

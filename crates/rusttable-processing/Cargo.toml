@@ -3,6 +3,7 @@ name = "rusttable-processing"
 description = "Compiled operation data for the RustTable processing pipeline."
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [dependencies]

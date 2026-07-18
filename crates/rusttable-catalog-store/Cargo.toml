@@ -3,6 +3,7 @@ name = "rusttable-catalog-store"
 description = "Transactional embedded persistence adapter for RustTable import records."
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [dependencies]

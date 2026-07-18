@@ -4,6 +4,7 @@ description = "Bounded single-snapshot image inspection and catalog registration
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 rusttable-catalog = { path = "../rusttable-catalog" }

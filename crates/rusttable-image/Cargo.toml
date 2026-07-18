@@ -3,6 +3,7 @@ name = "rusttable-image"
 description = "Codec-neutral image input contracts for RustTable."
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [lints]

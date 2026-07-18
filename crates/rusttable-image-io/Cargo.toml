@@ -3,6 +3,7 @@ name = "rusttable-image-io"
 description = "Bounded JPEG, PNG, and classic-TIFF file input/output for RustTable."
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [dependencies]

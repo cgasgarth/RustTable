@@ -4,6 +4,7 @@ description = "Bounded canonical metadata extraction for RustTable image inputs.
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 kamadak-exif = { version = "0.6.1", default-features = false }

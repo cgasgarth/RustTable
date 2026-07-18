@@ -16,7 +16,7 @@ run_check() {
   return "$status"
 }
 
-cheap_labels=(diff fmt metadata source bun repository-policy doctor readme-contract)
+cheap_labels=(diff fmt metadata source bun repository-policy doctor readme-contract workspace-rust-version)
 run_check diff git diff --check &
 cheap_pids[0]=$!
 run_check fmt cargo fmt --all -- --check &
@@ -33,10 +33,12 @@ cheap_pids[4]=$!
   cheap_pids[6]=$!
   run_check readme-contract bash scripts/dev/test-readme-contract.sh &
   cheap_pids[7]=$!
+  run_check workspace-rust-version bash -c 'bun run test:workspace-rust-version && bun run check:workspace-rust-version' &
+  cheap_pids[8]=$!
 if [[ "${RUSTTABLE_SKIP_PR_CI_REGRESSION:-0}" != 1 ]]; then
   cheap_labels+=(pr-ci)
   run_check pr-ci bash scripts/test-pr-ci.sh &
-  cheap_pids[8]=$!
+  cheap_pids[9]=$!
 fi
 
 cheap_status=0
