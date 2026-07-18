@@ -31,6 +31,8 @@ run_checks() {
   doctor_pid=$!
   bash scripts/dev/test-readme-contract.sh >"$temporary_directory/readme-contract.log" 2>&1 &
   readme_contract_pid=$!
+  (bun run test:workspace-rust-version && bun run check:workspace-rust-version) >"$temporary_directory/workspace-rust-version.log" 2>&1 &
+  workspace_rust_version_pid=$!
   bash scripts/test-pr-ci.sh >"$temporary_directory/pr-ci.log" 2>&1 &
   pr_ci_pid=$!
   bun run test:repository-policy >"$temporary_directory/repository-policy.log" 2>&1 &
@@ -60,6 +62,10 @@ run_checks() {
   if ! wait "$readme_contract_pid"; then
     status=1
     cat "$temporary_directory/readme-contract.log" >&2
+  fi
+  if ! wait "$workspace_rust_version_pid"; then
+    status=1
+    cat "$temporary_directory/workspace-rust-version.log" >&2
   fi
   if ! wait "$pr_ci_pid"; then
     status=1

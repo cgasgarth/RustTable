@@ -3,6 +3,7 @@ name = "rusttable-app"
 description = "Iced application shell for RustTable."
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
