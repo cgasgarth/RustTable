@@ -11,6 +11,7 @@ mod command;
 mod error;
 mod import;
 mod repository;
+mod snapshot;
 mod source_path;
 mod state;
 
@@ -21,5 +22,6 @@ pub use import::{
     ImportRecordError, ImportService,
 };
 pub use repository::{ImportRepository, RepositoryError};
+pub use snapshot::{CatalogEntry, CatalogSnapshot, CatalogSnapshotError};
 pub use source_path::{SourcePath, SourcePathError};
 pub use state::CatalogState;
