@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 #![doc = "The `RustTable` iced application shell."]
 
+mod action_button;
 mod app;
 mod bootstrap;
+mod input;
 mod navigation;
 #[cfg_attr(
     not(test),

@@ -1,5 +1,6 @@
 use iced::Task;
 
+use crate::input::{FocusTarget, InputEffect, InputIntent, InputState};
 use crate::navigation::{NavigationIntent, NavigationState};
 use crate::presentation::PhotoWorkspaceViewModel;
 
@@ -8,6 +9,7 @@ pub(crate) struct Shell {
     sidebar_visible: bool,
     navigation: NavigationState,
     photo_workspace: PhotoWorkspaceViewModel,
+    input: InputState,
 }
 
 impl Default for Shell {
@@ -16,6 +18,7 @@ impl Default for Shell {
             sidebar_visible: true,
             navigation: NavigationState::default(),
             photo_workspace: PhotoWorkspaceViewModel::default(),
+            input: InputState::default(),
         }
     }
 }
@@ -41,11 +44,16 @@ impl Shell {
             sidebar_visible: true,
             navigation: NavigationState::default(),
             photo_workspace,
+            input: InputState::default(),
         }
     }
 
     pub(crate) fn photo_workspace(&self) -> &PhotoWorkspaceViewModel {
         &self.photo_workspace
+    }
+
+    pub(crate) fn is_focused(&self, target: FocusTarget) -> bool {
+        self.input.is_focused(target)
     }
 }
 
@@ -53,13 +61,41 @@ impl Shell {
 pub(crate) enum Message {
     ToggleSidebar,
     Navigate(NavigationIntent),
+    Input(InputIntent),
 }
 
 pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match message {
-        Message::ToggleSidebar => shell.sidebar_visible = !shell.sidebar_visible,
+        Message::ToggleSidebar => {
+            shell.sidebar_visible = !shell.sidebar_visible;
+            shell
+                .input
+                .reconcile(shell.sidebar_visible, shell.route(), &shell.photo_workspace);
+        }
         Message::Navigate(intent) => {
             let _ = shell.navigation.apply(intent);
+            shell.input.note_navigation(intent, &shell.photo_workspace);
+            shell
+                .input
+                .reconcile(shell.sidebar_visible, shell.route(), &shell.photo_workspace);
+        }
+        Message::Input(intent) => {
+            let effect = shell.input.apply(
+                intent,
+                shell.sidebar_visible,
+                shell.route(),
+                &shell.photo_workspace,
+            );
+            match effect {
+                InputEffect::None => {}
+                InputEffect::ToggleSidebar => shell.sidebar_visible = !shell.sidebar_visible,
+                InputEffect::Navigate(navigation) => {
+                    let _ = shell.navigation.apply(navigation);
+                }
+            }
+            shell
+                .input
+                .reconcile(shell.sidebar_visible, shell.route(), &shell.photo_workspace);
         }
     }
     Task::none()
@@ -67,6 +103,7 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
 
 #[cfg(test)]
 mod tests {
+    use crate::input::InputState;
     use crate::navigation::NavigationState;
     use crate::presentation::PhotoWorkspaceViewModel;
 
@@ -80,6 +117,7 @@ mod tests {
                 sidebar_visible: true,
                 navigation: NavigationState::default(),
                 photo_workspace: PhotoWorkspaceViewModel::default(),
+                input: InputState::default(),
             }
         );
     }

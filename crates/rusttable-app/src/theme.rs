@@ -8,9 +8,14 @@ pub(crate) const PHOTO_GRID_COLUMNS: usize = 3;
 pub(crate) const PHOTO_CARD_WIDTH: f32 = 150.0;
 pub(crate) const PHOTO_CARD_HEIGHT: f32 = 140.0;
 pub(crate) const PHOTO_GRID_SPACING: f32 = 12.0;
+pub(crate) const FOCUS_OUTLINE_WIDTH: f32 = 2.0;
 
 pub(crate) fn theme(_: &Shell) -> iced::Theme {
     iced::Theme::Dark
+}
+
+pub(crate) fn focus_outline() -> iced::Border {
+    iced::border::color(iced::Color::from_rgb(0.3, 0.7, 1.0)).width(FOCUS_OUTLINE_WIDTH)
 }
 
 #[cfg(test)]
