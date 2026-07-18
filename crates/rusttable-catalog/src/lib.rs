@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 #![doc = "Catalog state and use cases for `RustTable`."]
-#![doc = "Normal dependencies flow from this crate to `rusttable-core`; UI, I/O, and processing stay outside it."]
+#![doc = "Normal dependencies flow from this crate to `rusttable-core` and `rusttable-image`; codecs, UI, and processing stay outside it."]
 
 /// Identifies the catalog crate's current dependency boundary.
 #[must_use]
@@ -9,8 +9,17 @@ pub const fn dependency_direction() -> &'static str {
 }
 mod command;
 mod error;
+mod import;
+mod repository;
+mod source_path;
 mod state;
 
 pub use command::CatalogCommand;
 pub use error::CatalogError;
+pub use import::{
+    ImportCandidate, ImportCandidateError, ImportError, ImportOutcome, ImportRecord,
+    ImportRecordError, ImportService,
+};
+pub use repository::{ImportRepository, RepositoryError};
+pub use source_path::{SourcePath, SourcePathError};
 pub use state::CatalogState;
