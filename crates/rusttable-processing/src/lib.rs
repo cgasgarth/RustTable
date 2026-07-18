@@ -11,6 +11,7 @@
 mod color;
 mod evaluate;
 mod operation;
+mod output;
 mod pipeline;
 mod scalar;
 
@@ -21,5 +22,9 @@ pub use color::{
 };
 pub use evaluate::{EvaluationError, evaluate};
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
+pub use output::{
+    ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,
+    encode_linear_srgb,
+};
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
