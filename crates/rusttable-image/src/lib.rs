@@ -11,7 +11,10 @@ pub use image::{
     ColorEncoding, DecodedImage, DecodedImageError, ImageDimensions, ImageDimensionsError,
     PixelLayout,
 };
-pub use input::{DecodeLimits, DecodeLimitsError, ImageInput, ImageInputError, ImageProbe};
+pub use input::{
+    DecodeLimits, DecodeLimitsError, ImageInput, ImageInputError, ImageProbe,
+    UnsupportedImageFeature,
+};
 pub use output::{
     ImageOutput, ImageOutputError, JpegQuality, JpegQualityError, OutputFormat, OutputLimits,
     OutputLimitsError, OutputOptions, OutputReceipt, OutputReceiptError, SUPPORTED_OUTPUT_FORMATS,

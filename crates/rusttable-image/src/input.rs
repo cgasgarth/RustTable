@@ -124,6 +124,10 @@ pub enum ImageInputError {
     UnsupportedSignature {
         signature: Vec<u8>,
     },
+    UnsupportedFeature {
+        format: InputFormat,
+        reason: UnsupportedImageFeature,
+    },
     MalformedInput {
         format: InputFormat,
         message: String,
@@ -152,6 +156,16 @@ pub enum ImageInputError {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsupportedImageFeature {
+    BigTiff,
+    MultipleImages,
+    BitDepth,
+    SampleFormat,
+    ColorModel,
+    PlanarConfiguration,
+}
+
 impl fmt::Display for ImageInputError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -161,6 +175,12 @@ impl fmt::Display for ImageInputError {
             Self::Io { message } => write!(formatter, "image input I/O failed: {message}"),
             Self::UnsupportedSignature { .. } => {
                 formatter.write_str("image signature is unsupported")
+            }
+            Self::UnsupportedFeature { format, reason } => {
+                write!(
+                    formatter,
+                    "unsupported {format:?} image feature: {reason:?}"
+                )
             }
             Self::MalformedInput { format, message } => {
                 write!(formatter, "malformed {format:?} input: {message}")
