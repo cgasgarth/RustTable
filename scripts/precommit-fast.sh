@@ -70,6 +70,7 @@ run_checks() {
   start_check workspace-layout bash -c 'bun run test:workspace-layout && bun run check:workspace-layout'
   start_check pr-ci bash scripts/test-pr-ci.sh
   start_check repository-policy bun run test:repository-policy
+  start_check cache-workflow-policy bash -c 'bun run test:cache-workflow-policy && bun run check:cache-workflow-policy'
   start_check pr-branch-freshness bun run test:pr-branch-freshness
   start_check security bash scripts/test-dependency-security.sh
   start_check bun-pin-fixtures bash scripts/test-bun-pin.sh
