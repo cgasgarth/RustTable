@@ -72,15 +72,29 @@ fn apply_step(step: &PipelineStep, pixels: &mut [LinearRgb]) -> Result<(), Evalu
                     operation_id,
                 }
             })?;
-            apply_channels(pixels, step_index, operation_id, opacity, |value| {
+            apply_channels(pixels, step_index, operation_id, opacity, |_, value| {
                 value * multiplier.get()
             })
         }
         ProcessingOperationKind::LinearOffset { value } => {
-            apply_channels(pixels, step_index, operation_id, opacity, |sample| {
+            apply_channels(pixels, step_index, operation_id, opacity, |_, sample| {
                 sample + value.get()
             })
         }
+        ProcessingOperationKind::RgbGain { red, green, blue } => apply_channels(
+            pixels,
+            step_index,
+            operation_id,
+            opacity,
+            |channel, value| {
+                let gain = match channel {
+                    RgbChannel::Red => red,
+                    RgbChannel::Green => green,
+                    RgbChannel::Blue => blue,
+                };
+                value * gain.get()
+            },
+        ),
     }
 }
 
@@ -92,27 +106,27 @@ fn apply_channels<F>(
     transform: F,
 ) -> Result<(), EvaluationError>
 where
-    F: Fn(f32) -> f32,
+    F: Fn(RgbChannel, f32) -> f32,
 {
     for (pixel_index, pixel) in pixels.iter_mut().enumerate() {
         let current = *pixel;
         if opacity.to_bits() == 1.0f32.to_bits() {
             let red = checked_channel(
-                transform(current.red().get()),
+                transform(RgbChannel::Red, current.red().get()),
                 step_index,
                 operation_id,
                 pixel_index,
                 RgbChannel::Red,
             )?;
             let green = checked_channel(
-                transform(current.green().get()),
+                transform(RgbChannel::Green, current.green().get()),
                 step_index,
                 operation_id,
                 pixel_index,
                 RgbChannel::Green,
             )?;
             let blue = checked_channel(
-                transform(current.blue().get()),
+                transform(RgbChannel::Blue, current.blue().get()),
                 step_index,
                 operation_id,
                 pixel_index,
@@ -122,7 +136,7 @@ where
             continue;
         }
         let red_candidate = checked_channel(
-            transform(current.red().get()),
+            transform(RgbChannel::Red, current.red().get()),
             step_index,
             operation_id,
             pixel_index,
@@ -138,7 +152,7 @@ where
             RgbChannel::Red,
         )?;
         let green_candidate = checked_channel(
-            transform(current.green().get()),
+            transform(RgbChannel::Green, current.green().get()),
             step_index,
             operation_id,
             pixel_index,
@@ -154,7 +168,7 @@ where
             RgbChannel::Green,
         )?;
         let blue_candidate = checked_channel(
-            transform(current.blue().get()),
+            transform(RgbChannel::Blue, current.blue().get()),
             step_index,
             operation_id,
             pixel_index,
