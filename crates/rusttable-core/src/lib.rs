@@ -4,6 +4,7 @@
 
 mod edit;
 mod id;
+mod metadata;
 mod model;
 mod value;
 
@@ -13,6 +14,10 @@ pub use edit::{
     ParameterValue,
 };
 pub use id::{AssetId, EditId, IdParseError, OperationId, PhotoId};
+pub use metadata::{
+    ALL_FIELDS, ImageMetadata, MetadataEntry, MetadataField, MetadataModelError, MetadataText,
+    MetadataTextError, Orientation, OrientationError, PositiveRational, PositiveRationalError,
+};
 pub use model::{Asset, AssetRole, ByteLength, ContentHash, HashAlgorithm, Photo, PhotoBuildError};
 pub use value::{FiniteF64, FiniteF64Error, Revision, RevisionOverflow};
 
