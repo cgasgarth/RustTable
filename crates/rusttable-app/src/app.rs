@@ -1,6 +1,4 @@
-use iced::widget::{button, column, text};
-use iced::{Element, Task};
-use rusttable_core::product_name;
+use iced::Task;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Shell {
@@ -15,6 +13,12 @@ impl Default for Shell {
     }
 }
 
+impl Shell {
+    pub(crate) fn sidebar_visible(&self) -> bool {
+        self.sidebar_visible
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Message {
     ToggleSidebar,
@@ -25,27 +29,6 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
         Message::ToggleSidebar => shell.sidebar_visible = !shell.sidebar_visible,
     }
     Task::none()
-}
-
-pub(crate) fn view(shell: &Shell) -> Element<'_, Message> {
-    let sidebar = if shell.sidebar_visible {
-        text("Sidebar")
-    } else {
-        text("")
-    };
-    let toggle_label = if shell.sidebar_visible {
-        "Hide sidebar"
-    } else {
-        "Show sidebar"
-    };
-
-    column![
-        text(product_name()).size(32),
-        button(text(toggle_label)).on_press(Message::ToggleSidebar),
-        sidebar,
-    ]
-    .spacing(16)
-    .into()
 }
 
 #[cfg(test)]
