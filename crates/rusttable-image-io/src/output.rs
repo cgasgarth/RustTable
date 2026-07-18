@@ -12,6 +12,10 @@ use rusttable_image::{
     DurableOutputStage, ImageOutput, ImageOutputError, JpegQuality, OutputFormat, OutputLimits,
     OutputOptions, OutputReceipt,
 };
+use rusttable_metadata::{
+    CanonicalExifOutput, MetadataImageOutput, MetadataImageOutputError, MetadataOutput,
+    MetadataOutputLimits,
+};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -55,6 +59,57 @@ impl ImageOutput for FileImageOutput {
         )
         .map_err(|_| ImageOutputError::EncodeFailure {
             format: options.format(),
+        })
+    }
+}
+
+impl MetadataImageOutput for FileImageOutput {
+    fn write_new_with_metadata(
+        &self,
+        image: &DecodedImage,
+        metadata: &rusttable_metadata::ImageMetadata,
+        destination: &Path,
+        options: OutputOptions,
+        metadata_limits: MetadataOutputLimits,
+    ) -> Result<OutputReceipt, MetadataImageOutputError> {
+        if options.format() == OutputFormat::Tiff {
+            return Err(MetadataImageOutputError::UnsupportedMetadataOutputFormat {
+                format: OutputFormat::Tiff,
+            });
+        }
+        if metadata.is_empty() {
+            return self
+                .write_new(image, destination, options)
+                .map_err(image_output_error);
+        }
+        validate_destination(destination).map_err(image_output_error)?;
+        if destination.exists() {
+            return Err(image_output_error(ImageOutputError::DestinationExists {
+                path: destination.to_owned(),
+            }));
+        }
+        let encoded = encode(image, options, self.limits).map_err(image_output_error)?;
+        let exif = CanonicalExifOutput::new(metadata_limits)
+            .encode_exif(metadata)
+            .map_err(|source| MetadataImageOutputError::MetadataSerializationFailure { source })?
+            .ok_or(MetadataImageOutputError::MetadataSerializationFailure {
+                source: rusttable_metadata::MetadataOutputError::InternalInvariant {
+                    context: "nonempty metadata produced no EXIF payload",
+                },
+            })?;
+        let encoded = insert_metadata(&encoded, options.format(), exif.as_bytes(), self.limits)?;
+        let temporary = create_temporary(destination).map_err(image_output_error)?;
+        publish(&temporary, destination, &encoded).map_err(image_output_error)?;
+        OutputReceipt::new(
+            destination.to_owned(),
+            options.format(),
+            image.dimensions(),
+            u64::try_from(encoded.len()).unwrap_or(u64::MAX),
+        )
+        .map_err(|_| {
+            image_output_error(ImageOutputError::EncodeFailure {
+                format: options.format(),
+            })
         })
     }
 }
@@ -192,6 +247,270 @@ fn encode(
         });
     }
     Ok(writer.bytes)
+}
+
+fn image_output_error(source: ImageOutputError) -> MetadataImageOutputError {
+    MetadataImageOutputError::BeforePublication { source }
+}
+
+fn insert_metadata(
+    encoded: &[u8],
+    format: OutputFormat,
+    exif: &[u8],
+    limits: OutputLimits,
+) -> Result<Vec<u8>, MetadataImageOutputError> {
+    let extra = match format {
+        OutputFormat::Jpeg => {
+            let actual = u64::try_from(exif.len())
+                .ok()
+                .and_then(|length| length.checked_add(8))
+                .unwrap_or(u64::MAX);
+            if actual > u64::from(u16::MAX) {
+                return Err(MetadataImageOutputError::ExifFramingLimit {
+                    format,
+                    limit: u64::from(u16::MAX),
+                    actual,
+                });
+            }
+            10usize
+                .checked_add(exif.len())
+                .ok_or_else(|| image_output_error(ImageOutputError::AllocationFailure))?
+        }
+        OutputFormat::Png => 12usize
+            .checked_add(exif.len())
+            .ok_or_else(|| image_output_error(ImageOutputError::AllocationFailure))?,
+        OutputFormat::Tiff => {
+            return Err(image_output_error(ImageOutputError::EncodeFailure {
+                format,
+            }));
+        }
+    };
+    let final_length = encoded
+        .len()
+        .checked_add(extra)
+        .ok_or_else(|| image_output_error(ImageOutputError::AllocationFailure))?;
+    let actual = u64::try_from(final_length).unwrap_or(u64::MAX);
+    if actual > limits.max_encoded_bytes() {
+        return Err(image_output_error(
+            ImageOutputError::EncodedOutputTooLarge {
+                limit: limits.max_encoded_bytes(),
+                actual,
+            },
+        ));
+    }
+    match format {
+        OutputFormat::Jpeg => insert_jpeg(encoded, exif, final_length),
+        OutputFormat::Png => insert_png(encoded, exif, final_length),
+        OutputFormat::Tiff => Err(image_output_error(ImageOutputError::EncodeFailure {
+            format,
+        })),
+    }
+}
+
+fn insert_jpeg(
+    encoded: &[u8],
+    exif: &[u8],
+    final_length: usize,
+) -> Result<Vec<u8>, MetadataImageOutputError> {
+    validate_jpeg(encoded).map_err(|reason| {
+        MetadataImageOutputError::MalformedEncodedContainer {
+            format: OutputFormat::Jpeg,
+            reason,
+        }
+    })?;
+    let segment_length = u16::try_from(
+        exif.len()
+            .checked_add(8)
+            .ok_or_else(|| image_output_error(ImageOutputError::AllocationFailure))?,
+    )
+    .map_err(|_| MetadataImageOutputError::ExifFramingLimit {
+        format: OutputFormat::Jpeg,
+        limit: u64::from(u16::MAX),
+        actual: u64::try_from(exif.len()).unwrap_or(u64::MAX),
+    })?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(final_length)
+        .map_err(|_| image_output_error(ImageOutputError::AllocationFailure))?;
+    output.extend_from_slice(&encoded[..2]);
+    output.extend_from_slice(&[0xff, 0xe1]);
+    output.extend_from_slice(&segment_length.to_be_bytes());
+    output.extend_from_slice(b"Exif\0\0");
+    output.extend_from_slice(exif);
+    output.extend_from_slice(&encoded[2..]);
+    Ok(output)
+}
+
+fn validate_jpeg(encoded: &[u8]) -> Result<(), &'static str> {
+    if encoded.len() < 4 || !encoded.starts_with(&[0xff, 0xd8]) {
+        return Err("missing JPEG SOI");
+    }
+    let mut cursor = 2usize;
+    while cursor < encoded.len() {
+        if encoded[cursor] != 0xff {
+            return Err("JPEG marker prefix missing");
+        }
+        while cursor < encoded.len() && encoded[cursor] == 0xff {
+            cursor += 1;
+        }
+        let marker = *encoded.get(cursor).ok_or("truncated JPEG marker")?;
+        cursor += 1;
+        if marker == 0x00 {
+            return Err("unexpected JPEG stuffed byte");
+        }
+        if marker == 0xd9 {
+            return (cursor == encoded.len())
+                .then_some(())
+                .ok_or("JPEG data follows EOI");
+        }
+        if marker == 0xda {
+            let end = jpeg_segment_end(encoded, cursor)?;
+            if end > encoded.len() || !encoded.ends_with(&[0xff, 0xd9]) {
+                return Err("JPEG scan is truncated");
+            }
+            return Ok(());
+        }
+        if (0xd0..=0xd7).contains(&marker) || marker == 0x01 {
+            continue;
+        }
+        let end = jpeg_segment_end(encoded, cursor)?;
+        let payload = &encoded[cursor + 2..end];
+        if marker == 0xe1 && payload.starts_with(b"Exif\0\0") {
+            return Err("unexpected pre-existing EXIF APP1");
+        }
+        cursor = end;
+    }
+    Err("JPEG EOI is missing")
+}
+
+fn jpeg_segment_end(encoded: &[u8], length_start: usize) -> Result<usize, &'static str> {
+    let length_bytes = encoded
+        .get(length_start..length_start + 2)
+        .ok_or("truncated JPEG segment length")?;
+    let length = usize::from(u16::from_be_bytes([length_bytes[0], length_bytes[1]]));
+    if length < 2 {
+        return Err("invalid JPEG segment length");
+    }
+    length_start
+        .checked_add(length)
+        .filter(|end| *end <= encoded.len())
+        .ok_or("JPEG segment exceeds output")
+}
+
+fn insert_png(
+    encoded: &[u8],
+    exif: &[u8],
+    final_length: usize,
+) -> Result<Vec<u8>, MetadataImageOutputError> {
+    let ihdr_end = validate_png(encoded).map_err(|reason| {
+        MetadataImageOutputError::MalformedEncodedContainer {
+            format: OutputFormat::Png,
+            reason,
+        }
+    })?;
+    let length =
+        u32::try_from(exif.len()).map_err(|_| MetadataImageOutputError::ExifFramingLimit {
+            format: OutputFormat::Png,
+            limit: u64::from(u32::MAX),
+            actual: u64::try_from(exif.len()).unwrap_or(u64::MAX),
+        })?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(final_length)
+        .map_err(|_| image_output_error(ImageOutputError::AllocationFailure))?;
+    output.extend_from_slice(&encoded[..ihdr_end]);
+    output.extend_from_slice(&length.to_be_bytes());
+    output.extend_from_slice(b"eXIf");
+    output.extend_from_slice(exif);
+    output.extend_from_slice(&crc32_parts(b"eXIf", exif).to_be_bytes());
+    output.extend_from_slice(&encoded[ihdr_end..]);
+    Ok(output)
+}
+
+fn validate_png(encoded: &[u8]) -> Result<usize, &'static str> {
+    const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    if !encoded.starts_with(SIGNATURE) {
+        return Err("missing PNG signature");
+    }
+    let mut cursor = 8usize;
+    let mut ihdr_end = None;
+    let mut saw_iend = false;
+    while cursor < encoded.len() {
+        let header = encoded
+            .get(cursor..cursor + 8)
+            .ok_or("truncated PNG chunk header")?;
+        let length = usize::try_from(u32::from_be_bytes([
+            header[0], header[1], header[2], header[3],
+        ]))
+        .map_err(|_| "PNG chunk length does not fit host size")?;
+        let data_start = cursor.checked_add(8).ok_or("PNG chunk offset overflow")?;
+        let data_end = data_start
+            .checked_add(length)
+            .ok_or("PNG chunk length overflow")?;
+        let end = data_end.checked_add(4).ok_or("PNG chunk end overflow")?;
+        if end > encoded.len() {
+            return Err("PNG chunk exceeds output");
+        }
+        let kind = &header[4..8];
+        let expected_crc = u32::from_be_bytes([
+            encoded[data_end],
+            encoded[data_end + 1],
+            encoded[data_end + 2],
+            encoded[data_end + 3],
+        ]);
+        if crc32(&encoded[cursor + 4..data_end]) != expected_crc {
+            return Err("PNG chunk CRC mismatch");
+        }
+        match kind {
+            b"IHDR" => {
+                if cursor != 8 || ihdr_end.is_some() || length != 13 {
+                    return Err("invalid PNG IHDR structure");
+                }
+                ihdr_end = Some(end);
+            }
+            b"eXIf" => return Err("unexpected pre-existing EXIF chunk"),
+            b"IEND" => {
+                if ihdr_end.is_none() || length != 0 || saw_iend || end != encoded.len() {
+                    return Err("invalid PNG IEND structure");
+                }
+                saw_iend = true;
+            }
+            _ if ihdr_end.is_none() || saw_iend => return Err("invalid PNG chunk order"),
+            _ => {}
+        }
+        cursor = end;
+        if saw_iend {
+            break;
+        }
+    }
+    if !saw_iend {
+        return Err("PNG IEND is missing");
+    }
+    ihdr_end.ok_or("PNG IHDR is missing")
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            let mask = 0u32.wrapping_sub(crc & 1);
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
+}
+
+fn crc32_parts(first: &[u8], second: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for byte in first.iter().chain(second) {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            let mask = 0u32.wrapping_sub(crc & 1);
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
 }
 
 fn rgba_to_opaque_rgb(
@@ -421,6 +740,46 @@ mod tests {
         assert!(matches!(
             error,
             DurableImageOutputError::BeforePublicationCleanupFailure { .. }
+        ));
+    }
+
+    #[test]
+    fn metadata_container_failures_are_typed_and_bounded() {
+        let limit = OutputLimits::new(u64::MAX).expect("nonzero limit");
+        let oversized = vec![0; usize::from(u16::MAX) - 7];
+        assert!(matches!(
+            insert_metadata(
+                &[0xff, 0xd8, 0xff, 0xd9],
+                OutputFormat::Jpeg,
+                &oversized,
+                limit
+            ),
+            Err(MetadataImageOutputError::ExifFramingLimit {
+                format: OutputFormat::Jpeg,
+                limit: 65_535,
+                actual: 65_536,
+            })
+        ));
+
+        assert!(matches!(
+            insert_metadata(
+                &[0xff, 0xd8, 0xff, 0xe0, 0, 2],
+                OutputFormat::Jpeg,
+                &[1],
+                limit,
+            ),
+            Err(MetadataImageOutputError::MalformedEncodedContainer {
+                format: OutputFormat::Jpeg,
+                ..
+            })
+        ));
+
+        assert!(matches!(
+            insert_metadata(b"\x89PNG\r\n\x1a\n", OutputFormat::Png, &[1], limit,),
+            Err(MetadataImageOutputError::MalformedEncodedContainer {
+                format: OutputFormat::Png,
+                ..
+            })
         ));
     }
 }

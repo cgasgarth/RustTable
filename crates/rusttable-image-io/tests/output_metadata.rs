@@ -1,11 +1,22 @@
-use rusttable_image::{DecodedImage, ImageDimensions, ImageOutput, OutputLimits, OutputOptions};
+use rusttable_image::{
+    DecodedImage, ImageDimensions, ImageOutput, JpegQuality, OutputLimits, OutputOptions,
+};
 use rusttable_image_io::FileImageOutput;
 use std::fs;
 
 #[test]
 fn generated_output_does_not_copy_user_metadata_markers() {
     let image = DecodedImage::new(ImageDimensions::new(1, 1).unwrap(), vec![1, 2, 3, 255]).unwrap();
-    for (name, options) in [("png", OutputOptions::Png), ("tiff", OutputOptions::Tiff)] {
+    for (name, options) in [
+        ("png", OutputOptions::Png),
+        (
+            "jpeg",
+            OutputOptions::Jpeg {
+                quality: JpegQuality::new(90).expect("quality"),
+            },
+        ),
+        ("tiff", OutputOptions::Tiff),
+    ] {
         let destination = std::env::temp_dir().join(format!("rusttable-output-metadata-{name}"));
         FileImageOutput::new(OutputLimits::new(1_000_000).unwrap())
             .write_new(&image, &destination, options)
