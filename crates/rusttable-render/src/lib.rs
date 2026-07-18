@@ -6,19 +6,22 @@ use std::fmt;
 use rusttable_core::{Edit, EditId, PhotoId, Revision};
 use rusttable_image::{ColorEncoding, DecodedImage, DecodedImageError};
 use rusttable_processing::{
-    CompiledPipeline, EvaluationError, GamutClipReport, RasterDimensions, SourceRgb,
-    SourceRgbImage, SrgbChannel, encode_linear_srgb, evaluate, to_linear_srgb,
+    CompiledPipeline, DisplayP3Channel, DisplayP3Rgb, DisplayP3RgbImage, EvaluationError,
+    GamutClipReport, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb,
+    evaluate, to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceColorPolicy {
     RequireDeclaredSrgb,
+    RequireDeclaredSupported,
     AssumeSrgbWhenUnspecified,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceColorDecision {
     DeclaredSrgb,
+    DeclaredDisplayP3,
     AssumedSrgb,
 }
 
@@ -129,7 +132,10 @@ pub fn render_edit(
         source: Box::new(source),
     })?;
     let (source, alpha) = source_image(input);
-    let working = to_linear_srgb(&source);
+    let working = match source {
+        SourceImage::Srgb(source) => to_linear_srgb(&source),
+        SourceImage::DisplayP3(source) => to_linear_srgb_from_display_p3(&source),
+    };
     let evaluated =
         evaluate(&pipeline, &working).map_err(|source| RenderError::Evaluation { source })?;
     let encoded = encode_linear_srgb(&evaluated);
@@ -157,16 +163,26 @@ fn source_color_decision(
 ) -> Result<SourceColorDecision, RenderError> {
     match (actual, policy) {
         (ColorEncoding::Srgb, _) => Ok(SourceColorDecision::DeclaredSrgb),
+        (ColorEncoding::DisplayP3, SourceColorPolicy::RequireDeclaredSrgb) => {
+            Err(RenderError::SourceColor { actual })
+        }
+        (ColorEncoding::DisplayP3, _) => Ok(SourceColorDecision::DeclaredDisplayP3),
         (ColorEncoding::Unspecified, SourceColorPolicy::AssumeSrgbWhenUnspecified) => {
             Ok(SourceColorDecision::AssumedSrgb)
         }
-        (ColorEncoding::Unspecified, SourceColorPolicy::RequireDeclaredSrgb) => {
-            Err(RenderError::SourceColor { actual })
-        }
+        (
+            ColorEncoding::Unspecified,
+            SourceColorPolicy::RequireDeclaredSrgb | SourceColorPolicy::RequireDeclaredSupported,
+        ) => Err(RenderError::SourceColor { actual }),
     }
 }
 
-fn source_image(input: &DecodedImage) -> (SourceRgbImage, Vec<u8>) {
+enum SourceImage {
+    Srgb(SourceRgbImage),
+    DisplayP3(DisplayP3RgbImage),
+}
+
+fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
     let dimensions = RasterDimensions::new(input.dimensions().width(), input.dimensions().height())
         .expect("validated decoded dimensions are nonzero");
     let pixel_count = usize::try_from(
@@ -176,20 +192,51 @@ fn source_image(input: &DecodedImage) -> (SourceRgbImage, Vec<u8>) {
             .expect("validated dimensions have a representable pixel count"),
     )
     .expect("decoded pixel count fits the host allocation");
-    let mut source_pixels = Vec::with_capacity(pixel_count);
-    let mut alpha = Vec::with_capacity(source_pixels.capacity());
-    for pixel in input.pixels().chunks_exact(4) {
-        source_pixels.push(SourceRgb::new(
-            SrgbChannel::new(f32::from(pixel[0]) / 255.0).expect("normalized byte is valid sRGB"),
-            SrgbChannel::new(f32::from(pixel[1]) / 255.0).expect("normalized byte is valid sRGB"),
-            SrgbChannel::new(f32::from(pixel[2]) / 255.0).expect("normalized byte is valid sRGB"),
-        ));
-        alpha.push(pixel[3]);
+    let mut alpha = Vec::with_capacity(pixel_count);
+    match input.color_encoding() {
+        ColorEncoding::DisplayP3 => {
+            let mut source_pixels = Vec::with_capacity(pixel_count);
+            for pixel in input.pixels().chunks_exact(4) {
+                source_pixels.push(DisplayP3Rgb::new(
+                    DisplayP3Channel::new(f32::from(pixel[0]) / 255.0)
+                        .expect("normalized byte is valid Display P3"),
+                    DisplayP3Channel::new(f32::from(pixel[1]) / 255.0)
+                        .expect("normalized byte is valid Display P3"),
+                    DisplayP3Channel::new(f32::from(pixel[2]) / 255.0)
+                        .expect("normalized byte is valid Display P3"),
+                ));
+                alpha.push(pixel[3]);
+            }
+            (
+                SourceImage::DisplayP3(
+                    DisplayP3RgbImage::new(dimensions, source_pixels)
+                        .expect("decoded pixels match dimensions"),
+                ),
+                alpha,
+            )
+        }
+        ColorEncoding::Unspecified | ColorEncoding::Srgb => {
+            let mut source_pixels = Vec::with_capacity(pixel_count);
+            for pixel in input.pixels().chunks_exact(4) {
+                source_pixels.push(SourceRgb::new(
+                    SrgbChannel::new(f32::from(pixel[0]) / 255.0)
+                        .expect("normalized byte is valid sRGB"),
+                    SrgbChannel::new(f32::from(pixel[1]) / 255.0)
+                        .expect("normalized byte is valid sRGB"),
+                    SrgbChannel::new(f32::from(pixel[2]) / 255.0)
+                        .expect("normalized byte is valid sRGB"),
+                ));
+                alpha.push(pixel[3]);
+            }
+            (
+                SourceImage::Srgb(
+                    SourceRgbImage::new(dimensions, source_pixels)
+                        .expect("decoded pixels match dimensions"),
+                ),
+                alpha,
+            )
+        }
     }
-    (
-        SourceRgbImage::new(dimensions, source_pixels).expect("decoded pixels match dimensions"),
-        alpha,
-    )
 }
 
 fn quantized_pixels(encoded: &rusttable_processing::EncodedSrgbOutput, alpha: &[u8]) -> Vec<u8> {
@@ -224,7 +271,7 @@ impl fmt::Display for RenderError {
             Self::SourceColor { actual } => {
                 write!(
                     formatter,
-                    "source color encoding {actual:?} is not declared sRGB"
+                    "source color encoding {actual:?} is not supported by the selected policy"
                 )
             }
             Self::Pipeline { source } => {

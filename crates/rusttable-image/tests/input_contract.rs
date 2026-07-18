@@ -79,6 +79,21 @@ fn decoded_image_exposes_immutable_checked_rgba8_data() {
     );
 }
 
+#[test]
+fn decoded_image_preserves_explicit_display_p3_tag() {
+    let dimensions = ImageDimensions::new(1, 1).expect("positive dimensions should construct");
+    let image = DecodedImage::new_with_color_encoding(
+        dimensions,
+        vec![1, 2, 3, 4],
+        ColorEncoding::DisplayP3,
+    )
+    .expect("matching bytes should work");
+
+    assert_eq!(image.color_encoding(), ColorEncoding::DisplayP3);
+    assert_eq!(image.dimensions(), dimensions);
+    assert_eq!(image.layout(), PixelLayout::Rgba8StraightAlpha);
+}
+
 struct FakeInput {
     probe: ImageProbe,
     image: DecodedImage,

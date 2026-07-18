@@ -87,6 +87,40 @@ impl SrgbChannel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayP3ChannelError {
+    NonFinite,
+    BelowZero,
+    AboveOne,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DisplayP3Channel(FiniteF32);
+
+impl DisplayP3Channel {
+    /// Creates a normalized transfer-encoded Display P3 channel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the value is non-finite or outside `0.0..=1.0`.
+    pub fn new(value: f32) -> Result<Self, DisplayP3ChannelError> {
+        let value =
+            FiniteF32::new(value).map_err(|_: FiniteF32Error| DisplayP3ChannelError::NonFinite)?;
+        if value.get() < 0.0 {
+            return Err(DisplayP3ChannelError::BelowZero);
+        }
+        if value.get() > 1.0 {
+            return Err(DisplayP3ChannelError::AboveOne);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0.get()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SourceRgb {
     red: SrgbChannel,
@@ -166,6 +200,7 @@ impl LinearRgb {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SourceColorSpace {
     Srgb,
+    DisplayP3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -225,6 +260,99 @@ impl SourceRgbImage {
 
     #[must_use]
     pub fn pixel(&self, index: usize) -> Option<&SourceRgb> {
+        self.pixels.get(index)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DisplayP3Rgb {
+    red: DisplayP3Channel,
+    green: DisplayP3Channel,
+    blue: DisplayP3Channel,
+}
+
+impl DisplayP3Rgb {
+    #[must_use]
+    pub const fn new(
+        red: DisplayP3Channel,
+        green: DisplayP3Channel,
+        blue: DisplayP3Channel,
+    ) -> Self {
+        Self { red, green, blue }
+    }
+
+    #[must_use]
+    pub const fn red(self) -> DisplayP3Channel {
+        self.red
+    }
+
+    #[must_use]
+    pub const fn green(self) -> DisplayP3Channel {
+        self.green
+    }
+
+    #[must_use]
+    pub const fn blue(self) -> DisplayP3Channel {
+        self.blue
+    }
+
+    #[must_use]
+    pub const fn channel(self, channel: RgbChannel) -> DisplayP3Channel {
+        match channel {
+            RgbChannel::Red => self.red,
+            RgbChannel::Green => self.green,
+            RgbChannel::Blue => self.blue,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayP3RgbImage {
+    dimensions: RasterDimensions,
+    pixels: Vec<DisplayP3Rgb>,
+}
+
+impl DisplayP3RgbImage {
+    /// Creates a row-major normalized Display P3 image.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ImageBuildError::PixelCountMismatch`] when the supplied
+    /// pixels do not exactly cover the dimensions.
+    pub fn new(
+        dimensions: RasterDimensions,
+        pixels: Vec<DisplayP3Rgb>,
+    ) -> Result<Self, ImageBuildError> {
+        if u64::try_from(pixels.len()) != Ok(dimensions.pixel_count()) {
+            return Err(ImageBuildError::PixelCountMismatch {
+                expected: dimensions.pixel_count(),
+                actual: pixels.len(),
+            });
+        }
+        Ok(Self { dimensions, pixels })
+    }
+
+    #[must_use]
+    pub const fn dimensions(&self) -> RasterDimensions {
+        self.dimensions
+    }
+
+    #[must_use]
+    pub const fn space(&self) -> SourceColorSpace {
+        SourceColorSpace::DisplayP3
+    }
+
+    #[must_use]
+    pub fn pixel_slice(&self) -> &[DisplayP3Rgb] {
+        &self.pixels
+    }
+
+    pub fn pixels(&self) -> impl Iterator<Item = &DisplayP3Rgb> {
+        self.pixels.iter()
+    }
+
+    #[must_use]
+    pub fn pixel(&self, index: usize) -> Option<&DisplayP3Rgb> {
         self.pixels.get(index)
     }
 }
@@ -310,8 +438,42 @@ pub fn to_linear_srgb(source: &SourceRgbImage) -> WorkingRgbImage {
     }
 }
 
+/// Converts declared Display P3 values to unclipped linear sRGB.
+///
+/// The transfer curve is the sRGB/Display P3 curve. The fixed D65 matrix is
+/// the Display P3-to-sRGB primary conversion from the CSS Color 4 matrices;
+/// both spaces use D65, so no chromatic adaptation is performed. Coefficients
+/// and multiplication order are intentionally RustTable-owned and fixed.
+#[must_use]
+pub fn to_linear_srgb_from_display_p3(source: &DisplayP3RgbImage) -> WorkingRgbImage {
+    const RED: [f32; 3] = [1.224_940_2, -0.224_940_18, 0.0];
+    const GREEN: [f32; 3] = [-0.042_056_955, 1.042_057, 0.0];
+    const BLUE: [f32; 3] = [-0.019_637_555, -0.078_636_05, 1.098_273_6];
+    let pixels = source
+        .pixels
+        .iter()
+        .map(|pixel| {
+            let red = decode_transfer(pixel.red().get()).get();
+            let green = decode_transfer(pixel.green().get()).get();
+            let blue = decode_transfer(pixel.blue().get()).get();
+            LinearRgb::new(
+                FiniteF32::from_proven_finite(RED[0] * red + RED[1] * green + RED[2] * blue),
+                FiniteF32::from_proven_finite(GREEN[0] * red + GREEN[1] * green + GREEN[2] * blue),
+                FiniteF32::from_proven_finite(BLUE[0] * red + BLUE[1] * green + BLUE[2] * blue),
+            )
+        })
+        .collect();
+    WorkingRgbImage {
+        dimensions: source.dimensions,
+        pixels,
+    }
+}
+
 fn decode_channel(channel: SrgbChannel) -> FiniteF32 {
-    let encoded = channel.get();
+    decode_transfer(channel.get())
+}
+
+fn decode_transfer(encoded: f32) -> FiniteF32 {
     let linear = if encoded <= 0.04045 {
         encoded / 12.92
     } else {
@@ -342,6 +504,18 @@ impl fmt::Display for SrgbChannelError {
 }
 
 impl std::error::Error for SrgbChannelError {}
+
+impl fmt::Display for DisplayP3ChannelError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NonFinite => formatter.write_str("Display P3 channel must be finite"),
+            Self::BelowZero => formatter.write_str("Display P3 channel must not be below zero"),
+            Self::AboveOne => formatter.write_str("Display P3 channel must not be above one"),
+        }
+    }
+}
+
+impl std::error::Error for DisplayP3ChannelError {}
 
 impl fmt::Display for ImageBuildError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
