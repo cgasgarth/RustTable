@@ -3,8 +3,10 @@
 
 mod app;
 mod bootstrap;
+mod theme;
+mod view;
 
-use app::{Shell, update, view};
+use app::{Shell, update};
 use bootstrap::run_with_bootstrap;
 
 /// Starts the `RustTable` desktop application.
@@ -16,8 +18,9 @@ pub fn run() -> iced::Result {
     run_with_bootstrap(
         rusttable_diagnostics::install,
         || {
-            iced::application(Shell::default, update, view)
+            iced::application(Shell::default, update, view::view)
                 .title("RustTable")
+                .theme(theme::theme)
                 .centered()
                 .run()
         },
