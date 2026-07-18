@@ -1,0 +1,116 @@
+version = 1
+governed_roots = ["crates/rusttable-image-io/tests/fixtures"]
+
+[limits]
+max_file_bytes = 1048576
+max_total_bytes = 1048576
+max_decompressed_bytes = 1048576
+max_compression_ratio = 100
+
+[[fixtures]]
+id = "image-io.bigtiff"
+path = "crates/rusttable-image-io/tests/fixtures/bigtiff.tiff.b64"
+size = 17
+sha256 = "25b31f101da2f1c12988a1cfdb80dfe88435745b129ec56ecb753d6e65cd5182"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.gray-tiff"
+path = "crates/rusttable-image-io/tests/fixtures/gray-2x1.tiff.b64"
+size = 185
+sha256 = "511ddf74846a0200999efe13902c6d3a9c95a6e88f75cadcfbff3459d40f377f"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.malformed-offset"
+path = "crates/rusttable-image-io/tests/fixtures/malformed-offset.tiff.b64"
+size = 197
+sha256 = "0a208ef8077da10d5eef005ad1f18993fddaa00f11f3a5b36febae08de3c2db7"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.multi-page"
+path = "crates/rusttable-image-io/tests/fixtures/multi-page.tiff.b64"
+size = 197
+sha256 = "39146b6f07a432032cb6840d71760b52d19abe2f8d12d4321b13852550e8eb63"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.rgb-16bit-tiff"
+path = "crates/rusttable-image-io/tests/fixtures/rgb-16bit.tiff.b64"
+size = 197
+sha256 = "208c9288917f09ee7dd7ed20b9f717f8fe9076eb4035056be8261c47729936fc"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.rgb-jpeg"
+path = "crates/rusttable-image-io/tests/fixtures/rgb-2x1.jpg.b64"
+size = 445
+sha256 = "3cdb0dbb451fe7a4a5abdb52d6046e9f68248e2a59d8008e3ef225f7b076f2ec"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.rgb-tiff"
+path = "crates/rusttable-image-io/tests/fixtures/rgb-2x1.tiff.b64"
+size = 197
+sha256 = "035ecb7f8fb58afff218de75b3b22183117bbb43c4da706e7a8ba68229b9774a"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.rgba-png"
+path = "crates/rusttable-image-io/tests/fixtures/rgba-1x2.png.b64"
+size = 97
+sha256 = "7f506c6f2434b50e5f465f6de330db567b73edf2c2cbfd87a84c6fa94a4ad9c9"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.rgba-png-transposed"
+path = "crates/rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+size = 97
+sha256 = "cf9a5e966081298df36751cde67a10da395aeb248f9bff0ec330f0973c8c4ece"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.rgba-tiff"
+path = "crates/rusttable-image-io/tests/fixtures/rgba-1x2.tiff.b64"
+size = 201
+sha256 = "223c8aa278c63d4a8828160aa6724f02a4019183c5024ed84bcf77e1849ed62a"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.truncated-png"
+path = "crates/rusttable-image-io/tests/fixtures/truncated.png.b64"
+size = 29
+sha256 = "f2a5f32e4226f875484ef087f4f231354a2d1cf8dfa0c68144c650c8a87a1c81"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+
+[[fixtures]]
+id = "image-io.unsupported-gif"
+path = "crates/rusttable-image-io/tests/fixtures/unsupported.gif.b64"
+size = 57
+sha256 = "eb91db57857647708f344b883c1e95147519a74ba2d090f45fa76f69aacfa92b"
+media_type = "application/base64"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
