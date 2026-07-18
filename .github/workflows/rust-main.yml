@@ -76,3 +76,48 @@ jobs:
       - name: Run portable workspace tests
         shell: bash
         run: cargo test --workspace --all-targets --all-features --locked
+
+  dependency-security:
+    name: linux / dependency security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+      - name: Set up exact Rust toolchain
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --no-self-update
+          rustup default 1.95.0
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
+      - name: Set up exact Bun toolchain
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: 1.3.14
+      - name: Restore security tool cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-audit
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/advisory-dbs
+            target
+          key: rust-security-Linux-rust-1.95.0-audit-0.22.2-deny-0.19.8-${{ hashFiles('Cargo.lock') }}
+      - name: Install exact security tools
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked --force
+          cargo install cargo-deny --version 0.19.8 --locked --force
+          test "$(cargo-audit --version)" = "cargo-audit 0.22.2"
+          test "$(cargo-deny --version)" = "cargo-deny 0.19.8"
+      - name: Run dependency security
+        run: bash scripts/dependency-security.sh
+      - name: Upload dependency security reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rusttable-dependency-security-${{ github.sha }}
+          path: target/security/
+          if-no-files-found: warn

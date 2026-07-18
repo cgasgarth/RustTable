@@ -7,7 +7,7 @@ version.workspace = true
 
 [dependencies]
 image = { version = "0.25.8", default-features = false, features = ["jpeg", "png"] }
-rusttable-image = { path = "../rusttable-image" }
+rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
 
 [lints]
 workspace = true

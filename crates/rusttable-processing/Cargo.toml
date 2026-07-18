@@ -6,7 +6,7 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
-rusttable-core = { path = "../rusttable-core" }
+rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
 
 [lints]
 workspace = true
