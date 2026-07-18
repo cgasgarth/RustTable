@@ -4,13 +4,12 @@ use iced::advanced::{
 use iced::keyboard::{self, Key, Modifiers, key::Named};
 use iced::{Background, Color, Element, Event, Length, Rectangle, Shadow, Size};
 
-use crate::app::Message;
-use crate::input::InputIntent;
+use crate::input::{InputIntent, UiMessage};
 use crate::theme;
 
 pub(crate) struct ActionButton<'a> {
-    inner: Element<'a, Message>,
-    action: Message,
+    inner: Element<'a, UiMessage>,
+    action: UiMessage,
     focused: bool,
     width: Length,
     height: Length,
@@ -18,14 +17,12 @@ pub(crate) struct ActionButton<'a> {
 
 impl<'a> ActionButton<'a> {
     pub(crate) fn new(
-        content: impl Into<Element<'a, Message>>,
-        action: Message,
+        content: impl Into<Element<'a, UiMessage>>,
+        action: UiMessage,
         focused: bool,
     ) -> Self {
         Self {
-            inner: iced::widget::button(content)
-                .on_press(action.clone())
-                .into(),
+            inner: iced::widget::button(content).on_press(action).into(),
             action,
             focused,
             width: Length::Shrink,
@@ -44,34 +41,34 @@ impl<'a> ActionButton<'a> {
     }
 }
 
-pub(crate) fn action_button<'a>(
-    content: impl Into<Element<'a, Message>>,
-    action: Message,
+pub fn action_button<'a>(
+    content: impl Into<Element<'a, UiMessage>>,
+    action: UiMessage,
     focused: bool,
-) -> Element<'a, Message> {
+) -> Element<'a, UiMessage> {
     ActionButton::new(content, action, focused).into()
 }
 
-pub(crate) fn sized_action_button<'a>(
-    content: impl Into<Element<'a, Message>>,
-    action: Message,
+pub fn sized_action_button<'a>(
+    content: impl Into<Element<'a, UiMessage>>,
+    action: UiMessage,
     focused: bool,
     width: impl Into<Length>,
     height: impl Into<Length>,
-) -> Element<'a, Message> {
+) -> Element<'a, UiMessage> {
     ActionButton::new(content, action, focused)
         .width(width)
         .height(height)
         .into()
 }
 
-impl<'a> From<ActionButton<'a>> for Element<'a, Message> {
+impl<'a> From<ActionButton<'a>> for Element<'a, UiMessage> {
     fn from(button: ActionButton<'a>) -> Self {
         Self::new(button)
     }
 }
 
-impl Widget<Message, iced::Theme, iced::Renderer> for ActionButton<'_> {
+impl Widget<UiMessage, iced::Theme, iced::Renderer> for ActionButton<'_> {
     fn size(&self) -> Size<Length> {
         Size {
             width: self.width,
@@ -167,7 +164,7 @@ impl Widget<Message, iced::Theme, iced::Renderer> for ActionButton<'_> {
         cursor: mouse::Cursor,
         renderer: &iced::Renderer,
         clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, Message>,
+        shell: &mut Shell<'_, UiMessage>,
         viewport: &Rectangle,
     ) {
         self.inner.as_widget_mut().update(
@@ -197,7 +194,7 @@ impl Widget<Message, iced::Theme, iced::Renderer> for ActionButton<'_> {
             return;
         }
 
-        let Some(message) = key_message(key, *modifiers, self.action.clone()) else {
+        let Some(message) = key_message(key, *modifiers, self.action) else {
             return;
         };
         shell.publish(message);
@@ -222,7 +219,7 @@ impl Widget<Message, iced::Theme, iced::Renderer> for ActionButton<'_> {
     }
 }
 
-fn key_message(key: &Key, modifiers: Modifiers, action: Message) -> Option<Message> {
+fn key_message(key: &Key, modifiers: Modifiers, action: UiMessage) -> Option<UiMessage> {
     if modifiers.control() || modifiers.alt() || modifiers.command() || modifiers.logo() {
         return None;
     }
@@ -242,7 +239,7 @@ fn key_message(key: &Key, modifiers: Modifiers, action: Message) -> Option<Messa
         Key::Named(Named::Escape) => InputIntent::Escape,
         _ => return None,
     };
-    Some(Message::Input(intent))
+    Some(UiMessage::Input(intent))
 }
 
 #[cfg(test)]
@@ -250,46 +247,33 @@ mod tests {
     use iced::keyboard::{Key, Modifiers, key::Named};
 
     use super::key_message;
-    use crate::app::Message;
-    use crate::input::InputIntent;
+    use crate::input::{InputIntent, UiMessage};
 
     #[test]
     fn supported_keys_map_once_and_modifiers_are_filtered() {
-        let action = Message::ToggleSidebar;
+        let action = UiMessage::ToggleSidebar;
         assert_eq!(
-            key_message(
-                &Key::Named(Named::Tab),
-                Modifiers::default(),
-                action.clone()
-            ),
-            Some(Message::Input(InputIntent::FocusNext))
+            key_message(&Key::Named(Named::Tab), Modifiers::default(), action),
+            Some(UiMessage::Input(InputIntent::FocusNext))
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::SHIFT, action.clone()),
-            Some(Message::Input(InputIntent::FocusPrevious))
+            key_message(&Key::Named(Named::Tab), Modifiers::SHIFT, action),
+            Some(UiMessage::Input(InputIntent::FocusPrevious))
         );
         assert_eq!(
-            key_message(
-                &Key::Named(Named::Enter),
-                Modifiers::default(),
-                action.clone()
-            ),
-            Some(action.clone())
+            key_message(&Key::Named(Named::Enter), Modifiers::default(), action),
+            Some(action)
         );
         assert_eq!(
-            key_message(
-                &Key::Named(Named::Escape),
-                Modifiers::default(),
-                action.clone()
-            ),
-            Some(Message::Input(InputIntent::Escape))
+            key_message(&Key::Named(Named::Escape), Modifiers::default(), action),
+            Some(UiMessage::Input(InputIntent::Escape))
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::CTRL, action.clone()),
+            key_message(&Key::Named(Named::Tab), Modifiers::CTRL, action),
             None
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::ALT, action.clone()),
+            key_message(&Key::Named(Named::Tab), Modifiers::ALT, action),
             None
         );
     }

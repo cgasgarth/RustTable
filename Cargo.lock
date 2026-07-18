@@ -1873,6 +1873,7 @@ dependencies = [
  "rusttable-core",
  "rusttable-diagnostics",
  "rusttable-image",
+ "rusttable-ui",
 ]
 
 [[package]]
@@ -1954,6 +1955,15 @@ dependencies = [
  "rusttable-core",
  "rusttable-image",
  "rusttable-processing",
+]
+
+[[package]]
+name = "rusttable-ui"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced_test",
+ "rusttable-core",
 ]
 
 [[package]]

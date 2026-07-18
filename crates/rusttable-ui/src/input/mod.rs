@@ -4,7 +4,15 @@ use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FocusTarget {
+pub enum UiMessage {
+    ToggleSidebar,
+    Navigate(NavigationIntent),
+    RetryLibrary,
+    Input(InputIntent),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FocusTarget {
     SidebarToggle,
     Library,
     RetryLibrary,
@@ -13,22 +21,15 @@ pub(crate) enum FocusTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputIntent {
+pub enum InputIntent {
     FocusNext,
     FocusPrevious,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "activation is exercised through the pure input reducer"
-        )
-    )]
     Activate,
     Escape,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputEffect {
+pub enum InputEffect {
     None,
     ToggleSidebar,
     Navigate(NavigationIntent),
@@ -36,7 +37,7 @@ pub(crate) enum InputEffect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct InputState {
+pub struct InputState {
     focused: FocusTarget,
     origin: Option<PhotoId>,
 }
@@ -51,22 +52,17 @@ impl Default for InputState {
 }
 
 impl InputState {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the focused-target accessor is used by input tests"
-        )
-    )]
-    pub(crate) fn focused(&self) -> FocusTarget {
+    #[must_use]
+    pub fn focused(&self) -> FocusTarget {
         self.focused
     }
 
-    pub(crate) fn is_focused(&self, target: FocusTarget) -> bool {
+    #[must_use]
+    pub fn is_focused(&self, target: FocusTarget) -> bool {
         self.focused == target
     }
 
-    pub(crate) fn apply(
+    pub fn apply(
         &mut self,
         intent: InputIntent,
         sidebar_visible: bool,
@@ -87,7 +83,7 @@ impl InputState {
         }
     }
 
-    pub(crate) fn reconcile(
+    pub fn reconcile(
         &mut self,
         sidebar_visible: bool,
         route: WorkspaceRoute,
@@ -99,11 +95,7 @@ impl InputState {
         }
     }
 
-    pub(crate) fn note_navigation(
-        &mut self,
-        intent: NavigationIntent,
-        library_state: &LibraryState,
-    ) {
+    pub fn note_navigation(&mut self, intent: NavigationIntent, library_state: &LibraryState) {
         match intent {
             NavigationIntent::ShowPhoto(photo_id) => {
                 self.origin = Some(photo_id);
@@ -183,7 +175,8 @@ impl InputState {
     }
 }
 
-pub(crate) fn focus_chain(
+#[must_use]
+pub fn focus_chain(
     sidebar_visible: bool,
     route: WorkspaceRoute,
     library_state: &LibraryState,

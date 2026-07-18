@@ -12,6 +12,8 @@
     "check:native-removal": "bash scripts/check-native-removal.sh",
     "test:workspace-rust-version": "bun test scripts/workspace-rust-version.test.ts",
     "check:workspace-rust-version": "bun scripts/workspace-rust-version.ts",
+    "test:workspace-layout": "bun test scripts/workspace-layout.test.ts",
+    "check:workspace-layout": "bash scripts/check-workspace-layout.sh",
     "test:pr-ci": "bash scripts/test-pr-ci.sh",
     "test:pr-branch-freshness": "bun test scripts/github/update-open-pr-branches.test.ts",
     "test:linux-artifact-identity": "bun test scripts/linux-artifact-identity.test.ts",

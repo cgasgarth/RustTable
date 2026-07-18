@@ -1,18 +1,15 @@
 use iced::Task;
 use std::path::PathBuf;
 
-use crate::input::{FocusTarget, InputEffect, InputIntent, InputState};
-use crate::library::{LibraryFailureKind, LibraryState};
-use crate::library_loader::{self, LibraryLoadRequestId, LibraryLoadResult};
-use crate::navigation::{NavigationIntent, NavigationState};
-use crate::presentation::PhotoWorkspaceViewModel;
+use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
+use rusttable_ui::{
+    InputIntent, LibraryFailureKind, LibraryState, NavigationIntent, PhotoWorkspaceViewModel,
+    UiEffect, UiMessage, UiState,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Shell {
-    sidebar_visible: bool,
-    navigation: NavigationState,
-    library_state: LibraryState,
-    input: InputState,
+    ui: UiState,
     active_load_request_id: LibraryLoadRequestId,
     load_in_flight: bool,
     catalog_path: Result<PathBuf, LibraryFailureKind>,
@@ -21,10 +18,7 @@ pub(crate) struct Shell {
 impl Default for Shell {
     fn default() -> Self {
         Self {
-            sidebar_visible: true,
-            navigation: NavigationState::default(),
-            library_state: LibraryState::default(),
-            input: InputState::default(),
+            ui: UiState::default(),
             active_load_request_id: LibraryLoadRequestId::first(),
             load_in_flight: false,
             catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
@@ -34,21 +28,13 @@ impl Default for Shell {
 
 pub(crate) fn boot() -> (Shell, Task<Message>) {
     let request_id = LibraryLoadRequestId::first();
-    let catalog_path = library_loader::catalog_path();
+    let catalog_path = library::catalog_path();
     let shell = Shell::loading(request_id, catalog_path.clone());
     let task = start_load(request_id, catalog_path);
     (shell, task)
 }
 
 impl Shell {
-    pub(crate) fn sidebar_visible(&self) -> bool {
-        self.sidebar_visible
-    }
-
-    pub(crate) fn route(&self) -> crate::navigation::WorkspaceRoute {
-        self.navigation.route()
-    }
-
     #[cfg_attr(
         not(test),
         expect(
@@ -62,10 +48,7 @@ impl Shell {
 
     pub(crate) fn with_library_state(library_state: LibraryState) -> Self {
         Self {
-            sidebar_visible: true,
-            navigation: NavigationState::default(),
-            library_state,
-            input: InputState::default(),
+            ui: UiState::with_library_state(library_state),
             active_load_request_id: LibraryLoadRequestId::first(),
             load_in_flight: false,
             catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
@@ -77,10 +60,7 @@ impl Shell {
         catalog_path: Result<PathBuf, LibraryFailureKind>,
     ) -> Self {
         Self {
-            sidebar_visible: true,
-            navigation: NavigationState::default(),
-            library_state: LibraryState::Loading,
-            input: InputState::default(),
+            ui: UiState::with_library_state(LibraryState::Loading),
             active_load_request_id: request_id,
             load_in_flight: true,
             catalog_path,
@@ -88,11 +68,11 @@ impl Shell {
     }
 
     pub(crate) fn library_state(&self) -> &LibraryState {
-        &self.library_state
+        self.ui.library_state()
     }
 
-    pub(crate) fn is_focused(&self, target: FocusTarget) -> bool {
-        self.input.is_focused(target)
+    pub(crate) fn ui_state(&self) -> &UiState {
+        &self.ui
     }
 
     #[cfg_attr(
@@ -116,50 +96,37 @@ pub(crate) enum Message {
     Input(InputIntent),
 }
 
+impl From<UiMessage> for Message {
+    fn from(message: UiMessage) -> Self {
+        match message {
+            UiMessage::ToggleSidebar => Self::ToggleSidebar,
+            UiMessage::Navigate(intent) => Self::Navigate(intent),
+            UiMessage::RetryLibrary => Self::RetryLibrary,
+            UiMessage::Input(intent) => Self::Input(intent),
+        }
+    }
+}
+
 pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match message {
-        Message::ToggleSidebar => {
-            shell.sidebar_visible = !shell.sidebar_visible;
-            shell
-                .input
-                .reconcile(shell.sidebar_visible, shell.route(), &shell.library_state);
-        }
-        Message::Navigate(intent) => {
-            let _ = shell.navigation.apply(intent);
-            shell.input.note_navigation(intent, &shell.library_state);
-            shell
-                .input
-                .reconcile(shell.sidebar_visible, shell.route(), &shell.library_state);
+        Message::ToggleSidebar | Message::Navigate(_) | Message::Input(_) => {
+            let ui_message = match message {
+                Message::ToggleSidebar => UiMessage::ToggleSidebar,
+                Message::Navigate(intent) => UiMessage::Navigate(intent),
+                Message::Input(intent) => UiMessage::Input(intent),
+                Message::LibraryLoaded { .. } | Message::RetryLibrary => unreachable!(),
+            };
+            if shell.ui.handle(ui_message) == UiEffect::RetryLibrary {
+                return retry_library(shell);
+            }
         }
         Message::LibraryLoaded { request_id, result } => {
             if shell.load_in_flight && request_id == shell.active_load_request_id {
                 shell.load_in_flight = false;
-                shell.library_state = result.into_library_state();
-                shell
-                    .input
-                    .reconcile(shell.sidebar_visible, shell.route(), &shell.library_state);
+                shell.ui.set_library_state(result.into_library_state());
             }
         }
         Message::RetryLibrary => return retry_library(shell),
-        Message::Input(intent) => {
-            let effect = shell.input.apply(
-                intent,
-                shell.sidebar_visible,
-                shell.route(),
-                &shell.library_state,
-            );
-            match effect {
-                InputEffect::None => {}
-                InputEffect::ToggleSidebar => shell.sidebar_visible = !shell.sidebar_visible,
-                InputEffect::Navigate(navigation) => {
-                    let _ = shell.navigation.apply(navigation);
-                }
-                InputEffect::RetryLibrary => return retry_library(shell),
-            }
-            shell
-                .input
-                .reconcile(shell.sidebar_visible, shell.route(), &shell.library_state);
-        }
     }
     Task::none()
 }
@@ -178,14 +145,13 @@ fn start_load(
 }
 
 fn load_task(request_id: LibraryLoadRequestId, path: std::path::PathBuf) -> Task<Message> {
-    Task::perform(
-        async move { library_loader::load_catalog(&path) },
-        move |result| Message::LibraryLoaded { request_id, result },
-    )
+    Task::perform(async move { library::load_catalog(&path) }, move |result| {
+        Message::LibraryLoaded { request_id, result }
+    })
 }
 
 fn retry_library(shell: &mut Shell) -> Task<Message> {
-    if !matches!(shell.library_state, LibraryState::Failed(_)) || shell.load_in_flight {
+    if !matches!(shell.library_state(), LibraryState::Failed(_)) || shell.load_in_flight {
         return Task::none();
     }
     let Some(request_id) = shell.active_load_request_id.next() else {
@@ -193,20 +159,15 @@ fn retry_library(shell: &mut Shell) -> Task<Message> {
     };
     shell.active_load_request_id = request_id;
     shell.load_in_flight = true;
-    shell.library_state = LibraryState::Loading;
-    shell
-        .input
-        .reconcile(shell.sidebar_visible, shell.route(), &shell.library_state);
+    shell.ui.begin_library_load();
     start_load(request_id, shell.catalog_path.clone())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::input::InputState;
     use crate::library::{LibraryFailureKind, LibraryState};
-    use crate::library_loader::{LibraryLoadRequestId, LibraryLoadResult};
-    use crate::navigation::NavigationState;
-    use crate::presentation::PhotoWorkspaceViewModel;
+    use crate::library::{LibraryLoadRequestId, LibraryLoadResult};
+    use rusttable_ui::{PhotoWorkspaceViewModel, UiState};
 
     use super::{Message, Shell, update};
 
@@ -215,10 +176,7 @@ mod tests {
         assert_eq!(
             Shell::default(),
             Shell {
-                sidebar_visible: true,
-                navigation: NavigationState::default(),
-                library_state: LibraryState::default(),
-                input: InputState::default(),
+                ui: UiState::default(),
                 active_load_request_id: LibraryLoadRequestId::first(),
                 load_in_flight: false,
                 catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
@@ -232,7 +190,7 @@ mod tests {
 
         let _ = update(&mut shell, Message::ToggleSidebar);
 
-        assert!(!shell.sidebar_visible);
+        assert!(!shell.ui_state().sidebar_visible());
     }
 
     #[test]
@@ -242,7 +200,7 @@ mod tests {
         let _ = update(&mut shell, Message::ToggleSidebar);
         let _ = update(&mut shell, Message::ToggleSidebar);
 
-        assert!(shell.sidebar_visible);
+        assert!(shell.ui_state().sidebar_visible());
     }
 
     #[test]

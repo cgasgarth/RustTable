@@ -3,15 +3,15 @@ use iced_test::Simulator;
 use iced_test::core::{Settings, Size};
 use rusttable_core::PhotoId;
 
-use crate::app::{Message, Shell, update};
+use super::super::application::{Message, Shell, update};
+use super::view;
+use crate::library::LibraryLoadResult;
 use crate::library::{LibraryFailureKind, LibraryState};
-use crate::library_loader::LibraryLoadResult;
-use crate::navigation::NavigationIntent;
-use crate::presentation::{
+use rusttable_ui::NavigationIntent;
+use rusttable_ui::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PresentationText,
 };
-use crate::view;
 
 #[test]
 fn shell_renders_and_toggles_sidebar() -> Result<(), iced_test::Error> {
@@ -273,11 +273,11 @@ fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
     simulator.tap_key(Key::Named(Named::Tab));
     assert_eq!(
         simulator.into_messages().collect::<Vec<_>>(),
-        [Message::Input(crate::input::InputIntent::FocusNext)]
+        [Message::Input(rusttable_ui::InputIntent::FocusNext)]
     );
     let _ = update(
         &mut shell,
-        Message::Input(crate::input::InputIntent::FocusNext),
+        Message::Input(rusttable_ui::InputIntent::FocusNext),
     );
 
     let mut simulator = Simulator::with_size(
@@ -288,11 +288,11 @@ fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
     simulator.tap_key(Key::Named(Named::Tab));
     assert_eq!(
         simulator.into_messages().collect::<Vec<_>>(),
-        [Message::Input(crate::input::InputIntent::FocusNext)]
+        [Message::Input(rusttable_ui::InputIntent::FocusNext)]
     );
     let _ = update(
         &mut shell,
-        Message::Input(crate::input::InputIntent::FocusNext),
+        Message::Input(rusttable_ui::InputIntent::FocusNext),
     );
 
     let mut simulator = Simulator::with_size(
@@ -303,11 +303,11 @@ fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
     simulator.tap_key(Key::Named(Named::Tab));
     assert_eq!(
         simulator.into_messages().collect::<Vec<_>>(),
-        [Message::Input(crate::input::InputIntent::FocusNext)]
+        [Message::Input(rusttable_ui::InputIntent::FocusNext)]
     );
     let _ = update(
         &mut shell,
-        Message::Input(crate::input::InputIntent::FocusNext),
+        Message::Input(rusttable_ui::InputIntent::FocusNext),
     );
 
     let mut simulator = Simulator::with_size(
@@ -351,11 +351,11 @@ fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
     let messages: Vec<_> = simulator.into_messages().collect();
     assert_eq!(
         messages,
-        [Message::Input(crate::input::InputIntent::FocusNext)]
+        [Message::Input(rusttable_ui::InputIntent::FocusNext)]
     );
     let _ = update(
         &mut shell,
-        Message::Input(crate::input::InputIntent::FocusNext),
+        Message::Input(rusttable_ui::InputIntent::FocusNext),
     );
 
     let mut simulator = Simulator::with_size(
@@ -385,7 +385,7 @@ fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
     simulator.tap_key(Key::Named(Named::Escape));
     assert_eq!(
         simulator.into_messages().collect::<Vec<_>>(),
-        [Message::Input(crate::input::InputIntent::Escape)]
+        [Message::Input(rusttable_ui::InputIntent::Escape)]
     );
 
     Ok(())

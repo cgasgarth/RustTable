@@ -1,7 +1,7 @@
 use crate::presentation::PhotoWorkspaceViewModel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LibraryFailureKind {
+pub enum LibraryFailureKind {
     CatalogLocationUnavailable,
     RepositoryUnavailable,
     CorruptPersistedCatalog,
@@ -9,23 +9,26 @@ pub(crate) enum LibraryFailureKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LibraryFailureProjection {
+pub struct LibraryFailureProjection {
     title: &'static str,
     detail: &'static str,
 }
 
 impl LibraryFailureProjection {
-    pub(crate) fn title(self) -> &'static str {
+    #[must_use]
+    pub fn title(self) -> &'static str {
         self.title
     }
 
-    pub(crate) fn detail(self) -> &'static str {
+    #[must_use]
+    pub fn detail(self) -> &'static str {
         self.detail
     }
 }
 
 impl LibraryFailureKind {
-    pub(crate) fn projection(self) -> LibraryFailureProjection {
+    #[must_use]
+    pub fn projection(self) -> LibraryFailureProjection {
         let detail = match self {
             Self::CatalogLocationUnavailable => "The catalog location is unavailable.",
             Self::RepositoryUnavailable => "The catalog repository is unavailable.",
@@ -40,7 +43,7 @@ impl LibraryFailureKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) enum LibraryState {
+pub enum LibraryState {
     Loading,
     #[default]
     Empty,
@@ -49,7 +52,8 @@ pub(crate) enum LibraryState {
 }
 
 impl LibraryState {
-    pub(crate) fn ready_workspace(&self) -> Option<&PhotoWorkspaceViewModel> {
+    #[must_use]
+    pub fn ready_workspace(&self) -> Option<&PhotoWorkspaceViewModel> {
         match self {
             Self::Ready(workspace) => Some(workspace),
             Self::Loading | Self::Empty | Self::Failed(_) => None,
