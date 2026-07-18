@@ -1942,6 +1942,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-parity"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "rusttable-processing"
 version = "0.1.0"
 dependencies = [

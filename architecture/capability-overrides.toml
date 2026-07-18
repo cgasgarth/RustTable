@@ -1,0 +1,122 @@
+# Reviewed cross-cutting capabilities that have no single plugin registration.
+# Discoverable modules must never be added here.
+
+[[override]]
+id = "domain.catalog-library"
+reference_path = "src/common/collection.c"
+reference_symbol = "catalog and collection services"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057", "0058", "0059"]
+test_evidence = ["catalog:query-and-state"]
+reason = "Library and collection behavior spans core services rather than one registered lighttable module."
+
+[[override]]
+id = "domain.masks-blending"
+reference_path = "src/develop/blend.c"
+reference_symbol = "blend and mask evaluation"
+category = "masks/blending"
+status = "required"
+issue_sequences = ["0127", "0128"]
+test_evidence = ["processing:mask-blend-parity"]
+reason = "Mask geometry and blend-if evaluation are cross-cutting pixelpipe behavior, not a single plugin."
+
+[[override]]
+id = "domain.color-management"
+reference_path = "src/common/colorspaces.h"
+reference_symbol = "color-space and profile contracts"
+category = "color management"
+status = "required"
+issue_sequences = ["0101", "0105", "0106"]
+test_evidence = ["color:cpu-gpu-transform-parity"]
+reason = "Color management is shared by input, processing, viewport, and export paths."
+
+[[override]]
+id = "domain.metadata"
+reference_path = "src/imageio/imageio.c"
+reference_symbol = "image metadata integration"
+category = "metadata"
+status = "required"
+issue_sequences = ["0081", "0084", "0087"]
+test_evidence = ["metadata:canonical-precedence"]
+reason = "Metadata extraction and publication are shared image-I/O contracts rather than a plugin."
+
+[[override]]
+id = "domain.import"
+reference_path = "src/common/darktable.c"
+reference_symbol = "application import lifecycle"
+category = "import"
+status = "required"
+issue_sequences = ["0091", "0092", "0096"]
+test_evidence = ["import:resumable-session"]
+reason = "Import lifecycle and failure recovery are orchestrated across the application boundary."
+
+[[override]]
+id = "domain.camera-tethering"
+reference_path = "src/common/camera_control.c"
+reference_symbol = "camera control transport"
+category = "camera/tethering"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["camera:tethered-capture-contract"]
+reason = "Camera transport is shared by camera, live-view, and tethering registrations."
+
+[[override]]
+id = "domain.map-geotagging"
+reference_path = "src/common/gpx.c"
+reference_symbol = "GPX track matching"
+category = "map/geotagging"
+status = "required"
+issue_sequences = ["0060", "0099"]
+test_evidence = ["map:gpx-track-match"]
+reason = "GPX matching is a cross-cutting geotagging service and is not a view module."
+
+[[override]]
+id = "domain.printing"
+reference_path = "src/common/printing.c"
+reference_symbol = "print pipeline"
+category = "printing"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["printing:deterministic-job"]
+reason = "Print preparation and device output are shared by the print view and storage path."
+
+[[override]]
+id = "domain.input-devices"
+reference_path = "src/gui/accelerators.c"
+reference_symbol = "keyboard and device actions"
+category = "input devices"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["input:keyboard-device-actions"]
+reason = "Input routing spans application actions and optional device backends."
+
+[[override]]
+id = "domain.accessibility"
+reference_path = "src/gui/gtk.c"
+reference_symbol = "GUI accessibility integration"
+category = "accessibility"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["ui:accessibility-semantics"]
+reason = "Accessibility semantics are a UI-wide contract and cannot be discovered from one module."
+
+[[override]]
+id = "domain.localization"
+reference_path = "po/CMakeLists.txt"
+reference_symbol = "translation catalog build"
+category = "localization"
+status = "required"
+issue_sequences = ["0017"]
+test_evidence = ["localization:catalog-build"]
+reason = "Localization is represented by translation catalogs and build wiring, not a runtime module."
+
+[[override]]
+id = "domain.packaging"
+reference_path = "CMakeLists.txt"
+reference_symbol = "package and install policy"
+category = "packaging"
+status = "required"
+issue_sequences = ["0014", "0017"]
+test_evidence = ["packaging:platform-policy"]
+reason = "Packaging is build/install policy and has no user-visible plugin registration."
