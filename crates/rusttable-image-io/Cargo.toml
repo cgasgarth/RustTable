@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-image-io"
+description = "JPEG and PNG file input adapter for RustTable."
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+image = { version = "0.25.8", default-features = false, features = ["jpeg", "png"] }
+rusttable-image = { path = "../rusttable-image" }
+
+[lints]
+workspace = true
