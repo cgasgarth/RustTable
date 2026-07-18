@@ -49,6 +49,7 @@ case "$*" in
   *test:linux-artifact-identity*|*test:linux-distribution-smoke*) label=linux-distribution ;;
   *test:workspace-rust-version*|*check:workspace-rust-version*) label=workspace-rust-version ;;
   *test:workspace-layout*|*check:workspace-layout*) label=workspace-layout ;;
+  *test:cache-workflow-policy*|*check:cache-workflow-policy*) label=cache-workflow-policy ;;
   *test:repository-policy*) label=repository-policy ;;
   *test:pr-branch-freshness*) label=pr-branch-freshness ;;
 esac
@@ -125,11 +126,11 @@ grep -F 'validation duration:' "$output" >/dev/null
 grep -F 'budget: 60s' "$output" >/dev/null
 
 output="$temporary_directory/failures.log"
-if run_precommit 'rust-check,rust-clippy,source' "$output"; then
+if run_precommit 'rust-check,rust-clippy,source,cache-workflow-policy' "$output"; then
   echo 'expected independent pre-commit failures' >&2
   exit 1
 fi
-for label in rust-check rust-clippy source; do
+for label in rust-check rust-clippy source cache-workflow-policy; do
   grep -F "pre-commit check failed: $label" "$output" >/dev/null
   grep -F "fake $label failure" "$output" >/dev/null
 done

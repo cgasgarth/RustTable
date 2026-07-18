@@ -23,6 +23,10 @@ run_checks() {
   test_pid=$!
   cargo clippy --workspace --all-targets --all-features --locked -- -D warnings >"$temporary_directory/clippy.log" 2>&1 &
   clippy_pid=$!
+  bun run test:cache-workflow-policy >"$temporary_directory/cache-workflow-policy.log" 2>&1 &
+  cache_workflow_policy_pid=$!
+  bun run check:cache-workflow-policy >"$temporary_directory/cache-workflow-policy-check.log" 2>&1 &
+  cache_workflow_policy_check_pid=$!
   bun run check:workspace-rust-version >"$temporary_directory/workspace-rust-version.log" 2>&1 &
   workspace_rust_version_pid=$!
   bun run check:workspace-layout >"$temporary_directory/workspace-layout.log" 2>&1 &
@@ -36,6 +40,14 @@ run_checks() {
   if ! wait "$clippy_pid"; then
     status=1
     cat "$temporary_directory/clippy.log" >&2
+  fi
+  if ! wait "$cache_workflow_policy_pid"; then
+    status=1
+    cat "$temporary_directory/cache-workflow-policy.log" >&2
+  fi
+  if ! wait "$cache_workflow_policy_check_pid"; then
+    status=1
+    cat "$temporary_directory/cache-workflow-policy-check.log" >&2
   fi
   if ! wait "$workspace_rust_version_pid"; then
     status=1

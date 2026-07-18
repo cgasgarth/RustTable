@@ -46,6 +46,7 @@ label=bun
   case "$*" in
     *workspace-rust-version*) label=workspace-rust-version ;;
     *workspace-layout*) label=workspace-layout ;;
+    *cache-workflow-policy*) label=cache-workflow-policy ;;
     *macos-artifact-identity*) label=macos-artifact-identity ;;
   esac
 case ",${FAKE_FAILS:-}," in *",$label,"*)
@@ -92,7 +93,7 @@ write_fake_tools "$fake_tools"
 FAKE_MARKERS="$temporary_directory/markers"
 export FAKE_MARKERS
 
-for label in diff fmt metadata source bun macos-artifact-identity workspace-rust-version workspace-layout; do
+for label in diff fmt metadata source bun macos-artifact-identity workspace-rust-version workspace-layout cache-workflow-policy; do
   output="$temporary_directory/$label.log"
   if [ "$label" = workspace-layout ]; then
     export RUSTTABLE_LAYOUT_CHECK=1
