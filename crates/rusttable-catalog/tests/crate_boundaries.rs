@@ -108,3 +108,57 @@ fn catalog_boundary_has_no_forbidden_integration_dependencies() {
         );
     }
 }
+
+#[test]
+fn image_contract_stays_codec_neutral() {
+    let metadata = metadata();
+    let image = package_object(&metadata, "rusttable-image");
+
+    assert!(
+        image.contains("\"dependencies\":[]"),
+        "image dependencies changed: {image}"
+    );
+    for forbidden in [
+        "rusttable-app",
+        "rusttable-catalog",
+        "rusttable-core",
+        "image",
+    ] {
+        assert!(
+            !image.contains(&format!("\"name\":\"{forbidden}\"")),
+            "image contains forbidden dependency {forbidden}: {image}"
+        );
+    }
+}
+
+#[test]
+fn image_io_contains_the_codec_boundary() {
+    let metadata = metadata();
+    let image_io = package_object(&metadata, "rusttable-image-io");
+
+    assert!(
+        image_io.contains("\"name\":\"rusttable-image\""),
+        "image-io must depend on rusttable-image: {image_io}"
+    );
+    assert!(
+        image_io.contains("\"name\":\"image\""),
+        "image-io must own the codec dependency: {image_io}"
+    );
+    for forbidden in [
+        "rusttable-app",
+        "rusttable-catalog",
+        "rusttable-core",
+        "iced",
+        "gtk",
+        "bindgen",
+        "cmake",
+        "database",
+        "processing",
+        "ffi",
+    ] {
+        assert!(
+            !image_io.contains(&format!("\"name\":\"{forbidden}\"")),
+            "image-io contains forbidden dependency {forbidden}: {image_io}"
+        );
+    }
+}
