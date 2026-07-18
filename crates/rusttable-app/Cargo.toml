@@ -6,7 +6,7 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
-iced = { version = "0.14.0", default-features = false, features = ["thread-pool", "tiny-skia"] }
+iced = { version = "0.14.0", default-features = false, features = ["thread-pool", "tiny-skia", "x11"] }
 rusttable-core = { path = "../rusttable-core" }
 
 [lints]

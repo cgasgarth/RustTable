@@ -1,0 +1,56 @@
+name: RustTable PR
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: rust-pr / validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Start validation timer
+        run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+      - name: Set up exact Rust toolchain
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --no-self-update
+          rustup default 1.95.0
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
+      - name: Set up exact Bun toolchain
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: 1.3.14
+      - name: Restore Cargo cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-pr-${{ runner.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock') }}
+      - name: Run repository PR validation
+        run: bash scripts/pr-ci.sh
+      - name: Enforce 150-second validation budget
+        if: always()
+        run: |
+          end_seconds="$(date +%s)"
+          elapsed_seconds=$((end_seconds - RUSTTABLE_VALIDATION_START))
+          echo "validation duration: ${elapsed_seconds}s (budget: 150s)"
+          if (( elapsed_seconds > 150 )); then
+            echo "validation budget exceeded" >&2
+            exit 1
+          fi
