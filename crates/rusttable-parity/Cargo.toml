@@ -1,0 +1,18 @@
+[package]
+name = "rusttable-parity"
+description = "Deterministic darktable feature-parity inventory scanner."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+serde = { version = "=1.0.228", features = ["derive"] }
+toml = "=0.8.23"
+
+[[bin]]
+name = "rusttable-parity"
+path = "src/main.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,2828 @@
+schema_version = 1
+source_commit = "0eba994d638a4ae0c4e5fccd185600cf6f2118db"
+
+[[capabilities]]
+id = "build-option.BINARY_PACKAGE_BUILD"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BINARY_PACKAGE_BUILD"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.BUILD_CMSTEST"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BUILD_CMSTEST"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.BUILD_CURVE_TOOLS"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BUILD_CURVE_TOOLS"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.BUILD_MSYS2_INSTALL"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BUILD_MSYS2_INSTALL"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.BUILD_NOISE_TOOLS"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BUILD_NOISE_TOOLS"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.BUILD_PRINT"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BUILD_PRINT"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.BUILD_RS_IDENTIFY"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "BUILD_RS_IDENTIFY"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.CUSTOM_CFLAGS"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "CUSTOM_CFLAGS"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.DONT_USE_INTERNAL_LIBRAW"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "DONT_USE_INTERNAL_LIBRAW"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.DONT_USE_INTERNAL_LUA"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "DONT_USE_INTERNAL_LUA"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.FORCE_COLORED_OUTPUT"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "FORCE_COLORED_OUTPUT"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.TESTBUILD_OPENCL_PROGRAMS"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "TESTBUILD_OPENCL_PROGRAMS"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_AI"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_AI"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_AVIF"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_AVIF"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_CAMERA_SUPPORT"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_CAMERA_SUPPORT"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_COLORD"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_COLORD"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_DARKTABLE_PROFILING"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_DARKTABLE_PROFILING"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_GMIC"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_GMIC"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_GRAPHICSMAGICK"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_GRAPHICSMAGICK"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_HEIF"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_HEIF"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_ICU"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_ICU"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_IMAGEMAGICK"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_IMAGEMAGICK"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_ISOBMFF"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_ISOBMFF"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_JXL"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_JXL"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_KWALLET"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_KWALLET"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_LIBRAW"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_LIBRAW"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_LIBSECRET"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_LIBSECRET"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_LUA"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_LUA"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_MAC_INTEGRATION"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_MAC_INTEGRATION"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_MAP"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_MAP"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_OPENCL"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_OPENCL"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_OPENEXR"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_OPENEXR"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_OPENJPEG"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_OPENJPEG"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_OPENMP"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_OPENMP"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_PORTMIDI"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_PORTMIDI"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_SDL2"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_SDL2"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_UNITY"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_UNITY"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_WEBP"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_WEBP"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_XCF"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_XCF"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.USE_XMLLINT"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "USE_XMLLINT"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "build-option.VALIDATE_APPDATA_FILE"
+reference_path = "DefineOptions.cmake"
+reference_symbol = "VALIDATE_APPDATA_FILE"
+category = "packaging"
+status = "redesigned"
+issue_sequences = ["0014"]
+test_evidence = ["reference-scan:build-option"]
+redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
+
+[[capabilities]]
+id = "domain.accessibility"
+reference_path = "src/gui/gtk.c"
+reference_symbol = "GUI accessibility integration"
+category = "accessibility"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["ui:accessibility-semantics"]
+
+[[capabilities]]
+id = "domain.camera-tethering"
+reference_path = "src/common/camera_control.c"
+reference_symbol = "camera control transport"
+category = "camera/tethering"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["camera:tethered-capture-contract"]
+
+[[capabilities]]
+id = "domain.catalog-library"
+reference_path = "src/common/collection.c"
+reference_symbol = "catalog and collection services"
+category = "catalog/library"
+status = "required"
+issue_sequences = [
+    "0057",
+    "0058",
+    "0059",
+]
+test_evidence = ["catalog:query-and-state"]
+
+[[capabilities]]
+id = "domain.color-management"
+reference_path = "src/common/colorspaces.h"
+reference_symbol = "color-space and profile contracts"
+category = "color management"
+status = "required"
+issue_sequences = [
+    "0101",
+    "0105",
+    "0106",
+]
+test_evidence = ["color:cpu-gpu-transform-parity"]
+
+[[capabilities]]
+id = "domain.import"
+reference_path = "src/common/darktable.c"
+reference_symbol = "application import lifecycle"
+category = "import"
+status = "required"
+issue_sequences = [
+    "0091",
+    "0092",
+    "0096",
+]
+test_evidence = ["import:resumable-session"]
+
+[[capabilities]]
+id = "domain.input-devices"
+reference_path = "src/gui/accelerators.c"
+reference_symbol = "keyboard and device actions"
+category = "input devices"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["input:keyboard-device-actions"]
+
+[[capabilities]]
+id = "domain.localization"
+reference_path = "po/CMakeLists.txt"
+reference_symbol = "translation catalog build"
+category = "localization"
+status = "required"
+issue_sequences = ["0017"]
+test_evidence = ["localization:catalog-build"]
+
+[[capabilities]]
+id = "domain.map-geotagging"
+reference_path = "src/common/gpx.c"
+reference_symbol = "GPX track matching"
+category = "map/geotagging"
+status = "required"
+issue_sequences = [
+    "0060",
+    "0099",
+]
+test_evidence = ["map:gpx-track-match"]
+
+[[capabilities]]
+id = "domain.masks-blending"
+reference_path = "src/develop/blend.c"
+reference_symbol = "blend and mask evaluation"
+category = "masks/blending"
+status = "required"
+issue_sequences = [
+    "0127",
+    "0128",
+]
+test_evidence = ["processing:mask-blend-parity"]
+
+[[capabilities]]
+id = "domain.metadata"
+reference_path = "src/imageio/imageio.c"
+reference_symbol = "image metadata integration"
+category = "metadata"
+status = "required"
+issue_sequences = [
+    "0081",
+    "0084",
+    "0087",
+]
+test_evidence = ["metadata:canonical-precedence"]
+
+[[capabilities]]
+id = "domain.packaging"
+reference_path = "CMakeLists.txt"
+reference_symbol = "package and install policy"
+category = "packaging"
+status = "required"
+issue_sequences = [
+    "0014",
+    "0017",
+]
+test_evidence = ["packaging:platform-policy"]
+
+[[capabilities]]
+id = "domain.printing"
+reference_path = "src/common/printing.c"
+reference_symbol = "print pipeline"
+category = "printing"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["printing:deterministic-job"]
+
+[[capabilities]]
+id = "format.avif_format"
+reference_path = "src/imageio/format/avif.c"
+reference_symbol = "avif_format"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0075",
+    "0246",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.copy"
+reference_path = "src/imageio/format/copy.c"
+reference_symbol = "copy"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = ["0239"]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.exr"
+reference_path = "src/imageio/format/exr.cc"
+reference_symbol = "exr"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0072",
+    "0248",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.gimp_xcf"
+reference_path = "src/imageio/format/xcf.c"
+reference_symbol = "gimp_xcf"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0083",
+    "0251",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.heif_format"
+reference_path = "src/imageio/format/heif.c"
+reference_symbol = "heif_format"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0075",
+    "0247",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.j2k"
+reference_path = "src/imageio/format/j2k.c"
+reference_symbol = "j2k"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0076",
+    "0249",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.jpeg"
+reference_path = "src/imageio/format/jpeg.c"
+reference_symbol = "jpeg"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0069",
+    "0240",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.jxl_format"
+reference_path = "src/imageio/format/jxl.c"
+reference_symbol = "jxl_format"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0073",
+    "0244",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.pdf"
+reference_path = "src/imageio/format/pdf.c"
+reference_symbol = "pdf"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = ["0250"]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.pfm"
+reference_path = "src/imageio/format/pfm.c"
+reference_symbol = "pfm"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0076",
+    "0243",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.png"
+reference_path = "src/imageio/format/png.c"
+reference_symbol = "png"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0070",
+    "0241",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.ppm"
+reference_path = "src/imageio/format/ppm.c"
+reference_symbol = "ppm"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0076",
+    "0243",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.tiff"
+reference_path = "src/imageio/format/tiff.c"
+reference_symbol = "tiff"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0071",
+    "0242",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "format.webp"
+reference_path = "src/imageio/format/webp.c"
+reference_symbol = "webp"
+category = "RAW/raster I/O"
+status = "required"
+issue_sequences = [
+    "0074",
+    "0245",
+]
+test_evidence = ["reference-scan:format"]
+
+[[capabilities]]
+id = "iop.agx"
+reference_path = "src/iop/agx.c"
+reference_symbol = "agx"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0181"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.ashift"
+reference_path = "src/iop/ashift.c"
+reference_symbol = "ashift"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0229"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.atrous"
+reference_path = "src/iop/atrous.c"
+reference_symbol = "atrous"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0155"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.basecurve"
+reference_path = "src/iop/basecurve.c"
+reference_symbol = "basecurve"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0174"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.basicadj"
+reference_path = "src/iop/basicadj.c"
+reference_symbol = "basicadj"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0165"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.bilat"
+reference_path = "src/iop/bilat.c"
+reference_symbol = "bilat"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0160"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.bilateral"
+reference_path = "src/iop/bilateral.cc"
+reference_symbol = "bilateral"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0161"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.bloom"
+reference_path = "src/iop/bloom.c"
+reference_symbol = "bloom"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0213"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.blurs"
+reference_path = "src/iop/blurs.c"
+reference_symbol = "blurs"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0162"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.borders"
+reference_path = "src/iop/borders.c"
+reference_symbol = "borders"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0219"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.cacorrect"
+reference_path = "src/iop/cacorrect.c"
+reference_symbol = "cacorrect"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0149"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.cacorrectrgb"
+reference_path = "src/iop/cacorrectrgb.c"
+reference_symbol = "cacorrectrgb"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0149"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.censorize"
+reference_path = "src/iop/censorize.c"
+reference_symbol = "censorize"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0235"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.channelmixer"
+reference_path = "src/iop/channelmixer.c"
+reference_symbol = "channelmixer"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0197"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.channelmixerrgb"
+reference_path = "src/iop/channelmixerrgb.c"
+reference_symbol = "channelmixerrgb"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0196"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.clahe"
+reference_path = "src/iop/clahe.c"
+reference_symbol = "clahe"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0235"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.clipping"
+reference_path = "src/iop/clipping.c"
+reference_symbol = "clipping"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0235"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colisa"
+reference_path = "src/iop/colisa.c"
+reference_symbol = "colisa"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0191"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorbalance"
+reference_path = "src/iop/colorbalance.c"
+reference_symbol = "colorbalance"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0190"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorbalancergb"
+reference_path = "src/iop/colorbalancergb.c"
+reference_symbol = "colorbalancergb"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0189"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorchecker"
+reference_path = "src/iop/colorchecker.c"
+reference_symbol = "colorchecker"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0202"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorcontrast"
+reference_path = "src/iop/colorcontrast.c"
+reference_symbol = "colorcontrast"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0188"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorcorrection"
+reference_path = "src/iop/colorcorrection.c"
+reference_symbol = "colorcorrection"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0195"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorequal"
+reference_path = "src/iop/colorequal.c"
+reference_symbol = "colorequal"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0187"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorharmonizer"
+reference_path = "src/iop/colorharmonizer.c"
+reference_symbol = "colorharmonizer"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0203"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorin"
+reference_path = "src/iop/colorin.c"
+reference_symbol = "colorin"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0193"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorize"
+reference_path = "src/iop/colorize.c"
+reference_symbol = "colorize"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0201"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colormapping"
+reference_path = "src/iop/colormapping.c"
+reference_symbol = "colormapping"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0199"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorout"
+reference_path = "src/iop/colorout.c"
+reference_symbol = "colorout"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0192"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorreconstruct"
+reference_path = "src/iop/colorreconstruction.c"
+reference_symbol = "colorreconstruct"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0206"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colortransfer"
+reference_path = "src/iop/colortransfer.c"
+reference_symbol = "colortransfer"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0200"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.colorzones"
+reference_path = "src/iop/colorzones.c"
+reference_symbol = "colorzones"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0204"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.crop"
+reference_path = "src/iop/crop.c"
+reference_symbol = "crop"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0223"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.defringe"
+reference_path = "src/iop/defringe.c"
+reference_symbol = "defringe"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0235"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.demosaic"
+reference_path = "src/iop/demosaic.c"
+reference_symbol = "demosaic"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0147"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.denoiseprofile"
+reference_path = "src/iop/denoiseprofile.c"
+reference_symbol = "denoiseprofile"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0151"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.diffuse"
+reference_path = "src/iop/diffuse.c"
+reference_symbol = "diffuse"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0163"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.dither"
+reference_path = "src/iop/dither.c"
+reference_symbol = "dither"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0218"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.enlargecanvas"
+reference_path = "src/iop/enlargecanvas.c"
+reference_symbol = "enlargecanvas"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0228"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.equalizer"
+reference_path = "src/iop/equalizer.c"
+reference_symbol = "equalizer"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0156"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.exposure"
+reference_path = "src/iop/exposure.c"
+reference_symbol = "exposure"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0164"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.filmic"
+reference_path = "src/iop/filmic.c"
+reference_symbol = "filmic"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0173"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.filmicrgb"
+reference_path = "src/iop/filmicrgb.c"
+reference_symbol = "filmicrgb"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0172"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.finalscale"
+reference_path = "src/iop/finalscale.c"
+reference_symbol = "finalscale"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0227"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.flip"
+reference_path = "src/iop/flip.c"
+reference_symbol = "flip"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0224"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.gamma"
+reference_path = "src/iop/gamma.c"
+reference_symbol = "gamma"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0168"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.globaltonemap"
+reference_path = "src/iop/globaltonemap.c"
+reference_symbol = "globaltonemap"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0179"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.graduatednd"
+reference_path = "src/iop/graduatednd.c"
+reference_symbol = "graduatednd"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0211"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.grain"
+reference_path = "src/iop/grain.c"
+reference_symbol = "grain"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0212"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.hazeremoval"
+reference_path = "src/iop/hazeremoval.c"
+reference_symbol = "hazeremoval"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0154"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.highlights"
+reference_path = "src/iop/highlights.c"
+reference_symbol = "highlights"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0205"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.highpass"
+reference_path = "src/iop/highpass.c"
+reference_symbol = "highpass"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0158"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.hotpixels"
+reference_path = "src/iop/hotpixels.c"
+reference_symbol = "hotpixels"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0150"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.invert"
+reference_path = "src/iop/invert.c"
+reference_symbol = "invert"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0235"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.lens"
+reference_path = "src/iop/lens.cc"
+reference_symbol = "lens"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0230"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.levels"
+reference_path = "src/iop/levels.c"
+reference_symbol = "levels"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0170"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.liquify"
+reference_path = "src/iop/liquify.c"
+reference_symbol = "liquify"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0231"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.lowlight"
+reference_path = "src/iop/lowlight.c"
+reference_symbol = "lowlight"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0166"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.lowpass"
+reference_path = "src/iop/lowpass.c"
+reference_symbol = "lowpass"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0159"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.lut3d"
+reference_path = "src/iop/lut3d.c"
+reference_symbol = "lut3d"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0198"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.mask_manager"
+reference_path = "src/iop/mask_manager.c"
+reference_symbol = "mask_manager"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0234"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.monochrome"
+reference_path = "src/iop/monochrome.c"
+reference_symbol = "monochrome"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0184"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.negadoctor"
+reference_path = "src/iop/negadoctor.c"
+reference_symbol = "negadoctor"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0182"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.nlmeans"
+reference_path = "src/iop/nlmeans.c"
+reference_symbol = "nlmeans"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0153"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.overexposed"
+reference_path = "src/iop/overexposed.c"
+reference_symbol = "overexposed"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0208"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.overlay"
+reference_path = "src/iop/overlay.c"
+reference_symbol = "overlay"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0235"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.primaries"
+reference_path = "src/iop/primaries.c"
+reference_symbol = "primaries"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0194"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.profile_gamma"
+reference_path = "src/iop/profile_gamma.c"
+reference_symbol = "profile_gamma"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0167"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rasterfile"
+reference_path = "src/iop/rasterfile.c"
+reference_symbol = "rasterfile"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0209"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rawdenoise"
+reference_path = "src/iop/rawdenoise.c"
+reference_symbol = "rawdenoise"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0152"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rawoverexposed"
+reference_path = "src/iop/rawoverexposed.c"
+reference_symbol = "rawoverexposed"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0207"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rawprepare"
+reference_path = "src/iop/rawprepare.c"
+reference_symbol = "rawprepare"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0146"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.relight"
+reference_path = "src/iop/relight.c"
+reference_symbol = "relight"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0216"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.retouch"
+reference_path = "src/iop/retouch.c"
+reference_symbol = "retouch"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0233"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rgbcurve"
+reference_path = "src/iop/rgbcurve.c"
+reference_symbol = "rgbcurve"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0175"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rgblevels"
+reference_path = "src/iop/rgblevels.c"
+reference_symbol = "rgblevels"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0169"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.rotatepixels"
+reference_path = "src/iop/rotatepixels.c"
+reference_symbol = "rotatepixels"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0225"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.scalepixels"
+reference_path = "src/iop/scalepixels.c"
+reference_symbol = "scalepixels"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0226"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.shadhi"
+reference_path = "src/iop/shadhi.c"
+reference_symbol = "shadhi"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0215"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.sharpen"
+reference_path = "src/iop/sharpen.c"
+reference_symbol = "sharpen"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0157"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.sigmoid"
+reference_path = "src/iop/sigmoid.c"
+reference_symbol = "sigmoid"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0180"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.soften"
+reference_path = "src/iop/soften.c"
+reference_symbol = "soften"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0214"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.splittoning"
+reference_path = "src/iop/splittoning.c"
+reference_symbol = "splittoning"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0183"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.spots"
+reference_path = "src/iop/spots.c"
+reference_symbol = "spots"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0232"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.temperature"
+reference_path = "src/iop/temperature.c"
+reference_symbol = "temperature"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0148"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.tonecurve"
+reference_path = "src/iop/tonecurve.c"
+reference_symbol = "tonecurve"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0176"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.toneequal"
+reference_path = "src/iop/toneequal.c"
+reference_symbol = "toneequal"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0171"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.tonemap"
+reference_path = "src/iop/tonemap.cc"
+reference_symbol = "tonemap"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0178"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.velvia"
+reference_path = "src/iop/velvia.c"
+reference_symbol = "velvia"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0186"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.vibrance"
+reference_path = "src/iop/vibrance.c"
+reference_symbol = "vibrance"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0185"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.vignette"
+reference_path = "src/iop/vignette.c"
+reference_symbol = "vignette"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0210"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.watermark"
+reference_path = "src/iop/watermark.c"
+reference_symbol = "watermark"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0220"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "iop.zonesystem"
+reference_path = "src/iop/zonesystem.c"
+reference_symbol = "zonesystem"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0177"]
+test_evidence = ["reference-scan:iop"]
+
+[[capabilities]]
+id = "lib.backgroundjobs"
+reference_path = "src/libs/backgroundjobs.c"
+reference_symbol = "backgroundjobs"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.camera"
+reference_path = "src/libs/camera.c"
+reference_symbol = "camera"
+category = "camera/tethering"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.collect"
+reference_path = "src/libs/collect.c"
+reference_symbol = "collect"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.colorlabels"
+reference_path = "src/libs/tools/colorlabels.c"
+reference_symbol = "colorlabels"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.colorpicker"
+reference_path = "src/libs/colorpicker.c"
+reference_symbol = "colorpicker"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.copy_history"
+reference_path = "src/libs/copy_history.c"
+reference_symbol = "copy_history"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.darktable_label"
+reference_path = "src/libs/tools/darktable.c"
+reference_symbol = "darktable_label"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.duplicate"
+reference_path = "src/libs/duplicate.c"
+reference_symbol = "duplicate"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.export"
+reference_path = "src/libs/export.c"
+reference_symbol = "export"
+category = "export/storage"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.filmstrip"
+reference_path = "src/libs/tools/filmstrip.c"
+reference_symbol = "filmstrip"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.filter"
+reference_path = "src/libs/tools/filter.c"
+reference_symbol = "filter"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.filtering"
+reference_path = "src/libs/filtering.c"
+reference_symbol = "filtering"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.gamepad"
+reference_path = "src/libs/tools/gamepad.c"
+reference_symbol = "gamepad"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.geotagging"
+reference_path = "src/libs/geotagging.c"
+reference_symbol = "geotagging"
+category = "map/geotagging"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.global_toolbox"
+reference_path = "src/libs/tools/global_toolbox.c"
+reference_symbol = "global_toolbox"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.hinter"
+reference_path = "src/libs/tools/hinter.c"
+reference_symbol = "hinter"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.histogram"
+reference_path = "src/libs/histogram.c"
+reference_symbol = "histogram"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.history"
+reference_path = "src/libs/history.c"
+reference_symbol = "history"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.image"
+reference_path = "src/libs/image.c"
+reference_symbol = "image"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.image_infos"
+reference_path = "src/libs/tools/image_infos.c"
+reference_symbol = "image_infos"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.import"
+reference_path = "src/libs/import.c"
+reference_symbol = "import"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.ioporder"
+reference_path = "src/libs/ioporder.c"
+reference_symbol = "ioporder"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.lighttable_mode"
+reference_path = "src/libs/tools/lighttable.c"
+reference_symbol = "lighttable_mode"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.live_view"
+reference_path = "src/libs/live_view.c"
+reference_symbol = "live_view"
+category = "camera/tethering"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.location"
+reference_path = "src/libs/location.c"
+reference_symbol = "location"
+category = "map/geotagging"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.log_history"
+reference_path = "src/libs/tools/log_history.c"
+reference_symbol = "log_history"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.map_locations"
+reference_path = "src/libs/map_locations.c"
+reference_symbol = "map_locations"
+category = "map/geotagging"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.map_settings"
+reference_path = "src/libs/map_settings.c"
+reference_symbol = "map_settings"
+category = "map/geotagging"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.masks"
+reference_path = "src/libs/masks.c"
+reference_symbol = "masks"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.metadata"
+reference_path = "src/libs/metadata.c"
+reference_symbol = "metadata"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.metadata_view"
+reference_path = "src/libs/metadata_view.c"
+reference_symbol = "metadata_view"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.midi"
+reference_path = "src/libs/tools/midi.c"
+reference_symbol = "midi"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.module_toolbox"
+reference_path = "src/libs/tools/module_toolbox.c"
+reference_symbol = "module_toolbox"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.modulegroups"
+reference_path = "src/libs/modulegroups.c"
+reference_symbol = "modulegroups"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.navigation"
+reference_path = "src/libs/navigation.c"
+reference_symbol = "navigation"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.neural_restore"
+reference_path = "src/libs/neural_restore.c"
+reference_symbol = "neural_restore"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.print_settings"
+reference_path = "src/libs/print_settings.c"
+reference_symbol = "print_settings"
+category = "printing"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.ratings"
+reference_path = "src/libs/tools/ratings.c"
+reference_symbol = "ratings"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.recentcollect"
+reference_path = "src/libs/recentcollect.c"
+reference_symbol = "recentcollect"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.select"
+reference_path = "src/libs/select.c"
+reference_symbol = "select"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.session"
+reference_path = "src/libs/session.c"
+reference_symbol = "session"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.snapshots"
+reference_path = "src/libs/snapshots.c"
+reference_symbol = "snapshots"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.styles"
+reference_path = "src/libs/styles.c"
+reference_symbol = "styles"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.tagging"
+reference_path = "src/libs/tagging.c"
+reference_symbol = "tagging"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.timeline"
+reference_path = "src/libs/tools/timeline.c"
+reference_symbol = "timeline"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.view_toolbox"
+reference_path = "src/libs/tools/view_toolbox.c"
+reference_symbol = "view_toolbox"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lib.viewswitcher"
+reference_path = "src/libs/tools/viewswitcher.c"
+reference_symbol = "viewswitcher"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:lib"]
+
+[[capabilities]]
+id = "lua.ai"
+reference_path = "src/lua/init.c"
+reference_symbol = "ai"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.cairo"
+reference_path = "src/lua/init.c"
+reference_symbol = "cairo"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.call"
+reference_path = "src/lua/init.c"
+reference_symbol = "call"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.configuration"
+reference_path = "src/lua/init.c"
+reference_symbol = "configuration"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.database"
+reference_path = "src/lua/init.c"
+reference_symbol = "database"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_events"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_events"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_format"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_format"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_lib"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_lib"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_modules"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_modules"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_storage"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_storage"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_types"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_types"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.early_view"
+reference_path = "src/lua/init.c"
+reference_symbol = "early_view"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.events"
+reference_path = "src/lua/init.c"
+reference_symbol = "events"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.film"
+reference_path = "src/lua/init.c"
+reference_symbol = "film"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.gettext"
+reference_path = "src/lua/init.c"
+reference_symbol = "gettext"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.glist"
+reference_path = "src/lua/init.c"
+reference_symbol = "glist"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.gui"
+reference_path = "src/lua/init.c"
+reference_symbol = "gui"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.guides"
+reference_path = "src/lua/init.c"
+reference_symbol = "guides"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.image"
+reference_path = "src/lua/init.c"
+reference_symbol = "image"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.init"
+reference_path = "src/lua/init.c"
+reference_symbol = "init"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.lualib"
+reference_path = "src/lua/init.c"
+reference_symbol = "lualib"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.luastorages"
+reference_path = "src/lua/init.c"
+reference_symbol = "luastorages"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.metadata"
+reference_path = "src/lua/init.c"
+reference_symbol = "metadata"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.password"
+reference_path = "src/lua/init.c"
+reference_symbol = "password"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.preferences"
+reference_path = "src/lua/init.c"
+reference_symbol = "preferences"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.print"
+reference_path = "src/lua/init.c"
+reference_symbol = "print"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.styles"
+reference_path = "src/lua/init.c"
+reference_symbol = "styles"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.tags"
+reference_path = "src/lua/init.c"
+reference_symbol = "tags"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.util"
+reference_path = "src/lua/init.c"
+reference_symbol = "util"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.view"
+reference_path = "src/lua/init.c"
+reference_symbol = "view"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "lua.widget"
+reference_path = "src/lua/init.c"
+reference_symbol = "widget"
+category = "scripting"
+status = "redesigned"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:lua"]
+redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
+
+[[capabilities]]
+id = "opencl.agx"
+reference_path = "data/kernels/agx.cl"
+reference_symbol = "agx"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.atrous"
+reference_path = "data/kernels/atrous.cl"
+reference_symbol = "atrous"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.basecurve"
+reference_path = "data/kernels/basecurve.cl"
+reference_symbol = "basecurve"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.basic"
+reference_path = "data/kernels/basic.cl"
+reference_symbol = "basic"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.basicadj"
+reference_path = "data/kernels/basicadj.cl"
+reference_symbol = "basicadj"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.bilateral"
+reference_path = "data/kernels/bilateral.cl"
+reference_symbol = "bilateral"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.blendop"
+reference_path = "data/kernels/blendop.cl"
+reference_symbol = "blendop"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.bloom"
+reference_path = "data/kernels/bloom.cl"
+reference_symbol = "bloom"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.blurs"
+reference_path = "data/kernels/blurs.cl"
+reference_symbol = "blurs"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.bspline"
+reference_path = "data/kernels/bspline.cl"
+reference_symbol = "bspline"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.capture"
+reference_path = "data/kernels/capture.cl"
+reference_symbol = "capture"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.channelmixer"
+reference_path = "data/kernels/channelmixer.cl"
+reference_symbol = "channelmixer"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.colorequal"
+reference_path = "data/kernels/colorequal.cl"
+reference_symbol = "colorequal"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.colorharmonizer"
+reference_path = "data/kernels/colorharmonizer.cl"
+reference_symbol = "colorharmonizer"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.colorreconstruction"
+reference_path = "data/kernels/colorreconstruction.cl"
+reference_symbol = "colorreconstruction"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.colorspaces"
+reference_path = "data/kernels/colorspaces.cl"
+reference_symbol = "colorspaces"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.demosaic_markesteijn"
+reference_path = "data/kernels/demosaic_markesteijn.cl"
+reference_symbol = "demosaic_markesteijn"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.demosaic_other"
+reference_path = "data/kernels/demosaic_other.cl"
+reference_symbol = "demosaic_other"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.demosaic_ppg"
+reference_path = "data/kernels/demosaic_ppg.cl"
+reference_symbol = "demosaic_ppg"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.demosaic_rcd"
+reference_path = "data/kernels/demosaic_rcd.cl"
+reference_symbol = "demosaic_rcd"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.demosaic_vng"
+reference_path = "data/kernels/demosaic_vng.cl"
+reference_symbol = "demosaic_vng"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.denoiseprofile"
+reference_path = "data/kernels/denoiseprofile.cl"
+reference_symbol = "denoiseprofile"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.diffuse"
+reference_path = "data/kernels/diffuse.cl"
+reference_symbol = "diffuse"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.dwt"
+reference_path = "data/kernels/dwt.cl"
+reference_symbol = "dwt"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.extended"
+reference_path = "data/kernels/extended.cl"
+reference_symbol = "extended"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.filmic"
+reference_path = "data/kernels/filmic.cl"
+reference_symbol = "filmic"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.gaussian"
+reference_path = "data/kernels/gaussian.cl"
+reference_symbol = "gaussian"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.guided_filter"
+reference_path = "data/kernels/guided_filter.cl"
+reference_symbol = "guided_filter"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.hazeremoval"
+reference_path = "data/kernels/hazeremoval.cl"
+reference_symbol = "hazeremoval"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.highpass"
+reference_path = "data/kernels/highpass.cl"
+reference_symbol = "highpass"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.liquify"
+reference_path = "data/kernels/liquify.cl"
+reference_symbol = "liquify"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.locallaplacian"
+reference_path = "data/kernels/locallaplacian.cl"
+reference_symbol = "locallaplacian"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.lut3d"
+reference_path = "data/kernels/lut3d.cl"
+reference_symbol = "lut3d"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.negadoctor"
+reference_path = "data/kernels/negadoctor.cl"
+reference_symbol = "negadoctor"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.nlmeans"
+reference_path = "data/kernels/nlmeans.cl"
+reference_symbol = "nlmeans"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.overlay"
+reference_path = "data/kernels/overlay.cl"
+reference_symbol = "overlay"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.retouch"
+reference_path = "data/kernels/retouch.cl"
+reference_symbol = "retouch"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.rgbcurve"
+reference_path = "data/kernels/rgbcurve.cl"
+reference_symbol = "rgbcurve"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.rgblevels"
+reference_path = "data/kernels/rgblevels.cl"
+reference_symbol = "rgblevels"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.sharpen"
+reference_path = "data/kernels/sharpen.cl"
+reference_symbol = "sharpen"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.sigmoid"
+reference_path = "data/kernels/sigmoid.cl"
+reference_symbol = "sigmoid"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "opencl.soften"
+reference_path = "data/kernels/soften.cl"
+reference_symbol = "soften"
+category = "darkroom"
+status = "redesigned"
+issue_sequences = ["0136"]
+test_evidence = ["reference-scan:opencl"]
+redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
+
+[[capabilities]]
+id = "storage.disk"
+reference_path = "src/imageio/storage/disk.c"
+reference_symbol = "disk"
+category = "export/storage"
+status = "required"
+issue_sequences = ["0254"]
+test_evidence = ["reference-scan:storage"]
+
+[[capabilities]]
+id = "storage.email"
+reference_path = "src/imageio/storage/email.c"
+reference_symbol = "email"
+category = "export/storage"
+status = "required"
+issue_sequences = ["0255"]
+test_evidence = ["reference-scan:storage"]
+
+[[capabilities]]
+id = "storage.gallery"
+reference_path = "src/imageio/storage/gallery.c"
+reference_symbol = "gallery"
+category = "export/storage"
+status = "required"
+issue_sequences = ["0256"]
+test_evidence = ["reference-scan:storage"]
+
+[[capabilities]]
+id = "storage.latex"
+reference_path = "src/imageio/storage/latex.c"
+reference_symbol = "latex"
+category = "export/storage"
+status = "required"
+issue_sequences = ["0257"]
+test_evidence = ["reference-scan:storage"]
+
+[[capabilities]]
+id = "storage.piwigo"
+reference_path = "src/imageio/storage/piwigo.c"
+reference_symbol = "piwigo"
+category = "export/storage"
+status = "required"
+issue_sequences = ["0256"]
+test_evidence = ["reference-scan:storage"]
+
+[[capabilities]]
+id = "view.darkroom"
+reference_path = "src/views/darkroom.c"
+reference_symbol = "darkroom"
+category = "darkroom"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:view"]
+
+[[capabilities]]
+id = "view.lighttable"
+reference_path = "src/views/lighttable.c"
+reference_symbol = "lighttable"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:view"]
+
+[[capabilities]]
+id = "view.map"
+reference_path = "src/views/map.c"
+reference_symbol = "map"
+category = "map/geotagging"
+status = "required"
+issue_sequences = ["0060"]
+test_evidence = ["reference-scan:view"]
+
+[[capabilities]]
+id = "view.print"
+reference_path = "src/views/print.c"
+reference_symbol = "print"
+category = "printing"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:view"]
+
+[[capabilities]]
+id = "view.slideshow"
+reference_path = "src/views/slideshow.c"
+reference_symbol = "slideshow"
+category = "catalog/library"
+status = "required"
+issue_sequences = ["0057"]
+test_evidence = ["reference-scan:view"]
+
+[[capabilities]]
+id = "view.tethering"
+reference_path = "src/views/tethering.c"
+reference_symbol = "tethering"
+category = "camera/tethering"
+status = "required"
+issue_sequences = ["0035"]
+test_evidence = ["reference-scan:view"]
+
+[[summary]]
+phase = "foundation"
+milestone = "1"
+capability_count = 43
+required = 2
+redesigned = 41
+unsupported = 0
+
+[[summary]]
+phase = "compatibility"
+milestone = "3"
+capability_count = 90
+required = 59
+redesigned = 31
+unsupported = 0
+
+[[summary]]
+phase = "image"
+milestone = "4"
+capability_count = 14
+required = 14
+redesigned = 0
+unsupported = 0
+
+[[summary]]
+phase = "processing"
+milestone = "5"
+capability_count = 144
+required = 102
+redesigned = 42
+unsupported = 0

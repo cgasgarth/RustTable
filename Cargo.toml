@@ -13,6 +13,7 @@ members = [
     "crates/rusttable-render",
     "crates/rusttable-testkit",
     "crates/rusttable-ui",
+    "crates/rusttable-parity",
 ]
 resolver = "3"
 
