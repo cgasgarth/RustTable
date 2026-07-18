@@ -3,6 +3,7 @@
 
 mod app;
 mod bootstrap;
+mod navigation;
 mod theme;
 mod view;
 
