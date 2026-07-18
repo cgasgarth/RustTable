@@ -3,6 +3,7 @@ use iced::{Element, Length};
 use rusttable_core::product_name;
 
 use crate::app::{Message, Shell};
+use crate::navigation::{NavigationIntent, WorkspaceRoute};
 use crate::theme::{CONTENT_PADDING, HEADER_HEIGHT, REGION_SPACING, SIDEBAR_WIDTH};
 
 pub(crate) fn view(shell: &Shell) -> Element<'_, Message> {
@@ -20,12 +21,26 @@ pub(crate) fn view(shell: &Shell) -> Element<'_, Message> {
     )
     .width(Length::Fill)
     .height(Length::Fixed(HEADER_HEIGHT));
-    let workspace = container(text("Workspace"))
+    let workspace_content = match shell.route() {
+        WorkspaceRoute::Library => column![text("Workspace"), text("Library")],
+        WorkspaceRoute::PhotoDetail(photo_id) => column![
+            text("Workspace"),
+            text("Photo detail"),
+            text(photo_id.to_string()),
+            button(text("Back to library"))
+                .on_press(Message::Navigate(NavigationIntent::ShowLibrary)),
+        ],
+    };
+    let workspace = container(workspace_content)
         .width(Length::Fill)
         .height(Length::Fill);
     let body = if shell.sidebar_visible() {
         row![
-            container(text("Sidebar")).width(Length::Fixed(SIDEBAR_WIDTH)),
+            container(column![
+                text("Sidebar"),
+                button(text("Library")).on_press(Message::Navigate(NavigationIntent::ShowLibrary)),
+            ])
+            .width(Length::Fixed(SIDEBAR_WIDTH)),
             workspace,
         ]
         .spacing(REGION_SPACING)

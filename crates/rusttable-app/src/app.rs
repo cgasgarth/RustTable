@@ -1,14 +1,18 @@
 use iced::Task;
 
+use crate::navigation::{NavigationIntent, NavigationState};
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Shell {
     sidebar_visible: bool,
+    navigation: NavigationState,
 }
 
 impl Default for Shell {
     fn default() -> Self {
         Self {
             sidebar_visible: true,
+            navigation: NavigationState::default(),
         }
     }
 }
@@ -17,22 +21,32 @@ impl Shell {
     pub(crate) fn sidebar_visible(&self) -> bool {
         self.sidebar_visible
     }
+
+    pub(crate) fn route(&self) -> crate::navigation::WorkspaceRoute {
+        self.navigation.route()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Message {
     ToggleSidebar,
+    Navigate(NavigationIntent),
 }
 
 pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match message {
         Message::ToggleSidebar => shell.sidebar_visible = !shell.sidebar_visible,
+        Message::Navigate(intent) => {
+            let _ = shell.navigation.apply(intent);
+        }
     }
     Task::none()
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::navigation::NavigationState;
+
     use super::{Message, Shell, update};
 
     #[test]
@@ -40,7 +54,8 @@ mod tests {
         assert_eq!(
             Shell::default(),
             Shell {
-                sidebar_visible: true
+                sidebar_visible: true,
+                navigation: NavigationState::default(),
             }
         );
     }
