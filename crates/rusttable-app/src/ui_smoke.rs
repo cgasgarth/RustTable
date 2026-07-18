@@ -1,3 +1,4 @@
+use iced::keyboard::{Key, key::Named};
 use iced_test::Simulator;
 use iced_test::core::{Settings, Size};
 use rusttable_core::PhotoId;
@@ -202,6 +203,141 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
         simulator.find(format!("Photo {number}"))?;
     }
     assert_eq!(shell.photo_workspace(), &workspace);
+
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the keyboard scenario intentionally covers the complete interaction sequence"
+)]
+fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
+    let workspace = four_photo_workspace();
+    let mut shell = Shell::with_photo_workspace(workspace);
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Tab));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(crate::input::InputIntent::FocusNext)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(crate::input::InputIntent::FocusNext),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Tab));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(crate::input::InputIntent::FocusNext)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(crate::input::InputIntent::FocusNext),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Tab));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(crate::input::InputIntent::FocusNext)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(crate::input::InputIntent::FocusNext),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Enter));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Navigate(NavigationIntent::ShowPhoto(
+            PhotoId::new(2).expect("test photo ID is non-zero"),
+        ))]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Navigate(NavigationIntent::ShowPhoto(
+            PhotoId::new(2).expect("test photo ID is non-zero"),
+        )),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.find("Detail 2")?;
+    simulator.tap_key(Key::Named(Named::Space));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Navigate(NavigationIntent::ShowLibrary)]
+    );
+    let _ = update(&mut shell, Message::Navigate(NavigationIntent::ShowLibrary));
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Tab));
+    let messages: Vec<_> = simulator.into_messages().collect();
+    assert_eq!(
+        messages,
+        [Message::Input(crate::input::InputIntent::FocusNext)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(crate::input::InputIntent::FocusNext),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Enter));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Navigate(NavigationIntent::ShowPhoto(
+            PhotoId::new(3).expect("test photo ID is non-zero"),
+        ))]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Navigate(NavigationIntent::ShowPhoto(
+            PhotoId::new(3).expect("test photo ID is non-zero"),
+        )),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Escape));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(crate::input::InputIntent::Escape)]
+    );
 
     Ok(())
 }

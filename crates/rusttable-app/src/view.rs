@@ -1,8 +1,10 @@
-use iced::widget::{button, column, container, row, scrollable, text};
+use iced::widget::{column, container, row, scrollable, text};
 use iced::{Element, Length};
 use rusttable_core::product_name;
 
+use crate::action_button::{action_button, sized_action_button};
 use crate::app::{Message, Shell};
+use crate::input::FocusTarget;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
 use crate::presentation::{PhotoCardViewModel, PhotoDetailViewModel};
 use crate::theme::{
@@ -19,7 +21,11 @@ pub(crate) fn view(shell: &Shell) -> Element<'_, Message> {
     let header = container(
         row![
             text(product_name()),
-            button(text(toggle_label)).on_press(Message::ToggleSidebar)
+            action_button(
+                text(toggle_label),
+                Message::ToggleSidebar,
+                shell.is_focused(FocusTarget::SidebarToggle),
+            )
         ]
         .spacing(REGION_SPACING),
     )
@@ -36,7 +42,11 @@ pub(crate) fn view(shell: &Shell) -> Element<'_, Message> {
         row![
             container(column![
                 text("Sidebar"),
-                button(text("Library")).on_press(Message::Navigate(NavigationIntent::ShowLibrary)),
+                action_button(
+                    text("Library"),
+                    Message::Navigate(NavigationIntent::ShowLibrary),
+                    shell.is_focused(FocusTarget::Library),
+                ),
             ])
             .width(Length::Fixed(SIDEBAR_WIDTH)),
             workspace,
@@ -63,7 +73,7 @@ fn library_content(shell: &Shell) -> Element<'_, Message> {
     let rows = cards.chunks(PHOTO_GRID_COLUMNS).map(|cards| {
         cards
             .iter()
-            .fold(row![], |row, card| row.push(photo_card(card)))
+            .fold(row![], |row, card| row.push(photo_card(shell, card)))
             .spacing(PHOTO_GRID_SPACING)
             .into()
     });
@@ -74,22 +84,27 @@ fn library_content(shell: &Shell) -> Element<'_, Message> {
     column![text("Library"), grid].into()
 }
 
-fn photo_card(card: &PhotoCardViewModel) -> Element<'_, Message> {
+fn photo_card<'a>(shell: &Shell, card: &'a PhotoCardViewModel) -> Element<'a, Message> {
     let mut content = column![text("Preview unavailable"), text(card.title().as_str())];
     if let Some(secondary) = card.secondary() {
         content = content.push(text(secondary.as_str()));
     }
 
-    button(content)
-        .width(Length::Fixed(PHOTO_CARD_WIDTH))
-        .height(Length::Fixed(PHOTO_CARD_HEIGHT))
-        .on_press(Message::Navigate(NavigationIntent::ShowPhoto(card.id())))
-        .into()
+    sized_action_button(
+        content,
+        Message::Navigate(NavigationIntent::ShowPhoto(card.id())),
+        shell.is_focused(FocusTarget::PhotoCard(card.id())),
+        Length::Fixed(PHOTO_CARD_WIDTH),
+        Length::Fixed(PHOTO_CARD_HEIGHT),
+    )
 }
 
 fn detail_content(shell: &Shell, photo_id: rusttable_core::PhotoId) -> Element<'_, Message> {
-    let back =
-        button(text("Back to library")).on_press(Message::Navigate(NavigationIntent::ShowLibrary));
+    let back = action_button(
+        text("Back to library"),
+        Message::Navigate(NavigationIntent::ShowLibrary),
+        shell.is_focused(FocusTarget::BackToLibrary),
+    );
     let Some(detail) = shell.photo_workspace().detail(photo_id) else {
         return column![
             text("Photo detail"),
@@ -105,7 +120,7 @@ fn detail_content(shell: &Shell, photo_id: rusttable_core::PhotoId) -> Element<'
 
 fn detail_view<'a>(
     detail: &'a PhotoDetailViewModel,
-    back: iced::widget::Button<'a, Message>,
+    back: Element<'a, Message>,
 ) -> Element<'a, Message> {
     let facts = column(detail.facts().map(|fact| {
         row![text(fact.label().as_str()), text(fact.value().as_str())]
