@@ -1,0 +1,12 @@
+[package]
+name = "rusttable-diagnostics"
+description = "Bounded local diagnostics for RustTable."
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+directories = "=6.0.0"
+
+[lints]
+workspace = true
