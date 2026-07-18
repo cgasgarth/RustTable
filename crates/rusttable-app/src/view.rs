@@ -5,6 +5,7 @@ use rusttable_core::product_name;
 use crate::action_button::{action_button, sized_action_button};
 use crate::app::{Message, Shell};
 use crate::input::FocusTarget;
+use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
 use crate::presentation::{PhotoCardViewModel, PhotoDetailViewModel};
 use crate::theme::{
@@ -65,9 +66,29 @@ pub(crate) fn view(shell: &Shell) -> Element<'_, Message> {
 }
 
 fn library_content(shell: &Shell) -> Element<'_, Message> {
-    let cards: Vec<_> = shell.photo_workspace().cards().collect();
+    match shell.library_state() {
+        LibraryState::Loading => column![text("Library"), text("Loading library")].into(),
+        LibraryState::Empty => column![text("Library"), text("No photos in this catalog")].into(),
+        LibraryState::Ready(workspace) => ready_library_content(shell, workspace),
+        LibraryState::Failed(kind) => {
+            let projection = kind.projection();
+            column![
+                text("Library"),
+                text(projection.title()),
+                text(projection.detail()),
+            ]
+            .into()
+        }
+    }
+}
+
+fn ready_library_content<'a>(
+    shell: &'a Shell,
+    workspace: &'a crate::presentation::PhotoWorkspaceViewModel,
+) -> Element<'a, Message> {
+    let cards: Vec<_> = workspace.cards().collect();
     if cards.is_empty() {
-        return column![text("Library"), text("No photos")].into();
+        return column![text("Library"), text("No photos in this catalog")].into();
     }
 
     let rows = cards.chunks(PHOTO_GRID_COLUMNS).map(|cards| {
@@ -105,7 +126,16 @@ fn detail_content(shell: &Shell, photo_id: rusttable_core::PhotoId) -> Element<'
         Message::Navigate(NavigationIntent::ShowLibrary),
         shell.is_focused(FocusTarget::BackToLibrary),
     );
-    let Some(detail) = shell.photo_workspace().detail(photo_id) else {
+    let Some(workspace) = shell.library_state().ready_workspace() else {
+        return column![
+            text("Photo detail"),
+            text(photo_id.to_string()),
+            text("Photo unavailable"),
+            back
+        ]
+        .into();
+    };
+    let Some(detail) = workspace.detail(photo_id) else {
         return column![
             text("Photo detail"),
             text(photo_id.to_string()),
@@ -146,7 +176,28 @@ mod tests {
 
     use super::view;
     use crate::app::{Message, Shell, update};
+    use crate::library::{LibraryFailureKind, LibraryState};
     use crate::navigation::NavigationIntent;
+    use crate::presentation::{
+        PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
+    };
+
+    fn text(value: &str) -> PresentationText {
+        PresentationText::new(value).expect("test text is valid")
+    }
+
+    fn ready_workspace() -> PhotoWorkspaceViewModel {
+        let photo_id = PhotoId::new(1).expect("test photo ID is non-zero");
+        PhotoWorkspaceViewModel::new(
+            vec![PhotoCardViewModel::new(photo_id, text("Photo 1"), None)],
+            vec![PhotoDetailViewModel::new(
+                photo_id,
+                text("Photo 1"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid")
+    }
 
     #[test]
     fn empty_library_projection_is_explicit() -> Result<(), iced_test::Error> {
@@ -156,7 +207,7 @@ mod tests {
 
         simulator.find("Workspace")?;
         simulator.find("Library")?;
-        simulator.find("No photos")?;
+        simulator.find("No photos in this catalog")?;
 
         Ok(())
     }
@@ -177,6 +228,62 @@ mod tests {
         simulator.find("Photo unavailable")?;
         simulator.find("Back to library")?;
 
+        Ok(())
+    }
+
+    #[test]
+    fn loading_library_projection_has_no_photo_cards() -> Result<(), iced_test::Error> {
+        let shell = Shell::with_library_state(LibraryState::Loading);
+        let mut simulator =
+            Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&shell));
+
+        simulator.find("Loading library")?;
+        assert!(simulator.find("No photos in this catalog").is_err());
+        assert!(simulator.find("Photo 1").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn failed_library_projections_are_safe_and_card_free() -> Result<(), iced_test::Error> {
+        for (kind, detail) in [
+            (
+                LibraryFailureKind::CatalogLocationUnavailable,
+                "The catalog location is unavailable.",
+            ),
+            (
+                LibraryFailureKind::RepositoryUnavailable,
+                "The catalog repository is unavailable.",
+            ),
+            (
+                LibraryFailureKind::CorruptPersistedCatalog,
+                "The persisted catalog is corrupt.",
+            ),
+            (
+                LibraryFailureKind::PresentationConversionFailed,
+                "A catalog record could not be shown.",
+            ),
+        ] {
+            let shell = Shell::with_library_state(LibraryState::Failed(kind));
+            let mut simulator =
+                Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&shell));
+
+            simulator.find("Library unavailable")?;
+            simulator.find(detail)?;
+            assert!(simulator.find("Photo 1").is_err());
+            assert!(simulator.find("Loading library").is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ready_library_projection_preserves_photo_cards() -> Result<(), iced_test::Error> {
+        let shell = Shell::with_library_state(LibraryState::Ready(ready_workspace()));
+        let mut simulator =
+            Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&shell));
+
+        simulator.find("Photo 1")?;
+        assert!(simulator.find("Loading library").is_err());
+        assert!(simulator.find("No photos in this catalog").is_err());
         Ok(())
     }
 }

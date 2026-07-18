@@ -5,6 +5,7 @@ mod action_button;
 mod app;
 mod bootstrap;
 mod input;
+mod library;
 mod navigation;
 #[cfg_attr(
     not(test),

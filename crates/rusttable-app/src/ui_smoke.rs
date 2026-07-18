@@ -4,6 +4,7 @@ use iced_test::core::{Settings, Size};
 use rusttable_core::PhotoId;
 
 use crate::app::{Message, Shell, update};
+use crate::library::LibraryState;
 use crate::navigation::NavigationIntent;
 use crate::presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
@@ -202,7 +203,7 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
     for number in 1..=4 {
         simulator.find(format!("Photo {number}"))?;
     }
-    assert_eq!(shell.photo_workspace(), &workspace);
+    assert_eq!(shell.library_state(), &LibraryState::Ready(workspace));
 
     Ok(())
 }
