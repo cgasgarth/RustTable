@@ -10,6 +10,7 @@
 
 mod color;
 mod evaluate;
+mod graph;
 mod operation;
 mod output;
 mod pipeline;
@@ -21,6 +22,10 @@ pub use color::{
     WorkingRgbImage, to_linear_srgb,
 };
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
+pub use graph::{
+    CompiledOperationGraph, OperationGraphCompileError, OperationGraphInput, OperationGraphNode,
+    OperationGraphNodeIndex, OperationGraphOutput,
+};
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,
