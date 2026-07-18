@@ -61,7 +61,7 @@ fn core_has_no_normal_dependencies() {
 }
 
 #[test]
-fn catalog_depends_only_on_core() {
+fn catalog_depends_only_on_core_and_image() {
     let metadata = metadata();
     let catalog = package_object(&metadata, "rusttable-catalog");
     let dependencies_start = catalog
@@ -78,10 +78,14 @@ fn catalog_depends_only_on_core() {
         dependencies.contains("\"name\":\"rusttable-core\""),
         "catalog must depend on rusttable-core: {catalog}"
     );
+    assert!(
+        dependencies.contains("\"name\":\"rusttable-image\""),
+        "catalog must depend on rusttable-image: {catalog}"
+    );
     assert_eq!(
         dependencies.matches("\"name\":").count(),
-        1,
-        "catalog must have exactly one normal dependency: {catalog}"
+        2,
+        "catalog must have exactly two normal dependencies: {catalog}"
     );
 }
 
@@ -96,7 +100,6 @@ fn catalog_boundary_has_no_forbidden_integration_dependencies() {
         "bindgen",
         "cmake",
         "database",
-        "image",
         "jpeg",
         "png",
         "processing",
