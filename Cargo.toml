@@ -8,6 +8,7 @@ members = [
     "crates/rusttable-image",
     "crates/rusttable-image-io",
     "crates/rusttable-processing",
+    "crates/rusttable-render",
 ]
 resolver = "3"
 
