@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/rusttable-app", "crates/rusttable-core"]
+members = [
+    "crates/rusttable-app",
+    "crates/rusttable-catalog",
+    "crates/rusttable-core",
+]
 resolver = "3"
 
 [workspace.package]

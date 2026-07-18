@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
-#![doc = "Core foundation for the `RustTable` rewrite."]
+#![doc = "Core domain foundation for the `RustTable` rewrite."]
+#![doc = "The core crate has no normal dependencies; catalog code may depend on it, never the reverse."]
 
 /// Returns the stable product name used by the workspace smoke test.
 #[must_use]
