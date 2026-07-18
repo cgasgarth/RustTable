@@ -1,0 +1,10 @@
+[package]
+name = "rusttable-core"
+description = "Core foundation for the RustTable rewrite."
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
