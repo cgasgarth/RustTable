@@ -8,8 +8,9 @@ mod model;
 mod value;
 
 pub use edit::{
-    Operation, OperationBuildError, OperationKey, OperationKeyError, ParameterName,
-    ParameterNameError, ParameterText, ParameterTextError, ParameterValue,
+    Edit, EditBuildError, EditRevisionError, Operation, OperationBuildError, OperationKey,
+    OperationKeyError, ParameterName, ParameterNameError, ParameterText, ParameterTextError,
+    ParameterValue,
 };
 pub use id::{AssetId, EditId, IdParseError, OperationId, PhotoId};
 pub use model::{Asset, AssetRole, ByteLength, ContentHash, HashAlgorithm, Photo, PhotoBuildError};
