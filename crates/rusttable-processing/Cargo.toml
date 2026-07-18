@@ -8,5 +8,11 @@ version.workspace = true
 [dependencies]
 rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
 
+[[bench]]
+name = "performance_budgets"
+harness = false
+bench = false
+test = false
+
 [lints]
 workspace = true
