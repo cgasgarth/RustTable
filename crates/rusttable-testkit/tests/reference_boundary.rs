@@ -28,6 +28,7 @@ fn reference_process_boundary_stays_in_testkit() {
     for path in cargo_manifests(&root) {
         if path == root.join("crates/rusttable-testkit/Cargo.toml")
             || path == root.join("Cargo.toml")
+            || path == root.join("crates/xtask/Cargo.toml")
         {
             continue;
         }

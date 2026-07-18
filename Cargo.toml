@@ -14,6 +14,7 @@ members = [
     "crates/rusttable-testkit",
     "crates/rusttable-ui",
     "crates/rusttable-parity",
+    "crates/xtask",
 ]
 resolver = "3"
 
