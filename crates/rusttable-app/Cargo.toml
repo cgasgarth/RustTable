@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-app"
+description = "Iced application shell for RustTable."
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+iced = { version = "0.14.0", default-features = false, features = ["thread-pool", "tiny-skia"] }
+rusttable-core = { path = "../rusttable-core" }
+
+[lints]
+workspace = true
