@@ -7,6 +7,14 @@
 #![doc = "fn takes_working(_: WorkingRgbImage) {}"]
 #![doc = "fn takes_source(source: SourceRgbImage) { takes_working(source); }"]
 #![doc = "```"]
+#![doc = "```compile_fail"]
+#![doc = "use rusttable_processing::{to_linear_srgb, DisplayP3RgbImage};"]
+#![doc = "fn converts(source: &DisplayP3RgbImage) { let _ = to_linear_srgb(source); }"]
+#![doc = "```"]
+#![doc = "```compile_fail"]
+#![doc = "use rusttable_processing::{to_linear_srgb_from_display_p3, SourceRgbImage};"]
+#![doc = "fn converts(source: &SourceRgbImage) { let _ = to_linear_srgb_from_display_p3(source); }"]
+#![doc = "```"]
 
 mod color;
 mod evaluate;
@@ -18,9 +26,10 @@ mod scalar;
 mod window;
 
 pub use color::{
-    ImageBuildError, LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel,
-    SourceColorSpace, SourceRgb, SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace,
-    WorkingRgbImage, to_linear_srgb,
+    DisplayP3Channel, DisplayP3ChannelError, DisplayP3Rgb, DisplayP3RgbImage, ImageBuildError,
+    LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel, SourceColorSpace, SourceRgb,
+    SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingRgbImage,
+    to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use graph::{

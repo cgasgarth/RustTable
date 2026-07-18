@@ -88,6 +88,7 @@ pub enum PixelLayout {
 pub enum ColorEncoding {
     Unspecified,
     Srgb,
+    DisplayP3,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
