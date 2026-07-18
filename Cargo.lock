@@ -1470,6 +1470,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-catalog"
+version = "0.1.0"
+dependencies = [
+ "rusttable-core",
+]
+
+[[package]]
 name = "rusttable-core"
 version = "0.1.0"
 

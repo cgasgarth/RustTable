@@ -1,0 +1,12 @@
+[package]
+name = "rusttable-catalog"
+description = "Catalog state and use cases for RustTable."
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+rusttable-core = { path = "../rusttable-core" }
+
+[lints]
+workspace = true
