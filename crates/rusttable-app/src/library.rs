@@ -1,13 +1,6 @@
 use crate::presentation::PhotoWorkspaceViewModel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "failure kinds are constructed by the future catalog loader"
-    )
-)]
 pub(crate) enum LibraryFailureKind {
     CatalogLocationUnavailable,
     RepositoryUnavailable,
@@ -47,13 +40,6 @@ impl LibraryFailureKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "loading and failure states are constructed by the future catalog loader"
-    )
-)]
 pub(crate) enum LibraryState {
     Loading,
     #[default]

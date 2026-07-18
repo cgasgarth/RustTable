@@ -7,6 +7,7 @@ use crate::navigation::{NavigationIntent, WorkspaceRoute};
 pub(crate) enum FocusTarget {
     SidebarToggle,
     Library,
+    RetryLibrary,
     PhotoCard(PhotoId),
     BackToLibrary,
 }
@@ -31,6 +32,7 @@ pub(crate) enum InputEffect {
     None,
     ToggleSidebar,
     Navigate(NavigationIntent),
+    RetryLibrary,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +152,7 @@ impl InputState {
                 self.origin = None;
                 InputEffect::Navigate(NavigationIntent::ShowLibrary)
             }
+            FocusTarget::RetryLibrary => InputEffect::RetryLibrary,
         }
     }
 
@@ -197,6 +200,9 @@ pub(crate) fn focus_chain(
                         .cards()
                         .map(|card| FocusTarget::PhotoCard(card.id())),
                 );
+            }
+            if matches!(library_state, LibraryState::Failed(_)) {
+                chain.push(FocusTarget::RetryLibrary);
             }
         }
         WorkspaceRoute::PhotoDetail(_) => chain.push(FocusTarget::BackToLibrary),
@@ -353,5 +359,29 @@ mod tests {
                 .any(|target| matches!(target, FocusTarget::PhotoCard(_)))
             );
         }
+    }
+
+    #[test]
+    fn failed_library_appends_retry_focus_and_activates_it() {
+        let library = LibraryState::Failed(LibraryFailureKind::RepositoryUnavailable);
+        let route = crate::navigation::WorkspaceRoute::Library;
+        let chain = focus_chain(true, route, &library);
+        assert_eq!(
+            chain,
+            vec![
+                FocusTarget::SidebarToggle,
+                FocusTarget::Library,
+                FocusTarget::RetryLibrary,
+            ]
+        );
+
+        let mut state = InputState::default();
+        let _ = state.apply(InputIntent::FocusNext, true, route, &library);
+        let _ = state.apply(InputIntent::FocusNext, true, route, &library);
+        assert_eq!(state.focused(), FocusTarget::RetryLibrary);
+        assert_eq!(
+            state.apply(InputIntent::Activate, true, route, &library),
+            InputEffect::RetryLibrary
+        );
     }
 }

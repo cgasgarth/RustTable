@@ -76,6 +76,11 @@ fn library_content(shell: &Shell) -> Element<'_, Message> {
                 text("Library"),
                 text(projection.title()),
                 text(projection.detail()),
+                action_button(
+                    text("Retry library"),
+                    Message::RetryLibrary,
+                    shell.is_focused(FocusTarget::RetryLibrary),
+                ),
             ]
             .into()
         }

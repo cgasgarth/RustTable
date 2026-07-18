@@ -1865,10 +1865,14 @@ dependencies = [
 name = "rusttable-app"
 version = "0.1.0"
 dependencies = [
+ "directories",
  "iced",
  "iced_test",
+ "rusttable-catalog",
+ "rusttable-catalog-store",
  "rusttable-core",
  "rusttable-diagnostics",
+ "rusttable-image",
 ]
 
 [[package]]
