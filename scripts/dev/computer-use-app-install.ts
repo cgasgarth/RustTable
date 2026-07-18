@@ -1,7 +1,14 @@
-import { access, mkdir, readdir, rename, rm, readFile } from 'node:fs/promises';
+import { access, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
+import {
+  RUSTTABLE_BUNDLE_IDENTIFIER,
+  parseBundleIdentifier,
+  readBundleManifest,
+  validateBundle,
+  type BundleManifest,
+} from './rusttable-app-bundle';
 
-export const RUSTTABLE_BUNDLE_IDENTIFIER = 'com.cgasgarth.rusttable';
+export { RUSTTABLE_BUNDLE_IDENTIFIER } from './rusttable-app-bundle';
 export const DEFAULT_COMPUTER_USE_APP_PATH = join(
   process.env.HOME ?? '/tmp',
   'Applications',
@@ -91,14 +98,25 @@ export const parseGitWorktreePaths = (porcelain: string): string[] =>
     .map((field) => resolve(field.slice('worktree '.length)))
     .filter((path, index, paths) => paths.indexOf(path) === index);
 
-export const parseBundleIdentifier = (plist: string): string => {
-  const match = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist);
-  if (match?.[1] === undefined) throw new Error('Bundle is missing CFBundleIdentifier.');
-  return match[1];
-};
+export { parseBundleIdentifier };
 
 export const readBundleIdentifier: BundleIdentifierReader = async (bundlePath) =>
-  parseBundleIdentifier(await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8'));
+  (await readBundleManifest(bundlePath)).CFBundleIdentifier;
+
+type BundleManifestReader = (bundlePath: string) => Promise<BundleManifest>;
+
+const assertCompleteBundle = async (
+  bundlePath: string,
+  readIdentifier: BundleIdentifierReader,
+  readManifest: BundleManifestReader,
+): Promise<void> => {
+  await validateBundle(bundlePath);
+  const manifest = await readManifest(bundlePath);
+  const identifier = await readIdentifier(bundlePath);
+  if (manifest.CFBundleIdentifier !== RUSTTABLE_BUNDLE_IDENTIFIER || identifier !== RUSTTABLE_BUNDLE_IDENTIFIER) {
+    throw new Error(`Refusing RustTable app mutation for ${bundlePath}: unexpected bundle identifier ${identifier}.`);
+  }
+};
 
 export const pathExists = async (path: string): Promise<boolean> => {
   try {
@@ -182,30 +200,23 @@ const registerBundle = async (bundlePath: string, run: CommandRunner): Promise<v
   });
 };
 
-const assertBundleIdentifier = async (
-  bundlePath: string,
-  readIdentifier: BundleIdentifierReader,
-): Promise<void> => {
-  const identifier = await readIdentifier(bundlePath);
-  if (identifier !== RUSTTABLE_BUNDLE_IDENTIFIER) {
-    throw new Error(`Refusing RustTable app mutation for ${bundlePath}: unexpected bundle identifier ${identifier}.`);
-  }
-};
-
 export const installCanonicalComputerUseApp = async ({
   installPath,
+  readManifest,
   readIdentifier = readBundleIdentifier,
   run,
   sourcePath,
   transactionId,
 }: {
   installPath: string;
+  readManifest?: BundleManifestReader;
   readIdentifier?: BundleIdentifierReader;
   run: CommandRunner;
   sourcePath: string;
   transactionId: string;
 }): Promise<void> => {
-  await assertBundleIdentifier(sourcePath, readIdentifier);
+  const readManifestValue = readManifest ?? readBundleManifest;
+  await assertCompleteBundle(sourcePath, readIdentifier, readManifestValue);
   await mkdir(dirname(installPath), { recursive: true });
   const transactionPrefix = join(dirname(installPath), `.${basename(installPath)}.${transactionId}`);
   const stagingPath = `${transactionPrefix}.stage`;
@@ -217,10 +228,10 @@ export const installCanonicalComputerUseApp = async ({
   let newBundleInstalled = false;
   try {
     await run({ args: [sourcePath, stagingPath], command: 'ditto', label: 'stage computer-use app' });
-    await assertBundleIdentifier(stagingPath, readIdentifier);
+    await assertCompleteBundle(stagingPath, readIdentifier, readManifestValue);
     await run({ allowedExitCodes: [0, 1], args: ['-x', 'RustTable'], command: 'pkill', label: 'quit RustTable' });
     if (await pathExists(installPath)) {
-      await assertBundleIdentifier(installPath, readIdentifier);
+      await assertCompleteBundle(installPath, readIdentifier, readManifestValue);
       await unregisterBundle(installPath, run);
       await rename(installPath, backupPath);
       backupCreated = true;
@@ -259,6 +270,7 @@ export const cleanupRepositoryAppBundles = async ({
     if (keep.has(resolvedPath)) continue;
     const identifier = await readIdentifier(resolvedPath).catch(() => 'unreadable');
     if (!REPOSITORY_BUNDLE_IDENTIFIERS.has(identifier)) continue;
+    await validateBundle(resolvedPath);
     await unregisterBundle(resolvedPath, run);
     await rm(resolvedPath, { force: true, recursive: true });
     removed.push(resolvedPath);

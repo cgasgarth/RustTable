@@ -1,4 +1,3 @@
-import { chmod, mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
@@ -13,9 +12,13 @@ import {
   parseLaunchServicesRegistrations,
   pathExists,
   readBundleIdentifier,
-  RUSTTABLE_BUNDLE_IDENTIFIER,
   unregisterMissingRepositoryBundles,
 } from './computer-use-app-install';
+import {
+  createRustTableBundle,
+  resolveRustTableVersion,
+  validateBundle,
+} from './rusttable-app-bundle';
 
 const releaseBundlePath = (root: string): string =>
   join(root, 'target/release/bundle/macos/RustTable.app');
@@ -46,28 +49,16 @@ const runCommand = async (request: CommandRequest): Promise<CommandResult> => {
   return result;
 };
 
-const writeAppBundle = async (root: string): Promise<string> => {
+const writeAppBundle = async (root: string, run: CommandRunner): Promise<string> => {
   const appPath = releaseBundlePath(root);
-  const executablePath = join(appPath, 'Contents/MacOS/RustTable');
-  await rm(appPath, { force: true, recursive: true });
-  await mkdir(join(appPath, 'Contents/Resources'), { recursive: true });
-  await Bun.write(
-    join(appPath, 'Contents/Info.plist'),
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleDisplayName</key><string>RustTable</string>
-<key>CFBundleExecutable</key><string>RustTable</string>
-<key>CFBundleIdentifier</key><string>${RUSTTABLE_BUNDLE_IDENTIFIER}</string>
-<key>CFBundleName</key><string>RustTable</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.0</string>
-<key>CFBundleVersion</key><string>0.1.0</string>
-</dict></plist>
-`,
-  );
-  await Bun.write(executablePath, await Bun.file(join(root, 'target/release/rusttable-app')).arrayBuffer());
-  await chmod(executablePath, 0o755);
+  const version = await resolveRustTableVersion(root, run);
+  await createRustTableBundle({
+    appPath,
+    executablePath: join(root, 'target/release/rusttable-app'),
+    licensePath: join(root, 'LICENSE'),
+    version,
+  });
+  await validateBundle(appPath, join(root, 'LICENSE'));
   return appPath;
 };
 
@@ -88,7 +79,7 @@ const main = async (): Promise<void> => {
   const bundlePath = releaseBundlePath(root);
   if (options.shouldBuild) {
     const buildResult = await runCommand({
-      args: ['build', '--release', '--package', 'rusttable-app', '--bin', 'rusttable-app'],
+      args: ['build', '--release', '--package', 'rusttable-app', '--bin', 'rusttable-app', '--locked'],
       command: 'cargo',
       label: 'build RustTable release',
     });
@@ -96,10 +87,11 @@ const main = async (): Promise<void> => {
       process.stdout.write(buildResult.stdout);
       process.stderr.write(buildResult.stderr);
     }
-    await writeAppBundle(root);
+    await writeAppBundle(root, runCommand);
   } else if (!(await pathExists(bundlePath))) {
     throw new Error(`Release bundle not found at ${bundlePath}; remove --no-build.`);
   }
+  await validateBundle(bundlePath, join(root, 'LICENSE'));
   await readBundleIdentifier(bundlePath);
 
   if (options.shouldInstall) {
