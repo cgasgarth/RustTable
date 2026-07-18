@@ -6,13 +6,6 @@ pub(crate) enum WorkspaceRoute {
     PhotoDetail(PhotoId),
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "photo navigation is exercised by the headless UI contract"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NavigationIntent {
     ShowLibrary,

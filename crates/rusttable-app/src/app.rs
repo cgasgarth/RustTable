@@ -44,13 +44,6 @@ impl Shell {
         }
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "read-only access is consumed by the future presentation view"
-        )
-    )]
     pub(crate) fn photo_workspace(&self) -> &PhotoWorkspaceViewModel {
         &self.photo_workspace
     }
