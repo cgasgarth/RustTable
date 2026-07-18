@@ -4,7 +4,6 @@ use std::fmt;
 pub enum StatsError {
     Empty,
     Overflow,
-    ZeroCalibration,
 }
 
 impl fmt::Display for StatsError {
@@ -12,7 +11,6 @@ impl fmt::Display for StatsError {
         formatter.write_str(match self {
             Self::Empty => "no performance samples",
             Self::Overflow => "performance statistic overflow",
-            Self::ZeroCalibration => "calibration sample was zero",
         })
     }
 }
@@ -40,28 +38,6 @@ pub fn median(values: &[u128]) -> Result<u128, StatsError> {
     Ok(sorted[(sorted.len() - 1) / 2])
 }
 
-pub fn normalized_p95(
-    workload_ns: &[u128],
-    calibration_ns: &[u128],
-    work_units: u64,
-    calibration_iterations: u64,
-) -> Result<u128, StatsError> {
-    if workload_ns.is_empty() || workload_ns.len() != calibration_ns.len() {
-        return Err(StatsError::Empty);
-    }
-    if calibration_ns.contains(&0) {
-        return Err(StatsError::ZeroCalibration);
-    }
-    let mut ratios = Vec::with_capacity(workload_ns.len());
-    for (&workload, &calibration) in workload_ns.iter().zip(calibration_ns) {
-        let numerator = workload
-            .checked_mul(u128::from(calibration_iterations))
-            .and_then(|value| value.checked_mul(1_000_000))
-            .ok_or(StatsError::Overflow)?;
-        let denominator = u128::from(work_units)
-            .checked_mul(calibration)
-            .ok_or(StatsError::Overflow)?;
-        ratios.push(numerator / denominator);
-    }
-    nearest_rank(&ratios)
+pub fn p95_within_budget(samples: &[u128], limit_ns: u64) -> Result<bool, StatsError> {
+    Ok(nearest_rank(samples)? <= u128::from(limit_ns))
 }
