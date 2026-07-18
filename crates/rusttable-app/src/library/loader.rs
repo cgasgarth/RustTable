@@ -10,7 +10,7 @@ use rusttable_core::PhotoId;
 use rusttable_image::InputFormat;
 
 use crate::library::{LibraryFailureKind, LibraryState};
-use crate::presentation::{
+use rusttable_ui::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError,
 };
@@ -224,7 +224,7 @@ mod tests {
         format_file_size, load_catalog, present_records, select_catalog_path,
     };
     use crate::library::LibraryFailureKind;
-    use crate::presentation::PhotoWorkspaceViewModelError;
+    use rusttable_ui::PhotoWorkspaceViewModelError;
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 

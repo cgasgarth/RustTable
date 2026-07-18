@@ -25,6 +25,8 @@ run_checks() {
   clippy_pid=$!
   bun run check:workspace-rust-version >"$temporary_directory/workspace-rust-version.log" 2>&1 &
   workspace_rust_version_pid=$!
+  bun run check:workspace-layout >"$temporary_directory/workspace-layout.log" 2>&1 &
+  workspace_layout_pid=$!
   bun run test:computer-use >"$temporary_directory/computer-use.log" 2>&1 &
   computer_use_pid=$!
   if ! wait "$test_pid"; then
@@ -38,6 +40,10 @@ run_checks() {
   if ! wait "$workspace_rust_version_pid"; then
     status=1
     cat "$temporary_directory/workspace-rust-version.log" >&2
+  fi
+  if ! wait "$workspace_layout_pid"; then
+    status=1
+    cat "$temporary_directory/workspace-layout.log" >&2
   fi
   if ! wait "$computer_use_pid"; then
     status=1

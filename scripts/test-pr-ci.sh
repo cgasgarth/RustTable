@@ -24,11 +24,17 @@ case "${1:-}" in
   test) label=test ;;
   *) label=other ;;
 esac
+if [ "${RUSTTABLE_LAYOUT_CHECK:-0}" = 1 ] && [ "$label" = metadata ]; then
+  label=workspace-layout
+fi
 case ",${FAKE_FAILS:-}," in *",$label,"*)
   echo "fake $label failure"
   exit 12
   ;;
 esac
+if [ "$label" = workspace-layout ]; then
+  printf '%s\n' '{"workspace_members":["app","catalog","catalog-store","core","diagnostics","image","image-io","import","metadata","processing","render","ui"],"packages":[{"id":"app","name":"rusttable-app","dependencies":[{"name":"rusttable-ui","kind":null}]},{"id":"catalog","name":"rusttable-catalog","dependencies":[]},{"id":"catalog-store","name":"rusttable-catalog-store","dependencies":[]},{"id":"core","name":"rusttable-core","dependencies":[]},{"id":"diagnostics","name":"rusttable-diagnostics","dependencies":[]},{"id":"image","name":"rusttable-image","dependencies":[]},{"id":"image-io","name":"rusttable-image-io","dependencies":[]},{"id":"import","name":"rusttable-import","dependencies":[]},{"id":"metadata","name":"rusttable-metadata","dependencies":[]},{"id":"processing","name":"rusttable-processing","dependencies":[]},{"id":"render","name":"rusttable-render","dependencies":[]},{"id":"ui","name":"rusttable-ui","dependencies":[{"name":"rusttable-core","kind":null},{"name":"iced","kind":null}]}]}'
+fi
 if [ "$label" = clippy ] || [ "$label" = test ]; then
   printf '%s\n' "$label" >>"$FAKE_MARKERS"
 fi
@@ -39,6 +45,7 @@ EOF
 label=bun
   case "$*" in
     *workspace-rust-version*) label=workspace-rust-version ;;
+    *workspace-layout*) label=workspace-layout ;;
     *macos-artifact-identity*) label=macos-artifact-identity ;;
   esac
 case ",${FAKE_FAILS:-}," in *",$label,"*)
@@ -85,8 +92,13 @@ write_fake_tools "$fake_tools"
 FAKE_MARKERS="$temporary_directory/markers"
 export FAKE_MARKERS
 
-for label in diff fmt metadata source bun macos-artifact-identity workspace-rust-version; do
+for label in diff fmt metadata source bun macos-artifact-identity workspace-rust-version workspace-layout; do
   output="$temporary_directory/$label.log"
+  if [ "$label" = workspace-layout ]; then
+    export RUSTTABLE_LAYOUT_CHECK=1
+  else
+    unset RUSTTABLE_LAYOUT_CHECK
+  fi
   if run_pr_ci "$label" "$output"; then
     echo "expected cheap check failure: $label" >&2
     exit 1

@@ -5,10 +5,10 @@ use rusttable_core::PhotoId;
 const MAX_PRESENTATION_TEXT_BYTES: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct PresentationText(String);
+pub struct PresentationText(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PresentationTextError {
+pub enum PresentationTextError {
     Empty,
     WhitespaceOnly,
     AsciiControlCharacter { byte_index: usize, value: char },
@@ -16,7 +16,13 @@ pub(crate) enum PresentationTextError {
 }
 
 impl PresentationText {
-    pub(crate) fn new(value: impl Into<String>) -> Result<Self, PresentationTextError> {
+    /// Creates bounded, display-safe presentation text.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable error when the value is empty, whitespace-only, contains an ASCII control
+    /// character, or exceeds the presentation byte limit.
+    pub fn new(value: impl Into<String>) -> Result<Self, PresentationTextError> {
         let value = value.into();
         if value.is_empty() {
             return Err(PresentationTextError::Empty);
@@ -38,24 +44,22 @@ impl PresentationText {
         Ok(Self(value))
     }
 
-    pub(crate) fn as_str(&self) -> &str {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PhotoCardViewModel {
+pub struct PhotoCardViewModel {
     id: PhotoId,
     title: PresentationText,
     secondary: Option<PresentationText>,
 }
 
 impl PhotoCardViewModel {
-    pub(crate) fn new(
-        id: PhotoId,
-        title: PresentationText,
-        secondary: Option<PresentationText>,
-    ) -> Self {
+    #[must_use]
+    pub fn new(id: PhotoId, title: PresentationText, secondary: Option<PresentationText>) -> Self {
         Self {
             id,
             title,
@@ -63,70 +67,76 @@ impl PhotoCardViewModel {
         }
     }
 
-    pub(crate) fn id(&self) -> PhotoId {
+    #[must_use]
+    pub fn id(&self) -> PhotoId {
         self.id
     }
 
-    pub(crate) fn title(&self) -> &PresentationText {
+    #[must_use]
+    pub fn title(&self) -> &PresentationText {
         &self.title
     }
 
-    pub(crate) fn secondary(&self) -> Option<&PresentationText> {
+    #[must_use]
+    pub fn secondary(&self) -> Option<&PresentationText> {
         self.secondary.as_ref()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PhotoFactViewModel {
+pub struct PhotoFactViewModel {
     label: PresentationText,
     value: PresentationText,
 }
 
 impl PhotoFactViewModel {
-    pub(crate) fn new(label: PresentationText, value: PresentationText) -> Self {
+    #[must_use]
+    pub fn new(label: PresentationText, value: PresentationText) -> Self {
         Self { label, value }
     }
 
-    pub(crate) fn label(&self) -> &PresentationText {
+    #[must_use]
+    pub fn label(&self) -> &PresentationText {
         &self.label
     }
 
-    pub(crate) fn value(&self) -> &PresentationText {
+    #[must_use]
+    pub fn value(&self) -> &PresentationText {
         &self.value
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PhotoDetailViewModel {
+pub struct PhotoDetailViewModel {
     id: PhotoId,
     title: PresentationText,
     facts: Vec<PhotoFactViewModel>,
 }
 
 impl PhotoDetailViewModel {
-    pub(crate) fn new(
-        id: PhotoId,
-        title: PresentationText,
-        facts: Vec<PhotoFactViewModel>,
-    ) -> Self {
+    #[must_use]
+    pub fn new(id: PhotoId, title: PresentationText, facts: Vec<PhotoFactViewModel>) -> Self {
         Self { id, title, facts }
     }
 
-    pub(crate) fn id(&self) -> PhotoId {
+    #[must_use]
+    pub fn id(&self) -> PhotoId {
         self.id
     }
 
-    pub(crate) fn title(&self) -> &PresentationText {
+    #[must_use]
+    pub fn title(&self) -> &PresentationText {
         &self.title
     }
 
-    pub(crate) fn facts(&self) -> impl Iterator<Item = &PhotoFactViewModel> {
+    #[must_use = "iterate over the detail facts"]
+    pub fn facts(&self) -> impl Iterator<Item = &PhotoFactViewModel> {
         self.facts.iter()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum PhotoWorkspaceViewModelError {
+pub enum PhotoWorkspaceViewModelError {
     DuplicateCardId { id: PhotoId },
     DuplicateDetailId { id: PhotoId },
     MissingDetail { id: PhotoId },
@@ -134,13 +144,19 @@ pub(crate) enum PhotoWorkspaceViewModelError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct PhotoWorkspaceViewModel {
+pub struct PhotoWorkspaceViewModel {
     cards: Vec<PhotoCardViewModel>,
     details: BTreeMap<PhotoId, PhotoDetailViewModel>,
 }
 
 impl PhotoWorkspaceViewModel {
-    pub(crate) fn new(
+    /// Builds a workspace while checking card/detail topology.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable error when card or detail identifiers are duplicated or when the two
+    /// collections do not describe the same set of photos.
+    pub fn new(
         cards: Vec<PhotoCardViewModel>,
         details: Vec<PhotoDetailViewModel>,
     ) -> Result<Self, PhotoWorkspaceViewModelError> {
@@ -176,15 +192,18 @@ impl PhotoWorkspaceViewModel {
         })
     }
 
-    pub(crate) fn cards(&self) -> impl ExactSizeIterator<Item = &PhotoCardViewModel> {
+    #[must_use]
+    pub fn cards(&self) -> impl ExactSizeIterator<Item = &PhotoCardViewModel> {
         self.cards.iter()
     }
 
-    pub(crate) fn detail(&self, id: PhotoId) -> Option<&PhotoDetailViewModel> {
+    #[must_use]
+    pub fn detail(&self, id: PhotoId) -> Option<&PhotoDetailViewModel> {
         self.details.get(&id)
     }
 
-    pub(crate) fn details(&self) -> impl ExactSizeIterator<Item = &PhotoDetailViewModel> {
+    #[must_use]
+    pub fn details(&self) -> impl ExactSizeIterator<Item = &PhotoDetailViewModel> {
         self.details.values()
     }
 }

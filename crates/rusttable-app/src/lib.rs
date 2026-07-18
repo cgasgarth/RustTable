@@ -1,45 +1,9 @@
 #![forbid(unsafe_code)]
-#![doc = "The `RustTable` iced application shell."]
+#![doc = "The `RustTable` Iced application composition root."]
 
-mod action_button;
-mod app;
-mod bootstrap;
-mod input;
+mod application;
+mod composition;
 mod library;
-mod library_loader;
-mod navigation;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "presentation contracts are staged before their rendering adapter"
-    )
-)]
-mod presentation;
-mod theme;
-mod view;
+mod lifecycle;
 
-#[cfg(test)]
-mod ui_smoke;
-
-use app::{boot, update};
-use bootstrap::run_with_bootstrap;
-
-/// Starts the `RustTable` desktop application.
-///
-/// # Errors
-///
-/// Returns an error if iced cannot create or run the desktop window.
-pub fn run() -> iced::Result {
-    run_with_bootstrap(
-        rusttable_diagnostics::install,
-        || {
-            iced::application(boot, update, view::view)
-                .title("RustTable")
-                .theme(theme::theme)
-                .centered()
-                .run()
-        },
-        |warning| eprintln!("{warning}"),
-    )
-}
+pub use composition::run;

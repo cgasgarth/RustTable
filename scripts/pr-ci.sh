@@ -16,7 +16,7 @@ run_check() {
   return "$status"
 }
 
-cheap_labels=(diff fmt metadata source bun macos-artifact-identity repository-policy pr-branch-freshness doctor readme-contract native-removal linux-distribution workspace-rust-version)
+cheap_labels=(diff fmt metadata source bun macos-artifact-identity repository-policy pr-branch-freshness doctor readme-contract native-removal linux-distribution)
 run_check diff git diff --check &
 cheap_pids[0]=$!
 run_check fmt cargo fmt --all -- --check &
@@ -53,6 +53,10 @@ if [[ "${RUSTTABLE_SKIP_BUN_PIN_REGRESSION:-0}" != 1 ]]; then
 fi
 cheap_labels+=(workspace-rust-version)
 run_check workspace-rust-version bash -c 'bun run test:workspace-rust-version && bun run check:workspace-rust-version' &
+cheap_pids[$cheap_index]=$!
+cheap_index=$((cheap_index + 1))
+cheap_labels+=(workspace-layout)
+run_check workspace-layout env RUSTTABLE_LAYOUT_CHECK=1 bash -c 'bun run test:workspace-layout && bun run check:workspace-layout' &
 cheap_pids[$cheap_index]=$!
 cheap_index=$((cheap_index + 1))
 if [[ "${RUSTTABLE_SKIP_PR_CI_REGRESSION:-0}" != 1 ]]; then

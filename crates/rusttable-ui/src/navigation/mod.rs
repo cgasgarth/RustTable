@@ -1,19 +1,19 @@
 use rusttable_core::PhotoId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkspaceRoute {
+pub enum WorkspaceRoute {
     Library,
     PhotoDetail(PhotoId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum NavigationIntent {
+pub enum NavigationIntent {
     ShowLibrary,
     ShowPhoto(PhotoId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct NavigationState {
+pub struct NavigationState {
     route: WorkspaceRoute,
 }
 
@@ -26,11 +26,12 @@ impl Default for NavigationState {
 }
 
 impl NavigationState {
-    pub(crate) fn route(&self) -> WorkspaceRoute {
+    #[must_use]
+    pub fn route(&self) -> WorkspaceRoute {
         self.route
     }
 
-    pub(crate) fn apply(&mut self, intent: NavigationIntent) -> bool {
+    pub fn apply(&mut self, intent: NavigationIntent) -> bool {
         let next_route = match intent {
             NavigationIntent::ShowLibrary => WorkspaceRoute::Library,
             NavigationIntent::ShowPhoto(photo_id) => WorkspaceRoute::PhotoDetail(photo_id),
