@@ -7,6 +7,7 @@ members = [
     "crates/rusttable-diagnostics",
     "crates/rusttable-image",
     "crates/rusttable-image-io",
+    "crates/rusttable-metadata",
     "crates/rusttable-processing",
     "crates/rusttable-render",
 ]
