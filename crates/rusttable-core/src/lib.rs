@@ -2,10 +2,15 @@
 #![doc = "Core domain foundation for the `RustTable` rewrite."]
 #![doc = "The core crate has no normal dependencies; catalog code may depend on it, never the reverse."]
 
+mod edit;
 mod id;
 mod model;
 mod value;
 
+pub use edit::{
+    Operation, OperationBuildError, OperationKey, OperationKeyError, ParameterName,
+    ParameterNameError, ParameterText, ParameterTextError, ParameterValue,
+};
 pub use id::{AssetId, EditId, IdParseError, OperationId, PhotoId};
 pub use model::{Asset, AssetRole, ByteLength, ContentHash, HashAlgorithm, Photo, PhotoBuildError};
 pub use value::{FiniteF64, FiniteF64Error, Revision, RevisionOverflow};
