@@ -29,6 +29,10 @@ pub fn render_manifest(manifest: &Manifest) -> Result<String, ScanError> {
         toml::to_string_pretty(manifest).map_err(|error| ScanError::Serialization {
             message: error.to_string(),
         })?;
+    rendered.insert_str(
+        0,
+        "# GENERATED FILE: rusttable-parity scan-darktable; do not hand-edit.\n\n",
+    );
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }
