@@ -16,7 +16,7 @@ run_check() {
   return "$status"
 }
 
-cheap_labels=(diff fmt metadata source bun)
+cheap_labels=(diff fmt metadata source bun repository-policy)
 run_check diff git diff --check &
 cheap_pids[0]=$!
 run_check fmt cargo fmt --all -- --check &
@@ -27,10 +27,12 @@ run_check source bash scripts/check-source-policy.sh &
 cheap_pids[3]=$!
 run_check bun bun run test:computer-use &
 cheap_pids[4]=$!
+run_check repository-policy bun run test:repository-policy &
+cheap_pids[5]=$!
 if [[ "${RUSTTABLE_SKIP_PR_CI_REGRESSION:-0}" != 1 ]]; then
   cheap_labels+=(pr-ci)
   run_check pr-ci bash scripts/test-pr-ci.sh &
-  cheap_pids[5]=$!
+  cheap_pids[6]=$!
 fi
 
 cheap_status=0

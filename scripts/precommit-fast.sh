@@ -29,6 +29,8 @@ run_checks() {
   computer_use_pid=$!
   bash scripts/test-pr-ci.sh >"$temporary_directory/pr-ci.log" 2>&1 &
   pr_ci_pid=$!
+  bun run test:repository-policy >"$temporary_directory/repository-policy.log" 2>&1 &
+  repository_policy_pid=$!
   bash scripts/test-dependency-security.sh >"$temporary_directory/security.log" 2>&1 &
   security_pid=$!
   if ! wait "$format_pid"; then
@@ -50,6 +52,10 @@ run_checks() {
   if ! wait "$pr_ci_pid"; then
     status=1
     cat "$temporary_directory/pr-ci.log" >&2
+  fi
+  if ! wait "$repository_policy_pid"; then
+    status=1
+    cat "$temporary_directory/repository-policy.log" >&2
   fi
   if ! wait "$security_pid"; then
     status=1

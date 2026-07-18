@@ -5,6 +5,9 @@
   "scripts": {
     "install:computer-use": "bun scripts/dev/install-computer-use-app.ts",
     "test:computer-use": "bun test scripts/dev/computer-use-app-install.test.ts scripts/dev/rusttable-app-bundle.test.ts",
-    "test:pr-ci": "bash scripts/test-pr-ci.sh"
+    "test:pr-ci": "bash scripts/test-pr-ci.sh",
+    "test:repository-policy": "bun test scripts/github/repository-policy.test.ts",
+    "check:repository-policy": "bun scripts/github/repository-policy.ts",
+    "apply:repository-policy": "bun scripts/github/repository-policy.ts --apply"
   }
 }
