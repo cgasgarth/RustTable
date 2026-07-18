@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: protect-protected-branches
+        name: Protect main and master branches
+        entry: bash .githooks/pre-commit-guard
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
