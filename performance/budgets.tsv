@@ -1,0 +1,4 @@
+schema_version	1
+case	warmup_count	sample_count	work_units	calibration_iterations	limit_ppm
+photo_build_and_iterate_128_assets	1	50	128	100000	97134024
+render_256x256_two_step_pipeline	1	50	65536	100000	6068022
