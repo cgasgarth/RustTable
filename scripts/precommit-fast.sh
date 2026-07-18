@@ -27,6 +27,8 @@ run_checks() {
   policy_pid=$!
   bun run test:computer-use >"$temporary_directory/computer-use.log" 2>&1 &
   computer_use_pid=$!
+  bun run test:macos-artifact-identity >"$temporary_directory/macos-artifact-identity.log" 2>&1 &
+  macos_artifact_identity_pid=$!
   bash scripts/dev/test-doctor.sh >"$temporary_directory/doctor.log" 2>&1 &
   doctor_pid=$!
   bash scripts/dev/test-readme-contract.sh >"$temporary_directory/readme-contract.log" 2>&1 &
@@ -62,6 +64,10 @@ run_checks() {
   if ! wait "$computer_use_pid"; then
     status=1
     cat "$temporary_directory/computer-use.log" >&2
+  fi
+  if ! wait "$macos_artifact_identity_pid"; then
+    status=1
+    cat "$temporary_directory/macos-artifact-identity.log" >&2
   fi
   if ! wait "$doctor_pid"; then
     status=1

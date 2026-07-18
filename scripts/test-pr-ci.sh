@@ -37,9 +37,10 @@ EOF
   cat >"$directory/bun" <<'EOF'
 #!/bin/sh
 label=bun
-case "$*" in
-  *workspace-rust-version*) label=workspace-rust-version ;;
-esac
+  case "$*" in
+    *workspace-rust-version*) label=workspace-rust-version ;;
+    *macos-artifact-identity*) label=macos-artifact-identity ;;
+  esac
 case ",${FAKE_FAILS:-}," in *",$label,"*)
   echo "fake $label failure"
   exit 13
@@ -84,7 +85,7 @@ write_fake_tools "$fake_tools"
 FAKE_MARKERS="$temporary_directory/markers"
 export FAKE_MARKERS
 
-for label in diff fmt metadata source bun workspace-rust-version; do
+for label in diff fmt metadata source bun macos-artifact-identity workspace-rust-version; do
   output="$temporary_directory/$label.log"
   if run_pr_ci "$label" "$output"; then
     echo "expected cheap check failure: $label" >&2

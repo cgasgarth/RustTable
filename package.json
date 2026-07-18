@@ -5,6 +5,7 @@
   "scripts": {
     "install:computer-use": "bun scripts/dev/install-computer-use-app.ts",
     "test:computer-use": "bun test scripts/dev/computer-use-app-install.test.ts scripts/dev/rusttable-app-bundle.test.ts",
+    "test:macos-artifact-identity": "bun test scripts/macos-artifact-identity.test.ts",
     "test:doctor": "bash scripts/dev/test-doctor.sh",
     "test:readme-contract": "bash scripts/dev/test-readme-contract.sh",
     "test:native-removal": "bash scripts/test-native-removal.sh",
