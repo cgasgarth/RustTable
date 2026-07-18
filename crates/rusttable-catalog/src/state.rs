@@ -40,6 +40,11 @@ impl CatalogState {
         match command {
             CatalogCommand::RegisterPhoto(photo) => self.register_photo(photo),
             CatalogCommand::CreateEdit(edit) => self.create_edit(edit),
+            CatalogCommand::ReplaceEdit {
+                edit_id,
+                expected_edit_revision,
+                replacement,
+            } => self.replace_edit(edit_id, expected_edit_revision, replacement),
         }
     }
 
@@ -106,6 +111,60 @@ impl CatalogState {
         self.revision = next_revision;
         Ok(next_revision)
     }
+
+    fn replace_edit(
+        &mut self,
+        edit_id: EditId,
+        expected_edit_revision: Revision,
+        replacement: Edit,
+    ) -> Result<Revision, CatalogError> {
+        let existing = self
+            .edits
+            .get(&edit_id)
+            .ok_or(CatalogError::UnknownEdit { edit_id })?;
+        if replacement.id() != edit_id {
+            return Err(CatalogError::EditIdMismatch {
+                target_edit_id: edit_id,
+                replacement_edit_id: replacement.id(),
+            });
+        }
+        if replacement.photo_id() != existing.photo_id() {
+            return Err(CatalogError::EditPhotoMismatch {
+                edit_id,
+                expected_photo_id: existing.photo_id(),
+                actual_photo_id: replacement.photo_id(),
+            });
+        }
+        if replacement.base_photo_revision() != existing.base_photo_revision() {
+            return Err(CatalogError::EditBasePhotoRevisionMismatch {
+                edit_id,
+                expected: existing.base_photo_revision(),
+                actual: replacement.base_photo_revision(),
+            });
+        }
+        if expected_edit_revision != existing.revision() {
+            return Err(CatalogError::EditRevisionConflict {
+                edit_id,
+                expected: expected_edit_revision,
+                actual: existing.revision(),
+            });
+        }
+        let next_edit_revision = existing
+            .revision()
+            .checked_increment()
+            .map_err(|_| CatalogError::EditRevisionOverflow { edit_id })?;
+        if replacement.revision() != next_edit_revision {
+            return Err(CatalogError::InvalidEditRevisionAdvance {
+                edit_id,
+                expected: next_edit_revision,
+                actual: replacement.revision(),
+            });
+        }
+        let next_catalog_revision = next_revision(self.revision)?;
+        self.edits.insert(edit_id, replacement);
+        self.revision = next_catalog_revision;
+        Ok(next_catalog_revision)
+    }
 }
 
 impl Default for CatalogState {
@@ -123,7 +182,10 @@ fn next_revision(revision: Revision) -> Result<Revision, CatalogError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusttable_core::{Asset, AssetId, AssetRole, ByteLength, ContentHash};
+    use rusttable_core::{
+        Asset, AssetId, AssetRole, ByteLength, ContentHash, Edit, EditId, Operation, OperationId,
+        OperationKey,
+    };
 
     fn photo() -> Photo {
         Photo::from_parts(
@@ -137,6 +199,23 @@ mod tests {
             )],
         )
         .expect("valid photo")
+    }
+
+    fn edit(revision: Revision) -> Edit {
+        Edit::from_parts(
+            EditId::new(2).expect("nonzero edit ID"),
+            PhotoId::new(1).expect("nonzero photo ID"),
+            Revision::ZERO,
+            revision,
+            [Operation::new(
+                OperationId::new(2).expect("nonzero operation ID"),
+                OperationKey::new("rusttable.exposure").expect("valid key"),
+                true,
+                [],
+            )
+            .expect("valid operation")],
+        )
+        .expect("valid edit")
     }
 
     #[test]
@@ -156,6 +235,35 @@ mod tests {
             .expect_err("maximum catalog revision cannot increment");
 
         assert_eq!(error, CatalogError::CatalogRevisionOverflow);
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn edit_revision_overflow_is_atomic() {
+        let mut state = CatalogState {
+            revision: Revision::from_u64(2),
+            photos: BTreeMap::from([(PhotoId::new(1).unwrap(), photo())]),
+            edits: BTreeMap::from([(EditId::new(2).unwrap(), edit(Revision::from_u64(u64::MAX)))]),
+        };
+        let before = state.clone();
+
+        let error = state
+            .apply(
+                Revision::from_u64(2),
+                CatalogCommand::ReplaceEdit {
+                    edit_id: EditId::new(2).unwrap(),
+                    expected_edit_revision: Revision::from_u64(u64::MAX),
+                    replacement: edit(Revision::from_u64(u64::MAX)),
+                },
+            )
+            .expect_err("maximum edit revision cannot increment");
+
+        assert_eq!(
+            error,
+            CatalogError::EditRevisionOverflow {
+                edit_id: EditId::new(2).unwrap()
+            }
+        );
         assert_eq!(state, before);
     }
 }
