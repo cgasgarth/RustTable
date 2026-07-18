@@ -1,11 +1,13 @@
 use iced::Task;
 
 use crate::navigation::{NavigationIntent, NavigationState};
+use crate::presentation::PhotoWorkspaceViewModel;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Shell {
     sidebar_visible: bool,
     navigation: NavigationState,
+    photo_workspace: PhotoWorkspaceViewModel,
 }
 
 impl Default for Shell {
@@ -13,6 +15,7 @@ impl Default for Shell {
         Self {
             sidebar_visible: true,
             navigation: NavigationState::default(),
+            photo_workspace: PhotoWorkspaceViewModel::default(),
         }
     }
 }
@@ -24,6 +27,32 @@ impl Shell {
 
     pub(crate) fn route(&self) -> crate::navigation::WorkspaceRoute {
         self.navigation.route()
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "injection is the boundary for the future presentation adapter"
+        )
+    )]
+    pub(crate) fn with_photo_workspace(photo_workspace: PhotoWorkspaceViewModel) -> Self {
+        Self {
+            sidebar_visible: true,
+            navigation: NavigationState::default(),
+            photo_workspace,
+        }
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "read-only access is consumed by the future presentation view"
+        )
+    )]
+    pub(crate) fn photo_workspace(&self) -> &PhotoWorkspaceViewModel {
+        &self.photo_workspace
     }
 }
 
@@ -46,6 +75,7 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
 #[cfg(test)]
 mod tests {
     use crate::navigation::NavigationState;
+    use crate::presentation::PhotoWorkspaceViewModel;
 
     use super::{Message, Shell, update};
 
@@ -56,6 +86,7 @@ mod tests {
             Shell {
                 sidebar_visible: true,
                 navigation: NavigationState::default(),
+                photo_workspace: PhotoWorkspaceViewModel::default(),
             }
         );
     }
@@ -77,5 +108,13 @@ mod tests {
         let _ = update(&mut shell, Message::ToggleSidebar);
 
         assert!(shell.sidebar_visible);
+    }
+
+    #[test]
+    fn injected_photo_workspace_is_retained_read_only() {
+        let workspace = PhotoWorkspaceViewModel::default();
+        let shell = Shell::with_photo_workspace(workspace.clone());
+
+        assert_eq!(shell.photo_workspace(), &workspace);
     }
 }

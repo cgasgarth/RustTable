@@ -4,6 +4,14 @@
 mod app;
 mod bootstrap;
 mod navigation;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "presentation contracts are staged before their rendering adapter"
+    )
+)]
+mod presentation;
 mod theme;
 mod view;
 
