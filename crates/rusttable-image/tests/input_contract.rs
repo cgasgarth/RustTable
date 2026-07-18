@@ -85,6 +85,14 @@ struct FakeInput {
 }
 
 impl ImageInput for FakeInput {
+    fn probe_bytes(&self, _bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
+        Ok(self.probe)
+    }
+
+    fn decode_bytes(&self, _bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
+        Ok(self.image.clone())
+    }
+
     fn probe_path(&self, _path: &Path) -> Result<ImageProbe, ImageInputError> {
         Ok(self.probe)
     }

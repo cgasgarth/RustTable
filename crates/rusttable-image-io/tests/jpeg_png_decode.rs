@@ -88,3 +88,15 @@ fn probe_reports_signature_selected_format() {
 
     assert_eq!(probe.format(), InputFormat::Png);
 }
+
+#[test]
+fn byte_operations_match_path_operations_for_the_same_snapshot() {
+    let bytes = fixture("png");
+    let path_result = with_fixture("png-byte-equivalence.jpg", &bytes, |path| {
+        (input().probe_path(path), input().decode_path(path))
+    });
+    let probe = input().probe_bytes(&bytes).expect("byte probe");
+    let image = input().decode_bytes(&bytes).expect("byte decode");
+    assert_eq!(path_result.0.expect("path probe"), probe);
+    assert_eq!(path_result.1.expect("path decode").pixels(), image.pixels());
+}

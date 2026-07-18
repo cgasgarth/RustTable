@@ -1,0 +1,92 @@
+use rusttable_catalog::{
+    CatalogState, ImportCandidate, ImportError, ImportOutcome, ImportRepository, ImportService,
+};
+use rusttable_core::{ByteLength, ContentHash, Revision};
+use rusttable_image::{ImageInput, ImageInputError};
+use rusttable_metadata::{MetadataInput, MetadataInputError};
+use sha2::{Digest, Sha256};
+
+use crate::{ImportSourceLimits, SourceImportRequest, SourceSnapshotError, SourceSnapshotReader};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceImportError {
+    StaleRevision {
+        expected: Revision,
+        actual: Revision,
+    },
+    Snapshot(SourceSnapshotError),
+    Image(ImageInputError),
+    Metadata(MetadataInputError),
+    Candidate(rusttable_catalog::ImportCandidateError),
+    Import(ImportError),
+}
+
+impl std::fmt::Display for SourceImportError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "source import failed: {self:?}")
+    }
+}
+
+impl std::error::Error for SourceImportError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Snapshot(error) => Some(error),
+            Self::Image(error) => Some(error),
+            Self::Metadata(error) => Some(error),
+            Self::Candidate(error) => Some(error),
+            Self::Import(error) => Some(error),
+            Self::StaleRevision { .. } => None,
+        }
+    }
+}
+
+pub struct SourceImportService;
+
+impl SourceImportService {
+    // The ports stay explicit so the service cannot hide or retain adapter state.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "issue #86 requires explicit state, request, limits, repository, and three adapter ports"
+    )]
+    pub fn inspect_and_register(
+        state: &mut CatalogState,
+        expected_revision: Revision,
+        request: &SourceImportRequest,
+        limits: ImportSourceLimits,
+        repository: &mut dyn ImportRepository,
+        snapshot_reader: &dyn SourceSnapshotReader,
+        image_input: &dyn ImageInput,
+        metadata_input: &dyn MetadataInput,
+    ) -> Result<ImportOutcome, SourceImportError> {
+        if expected_revision != state.revision() {
+            return Err(SourceImportError::StaleRevision {
+                expected: expected_revision,
+                actual: state.revision(),
+            });
+        }
+        let snapshot = snapshot_reader
+            .read_snapshot(request.physical_path(), limits)
+            .map_err(SourceImportError::Snapshot)?;
+        let probe = image_input
+            .probe_bytes(snapshot.bytes())
+            .map_err(SourceImportError::Image)?;
+        let metadata = metadata_input
+            .read_bytes(probe.format(), snapshot.bytes())
+            .map_err(SourceImportError::Metadata)?;
+        let mut hasher = Sha256::new();
+        hasher.update(snapshot.bytes());
+        let hash: [u8; 32] = hasher.finalize().into();
+        let candidate = ImportCandidate::new(
+            request.photo_id(),
+            request.asset_id(),
+            request.source().clone(),
+            ContentHash::Sha256(hash),
+            ByteLength::from_bytes(snapshot.byte_length().get()),
+            probe,
+            metadata,
+        )
+        .map_err(SourceImportError::Candidate)?;
+        ImportService::register(state, expected_revision, &candidate, repository)
+            .map_err(SourceImportError::Import)
+    }
+}

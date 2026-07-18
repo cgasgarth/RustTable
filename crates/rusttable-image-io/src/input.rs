@@ -45,7 +45,7 @@ impl FileImageInput {
         Ok(bytes)
     }
 
-    fn probe_bytes(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
+    fn probe_bytes_inner(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
         let format = detect_format(bytes)?;
         if format == InputFormat::Tiff {
             return probe_tiff(bytes, self.limits);
@@ -59,8 +59,8 @@ impl FileImageInput {
         Ok(ImageProbe::new(format, dimensions))
     }
 
-    fn decode_bytes(&self, bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
-        let probe = self.probe_bytes(bytes)?;
+    fn decode_bytes_inner(&self, bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
+        let probe = self.probe_bytes_inner(bytes)?;
         let decoded = ImageReader::with_format(Cursor::new(bytes), image_format(probe.format()))
             .decode()
             .map_err(|error| malformed(probe.format(), &error))?
@@ -77,12 +77,20 @@ impl FileImageInput {
 }
 
 impl ImageInput for FileImageInput {
+    fn probe_bytes(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
+        self.probe_bytes_inner(bytes)
+    }
+
+    fn decode_bytes(&self, bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
+        self.decode_bytes_inner(bytes)
+    }
+
     fn probe_path(&self, path: &Path) -> Result<ImageProbe, ImageInputError> {
-        self.probe_bytes(&self.read_source(path)?)
+        self.probe_bytes_inner(&self.read_source(path)?)
     }
 
     fn decode_path(&self, path: &Path) -> Result<DecodedImage, ImageInputError> {
-        self.decode_bytes(&self.read_source(path)?)
+        self.decode_bytes_inner(&self.read_source(path)?)
     }
 }
 
