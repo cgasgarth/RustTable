@@ -1,3 +1,5 @@
 [build]
 rustflags = ["-D", "warnings"]
 
+[alias]
+xtask = "run --quiet --package xtask --"
