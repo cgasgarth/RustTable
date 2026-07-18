@@ -33,6 +33,10 @@ impl FiniteF32 {
     pub const fn get(self) -> f32 {
         self.0
     }
+
+    pub(crate) const fn from_proven_finite(value: f32) -> Self {
+        Self(value)
+    }
 }
 
 impl TryFrom<FiniteF64> for FiniteF32 {
