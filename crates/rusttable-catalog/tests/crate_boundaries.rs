@@ -180,6 +180,10 @@ fn image_io_contains_the_codec_boundary() {
         "image-io must depend on rusttable-image: {image_io}"
     );
     assert!(
+        image_io.contains("\"name\":\"rusttable-metadata\""),
+        "image-io must depend on rusttable-metadata: {image_io}"
+    );
+    assert!(
         image_io.contains("\"name\":\"image\""),
         "image-io must own the codec dependency: {image_io}"
     );
