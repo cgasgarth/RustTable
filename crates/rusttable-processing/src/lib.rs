@@ -15,6 +15,7 @@ mod operation;
 mod output;
 mod pipeline;
 mod scalar;
+mod window;
 
 pub use color::{
     ImageBuildError, LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel,
@@ -33,3 +34,7 @@ pub use output::{
 };
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
+pub use window::{
+    EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
+    evaluate_graph, evaluate_graph_window,
+};

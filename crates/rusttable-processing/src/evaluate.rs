@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    CompiledPipeline, FiniteF32, LinearRgb, PipelineStep, PipelineStepIndex,
+    CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, ProcessingOperation,
     ProcessingOperationKind, RgbChannel, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
@@ -47,24 +47,46 @@ pub fn evaluate(
     pipeline: &CompiledPipeline,
     input: &WorkingRgbImage,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    let mut output = input.pixel_slice().to_vec();
-    for step in pipeline.active_steps() {
-        apply_step(step, &mut output)?;
-    }
+    let output = evaluate_steps(
+        pipeline
+            .steps()
+            .map(|step| (step.index(), step.operation())),
+        input.pixel_slice(),
+        0,
+    )?;
     Ok(WorkingRgbImage::from_validated_parts(
         input.dimensions(),
         output,
     ))
 }
 
-fn apply_step(step: &PipelineStep, pixels: &mut [LinearRgb]) -> Result<(), EvaluationError> {
-    let step_index = step.index();
-    let operation_id = step.operation().operation_id();
-    let opacity = step.operation().opacity().get();
-    if opacity.to_bits() == 0.0f32.to_bits() {
+pub(crate) fn evaluate_steps<'a, I>(
+    steps: I,
+    input: &[LinearRgb],
+    pixel_index_offset: usize,
+) -> Result<Vec<LinearRgb>, EvaluationError>
+where
+    I: IntoIterator<Item = (PipelineStepIndex, &'a ProcessingOperation)>,
+{
+    let mut output = input.to_vec();
+    for (step_index, operation) in steps {
+        apply_operation(step_index, operation, &mut output, pixel_index_offset)?;
+    }
+    Ok(output)
+}
+
+fn apply_operation(
+    step_index: PipelineStepIndex,
+    operation: &ProcessingOperation,
+    pixels: &mut [LinearRgb],
+    pixel_index_offset: usize,
+) -> Result<(), EvaluationError> {
+    let operation_id = operation.operation_id();
+    let opacity = operation.opacity().get();
+    if !operation.is_enabled() || opacity.to_bits() == 0.0f32.to_bits() {
         return Ok(());
     }
-    match step.operation().kind() {
+    match operation.kind() {
         ProcessingOperationKind::Exposure { stops } => {
             let multiplier = FiniteF32::new(stops.get().exp2()).map_err(|_| {
                 EvaluationError::NonFiniteExposureMultiplier {
@@ -72,20 +94,29 @@ fn apply_step(step: &PipelineStep, pixels: &mut [LinearRgb]) -> Result<(), Evalu
                     operation_id,
                 }
             })?;
-            apply_channels(pixels, step_index, operation_id, opacity, |_, value| {
-                value * multiplier.get()
-            })
+            apply_channels(
+                pixels,
+                step_index,
+                operation_id,
+                opacity,
+                pixel_index_offset,
+                |_, value| value * multiplier.get(),
+            )
         }
-        ProcessingOperationKind::LinearOffset { value } => {
-            apply_channels(pixels, step_index, operation_id, opacity, |_, sample| {
-                sample + value.get()
-            })
-        }
+        ProcessingOperationKind::LinearOffset { value } => apply_channels(
+            pixels,
+            step_index,
+            operation_id,
+            opacity,
+            pixel_index_offset,
+            |_, sample| sample + value.get(),
+        ),
         ProcessingOperationKind::RgbGain { red, green, blue } => apply_channels(
             pixels,
             step_index,
             operation_id,
             opacity,
+            pixel_index_offset,
             |channel, value| {
                 let gain = match channel {
                     RgbChannel::Red => red,
@@ -103,12 +134,14 @@ fn apply_channels<F>(
     step_index: PipelineStepIndex,
     operation_id: OperationId,
     opacity: f32,
+    pixel_index_offset: usize,
     transform: F,
 ) -> Result<(), EvaluationError>
 where
     F: Fn(RgbChannel, f32) -> f32,
 {
-    for (pixel_index, pixel) in pixels.iter_mut().enumerate() {
+    for (local_pixel_index, pixel) in pixels.iter_mut().enumerate() {
+        let pixel_index = pixel_index_offset + local_pixel_index;
         let current = *pixel;
         if opacity.to_bits() == 1.0f32.to_bits() {
             let red = checked_channel(
@@ -310,7 +343,8 @@ mod tests {
         let capacity = pixels.capacity();
 
         for step in pipeline.active_steps() {
-            apply_step(step, &mut pixels).expect("finite operation");
+            apply_operation(step.index(), step.operation(), &mut pixels, 0)
+                .expect("finite operation");
         }
 
         assert_eq!(pixels.as_ptr(), pointer);
