@@ -38,7 +38,7 @@ fn edit(id: u128, photo_id: u128, edit_revision: u64, base_revision: u64) -> Edi
 fn registered_state() -> CatalogState {
     let mut state = CatalogState::new();
     state
-        .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(photo(1, 4)))
+        .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(photo(1, 0)))
         .unwrap();
     state
 }
@@ -50,7 +50,7 @@ fn duplicate_photo_and_stale_revision_fail_without_mutation() {
     let duplicate = state
         .apply(
             Revision::from_u64(1),
-            CatalogCommand::RegisterPhoto(photo(1, 4)),
+            CatalogCommand::RegisterPhoto(photo(1, 0)),
         )
         .unwrap_err();
     assert!(matches!(duplicate, CatalogError::DuplicatePhoto { .. }));
@@ -96,7 +96,7 @@ fn create_edit_validation_has_documented_precedence() {
     let base_conflict = state
         .apply(
             Revision::from_u64(1),
-            CatalogCommand::CreateEdit(edit(2, 1, 0, 0)),
+            CatalogCommand::CreateEdit(edit(2, 1, 0, 1)),
         )
         .unwrap_err();
     assert!(matches!(
@@ -112,7 +112,7 @@ fn duplicate_edit_is_rejected_before_photo_and_revision_checks() {
     state
         .apply(
             Revision::from_u64(1),
-            CatalogCommand::CreateEdit(edit(2, 1, 0, 4)),
+            CatalogCommand::CreateEdit(edit(2, 1, 0, 0)),
         )
         .unwrap();
     let before = state.clone();

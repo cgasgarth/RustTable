@@ -35,6 +35,62 @@ fn edit(id: u128, photo_id: u128, base_revision: u64) -> Edit {
 }
 
 #[test]
+fn registration_rejects_nonzero_photo_revision_without_mutation() {
+    let mut state = CatalogState::new();
+    let value = photo(1, 4);
+    let before = state.clone();
+
+    let error = state
+        .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(value))
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        rusttable_catalog::CatalogError::InvalidInitialPhotoRevision {
+            photo_id,
+            revision
+        } if photo_id == PhotoId::new(1).unwrap() && revision == Revision::from_u64(4)
+    ));
+    assert_eq!(state, before);
+}
+
+#[test]
+fn registration_rejects_cross_photo_asset_identity_without_mutation() {
+    let mut state = CatalogState::new();
+    state
+        .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(photo(1, 0)))
+        .unwrap();
+    let before = state.clone();
+    let conflicting = Photo::from_parts(
+        PhotoId::new(2).unwrap(),
+        Revision::ZERO,
+        [Asset::new(
+            AssetId::new(1).unwrap(),
+            AssetRole::Primary,
+            ContentHash::Sha256([2; 32]),
+            ByteLength::from_bytes(1),
+        )],
+    )
+    .unwrap();
+
+    let error = state
+        .apply(state.revision(), CatalogCommand::RegisterPhoto(conflicting))
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        rusttable_catalog::CatalogError::AssetIdConflict {
+            asset_id,
+            existing_photo_id,
+            conflicting_photo_id
+        } if asset_id == AssetId::new(1).unwrap()
+            && existing_photo_id == PhotoId::new(1).unwrap()
+            && conflicting_photo_id == PhotoId::new(2).unwrap()
+    ));
+    assert_eq!(state, before);
+}
+
+#[test]
 fn new_state_registers_a_photo_atomically() {
     let mut state = CatalogState::new();
     let value = photo(1, 0);
@@ -57,11 +113,11 @@ fn new_state_registers_a_photo_atomically() {
 #[test]
 fn valid_initial_edit_requires_the_registered_photo_revision() {
     let mut state = CatalogState::new();
-    let value = photo(1, 4);
+    let value = photo(1, 0);
     state
         .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(value))
         .expect("registration succeeds");
-    let value = edit(2, 1, 4);
+    let value = edit(2, 1, 0);
     let edit_id = value.id();
 
     let revision = state
@@ -69,7 +125,7 @@ fn valid_initial_edit_requires_the_registered_photo_revision() {
         .expect("edit registration succeeds");
 
     assert_eq!(revision, Revision::from_u64(2));
-    assert_eq!(state.edit(edit_id), Some(&edit(2, 1, 4)));
+    assert_eq!(state.edit(edit_id), Some(&edit(2, 1, 0)));
     assert_eq!(
         state.edits().map(Edit::id).collect::<Vec<_>>(),
         vec![edit_id]

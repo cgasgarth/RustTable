@@ -12,6 +12,15 @@ pub enum CatalogError {
     DuplicatePhoto {
         photo_id: PhotoId,
     },
+    InvalidInitialPhotoRevision {
+        photo_id: PhotoId,
+        revision: Revision,
+    },
+    AssetIdConflict {
+        asset_id: rusttable_core::AssetId,
+        existing_photo_id: PhotoId,
+        conflicting_photo_id: PhotoId,
+    },
     UnknownPhoto {
         photo_id: PhotoId,
     },
@@ -75,6 +84,20 @@ impl fmt::Display for CatalogError {
             Self::DuplicatePhoto { photo_id } => {
                 write!(formatter, "photo ID {photo_id} is already registered")
             }
+            Self::InvalidInitialPhotoRevision { photo_id, revision } => {
+                write!(
+                    formatter,
+                    "photo {photo_id} has initial revision {revision}, expected zero"
+                )
+            }
+            Self::AssetIdConflict {
+                asset_id,
+                existing_photo_id,
+                conflicting_photo_id,
+            } => write!(
+                formatter,
+                "asset ID {asset_id} is owned by photos {existing_photo_id} and {conflicting_photo_id}"
+            ),
             Self::UnknownPhoto { photo_id } => {
                 write!(formatter, "photo ID {photo_id} is not registered")
             }
