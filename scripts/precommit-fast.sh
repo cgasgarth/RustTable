@@ -33,6 +33,8 @@ run_checks() {
   readme_contract_pid=$!
   (bun run test:native-removal && bun run check:native-removal) >"$temporary_directory/native-removal.log" 2>&1 &
   native_removal_pid=$!
+  (bun run test:linux-artifact-identity && bun run test:linux-distribution-smoke) >"$temporary_directory/linux-distribution.log" 2>&1 &
+  linux_distribution_pid=$!
   (bun run test:workspace-rust-version && bun run check:workspace-rust-version) >"$temporary_directory/workspace-rust-version.log" 2>&1 &
   workspace_rust_version_pid=$!
   bash scripts/test-pr-ci.sh >"$temporary_directory/pr-ci.log" 2>&1 &
@@ -72,6 +74,10 @@ run_checks() {
   if ! wait "$native_removal_pid"; then
     status=1
     cat "$temporary_directory/native-removal.log" >&2
+  fi
+  if ! wait "$linux_distribution_pid"; then
+    status=1
+    cat "$temporary_directory/linux-distribution.log" >&2
   fi
   if ! wait "$workspace_rust_version_pid"; then
     status=1
