@@ -1,14 +1,21 @@
 use std::collections::BTreeMap;
 
-use rusttable_core::{Edit, EditId, Photo, PhotoId, Revision};
+use rusttable_core::{AssetId, Edit, EditId, Photo, PhotoId, Revision};
 
 use crate::{CatalogCommand, CatalogError};
 
+/// Current catalog aggregates and their derived optimistic revision.
+///
+/// Every command that creates or advances an aggregate advances the catalog
+/// exactly once. Restoration derives the same accounting from current values;
+/// any future command that changes that accounting must update restoration
+/// validation in the same change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogState {
     revision: Revision,
     photos: BTreeMap<PhotoId, Photo>,
     edits: BTreeMap<EditId, Edit>,
+    asset_owners: BTreeMap<AssetId, PhotoId>,
 }
 
 impl CatalogState {
@@ -18,6 +25,7 @@ impl CatalogState {
             revision: Revision::ZERO,
             photos: BTreeMap::new(),
             edits: BTreeMap::new(),
+            asset_owners: BTreeMap::new(),
         }
     }
 
@@ -71,12 +79,49 @@ impl CatalogState {
         self.edits.values()
     }
 
+    #[must_use]
+    pub fn asset_owner(&self, asset_id: AssetId) -> Option<PhotoId> {
+        self.asset_owners.get(&asset_id).copied()
+    }
+
+    pub(crate) fn from_parts(
+        revision: Revision,
+        photos: BTreeMap<PhotoId, Photo>,
+        edits: BTreeMap<EditId, Edit>,
+        asset_owners: BTreeMap<AssetId, PhotoId>,
+    ) -> Self {
+        Self {
+            revision,
+            photos,
+            edits,
+            asset_owners,
+        }
+    }
+
     fn register_photo(&mut self, photo: Photo) -> Result<Revision, CatalogError> {
         let photo_id = photo.id();
         if self.photos.contains_key(&photo_id) {
             return Err(CatalogError::DuplicatePhoto { photo_id });
         }
+        if photo.revision() != Revision::ZERO {
+            return Err(CatalogError::InvalidInitialPhotoRevision {
+                photo_id,
+                revision: photo.revision(),
+            });
+        }
+        for asset in photo.assets() {
+            if let Some(existing_photo_id) = self.asset_owners.get(&asset.id()).copied() {
+                return Err(CatalogError::AssetIdConflict {
+                    asset_id: asset.id(),
+                    existing_photo_id,
+                    conflicting_photo_id: photo_id,
+                });
+            }
+        }
         let next_revision = next_revision(self.revision)?;
+        for asset in photo.assets() {
+            self.asset_owners.insert(asset.id(), photo_id);
+        }
         self.photos.insert(photo_id, photo);
         self.revision = next_revision;
         Ok(next_revision)
@@ -224,6 +269,7 @@ mod tests {
             revision: Revision::from_u64(u64::MAX),
             photos: BTreeMap::new(),
             edits: BTreeMap::new(),
+            asset_owners: BTreeMap::new(),
         };
         let before = state.clone();
 
@@ -244,6 +290,7 @@ mod tests {
             revision: Revision::from_u64(2),
             photos: BTreeMap::from([(PhotoId::new(1).unwrap(), photo())]),
             edits: BTreeMap::from([(EditId::new(2).unwrap(), edit(Revision::from_u64(u64::MAX)))]),
+            asset_owners: BTreeMap::from([(AssetId::new(1).unwrap(), PhotoId::new(1).unwrap())]),
         };
         let before = state.clone();
 

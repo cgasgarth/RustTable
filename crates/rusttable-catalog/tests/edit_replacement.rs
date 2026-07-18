@@ -38,12 +38,12 @@ fn edit(id: u128, photo_id: u128, edit_revision: u64, base_revision: u64) -> Edi
 fn registered_state() -> CatalogState {
     let mut state = CatalogState::new();
     state
-        .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(photo(1, 4)))
+        .apply(Revision::ZERO, CatalogCommand::RegisterPhoto(photo(1, 0)))
         .unwrap();
     state
         .apply(
             Revision::from_u64(1),
-            CatalogCommand::CreateEdit(edit(2, 1, 0, 4)),
+            CatalogCommand::CreateEdit(edit(2, 1, 0, 0)),
         )
         .unwrap();
     state
@@ -52,7 +52,7 @@ fn registered_state() -> CatalogState {
 #[test]
 fn replacement_advances_edit_and_catalog_revisions_atomically() {
     let mut state = registered_state();
-    let replacement = edit(2, 1, 1, 4);
+    let replacement = edit(2, 1, 1, 0);
 
     let revision = state
         .apply(
@@ -66,7 +66,7 @@ fn replacement_advances_edit_and_catalog_revisions_atomically() {
         .unwrap();
 
     assert_eq!(revision, Revision::from_u64(3));
-    assert_eq!(state.edit(EditId::new(2).unwrap()), Some(&edit(2, 1, 1, 4)));
+    assert_eq!(state.edit(EditId::new(2).unwrap()), Some(&edit(2, 1, 1, 0)));
     assert_eq!(state.revision(), Revision::from_u64(3));
 }
 
@@ -94,7 +94,7 @@ fn replacement_validation_precedence_is_explicit_and_atomic() {
             CatalogCommand::ReplaceEdit {
                 edit_id: EditId::new(2).unwrap(),
                 expected_edit_revision: Revision::ZERO,
-                replacement: edit(3, 1, 1, 4),
+                replacement: edit(3, 1, 1, 0),
             },
         )
         .unwrap_err();
@@ -108,7 +108,7 @@ fn replacement_validation_precedence_is_explicit_and_atomic() {
             CatalogCommand::ReplaceEdit {
                 edit_id: EditId::new(2).unwrap(),
                 expected_edit_revision: Revision::ZERO,
-                replacement: edit(2, 9, 1, 4),
+                replacement: edit(2, 9, 1, 0),
             },
         )
         .unwrap_err();
@@ -146,7 +146,7 @@ fn replacement_revision_checks_and_catalog_conflicts_leave_state_unchanged() {
             CatalogCommand::ReplaceEdit {
                 edit_id: EditId::new(2).unwrap(),
                 expected_edit_revision: Revision::from_u64(4),
-                replacement: edit(2, 1, 1, 4),
+                replacement: edit(2, 1, 1, 0),
             },
         )
         .unwrap_err();
@@ -163,7 +163,7 @@ fn replacement_revision_checks_and_catalog_conflicts_leave_state_unchanged() {
             CatalogCommand::ReplaceEdit {
                 edit_id: EditId::new(2).unwrap(),
                 expected_edit_revision: Revision::ZERO,
-                replacement: edit(2, 1, 2, 4),
+                replacement: edit(2, 1, 2, 0),
             },
         )
         .unwrap_err();
