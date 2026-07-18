@@ -4,7 +4,9 @@ use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use rusttable_parity::{render_manifest, scan_darktable};
+use rusttable_parity::{
+    render_manifest, render_operation_manifest, scan_darktable, scan_operations,
+};
 
 fn main() -> ExitCode {
     let args = env::args().skip(1).collect::<Vec<_>>();
@@ -18,8 +20,12 @@ fn main() -> ExitCode {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
-    if args.first().map(String::as_str) != Some("scan-darktable") {
-        return Err("usage: rusttable-parity scan-darktable --source <path> [--overrides <path>] [--output <path>]".to_owned());
+    let command = args.first().map(String::as_str);
+    if command == Some("scan-operations") {
+        return run_operations(args);
+    }
+    if command != Some("scan-darktable") {
+        return Err("usage: rusttable-parity scan-darktable|scan-operations --source <path> [--overrides <path>] [--output <path>]".to_owned());
     }
     let source = argument(args, "--source")?;
     let overrides = argument_or(
@@ -39,6 +45,21 @@ fn run(args: &[String]) -> Result<(), String> {
         "wrote {output}: {} capabilities",
         manifest.capabilities.len()
     );
+    Ok(())
+}
+
+fn run_operations(args: &[String]) -> Result<(), String> {
+    let source = argument(args, "--source")?;
+    let overrides = argument_or(args, "--overrides", "architecture/operation-overrides.toml");
+    let output = argument_or(args, "--output", "architecture/darktable-operations.toml");
+    let manifest = scan_operations(&PathBuf::from(source), &PathBuf::from(overrides))
+        .map_err(|error| error.to_string())?;
+    std::fs::write(
+        &output,
+        render_operation_manifest(&manifest).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("write {output}: {error}"))?;
+    println!("wrote {output}: {} operations", manifest.operations.len());
     Ok(())
 }
 
