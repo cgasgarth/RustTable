@@ -211,6 +211,20 @@ impl fmt::Display for ImageInputError {
 impl std::error::Error for ImageInputError {}
 
 pub trait ImageInput: Send + Sync {
+    /// Probes one already-owned byte snapshot using signature dispatch.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for unsupported signatures, malformed bytes, or limits.
+    fn probe_bytes(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError>;
+
+    /// Decodes one already-owned byte snapshot into checked RGBA8 samples.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for unsupported signatures, malformed bytes, or limits.
+    fn decode_bytes(&self, bytes: &[u8]) -> Result<crate::DecodedImage, ImageInputError>;
+
     /// Probes a path using the bounded, signature-selected input contract.
     ///
     /// # Errors

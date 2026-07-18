@@ -1915,6 +1915,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-import"
+version = "0.1.0"
+dependencies = [
+ "rusttable-catalog",
+ "rusttable-catalog-store",
+ "rusttable-core",
+ "rusttable-image",
+ "rusttable-metadata",
+ "sha2",
+]
+
+[[package]]
 name = "rusttable-metadata"
 version = "0.1.0"
 dependencies = [

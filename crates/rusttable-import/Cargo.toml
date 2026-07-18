@@ -1,0 +1,16 @@
+[package]
+name = "rusttable-import"
+description = "Bounded single-snapshot image inspection and catalog registration."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rusttable-catalog = { path = "../rusttable-catalog" }
+rusttable-core = { path = "../rusttable-core" }
+rusttable-image = { path = "../rusttable-image" }
+rusttable-metadata = { path = "../rusttable-metadata" }
+sha2 = { version = "0.10.9", default-features = false }
+
+[dev-dependencies]
+rusttable-catalog-store = { path = "../rusttable-catalog-store" }

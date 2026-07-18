@@ -231,6 +231,37 @@ fn metadata_owns_exif_parsing_without_reaching_upward() {
 }
 
 #[test]
+fn import_owns_snapshot_orchestration_and_hashing() {
+    let metadata = metadata();
+    let package = package_object(&metadata, "rusttable-import");
+    for required in [
+        "rusttable-core",
+        "rusttable-image",
+        "rusttable-metadata",
+        "rusttable-catalog",
+        "sha2",
+    ] {
+        assert!(
+            package.contains(&format!("\"name\":\"{required}\"")),
+            "import is missing required dependency {required}: {package}"
+        );
+    }
+    for forbidden in [
+        "rusttable-image-io",
+        "rusttable-render",
+        "rusttable-processing",
+        "iced",
+        "serde",
+        "redb",
+    ] {
+        assert!(
+            !package.contains(&format!("\"name\":\"{forbidden}\"")),
+            "import contains forbidden normal dependency {forbidden}: {package}"
+        );
+    }
+}
+
+#[test]
 fn render_depends_only_on_the_three_intended_lower_layers() {
     let metadata = metadata();
     let render = package_object(&metadata, "rusttable-render");
