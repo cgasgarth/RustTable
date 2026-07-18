@@ -1,10 +1,11 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
+use image::codecs::tiff::TiffEncoder;
 use image::{ExtendedColorType, ImageEncoder};
 use rusttable_image::{
     DecodedImage, DurableImageOutput, DurableImageOutputError, DurableOutputReceipt,
@@ -173,6 +174,14 @@ fn encode(
                 )
                 .map_err(|error| (OutputFormat::Jpeg, error))
         }
+        OutputOptions::Tiff => TiffEncoder::new(&mut writer)
+            .write_image(
+                image.pixels(),
+                image.dimensions().width(),
+                image.dimensions().height(),
+                ExtendedColorType::Rgba8,
+            )
+            .map_err(|error| (OutputFormat::Tiff, error)),
     };
     if let Err((format, error)) = result {
         return Err(map_encode_error(&writer, format, error));
@@ -231,6 +240,7 @@ fn map_encode_error(
 struct LimitedWriter {
     bytes: Vec<u8>,
     limit: u64,
+    position: u64,
     length: u64,
     limit_exceeded: Option<u64>,
     allocation_failed: bool,
@@ -241,6 +251,7 @@ impl LimitedWriter {
         Self {
             bytes: Vec::new(),
             limit,
+            position: 0,
             length: 0,
             limit_exceeded: None,
             allocation_failed: false,
@@ -253,24 +264,60 @@ impl Write for LimitedWriter {
         let incoming =
             u64::try_from(bytes.len()).map_err(|_| io::Error::other("write length overflow"))?;
         let next = self
-            .length
+            .position
             .checked_add(incoming)
             .ok_or_else(|| io::Error::other("write length overflow"))?;
         if next > self.limit {
             self.limit_exceeded = Some(next);
             return Err(io::Error::other("encoded output limit exceeded"));
         }
-        self.bytes.try_reserve(bytes.len()).map_err(|_| {
-            self.allocation_failed = true;
-            io::Error::other("output allocation failed")
-        })?;
-        self.bytes.extend_from_slice(bytes);
-        self.length = next;
+        let end = usize::try_from(next).map_err(|_| io::Error::other("write length overflow"))?;
+        if end > self.bytes.len() {
+            self.bytes
+                .try_reserve(end - self.bytes.len())
+                .map_err(|_| {
+                    self.allocation_failed = true;
+                    io::Error::other("output allocation failed")
+                })?;
+            self.bytes.resize(end, 0);
+        }
+        let start = usize::try_from(self.position)
+            .map_err(|_| io::Error::other("write position overflow"))?;
+        self.bytes[start..end].copy_from_slice(bytes);
+        self.position = next;
+        self.length = self.length.max(next);
         Ok(bytes.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+impl Seek for LimitedWriter {
+    fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
+        let end = i128::try_from(self.bytes.len())
+            .map_err(|_| io::Error::other("seek position overflow"))?;
+        let current = i128::from(self.position);
+        let target = match from {
+            SeekFrom::Start(position) => i128::from(position),
+            SeekFrom::Current(offset) => current + i128::from(offset),
+            SeekFrom::End(offset) => end + i128::from(offset),
+        };
+        if target < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "seek before output start",
+            ));
+        }
+        let target =
+            u64::try_from(target).map_err(|_| io::Error::other("seek position overflow"))?;
+        if target > self.limit {
+            self.limit_exceeded = Some(target);
+            return Err(io::Error::other("encoded output limit exceeded"));
+        }
+        self.position = target;
+        Ok(target)
     }
 }
 

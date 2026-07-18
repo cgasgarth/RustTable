@@ -8,9 +8,11 @@ use crate::{DecodedImage, ImageDimensions};
 pub enum OutputFormat {
     Png,
     Jpeg,
+    Tiff,
 }
 
-pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 2] = [OutputFormat::Png, OutputFormat::Jpeg];
+pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 3] =
+    [OutputFormat::Png, OutputFormat::Jpeg, OutputFormat::Tiff];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JpegQualityError {
@@ -70,7 +72,11 @@ impl OutputLimits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OutputOptions {
     Png,
-    Jpeg { quality: JpegQuality },
+    Jpeg {
+        quality: JpegQuality,
+    },
+    /// Writes one uncompressed classic TIFF image with RGBA8 straight-alpha samples.
+    Tiff,
 }
 
 impl OutputOptions {
@@ -79,6 +85,7 @@ impl OutputOptions {
         match self {
             Self::Png => OutputFormat::Png,
             Self::Jpeg { .. } => OutputFormat::Jpeg,
+            Self::Tiff => OutputFormat::Tiff,
         }
     }
 }

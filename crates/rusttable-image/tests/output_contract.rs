@@ -19,11 +19,12 @@ fn image() -> DecodedImage {
 fn output_formats_are_stable_and_options_are_closed() {
     assert_eq!(
         SUPPORTED_OUTPUT_FORMATS,
-        [OutputFormat::Png, OutputFormat::Jpeg]
+        [OutputFormat::Png, OutputFormat::Jpeg, OutputFormat::Tiff]
     );
     assert_eq!(OutputOptions::Png.format(), OutputFormat::Png);
     let quality = JpegQuality::new(80).expect("quality");
     assert_eq!(OutputOptions::Jpeg { quality }.format(), OutputFormat::Jpeg);
+    assert_eq!(OutputOptions::Tiff.format(), OutputFormat::Tiff);
     assert_eq!(quality.get(), 80);
 }
 
