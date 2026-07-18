@@ -9,19 +9,63 @@ use crate::validate::{summary_for, validate_capability_fields, validate_manifest
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScanError {
-    Io { path: String, message: String },
-    InvalidOverrides { message: String },
-    InvalidManifest { message: String },
-    MissingReferencePath { path: String },
-    MissingSurface { path: String },
-    InvalidStatus { value: String, id: String },
-    StaleIssueSequence { sequence: String, id: String },
-    DuplicateCapabilityId { id: String },
-    UnmappedDiscoveredModule { id: String, path: String },
-    MaskingOverride { id: String },
-    InvalidOverride { id: String, message: String },
-    UnregisteredOpenclProgram { id: String, path: String },
-    Serialization { message: String },
+    Io {
+        path: String,
+        message: String,
+    },
+    InvalidOverrides {
+        message: String,
+    },
+    InvalidManifest {
+        message: String,
+    },
+    MissingReferencePath {
+        path: String,
+    },
+    MissingSurface {
+        path: String,
+    },
+    InvalidStatus {
+        value: String,
+        id: String,
+    },
+    StaleIssueSequence {
+        sequence: String,
+        id: String,
+    },
+    DuplicateCapabilityId {
+        id: String,
+    },
+    UnmappedDiscoveredModule {
+        id: String,
+        path: String,
+    },
+    MaskingOverride {
+        id: String,
+    },
+    InvalidOverride {
+        id: String,
+        message: String,
+    },
+    UnregisteredOpenclProgram {
+        id: String,
+        path: String,
+    },
+    OperationExtraction {
+        operation: String,
+        message: String,
+    },
+    OperationValidation {
+        operation: String,
+        message: String,
+    },
+    UnknownOpenclKernel {
+        operation: String,
+        reference: String,
+    },
+    Serialization {
+        message: String,
+    },
 }
 
 impl Display for ScanError {
@@ -54,6 +98,27 @@ impl Display for ScanError {
             }
             Self::UnregisteredOpenclProgram { id, path } => {
                 write!(formatter, "unregistered OpenCL program {id} at {path}")
+            }
+            Self::OperationExtraction { operation, message } => {
+                write!(
+                    formatter,
+                    "operation extraction failed for {operation}: {message}"
+                )
+            }
+            Self::OperationValidation { operation, message } => {
+                write!(
+                    formatter,
+                    "operation validation failed for {operation}: {message}"
+                )
+            }
+            Self::UnknownOpenclKernel {
+                operation,
+                reference,
+            } => {
+                write!(
+                    formatter,
+                    "unknown OpenCL kernel for {operation}: {reference}"
+                )
             }
             Self::Serialization { message } => {
                 write!(formatter, "manifest serialization failed: {message}")

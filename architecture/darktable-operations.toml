@@ -1,0 +1,6146 @@
+# GENERATED FILE: rusttable-parity scan-operations; do not hand-edit.
+
+schema_version = 1
+source_commit = "0eba994d638a4ae0c4e5fccd185600cf6f2118db"
+
+[history]
+database_table = "history"
+database_fields = [
+    "operation",
+    "enabled",
+    "instance",
+    "multi_priority",
+    "blendop_version",
+]
+xmp_fields = [
+    "darktable: operation",
+    "darktable: enabled",
+    "darktable: multi_name",
+    "darktable: multi_priority",
+    "darktable: blendop_version",
+]
+enabled_rule = "zero-or-one persisted boolean; unknown values block decoding"
+instance_rule = "preserve darktable operation name and instance name verbatim"
+blend_rule = "retain blend version and opaque parameters when unsupported"
+ordering_rule = "stable database order, then multi_priority, then source registration order"
+
+[[operations]]
+name = "agx"
+reference_path = "src/iop/agx.c"
+module_version = 7
+parameter_size = 0
+parameter_layout_hash = "237c1c175e46f4b72524c8682e291d0e6546d595c2742fb102d6e3d3f8f62f0a"
+default_enabled = false
+default_order = 155
+group = "tone"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_TECHNICAL",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["agx"]
+opencl_kernels = ["kernel_agx"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "const char *preset_id = gtk_widget_get_name(GTK_WIDGET(menuitem));",
+    'if(strcmp(preset_id, "blender") == 0) _set_blenderlike_primaries(p);',
+    'else if(strcmp(preset_id, "smooth") == 0) _set_smooth_primaries(p);',
+    'else if(strcmp(preset_id, "unmodified") == 0) _set_unmodified_primaries(p);',
+    "// make sure a double-click sets it to 100%, overriding preset defaults",
+    "// make sure a double-click sets it to 100%, overriding preset defaults",
+    "// sigmoid'd scene-referred defaults and those used by its 'smooth' preset,",
+]
+owning_issue = "0181"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "522b0422d9f02edf87cdf35ba29954126740563d28a7059abbfb044b0bb27695"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "1e601e6b169db812fd519194689890a728ca1764b64febd4130bc3afac042bcb"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "0c3f216e82cfb09588f900102039dfdfdba3ed53c6e027998758eed20b2b6639"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "2a082e1c7d8496bd83a2c5d375f5601088bc7adb02625d1c26a0a9eda8f3ef21"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "1aa055f1bb01653e8f7b94f701fc9d8f2d51b831298eaddb065a600c5583a4f1"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "7f64201a7aa4af6e1d5c136eb19cf75156e437783dfd399e2d383e8c6b2fa964"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v6"
+
+[[operations.parameter_versions]]
+version = 7
+byte_size = 0
+layout_hash = "b982066eece08c967e240a30ca368f73c282b882a161fb4e6606da4ac128923d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.agx.params.v7"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.agx.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "opaque-blocking"
+fixture_id = "operation.agx.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "opaque-blocking"
+fixture_id = "operation.agx.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "opaque-blocking"
+fixture_id = "operation.agx.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "opaque-blocking"
+fixture_id = "operation.agx.migration.v5-v6"
+
+[[operations.migrations]]
+from_version = 6
+to_version = 7
+strategy = "opaque-blocking"
+fixture_id = "operation.agx.migration.v6-v7"
+
+[[operations]]
+name = "ashift"
+reference_path = "src/iop/ashift.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "9c23d540ca4e1c629068f0692e6e2d472d4d6dd5d46d440ae8e43a54f4422838"
+default_enabled = false
+default_order = 136
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_FAST_PIPE",
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_GUIDES_SPECIAL_DRAW",
+    "IOP_FLAGS_GUIDES_WIDGET",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "basic",
+    "dt_iop_ashift_data_t",
+]
+opencl_kernels = [
+    "ashift_bicubic",
+    "ashift_bilinear",
+    "ashift_lanczos2",
+    "ashift_lanczos3",
+]
+preset_sources = []
+owning_issue = "0229"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "10e6b31d03d8a2f4ad695f3b1d0db70d07a21963d4016da7dc1751ba884bec6f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.ashift.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "f2fc5a9678dd9a7de592471cbb4e0c26b90b581c45622a4541bc539454baaf22"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.ashift.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "4bd51521aeb9e3905be733423be4e8355be1a33dc806a45c745555c9620c3954"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.ashift.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "4561f65a1da8b84935ae15015b1284a2fc1070927f93fc6185db10c8a8ec7f6e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.ashift.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "3cfce0cac302c0f816979a432d7384b97a4d99a09d6ba54417f61b85a3e0985e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.ashift.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.ashift.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.ashift.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.ashift.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.ashift.migration.v4-v5"
+
+[[operations]]
+name = "atrous"
+reference_path = "src/iop/atrous.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "ee10f042dfd82a06df369b4edff864f3426d0a1d3399149aacf3fc7f0154273e"
+default_enabled = false
+default_order = 113
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
+cpu_implementation = "process_tiling"
+opencl_programs = ["atrous"]
+opencl_kernels = [
+    "eaw_addbuffers",
+    "eaw_decompose",
+    "eaw_synthesize",
+    "eaw_zero",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("coarse"), self->op,',
+    'dt_gui_presets_add_generic(_("denoise & sharpen"), self->op,',
+    'dt_gui_presets_add_generic(_("sharpen"), self->op,',
+    'dt_gui_presets_add_generic(_("denoise chroma"), self->op,',
+    'dt_gui_presets_add_generic(_("denoise"), self->op,',
+    'dt_gui_presets_add_generic(_("bloom"), self->op,',
+]
+owning_issue = "0155"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e834fbd5bfd02fcd3d7aa5fdefe8c4ec61e52514600945526c41b9a21646771c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.atrous.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "e7fca66bce5b06b08ccba98f0b353cf75aa0e0ba9dd843ce692cf1600191eccd"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.atrous.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.atrous.migration.v1-v2"
+
+[[operations]]
+name = "basecurve"
+reference_path = "src/iop/basecurve.c"
+module_version = 6
+parameter_size = 0
+parameter_layout_hash = "dab689efb908e2986b2f7555cb84e3e8361c5de3fc2c1624f4305e4850ac094d"
+default_enabled = true
+default_order = 92
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "basecurve",
+    "data/kernels/basecurve",
+]
+opencl_kernels = [
+    "basecurve_adjust_features",
+    "basecurve_blend_gaussian",
+    "basecurve_blend_laplacian",
+    "basecurve_blur_h",
+    "basecurve_blur_v",
+    "basecurve_compute_features",
+    "basecurve_detail",
+    "basecurve_expand",
+    "basecurve_finalize",
+    "basecurve_legacy_lut",
+    "basecurve_lut",
+    "basecurve_normalize",
+    "basecurve_reconstruct",
+    "basecurve_reduce",
+    "basecurve_zero",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "int tonecurve_preset;",
+    "typedef struct basecurve_preset_t",
+    "} basecurve_preset_t;",
+    "static const basecurve_preset_t basecurve_camera_presets[] = {",
+    "static const int basecurve_camera_presets_cnt = sizeof(basecurve_camera_presets) / sizeof(basecurve_preset_t);",
+    "static const basecurve_preset_t basecurve_presets[] = {",
+    "static const int basecurve_presets_cnt = sizeof(basecurve_presets) / sizeof(basecurve_preset_t);",
+]
+owning_issue = "0174"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "6acdce7f9b652fe77b7b26cde0a3b1ffdb178a8ff0560efca1d25c931ed1d948"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basecurve.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "400e06901fb37453c856afa558bffdcc146365044609644916cd2cdb39394715"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basecurve.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "429b39e70a653d5ab4723fbbc3128063eee6821d925b3184df9f84f86c34e32e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basecurve.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "5e9151d341ae86b73633f2061e3eec84d1c56e9cd99ed64670e317882e786498"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basecurve.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "88afeb152ccbc620daab9e7d066d6c64777372abcfc161fd8418b0c9e574aaa7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basecurve.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "64d59fcd616148bd361cc1a91b42873693df6fd10c55645126a24b77455b5535"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basecurve.params.v6"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.basecurve.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.basecurve.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.basecurve.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.basecurve.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.basecurve.migration.v5-v6"
+
+[[operations]]
+name = "basicadj"
+reference_path = "src/iop/basicadj.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "537755b951fcd96727e4885babfc8d1ab00f7c9df980fdc2855f912e404651c7"
+default_enabled = false
+default_order = 78
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basicadj"]
+opencl_kernels = ["basicadj"]
+preset_sources = []
+owning_issue = "0165"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "42543445a062c2fbffd274f7907d5eb395df960aa7f79efe2a8a9b218b229d21"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basicadj.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "7749fa064d696445886dbd669adc4a699547ddc6bf927a0fbeb5d8da53fff797"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.basicadj.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.basicadj.migration.v1-v2"
+
+[[operations]]
+name = "bilat"
+reference_path = "src/iop/bilat.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "6ed14307e606b2831cff02a1a57b2f6effd4f00e74fb7c4e803ec251008dfec8"
+default_enabled = true
+default_order = 133
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECTS",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
+cpu_implementation = "process_tiling"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("clarity"), self->op,',
+    'dt_gui_presets_add_generic(_("HDR local tone-mapping"), self->op,',
+]
+owning_issue = "0160"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "06d4bae32ccd2cfcc52dc66d69c2fbe66f85c0c47acad9c0e93d0f7a7a1253e5"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.bilat.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "dc8074127ae6b42c057ffb77d7e38d16eda319ba497b2597fd09a20122ece01f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.bilat.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "f281ca7ee821f0896fd929aad4504f3b61399e63b706692cdef40760d449c7f8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.bilat.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.bilat.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.bilat.migration.v2-v3"
+
+[[operations]]
+name = "bilateral"
+reference_path = "src/iop/bilateral.cc"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "5c9c587a994df6759f6ddea4dc1d009eef8e58efb8265d73c1174ac3d35ab1e9"
+default_enabled = false
+default_order = 102
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0161"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "361645153bdefa4f25b1c42a054ccfa1967e1465577d4b847bd0fd4b2566fc80"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.bilateral.params.v1"
+
+[[operations]]
+name = "bloom"
+reference_path = "src/iop/bloom.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "d109406319bca78b1af61f002820195620c371259af4e26ff105ba98a28432c3"
+default_enabled = false
+default_order = 67
+group = "effect"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["bloom"]
+opencl_kernels = [
+    "bloom_hblur",
+    "bloom_mix",
+    "bloom_threshold",
+    "bloom_vblur",
+]
+migrations = []
+preset_sources = []
+owning_issue = "0213"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "b074dec889d33e280c3d3cad900c25c2af59f0736f463f68f1fe6a9182795c50"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.bloom.params.v1"
+
+[[operations]]
+name = "blurs"
+reference_path = "src/iop/blurs.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "95c02357f4cbf4d04470159b4e527e860fb713663291800b493e647bf4819e6f"
+default_enabled = false
+default_order = 153
+group = "effects"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["blurs"]
+opencl_kernels = [
+    "convolve",
+    "convolve_sparse",
+    "restore_alpha",
+]
+migrations = []
+preset_sources = []
+owning_issue = "0162"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "d9080c1a1757138113c4f469d2d23dec0ece5f3b5b531503ad2e2b3131d3ecdd"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.blurs.params.v1"
+
+[[operations]]
+name = "borders"
+reference_path = "src/iop/borders.c"
+module_version = 4
+parameter_size = 0
+parameter_layout_hash = "b295becbe59275092d8d57dc0840590652c33d02bfc2fbae75b5681f0f1d96a6"
+default_enabled = false
+default_order = 122
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_EXPAND_ROI_IN",
+    "IOP_FLAGS_GUIDES_WIDGET",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["borders_fill"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("15:10 postcard white"), self->op,',
+    'dt_gui_presets_add_generic(_("15:10 postcard black"), self->op,',
+]
+owning_issue = "0219"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "32b0cb60eb9827dc53e49531260b8147b35241412ef3e75d783f43a558adccba"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.borders.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "65d0b3d87b1db00e73ea9ea522476db34e4d681a7e386839091f173dafcaa4d4"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.borders.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "ac72f8d40034c3232f5111eb8323fe2e26c06f649154eece63a2f8dc10e9768f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.borders.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "78d8769b8b076332cf7eb68ac5d7a7c5a2c76ccd3116d5a0e01e2fd81e85b788"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.borders.params.v4"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.borders.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.borders.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.borders.migration.v3-v4"
+
+[[operations]]
+name = "cacorrect"
+reference_path = "src/iop/cacorrect.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "9da92bf0fed0684c7dcca54d172c3f77bf3c21cd1beb1cd9fbe36011831e09fc"
+default_enabled = false
+default_order = 114
+group = "correct"
+tags = [
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = []
+owning_issue = "0149"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "facd84af89000f816c3140a0bfd2fd7232348a2b3886eacfdad33dab6e7ad567"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.cacorrect.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "1e7c72eea1bce1559ec56cb4491d37697924f4753e1b82c5a587cb8354f6c8b3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.cacorrect.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.cacorrect.migration.v1-v2"
+
+[[operations]]
+name = "cacorrectrgb"
+reference_path = "src/iop/cacorrectrgb.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "a7b1841551876bcbcc703c88a9af7064c18370f6cb6371a98bb9f125575750c1"
+default_enabled = false
+default_order = 151
+group = "correct"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0149"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "288e78008120098a9a3db797b1a50e107ca285bd9cb87b9865d06f283faf422a"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.cacorrectrgb.params.v1"
+
+[[operations]]
+name = "censorize"
+reference_path = "src/iop/censorize.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "d2d918fd3ecce85afeb03ad7333b6e98ac7dba03f943c8c2b83727f75356531b"
+default_enabled = false
+default_order = 149
+group = "effect"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["gaussian"]
+opencl_kernels = ["lowpass_mix"]
+migrations = []
+preset_sources = ['#include "gui/presets.h"']
+owning_issue = "0235"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "151bdbb04a698c4ef97b7ecef1d0a63ad15add22637ee0b7c372ece8cbdb85c9"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.censorize.params.v1"
+
+[[operations]]
+name = "channelmixer"
+reference_path = "src/iop/channelmixer.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "aaf2dea7af28b5d8d9f51fa996a0a13ec67858a1ad61270f4f756bc55395d14b"
+default_enabled = false
+default_order = 106
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["channelmixer"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "/** Crazy presets b&w ...",
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("swap R and B"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("swap G and B"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("color contrast boost"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("color details boost"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("color artifacts boost"), self->op, self->version(),',
+]
+owning_issue = "0197"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "8b3eade0c9ae07b9a11eb5240e50d4eb1202556023ab0664242ba0595e4ea0e6"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.channelmixer.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "8fe5c7e9aebdd9b60ce0db658ffe292ea2cce0eabccc6e39ca58603bfdb0c1f1"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.channelmixer.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.channelmixer.migration.v1-v2"
+
+[[operations]]
+name = "channelmixerrgb"
+reference_path = "src/iop/channelmixerrgb.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "3b645e5f124b4b556b2f7b6a14b9a335c0c70c47361b9923894ed655bc1e784a"
+default_enabled = false
+default_order = 148
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "channelmixer",
+    "extended",
+]
+opencl_kernels = [
+    "channelmixerrgb_CAT16",
+    "channelmixerrgb_RGB",
+    "channelmixerrgb_XYZ",
+    "channelmixerrgb_bradford_full",
+    "channelmixerrgb_bradford_linear",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "self->pref_based_presets = TRUE;",
+    "dt_gui_presets_add_generic",
+    'dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,',
+    'dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),',
+    "// Create B&W presets",
+    'dt_gui_presets_add_generic(_("monochrome | luminance-based"), self->op,',
+]
+owning_issue = "0196"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "a0c8a0149767f59ed74f3dac453a9eda05c07fa27dc25cca44a02d11f7a1ea78"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.channelmixerrgb.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "0171b84792ccb7533916130dfef990c58b6bce51e151cc40bd23c756fe303f12"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.channelmixerrgb.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "f102b4d62cb37a04c2d81eb8d9d62472e7b508a3f0ad4a286468008f27e4b265"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.channelmixerrgb.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.channelmixerrgb.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.channelmixerrgb.migration.v2-v3"
+
+[[operations]]
+name = "clahe"
+reference_path = "src/iop/clahe.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "0d0662200adb45bc081cf3df695833ae25c171c8eb197fe26080f0bdcfd30a5d"
+default_enabled = false
+default_order = 101
+group = "effect"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0235"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "54c19d4a2d33d9c69170e83f69e9537107a195731c3e56924eb5f8d918445187"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.clahe.params.v1"
+
+[[operations]]
+name = "clipping"
+reference_path = "src/iop/clipping.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "3b47bc70811e4a1aca3f625db270065f2fb8e142bda4623a057cd7d25a089a57"
+default_enabled = true
+default_order = 86
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_FAST_PIPE",
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_GUIDES_SPECIAL_DRAW",
+    "IOP_FLAGS_GUIDES_WIDGET",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "clip_rotate_bicubic",
+    "clip_rotate_bilinear",
+    "clip_rotate_lanczos2",
+    "clip_rotate_lanczos3",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "GtkWidget *aspect_presets;",
+    "float aspect = _ratio_get_aspect(self, g->aspect_presets);",
+    "static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)",
+    "dt_bauhaus_combobox_set_text(g->aspect_presets, str);",
+    "else if(dt_bauhaus_combobox_get(g->aspect_presets) != act)",
+    "dt_bauhaus_combobox_set(g->aspect_presets, act);",
+    "/* reset aspect preset to default */",
+]
+owning_issue = "0235"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "48af45e1d95c1581c8e2105f2c9888875d40f9564f4b7d326db3229124d8043f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.clipping.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "0ae46fb53329b5b0c03bc1e47f764cb6a69e60ecf831aa5d9be07af5e6f2b1ca"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.clipping.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "08cbdf8a0e2b41f7fd31285b770da6e443275e466ec142f988e4db52fd496763"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.clipping.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "b799d2079b202ae32516be8c03d382b2d7fef79d2915cb10f7ee9ca2fa0ca6d3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.clipping.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "c463b6d8e72620d09f3ee969c13d96ac34766a87ae89c057f3ebf7428597eeaa"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.clipping.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.clipping.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.clipping.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.clipping.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.clipping.migration.v4-v5"
+
+[[operations]]
+name = "colisa"
+reference_path = "src/iop/colisa.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "587515f7c7a997cbaf0cf9178a8f8c32a64359f485bf63caa8675dfeb7824fe7"
+default_enabled = false
+default_order = 74
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["colisa"]
+migrations = []
+preset_sources = ['#include "gui/presets.h"']
+owning_issue = "0191"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "02d636f18f91327cb69fb99e1431364ee595cf6663da369ff42d814b6042024c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colisa.params.v1"
+
+[[operations]]
+name = "colorbalance"
+reference_path = "src/iop/colorbalance.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "5596fe1be9d4c9c8f6520973e493047c66f4d52c0b88f13493bc0b369759a52a"
+default_enabled = true
+default_order = 82
+group = "color"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = [
+    "colorbalance",
+    "colorbalance_cdl",
+    "colorbalance_lgg",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "static void add_preset(dt_iop_module_so_t *self, const char *name,",
+    "dt_gui_presets_add_with_blendop(prefixed_name, self->op, version, p, len, bp, TRUE);",
+    "void init_presets(dt_iop_module_so_t *self)",
+    'add_preset(self, N_("split-toning teal-orange (2nd instance)"),',
+    'add_preset(self, N_("split-toning teal-orange (1st instance)"),',
+    'add_preset(self, N_("generic film"),',
+    'add_preset(self, N_("similar to Kodak Portra"),',
+]
+owning_issue = "0190"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "71ba14172ebd125dc27eca6a3111e8b5fdc4ee02af6f2287f1e0cd438a9e8d54"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalance.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "dd8eb2e97a2d4012f602bb3b35d4408044aa1b5236001a3ab3b314d88fc34029"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalance.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "6f92576bde50aec4724343fa9f472ad57620e996771a393488c405e73fc43c13"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalance.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorbalance.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorbalance.migration.v2-v3"
+
+[[operations]]
+name = "colorbalancergb"
+reference_path = "src/iop/colorbalancergb.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "1ea50c62a7f8c0394e7957e322f3019ca5b6ed1d8317ef232a4152d2fe497d3f"
+default_enabled = false
+default_order = 150
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["colorbalancergb"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "// preset",
+    'dt_gui_presets_add_generic(_("basic colorfulness | legacy"), self->op, self->version(), &p, sizeof(p), TRUE, DEVELOP_BLEND_CS_RGB_SCENE);',
+    'dt_gui_presets_add_generic(_("basic colorfulness | natural skin"), self->op, self->version(), &p, sizeof(p), TRUE, DEVELOP_BLEND_CS_RGB_SCENE);',
+    'dt_gui_presets_add_generic(_("basic colorfulness | vibrant colors"), self->op, self->version(), &p, sizeof(p), TRUE, DEVELOP_BLEND_CS_RGB_SCENE);',
+    'dt_gui_presets_add_generic(_("basic colorfulness | standard"), self->op, self->version(), &p, sizeof(p), TRUE, DEVELOP_BLEND_CS_RGB_SCENE);',
+]
+owning_issue = "0189"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "f08806951646dcf324ceb37999038a1d6f25705aee65c7a48583faa8cf130d5b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalancergb.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "e3c15ccbbf67a85b2d44e3c6598f3039423467b826e8ef979bfcdbf9091b1c41"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalancergb.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "278e5220cde800a0877be906bf3c150b0dbface69f535a7c29418bf41f82ae4c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalancergb.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "9ae2c7d4df4dac5651c8553c90addac282db9f29843c3177bf7be042538e8271"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalancergb.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "b19989fa00e2c115cbafc12fd5fdc1f84e679182931e680787f8b6c2754d320d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorbalancergb.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorbalancergb.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorbalancergb.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorbalancergb.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorbalancergb.migration.v4-v5"
+
+[[operations]]
+name = "colorchecker"
+reference_path = "src/iop/colorchecker.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "4189182fc4234c8b91bd99d9b61cd7e6f34c204ed29c0f5fdc7336f5f7cf2725"
+default_enabled = false
+default_order = 85
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["colorchecker"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("it8 skin tones"), self->op,',
+    'dt_gui_presets_add_generic(_("expanded color checker"), self->op,',
+    'dt_gui_presets_add_generic(_("Helmholtz/Kohlrausch monochrome"), self->op,',
+    'dt_gui_presets_add_generic(_("Fuji Astia emulation"), self->op,',
+    'dt_gui_presets_add_generic(_("Fuji Classic Chrome emulation"), self->op,',
+    'dt_gui_presets_add_generic(_("Fuji Monochrome emulation"), self->op,',
+]
+owning_issue = "0202"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "df1befdfa93a7178f4cc1dc15b97d2f2ce828f85467efa45d632e94934045275"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorchecker.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "8db9debbd82fda5ea15bc0d96276d8c27344b11e9116c6ce6f29e0f5f987268c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorchecker.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorchecker.migration.v1-v2"
+
+[[operations]]
+name = "colorcontrast"
+reference_path = "src/iop/colorcontrast.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "1e2d8db6d9a1099492bc95c6425d35851005b7892e6cd37343eec56fa18d7f08"
+default_enabled = false
+default_order = 124
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["colorcontrast"]
+preset_sources = []
+owning_issue = "0188"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "71d1f99247bf055b7c52a2ead4e241e45a3c3070bc4a23439fa7272c88470a3c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorcontrast.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "fcd6f70b4ca18a7ba988ca5406e24aae2a9425bb3e6438524b6bb243da13dde8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorcontrast.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorcontrast.migration.v1-v2"
+
+[[operations]]
+name = "colorcorrection"
+reference_path = "src/iop/colorcorrection.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "1f9dce216ca17094a4a1c4f19c15e6d86a6dd14a8fb88551f93e9cd9808af6f3"
+default_enabled = false
+default_order = 77
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["colorcorrection"]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("warm tone"), self->op,',
+    'dt_gui_presets_add_generic(_("warming filter"), self->op,',
+    'dt_gui_presets_add_generic(_("cooling filter"), self->op,',
+]
+owning_issue = "0195"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "40276da76242e2a60b441a8ea700c12ea29f7bc5838b595efcd3494b1a547444"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorcorrection.params.v1"
+
+[[operations]]
+name = "colorequal"
+reference_path = "src/iop/colorequal.c"
+module_version = 4
+parameter_size = 0
+parameter_layout_hash = "441f71619447e840916177bb3e76ab2f22b9ec4dfe6aaa84d4461c4892012639"
+default_enabled = false
+default_order = 157
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["colorequal"]
+opencl_kernels = [
+    "apply_guided",
+    "apply_prefilter",
+    "bilinear1",
+    "bilinear2",
+    "bilinear4",
+    "draw_weight",
+    "final_guide",
+    "finish_correlations",
+    "finish_covariance",
+    "init_covariance",
+    "prepare_correlations",
+    "prepare_prefilter",
+    "process_data",
+    "sample_input",
+    "write_output",
+    "write_visual",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "// we might be called from presets update infrastructure => there is no image",
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("bleach bypass"), self->op,',
+    'dt_gui_presets_add_generic(_("Kodachrome 64 like"), self->op,',
+    'dt_gui_presets_add_generic(_("Kodak Portra 400 like"), self->op,',
+    'dt_gui_presets_add_generic(_("teal & orange"), self->op,',
+]
+owning_issue = "0187"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "35547f27da6777370d4ff60bc6c8dacf120ecde067ce8dd7eeb30cc7671a3e4c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorequal.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "1b092bf80a13606f4f63ff521783ae4d4e66e530533298f2bb7d705dc8678e1f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorequal.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "cb52f72fa6ff8264d189d77082a3252ad9c7cc7a19fd6aa5006a80edadc6f987"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorequal.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "e72e158d137fa322823813cad02a3bf521a5e41b439efa52b7d8256d25b252e8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorequal.params.v4"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorequal.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorequal.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorequal.migration.v3-v4"
+
+[[operations]]
+name = "colorharmonizer"
+reference_path = "src/iop/colorharmonizer.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "78cb5538888ab8016e68df4b52c1b81f70bae182e1685a4092cc56afcf551cbd"
+default_enabled = true
+default_order = 64
+group = "color"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["colorharmonizer"]
+opencl_kernels = [
+    "colorharmonizer_apply",
+    "colorharmonizer_map",
+]
+migrations = []
+preset_sources = []
+owning_issue = "0203"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "19e9a21c6bb55b09f972462bd0327f800870f5447b2c1f05aba7b5fc26cd29e8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorharmonizer.params.v1"
+
+[[operations]]
+name = "colorin"
+reference_path = "src/iop/colorin.c"
+module_version = 7
+parameter_size = 0
+parameter_layout_hash = "568a7663df3846c7756697bdb188acd38818dc9c344d577704987374c4821b9a"
+default_enabled = true
+default_order = 83
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "colorin_clipping",
+    "colorin_unbound",
+]
+preset_sources = []
+owning_issue = "0193"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "347ff174dad14a19e5bde9e9bea80adb285ed992ae4b524fcca4f2eb90babb95"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "49f54973434ead0876f0a8a48f0001a5cc671340410d21839f0cf8578e6ac648"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "e48dd0e43344f7ca75a48b40ae9c761b3d9e45ea557a92adac5897eefe7d7401"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "14892b5837e66cafe9a362fb7fcecd2a4467ff303b80110328567f1353c05ba8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "884eab2edc6769a0203d021bcb3cc3b2ab692bd7e5166aea1ffcf67e3c9c5b52"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "ff1372b393465aa2e6738d9b0114c26f4519724427a0228a897caf2b3daedfd1"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v6"
+
+[[operations.parameter_versions]]
+version = 7
+byte_size = 0
+layout_hash = "764acbe647ee6ac1750254842016c3753342e80ab57175d2be0ebc2712d0fbf4"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorin.params.v7"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorin.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorin.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorin.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorin.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorin.migration.v5-v6"
+
+[[operations.migrations]]
+from_version = 6
+to_version = 7
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorin.migration.v6-v7"
+
+[[operations]]
+name = "colorize"
+reference_path = "src/iop/colorize.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "df56b436f56b7be1f643421c6dd719673ff55d858654de58eed1bf84dd4b17dd"
+default_enabled = false
+default_order = 127
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["colorize"]
+preset_sources = []
+owning_issue = "0201"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e537cc9427b0aa85852cb7f136972c0a071cd4bfdb2f89be505f2cbbbee48255"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorize.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "09a0d2a18371d170b2becf6fa01cc0b41fea15038a59b662dd5db58aa0cc7622"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorize.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorize.migration.v1-v2"
+
+[[operations]]
+name = "colormapping"
+reference_path = "src/iop/colormapping.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "df6098842641608163b5a8dc4251dbfc754196d879543c095f136b0e12782b7c"
+default_enabled = false
+default_order = 105
+group = "effect"
+tags = [
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = [
+    "colormapping_histogram",
+    "colormapping_mapping",
+]
+migrations = []
+preset_sources = [
+    "* - right click store as preset",
+    "* - right click and apply the preset",
+]
+owning_issue = "0199"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "2942cbb12bbed7f16a2c46ed8a85009db3f9ed408a69a8baf1023fd512d63948"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colormapping.params.v1"
+
+[[operations]]
+name = "colorout"
+reference_path = "src/iop/colorout.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "74e8cc0eab72e6955b41004ce579016ae74ef655277931f31282a4944346873b"
+default_enabled = false
+default_order = 84
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_WRITE_PIPECACHE_IN",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["colorout"]
+preset_sources = []
+owning_issue = "0192"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "369fd88a9ec7f6fbf5f35e2451e8b66c401392722b6f6e24ae7f81bbcba8e20e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorout.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "24dbd4844a4e25aed648c96b9c2faf5b831ec2fdb4cfcebc1d0a507f1e2bcd2b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorout.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "59932131169f8c97de51232654487e426ac84d177c86df2fa49a188dba8b90d9"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorout.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "ccad14ab9f477f875f9285baed61797c4b0aac48cdf12c4a47dd304893c7968c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorout.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "8230096d4c6f7db4cf2082c7c2e208b8517c29217a1c7b8604d8b984c091e4e7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorout.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorout.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorout.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorout.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorout.migration.v4-v5"
+
+[[operations]]
+name = "colorreconstruct"
+reference_path = "src/iop/colorreconstruction.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "b89e613e99df5a9fd3c504e58a4925e6af5ee61bb10ed084871d26faa7efeea3"
+default_enabled = false
+default_order = 71
+group = "basic"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "colorcorrection",
+    "colorreconstruction",
+]
+opencl_kernels = [
+    "colorreconstruction_blur_line",
+    "colorreconstruction_slice",
+    "colorreconstruction_splat",
+    "colorreconstruction_zero",
+]
+preset_sources = ['#include "gui/presets.h"']
+owning_issue = "0206"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "706b5ede8a7a963dd6b1b792524e0ccf56489e303150ab6e805513a5ceb917cb"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorreconstruct.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "d3a67ded05d09e34d6c1a15e0ef2d39a715686306b98cac970461fce7345f6ca"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorreconstruct.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "f9c246447f85c66acf87935701d0676488de37bf044bebfd6c3b163cc52363e8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorreconstruct.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorreconstruct.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorreconstruct.migration.v2-v3"
+
+[[operations]]
+name = "colortransfer"
+reference_path = "src/iop/colortransfer.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "74178e9f4baefd8a9ae22ccd31c8784bcc2601af9cd3f347bf6408bb0b8cf40c"
+default_enabled = false
+default_order = 104
+group = "color"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_PREVIEW_NON_OPENCL",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = [
+    "* - right click store as preset",
+    "* - right click and apply the preset",
+    "// same as params. (need duplicate because database table preset contains params_t)",
+]
+owning_issue = "0200"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "a38e70bb933c9f26db1511cc22d45742fde12a36de884fd3b97e5216d01bed03"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colortransfer.params.v1"
+
+[[operations]]
+name = "colorzones"
+reference_path = "src/iop/colorzones.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "2abff1100a14323495964259d5815a66ac5e614eda9779bb1d5ef4ec405d7774"
+default_enabled = false
+default_order = 93
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "colorzones",
+    "colorzones_v3",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("B&W: with red"), self->op,',
+    'dt_gui_presets_add_generic(_("B&W: with skin tones"), self->op,',
+    'dt_gui_presets_add_generic(_("polarizing filter"), self->op,',
+    'dt_gui_presets_add_generic(_("natural skin tones"), self->op,',
+    'dt_gui_presets_add_generic(_("B&W: film"), self->op,',
+    "// neutral preset with just a set of nodes uniformly distributed along the hue axis",
+]
+owning_issue = "0204"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "50e7f2245dbc9ae9fcff5f35f7beb0290d1b4b2ba91e92c40a279d2d7a10071e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorzones.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "8523f81b7a3ffae9cbd17d1079e501017a73209660a8cb2a12cd97e8cff5a19e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorzones.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "9909c89cb040225be6a10fb742a27c9ab7ce3c560a95b32d9e83f53efe3403e2"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorzones.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "31f4ea24fc8a49876d36a84828932b701984b2b9a1b04de7f4336fd0fa875ff0"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorzones.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "33ea9d84763bff885e44c13b0ec0f4702cacb62890dcd9658995d4a810271900"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.colorzones.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorzones.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorzones.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorzones.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.colorzones.migration.v4-v5"
+
+[[operations]]
+name = "crop"
+reference_path = "src/iop/crop.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "c072f1c5ecbc34afe48dd3dca8f369d2e674f784a9c7a33e074fc93132a9f388"
+default_enabled = true
+default_order = 88
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_FAST_PIPE",
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_CROP_EXPOSER",
+    "IOP_FLAGS_GUIDES_SPECIAL_DRAW",
+    "IOP_FLAGS_GUIDES_WIDGET",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "GtkWidget *aspect_presets;",
+    "double aspect = _aspect_ratio_get(self, g->aspect_presets);",
+    "static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)",
+    "dt_bauhaus_combobox_set_text(g->aspect_presets, str);",
+    "else if(dt_bauhaus_combobox_get(g->aspect_presets) != act)",
+    "dt_bauhaus_combobox_set(g->aspect_presets, act);",
+    "/* reset aspect preset to default */",
+]
+owning_issue = "0223"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "ba308583f69a54918df3805b67a422484e5d5397b9021f70220d8e2514b2bd6d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.crop.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "50c8d91549cc5027180a27326c2b549f1f32c008503dcfcc015953009dbdaeee"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.crop.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "567544c3d15cd2940a362462d6c7957dce763b29e1b2cb3f32d3edd61d775bb5"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.crop.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.crop.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.crop.migration.v2-v3"
+
+[[operations]]
+name = "defringe"
+reference_path = "src/iop/defringe.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "5bfa9cac26a7bfc8f45441bc1e4cc171f334ed8e9aaa11336f64410929c92bde"
+default_enabled = false
+default_order = 135
+group = "correct"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0235"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e249c11d89a9cc3b49b3bba87686b13e522a2719f6fb066112c364480fe82604"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.defringe.params.v1"
+
+[[operations]]
+name = "demosaic"
+reference_path = "src/iop/demosaic.c"
+module_version = 6
+parameter_size = 0
+parameter_layout_hash = "81e2cfe9c22ccb8911195d1085e4bf8a3a79dcd3d77808dbdcae2f70d349dac9"
+default_enabled = true
+default_order = 110
+group = "basic"
+tags = [
+    "IOP_FLAGS_FENCE",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_WRITE_DETAILS",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "capture",
+    "demosaic_ppg",
+]
+opencl_kernels = [
+    "border_interpolate",
+    "capture_result",
+    "clip_and_zoom_demosaic_half_size",
+    "clip_and_zoom_demosaic_passthrough_monochrome",
+    "clip_and_zoom_demosaic_third_size_xtrans",
+    "color_smoothing",
+    "demosaic_box3",
+    "final_blend",
+    "green_equilibration_favg_apply",
+    "green_equilibration_favg_reduce_first",
+    "green_equilibration_favg_reduce_second",
+    "green_equilibration_lavg",
+    "kernel_9x9_div",
+    "kernel_9x9_mul",
+    "markesteijn_accu",
+    "markesteijn_convert_yuv",
+    "markesteijn_differentiate",
+    "markesteijn_final",
+    "markesteijn_green_minmax",
+    "markesteijn_homo_max",
+    "markesteijn_homo_max_corr",
+    "markesteijn_homo_quench",
+    "markesteijn_homo_set",
+    "markesteijn_homo_sum",
+    "markesteijn_homo_threshold",
+    "markesteijn_initial_copy",
+    "markesteijn_interpolate_green",
+    "markesteijn_interpolate_twoxtwo",
+    "markesteijn_recalculate_green",
+    "markesteijn_red_and_blue",
+    "markesteijn_solitary_green",
+    "markesteijn_zero",
+    "modify_blend",
+    "passthrough_color",
+    "passthrough_monochrome",
+    "ppg_demosaic_green",
+    "ppg_demosaic_redblue",
+    "pre_median",
+    "prefill_clip_mask",
+    "prepare_blend",
+    "rcd_populate",
+    "rcd_step_1",
+    "rcd_step_2",
+    "rcd_step_3",
+    "rcd_step_4_0",
+    "rcd_step_4_1",
+    "rcd_step_4_2",
+    "rcd_step_4_3",
+    "rcd_write_output",
+    "show_blend_mask",
+    "vng_interpolate",
+    "vng_lin_interpolate",
+    "write_blended_dual",
+]
+preset_sources = [
+    "// if there is a xtrans/bayer mismatch due to presets/historycopy we still want to keep dual mode",
+    "/*  If auto-applied from a preset/style from a different sensor type it's demosaicer",
+    "static void _preset_applied_callback(gpointer instance, dt_iop_module_t *self)",
+    'dt_print(DT_DEBUG_PIPE, "demosaic auto preset applied, radius=%.3f thrs=%.3f",',
+    '"Note: a radius set to zero will be recalculated automatically the next run. use for presets"));',
+    '"Note: a threshold set to zero will be reset to defaults the next run. use for presets"));',
+    "DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_PRESET_APPLIED, _preset_applied_callback);",
+]
+owning_issue = "0147"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e7ca16e0b60b06b858bb18b045e5b8501b9fa51a781f954a758ffe697ef4457b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.demosaic.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "fddb1157fb3f66277fb349dc7b42d85dde0949e087f5c75ad64eb7f80adc4d2f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.demosaic.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "4d3f2ef01b744ff7f26bd3dca2ec8d42f462193eefd3aaa1ddc7812d88508bf3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.demosaic.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "361021ac9c679779aa62a1c767ff7a46b40758592354c103ed28ab4f3180084f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.demosaic.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "7fa09e8eb3d74a452a4467a5b844360255a699ba700bda73df2318ea9ae924ba"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.demosaic.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "8f359e3f3543e9e872b5c4c2de0f3ec69581e03816f983e84fe8271ffc55925d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.demosaic.params.v6"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.demosaic.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.demosaic.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.demosaic.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.demosaic.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.demosaic.migration.v5-v6"
+
+[[operations]]
+name = "denoiseprofile"
+reference_path = "src/iop/denoiseprofile.c"
+module_version = 12
+parameter_size = 0
+parameter_layout_hash = "d8e7fb73172bc01978a17c4e8acb656ef8ddee6c7c48628ffbdadc8ec2745172"
+default_enabled = true
+default_order = 134
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["denoiseprofile"]
+opencl_kernels = [
+    "denoiseprofile_accu",
+    "denoiseprofile_backtransform",
+    "denoiseprofile_backtransform_Y0U0V0",
+    "denoiseprofile_backtransform_v2",
+    "denoiseprofile_decompose",
+    "denoiseprofile_dist",
+    "denoiseprofile_finish",
+    "denoiseprofile_finish_v2",
+    "denoiseprofile_horiz",
+    "denoiseprofile_init",
+    "denoiseprofile_precondition",
+    "denoiseprofile_precondition_Y0U0V0",
+    "denoiseprofile_precondition_v2",
+    "denoiseprofile_reduce_first",
+    "denoiseprofile_reduce_second",
+    "denoiseprofile_synthesize",
+    "denoiseprofile_vert",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "// we are probably handling a style or preset, do nothing for",
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("wavelets: chroma only"), self->op, 12, &p,',
+]
+owning_issue = "0151"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e6717497129ecabd29c76112f1f1092a12bd890a6a9c30dd19cf6f858746289d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "83ddfc2d33a8dd0d1acad6235847ab9bb582d96117c9a506f6787efb33cb10c3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "037a3029b4a9c3f9d772ee8fa19273fc01bef96c6b5a119245caa62f21354c63"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "7438f25f45ac95a85473b934249235638fec4470f76d6915edaaecc07b0bc041"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "af485c55a36fe3c1d0cfd53b050391dc49938dd2bc632ce250f8cbef4797bf2c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "c39af84c2a220ba1602c57f4fc79628fcdf676ecef230b37fe8a7d0cc689d737"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v6"
+
+[[operations.parameter_versions]]
+version = 7
+byte_size = 0
+layout_hash = "b1b311fb4907acd67fc08d2f532156bd17010a8d0ecc1c552142bc3b7a7532ec"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v7"
+
+[[operations.parameter_versions]]
+version = 8
+byte_size = 0
+layout_hash = "abf43815098a6242150fa8492d783a1067b14bc250f761a830b5d80e9bdf05eb"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v8"
+
+[[operations.parameter_versions]]
+version = 9
+byte_size = 0
+layout_hash = "0f71ff08904199740c9074b63291b181feaffeaf9ae8b33c53c607592963254e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v9"
+
+[[operations.parameter_versions]]
+version = 10
+byte_size = 0
+layout_hash = "658e2873e7fa1e5404f3e9c8ce318ac752505fe3b99a5d34b5efed60721df992"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v10"
+
+[[operations.parameter_versions]]
+version = 11
+byte_size = 0
+layout_hash = "670c53276bf6102a8c6aee0df138a17a5ba568abf60c9cd09ae22cd27434250b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v11"
+
+[[operations.parameter_versions]]
+version = 12
+byte_size = 0
+layout_hash = "26b0f74656ac3ca76462b7428c72b5f1b67a19edb1676453d66b6d54fcf15938"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.denoiseprofile.params.v12"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.denoiseprofile.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.denoiseprofile.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.denoiseprofile.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v5-v6"
+
+[[operations.migrations]]
+from_version = 6
+to_version = 7
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v6-v7"
+
+[[operations.migrations]]
+from_version = 7
+to_version = 8
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v7-v8"
+
+[[operations.migrations]]
+from_version = 8
+to_version = 9
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v8-v9"
+
+[[operations.migrations]]
+from_version = 9
+to_version = 10
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v9-v10"
+
+[[operations.migrations]]
+from_version = 10
+to_version = 11
+strategy = "opaque-blocking"
+fixture_id = "operation.denoiseprofile.migration.v10-v11"
+
+[[operations.migrations]]
+from_version = 11
+to_version = 12
+strategy = "reference-legacy-params"
+fixture_id = "operation.denoiseprofile.migration.v11-v12"
+
+[[operations]]
+name = "diffuse"
+reference_path = "src/iop/diffuse.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "86c23274b701259af22b0032e5922bfd590af86eeb2d1348fb489375010f1394"
+default_enabled = false
+default_order = 152
+group = "effects"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "bspline",
+    "diffuse",
+    "extended",
+]
+opencl_kernels = [
+    "blur_2D_Bspline_horizontal",
+    "blur_2D_Bspline_vertical",
+    "build_mask",
+    "diffuse_pde",
+    "inpaint_mask",
+    "wavelets_detail_level",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "// deblurring presets",
+    'dt_gui_presets_add_generic(_("lens deblur | soft"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("lens deblur | medium"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("lens deblur | hard"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("dehaze | default"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("dehaze | extra contrast"), self->op, self->version(),',
+]
+owning_issue = "0163"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e12cd54b0a484eab31e486c9785a8db0d6c594b062d8defecc884910a54c7112"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.diffuse.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "f436822417cd5ef7fabd67b396fab225b80170fe4ef245550d6d0a5352d8ac49"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.diffuse.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.diffuse.migration.v1-v2"
+
+[[operations]]
+name = "dither"
+reference_path = "src/iop/dither.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "d535dfeb8308cb0157a2799b6b8a028b0a7a379eee26a17aa479d67776be31ba"
+default_enabled = false
+default_order = 90
+group = "correct"
+tags = [
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "// add the preset.",
+    'dt_gui_presets_add_generic(_("dither"), self->op,',
+    '// dt_gui_presets_update_autoapply(BUILTIN_PRESET("dither"), self->op, self->version(), 1);',
+]
+owning_issue = "0218"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "fe8405a0329442975572698e8a015d3c68cbc37621333e7f6df2838ff557d431"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.dither.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "01a3cf8ef50a29fc747d0642cc2d6ede75993a6172b95ab8f23e5a8f68e9b133"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.dither.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.dither.migration.v1-v2"
+
+[[operations]]
+name = "enlargecanvas"
+reference_path = "src/iop/enlargecanvas.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "604319c75d2c20b8e68076672fc260308c6205bdb90cbbb1d3d2f0b3b1d71689"
+default_enabled = false
+default_order = 87
+group = "basic"
+tags = [
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0228"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "41121fff584edf384c57e4e7295f6df052d1715465caeabdc0e7749f1a39f72d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.enlargecanvas.params.v1"
+
+[[operations]]
+name = "equalizer"
+reference_path = "src/iop/equalizer.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "269a5eee8c93bcf860b13f8ea6d9c8a52a41c5b37fb89acc2eb043c4935aca8d"
+default_enabled = false
+default_order = 80
+group = "correct"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "GtkComboBox *presets;",
+]
+owning_issue = "0156"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "c5137bf9d548f3f53df8c89094418d965ad34a60d246a79fe3d0500d03576870"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.equalizer.params.v1"
+
+[[operations]]
+name = "exposure"
+reference_path = "src/iop/exposure.c"
+module_version = 7
+parameter_size = 0
+parameter_layout_hash = "e22605185a924eb7a640e26770ed48a418d8ac05ab0b557a85cfd6792351525c"
+default_enabled = true
+default_order = 79
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["exposure"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "self->pref_based_presets = TRUE;",
+    "dt_gui_presets_add_generic",
+    "// we need an initial exposure boost. This preset has the same value as what is",
+    "dt_gui_presets_add_generic",
+    'dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,',
+    'dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),',
+]
+owning_issue = "0164"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e2035cc4247857269e5a10ec88fd586a5e93106f6f02170d843b4bececf8d533"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "0dd092743c75904afc6bf0864c3062fc6be5da4551923aed59f398b2eff52a09"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "cae7f5840365ea24fc296cc0da50372e3772b8f431f223d748da454dec016c73"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "fd2bd0b24491f7a35b665f4501dd6128d8911bfc25f19161fbe549de5c3244cf"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "3529dd138fbfa2ad6c390324e15a3a9d6c9cfa0f77f4298f540196a36f2c4481"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "9874a5353a1839d726e2ccfd41fc2e58c466c3cb5662fcf5cef88ed58e407e0b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v6"
+
+[[operations.parameter_versions]]
+version = 7
+byte_size = 0
+layout_hash = "39e9af86e1d707dc28e9da8f8ae0842d7b715dbdb83a786ac377ab6107ab2fc0"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.exposure.params.v7"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.exposure.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.exposure.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.exposure.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.exposure.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.exposure.migration.v5-v6"
+
+[[operations.migrations]]
+from_version = 6
+to_version = 7
+strategy = "reference-legacy-params"
+fixture_id = "operation.exposure.migration.v6-v7"
+
+[[operations]]
+name = "filmic"
+reference_path = "src/iop/filmic.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "03d85f6d37414bb0cfc53b2c64d1b8017ff9a48bfdeeb4fe26bb873a9713f15f"
+default_enabled = false
+default_order = 138
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_TECHNICAL",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["filmic"]
+opencl_kernels = ["filmic"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("09 EV (low-key)"), self->op,',
+    'dt_gui_presets_add_generic(_("10 EV (indoors)"), self->op,',
+    'dt_gui_presets_add_generic(_("11 EV (dim outdoors)"), self->op,',
+    'dt_gui_presets_add_generic(_("12 EV (outdoors)"), self->op,',
+    'dt_gui_presets_add_generic(_("13 EV (bright outdoors)"), self->op,',
+    'dt_gui_presets_add_generic(_("14 EV (backlighting)"), self->op,',
+]
+owning_issue = "0173"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "26f7e3c2201ad01d3454706e2ed90e0f94dc3ae715361b9228fb6a656ddcd153"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmic.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "94fd01fa98f9c0ddc31547ab436682a6d2ced63a4b63ccc68a7c21821ff9fc21"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmic.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "ff16a3c2c17bd6be396b5a020e84286e8332602e7c3a5119b55dea22f2789b81"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmic.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmic.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmic.migration.v2-v3"
+
+[[operations]]
+name = "filmicrgb"
+reference_path = "src/iop/filmicrgb.c"
+module_version = 6
+parameter_size = 0
+parameter_layout_hash = "2990fa681a4044d1617b5c0be5628014f18335e24d8052f6f2cf150a2496f090"
+default_enabled = false
+default_order = 146
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_TECHNICAL",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "bspline",
+    "filmic",
+]
+opencl_kernels = [
+    "blur_2D_Bspline_horizontal",
+    "blur_2D_Bspline_vertical",
+    "compute_ratios",
+    "filmic_inpaint_noise",
+    "filmic_mask_clipped_pixels",
+    "filmic_show_mask",
+    "filmicrgb_chroma",
+    "filmicrgb_split",
+    "init_reconstruct",
+    "restore_ratios",
+    "wavelets_detail_level",
+    "wavelets_reconstruct",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "self->pref_based_presets = TRUE;",
+    "dt_gui_presets_add_generic",
+    'dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,',
+    'dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),',
+]
+owning_issue = "0172"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "bf3bbc786cadb9a735dc95393484b77197c1f8ed5d9e104005f0173cd0413de7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmicrgb.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "c9eb6c640e22208fc6bb325b586014cae4c85874821fc1ade87f1f1681686dd2"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmicrgb.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "14105ca62fccfa68873cad5268b7e1228f25da3ed4acee75a8fc3e50cb72b49a"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmicrgb.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "bab462cfeac9638f3b27e2ab0b5d33f1d49922c53ae015a7ea9586757d53b1d7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmicrgb.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "0b5b37d66486d072fdf88f8900822616de375a4fe11c820c4b58ef97733175f9"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmicrgb.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "28fdda1ca1a43f4dec509364a103918638fa3bb49ef811be829819ba40a9cbcd"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.filmicrgb.params.v6"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmicrgb.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmicrgb.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmicrgb.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmicrgb.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.filmicrgb.migration.v5-v6"
+
+[[operations]]
+name = "finalscale"
+reference_path = "src/iop/finalscale.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "51cd7ac2ab904b5410a30aea9b41300c6beb6be84b8dba667659aa52af6f9be8"
+default_enabled = false
+default_order = 131
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_HIDDEN",
+    "IOP_FLAGS_NO_HISTORY_STACK",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_FLAGS_WRITE_PIPECACHE_IN",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0227"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "f7284b07e7483b9e3640f1db3faf9fabe551bceee19bf04bc9ceee97ae0a3c31"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.finalscale.params.v1"
+
+[[operations]]
+name = "flip"
+reference_path = "src/iop/flip.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "dc2eaecf75ab9369b7d29cda1b747fb1eaa39c8919b228af7402dd46b8b767bd"
+default_enabled = true
+default_order = 130
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_GUIDES_WIDGET",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["flip"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "// we might be called from presets update infrastructure => there is no image",
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("auto"), self->op,',
+    'dt_gui_presets_update_autoapply(BUILTIN_PRESET("auto"), self->op, self->version(), TRUE);',
+    'dt_gui_presets_add_generic(_("no rotation"), self->op,',
+    'dt_gui_presets_add_generic(_("flip horizontally"), self->op,',
+    'dt_gui_presets_add_generic(_("flip vertically"), self->op,',
+]
+owning_issue = "0224"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "c35bd6c8bf4ae6caaa161e8da2c5a39332a6a394d9f929bf96daf85ce1dd4172"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.flip.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "00b76f9c856b69feaa3c3661b5262a188391194567e4a972d23580f7b22182d3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.flip.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.flip.migration.v1-v2"
+
+[[operations]]
+name = "gamma"
+reference_path = "src/iop/gamma.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "ac7057cea435e5ec9a9d828df56e2177094b2b06c42795b61b20e12f7c2da31d"
+default_enabled = false
+default_order = 75
+group = "color"
+tags = [
+    "IOP_FLAGS_FENCE",
+    "IOP_FLAGS_HIDDEN",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_FLAGS_WRITE_PIPECACHE",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0168"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "b0370f2d50b92223f9dcdf4067f94abb88489fe88d3509554893db88a2e62b31"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.gamma.params.v1"
+
+[[operations]]
+name = "globaltonemap"
+reference_path = "src/iop/globaltonemap.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "5cfe70d389fefa65c74f372eb4e2c931d5d50ba4f7b13e1d5e27d0edb6bb910d"
+default_enabled = false
+default_order = 132
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
+cpu_implementation = "process_tiling"
+opencl_programs = ["extended"]
+opencl_kernels = [
+    "global_tonemap_drago",
+    "global_tonemap_filmic",
+    "global_tonemap_reinhard",
+    "pixelmax_first",
+    "pixelmax_second",
+]
+preset_sources = []
+owning_issue = "0179"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "8cd36e4009d0000c4f4663523bd579f6eb715603bfd874cb2bbb3f6cc984f502"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.globaltonemap.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "0bf3c840ead0206d61975e00a11996429ceea70bbe4a8781952449519e2a26c3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.globaltonemap.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "28f2995f10d0eb8ac0e341f6f590fe989d715f1641af2d94dda31827c41f20b3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.globaltonemap.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.globaltonemap.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "opaque-blocking"
+fixture_id = "operation.globaltonemap.migration.v2-v3"
+
+[[operations]]
+name = "graduatednd"
+reference_path = "src/iop/graduatednd.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "2bfe899975bcf22a5345d8b0f11fa1515fc235ef9628facce0d16e1c41c1877b"
+default_enabled = false
+default_order = 107
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = [
+    "graduatedndm",
+    "graduatedndp",
+]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("neutral gray | ND2 (soft)"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("neutral gray | ND4 (soft)"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("neutral gray | ND8 (soft)"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("neutral gray | ND2 (hard)"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("neutral gray | ND4 (hard)"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("neutral gray | ND8 (hard)"), self->op, self->version(),',
+]
+owning_issue = "0211"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "16bfdb4754a0ddf23b8c20be2b8a9c979ed4c1772a8b42e2a267b0ca2eedfb41"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.graduatednd.params.v1"
+
+[[operations]]
+name = "grain"
+reference_path = "src/iop/grain.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "4eaa3280a804c896b2169a7d4496c80cb4a22fccbdd579facc4925451297daa0"
+default_enabled = false
+default_order = 100
+group = "effect"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = []
+owning_issue = "0212"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "8b0a0dcf91da915d83b12311bf443a9a239eb613ca1bddaab6b688aea20834c6"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.grain.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "13730fc7f2fde00a203a2b48c745d3ceb6aa0be21ba1ce2333a5a98fb53b81ff"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.grain.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.grain.migration.v1-v2"
+
+[[operations]]
+name = "hazeremoval"
+reference_path = "src/iop/hazeremoval.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "22068bd97deaa8b22efc5e3330486d4537fae65a6b479b74855cc9db3e15c8ca"
+default_enabled = true
+default_order = 137
+group = "correct"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["hazeremoval"]
+opencl_kernels = [
+    "hazeremoval_box_max_x",
+    "hazeremoval_box_max_y",
+    "hazeremoval_box_min_x",
+    "hazeremoval_box_min_y",
+    "hazeremoval_dehaze",
+    "hazeremoval_transision_map",
+]
+preset_sources = []
+owning_issue = "0154"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "96b537a8868cec1815a501b83ca6fd2d16af1a73209c326df395b36870cacca5"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.hazeremoval.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "aa42656c365a9980d700ceb7492fdbdd0b887f6f694e8d4a1e2ba29ed2b10597"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.hazeremoval.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "9b2b68bdea3690ef6f849e72af341c20bd5b21646f3f850670839a259770198c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.hazeremoval.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.hazeremoval.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.hazeremoval.migration.v2-v3"
+
+[[operations]]
+name = "highlights"
+reference_path = "src/iop/highlights.c"
+module_version = 4
+parameter_size = 0
+parameter_layout_hash = "b1a0eb4f0645415cdb72780ea053ec7223eba57d4d9647d89ee8d194ded43822"
+default_enabled = true
+default_order = 94
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_FLAGS_WRITE_RASTER",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "tiled"
+cpu_implementation = "process_tiling"
+opencl_programs = [
+    "basic",
+    "bspline",
+]
+opencl_kernels = [
+    "blur_2D_Bspline_horizontal",
+    "blur_2D_Bspline_vertical",
+    "box_blur_5x5",
+    "diffuse_color",
+    "guide_laplacians",
+    "highlights_1f_clip",
+    "highlights_1f_lch_bayer",
+    "highlights_1f_lch_xtrans",
+    "highlights_4f_clip",
+    "highlights_chroma",
+    "highlights_dilatemask",
+    "highlights_false_color",
+    "highlights_initmask",
+    "highlights_opposed",
+    "interpolate_and_mask",
+    "interpolate_bilinear",
+    "remosaic_and_replace",
+    "wavelets_detail_level",
+]
+preset_sources = [
+    "- copied as part of the history of another pic or by preset / style or",
+    "// we might be called from presets update infrastructure => there is no image",
+]
+owning_issue = "0205"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "184656dd1ab8557c09bfd79316774ef7fd2947a7cc37745ab923565298daa8ee"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.highlights.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "7690fa6d4d9505f39ae344528d18589e61acf8719637f359daafea3d287d55f6"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.highlights.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "9d272350a9d482318086dc9fb6ea5eded6590a28a5743d21a06e2339b6d026d3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.highlights.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "979689186df9e59810e6c4b2126bd3f76619f447f6364ae9b9b622c0c1c19174"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.highlights.params.v4"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.highlights.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.highlights.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.highlights.migration.v3-v4"
+
+[[operations]]
+name = "highpass"
+reference_path = "src/iop/highpass.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "3f99cb93b347f794199081102e4cefc5ecb495c8cfac517357c21d9aed385752"
+default_enabled = false
+default_order = 68
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["highpass"]
+opencl_kernels = [
+    "highpass_hblur",
+    "highpass_invert",
+    "highpass_mix",
+    "highpass_vblur",
+]
+migrations = []
+preset_sources = []
+owning_issue = "0158"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "421c3b4f4b8bd0a3fd4e9e9e54303182e3fe914f09e42d522cff5b163c2dc014"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.highpass.params.v1"
+
+[[operations]]
+name = "hotpixels"
+reference_path = "src/iop/hotpixels.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "5e65feaee40cd99cf46e6fe1e09489c40251758ed25f1e13c67d9a2243e5ef89"
+default_enabled = false
+default_order = 116
+group = "correct"
+tags = [
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0150"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "a78b1e90c8288ff29a9e4ad64c1f0d4608f6ba4cfc85659641b9d3a05cf5b8cb"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.hotpixels.params.v1"
+
+[[operations]]
+name = "invert"
+reference_path = "src/iop/invert.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "b484b1c752aef2bfab7339066501c5ff3d27d81c4c03ed4283c46d1edfd5824e"
+default_enabled = false
+default_order = 128
+group = "basic"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "invert_1f",
+    "invert_4f",
+]
+preset_sources = []
+owning_issue = "0235"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "ebc0d34d4fddb4be50f8382a2f4e79b012180a888dc36bab6de4e5bfd22a3c41"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.invert.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "bca3cef16c25ae9038bed6de6a1774a175d856228d9dacf2d5c4e0041fbc3f5d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.invert.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.invert.migration.v1-v2"
+
+[[operations]]
+name = "lens"
+reference_path = "src/iop/lens.cc"
+module_version = 10
+parameter_size = 0
+parameter_layout_hash = "18b2e58290d1934ba979c9e5d33d1e6d801db2d9383fc8b5c23dd7f47495ff06"
+default_enabled = true
+default_order = 164
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_GUIDES_WIDGET",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "lens_distort_bicubic",
+    "lens_distort_bilinear",
+    "lens_distort_lanczos2",
+    "lens_distort_lanczos3",
+    "lens_man_vignette",
+    "lens_vignette",
+    "md_lens_correction",
+    "md_vignette",
+]
+preset_sources = [
+    "* method that must be kept for presets and mass-export",
+    "* method that must be kept for presets and mass-export",
+]
+owning_issue = "0230"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "32441cbb156b980574a88c57d1ddd70aaf59f4ac8b0ebdb5e3b07f4461acbda6"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "9590d8a7b2edebe7c23d27d8232091764c6af749678a7df4a8a56de338fbb3de"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "32a2c0d31e7b3e5c8eccd355c18de0f07010a4ad54c2b9884292351756d073b9"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "d009e2216ae4e62df19b9c6c00513099d9de60f4af15d3fd06e64c765cba91d0"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "7ea64fcd2f5a0441b58bda33d4a11a1cf6f6f81e0131cc7563644776fd27cfdf"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "9000c6078f702ed6f3f1f01ab21d31af14f8d7fc9f6d0f7c75eb00150d906577"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v6"
+
+[[operations.parameter_versions]]
+version = 7
+byte_size = 0
+layout_hash = "1f7a211fef3f4ba641dd1d63cc7bf09cc245715bfa7a6b744ec651abdea0f8a3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v7"
+
+[[operations.parameter_versions]]
+version = 8
+byte_size = 0
+layout_hash = "907f56de896fa6244db7423e0e7383cb9a9e6979c0a3b15f91c11c0bb1109110"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v8"
+
+[[operations.parameter_versions]]
+version = 9
+byte_size = 0
+layout_hash = "6e6af7b5796e7b0e1b568ac7475c6ae070dc484266ca60b0aea5a492ab3a7a7e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v9"
+
+[[operations.parameter_versions]]
+version = 10
+byte_size = 0
+layout_hash = "2ec8fc6023e020b92e95dc7d6c67f3b7b06407c6d0797ecaf018205451d85af4"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lens.params.v10"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.lens.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v5-v6"
+
+[[operations.migrations]]
+from_version = 6
+to_version = 7
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v6-v7"
+
+[[operations.migrations]]
+from_version = 7
+to_version = 8
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v7-v8"
+
+[[operations.migrations]]
+from_version = 8
+to_version = 9
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v8-v9"
+
+[[operations.migrations]]
+from_version = 9
+to_version = 10
+strategy = "reference-legacy-params"
+fixture_id = "operation.lens.migration.v9-v10"
+
+[[operations]]
+name = "levels"
+reference_path = "src/iop/levels.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "f6158a0d970e224d462b2f997fe4660dbb40397fc9e4ad18a6192a8b4c29b3e1"
+default_enabled = false
+default_order = 125
+group = "tone"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["levels"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "int levels_preset;",
+    "// void init_presets (dt_iop_module_so_t *self)",
+    "//  p.levels_preset = 0;",
+    '//  dt_gui_presets_add_generic(_("unmodified"), self->op, self->version(), &p, sizeof(p), 1);',
+]
+owning_issue = "0170"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "6f9562371e241290b72eeb73291edc388feb3f525cfe9c7db38c74e1f58887cd"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.levels.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "54ce86c6fc216b67c262d8a9b4157205f3b38be293c5d06038d3378559319eee"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.levels.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.levels.migration.v1-v2"
+
+[[operations]]
+name = "liquify"
+reference_path = "src/iop/liquify.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "bd7c79d16bdd88212c2f66d577daf49747b921c79a9cceaf7e8084f7f815828c"
+default_enabled = false
+default_order = 120
+group = "correct"
+tags = [
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["liquify"]
+opencl_kernels = ["warp_kernel"]
+migrations = []
+preset_sources = []
+owning_issue = "0231"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "e5e20e50401c372ddf4729d3f68e332a64958a5741f2259b785eb1f20ade9cd1"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.liquify.params.v1"
+
+[[operations]]
+name = "lowlight"
+reference_path = "src/iop/lowlight.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "3229b10f9970616a000c71492f6e88cf2ad569859298e57076c88ff6461f7db9"
+default_enabled = false
+default_order = 117
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["lowlight"]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("daylight"), self->op,',
+    'dt_gui_presets_add_generic(_("indoor bright"), self->op,',
+    'dt_gui_presets_add_generic(_("indoor dim"), self->op,',
+    'dt_gui_presets_add_generic(_("indoor dark"), self->op,',
+    'dt_gui_presets_add_generic(_("twilight"), self->op,',
+    'dt_gui_presets_add_generic(_("night street lit"), self->op,',
+]
+owning_issue = "0166"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "426a1d94f5821040ea354287c1fc0ce9d591123105a11da5c6087ce227f8e603"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lowlight.params.v1"
+
+[[operations]]
+name = "lowpass"
+reference_path = "src/iop/lowpass.c"
+module_version = 4
+parameter_size = 0
+parameter_layout_hash = "d4ac0fc71ea49772df19759614472f504b7a860614a4bb26f92dd3b1a9c09498"
+default_enabled = false
+default_order = 69
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["gaussian"]
+opencl_kernels = ["lowpass_mix"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("local contrast mask"), self->op, self->version(),',
+]
+owning_issue = "0159"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "b95f805be3495d7b79fe13fb58a57d75e5c7b0bc9310e149eecaf1ca75897304"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lowpass.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "32895d2ef0d757be74db1dab2cee400c9fa613f27fe4b5e283293ac2c0701721"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lowpass.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "26780406edea8f7761525b184734670eaebebbe12a334275bc075d61d6b81e91"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lowpass.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "a6c6106a8d8b863510f47e0f5d9f4c3e0d3ff209eeb60e28a0895063f8872319"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lowpass.params.v4"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.lowpass.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.lowpass.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.lowpass.migration.v3-v4"
+
+[[operations]]
+name = "lut3d"
+reference_path = "src/iop/lut3d.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "3352b45ae764e2dc1a6023da6b8c57eeeefadd3a48b1cb4ec9806ef1e6d20324"
+default_enabled = false
+default_order = 141
+group = "color"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = [
+    "lut3d",
+    "rgbcurve",
+]
+opencl_kernels = [
+    "lut3d_none",
+    "lut3d_pyramid",
+    "lut3d_tetrahedral",
+    "lut3d_trilinear",
+]
+preset_sources = []
+owning_issue = "0198"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "8c9405b8631b49f5a532bd2c13055aafa426c538bf1bc3258313fbdaeae9ee68"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lut3d.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "b3b236d150d3d6baf19547bfec1f47244edaa0b129c22b20579650f35814f5f0"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lut3d.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "20bd3437582f50c3903f5322a911d2b9e6da1b263a940bebda2aa69e8e04f55e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.lut3d.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.lut3d.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.lut3d.migration.v2-v3"
+
+[[operations]]
+name = "mask_manager"
+reference_path = "src/iop/mask_manager.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "c4a976048999241a560809b7a4b8a8b5ef4535ae92fa9b187a6fc24c7c2cef1f"
+default_enabled = false
+default_order = 139
+group = "unspecified"
+tags = [
+    "IOP_FLAGS_HIDDEN",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = []
+owning_issue = "0234"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "bfcae1306aabcce6fa432e8fed2d9ac292b0d36e50e8bb65361c5ae63a350aca"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.mask_manager.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "77009f1fe9118cd91391500154c21c6fceb2e691b81c7f0e774ca8116cb60d98"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.mask_manager.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.mask_manager.migration.v1-v2"
+
+[[operations]]
+name = "monochrome"
+reference_path = "src/iop/monochrome.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "9bce6d134bcd8a3873dd3810c2594b1fda0238d5e2e3f0b9e7787a5b14e13ccf"
+default_enabled = false
+default_order = 91
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "monochrome",
+    "monochrome_filter",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("red filter"), self->op,',
+    '// dt_gui_presets_add_generic(_("purple filter"), self->op, self->version(), &p, sizeof(p), 1);',
+    '// dt_gui_presets_add_generic(_("blue filter"), self->op, self->version(), &p, sizeof(p), 1);',
+    '// dt_gui_presets_add_generic(_("green filter"), self->op, self->version(), &p, sizeof(p), 1);',
+]
+owning_issue = "0184"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "702a15d285bf0221a33d5c504d5747b655fcb9e6e1dab60693a9722a33980524"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.monochrome.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "8757c384c29f70989b47065c397b149844588ef1f0df8a761daf2ac67a474f30"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.monochrome.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.monochrome.migration.v1-v2"
+
+[[operations]]
+name = "negadoctor"
+reference_path = "src/iop/negadoctor.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "f79c9badec00140eb98e9cca34a30ce0f1616997de7321cf7e3a102054e229f6"
+default_enabled = false
+default_order = 147
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["negadoctor"]
+opencl_kernels = ["negadoctor"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("color film"), self->op,',
+    'dt_gui_presets_add_generic(_("black and white film"), self->op,',
+]
+owning_issue = "0182"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "2515f58e8363a80f54122e25355065b5ba72bc5fabfaa2d6cd7a36bc97dd6de7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.negadoctor.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "4083c9d4ee1dab814deb84c48a84815a0e5c0248fb965583e5c67d0bc61153c7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.negadoctor.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.negadoctor.migration.v1-v2"
+
+[[operations]]
+name = "nlmeans"
+reference_path = "src/iop/nlmeans.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "bee120d820c39be9019af9bc30287be6d9659c6215cf890c586e2c195fb1024a"
+default_enabled = false
+default_order = 123
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["nlmeans"]
+opencl_kernels = [
+    "nlmeans_accu",
+    "nlmeans_dist",
+    "nlmeans_finish",
+    "nlmeans_horiz",
+    "nlmeans_init",
+    "nlmeans_vert",
+]
+preset_sources = []
+owning_issue = "0153"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "f3996e143c3b7e3c6c98f809649b6877ea9db1830a6790563f0eae76cd41b33b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.nlmeans.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "6f034507fcdd32bc5009f1c908cb7921c43e4f87e089fa5792335d34f69196f2"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.nlmeans.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.nlmeans.migration.v1-v2"
+
+[[operations]]
+name = "overexposed"
+reference_path = "src/iop/overexposed.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "796a0e158e9a0a6876f4a33c5a7a5709beffb24dce6c3b5f9d5d88be5fd0492e"
+default_enabled = false
+default_order = 115
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_HIDDEN",
+    "IOP_FLAGS_NO_HISTORY_STACK",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["overexposed"]
+migrations = []
+preset_sources = []
+owning_issue = "0208"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "61ae03bd083e98db193decc79fe2fc5c59e01e9b24fce7c4d3b70156dd752680"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.overexposed.params.v1"
+
+[[operations]]
+name = "overlay"
+reference_path = "src/iop/overlay.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "dad152bf75495bc12110d28b75392bc6c129cf3cbb61c6f5b58863ab1b96c5a9"
+default_enabled = false
+default_order = 95
+group = "effect"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["overlay"]
+opencl_kernels = ["overlay_blend"]
+migrations = []
+preset_sources = []
+owning_issue = "0235"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "b4dd0514db890bb4a5b9707fcb72bdb61adee2c71be769bbc387bb1c3972d01c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.overlay.params.v1"
+
+[[operations]]
+name = "primaries"
+reference_path = "src/iop/primaries.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "f8e1187455680b4aa2a7c720ee4bc26e415388ede040c91779b039a36c695fa3"
+default_enabled = false
+default_order = 156
+group = "color"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["primaries"]
+migrations = []
+preset_sources = []
+owning_issue = "0194"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "a22322bdd6fc19629c53b35dfba15a36d49774c8932adc82b2a30de68fb05cf0"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.primaries.params.v1"
+
+[[operations]]
+name = "profile_gamma"
+reference_path = "src/iop/profile_gamma.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "e2d9b5eae565c226d192752ec230f0d1b01d585e2b631bc10dda4ec7882db9c1"
+default_enabled = false
+default_order = 103
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "profilegamma",
+    "profilegamma_log",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "// 16 EV preset",
+    'dt_gui_presets_add_generic(_("16 EV dynamic range (generic)"), self->op,',
+    "// 14 EV preset",
+    'dt_gui_presets_add_generic(_("14 EV dynamic range (generic)"), self->op,',
+    "// 12 EV preset",
+    'dt_gui_presets_add_generic(_("12 EV dynamic range (generic)"), self->op,',
+]
+owning_issue = "0167"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "2d982df960ee36aa5745092fb169b1df87f6993f0ca9c610966234449b1d3aad"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.profile_gamma.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "0839cbf4658c04b4fa191cfb70c54ecc3996a3b9ae8c786a0f06ced6937a95d7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.profile_gamma.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.profile_gamma.migration.v1-v2"
+
+[[operations]]
+name = "rasterfile"
+reference_path = "src/iop/rasterfile.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "2d9cc83dd5809aa3f4d3b3f025af8e459a34b7f3cd7559c427ac089f7248c8e8"
+default_enabled = false
+default_order = 158
+group = "basic"
+tags = [
+    "IOP_FLAGS_WRITE_RASTER",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = ["// we might be called from presets update infrastructure => there is"]
+owning_issue = "0209"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "d79768fc2431facde661ae109def1474b182d023886d4c367eabfe79ed1d18bf"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rasterfile.params.v1"
+
+[[operations.migrations]]
+from_version = 0
+to_version = 1
+strategy = "reference-legacy-params"
+fixture_id = "operation.rasterfile.migration.legacy-v1"
+
+[[operations]]
+name = "rawdenoise"
+reference_path = "src/iop/rawdenoise.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "72c4256a3d492b87e2ffbdf0cb7927257b8b9ec9e51f6064c565abcdc054a887"
+default_enabled = false
+default_order = 121
+group = "correct"
+tags = [
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = []
+owning_issue = "0152"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "6f4f492263f0069802a7c138356cc566bb46a58c7cd219a9db35c3620e7b2f9a"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rawdenoise.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "5a3ec06fe7d6186205d2b32bb28c8b9c1ed0c7ac135bc27b928a0b6df3f2c360"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rawdenoise.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.rawdenoise.migration.v1-v2"
+
+[[operations]]
+name = "rawoverexposed"
+reference_path = "src/iop/rawoverexposed.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "c4024b2d0f9a3f2195546393d569d71747e020ee630a5dfeca143cfbdcb9036d"
+default_enabled = false
+default_order = 96
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_HIDDEN",
+    "IOP_FLAGS_NO_HISTORY_STACK",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "rawoverexposed_falsecolor",
+    "rawoverexposed_mark_cfa",
+    "rawoverexposed_mark_solid",
+]
+migrations = []
+preset_sources = []
+owning_issue = "0207"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "bb41394875e6387d0d55265f0ed47b54c5785c8e241fb9ae3aaa5624edf22e0d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rawoverexposed.params.v1"
+
+[[operations]]
+name = "rawprepare"
+reference_path = "src/iop/rawprepare.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "ffc0bf3d3de2ca34f44329662b9ab3cb33f40435305c796eec24e25f01f07f80"
+default_enabled = false
+default_order = 65
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_FLAGS_WRITE_DETAILS",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "tiled"
+cpu_implementation = "process_tiling"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "rawprepare_1f",
+    "rawprepare_1f_gainmap",
+    "rawprepare_1f_unnormalized",
+    "rawprepare_1f_unnormalized_gainmap",
+    "rawprepare_4f",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("passthrough"), self->op, self->version(),',
+    '_("please reset to defaults, update your preset or set to something correct"),',
+]
+owning_issue = "0146"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "c9b1d47023b08c8d875cb79a9b66216e4bef95c9b0160936291eb9de554c05e3"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rawprepare.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "1d700dde9a1e6eaa0b5cc32c6a1601e18c3f5fcb9487be96ef5b5a048090beda"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rawprepare.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.rawprepare.migration.v1-v2"
+
+[[operations]]
+name = "relight"
+reference_path = "src/iop/relight.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "c3bcbbbf3217ec41300bf0cebcfb52c7c7077560554c7fc158d8113563d2a6eb"
+default_enabled = false
+default_order = 108
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["relight"]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("fill-light 0.25EV with 4 zones"), self->op, self->version(),',
+    'dt_gui_presets_add_generic(_("fill-shadow -0.25EV with 4 zones"), self->op, self->version(),',
+]
+owning_issue = "0216"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "69f7775a6e15fc44950735af756701e7ba087309c43db3620a550c2f82696221"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.relight.params.v1"
+
+[[operations]]
+name = "retouch"
+reference_path = "src/iop/retouch.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "f2112612de622fce4c461c0f7453993f4105499a27d5f4bec9a752ce15affd23"
+default_enabled = false
+default_order = 119
+group = "correct"
+tags = [
+    "IOP_FLAGS_NO_MASKS",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["retouch"]
+opencl_kernels = [
+    "retouch_clear_alpha",
+    "retouch_copy_alpha",
+    "retouch_copy_buffer_to_buffer",
+    "retouch_copy_buffer_to_buffer_masked",
+    "retouch_copy_buffer_to_image",
+    "retouch_copy_image_to_buffer_masked",
+    "retouch_copy_mask_to_alpha",
+    "retouch_fill",
+    "retouch_image_lab2rgb",
+    "retouch_image_rgb2lab",
+]
+preset_sources = []
+owning_issue = "0233"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "6a32b26616929b3573c2f29315404900a0d68ed684b2c9ecf0e61980b8192608"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.retouch.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "63f382e30a791977625dc8de2d53267df8248adbb7a79d74156217177f925330"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.retouch.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "7025984d88f94ae8db2d0ba8cf93450222a9440a9ba4754b56242ae8de482c9c"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.retouch.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.retouch.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.retouch.migration.v2-v3"
+
+[[operations]]
+name = "rgbcurve"
+reference_path = "src/iop/rgbcurve.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "d5605d69feb8c21e8f51c0333b82f015a4833b00638fa0f91218982a976d60ad"
+default_enabled = false
+default_order = 81
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["rgbcurve"]
+opencl_kernels = ["rgbcurve"]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "// linear a, b curves for presets",
+    'dt_gui_presets_add_generic(_("contrast | compression"), self->op,',
+    'dt_gui_presets_add_generic(_("linear (gamma 1.0)"), self->op,',
+    'dt_gui_presets_add_generic(_("contrast | medium (linear)"), self->op,',
+    'dt_gui_presets_add_generic(_("contrast | high (linear)"), self->op,',
+    'dt_gui_presets_add_generic(_("contrast | medium (gamma 2.2)"), self->op,',
+]
+owning_issue = "0175"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "7e8cc3348e4d4d991cc15fa8e285c15999bf874d3de1144de908f44b9822c6f5"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rgbcurve.params.v1"
+
+[[operations]]
+name = "rgblevels"
+reference_path = "src/iop/rgblevels.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "71ebfdba3d93991fe27a84e69fa1aefe6197b7484591f16df7a3ecf0399a92d4"
+default_enabled = true
+default_order = 126
+group = "tone"
+tags = [
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["rgblevels"]
+opencl_kernels = ["rgblevels"]
+migrations = []
+preset_sources = []
+owning_issue = "0169"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "bf258bfd0be33578b7258e6a3a95e54690b26208a8fab2340224997b5828428f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rgblevels.params.v1"
+
+[[operations]]
+name = "rotatepixels"
+reference_path = "src/iop/rotatepixels.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "6b22aeb91740e7a18a5167c6207077efdd9d761053f4c7dda9d226127a4a94ed"
+default_enabled = false
+default_order = 111
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_HIDDEN",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0225"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "676dbfeba6fa193bbcc31f43460d42305beaa7c7255f780080487e842bdef2a2"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.rotatepixels.params.v1"
+
+[[operations]]
+name = "scalepixels"
+reference_path = "src/iop/scalepixels.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "36f70adc12dfa91c279894f8ba7181ef5a7604e0d359414a141eeb7f49531ba6"
+default_enabled = false
+default_order = 112
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_TECHNICAL",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands-and-reduces"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0226"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "182512f6367a7ebfecf61759492f2a9d111583ec30174cb4d421b4492bbf57a7"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.scalepixels.params.v1"
+
+[[operations]]
+name = "shadhi"
+reference_path = "src/iop/shadhi.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "05e2880249bf034ecb5a836a6e024ddc16b9f26fc506dcb64676b5a680f3f9f4"
+default_enabled = false
+default_order = 70
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["gaussian"]
+opencl_kernels = ["shadows_highlights_mix"]
+preset_sources = ['#include "gui/presets.h"']
+owning_issue = "0215"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "508fa2360fc6a9feccaee3bf1d7b7e4416bbf71a93295b4199544e4f0526292f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.shadhi.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "da1c3a34083f3ec1dc7a592362f473ae3e8a659a0f7cf3ae9ad6e798b8f4337b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.shadhi.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "145ac24c599ae27d2944b849ddf13b44df89b0b257794cb8f18afbd3b0e956de"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.shadhi.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "b903fe4e0ac68f700f138d44ef729e9f9f6e2f003d77628c72f3166e3e52a488"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.shadhi.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "02851c380572b5c86c5cbee1c37dafb4b29bec361f6a67c276fee47196efe683"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.shadhi.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.shadhi.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.shadhi.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.shadhi.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.shadhi.migration.v4-v5"
+
+[[operations]]
+name = "sharpen"
+reference_path = "src/iop/sharpen.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "183fbbe7fe0ee96711201afd08e30004c99dd06b7c76f4cfd8f958a2bfde709c"
+default_enabled = true
+default_order = 89
+group = "correct"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["sharpen"]
+opencl_kernels = [
+    "sharpen_hblur",
+    "sharpen_mix",
+    "sharpen_vblur",
+]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "// add the preset.",
+    'dt_gui_presets_add_generic(_("sharpen"), self->op,',
+    'dt_gui_presets_update_format(BUILTIN_PRESET("sharpen"), self->op,',
+]
+owning_issue = "0157"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "37274212745fb32009732732971f9508a2f0124f0b0504aa9a95b83726fb2e90"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.sharpen.params.v1"
+
+[[operations]]
+name = "sigmoid"
+reference_path = "src/iop/sigmoid.c"
+module_version = 3
+parameter_size = 0
+parameter_layout_hash = "d8cea1e2a979f9ba3a0c53d1a1f77678759882fbfc354ac9b664a0703390b709"
+default_enabled = false
+default_order = 154
+group = "tone"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_TECHNICAL",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["sigmoid"]
+opencl_kernels = [
+    "sigmoid_loglogistic_per_channel",
+    "sigmoid_loglogistic_rgb_ratio",
+]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "self->pref_based_presets = TRUE;",
+    'dt_gui_presets_add_generic(_("scene-referred default"),',
+    'dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"),',
+    'dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),',
+    'dt_gui_presets_add_generic(_("neutral gray"), self->op,',
+    'dt_gui_presets_add_generic(_("ACES 100-nit like"), self->op,',
+]
+owning_issue = "0180"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "2fd59f4823157133e9ea4183b7b37c19ab199e22e3c591ec89572db8594f6e65"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.sigmoid.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "79bb7d5c388f15b25684c1d86e675450384d7bf2656b688f2a553f4bd2e3685f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.sigmoid.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "938be99dbdd5652dca0878b0f504aa51942ddb4ab82eec37a03f3a53c9925c82"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.sigmoid.params.v3"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.sigmoid.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.sigmoid.migration.v2-v3"
+
+[[operations]]
+name = "soften"
+reference_path = "src/iop/soften.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "7e0db5137dc6529c9f1c3e6661065ffecb140899cb3116b8c4c1e3f9551bf880"
+default_enabled = false
+default_order = 66
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["soften"]
+opencl_kernels = [
+    "soften_hblur",
+    "soften_mix",
+    "soften_overexposed",
+    "soften_vblur",
+]
+migrations = []
+preset_sources = []
+owning_issue = "0214"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "48713017613e115e07355b8b1d65f3d1758cb6f137ce725f30f2493b6e9ee37d"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.soften.params.v1"
+
+[[operations]]
+name = "splittoning"
+reference_path = "src/iop/splittoning.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "68f17bec06399ddd4bd1e249880fca9a87ac9553057a8fa1b9c1b3fe4b2a3866"
+default_enabled = false
+default_order = 99
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["splittoning"]
+migrations = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    "dt_gui_presets_add_generic(",
+    "dt_gui_presets_add_generic(",
+    "dt_gui_presets_add_generic(",
+    "dt_gui_presets_add_generic(",
+]
+owning_issue = "0183"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "2a94a4052c9ea414cd194cc32af959b411b5f8882b2afcda730d3e2770ca11aa"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.splittoning.params.v1"
+
+[[operations]]
+name = "spots"
+reference_path = "src/iop/spots.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "b9d629fe4ff95aa88378bdec223ecaf50a739a0a05156a6b45c5269b832e20b4"
+default_enabled = false
+default_order = 118
+group = "correct"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_NO_MASKS",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_CORRECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = []
+owning_issue = "0232"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "61036dc94756b202f4eeba14708ad4bfabf9287611170cde4ab73f63deff886f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.spots.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "74bfd45616e369d3fc93e7741cb8fe8fc5518c1756e751ac2b69914f709ba201"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.spots.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.spots.migration.v1-v2"
+
+[[operations]]
+name = "temperature"
+reference_path = "src/iop/temperature.c"
+module_version = 4
+parameter_size = 0
+parameter_layout_hash = "2ef3a4f73f6305dbf517f6d185dfe986e0a4d885da09cacaf238aa279929db4d"
+default_enabled = true
+default_order = 76
+group = "basic"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_ONE_INSTANCE",
+    "IOP_FLAGS_UNSAFE_COPY",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = [
+    "whitebalance_1f",
+    "whitebalance_1f_xtrans",
+    "whitebalance_4f",
+]
+preset_sources = [
+    '#include "common/wb_presets.h"',
+    "#define DT_IOP_NUM_OF_STD_TEMP_PRESETS 5",
+    "// If you reorder presets combo, change this consts",
+    "int preset;",
+    "GtkWidget *presets;",
+    "int preset_cnt;",
+    "int preset_num[54];",
+    "int preset;",
+]
+owning_issue = "0148"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "2857826a9710ca6693d5bba577dc00ae6bfc8e458c1cad11f9ebe40094ea00df"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.temperature.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "7de1c625cbac5184fb96c5222640e9c59e4d08fe09350a5826830df12136c873"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.temperature.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "f2b22cde099a8c19e4feff0731c36cbd43773ecb0fb92ab678d3facfcb3a12d4"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.temperature.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "c2b3fcda09de86bc6a144182975159e1cb63a777086b12abd76f671a0cf9aa8a"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.temperature.params.v4"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.temperature.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.temperature.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.temperature.migration.v3-v4"
+
+[[operations]]
+name = "tonecurve"
+reference_path = "src/iop/tonecurve.c"
+module_version = 5
+parameter_size = 0
+parameter_layout_hash = "cc7054070be05e2247dfa2e96969ce2913b9151a7cafc3fb7ee20da4102b58c6"
+default_enabled = false
+default_order = 73
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["tonecurve"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "int tonecurve_preset; // $DEFAULT: 0",
+    "int tonecurve_preset;",
+    "int tonecurve_preset;",
+    "n->tonecurve_preset = o->tonecurve_preset;",
+    "int tonecurve_preset;",
+    "n->tonecurve_preset = o->tonecurve_preset;",
+    "int tonecurve_preset;",
+]
+owning_issue = "0176"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "1cb7b38f7c7cef680b4cebf5d7626629aba7d14d2d8aa72e4628b4d77dafbfa8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.tonecurve.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "1bfdd361d804197046b364bc0ce2517daf271a0495c92e109d278a6f859deda1"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.tonecurve.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "a26a8635913d226789546ced6c35148b789e8842dce722a323b7f8221d3ab395"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.tonecurve.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "1c685c02aa5c5e44eb7f18debdc45be2106fee02e5e540909ce721bff1e9fbf8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.tonecurve.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "dc9c2d02a6eae6ae8bc90364056674920c91dec0a9f057eb3ace4e5ada13dca8"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.tonecurve.params.v5"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.tonecurve.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.tonecurve.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.tonecurve.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.tonecurve.migration.v4-v5"
+
+[[operations]]
+name = "toneequal"
+reference_path = "src/iop/toneequal.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "9c1ead8755b2de58083350aa7f57e9e15640f3d83b6106cc2f29c195810e98ed"
+default_enabled = true
+default_order = 145
+group = "basic"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "expands"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = [
+    '#include "gui/presets.h"',
+    "static void compress_shadows_highlight_preset_set_exposure_params",
+    '// highlights" presets, which use basically the same curve, centered around',
+    "static void dilate_shadows_highlight_preset_set_exposure_params",
+    "void init_presets(dt_iop_module_so_t *self)",
+    "dt_gui_presets_add_generic",
+    "dt_gui_presets_add_generic",
+    "dt_gui_presets_add_generic",
+]
+owning_issue = "0171"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "dd5e285561be7652f0e50e0d637237eba66bdc50a031b0b015765c70432ffd0b"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.toneequal.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "d078ac0519e14681ce733d8ec123814a096066644ec6dd67fd17c8465ba617d4"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.toneequal.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.toneequal.migration.v1-v2"
+
+[[operations]]
+name = "tonemap"
+reference_path = "src/iop/tonemap.cc"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "98cb0969d64d09fa12d4d99582cccb1d892f7795775cc29fecb5d56f343d0061"
+default_enabled = false
+default_order = 72
+group = "tone"
+tags = [
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+migrations = []
+preset_sources = []
+owning_issue = "0178"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "8d01783dfc376fac777834718e3da7cd2e46f9c47c44b0d61fc378a5ec08f158"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.tonemap.params.v1"
+
+[[operations]]
+name = "velvia"
+reference_path = "src/iop/velvia.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "cb66c44dd4e7d58c2dc40d97f82e1d50219ecb58f75aab1bf76a36d8b4bcaf9d"
+default_enabled = false
+default_order = 97
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["velvia"]
+preset_sources = []
+owning_issue = "0186"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "0d60dde7c1f9890a82f38fcd5a3952b8267e810417bab8d5ea890c00f9e0c261"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.velvia.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "d768b4e8f31f42da165cc99c6705580e2c386aa00b9eec7e97f4e1a9e3d0fbcf"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.velvia.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.velvia.migration.v1-v2"
+
+[[operations]]
+name = "vibrance"
+reference_path = "src/iop/vibrance.c"
+module_version = 2
+parameter_size = 0
+parameter_layout_hash = "0e8976417170756c88ac9c03291a33be48da65aacaa036be4c0f5a6ba80b7729"
+default_enabled = false
+default_order = 129
+group = "color"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_COLOR",
+    "IOP_GROUP_GRADING",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["vibrance"]
+preset_sources = []
+owning_issue = "0185"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "c2d6fc67adeae9572632f55ffe240888e54e62995d3a5ea29062b2a2a3575263"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.vibrance.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "3d4c1a2e0433f065cd89f52f0f748789727ad05bc41c7f431f47a6314484e229"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.vibrance.params.v2"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "opaque-blocking"
+fixture_id = "operation.vibrance.migration.v1-v2"
+
+[[operations]]
+name = "vignette"
+reference_path = "src/iop/vignette.c"
+module_version = 4
+parameter_size = 0
+parameter_layout_hash = "6d820391be4e138edd63c95106097245b78c04de9d7750edcd824e295d2478c5"
+default_enabled = false
+default_order = 98
+group = "effect"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_FLAGS_TILING_FULL_ROI",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["extended"]
+opencl_kernels = ["vignette"]
+preset_sources = [
+    '#include "gui/presets.h"',
+    "void init_presets(dt_iop_module_so_t *self)",
+    'dt_gui_presets_add_generic(_("lomo"), self->op,',
+]
+owning_issue = "0210"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "7af8f3e4b3d3cc14cf56fa39cfb3227f7a398286ead81f55c36d4b95c4340cb5"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.vignette.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "07fdc1798242934251d943d2510bfec4c5ce1ba6c648c43b677155303fb246fc"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.vignette.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "05819ee53e54b6bb553dd338813cf094be0d2c291de50d49cf3ce4793ecd1b56"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.vignette.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "c5bab50061340b14699e54ba49a5637e4481f13622d6b5115ef0fb08d9d0cb25"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.vignette.params.v4"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.vignette.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.vignette.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.vignette.migration.v3-v4"
+
+[[operations]]
+name = "watermark"
+reference_path = "src/iop/watermark.c"
+module_version = 7
+parameter_size = 0
+parameter_layout_hash = "2630e140108f7e2b9db3c9d95fcfb7dcc1f59df4acfa40790b35476b434bcedb"
+default_enabled = false
+default_order = 161
+group = "effect"
+tags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = []
+opencl_kernels = []
+preset_sources = []
+owning_issue = "0220"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "eca7dae2fca309c1afb1246fd89b8c0910eac732f7d82c06d071796f45894d3e"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v1"
+
+[[operations.parameter_versions]]
+version = 2
+byte_size = 0
+layout_hash = "edecb1d6d13bf4413e200a513b60d96f4ca8b6f8d49758fcc0b2465ac483f874"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v2"
+
+[[operations.parameter_versions]]
+version = 3
+byte_size = 0
+layout_hash = "f430963b0f4c8c77e692bed4b137bacaf25835393bef14ae439bac99825952bf"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v3"
+
+[[operations.parameter_versions]]
+version = 4
+byte_size = 0
+layout_hash = "484a6f04707eb45601474bac4871573764d407c1e1558c1a6acffb3e84c8cf8f"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v4"
+
+[[operations.parameter_versions]]
+version = 5
+byte_size = 0
+layout_hash = "c65ee5f3b64528f4bfc2fbeab8e78609194f64244aa30f8fa12f7227582e5fe1"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v5"
+
+[[operations.parameter_versions]]
+version = 6
+byte_size = 0
+layout_hash = "bc365a59918dedb3c1679b914e5989cfc863bef6456fd97cc32dd336173de702"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v6"
+
+[[operations.parameter_versions]]
+version = 7
+byte_size = 0
+layout_hash = "6ea7430d6ae6156d69a7e172c0b320d30c213b01170735c0f25d8fac53237d8a"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.watermark.params.v7"
+
+[[operations.migrations]]
+from_version = 1
+to_version = 2
+strategy = "reference-legacy-params"
+fixture_id = "operation.watermark.migration.v1-v2"
+
+[[operations.migrations]]
+from_version = 2
+to_version = 3
+strategy = "reference-legacy-params"
+fixture_id = "operation.watermark.migration.v2-v3"
+
+[[operations.migrations]]
+from_version = 3
+to_version = 4
+strategy = "reference-legacy-params"
+fixture_id = "operation.watermark.migration.v3-v4"
+
+[[operations.migrations]]
+from_version = 4
+to_version = 5
+strategy = "reference-legacy-params"
+fixture_id = "operation.watermark.migration.v4-v5"
+
+[[operations.migrations]]
+from_version = 5
+to_version = 6
+strategy = "reference-legacy-params"
+fixture_id = "operation.watermark.migration.v5-v6"
+
+[[operations.migrations]]
+from_version = 6
+to_version = 7
+strategy = "reference-legacy-params"
+fixture_id = "operation.watermark.migration.v6-v7"
+
+[[operations]]
+name = "zonesystem"
+reference_path = "src/iop/zonesystem.c"
+module_version = 1
+parameter_size = 0
+parameter_layout_hash = "07c43695802d0e93d483aa61ce48f6ef19521aac9466ad91d3bb88a405a1eedf"
+default_enabled = false
+default_order = 109
+group = "tone"
+tags = [
+    "IOP_FLAGS_ALLOW_TILING",
+    "IOP_FLAGS_DEPRECATED",
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_PREVIEW_NON_OPENCL",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_GRADING",
+    "IOP_GROUP_TONE",
+]
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "unknown"
+output_color_space = "unknown"
+roi_behavior = "identity"
+tiling_requirement = "scanline"
+cpu_implementation = "process"
+opencl_programs = ["basic"]
+opencl_kernels = ["zonesystem"]
+migrations = []
+preset_sources = ['#include "gui/presets.h"']
+owning_issue = "0177"
+
+[[operations.parameter_versions]]
+version = 1
+byte_size = 0
+layout_hash = "16e2e8298a13c0b80e870b8862f9b62c87790aa72194f578a143c1eb8ced9d13"
+decoder = "opaque"
+opaque_blocking = true
+fixture_id = "operation.zonesystem.params.v1"

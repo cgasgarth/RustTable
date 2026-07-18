@@ -112,7 +112,7 @@ fn storage_issue(name: &str) -> Vec<&'static str> {
     }
 }
 
-fn iop_issue(name: &str) -> Vec<&'static str> {
+pub(crate) fn iop_issue(name: &str) -> Vec<&'static str> {
     let issue = match name {
         "rawprepare" => "0146",
         "demosaic" => "0147",
