@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use rusttable_core::{Asset, AssetId, Edit, ImageMetadata, Photo, PhotoId, Revision};
+use rusttable_core::{Asset, AssetId, Edit, EditId, ImageMetadata, Photo, PhotoId, Revision};
 use rusttable_image::ImageProbe;
 
 use crate::{ImportRecord, ImportRepository, RepositoryError, SourcePath};
@@ -42,6 +42,10 @@ impl CatalogEntry {
     pub fn edits(&self) -> impl Iterator<Item = &Edit> {
         self.edits.iter()
     }
+
+    pub(crate) fn clone_record(&self) -> ImportRecord {
+        self.record.clone()
+    }
 }
 
 /// A deterministic, owned, read-only projection of catalog state and imports.
@@ -51,6 +55,7 @@ pub struct CatalogSnapshot {
     entries: Vec<CatalogEntry>,
     by_source: BTreeMap<SourcePath, usize>,
     by_photo_id: BTreeMap<PhotoId, usize>,
+    by_edit_id: BTreeMap<EditId, usize>,
 }
 
 impl CatalogSnapshot {
@@ -78,14 +83,18 @@ impl CatalogSnapshot {
         let mut entries = Vec::with_capacity(records.len());
         let mut by_source = BTreeMap::new();
         let mut by_photo_id = BTreeMap::new();
+        let mut by_edit_id = BTreeMap::new();
         for record in records {
             let index = entries.len();
             let photo_id = record.photo().id();
-            let edits = state
+            let edits: Vec<Edit> = state
                 .edits()
                 .filter(|edit| edit.photo_id() == photo_id)
                 .cloned()
                 .collect();
+            for edit in &edits {
+                by_edit_id.insert(edit.id(), index);
+            }
             by_source.insert(record.source().clone(), index);
             by_photo_id.insert(photo_id, index);
             entries.push(CatalogEntry { record, edits });
@@ -96,6 +105,7 @@ impl CatalogSnapshot {
             entries,
             by_source,
             by_photo_id,
+            by_edit_id,
         })
     }
 
@@ -120,6 +130,13 @@ impl CatalogSnapshot {
         self.by_photo_id
             .get(&photo_id)
             .and_then(|index| self.entries.get(*index))
+    }
+
+    pub(crate) fn edit_by_id(&self, edit_id: EditId) -> Option<&Edit> {
+        let entry_index = self.by_edit_id.get(&edit_id)?;
+        self.entries
+            .get(*entry_index)
+            .and_then(|entry| entry.edits.iter().find(|edit| edit.id() == edit_id))
     }
 }
 
