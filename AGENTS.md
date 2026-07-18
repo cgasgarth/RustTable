@@ -49,3 +49,10 @@
 - Document architectural decisions, public APIs, safety invariants, and non-obvious performance tradeoffs.
 - Keep code, tests, and documentation consistent with the current RustTable design; do not copy stale darktable assumptions into new APIs without validation.
 - Before submitting changes, inspect the diff, run the fastest relevant checks, and report any skipped validation explicitly.
+
+## Issue queue and consults
+
+- Treat open GitHub issues and milestones as the migration plan's source of truth; each issue maps to exactly one pull request.
+- When fewer than 10 open GitHub issues remain, kick off fresh consults to scope additional work against the current repository and milestones.
+- Prompt each consult for concrete issue-sized proposals with a title, rationale, scope, acceptance criteria, dependencies, and recommended milestone.
+- Convert accepted consult proposals into GitHub issues before implementation, then work from those issues without using consult chats as a second task tracker.
