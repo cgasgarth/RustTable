@@ -6,6 +6,7 @@ mod app;
 mod bootstrap;
 mod input;
 mod library;
+mod library_loader;
 mod navigation;
 #[cfg_attr(
     not(test),
@@ -21,7 +22,7 @@ mod view;
 #[cfg(test)]
 mod ui_smoke;
 
-use app::{Shell, update};
+use app::{boot, update};
 use bootstrap::run_with_bootstrap;
 
 /// Starts the `RustTable` desktop application.
@@ -33,7 +34,7 @@ pub fn run() -> iced::Result {
     run_with_bootstrap(
         rusttable_diagnostics::install,
         || {
-            iced::application(Shell::default, update, view::view)
+            iced::application(boot, update, view::view)
                 .title("RustTable")
                 .theme(theme::theme)
                 .centered()

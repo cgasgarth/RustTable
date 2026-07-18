@@ -23,7 +23,9 @@ impl<'a> ActionButton<'a> {
         focused: bool,
     ) -> Self {
         Self {
-            inner: iced::widget::button(content).on_press(action).into(),
+            inner: iced::widget::button(content)
+                .on_press(action.clone())
+                .into(),
             action,
             focused,
             width: Length::Shrink,
@@ -195,7 +197,7 @@ impl Widget<Message, iced::Theme, iced::Renderer> for ActionButton<'_> {
             return;
         }
 
-        let Some(message) = key_message(key, *modifiers, self.action) else {
+        let Some(message) = key_message(key, *modifiers, self.action.clone()) else {
             return;
         };
         shell.publish(message);
@@ -255,27 +257,39 @@ mod tests {
     fn supported_keys_map_once_and_modifiers_are_filtered() {
         let action = Message::ToggleSidebar;
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::default(), action),
+            key_message(
+                &Key::Named(Named::Tab),
+                Modifiers::default(),
+                action.clone()
+            ),
             Some(Message::Input(InputIntent::FocusNext))
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::SHIFT, action),
+            key_message(&Key::Named(Named::Tab), Modifiers::SHIFT, action.clone()),
             Some(Message::Input(InputIntent::FocusPrevious))
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Enter), Modifiers::default(), action),
-            Some(action)
+            key_message(
+                &Key::Named(Named::Enter),
+                Modifiers::default(),
+                action.clone()
+            ),
+            Some(action.clone())
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Escape), Modifiers::default(), action),
+            key_message(
+                &Key::Named(Named::Escape),
+                Modifiers::default(),
+                action.clone()
+            ),
             Some(Message::Input(InputIntent::Escape))
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::CTRL, action),
+            key_message(&Key::Named(Named::Tab), Modifiers::CTRL, action.clone()),
             None
         );
         assert_eq!(
-            key_message(&Key::Named(Named::Tab), Modifiers::ALT, action),
+            key_message(&Key::Named(Named::Tab), Modifiers::ALT, action.clone()),
             None
         );
     }

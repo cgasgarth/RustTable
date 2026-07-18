@@ -4,7 +4,8 @@ use iced_test::core::{Settings, Size};
 use rusttable_core::PhotoId;
 
 use crate::app::{Message, Shell, update};
-use crate::library::LibraryState;
+use crate::library::{LibraryFailureKind, LibraryState};
+use crate::library_loader::LibraryLoadResult;
 use crate::navigation::NavigationIntent;
 use crate::presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
@@ -103,6 +104,53 @@ fn shell_navigates_from_photo_detail_to_library() -> Result<(), iced_test::Error
     assert!(simulator.find("Photo detail").is_err());
     assert!(simulator.find("Back to library").is_err());
 
+    Ok(())
+}
+
+#[test]
+fn failed_library_retries_then_renders_ready_workspace() -> Result<(), iced_test::Error> {
+    let workspace = four_photo_workspace();
+    let mut shell = Shell::with_library_state(LibraryState::Failed(
+        LibraryFailureKind::RepositoryUnavailable,
+    ));
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+
+    simulator.find("Retry library")?;
+    simulator.click("Retry library")?;
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::RetryLibrary]
+    );
+    let _ = update(&mut shell, Message::RetryLibrary);
+    let request_id = shell.active_load_request_id();
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.find("Loading library")?;
+    assert!(simulator.find("Retry library").is_err());
+    drop(simulator);
+
+    let _ = update(
+        &mut shell,
+        Message::LibraryLoaded {
+            request_id,
+            result: LibraryLoadResult::Ready(workspace),
+        },
+    );
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.find("Photo 1")?;
+    assert!(simulator.find("Retry library").is_err());
     Ok(())
 }
 
