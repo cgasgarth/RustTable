@@ -69,6 +69,20 @@ pub fn validate_operation_manifest(manifest: &OperationManifest) -> Result<(), S
                 message: "reference path and four-digit owning issue are required".to_owned(),
             });
         }
+        if ![
+            "Exact",
+            "Transfer",
+            "Pointwise",
+            "Neighborhood",
+            "LegacyGpu",
+        ]
+        .contains(&operation.tolerance_class.as_str())
+        {
+            return Err(ScanError::OperationValidation {
+                operation: operation.name.clone(),
+                message: format!("unknown tolerance class {}", operation.tolerance_class),
+            });
+        }
         if operation.parameter_versions.is_empty() {
             return Err(ScanError::OperationValidation {
                 operation: operation.name.clone(),

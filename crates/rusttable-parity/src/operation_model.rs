@@ -43,6 +43,8 @@ pub struct Operation {
     pub migrations: Vec<ParameterMigration>,
     pub preset_sources: Vec<String>,
     pub owning_issue: String,
+    #[serde(default = "default_tolerance_class")]
+    pub tolerance_class: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -108,6 +110,12 @@ pub struct OperationOverride {
     pub preset_sources: Option<Vec<String>>,
     #[serde(default)]
     pub owning_issue: Option<String>,
+    #[serde(default)]
+    pub tolerance_class: Option<String>,
+}
+
+fn default_tolerance_class() -> String {
+    "Pointwise".to_owned()
 }
 
 #[derive(Debug, Deserialize)]

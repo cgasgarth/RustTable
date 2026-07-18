@@ -94,6 +94,11 @@ fn extract_operation(
     let versions = parameter_versions(content, name, module_version, &parameter_type);
     let migrations = migrations(content, name, module_version, &versions);
     let opencl_programs = opencl_programs(content, programs);
+    let tolerance_class = if opencl_programs.is_empty() {
+        "Pointwise".to_owned()
+    } else {
+        "LegacyGpu".to_owned()
+    };
     let opencl_kernels = opencl_kernels(content);
     let issue = iop_issue(name)
         .first()
@@ -131,6 +136,7 @@ fn extract_operation(
         migrations,
         preset_sources: preset_sources(content),
         owning_issue: issue,
+        tolerance_class,
     }
 }
 
@@ -477,6 +483,9 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     }
     if let Some(value) = &entry.owning_issue {
         operation.owning_issue.clone_from(value);
+    }
+    if let Some(value) = &entry.tolerance_class {
+        operation.tolerance_class.clone_from(value);
     }
 }
 
