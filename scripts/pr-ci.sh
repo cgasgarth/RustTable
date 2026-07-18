@@ -16,7 +16,7 @@ run_check() {
   return "$status"
 }
 
-cheap_labels=(diff fmt metadata source bun macos-artifact-identity repository-policy doctor readme-contract native-removal linux-distribution workspace-rust-version)
+cheap_labels=(diff fmt metadata source bun macos-artifact-identity repository-policy pr-branch-freshness doctor readme-contract native-removal linux-distribution workspace-rust-version)
 run_check diff git diff --check &
 cheap_pids[0]=$!
 run_check fmt cargo fmt --all -- --check &
@@ -31,15 +31,17 @@ run_check macos-artifact-identity bun run test:macos-artifact-identity &
 cheap_pids[5]=$!
 run_check repository-policy bun run test:repository-policy &
 cheap_pids[6]=$!
-run_check doctor bash scripts/dev/test-doctor.sh &
+run_check pr-branch-freshness bun run test:pr-branch-freshness &
 cheap_pids[7]=$!
-run_check readme-contract bash scripts/dev/test-readme-contract.sh &
+run_check doctor bash scripts/dev/test-doctor.sh &
 cheap_pids[8]=$!
-run_check native-removal bash -c 'bun run test:native-removal && bun run check:native-removal' &
+run_check readme-contract bash scripts/dev/test-readme-contract.sh &
 cheap_pids[9]=$!
-run_check linux-distribution bash -c 'bun run test:linux-artifact-identity && bun run test:linux-distribution-smoke' &
+run_check native-removal bash -c 'bun run test:native-removal && bun run check:native-removal' &
 cheap_pids[10]=$!
-cheap_index=11
+run_check linux-distribution bash -c 'bun run test:linux-artifact-identity && bun run test:linux-distribution-smoke' &
+cheap_pids[11]=$!
+cheap_index=12
 if [[ "${RUSTTABLE_SKIP_BUN_PIN_REGRESSION:-0}" != 1 ]]; then
   cheap_labels+=(bun-pin-fixtures bun-pin-policy)
   run_check bun-pin-fixtures bash scripts/test-bun-pin.sh &

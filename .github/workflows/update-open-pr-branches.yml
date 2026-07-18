@@ -1,0 +1,59 @@
+name: RustTable Ready PR Freshness
+
+on:
+  push:
+    branches:
+      - main
+  workflow_run:
+    workflows:
+      - RustTable PR
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: rust-pr-freshness
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: ready same-repository PR branches
+    if: >-
+      github.repository == 'cgasgarth/RustTable' &&
+      (github.event_name != 'workflow_run' ||
+      github.event.workflow_run.event == 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read canonical Bun pin
+        id: bun-pin
+        run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
+      - name: Set up exact Bun toolchain
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: ${{ steps.bun-pin.outputs.bun-version }}
+      - name: Verify canonical Bun version
+        run: test "$(bun --version)" = "${{ steps.bun-pin.outputs.bun-version }}"
+      - name: Verify protected-main and squash-only policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun scripts/github/repository-policy.ts cgasgarth/RustTable main
+      - name: Update ready same-repository PR branches
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          # Configure this as a fine-grained repository token with only Contents: read/write and Pull requests: read.
+          READY_PR_UPDATE_TOKEN: ${{ secrets.READY_PR_UPDATE_TOKEN }}
+        run: bun scripts/github/update-open-pr-branches.ts

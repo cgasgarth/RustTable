@@ -43,6 +43,8 @@ run_checks() {
   pr_ci_pid=$!
   bun run test:repository-policy >"$temporary_directory/repository-policy.log" 2>&1 &
   repository_policy_pid=$!
+  bun run test:pr-branch-freshness >"$temporary_directory/pr-branch-freshness.log" 2>&1 &
+  pr_branch_freshness_pid=$!
   bash scripts/test-dependency-security.sh >"$temporary_directory/security.log" 2>&1 &
   security_pid=$!
   bash scripts/test-bun-pin.sh >"$temporary_directory/bun-pin-fixtures.log" 2>&1 &
@@ -96,6 +98,10 @@ run_checks() {
   if ! wait "$repository_policy_pid"; then
     status=1
     cat "$temporary_directory/repository-policy.log" >&2
+  fi
+  if ! wait "$pr_branch_freshness_pid"; then
+    status=1
+    cat "$temporary_directory/pr-branch-freshness.log" >&2
   fi
   if ! wait "$security_pid"; then
     status=1
