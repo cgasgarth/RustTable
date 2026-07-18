@@ -5,7 +5,8 @@ mod verify;
 
 pub use compression::{CompressionError, DecompressionReport};
 pub use manifest::{
-    Compression, FixtureEntry, FixtureManifest, FixtureManifestLimits, ManifestError, PrivacyClass,
+    Compression, FixtureDimensions, FixtureEntry, FixtureExpectation, FixtureManifest,
+    FixtureManifestLimits, ManifestError, PrivacyClass,
 };
 pub use privacy::{
     PrivacyFinding, PrivacyFindingKind, PrivacyReport, PrivacyScanner, PrivacyScannerLimits,

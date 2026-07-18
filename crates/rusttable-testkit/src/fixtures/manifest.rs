@@ -71,7 +71,27 @@ pub struct FixtureEntry {
     #[serde(default)]
     pub consumers: Vec<String>,
     #[serde(default)]
+    pub consuming_issue_ranges: Vec<String>,
+    #[serde(default)]
+    pub expected: FixtureExpectation,
+    #[serde(default)]
     pub allow_privacy_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct FixtureExpectation {
+    pub dimensions: Option<FixtureDimensions>,
+    pub orientation: Option<String>,
+    #[serde(default)]
+    pub metadata: Vec<String>,
+    pub output_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub struct FixtureDimensions {
+    pub width: u32,
+    pub height: u32,
 }
 
 impl FixtureManifest {
@@ -148,6 +168,16 @@ impl FixtureManifest {
                 return Err(ManifestError::EmptyPrivacyField {
                     id: entry.id.clone(),
                 });
+            }
+            if let Some(dimensions) = entry.expected.dimensions
+                && (dimensions.width == 0 || dimensions.height == 0)
+            {
+                return Err(ManifestError::InvalidDimensions {
+                    id: entry.id.clone(),
+                });
+            }
+            if let Some(checksum) = &entry.expected.output_sha256 {
+                validate_checksum(&entry.id, checksum)?;
             }
         }
         Ok(())
@@ -282,6 +312,7 @@ pub enum ManifestError {
     InvalidChecksum { id: String },
     MissingMediaType { id: String },
     EmptyPrivacyField { id: String },
+    InvalidDimensions { id: String },
     EmptyPath { subject: String },
     AbsolutePath { path: String },
     PathTraversal { path: String },
@@ -320,6 +351,9 @@ impl fmt::Display for ManifestError {
             Self::MissingMediaType { id } => write!(formatter, "fixture {id} has no media type"),
             Self::EmptyPrivacyField { id } => {
                 write!(formatter, "fixture {id} has an empty allowed privacy field")
+            }
+            Self::InvalidDimensions { id } => {
+                write!(formatter, "fixture {id} has zero expected dimensions")
             }
             Self::EmptyPath { subject } => write!(formatter, "{subject} path is empty"),
             Self::AbsolutePath { path } => {

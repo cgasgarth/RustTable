@@ -1,5 +1,5 @@
 version = 1
-governed_roots = ["crates/rusttable-image-io/tests/fixtures"]
+governed_roots = ["crates/rusttable-image-io/tests/fixtures", "fixtures/corpus/assets"]
 
 [limits]
 max_file_bytes = 1048576
@@ -114,3 +114,532 @@ sha256 = "eb91db57857647708f344b883c1e95147519a74ba2d090f45fa76f69aacfa92b"
 media_type = "application/base64"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
+[[fixtures]]
+id = "corpus.color.display-output"
+path = "fixtures/corpus/assets/color-display-output.icc"
+size = 69
+sha256 = "aaafd39f66ca225aefb7a4a9cd416345ae017291de70498e279779474cd9790c"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#101-#106"]
+
+[[fixtures]]
+id = "corpus.color.hdr-transfer"
+path = "fixtures/corpus/assets/color-hdr-transfer.icc"
+size = 65
+sha256 = "00439d3f8b32afab1c743eef6c3cce19e85db416f5401ce2c0280937f4fbe4f3"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#101-#106"]
+
+[[fixtures]]
+id = "corpus.color.lut-icc"
+path = "fixtures/corpus/assets/color-lut.icc"
+size = 61
+sha256 = "8d9fe27216725f9188470b8039345a83f3381ec9ddc03e8103c8cf68f81356cf"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#101-#106"]
+
+[[fixtures]]
+id = "corpus.color.malformed"
+path = "fixtures/corpus/assets/color-malformed.icc"
+size = 82
+sha256 = "ae91d0345d348994910c7ba4826f8b13313db8c89dd84802deef82257a3362dc"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#101-#106"]
+
+[[fixtures]]
+id = "corpus.color.matrix-icc"
+path = "fixtures/corpus/assets/color-matrix.icc"
+size = 64
+sha256 = "1bd3618e25dbcc39e15e4310e31b74e515c4277994604acb3ffc8b926933b821"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#101-#106"]
+
+[[fixtures]]
+id = "corpus.compat.blend-mask-style"
+path = "fixtures/corpus/assets/compat-blend-mask-style.dt"
+size = 76
+sha256 = "c770006dc7ca5a25a97ec3604b2a75962ff90cf39c1afaf18ad1b58a067b0ff5"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#37-#40", "#84-#90"]
+
+[[fixtures]]
+id = "corpus.compat.data-schema"
+path = "fixtures/corpus/assets/compat-data-schema.db"
+size = 72
+sha256 = "bd15ef6eced782fa4d5e6fa3c76a66396438873cafbf4c054af0a549696ba5c5"
+media_type = "application/x-rusttable-catalog"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#37-#40", "#84-#90"]
+
+[[fixtures]]
+id = "corpus.compat.library-schema"
+path = "fixtures/corpus/assets/compat-library-schema.db"
+size = 75
+sha256 = "774c0d8c1fdd7cdf280f8fcb07b0164081057343671efc86c0978ce1a74ebc46"
+media_type = "application/x-rusttable-catalog"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#37-#40", "#84-#90"]
+
+[[fixtures]]
+id = "corpus.compat.unsupported-version"
+path = "fixtures/corpus/assets/compat-unsupported-version.dt"
+size = 74
+sha256 = "379f1322d2929e00adc87502f606597fa385b20d05c872077e48a0cceb95586a"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#37-#40", "#84-#90"]
+
+[[fixtures]]
+id = "corpus.compat.xmp.multi"
+path = "fixtures/corpus/assets/compat-xmp-multi.xmp"
+size = 76
+sha256 = "49aa02eac4843112e08eb79e9acb9e11c051b8bf52eb3fd11306016a799c83d2"
+media_type = "application/x-rusttable-xmp"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#37-#40", "#84-#90"]
+
+[[fixtures]]
+id = "corpus.compat.xmp.simple"
+path = "fixtures/corpus/assets/compat-xmp-simple.xmp"
+size = 75
+sha256 = "81861f96ac118ef629ba5f37fd68e7005968719127992c3eaa77ddf1cd3217a6"
+media_type = "application/x-rusttable-xmp"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#37-#40", "#84-#90"]
+
+[[fixtures]]
+id = "corpus.edge.conflicting-metadata"
+path = "fixtures/corpus/assets/edge-conflicting-metadata.xmp"
+size = 73
+sha256 = "df0198f4109438dfb941f642354f243e78ae4e03fd92ac2e0972a447b391b5e4"
+media_type = "application/x-rusttable-xmp"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.decompression-bomb"
+path = "fixtures/corpus/assets/edge-decompression-bomb.gz"
+size = 69
+sha256 = "fe55247d3943b819c24895046b153cc6b733f5bdfc24f3f6a8395341dd69c9e4"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.duplicate-tags"
+path = "fixtures/corpus/assets/edge-duplicate-tags.raw"
+size = 67
+sha256 = "2870fc68d14e35c2654ad3707b4d8a1cbb25ca06809a4c70ca78c0dc79a5a4f0"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.invalid-archive"
+path = "fixtures/corpus/assets/edge-invalid-archive.zip"
+size = 66
+sha256 = "a5917e1dfa1978258d3e7abe28bfbd616722b31df8210394ff6937094242a39f"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.invalid-offset"
+path = "fixtures/corpus/assets/edge-invalid-offset.raw"
+size = 65
+sha256 = "f1b82b082f94b4f1146d03550a30e0b48789a036a9d77ba3a18e5d52b0c56bab"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.nan-inf-parameters"
+path = "fixtures/corpus/assets/edge-nan-inf-parameters.toml"
+size = 69
+sha256 = "c065bc8941016e841731f8e5cd0b9f88754d1dae41eecacb9ebb4723b5a1d3bf"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.overlarge-dimensions"
+path = "fixtures/corpus/assets/edge-overlarge-dimensions.raw"
+size = 71
+sha256 = "42c9ef02c70a26c682f890588dc555822f84d38d2ebaf755f779bb161d0f058b"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.truncated-container"
+path = "fixtures/corpus/assets/edge-truncated-container.raw"
+size = 70
+sha256 = "515ffd118480ef920005eb9d9ba1a4febfea13be77eda8579b6f53d1f86de24e"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.edge.unicode-path"
+path = "fixtures/corpus/assets/edge-unicode-café.raw"
+size = 65
+sha256 = "bb87e92aeaf12a9d65e87719a68f2bc155a86edac1e72c82d53d0272d1c2a0ca"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#127"]
+
+[[fixtures]]
+id = "corpus.geometry.brush"
+path = "fixtures/corpus/assets/geometry-brush.raw"
+size = 59
+sha256 = "944bb69cb9a91ec813353e5f2d972c68d177530a070ee103338cb4da1c82a58d"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.crop"
+path = "fixtures/corpus/assets/geometry-crop.raw"
+size = 65
+sha256 = "65fb04cb52723cf3879f96d0ca3488b214aae290476eeba6e71b44382c4eb3c0"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.extreme-aspect"
+path = "fixtures/corpus/assets/geometry-extreme.raw"
+size = 68
+sha256 = "ee7d479336b5d256bd92adc1449ca8a8a9076d66b2ce8cdf9da0b17d45dd1031"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.gradient"
+path = "fixtures/corpus/assets/geometry-gradient.raw"
+size = 68
+sha256 = "fec229eaa7048f49f61c31eaec08fa3387671bec6e3f5c5371dd809f20643296"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.landscape"
+path = "fixtures/corpus/assets/geometry-landscape.raw"
+size = 72
+sha256 = "80e4383715c372d2fce902cda8e3eaaad70e84b20b2f26a789e98d00c5028c8b"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.one-pixel"
+path = "fixtures/corpus/assets/geometry-one-pixel.raw"
+size = 65
+sha256 = "02587d659004eb01b79d546caa56efb703a9990a527350b95047d6e8fb6095ed"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.path"
+path = "fixtures/corpus/assets/geometry-path.raw"
+size = 64
+sha256 = "c56fd39d32797fd2ae2eb66ce2506fd62ed816a803173dded113b13263adfaef"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.portrait"
+path = "fixtures/corpus/assets/geometry-portrait.raw"
+size = 71
+sha256 = "5f6db31be9f6f119008733f9d3257d994d3ee9695176962f71632b22e69cd6a4"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.raster-mask"
+path = "fixtures/corpus/assets/geometry-raster-mask.raw"
+size = 62
+sha256 = "93cf67c3d5621d969ad4b30f7ed04fbe262c0cb90fc6f2fcdd73dffe508e2273"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.geometry.source-heal"
+path = "fixtures/corpus/assets/geometry-source-heal.raw"
+size = 74
+sha256 = "63006401013f60b6fe07b75feba197971ecbebeaad0a57ccd9951c62de735883"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#117-#127", "#208-#234"]
+
+[[fixtures]]
+id = "corpus.raster.avif"
+path = "fixtures/corpus/assets/raster-avif.avif"
+size = 71
+sha256 = "6e67a78e9a91b32d3eadb3bc0a9f5059377d6b2a72a585c1aaa80c1fd690df1b"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.heif"
+path = "fixtures/corpus/assets/raster-heif.heif"
+size = 71
+sha256 = "76876affa1def7e30c280cfc8d271dfbc7b243e500587a294e343bac213a306d"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.jpeg.12"
+path = "fixtures/corpus/assets/raster-jpeg-12.jpg"
+size = 68
+sha256 = "fe87e3dea43e8b250efe1f09711fb6b9b3f81dc9aa11cc57adc16c49733188aa"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.jpeg-2000"
+path = "fixtures/corpus/assets/raster-jpeg-2000.jp2"
+size = 65
+sha256 = "31a3765de2def0d18df9968f5b52b75aeb2a600d4e901a5dec7c1aa1e6986ff0"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.jpeg-xl"
+path = "fixtures/corpus/assets/raster-jpeg-xl.jxl"
+size = 63
+sha256 = "9a7d762ce9b4569d699a275b01f0950ad72949850121454915141c2f65034215"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.openexr"
+path = "fixtures/corpus/assets/raster-openexr.exr"
+size = 76
+sha256 = "f728a908fce074143e01dedb966deb428812ee3594d2fbe18054191bb351192f"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.pfm"
+path = "fixtures/corpus/assets/raster-pfm.pfm"
+size = 72
+sha256 = "e5f74be65f8781a4580dfa3f2a9b5dbd1fce77735c06380bafea63e0abb71d39"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.png.16-alpha"
+path = "fixtures/corpus/assets/raster-png-16-alpha.png"
+size = 78
+sha256 = "f8b64593015ba3c815feb83c494dd2785727f33e91c9b2a792f0bccf7c292843"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.rgbe"
+path = "fixtures/corpus/assets/raster-rgbe.hdr"
+size = 73
+sha256 = "8b449107c82e31d22f42281b1ed75964b3decf173c6048b63f3669e828ea8c22"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.tiff.strip-float"
+path = "fixtures/corpus/assets/raster-tiff-strip-float.tiff"
+size = 86
+sha256 = "250b852a14da06973ab41a4a3ab500f377c5d9c63c4072d3f5741ee1a8ade8d7"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.tiff.tile-float"
+path = "fixtures/corpus/assets/raster-tiff-tile-float.tiff"
+size = 85
+sha256 = "caf795318e19641edda89614d630538b7f7527cd42d0fe4ecfefeb2a0bf672a3"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.tiff.tile-int"
+path = "fixtures/corpus/assets/raster-tiff-tile-int.tiff"
+size = 87
+sha256 = "7ee866263afab8fcb3a3f1039e4f30283b9e6cec0d6ff4e04e1ced47ec25697f"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raster.webp"
+path = "fixtures/corpus/assets/raster-webp.webp"
+size = 71
+sha256 = "4cc58fb08364ba233be88368aa5cd36d5167bae62dbb1bb71bb858f162d3a3e8"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
+
+[[fixtures]]
+id = "corpus.raw.bayer.12-2row"
+path = "fixtures/corpus/assets/raw-bayer-12-2row.dng"
+size = 86
+sha256 = "e823ed1cdfed609f4e13d51d20d1e74ebd6f285fdf1773a5cd8eaadbd6c803b2"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.bayer.14-compressed"
+path = "fixtures/corpus/assets/raw-bayer-14-compressed.dng"
+size = 88
+sha256 = "984bcfc6cc0704818ce6f54bfdb3d7fc7b6c48ddbb0351955caa36a7b5adf813"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.bayer.14-4row"
+path = "fixtures/corpus/assets/raw-bayer-14-4row.dng"
+size = 86
+sha256 = "25998d4ad5ce5a09b9fcd57e463afd5e487633ed55b01e69e94a0a18cd072d9d"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.canon.cr2"
+path = "fixtures/corpus/assets/raw-bayer-16-canon.cr2"
+size = 80
+sha256 = "117266c87f2585598e4e825e4e6ddb6ffaaeb124bf858449ae4912e683c65ad6"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.nikon.nef"
+path = "fixtures/corpus/assets/raw-nikon.nef"
+size = 80
+sha256 = "fd058c2ce83412346f2b925ed4cc21e34c415d471d6646d55a4161baad8cc4cb"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.olympus.orf"
+path = "fixtures/corpus/assets/raw-olympus.orf"
+size = 82
+sha256 = "265ddbffcb7d1e0eca0c9faff74331ab5931f878fe98594910b05972e3633669"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.panasonic.rw2"
+path = "fixtures/corpus/assets/raw-panasonic.rw2"
+size = 84
+sha256 = "28fb138cf4295f8e365f3f367f43190004d67258f65f635a1ff810c9fe476909"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.sony.arw"
+path = "fixtures/corpus/assets/raw-sony.arw"
+size = 79
+sha256 = "785ab5e67fd17b89a6f1d51221886ce1adeea6d618f251b843b326ca11dbb05a"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.xtrans.compressed"
+path = "fixtures/corpus/assets/raw-xtrans-compressed.raf"
+size = 93
+sha256 = "d0227f51f2952d4aa2740483937e62c43ba2779ff21f0adba504ed29c799f0ad"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
+
+[[fixtures]]
+id = "corpus.raw.xtrans.uncompressed"
+path = "fixtures/corpus/assets/raw-xtrans-uncompressed.raf"
+size = 95
+sha256 = "0a5b9bd2088999a4f68562d6c7e2375ff6ab76a2d51345de2c02fa90340eddea"
+media_type = "application/x-rusttable-synthetic"
+privacy = "synthetic"
+consumers = ["rusttable-testkit"]
+consuming_issue_ranges = ["#233-#235", "#302"]
