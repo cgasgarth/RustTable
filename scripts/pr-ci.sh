@@ -7,10 +7,13 @@ trap 'rm -rf "$temporary_directory"' EXIT
 run_check() {
   local label="$1"
   shift
+  local status=0
   if "$@" >"$temporary_directory/$label.log" 2>&1; then
-    return 0
+    status=0
+  else
+    status="$?"
   fi
-  return "$?"
+  return "$status"
 }
 
 cheap_labels=(diff fmt metadata source bun)
@@ -24,6 +27,11 @@ run_check source bash scripts/check-source-policy.sh &
 cheap_pids[3]=$!
 run_check bun bun run test:computer-use &
 cheap_pids[4]=$!
+if [[ "${RUSTTABLE_SKIP_PR_CI_REGRESSION:-0}" != 1 ]]; then
+  cheap_labels+=(pr-ci)
+  run_check pr-ci bash scripts/test-pr-ci.sh &
+  cheap_pids[5]=$!
+fi
 
 cheap_status=0
 for index in "${!cheap_pids[@]}"; do
