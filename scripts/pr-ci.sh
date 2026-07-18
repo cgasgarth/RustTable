@@ -16,7 +16,7 @@ run_check() {
   return "$status"
 }
 
-cheap_labels=(diff fmt metadata source bun repository-policy doctor readme-contract native-removal workspace-rust-version)
+cheap_labels=(diff fmt metadata source bun repository-policy doctor readme-contract native-removal linux-distribution workspace-rust-version)
 run_check diff git diff --check &
 cheap_pids[0]=$!
 run_check fmt cargo fmt --all -- --check &
@@ -35,7 +35,9 @@ cheap_pids[4]=$!
   cheap_pids[7]=$!
   run_check native-removal bash -c 'bun run test:native-removal && bun run check:native-removal' &
   cheap_pids[8]=$!
-cheap_index=9
+run_check linux-distribution bash -c 'bun run test:linux-artifact-identity && bun run test:linux-distribution-smoke' &
+cheap_pids[9]=$!
+cheap_index=10
 if [[ "${RUSTTABLE_SKIP_BUN_PIN_REGRESSION:-0}" != 1 ]]; then
   cheap_labels+=(bun-pin-fixtures bun-pin-policy)
   run_check bun-pin-fixtures bash scripts/test-bun-pin.sh &
