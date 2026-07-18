@@ -4,6 +4,7 @@
 mod format;
 mod image;
 mod input;
+mod output;
 
 pub use format::{InputFormat, SUPPORTED_INPUT_FORMATS};
 pub use image::{
@@ -11,3 +12,7 @@ pub use image::{
     PixelLayout,
 };
 pub use input::{DecodeLimits, DecodeLimitsError, ImageInput, ImageInputError, ImageProbe};
+pub use output::{
+    ImageOutput, ImageOutputError, JpegQuality, JpegQualityError, OutputFormat, OutputLimits,
+    OutputLimitsError, OutputOptions, OutputReceipt, OutputReceiptError, SUPPORTED_OUTPUT_FORMATS,
+};
