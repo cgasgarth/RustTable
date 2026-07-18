@@ -302,7 +302,7 @@ fn committed_fixture_manifest_is_registered_and_checksum_valid() {
         .expect("committed repository should open")
         .verify()
         .expect("committed fixtures should verify");
-    assert_eq!(report.fixtures().len(), 12);
+    assert!(report.fixtures().len() >= 50);
 }
 
 #[test]

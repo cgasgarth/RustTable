@@ -1,0 +1,601 @@
+version = 1
+fixture_manifest = "fixtures/manifest.toml"
+offline = true
+large_asset_policy = "skip-local-fail-merge"
+required_axes = ["camera-family", "cfa", "bit-depth", "compression", "raster-format", "color-profile", "compatibility", "geometry-mask"]
+
+# Each supported cell has a positive and malformed input. Unsupported cells
+# would omit positive_fixture and carry an explicit unsupported status.
+[[matrix]]
+axis = "camera-family"
+value = "bayer"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.12-2row"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["cfa=bayer", "bits=12"]
+
+[[matrix]]
+axis = "camera-family"
+value = "canon-cr2-cr3"
+status = "supported"
+positive_fixture = "corpus.raw.canon.cr2"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["vendor=canon"]
+
+[[matrix]]
+axis = "camera-family"
+value = "nikon-nef"
+status = "supported"
+positive_fixture = "corpus.raw.nikon.nef"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["vendor=nikon"]
+
+[[matrix]]
+axis = "camera-family"
+value = "sony-arw"
+status = "supported"
+positive_fixture = "corpus.raw.sony.arw"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["vendor=sony"]
+
+[[matrix]]
+axis = "camera-family"
+value = "olympus-panasonic"
+status = "supported"
+positive_fixture = "corpus.raw.olympus.orf"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["vendor=olympus"]
+
+[[matrix]]
+axis = "camera-family"
+value = "panasonic-rw2"
+status = "supported"
+positive_fixture = "corpus.raw.panasonic.rw2"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["vendor=panasonic"]
+
+[[matrix]]
+axis = "camera-family"
+value = "x-trans"
+status = "supported"
+positive_fixture = "corpus.raw.xtrans.uncompressed"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["cfa=x-trans-6x6"]
+
+[[matrix]]
+axis = "cfa"
+value = "bayer-two-row"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.12-2row"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["cfa=2-row"]
+
+[[matrix]]
+axis = "cfa"
+value = "bayer-four-row"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.14-4row"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["cfa=4-row"]
+
+[[matrix]]
+axis = "cfa"
+value = "x-trans-six-by-six"
+status = "supported"
+positive_fixture = "corpus.raw.xtrans.compressed"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["cfa=x-trans-6x6"]
+
+[[matrix]]
+axis = "bit-depth"
+value = "12-bit"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.12-2row"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["bits=12"]
+
+[[matrix]]
+axis = "bit-depth"
+value = "14-bit"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.14-4row"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["bits=14"]
+
+[[matrix]]
+axis = "bit-depth"
+value = "16-bit"
+status = "supported"
+positive_fixture = "corpus.raw.canon.cr2"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["bits=16"]
+
+[[matrix]]
+axis = "compression"
+value = "dng-uncompressed"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.12-2row"
+malformed_fixture = "corpus.edge.decompression-bomb"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["compression=uncompressed"]
+
+[[matrix]]
+axis = "compression"
+value = "dng-compressed"
+status = "supported"
+positive_fixture = "corpus.raw.bayer.14-compressed"
+malformed_fixture = "corpus.edge.decompression-bomb"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["compression=compressed"]
+
+[[matrix]]
+axis = "compression"
+value = "raf-uncompressed"
+status = "supported"
+positive_fixture = "corpus.raw.xtrans.uncompressed"
+malformed_fixture = "corpus.edge.decompression-bomb"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["compression=uncompressed"]
+
+[[matrix]]
+axis = "compression"
+value = "raf-compressed"
+status = "supported"
+positive_fixture = "corpus.raw.xtrans.compressed"
+malformed_fixture = "corpus.edge.decompression-bomb"
+expected_dimensions = { width = 2, height = 2 }
+expected_orientation = "landscape"
+expected_metadata = ["compression=compressed"]
+
+[[matrix]]
+axis = "raster-format"
+value = "jpeg-8-bit"
+status = "supported"
+positive_fixture = "image-io.rgb-jpeg"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 2, height = 1 }
+expected_orientation = "landscape"
+expected_metadata = ["format=jpeg", "bits=8"]
+
+[[matrix]]
+axis = "raster-format"
+value = "jpeg-12-bit"
+status = "supported"
+positive_fixture = "corpus.raster.jpeg.12"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=jpeg", "bits=12"]
+
+[[matrix]]
+axis = "raster-format"
+value = "png-8-alpha"
+status = "supported"
+positive_fixture = "image-io.rgba-png"
+malformed_fixture = "image-io.truncated-png"
+expected_dimensions = { width = 1, height = 2 }
+expected_orientation = "portrait"
+expected_metadata = ["format=png", "alpha=true", "bits=8"]
+
+[[matrix]]
+axis = "raster-format"
+value = "png-16-alpha"
+status = "supported"
+positive_fixture = "corpus.raster.png.16-alpha"
+malformed_fixture = "image-io.truncated-png"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=png", "alpha=true", "bits=16"]
+
+[[matrix]]
+axis = "raster-format"
+value = "tiff-strips-integer"
+status = "supported"
+positive_fixture = "image-io.rgb-tiff"
+malformed_fixture = "image-io.malformed-offset"
+expected_dimensions = { width = 2, height = 1 }
+expected_orientation = "landscape"
+expected_metadata = ["format=tiff", "layout=strips", "sample=integer"]
+
+[[matrix]]
+axis = "raster-format"
+value = "tiff-tiles-integer"
+status = "supported"
+positive_fixture = "corpus.raster.tiff.tile-int"
+malformed_fixture = "image-io.malformed-offset"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=tiff", "layout=tiles", "sample=integer"]
+
+[[matrix]]
+axis = "raster-format"
+value = "tiff-strips-float"
+status = "supported"
+positive_fixture = "corpus.raster.tiff.strip-float"
+malformed_fixture = "image-io.malformed-offset"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=tiff", "layout=strips", "sample=float"]
+
+[[matrix]]
+axis = "raster-format"
+value = "tiff-tiles-float"
+status = "supported"
+positive_fixture = "corpus.raster.tiff.tile-float"
+malformed_fixture = "image-io.malformed-offset"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=tiff", "layout=tiles", "sample=float"]
+
+[[matrix]]
+axis = "raster-format"
+value = "jpeg-xl"
+status = "supported"
+positive_fixture = "corpus.raster.jpeg-xl"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=jpeg-xl"]
+
+[[matrix]]
+axis = "raster-format"
+value = "webp"
+status = "supported"
+positive_fixture = "corpus.raster.webp"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=webp"]
+
+[[matrix]]
+axis = "raster-format"
+value = "avif"
+status = "supported"
+positive_fixture = "corpus.raster.avif"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=avif"]
+
+[[matrix]]
+axis = "raster-format"
+value = "heif"
+status = "supported"
+positive_fixture = "corpus.raster.heif"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=heif"]
+
+[[matrix]]
+axis = "raster-format"
+value = "openexr"
+status = "supported"
+positive_fixture = "corpus.raster.openexr"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=openexr", "sample=float"]
+
+[[matrix]]
+axis = "raster-format"
+value = "rgbe"
+status = "supported"
+positive_fixture = "corpus.raster.rgbe"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=rgbe", "transfer=hdr"]
+
+[[matrix]]
+axis = "raster-format"
+value = "pfm"
+status = "supported"
+positive_fixture = "corpus.raster.pfm"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=pfm", "sample=float"]
+
+[[matrix]]
+axis = "raster-format"
+value = "jpeg-2000"
+status = "supported"
+positive_fixture = "corpus.raster.jpeg-2000"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=jpeg-2000"]
+
+[[matrix]]
+axis = "color-profile"
+value = "matrix-icc"
+status = "supported"
+positive_fixture = "corpus.color.matrix-icc"
+malformed_fixture = "corpus.color.malformed"
+expected_metadata = ["profile=matrix-icc"]
+
+[[matrix]]
+axis = "color-profile"
+value = "lut-icc"
+status = "supported"
+positive_fixture = "corpus.color.lut-icc"
+malformed_fixture = "corpus.color.malformed"
+expected_metadata = ["profile=lut-icc"]
+
+[[matrix]]
+axis = "color-profile"
+value = "display-output"
+status = "supported"
+positive_fixture = "corpus.color.display-output"
+malformed_fixture = "corpus.color.malformed"
+expected_metadata = ["profile=display-output"]
+
+[[matrix]]
+axis = "color-profile"
+value = "malformed"
+status = "supported"
+positive_fixture = "corpus.color.malformed"
+malformed_fixture = "corpus.edge.truncated-container"
+expected_metadata = ["profile=malformed-icc"]
+
+[[matrix]]
+axis = "color-profile"
+value = "hdr-transfer"
+status = "supported"
+positive_fixture = "corpus.color.hdr-transfer"
+malformed_fixture = "corpus.color.malformed"
+expected_metadata = ["transfer=pq"]
+
+[[matrix]]
+axis = "compatibility"
+value = "darktable-library-schema"
+status = "supported"
+positive_fixture = "corpus.compat.library-schema"
+malformed_fixture = "corpus.compat.unsupported-version"
+expected_metadata = ["schema=darktable-library"]
+
+[[matrix]]
+axis = "compatibility"
+value = "darktable-data-schema"
+status = "supported"
+positive_fixture = "corpus.compat.data-schema"
+malformed_fixture = "corpus.compat.unsupported-version"
+expected_metadata = ["schema=darktable-data"]
+
+[[matrix]]
+axis = "compatibility"
+value = "xmp-simple-history"
+status = "supported"
+positive_fixture = "corpus.compat.xmp.simple"
+malformed_fixture = "corpus.edge.conflicting-metadata"
+expected_metadata = ["history=simple"]
+
+[[matrix]]
+axis = "compatibility"
+value = "xmp-multi-instance-history"
+status = "supported"
+positive_fixture = "corpus.compat.xmp.multi"
+malformed_fixture = "corpus.edge.conflicting-metadata"
+expected_metadata = ["history=multi-instance"]
+
+[[matrix]]
+axis = "compatibility"
+value = "blend-masks-styles-presets"
+status = "supported"
+positive_fixture = "corpus.compat.blend-mask-style"
+malformed_fixture = "corpus.edge.conflicting-metadata"
+expected_metadata = ["blend=true", "masks=true", "styles=true", "presets=true"]
+
+[[matrix]]
+axis = "compatibility"
+value = "unsupported-version"
+status = "unsupported"
+malformed_fixture = "corpus.edge.conflicting-metadata"
+expected_metadata = ["status=opaque"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "portrait"
+status = "supported"
+positive_fixture = "corpus.geometry.portrait"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 3, height = 4 }
+expected_orientation = "portrait"
+expected_metadata = ["orientation=portrait"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "landscape"
+status = "supported"
+positive_fixture = "corpus.geometry.landscape"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["orientation=landscape"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "extreme-aspect"
+status = "supported"
+positive_fixture = "corpus.geometry.extreme-aspect"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 1024, height = 1 }
+expected_orientation = "landscape"
+expected_metadata = ["aspect=extreme"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "one-pixel"
+status = "supported"
+positive_fixture = "corpus.geometry.one-pixel"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 1, height = 1 }
+expected_orientation = "landscape"
+expected_metadata = ["edge=one-pixel"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "crop"
+status = "supported"
+positive_fixture = "corpus.geometry.crop"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["mask=crop"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "path"
+status = "supported"
+positive_fixture = "corpus.geometry.path"
+malformed_fixture = "corpus.edge.duplicate-tags"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["mask=path"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "brush"
+status = "supported"
+positive_fixture = "corpus.geometry.brush"
+malformed_fixture = "corpus.edge.nan-inf-parameters"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["mask=brush"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "gradient"
+status = "supported"
+positive_fixture = "corpus.geometry.gradient"
+malformed_fixture = "corpus.edge.nan-inf-parameters"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["mask=gradient"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "raster-mask"
+status = "supported"
+positive_fixture = "corpus.geometry.raster-mask"
+malformed_fixture = "corpus.edge.overlarge-dimensions"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["mask=raster"]
+
+[[matrix]]
+axis = "geometry-mask"
+value = "source-heal-coordinates"
+status = "supported"
+positive_fixture = "corpus.geometry.source-heal"
+malformed_fixture = "corpus.edge.invalid-offset"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["mask=source-heal"]
+
+[[edge]]
+id = "edge.unicode-path"
+kind = "unicode-path"
+path = "fixtures/corpus/assets/edge-unicode-café.raw"
+fixture = "corpus.edge.unicode-path"
+expected = "diagnose"
+
+[[edge]]
+id = "edge.missing-file"
+kind = "missing-file"
+path = "fixtures/corpus/assets/does-not-exist.raw"
+expected = "absent"
+
+[[edge]]
+id = "edge.truncated-container"
+kind = "truncated-container"
+path = "fixtures/corpus/assets/edge-truncated-container.raw"
+fixture = "corpus.edge.truncated-container"
+expected = "reject"
+
+[[edge]]
+id = "edge.overlarge-dimensions"
+kind = "overlarge-dimensions"
+path = "fixtures/corpus/assets/edge-overlarge-dimensions.raw"
+fixture = "corpus.edge.overlarge-dimensions"
+expected = "reject"
+
+[[edge]]
+id = "edge.decompression-bomb"
+kind = "decompression-bomb"
+path = "fixtures/corpus/assets/edge-decompression-bomb.gz"
+fixture = "corpus.edge.decompression-bomb"
+expected = "reject"
+
+[[edge]]
+id = "edge.invalid-offset"
+kind = "invalid-offset"
+path = "fixtures/corpus/assets/edge-invalid-offset.raw"
+fixture = "corpus.edge.invalid-offset"
+expected = "reject"
+
+[[edge]]
+id = "edge.duplicate-tags"
+kind = "duplicate-tags"
+path = "fixtures/corpus/assets/edge-duplicate-tags.raw"
+fixture = "corpus.edge.duplicate-tags"
+expected = "diagnose"
+
+[[edge]]
+id = "edge.nan-inf-parameters"
+kind = "nan-inf-parameters"
+path = "fixtures/corpus/assets/edge-nan-inf-parameters.toml"
+fixture = "corpus.edge.nan-inf-parameters"
+expected = "reject"
+
+[[edge]]
+id = "edge.conflicting-metadata"
+kind = "conflicting-metadata"
+path = "fixtures/corpus/assets/edge-conflicting-metadata.xmp"
+fixture = "corpus.edge.conflicting-metadata"
+expected = "diagnose"
+
+[[edge]]
+id = "edge.invalid-archive"
+kind = "invalid-archive"
+path = "fixtures/corpus/assets/edge-invalid-archive.zip"
+fixture = "corpus.edge.invalid-archive"
+expected = "reject"
+
+[[external]]
+id = "corpus.large-raw-cache"
+path = "fixtures/corpus/external-cache/raw-representative.bin"
+size = 1048576
+sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+media_type = "application/octet-stream"
+required_in_merge = true
