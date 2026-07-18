@@ -6,6 +6,9 @@ mod bootstrap;
 mod theme;
 mod view;
 
+#[cfg(test)]
+mod ui_smoke;
+
 use app::{Shell, update};
 use bootstrap::run_with_bootstrap;
 
