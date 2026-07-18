@@ -24,6 +24,18 @@ fn dimensions_are_checked_and_report_rgba_size() {
 }
 
 #[test]
+fn supported_input_formats_have_stable_jpeg_png_tiff_order() {
+    assert_eq!(
+        rusttable_image::SUPPORTED_INPUT_FORMATS,
+        [
+            rusttable_image::InputFormat::Jpeg,
+            rusttable_image::InputFormat::Png,
+            rusttable_image::InputFormat::Tiff,
+        ]
+    );
+}
+
+#[test]
 fn limits_require_nonzero_representable_bounds_and_keep_caps_independent() {
     assert_eq!(
         DecodeLimits::new(0, 2, 2, 4, 16),

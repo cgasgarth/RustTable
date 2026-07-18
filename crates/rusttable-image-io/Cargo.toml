@@ -6,7 +6,7 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
-image = { version = "0.25.8", default-features = false, features = ["jpeg", "png"] }
+image = { version = "0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
 rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
 
 [lints]
