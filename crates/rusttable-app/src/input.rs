@@ -1,7 +1,7 @@
 use rusttable_core::PhotoId;
 
+use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
-use crate::presentation::PhotoWorkspaceViewModel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FocusTarget {
@@ -69,19 +69,19 @@ impl InputState {
         intent: InputIntent,
         sidebar_visible: bool,
         route: WorkspaceRoute,
-        workspace: &PhotoWorkspaceViewModel,
+        library_state: &LibraryState,
     ) -> InputEffect {
         match intent {
             InputIntent::FocusNext => {
-                self.move_focus(1, sidebar_visible, route, workspace);
+                self.move_focus(1, sidebar_visible, route, library_state);
                 InputEffect::None
             }
             InputIntent::FocusPrevious => {
-                self.move_focus(-1, sidebar_visible, route, workspace);
+                self.move_focus(-1, sidebar_visible, route, library_state);
                 InputEffect::None
             }
-            InputIntent::Activate => self.activate(workspace),
-            InputIntent::Escape => self.escape(route, workspace),
+            InputIntent::Activate => self.activate(library_state),
+            InputIntent::Escape => self.escape(route, library_state),
         }
     }
 
@@ -89,9 +89,9 @@ impl InputState {
         &mut self,
         sidebar_visible: bool,
         route: WorkspaceRoute,
-        workspace: &PhotoWorkspaceViewModel,
+        library_state: &LibraryState,
     ) {
-        let chain = focus_chain(sidebar_visible, route, workspace);
+        let chain = focus_chain(sidebar_visible, route, library_state);
         if !chain.contains(&self.focused) {
             self.focused = chain[0];
         }
@@ -100,7 +100,7 @@ impl InputState {
     pub(crate) fn note_navigation(
         &mut self,
         intent: NavigationIntent,
-        workspace: &PhotoWorkspaceViewModel,
+        library_state: &LibraryState,
     ) {
         match intent {
             NavigationIntent::ShowPhoto(photo_id) => {
@@ -108,7 +108,7 @@ impl InputState {
                 self.focused = FocusTarget::BackToLibrary;
             }
             NavigationIntent::ShowLibrary => {
-                self.focused = self.library_return_target(workspace);
+                self.focused = self.library_return_target(library_state);
                 self.origin = None;
             }
         }
@@ -119,9 +119,9 @@ impl InputState {
         direction: isize,
         sidebar_visible: bool,
         route: WorkspaceRoute,
-        workspace: &PhotoWorkspaceViewModel,
+        library_state: &LibraryState,
     ) {
-        let chain = focus_chain(sidebar_visible, route, workspace);
+        let chain = focus_chain(sidebar_visible, route, library_state);
         let index = chain
             .iter()
             .position(|target| *target == self.focused)
@@ -136,7 +136,7 @@ impl InputState {
         self.focused = chain[next];
     }
 
-    fn activate(&mut self, workspace: &PhotoWorkspaceViewModel) -> InputEffect {
+    fn activate(&mut self, library_state: &LibraryState) -> InputEffect {
         match self.focused {
             FocusTarget::SidebarToggle => InputEffect::ToggleSidebar,
             FocusTarget::Library => InputEffect::Navigate(NavigationIntent::ShowLibrary),
@@ -146,20 +146,16 @@ impl InputState {
                 InputEffect::Navigate(NavigationIntent::ShowPhoto(photo_id))
             }
             FocusTarget::BackToLibrary => {
-                self.focused = self.library_return_target(workspace);
+                self.focused = self.library_return_target(library_state);
                 self.origin = None;
                 InputEffect::Navigate(NavigationIntent::ShowLibrary)
             }
         }
     }
 
-    fn escape(
-        &mut self,
-        route: WorkspaceRoute,
-        workspace: &PhotoWorkspaceViewModel,
-    ) -> InputEffect {
+    fn escape(&mut self, route: WorkspaceRoute, library_state: &LibraryState) -> InputEffect {
         if matches!(route, WorkspaceRoute::PhotoDetail(_)) {
-            self.focused = self.library_return_target(workspace);
+            self.focused = self.library_return_target(library_state);
             self.origin = None;
             InputEffect::Navigate(NavigationIntent::ShowLibrary)
         } else {
@@ -167,7 +163,10 @@ impl InputState {
         }
     }
 
-    fn library_return_target(&self, workspace: &PhotoWorkspaceViewModel) -> FocusTarget {
+    fn library_return_target(&self, library_state: &LibraryState) -> FocusTarget {
+        let Some(workspace) = library_state.ready_workspace() else {
+            return FocusTarget::SidebarToggle;
+        };
         self.origin
             .filter(|photo_id| workspace.cards().any(|card| card.id() == *photo_id))
             .map(FocusTarget::PhotoCard)
@@ -184,7 +183,7 @@ impl InputState {
 pub(crate) fn focus_chain(
     sidebar_visible: bool,
     route: WorkspaceRoute,
-    workspace: &PhotoWorkspaceViewModel,
+    library_state: &LibraryState,
 ) -> Vec<FocusTarget> {
     let mut chain = vec![FocusTarget::SidebarToggle];
     if sidebar_visible {
@@ -192,11 +191,13 @@ pub(crate) fn focus_chain(
     }
     match route {
         WorkspaceRoute::Library => {
-            chain.extend(
-                workspace
-                    .cards()
-                    .map(|card| FocusTarget::PhotoCard(card.id())),
-            );
+            if let Some(workspace) = library_state.ready_workspace() {
+                chain.extend(
+                    workspace
+                        .cards()
+                        .map(|card| FocusTarget::PhotoCard(card.id())),
+                );
+            }
         }
         WorkspaceRoute::PhotoDetail(_) => chain.push(FocusTarget::BackToLibrary),
     }
@@ -208,6 +209,7 @@ mod tests {
     use rusttable_core::PhotoId;
 
     use super::{FocusTarget, InputEffect, InputIntent, InputState, focus_chain};
+    use crate::library::{LibraryFailureKind, LibraryState};
     use crate::presentation::{
         PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
     };
@@ -216,7 +218,7 @@ mod tests {
         PresentationText::new(value).expect("test text is valid")
     }
 
-    fn workspace() -> PhotoWorkspaceViewModel {
+    fn workspace() -> LibraryState {
         let cards = vec![
             PhotoCardViewModel::new(PhotoId::new(1).unwrap(), text("One"), None),
             PhotoCardViewModel::new(PhotoId::new(2).unwrap(), text("Two"), None),
@@ -225,7 +227,7 @@ mod tests {
             PhotoDetailViewModel::new(PhotoId::new(1).unwrap(), text("One"), Vec::new()),
             PhotoDetailViewModel::new(PhotoId::new(2).unwrap(), text("Two"), Vec::new()),
         ];
-        PhotoWorkspaceViewModel::new(cards, details).unwrap()
+        LibraryState::Ready(PhotoWorkspaceViewModel::new(cards, details).unwrap())
     }
 
     #[test]
@@ -319,5 +321,37 @@ mod tests {
             state.focused(),
             FocusTarget::PhotoCard(PhotoId::new(1).unwrap())
         );
+    }
+
+    #[test]
+    fn non_ready_library_states_remove_photo_card_focus() {
+        let photo_id = PhotoId::new(1).expect("test photo ID is non-zero");
+        for library_state in [
+            LibraryState::Loading,
+            LibraryState::Empty,
+            LibraryState::Failed(LibraryFailureKind::RepositoryUnavailable),
+        ] {
+            let mut state = InputState {
+                focused: FocusTarget::PhotoCard(photo_id),
+                origin: Some(photo_id),
+            };
+
+            state.reconcile(
+                true,
+                crate::navigation::WorkspaceRoute::Library,
+                &library_state,
+            );
+
+            assert_eq!(state.focused(), FocusTarget::SidebarToggle);
+            assert!(
+                !focus_chain(
+                    true,
+                    crate::navigation::WorkspaceRoute::Library,
+                    &library_state,
+                )
+                .iter()
+                .any(|target| matches!(target, FocusTarget::PhotoCard(_)))
+            );
+        }
     }
 }
