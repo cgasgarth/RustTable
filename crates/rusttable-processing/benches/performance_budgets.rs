@@ -8,7 +8,7 @@ mod support;
 use support::cases::{consume_photo, consume_render, prepared_photo_assets, prepared_render};
 use support::cli::{Command, parse};
 use support::config::{CaseConfig, read};
-use support::stats::{median, nearest_rank, normalized_p95};
+use support::stats::{median, nearest_rank, p95_within_budget};
 
 fn main() {
     let raw_arguments = std::env::args().collect::<Vec<_>>();
@@ -58,7 +58,6 @@ fn main() {
 
 fn run_case(config: &CaseConfig) -> String {
     let mut workload = Vec::with_capacity(config.sample_count as usize);
-    let mut calibration = Vec::with_capacity(config.sample_count as usize);
     match config.name.as_str() {
         "photo_build_and_iterate_128_assets" => {
             let assets = prepared_photo_assets();
@@ -69,7 +68,6 @@ fn run_case(config: &CaseConfig) -> String {
                 workload.push(measure(|| {
                     black_box(consume_photo(&assets));
                 }));
-                calibration.push(measure_calibration(config.calibration_iterations));
             }
         }
         "render_256x256_two_step_pipeline" => {
@@ -81,29 +79,20 @@ fn run_case(config: &CaseConfig) -> String {
                 workload.push(measure(|| {
                     black_box(consume_render(&image, &pipeline));
                 }));
-                calibration.push(measure_calibration(config.calibration_iterations));
             }
         }
         _ => unreachable!("validated case set"),
     }
-    let normalized = normalized_p95(
-        &workload,
-        &calibration,
-        config.work_units,
-        config.calibration_iterations,
-    )
-    .unwrap();
+    let raw_p95 = nearest_rank(&workload).unwrap();
     format!(
-        "RUSTTABLE_PERF_V1 case={} samples={} work_units={} raw_median_ns={} raw_p95_ns={} calibration_p95_ns={} normalized_p95_ppm={} limit_ppm={} status={}",
+        "RUSTTABLE_PERF_V1 case={} samples={} work_units={} raw_median_ns={} raw_p95_ns={} limit_ns={} status={}",
         config.name,
         config.sample_count,
         config.work_units,
         median(&workload).unwrap(),
-        nearest_rank(&workload).unwrap(),
-        nearest_rank(&calibration).unwrap(),
-        normalized,
-        config.limit_ppm,
-        if normalized <= u128::from(config.limit_ppm) {
+        raw_p95,
+        config.limit_ns,
+        if p95_within_budget(&workload, config.limit_ns).unwrap() {
             "pass"
         } else {
             "fail"
@@ -115,13 +104,4 @@ fn measure(work: impl FnOnce()) -> u128 {
     let start = Instant::now();
     work();
     start.elapsed().as_nanos()
-}
-fn measure_calibration(iterations: u64) -> u128 {
-    measure(|| {
-        let mut value = 0_u64;
-        for index in 0..iterations {
-            value = value.wrapping_mul(31).wrapping_add(index);
-        }
-        black_box(value);
-    })
 }

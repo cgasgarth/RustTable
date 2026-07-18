@@ -13,8 +13,7 @@ pub struct CaseConfig {
     pub warmup_count: u64,
     pub sample_count: u64,
     pub work_units: u64,
-    pub calibration_iterations: u64,
-    pub limit_ppm: u64,
+    pub limit_ns: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -55,21 +54,19 @@ pub fn read(path: &Path) -> Result<Vec<CaseConfig>, ConfigError> {
 pub fn parse(text: &str) -> Result<Vec<CaseConfig>, ConfigError> {
     let mut lines = text.lines();
     let schema = lines.next().ok_or(ConfigError::MissingSchema)?;
-    if schema.split('\t').collect::<Vec<_>>() != ["schema_version", "1"] {
+    if schema.split('\t').collect::<Vec<_>>() != ["schema_version", "2"] {
         if schema.starts_with("schema_version\t") {
             return Err(ConfigError::UnsupportedSchema);
         }
         return Err(ConfigError::MissingSchema);
     }
-    if lines.next()
-        != Some("case\twarmup_count\tsample_count\twork_units\tcalibration_iterations\tlimit_ppm")
-    {
+    if lines.next() != Some("case\twarmup_count\tsample_count\twork_units\tlimit_ns") {
         return Err(ConfigError::InvalidHeader);
     }
     let mut result = Vec::new();
     for line in lines {
         let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 6 {
+        if fields.len() != 5 {
             return Err(ConfigError::InvalidRow);
         }
         let name = fields[0].to_owned();
@@ -91,8 +88,7 @@ pub fn parse(text: &str) -> Result<Vec<CaseConfig>, ConfigError> {
             warmup_count: values[0],
             sample_count: values[1],
             work_units: values[2],
-            calibration_iterations: values[3],
-            limit_ppm: values[4],
+            limit_ns: values[3],
         });
     }
     for expected in CASES {
