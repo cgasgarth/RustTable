@@ -12,8 +12,13 @@ use rusttable_processing::{
 };
 
 mod plan;
+mod provenance;
 
 pub use plan::{PreviewBounds, PreviewBoundsError, RenderPlan, RenderSampling, RenderTarget};
+pub use provenance::{
+    ProvenancedRenderError, ProvenancedRenderErrorKind, ProvenancedRenderOutput,
+    RenderFailureStage, RenderReceipt, RenderRequestContext, RenderSourceProvenance,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceColorPolicy {
@@ -203,6 +208,64 @@ pub fn render_edit_with_plan(
             pipeline.revision(),
         ),
     })
+}
+
+/// Renders with caller-supplied imported source provenance and returns an
+/// owned success receipt or an owned stage-attributed failure context.
+///
+/// # Errors
+///
+/// Returns a source-preflight or delegated render failure with its complete
+/// immutable request context and typed nested cause when applicable.
+pub fn render_edit_with_provenance(
+    edit: &Edit,
+    input: &DecodedImage,
+    policy: SourceColorPolicy,
+    plan: RenderPlan,
+    source: RenderSourceProvenance,
+) -> Result<ProvenancedRenderOutput, ProvenancedRenderError> {
+    let context = RenderRequestContext::new(source, edit, policy, plan);
+    if source.photo_id() != edit.photo_id() {
+        return Err(ProvenancedRenderError::new(
+            context,
+            RenderFailureStage::SourcePhoto,
+            ProvenancedRenderErrorKind::SourcePhoto {
+                source_photo_id: source.photo_id(),
+                edit_photo_id: edit.photo_id(),
+            },
+        ));
+    }
+    if source.probe().dimensions() != input.dimensions() {
+        return Err(ProvenancedRenderError::new(
+            context,
+            RenderFailureStage::SourceDimensions,
+            ProvenancedRenderErrorKind::SourceDimensions {
+                probed: source.probe().dimensions(),
+                decoded: input.dimensions(),
+            },
+        ));
+    }
+    let output = render_edit_with_plan(edit, input, policy, plan).map_err(|source| {
+        ProvenancedRenderError::new(
+            context,
+            failure_stage(&source),
+            ProvenancedRenderErrorKind::Render {
+                source: Box::new(source),
+            },
+        )
+    })?;
+    let receipt = RenderReceipt::new(context, &output);
+    Ok(ProvenancedRenderOutput::new(output, receipt))
+}
+
+const fn failure_stage(error: &RenderError) -> RenderFailureStage {
+    match error {
+        RenderError::PlanSourceDimensions { .. } => RenderFailureStage::Plan,
+        RenderError::SourceColor { .. } => RenderFailureStage::SourceColor,
+        RenderError::Pipeline { .. } => RenderFailureStage::Pipeline,
+        RenderError::Evaluation { .. } => RenderFailureStage::Evaluation,
+        RenderError::Image { .. } => RenderFailureStage::Image,
+    }
 }
 
 fn source_color_decision(
