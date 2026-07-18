@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${RUSTTABLE_SKIP_PREPUSH:-0}" == "1" ]]; then
+  printf 'pre-push checks skipped by RUSTTABLE_SKIP_PREPUSH=1.\n' >&2
+  exit 0
+fi
+
+bash "$(git rev-parse --show-toplevel)/scripts/prepush-fast.sh"
