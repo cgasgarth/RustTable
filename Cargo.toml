@@ -11,6 +11,7 @@ members = [
     "crates/rusttable-import",
     "crates/rusttable-processing",
     "crates/rusttable-render",
+    "crates/rusttable-testkit",
     "crates/rusttable-ui",
 ]
 resolver = "3"
