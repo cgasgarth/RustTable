@@ -201,3 +201,37 @@ fn image_io_contains_the_codec_boundary() {
         );
     }
 }
+
+#[test]
+fn render_depends_only_on_the_three_intended_lower_layers() {
+    let metadata = metadata();
+    let render = package_object(&metadata, "rusttable-render");
+    let dependencies_start = render
+        .find("\"dependencies\":[")
+        .expect("render metadata should contain dependencies")
+        + "\"dependencies\":[".len();
+    let dependencies_end = render[dependencies_start..]
+        .find("],\"targets\"")
+        .map(|offset| dependencies_start + offset)
+        .expect("render metadata should contain targets after dependencies");
+    let dependencies = &render[dependencies_start..dependencies_end];
+
+    for required in ["rusttable-core", "rusttable-image", "rusttable-processing"] {
+        assert!(
+            dependencies.contains(&format!("\"name\":\"{required}\"")),
+            "render is missing required dependency {required}: {render}"
+        );
+    }
+    assert_eq!(
+        dependencies.matches("\"name\":").count(),
+        3,
+        "render must have exactly three normal dependencies: {render}"
+    );
+    for lower_layer in ["rusttable-core", "rusttable-image", "rusttable-processing"] {
+        let package = package_object(&metadata, lower_layer);
+        assert!(
+            !package.contains("\"name\":\"rusttable-render\""),
+            "lower layer {lower_layer} must not depend on render: {package}"
+        );
+    }
+}

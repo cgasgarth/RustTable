@@ -65,6 +65,20 @@ pub enum DecodedImageError {
     ByteLengthMismatch { expected: u64, actual: u64 },
 }
 
+impl fmt::Display for DecodedImageError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ArithmeticOverflow => formatter.write_str("decoded image arithmetic overflowed"),
+            Self::ByteLengthMismatch { expected, actual } => write!(
+                formatter,
+                "decoded image has {actual} bytes, expected {expected}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DecodedImageError {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelLayout {
     Rgba8StraightAlpha,
@@ -73,6 +87,7 @@ pub enum PixelLayout {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorEncoding {
     Unspecified,
+    Srgb,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +106,20 @@ impl DecodedImage {
     /// Returns an error when the expected byte count overflows or the buffer
     /// length differs from the checked dimensions.
     pub fn new(dimensions: ImageDimensions, pixels: Vec<u8>) -> Result<Self, DecodedImageError> {
+        Self::new_with_color_encoding(dimensions, pixels, ColorEncoding::Unspecified)
+    }
+
+    /// Creates an immutable packed RGBA8 image with an explicit color encoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the expected byte count overflows or the buffer
+    /// length differs from the checked dimensions.
+    pub fn new_with_color_encoding(
+        dimensions: ImageDimensions,
+        pixels: Vec<u8>,
+        color_encoding: ColorEncoding,
+    ) -> Result<Self, DecodedImageError> {
         let expected = dimensions
             .decoded_byte_count()
             .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
@@ -102,7 +131,7 @@ impl DecodedImage {
         Ok(Self {
             dimensions,
             layout: PixelLayout::Rgba8StraightAlpha,
-            color_encoding: ColorEncoding::Unspecified,
+            color_encoding,
             pixels,
         })
     }
