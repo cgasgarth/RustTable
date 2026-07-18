@@ -47,6 +47,7 @@
 - Never push to or open pull requests against `darktable-org/darktable`.
 - Use focused branches and descriptive commit messages. Keep changes small enough to review and validate quickly.
 - Open every pull request ready for review by default. Do not open draft pull requests unless the user explicitly requests a draft; if tooling creates a draft, mark it ready before handoff.
+- After required checks pass and required review is present, enable GitHub auto-merge with squash for the pull request (`gh pr merge --auto --squash` or the equivalent UI). Do not enable auto-merge for drafts, failing checks, unresolved conflicts, or unapproved pull requests.
 
 For workflow/orchestration follow-up work, reuse a completed worker only when its prior context and isolated worktree are clean, relevant, and materially continue the new issue; otherwise start a fresh worker. Close completed workers before reuse, preserve the active two-worker cap unless explicitly relaxed, keep worktrees isolated, and maintain one GitHub issue per PR.
 
