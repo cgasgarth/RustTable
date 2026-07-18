@@ -9,6 +9,7 @@
 #![doc = "```"]
 
 mod color;
+mod evaluate;
 mod operation;
 mod pipeline;
 mod scalar;
@@ -18,6 +19,7 @@ pub use color::{
     SourceColorSpace, SourceRgb, SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace,
     WorkingRgbImage, to_linear_srgb,
 };
+pub use evaluate::{EvaluationError, evaluate};
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};

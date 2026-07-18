@@ -278,6 +278,13 @@ impl WorkingRgbImage {
     pub fn pixel(&self, index: usize) -> Option<&LinearRgb> {
         self.pixels.get(index)
     }
+
+    pub(crate) fn from_validated_parts(
+        dimensions: RasterDimensions,
+        pixels: Vec<LinearRgb>,
+    ) -> Self {
+        Self { dimensions, pixels }
+    }
 }
 
 /// Converts normalized transfer-encoded sRGB to linear-light sRGB.
