@@ -3,9 +3,11 @@
 #![doc = "The core crate has no normal dependencies; catalog code may depend on it, never the reverse."]
 
 mod id;
+mod model;
 mod value;
 
 pub use id::{AssetId, EditId, IdParseError, OperationId, PhotoId};
+pub use model::{Asset, AssetRole, ByteLength, ContentHash, HashAlgorithm, Photo, PhotoBuildError};
 pub use value::{FiniteF64, FiniteF64Error, Revision, RevisionOverflow};
 
 /// IDs are intentionally nominally typed; a photo ID cannot stand in for an asset ID.
