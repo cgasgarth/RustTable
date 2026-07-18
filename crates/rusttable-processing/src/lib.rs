@@ -20,7 +20,7 @@ pub use color::{
     SourceColorSpace, SourceRgb, SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace,
     WorkingRgbImage, to_linear_srgb,
 };
-pub use evaluate::{EvaluationError, evaluate};
+pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,

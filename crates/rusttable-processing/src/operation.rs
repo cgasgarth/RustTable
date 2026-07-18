@@ -1,6 +1,8 @@
 use std::fmt;
 
-use rusttable_core::{Operation, OperationId, OperationKey, ParameterName, ParameterValue};
+use rusttable_core::{
+    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+};
 
 use crate::{FiniteF32, ScalarNarrowingError};
 
@@ -13,6 +15,7 @@ const LINEAR_OFFSET_PARAMETER: &str = "value";
 pub struct ProcessingOperation {
     operation_id: OperationId,
     enabled: bool,
+    opacity: FiniteF32,
     kind: ProcessingOperationKind,
 }
 
@@ -53,6 +56,9 @@ pub enum OperationCompileError {
         key: OperationKey,
         parameter: ParameterName,
     },
+    OpacityNarrowingUnderflow {
+        operation_id: OperationId,
+    },
 }
 
 impl ProcessingOperation {
@@ -85,6 +91,11 @@ impl ProcessingOperation {
     #[must_use]
     pub const fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    #[must_use]
+    pub const fn opacity(&self) -> FiniteF32 {
+        self.opacity
     }
 
     #[must_use]
@@ -147,9 +158,21 @@ where
             });
         }
     };
+    let opacity = match FiniteF32::try_from(
+        FiniteF64::new(operation.opacity().get()).expect("core opacity is finite"),
+    ) {
+        Ok(value) => value,
+        Err(ScalarNarrowingError::Underflow) => {
+            return Err(OperationCompileError::OpacityNarrowingUnderflow {
+                operation_id: operation.id(),
+            });
+        }
+        Err(ScalarNarrowingError::Overflow) => unreachable!("checked opacity cannot overflow f32"),
+    };
     Ok(ProcessingOperation {
         operation_id: operation.id(),
         enabled: operation.is_enabled(),
+        opacity,
         kind: build(value),
     })
 }
@@ -203,6 +226,12 @@ impl fmt::Display for OperationCompileError {
                 formatter,
                 "operation {operation_id} with key {key} underflows f32 parameter {parameter}"
             ),
+            Self::OpacityNarrowingUnderflow { operation_id } => {
+                write!(
+                    formatter,
+                    "operation {operation_id} has opacity that underflows f32"
+                )
+            }
         }
     }
 }
