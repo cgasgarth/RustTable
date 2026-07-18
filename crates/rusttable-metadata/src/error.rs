@@ -15,6 +15,36 @@ impl fmt::Display for MetadataLimitsError {
 
 impl std::error::Error for MetadataLimitsError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetadataOutputLimit {
+    PayloadBytes,
+    IfdEntries,
+    ValueBytes,
+    AllocationBytes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetadataOutputLimitsError {
+    ZeroLimit {
+        limit: MetadataOutputLimit,
+    },
+    Inconsistent {
+        smaller: MetadataOutputLimit,
+        larger: MetadataOutputLimit,
+    },
+    NotRepresentable {
+        limit: MetadataOutputLimit,
+    },
+}
+
+impl fmt::Display for MetadataOutputLimitsError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
+}
+
+impl std::error::Error for MetadataOutputLimitsError {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MetadataInputError {
     SourceTooLarge {
@@ -68,3 +98,52 @@ impl fmt::Display for MetadataInputError {
 }
 
 impl std::error::Error for MetadataInputError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MetadataOutputError {
+    InvalidLimits {
+        reason: MetadataOutputLimitsError,
+    },
+    UnrepresentableText {
+        field: rusttable_core::MetadataField,
+    },
+    UnrepresentableRational {
+        field: rusttable_core::MetadataField,
+        numerator: u64,
+        denominator: u64,
+    },
+    IfdEntryLimit {
+        limit: u32,
+        actual: u32,
+    },
+    ValueLimit {
+        field: rusttable_core::MetadataField,
+        limit: u64,
+        actual: u64,
+    },
+    PayloadLimit {
+        limit: u64,
+        actual: u64,
+    },
+    AllocationLimit {
+        limit: u64,
+        actual: u64,
+    },
+    ArithmeticOverflow {
+        context: &'static str,
+    },
+    AllocationFailure {
+        requested: u64,
+    },
+    InternalInvariant {
+        context: &'static str,
+    },
+}
+
+impl fmt::Display for MetadataOutputError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
+}
+
+impl std::error::Error for MetadataOutputError {}
