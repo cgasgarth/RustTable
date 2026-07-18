@@ -23,9 +23,9 @@ Rewrite darktable completely in Rust, using iced for the UI, while preserving th
 
 ## Validation budgets
 
-- Pre-commit: no more than 30 seconds.
-- Pre-push: no more than 1 minute.
-- Pull-request GitHub Actions: no more than 2.5 minutes.
+- Pre-commit: no more than 60 seconds.
+- Pre-push: no more than 60 seconds.
+- Pull-request GitHub Actions: no more than 150 seconds.
 - Put exhaustive or heavyweight validation in merge-to-main workflows.
 
 ## Execution loop

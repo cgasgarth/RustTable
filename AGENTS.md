@@ -31,9 +31,11 @@
 
 ## Shift-left validation
 
-- Pre-commit checks must run independent checks in parallel where practical and complete within 30 seconds.
-- Pre-push checks must complete within 1 minute.
-- Pull-request GitHub Actions must complete within 2.5 minutes. Keep PR workflows focused on fast, high-signal checks; move heavyweight or exhaustive validation to a merge-to-main workflow invoked after integration.
+- On the supported developer workstation, pre-commit has a hard 60-second budget, pre-push has a hard 60-second budget, and pull-request GitHub Actions have a hard 150-second budget (60/60/150).
+- Pre-commit runs independent high-signal Rust checks (locked workspace check, all-target/all-feature warnings-denied Clippy, and the measured fast workspace test slice) in parallel with deterministic repository, source/native, layout, and workflow-policy checks.
+- Hooks must clean up the complete child-process tree on success, failure, interrupt, and timeout; failures report bounded actionable excerpts and measured duration.
+- Hooks must not use the network, mutate GitHub, require secrets, or run heavyweight packaging, corpus, benchmark, GUI, or merge-only validation.
+- Pre-push and PR/main validation retain exhaustive all-target/all-feature Rust coverage and heavyweight checks outside the 60-second pre-commit tier.
 - Formatting, linting, compilation, tests, dependency checks, file-size checks, and unsafe-code checks should fail as early as practical.
 - Measure hook and workflow duration when changing validation so the time budgets remain enforceable.
 
@@ -45,6 +47,7 @@
 - Never push to or open pull requests against `darktable-org/darktable`.
 - Use focused branches and descriptive commit messages. Keep changes small enough to review and validate quickly.
 - Open every pull request ready for review by default. Do not open draft pull requests unless the user explicitly requests a draft; if tooling creates a draft, mark it ready before handoff.
+- After required checks pass and required review is present, enable GitHub auto-merge with squash for the pull request (`gh pr merge --auto --squash` or the equivalent UI). Do not enable auto-merge for drafts, failing checks, unresolved conflicts, or unapproved pull requests.
 
 For workflow/orchestration follow-up work, reuse a completed worker only when its prior context and isolated worktree are clean, relevant, and materially continue the new issue; otherwise start a fresh worker. Close completed workers before reuse, preserve the active two-worker cap unless explicitly relaxed, keep worktrees isolated, and maintain one GitHub issue per PR.
 
