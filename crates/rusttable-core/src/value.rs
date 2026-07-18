@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -30,6 +31,12 @@ impl Revision {
             Some(value) => Ok(Self(value)),
             None => Err(RevisionOverflow),
         }
+    }
+}
+
+impl fmt::Display for Revision {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(formatter)
     }
 }
 

@@ -7,3 +7,10 @@
 pub const fn dependency_direction() -> &'static str {
     "rusttable-catalog -> rusttable-core"
 }
+mod command;
+mod error;
+mod state;
+
+pub use command::CatalogCommand;
+pub use error::CatalogError;
+pub use state::CatalogState;
