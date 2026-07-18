@@ -1,6 +1,6 @@
 # RustTable
 
-RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, with [iced](https://iced.rs/) as the application UI framework. The retained darktable tree provides history and behavioral reference; it is not part of the RustTable build path.
+RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, with [iced](https://iced.rs/) as the application UI framework. The RustTable repository contains only the active Rust implementation and its validation surface; the original tree is kept separately for reference.
 
 ## Status
 
@@ -57,4 +57,4 @@ Use one GitHub issue, one dedicated worktree, and one pull request per change. W
 
 ## Reference
 
-The original [darktable project](https://github.com/darktable-org/darktable) remains available for historical context and behavioral comparison. RustTable's active source is the workspace described by [Cargo.toml](Cargo.toml), with the iced application in [crates/rusttable-app](crates/rusttable-app).
+The original [darktable project](https://github.com/darktable-org/darktable) remains available in the local reference clone at `/Users/cgas/Documents/RustTable/upstream` for historical context and behavioral comparison. RustTable's active source is the workspace described by [Cargo.toml](Cargo.toml), with the iced application in [crates/rusttable-app](crates/rusttable-app).
