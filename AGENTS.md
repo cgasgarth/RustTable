@@ -3,6 +3,7 @@
 ## Project direction
 
 - RustTable is a complete rewrite of darktable in Rust; do not incrementally port the existing C implementation.
+- After a darktable capability is ported, delete its corresponding legacy C/C++ implementation and obsolete CMake/native build, packaging, and generated-native files from RustTable. Keep historical C/C++ only in the separate local darktable reference clone at `/Users/cgas/Documents/RustTable/upstream`; do not retain a fallback or parallel native implementation in this repository.
 - Use `iced` for the user interface.
 - Prefer established Rust crates where they materially improve correctness or maintainability. Prefer the Rust standard library and framework facilities when they are sufficient.
 - Keep the architecture modular, testable, and suitable for independently replaceable components.

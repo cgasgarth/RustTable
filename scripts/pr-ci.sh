@@ -16,7 +16,7 @@ run_check() {
   return "$status"
 }
 
-cheap_labels=(diff fmt metadata source bun repository-policy doctor readme-contract workspace-rust-version)
+cheap_labels=(diff fmt metadata source bun repository-policy doctor readme-contract native-removal workspace-rust-version)
 run_check diff git diff --check &
 cheap_pids[0]=$!
 run_check fmt cargo fmt --all -- --check &
@@ -33,7 +33,7 @@ cheap_pids[4]=$!
   cheap_pids[6]=$!
   run_check readme-contract bash scripts/dev/test-readme-contract.sh &
   cheap_pids[7]=$!
-  run_check workspace-rust-version bash -c 'bun run test:workspace-rust-version && bun run check:workspace-rust-version' &
+  run_check native-removal bash -c 'bun run test:native-removal && bun run check:native-removal' &
   cheap_pids[8]=$!
 cheap_index=9
 if [[ "${RUSTTABLE_SKIP_BUN_PIN_REGRESSION:-0}" != 1 ]]; then
@@ -45,6 +45,10 @@ if [[ "${RUSTTABLE_SKIP_BUN_PIN_REGRESSION:-0}" != 1 ]]; then
   cheap_pids[$cheap_index]=$!
   cheap_index=$((cheap_index + 1))
 fi
+cheap_labels+=(workspace-rust-version)
+run_check workspace-rust-version bash -c 'bun run test:workspace-rust-version && bun run check:workspace-rust-version' &
+cheap_pids[$cheap_index]=$!
+cheap_index=$((cheap_index + 1))
 if [[ "${RUSTTABLE_SKIP_PR_CI_REGRESSION:-0}" != 1 ]]; then
   cheap_labels+=(pr-ci)
   run_check pr-ci bash scripts/test-pr-ci.sh &
