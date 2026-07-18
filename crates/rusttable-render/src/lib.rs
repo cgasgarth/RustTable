@@ -4,12 +4,16 @@
 use std::fmt;
 
 use rusttable_core::{Edit, EditId, PhotoId, Revision};
-use rusttable_image::{ColorEncoding, DecodedImage, DecodedImageError};
+use rusttable_image::{ColorEncoding, DecodedImage, DecodedImageError, ImageDimensions};
 use rusttable_processing::{
     CompiledPipeline, DisplayP3Channel, DisplayP3Rgb, DisplayP3RgbImage, EvaluationError,
     GamutClipReport, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb,
     evaluate, to_linear_srgb, to_linear_srgb_from_display_p3,
 };
+
+mod plan;
+
+pub use plan::{PreviewBounds, PreviewBoundsError, RenderPlan, RenderSampling, RenderTarget};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceColorPolicy {
@@ -73,6 +77,7 @@ impl RenderProvenance {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderOutput {
     image: DecodedImage,
+    plan: RenderPlan,
     source_color_decision: SourceColorDecision,
     clipping: GamutClipReport,
     provenance: RenderProvenance,
@@ -82,6 +87,11 @@ impl RenderOutput {
     #[must_use]
     pub const fn image(&self) -> &DecodedImage {
         &self.image
+    }
+
+    #[must_use]
+    pub const fn plan(&self) -> RenderPlan {
+        self.plan
     }
 
     #[must_use]
@@ -102,6 +112,10 @@ impl RenderOutput {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RenderError {
+    PlanSourceDimensions {
+        planned: ImageDimensions,
+        actual: ImageDimensions,
+    },
     SourceColor {
         actual: ColorEncoding,
     },
@@ -127,11 +141,41 @@ pub fn render_edit(
     input: &DecodedImage,
     policy: SourceColorPolicy,
 ) -> Result<RenderOutput, RenderError> {
+    let plan = RenderPlan::for_source(input.dimensions(), RenderTarget::FullResolution);
+    render_edit_with_plan(edit, input, policy, plan)
+}
+
+/// Renders one decoded image through an explicit deterministic render plan.
+///
+/// # Errors
+///
+/// Returns a plan mismatch before source policy, then preserves the existing
+/// typed source-color, pipeline, evaluation, and output errors.
+pub fn render_edit_with_plan(
+    edit: &Edit,
+    input: &DecodedImage,
+    policy: SourceColorPolicy,
+    plan: RenderPlan,
+) -> Result<RenderOutput, RenderError> {
+    if plan.source_dimensions() != input.dimensions() {
+        return Err(RenderError::PlanSourceDimensions {
+            planned: plan.source_dimensions(),
+            actual: input.dimensions(),
+        });
+    }
     let source_color_decision = source_color_decision(input.color_encoding(), policy)?;
     let pipeline = CompiledPipeline::compile(edit).map_err(|source| RenderError::Pipeline {
         source: Box::new(source),
     })?;
-    let (source, alpha) = source_image(input);
+    let sampled = match plan.sampling() {
+        RenderSampling::Identity => None,
+        RenderSampling::CenterPoint => Some(
+            sample_center_point(input, plan.output_dimensions())
+                .map_err(|source| RenderError::Image { source })?,
+        ),
+    };
+    let render_input = sampled.as_ref().unwrap_or(input);
+    let (source, alpha) = source_image(render_input);
     let working = match source {
         SourceImage::Srgb(source) => to_linear_srgb(&source),
         SourceImage::DisplayP3(source) => to_linear_srgb_from_display_p3(&source),
@@ -140,12 +184,16 @@ pub fn render_edit(
         evaluate(&pipeline, &working).map_err(|source| RenderError::Evaluation { source })?;
     let encoded = encode_linear_srgb(&evaluated);
     let pixels = quantized_pixels(&encoded, &alpha);
-    let image =
-        DecodedImage::new_with_color_encoding(input.dimensions(), pixels, ColorEncoding::Srgb)
-            .map_err(|source| RenderError::Image { source })?;
+    let image = DecodedImage::new_with_color_encoding(
+        plan.output_dimensions(),
+        pixels,
+        ColorEncoding::Srgb,
+    )
+    .map_err(|source| RenderError::Image { source })?;
 
     Ok(RenderOutput {
         image,
+        plan,
         source_color_decision,
         clipping: encoded.clipping(),
         provenance: RenderProvenance::new(
@@ -239,6 +287,51 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
     }
 }
 
+fn sample_center_point(
+    input: &DecodedImage,
+    output_dimensions: ImageDimensions,
+) -> Result<DecodedImage, DecodedImageError> {
+    let source_width = u64::from(input.dimensions().width());
+    let source_height = u64::from(input.dimensions().height());
+    let output_width = u64::from(output_dimensions.width());
+    let output_height = u64::from(output_dimensions.height());
+    let pixel_count = usize::try_from(
+        output_dimensions
+            .pixel_count()
+            .map_err(|_| DecodedImageError::ArithmeticOverflow)?,
+    )
+    .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
+    let mut pixels = Vec::with_capacity(
+        pixel_count
+            .checked_mul(4)
+            .ok_or(DecodedImageError::ArithmeticOverflow)?,
+    );
+    for output_row in 0..output_height {
+        let source_row = center_index(output_row, source_height, output_height);
+        for output_column in 0..output_width {
+            let source_column = center_index(output_column, source_width, output_width);
+            let source_index = usize::try_from(
+                (source_row * source_width + source_column)
+                    .checked_mul(4)
+                    .ok_or(DecodedImageError::ArithmeticOverflow)?,
+            )
+            .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
+            pixels.extend_from_slice(
+                input
+                    .pixels()
+                    .get(source_index..source_index + 4)
+                    .ok_or(DecodedImageError::ArithmeticOverflow)?,
+            );
+        }
+    }
+    DecodedImage::new_with_color_encoding(output_dimensions, pixels, input.color_encoding())
+}
+
+fn center_index(output_index: u64, source_extent: u64, output_extent: u64) -> u64 {
+    ((2 * output_index + 1) * source_extent / (2 * output_extent))
+        .min(source_extent.saturating_sub(1))
+}
+
 fn quantized_pixels(encoded: &rusttable_processing::EncodedSrgbOutput, alpha: &[u8]) -> Vec<u8> {
     let mut pixels = Vec::with_capacity(alpha.len() * 4);
     for (encoded_pixel, &alpha) in encoded.image().pixels().zip(alpha) {
@@ -268,6 +361,10 @@ fn quantize(channel: SrgbChannel) -> u8 {
 impl fmt::Display for RenderError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::PlanSourceDimensions { planned, actual } => write!(
+                formatter,
+                "render plan expects {planned:?} but input is {actual:?}"
+            ),
             Self::SourceColor { actual } => {
                 write!(
                     formatter,
@@ -289,7 +386,7 @@ impl fmt::Display for RenderError {
 impl std::error::Error for RenderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::SourceColor { .. } => None,
+            Self::PlanSourceDimensions { .. } | Self::SourceColor { .. } => None,
             Self::Pipeline { source } => Some(source.as_ref()),
             Self::Evaluation { source } => Some(source),
             Self::Image { source } => Some(source),
