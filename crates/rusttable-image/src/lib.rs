@@ -16,6 +16,8 @@ pub use input::{
     UnsupportedImageFeature,
 };
 pub use output::{
-    ImageOutput, ImageOutputError, JpegQuality, JpegQualityError, OutputFormat, OutputLimits,
-    OutputLimitsError, OutputOptions, OutputReceipt, OutputReceiptError, SUPPORTED_OUTPUT_FORMATS,
+    DurableImageOutput, DurableImageOutputError, DurableOutputReceipt, DurableOutputStage,
+    DurableOutputTag, ImageOutput, ImageOutputError, JpegQuality, JpegQualityError, OutputFormat,
+    OutputLimits, OutputLimitsError, OutputOptions, OutputReceipt, OutputReceiptError,
+    SUPPORTED_OUTPUT_FORMATS,
 };

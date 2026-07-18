@@ -154,6 +154,89 @@ pub enum ImageOutputError {
     PublishFailure,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DurableOutputStage {
+    DestinationValidation,
+    DirectoryCapability,
+    Encoding,
+    TemporaryCreation,
+    Write,
+    FileSync,
+    Publication,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DurableOutputTag {
+    FileAndParentDirectorySynchronized,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DurableOutputReceipt {
+    receipt: OutputReceipt,
+    tag: DurableOutputTag,
+}
+
+impl DurableOutputReceipt {
+    #[doc(hidden)]
+    #[must_use]
+    pub fn new(receipt: OutputReceipt) -> Self {
+        Self {
+            receipt,
+            tag: DurableOutputTag::FileAndParentDirectorySynchronized,
+        }
+    }
+
+    #[must_use]
+    pub fn output(&self) -> &OutputReceipt {
+        &self.receipt
+    }
+
+    #[must_use]
+    pub fn destination(&self) -> &Path {
+        self.receipt.destination()
+    }
+
+    #[must_use]
+    pub const fn format(&self) -> OutputFormat {
+        self.receipt.format()
+    }
+
+    #[must_use]
+    pub const fn dimensions(&self) -> ImageDimensions {
+        self.receipt.dimensions()
+    }
+
+    #[must_use]
+    pub const fn encoded_byte_length(&self) -> u64 {
+        self.receipt.encoded_byte_length()
+    }
+
+    #[must_use]
+    pub const fn durability(&self) -> DurableOutputTag {
+        self.tag
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DurableImageOutputError {
+    BeforePublication {
+        source: ImageOutputError,
+    },
+    DurabilityUnsupported {
+        destination: PathBuf,
+    },
+    BeforePublicationCleanupFailure {
+        destination: PathBuf,
+        stage: DurableOutputStage,
+    },
+    PublishedTemporaryCleanupFailure {
+        receipt: OutputReceipt,
+    },
+    PublishedDirectorySyncFailure {
+        receipt: OutputReceipt,
+    },
+}
+
 impl fmt::Display for JpegQualityError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -213,6 +296,24 @@ impl fmt::Display for ImageOutputError {
 }
 impl std::error::Error for ImageOutputError {}
 
+impl fmt::Display for DurableImageOutputError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "durable output failed: {self:?}")
+    }
+}
+
+impl std::error::Error for DurableImageOutputError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::BeforePublication { source } => Some(source),
+            Self::DurabilityUnsupported { .. }
+            | Self::BeforePublicationCleanupFailure { .. }
+            | Self::PublishedTemporaryCleanupFailure { .. }
+            | Self::PublishedDirectorySyncFailure { .. } => None,
+        }
+    }
+}
+
 pub trait ImageOutput {
     /// Publishes one new output without consulting or replacing the destination.
     ///
@@ -230,4 +331,19 @@ pub trait ImageOutput {
         destination: &Path,
         options: OutputOptions,
     ) -> Result<OutputReceipt, ImageOutputError>;
+}
+
+pub trait DurableImageOutput {
+    /// Publishes one new output and confirms file plus parent-directory sync.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed state-aware error. A published failure carries the
+    /// complete final-output receipt and never removes that final file.
+    fn write_new_durable(
+        &self,
+        image: &DecodedImage,
+        destination: &Path,
+        options: OutputOptions,
+    ) -> Result<DurableOutputReceipt, DurableImageOutputError>;
 }

@@ -7,7 +7,8 @@ use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::{ExtendedColorType, ImageEncoder};
 use rusttable_image::{
-    DecodedImage, ImageOutput, ImageOutputError, JpegQuality, OutputFormat, OutputLimits,
+    DecodedImage, DurableImageOutput, DurableImageOutputError, DurableOutputReceipt,
+    DurableOutputStage, ImageOutput, ImageOutputError, JpegQuality, OutputFormat, OutputLimits,
     OutputOptions, OutputReceipt,
 };
 
@@ -54,6 +55,80 @@ impl ImageOutput for FileImageOutput {
         .map_err(|_| ImageOutputError::EncodeFailure {
             format: options.format(),
         })
+    }
+}
+
+impl DurableImageOutput for FileImageOutput {
+    fn write_new_durable(
+        &self,
+        image: &DecodedImage,
+        destination: &Path,
+        options: OutputOptions,
+    ) -> Result<DurableOutputReceipt, DurableImageOutputError> {
+        validate_destination(destination)
+            .map_err(|source| DurableImageOutputError::BeforePublication { source })?;
+        if destination.exists() {
+            return Err(DurableImageOutputError::BeforePublication {
+                source: ImageOutputError::DestinationExists {
+                    path: destination.to_owned(),
+                },
+            });
+        }
+        let parent = destination.parent().unwrap_or_else(|| Path::new("."));
+        let directory =
+            File::open(parent).map_err(|_| DurableImageOutputError::DurabilityUnsupported {
+                destination: destination.to_owned(),
+            })?;
+        let encoded = encode(image, options, self.limits)
+            .map_err(|source| DurableImageOutputError::BeforePublication { source })?;
+        let temporary = create_temporary(destination)
+            .map_err(|source| DurableImageOutputError::BeforePublication { source })?;
+        if let Err(source) = write_and_sync(&temporary, &encoded) {
+            return Err(cleanup_before_publication(
+                &temporary,
+                destination,
+                DurableOutputStage::Write,
+                source,
+            ));
+        }
+        if let Err(source) = fs::hard_link(&temporary, destination).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                ImageOutputError::DestinationExists {
+                    path: destination.to_owned(),
+                }
+            } else {
+                ImageOutputError::PublishFailure
+            }
+        }) {
+            return Err(cleanup_before_publication(
+                &temporary,
+                destination,
+                DurableOutputStage::Publication,
+                source,
+            ));
+        }
+        let receipt = OutputReceipt::new(
+            destination.to_owned(),
+            options.format(),
+            image.dimensions(),
+            u64::try_from(encoded.len()).unwrap_or(u64::MAX),
+        )
+        .map_err(|_| DurableImageOutputError::PublishedDirectorySyncFailure {
+            receipt: OutputReceipt::new(
+                destination.to_owned(),
+                options.format(),
+                image.dimensions(),
+                1,
+            )
+            .expect("nonzero fallback receipt"),
+        })?;
+        if fs::remove_file(&temporary).is_err() {
+            return Err(DurableImageOutputError::PublishedTemporaryCleanupFailure { receipt });
+        }
+        if directory.sync_all().is_err() {
+            return Err(DurableImageOutputError::PublishedDirectorySyncFailure { receipt });
+        }
+        Ok(DurableOutputReceipt::new(receipt))
     }
 }
 
@@ -236,6 +311,29 @@ fn publish(temporary: &Path, destination: &Path, bytes: &[u8]) -> Result<(), Ima
     result
 }
 
+fn write_and_sync(temporary: &Path, bytes: &[u8]) -> Result<(), ImageOutputError> {
+    let mut file = File::create(temporary).map_err(|_| ImageOutputError::WriteFailure)?;
+    file.write_all(bytes)
+        .map_err(|_| ImageOutputError::WriteFailure)?;
+    file.flush().map_err(|_| ImageOutputError::WriteFailure)?;
+    file.sync_all().map_err(|_| ImageOutputError::SyncFailure)
+}
+
+fn cleanup_before_publication(
+    temporary: &Path,
+    destination: &Path,
+    stage: DurableOutputStage,
+    source: ImageOutputError,
+) -> DurableImageOutputError {
+    match fs::remove_file(temporary) {
+        Ok(()) => DurableImageOutputError::BeforePublication { source },
+        Err(_) => DurableImageOutputError::BeforePublicationCleanupFailure {
+            destination: destination.to_owned(),
+            stage,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,5 +344,36 @@ mod tests {
         assert!(writer.write_all(&[1, 2, 3]).is_ok());
         assert!(writer.write_all(&[4]).is_err());
         assert_eq!(writer.limit_exceeded, Some(4));
+    }
+
+    #[test]
+    fn durable_receipt_is_constructed_only_from_a_completed_output_receipt() {
+        let output = OutputReceipt::new(
+            PathBuf::from("published.png"),
+            OutputFormat::Png,
+            rusttable_image::ImageDimensions::new(1, 1).expect("dimensions"),
+            4,
+        )
+        .expect("receipt");
+        let durable = DurableOutputReceipt::new(output.clone());
+        assert_eq!(durable.output(), &output);
+        assert_eq!(
+            durable.durability(),
+            rusttable_image::DurableOutputTag::FileAndParentDirectorySynchronized
+        );
+    }
+
+    #[test]
+    fn temporary_cleanup_failure_is_not_downgraded_to_a_prepublication_error() {
+        let error = cleanup_before_publication(
+            Path::new("missing-temporary"),
+            Path::new("destination.png"),
+            DurableOutputStage::Write,
+            ImageOutputError::WriteFailure,
+        );
+        assert!(matches!(
+            error,
+            DurableImageOutputError::BeforePublicationCleanupFailure { .. }
+        ));
     }
 }
