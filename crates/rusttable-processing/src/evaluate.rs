@@ -18,6 +18,20 @@ pub enum EvaluationError {
         pixel_index: usize,
         channel: RgbChannel,
     },
+    NonFiniteBlendResult {
+        step_index: PipelineStepIndex,
+        operation_id: OperationId,
+        pixel_index: usize,
+        channel: RgbChannel,
+        stage: BlendArithmeticStage,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlendArithmeticStage {
+    Delta,
+    WeightedDelta,
+    Output,
 }
 
 /// Evaluates a compiled pipeline into a new linear-light sRGB image.
@@ -46,6 +60,10 @@ pub fn evaluate(
 fn apply_step(step: &PipelineStep, pixels: &mut [LinearRgb]) -> Result<(), EvaluationError> {
     let step_index = step.index();
     let operation_id = step.operation().operation_id();
+    let opacity = step.operation().opacity().get();
+    if opacity.to_bits() == 0.0f32.to_bits() {
+        return Ok(());
+    }
     match step.operation().kind() {
         ProcessingOperationKind::Exposure { stops } => {
             let multiplier = FiniteF32::new(stops.get().exp2()).map_err(|_| {
@@ -54,12 +72,12 @@ fn apply_step(step: &PipelineStep, pixels: &mut [LinearRgb]) -> Result<(), Evalu
                     operation_id,
                 }
             })?;
-            apply_channels(pixels, step_index, operation_id, |value| {
+            apply_channels(pixels, step_index, operation_id, opacity, |value| {
                 value * multiplier.get()
             })
         }
         ProcessingOperationKind::LinearOffset { value } => {
-            apply_channels(pixels, step_index, operation_id, |sample| {
+            apply_channels(pixels, step_index, operation_id, opacity, |sample| {
                 sample + value.get()
             })
         }
@@ -70,28 +88,82 @@ fn apply_channels<F>(
     pixels: &mut [LinearRgb],
     step_index: PipelineStepIndex,
     operation_id: OperationId,
+    opacity: f32,
     transform: F,
 ) -> Result<(), EvaluationError>
 where
     F: Fn(f32) -> f32,
 {
     for (pixel_index, pixel) in pixels.iter_mut().enumerate() {
-        let red = checked_channel(
-            transform(pixel.red().get()),
+        let current = *pixel;
+        if opacity.to_bits() == 1.0f32.to_bits() {
+            let red = checked_channel(
+                transform(current.red().get()),
+                step_index,
+                operation_id,
+                pixel_index,
+                RgbChannel::Red,
+            )?;
+            let green = checked_channel(
+                transform(current.green().get()),
+                step_index,
+                operation_id,
+                pixel_index,
+                RgbChannel::Green,
+            )?;
+            let blue = checked_channel(
+                transform(current.blue().get()),
+                step_index,
+                operation_id,
+                pixel_index,
+                RgbChannel::Blue,
+            )?;
+            *pixel = LinearRgb::new(red, green, blue);
+            continue;
+        }
+        let red_candidate = checked_channel(
+            transform(current.red().get()),
             step_index,
             operation_id,
             pixel_index,
             RgbChannel::Red,
         )?;
-        let green = checked_channel(
-            transform(pixel.green().get()),
+        let red = blend(
+            current.red().get(),
+            red_candidate.get(),
+            opacity,
+            step_index,
+            operation_id,
+            pixel_index,
+            RgbChannel::Red,
+        )?;
+        let green_candidate = checked_channel(
+            transform(current.green().get()),
             step_index,
             operation_id,
             pixel_index,
             RgbChannel::Green,
         )?;
-        let blue = checked_channel(
-            transform(pixel.blue().get()),
+        let green = blend(
+            current.green().get(),
+            green_candidate.get(),
+            opacity,
+            step_index,
+            operation_id,
+            pixel_index,
+            RgbChannel::Green,
+        )?;
+        let blue_candidate = checked_channel(
+            transform(current.blue().get()),
+            step_index,
+            operation_id,
+            pixel_index,
+            RgbChannel::Blue,
+        )?;
+        let blue = blend(
+            current.blue().get(),
+            blue_candidate.get(),
+            opacity,
             step_index,
             operation_id,
             pixel_index,
@@ -100,6 +172,43 @@ where
         *pixel = LinearRgb::new(red, green, blue);
     }
     Ok(())
+}
+
+fn blend(
+    current: f32,
+    candidate: f32,
+    opacity: f32,
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    pixel_index: usize,
+    channel: RgbChannel,
+) -> Result<FiniteF32, EvaluationError> {
+    let delta =
+        FiniteF32::new(candidate - current).map_err(|_| EvaluationError::NonFiniteBlendResult {
+            step_index,
+            operation_id,
+            pixel_index,
+            channel,
+            stage: BlendArithmeticStage::Delta,
+        })?;
+    let weighted_delta = FiniteF32::new(delta.get() * opacity).map_err(|_| {
+        EvaluationError::NonFiniteBlendResult {
+            step_index,
+            operation_id,
+            pixel_index,
+            channel,
+            stage: BlendArithmeticStage::WeightedDelta,
+        }
+    })?;
+    FiniteF32::new(current + weighted_delta.get()).map_err(|_| {
+        EvaluationError::NonFiniteBlendResult {
+            step_index,
+            operation_id,
+            pixel_index,
+            channel,
+            stage: BlendArithmeticStage::Output,
+        }
+    })
 }
 
 fn checked_channel(
@@ -136,6 +245,17 @@ impl fmt::Display for EvaluationError {
             } => write!(
                 formatter,
                 "operation {operation_id} at pipeline step {} produced a non-finite {channel:?} value at pixel {pixel_index}",
+                step_index.get()
+            ),
+            Self::NonFiniteBlendResult {
+                step_index,
+                operation_id,
+                pixel_index,
+                channel,
+                stage,
+            } => write!(
+                formatter,
+                "operation {operation_id} at pipeline step {} produced a non-finite {stage:?} blend value for {channel:?} at pixel {pixel_index}",
                 step_index.get()
             ),
         }

@@ -43,6 +43,76 @@ impl fmt::Display for Revision {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FiniteF64Error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationOpacityError {
+    NonFinite,
+    BelowZero,
+    AboveOne,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct OperationOpacity(FiniteF64);
+
+impl OperationOpacity {
+    pub const ZERO: Self = Self(FiniteF64(0.0));
+    pub const ONE: Self = Self(FiniteF64(1.0));
+
+    /// Creates opacity from a finite value in the inclusive unit interval.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OperationOpacityError::NonFinite`] for NaN or infinity,
+    /// [`OperationOpacityError::BelowZero`] for negative values, or
+    /// [`OperationOpacityError::AboveOne`] for values greater than one.
+    pub fn new(value: f64) -> Result<Self, OperationOpacityError> {
+        let value = FiniteF64::new(value).map_err(|_| OperationOpacityError::NonFinite)?;
+        if value.get() < 0.0 {
+            return Err(OperationOpacityError::BelowZero);
+        }
+        if value.get() > 1.0 {
+            return Err(OperationOpacityError::AboveOne);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> f64 {
+        self.0.get()
+    }
+}
+
+impl PartialEq for OperationOpacity {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for OperationOpacity {}
+
+impl PartialOrd for OperationOpacity {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OperationOpacity {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl Hash for OperationOpacity {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl fmt::Display for OperationOpacity {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(formatter)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct FiniteF64(f64);
 
@@ -90,3 +160,16 @@ impl Hash for FiniteF64 {
         self.0.to_bits().hash(state);
     }
 }
+
+impl fmt::Display for OperationOpacityError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::NonFinite => "operation opacity must be finite",
+            Self::BelowZero => "operation opacity must not be below zero",
+            Self::AboveOne => "operation opacity must not be above one",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl std::error::Error for OperationOpacityError {}

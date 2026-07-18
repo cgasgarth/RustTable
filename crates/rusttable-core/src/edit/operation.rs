@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
-use crate::{FiniteF64, OperationId};
+use crate::{FiniteF64, OperationId, OperationOpacity};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OperationKey(String);
@@ -324,6 +324,7 @@ pub struct Operation {
     id: OperationId,
     key: OperationKey,
     enabled: bool,
+    opacity: OperationOpacity,
     parameters: BTreeMap<ParameterName, ParameterValue>,
 }
 
@@ -342,6 +343,25 @@ impl Operation {
     where
         I: IntoIterator<Item = (ParameterName, ParameterValue)>,
     {
+        Self::new_with_opacity(id, key, enabled, OperationOpacity::ONE, parameters)
+    }
+
+    /// Creates an immutable operation with an explicit opacity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OperationBuildError::DuplicateParameterName`] when a name
+    /// occurs more than once.
+    pub fn new_with_opacity<I>(
+        id: OperationId,
+        key: OperationKey,
+        enabled: bool,
+        opacity: OperationOpacity,
+        parameters: I,
+    ) -> Result<Self, OperationBuildError>
+    where
+        I: IntoIterator<Item = (ParameterName, ParameterValue)>,
+    {
         let mut collected = BTreeMap::new();
         for (name, value) in parameters {
             if collected.insert(name.clone(), value).is_some() {
@@ -352,6 +372,7 @@ impl Operation {
             id,
             key,
             enabled,
+            opacity,
             parameters: collected,
         })
     }
@@ -369,6 +390,11 @@ impl Operation {
     #[must_use]
     pub const fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    #[must_use]
+    pub const fn opacity(&self) -> OperationOpacity {
+        self.opacity
     }
 
     #[must_use]
