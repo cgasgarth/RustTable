@@ -5,7 +5,12 @@ mod container;
 mod error;
 mod extract;
 mod limits;
+mod output;
 
-pub use error::{MetadataInputError, MetadataLimitsError};
+pub use error::{
+    MetadataInputError, MetadataLimitsError, MetadataOutputError, MetadataOutputLimit,
+    MetadataOutputLimitsError,
+};
 pub use extract::{ExifMetadataInput, MetadataInput};
-pub use limits::MetadataLimits;
+pub use limits::{MetadataLimits, MetadataOutputLimits};
+pub use output::{CanonicalExifOutput, EncodedExif, MetadataOutput};

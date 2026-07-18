@@ -76,3 +76,91 @@ impl MetadataLimits {
         self.max_value_bytes
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetadataOutputLimits {
+    pub(crate) max_payload_bytes: u64,
+    pub(crate) max_ifd_entries: u32,
+    pub(crate) max_value_bytes: u64,
+    pub(crate) max_allocation_bytes: u64,
+}
+
+impl MetadataOutputLimits {
+    /// Creates explicit, bounded limits for canonical EXIF output.
+    pub const fn new(
+        max_payload_bytes: u64,
+        max_ifd_entries: u32,
+        max_value_bytes: u64,
+        max_allocation_bytes: u64,
+    ) -> Result<Self, crate::MetadataOutputLimitsError> {
+        use crate::{MetadataOutputLimit, MetadataOutputLimitsError};
+
+        if max_payload_bytes == 0 {
+            return Err(MetadataOutputLimitsError::ZeroLimit {
+                limit: MetadataOutputLimit::PayloadBytes,
+            });
+        }
+        if max_ifd_entries == 0 {
+            return Err(MetadataOutputLimitsError::ZeroLimit {
+                limit: MetadataOutputLimit::IfdEntries,
+            });
+        }
+        if max_value_bytes == 0 {
+            return Err(MetadataOutputLimitsError::ZeroLimit {
+                limit: MetadataOutputLimit::ValueBytes,
+            });
+        }
+        if max_allocation_bytes == 0 {
+            return Err(MetadataOutputLimitsError::ZeroLimit {
+                limit: MetadataOutputLimit::AllocationBytes,
+            });
+        }
+        if max_value_bytes > max_payload_bytes {
+            return Err(MetadataOutputLimitsError::Inconsistent {
+                smaller: MetadataOutputLimit::PayloadBytes,
+                larger: MetadataOutputLimit::ValueBytes,
+            });
+        }
+        if max_payload_bytes > u32::MAX as u64 {
+            return Err(MetadataOutputLimitsError::NotRepresentable {
+                limit: MetadataOutputLimit::PayloadBytes,
+            });
+        }
+        if max_ifd_entries > u16::MAX as u32 {
+            return Err(MetadataOutputLimitsError::NotRepresentable {
+                limit: MetadataOutputLimit::IfdEntries,
+            });
+        }
+        if max_allocation_bytes > usize::MAX as u64 {
+            return Err(MetadataOutputLimitsError::NotRepresentable {
+                limit: MetadataOutputLimit::AllocationBytes,
+            });
+        }
+        Ok(Self {
+            max_payload_bytes,
+            max_ifd_entries,
+            max_value_bytes,
+            max_allocation_bytes,
+        })
+    }
+
+    #[must_use]
+    pub const fn max_payload_bytes(self) -> u64 {
+        self.max_payload_bytes
+    }
+
+    #[must_use]
+    pub const fn max_ifd_entries(self) -> u32 {
+        self.max_ifd_entries
+    }
+
+    #[must_use]
+    pub const fn max_value_bytes(self) -> u64 {
+        self.max_value_bytes
+    }
+
+    #[must_use]
+    pub const fn max_allocation_bytes(self) -> u64 {
+        self.max_allocation_bytes
+    }
+}
