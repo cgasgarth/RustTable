@@ -26,6 +26,24 @@ license = "GPL-3.0-or-later"
 rust-version = "1.98"
 version = "0.1.0"
 
+[workspace.dependencies]
+clap = { version = "=4.6.1", features = ["derive"] }
+directories = "=6.0.0"
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+futures = "=0.3.32"
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6", default-features = false, features = ["advanced", "sipper", "thread-pool", "tiny-skia", "wgpu"] }
+iced_test = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6" }
+image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
+kamadak-exif = { version = "=0.6.1", default-features = false }
+mlua = { version = "=0.11.4", default-features = false, features = ["async", "serialize"] }
+postcard = { version = "=1.1.3", features = ["alloc"] }
+redb = "=4.1.0"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+sha2 = { version = "=0.10.9", default-features = false }
+toml = "=0.9.12"
+unicode-normalization = { package = "unicode-normalization-alignments", version = "=0.1.12" }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 warnings = "deny"

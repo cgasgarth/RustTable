@@ -8,7 +8,7 @@ version.workspace = true
 
 [dependencies]
 rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
-sha2 = { version = "0.10.9", default-features = false }
+sha2.workspace = true
 
 [lints]
 workspace = true

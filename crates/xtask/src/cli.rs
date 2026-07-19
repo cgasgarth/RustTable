@@ -221,10 +221,30 @@ pub struct LuaConformanceArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum EcosystemCommand {
+    #[command(name = "verify-baseline")]
+    VerifyBaseline(BaselineVerifyArgs),
+    #[command(name = "upgrade-diff")]
+    UpgradeDiff,
+    Dependencies {
+        #[command(subcommand)]
+        command: DependencyCommand,
+    },
     Channels {
         #[command(subcommand)]
         command: ChannelsCommand,
     },
+}
+
+#[derive(Debug, Args)]
+pub struct BaselineVerifyArgs {
+    #[arg(long)]
+    pub receipt: Option<PathBuf>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DependencyCommand {
+    #[command(name = "verify-policy")]
+    VerifyPolicy,
 }
 
 #[derive(Debug, Subcommand)]

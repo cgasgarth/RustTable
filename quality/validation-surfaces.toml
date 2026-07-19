@@ -248,7 +248,7 @@ parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-02-workflow" }
 prerequisites_by_surface = { pull_request = ["rust-test"] }
 timeout_seconds = 5
-timeout_seconds_by_surface = { pull_request = 20 }
+timeout_seconds_by_surface = { pull_request = 10 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -279,6 +279,7 @@ parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-04-dag" }
 prerequisites_by_surface = { pull_request = ["repository-files"] }
 timeout_seconds = 10
+timeout_seconds_by_surface = { pull_request = 15, main = 30 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -302,6 +303,45 @@ label = "workspace-layout"
 program = "bash"
 args = ["scripts/check-workspace-layout.sh"]
 owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "ecosystem-baseline"
+label = "ecosystem-baseline"
+program = "cargo"
+args = ["xtask", "ecosystem", "verify-baseline"]
+owner = "toolchain"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 10
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "dependency-policy"
+label = "dependency-policy"
+program = "cargo"
+args = ["xtask", "ecosystem", "dependencies", "verify-policy"]
+owner = "dependencies"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 10
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "compiler-baseline-surfaces"
+label = "compiler-baseline-surfaces"
+program = "bash"
+args = ["scripts/check-compiler-baseline-surfaces.sh"]
+owner = "toolchain"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
 timeout_seconds = 5
@@ -371,7 +411,8 @@ program = "cargo"
 args = ["test", "--workspace", "--all-targets", "--all-features", "--release", "--locked"]
 owner = "workspace"
 surfaces = ["main"]
-parallel_group = "release"
+prerequisites = ["release-build"]
+parallel_group = "release-tests"
 timeout_seconds = 600
 network = "none"
 platforms = ["linux"]

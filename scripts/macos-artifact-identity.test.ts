@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   buildMacosArchiveBasename,
   expectedMachOArchitecture,
@@ -8,7 +10,11 @@ import {
   renderMacosSmokeLog,
 } from './macos-artifact-identity';
 
-const rustc = (host: string, release = '1.98.0-beta.4'): string =>
+const rustRelease = /^(?:release) = "([^"]+)"$/m.exec(
+  readFileSync(resolve(import.meta.dir, '../quality/compiler-baseline.toml'), 'utf8'),
+)?.[1];
+if (!rustRelease) throw new Error('compiler baseline release is missing');
+const rustc = (host: string, release = rustRelease): string =>
   `rustc ${release} (fixture)\nbinary: rustc\ncommit-hash: fixture\ncommit-date: fixture\nhost: ${host}\nrelease: ${release}\nLLVM version: 20.1.0\n`;
 
 const validInput = {
@@ -23,7 +29,7 @@ describe('macOS artifact identity', () => {
     ['x86_64-apple-darwin', 'x86_64'],
   ])('maps %s to one expected Mach-O architecture', (host, architecture) => {
     expect(expectedMachOArchitecture(host)).toBe(architecture);
-    expect(parseRustcVersion(rustc(host))).toEqual({ release: '1.98.0-beta.4', host });
+    expect(parseRustcVersion(rustc(host))).toEqual({ release: rustRelease, host });
   });
 
   test('constructs the target-qualified archive and canonical identity', () => {
@@ -33,7 +39,7 @@ describe('macOS artifact identity', () => {
       packageVersion: '0.1.0',
       archiveBasename: 'RustTable-0.1.0-aarch64-apple-darwin-unsigned.zip',
       checksumBasename: 'RustTable-0.1.0-aarch64-apple-darwin-unsigned.zip.sha256',
-      rustRelease: '1.98.0-beta.4',
+      rustRelease,
       rustHost: 'aarch64-apple-darwin',
       expectedMachOArchitecture: 'arm64',
       observedMachOArchitecture: 'arm64',
@@ -44,10 +50,10 @@ describe('macOS artifact identity', () => {
   });
 
   test.each([
-    ['missing release', rustc('aarch64-apple-darwin').replace('release: 1.98.0-beta.4\n', '')],
-    ['duplicate release', `${rustc('aarch64-apple-darwin')}release: 1.98.0-beta.4\n`],
-    ['empty release', rustc('aarch64-apple-darwin').replace('release: 1.98.0-beta.4', 'release:')],
-    ['nightly release', rustc('aarch64-apple-darwin').replace('release: 1.98.0-beta.4', 'release: 1.98.0-beta.4-nightly')],
+    ['missing release', rustc('aarch64-apple-darwin').replace(`release: ${rustRelease}\n`, '')],
+    ['duplicate release', `${rustc('aarch64-apple-darwin')}release: ${rustRelease}\n`],
+    ['empty release', rustc('aarch64-apple-darwin').replace(`release: ${rustRelease}`, 'release:')],
+    ['nightly release', rustc('aarch64-apple-darwin').replace(`release: ${rustRelease}`, `release: ${rustRelease}-nightly`)],
     ['missing host', rustc('aarch64-apple-darwin').replace('host: aarch64-apple-darwin\n', '')],
     ['duplicate host', `${rustc('aarch64-apple-darwin')}host: aarch64-apple-darwin\n`],
     ['unsupported host', rustc('x86_64-unknown-linux-gnu')],
@@ -97,7 +103,7 @@ describe('macOS artifact identity', () => {
       'schema=RUSTTABLE_MACOS_DISTRIBUTION_V2',
       'git_sha=' + 'a'.repeat(40),
       'cargo_package_version=0.1.0',
-      'rust_release=1.98.0-beta.4',
+      `rust_release=${rustRelease}`,
       'rust_host=aarch64-apple-darwin',
       'expected_macho_architecture=arm64',
       'observed_macho_architecture=arm64',

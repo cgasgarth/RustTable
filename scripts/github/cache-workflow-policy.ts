@@ -3,10 +3,10 @@ import { resolve } from 'node:path';
 export const CACHE_ACTION_PIN = '5a3ec84eff668545956fd18022155c47e93e2684';
 export const CACHE_RESTORE_ACTION = `actions/cache/restore@${CACHE_ACTION_PIN}`;
 export const CACHE_WRITER_ACTION = `actions/cache@${CACHE_ACTION_PIN}`;
-export const RUST_TOOLCHAIN_CACHE_KEY = 'beta-2026-07-17';
-export const RUST_MAIN_CACHE_KEY = "rust-main-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}";
-export const RUST_MAIN_WRITER_CACHE_KEY = "rust-main-Linux-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}";
-export const RUST_MAIN_CACHE_PREFIX = 'rust-main-${{ runner.os }}-rust-beta-2026-07-17-';
+export const RUST_BASELINE_CACHE_FRAGMENT = "rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}";
+export const RUST_MAIN_CACHE_KEY = "rust-main-${{ runner.os }}-" + RUST_BASELINE_CACHE_FRAGMENT + "-${{ hashFiles('Cargo.lock', 'package.json') }}";
+export const RUST_MAIN_WRITER_CACHE_KEY = "rust-main-Linux-" + RUST_BASELINE_CACHE_FRAGMENT + "-${{ hashFiles('Cargo.lock', 'package.json') }}";
+export const RUST_MAIN_CACHE_PREFIX = "rust-main-${{ runner.os }}-" + RUST_BASELINE_CACHE_FRAGMENT + "-";
 
 export type CacheWorkflowViolation = {
   workflow: 'pr' | 'main';

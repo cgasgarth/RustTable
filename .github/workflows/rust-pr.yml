@@ -41,9 +41,9 @@ jobs:
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
-          rustup default beta-2026-07-17
-          test "$(rustup show active-toolchain | awk '{print $1}')" = "beta-2026-07-17-x86_64-unknown-linux-gnu"
+          rustup toolchain install "$(bash scripts/rust-baseline.sh channel)" --profile minimal --no-self-update
+          rustup default "$(bash scripts/rust-baseline.sh channel)"
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "$(bash scripts/rust-baseline.sh channel)-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
@@ -57,9 +57,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-main-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
+          key: rust-main-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-${{ hashFiles('Cargo.lock', 'package.json') }}
           restore-keys: |
-            rust-main-${{ runner.os }}-rust-beta-2026-07-17-
+            rust-main-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-
       - name: Fetch locked dependencies for offline validation
         run: cargo fetch --locked
       - name: Run parallel PR validation group

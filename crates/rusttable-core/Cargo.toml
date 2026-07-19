@@ -7,8 +7,8 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-sha2 = { version = "0.10.9", default-features = false }
-unicode-normalization = { package = "unicode-normalization-alignments", version = "=0.1.12" }
+sha2.workspace = true
+unicode-normalization.workspace = true
 
 [lints]
 workspace = true

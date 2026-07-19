@@ -7,12 +7,16 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-# Keep the reviewed Iced 0.15.0-dev development-line revision reproducible.
-iced = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6", default-features = false, features = ["advanced", "sipper", "thread-pool", "tiny-skia", "wgpu", "x11"] }
 rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
 
 [dev-dependencies]
-iced_test = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6" }
+iced_test.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+iced = { workspace = true, features = ["x11"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+iced.workspace = true
 
 [lints]
 workspace = true

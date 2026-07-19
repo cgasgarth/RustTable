@@ -3,6 +3,29 @@ schema = "rusttable.ecosystem-baseline.v1"
 rust_channel = "beta-2026-07-17"
 rust_release = "1.98.0-beta.4"
 edition = "2024"
+rust_version = "1.98"
+compiler_receipt = "quality/compiler-baseline.toml"
+dependency_policy = "quality/dependency-sources.toml"
+workspace_manifest = "Cargo.toml"
+lockfile = "Cargo.lock"
+
+[frameworks.iced]
+source = "https://github.com/iced-rs/iced.git"
+version = "=0.15.0-dev"
+rev = "56b706fcd35aa881baede77a696bbb842773fdc6"
+platform_features = "x11-on-linux-only"
+
+[compiler]
+moving_channel = false
+nightly_product_code = false
+required_components = ["clippy", "rust-docs", "rust-src", "rustfmt", "llvm-tools-preview"]
+
+[dependency_policy]
+direct_versions = "exact"
+shared_versions = "workspace.dependencies"
+git_sources = "immutable-rev-only"
+path_sources = "workspace-local-only"
+lockfile_required = true
 
 [features]
 unstable_product_features = false

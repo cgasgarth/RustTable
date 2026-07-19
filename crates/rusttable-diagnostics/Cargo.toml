@@ -7,7 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-directories = "=6.0.0"
+directories.workspace = true
 
 [lints]
 workspace = true

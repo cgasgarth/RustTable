@@ -7,6 +7,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-kamadak-exif = { version = "0.6.1", default-features = false }
-rusttable-core = { path = "../rusttable-core" }
-rusttable-image = { path = "../rusttable-image" }
+kamadak-exif.workspace = true
+rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
+rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
