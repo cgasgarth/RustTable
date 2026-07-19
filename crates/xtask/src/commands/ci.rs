@@ -1106,6 +1106,7 @@ mod tests {
             "rust-clippy",
             "rust-test",
             "source",
+            "native-boundaries",
             "workflow-policy",
             "repository-files",
             "workspace-dag",

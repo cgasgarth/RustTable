@@ -97,6 +97,31 @@ fn workspace_dag_emits_a_clean_stable_receipt() {
 }
 
 #[test]
+fn native_boundary_verification_emits_an_evidence_receipt() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["repo", "verify-native-boundaries", "--format", "json"])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(value["command"], "repo.verify-native-boundaries");
+    assert_eq!(
+        value["data"]["schema"],
+        "rusttable.native-boundaries-receipt.v1"
+    );
+    assert!(value["data"]["ownership_map_sha256"].as_str().is_some());
+}
+
+#[test]
 fn github_pr_contract_fixture_runs_without_network_access() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

@@ -10,6 +10,9 @@ pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand, runner: &Process
         RepoCommand::Dag(arguments) => super::dag::run(root, runner, arguments.artifact.as_deref()),
         RepoCommand::Files => files::run(root, runner),
         RepoCommand::Workflows => verify_workflows(root),
+        RepoCommand::NativeBoundaries(arguments) => {
+            super::native_boundaries::run(root, runner, arguments.receipt.as_deref())
+        }
     }
 }
 

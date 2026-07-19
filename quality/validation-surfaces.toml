@@ -173,6 +173,21 @@ platforms = ["all"]
 severity = "error"
 
 [[checks]]
+id = "native-boundaries"
+label = "native-boundaries"
+program = "cargo"
+args = ["xtask", "repo", "verify-native-boundaries"]
+owner = "architecture"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+parallel_group_by_surface = { pull_request = "rust-02-boundaries" }
+timeout_seconds = 30
+timeout_seconds_by_surface = { precommit = 15, prepush = 30, pull_request = 30, main = 30 }
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
 id = "repository-policy"
 label = "repository-policy"
 program = "bun"

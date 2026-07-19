@@ -1,0 +1,5 @@
+# Synthetic negative fixtures for issue #168. They are never compiled or
+# linked; the checker excludes only this fixture directory and unit tests feed
+# their contents through the same source scanner used for product files.
+schema = "rusttable.native-boundary-fixtures.v1"
+patterns = ["c-source", "cxx-source", "cmake", "build-script", "ffi", "bindgen", "raw-handle", "reference-path", "unsafe-suppression", "adapter-edge"]
