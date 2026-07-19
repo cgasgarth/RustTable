@@ -130,7 +130,7 @@ impl<'a> GitHubApi<'a> {
             // before JSON parsing.
             max_stdout_bytes: 4 * 1024 * 1024,
             max_stderr_bytes: 16 * 1024,
-            timeout: Duration::from_secs(20),
+            timeout: Some(Duration::from_secs(20)),
         });
         let result = self
             .runner
@@ -175,7 +175,7 @@ impl<'a> GitHubApi<'a> {
         .limits(ProcessLimits {
             max_stdout_bytes: 128 * 1024,
             max_stderr_bytes: 16 * 1024,
-            timeout: Duration::from_secs(20),
+            timeout: Some(Duration::from_secs(20)),
         });
         let result = self
             .runner

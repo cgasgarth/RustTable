@@ -323,24 +323,21 @@ impl ProcessRequest {
             .collect()
     }
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProcessLimits {
     pub max_stdout_bytes: usize,
     pub max_stderr_bytes: usize,
-    pub timeout: Duration,
+    pub timeout: Option<Duration>,
 }
-
 impl Default for ProcessLimits {
     fn default() -> Self {
         Self {
             max_stdout_bytes: DEFAULT_OUTPUT_LIMIT,
             max_stderr_bytes: DEFAULT_OUTPUT_LIMIT,
-            timeout: DEFAULT_TIMEOUT,
+            timeout: Some(DEFAULT_TIMEOUT),
         }
     }
 }
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommandReceipt {
     pub schema_version: u32,
@@ -408,7 +405,7 @@ impl ProcessRunner {
             default_limits: ProcessLimits {
                 max_stdout_bytes: DEFAULT_OUTPUT_LIMIT,
                 max_stderr_bytes: DEFAULT_OUTPUT_LIMIT,
-                timeout: DEFAULT_TIMEOUT,
+                timeout: Some(DEFAULT_TIMEOUT),
             },
         }
     }
@@ -572,7 +569,10 @@ fn wait_for_exit(
     streams: &mut Streams,
     request: &ProcessRequest,
 ) -> Result<(StopReason, Option<i32>, CleanupReceipt), ProcessError> {
-    let deadline = Instant::now() + request.limits.timeout;
+    let deadline = request
+        .limits
+        .timeout
+        .map(|timeout| Instant::now() + timeout);
     let cancellation = request
         .cancellation
         .clone()
@@ -583,7 +583,7 @@ fn wait_for_exit(
         drain_events(receiver, streams);
         if cancellation.load(Ordering::Acquire) {
             reason = StopReason::Cancelled;
-        } else if Instant::now() >= deadline {
+        } else if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             reason = StopReason::TimedOut;
         } else if let Some(status) = child.try_wait().map_err(ProcessError::Wait)? {
             exit_code = status.code();
@@ -641,14 +641,15 @@ fn terminate_owned_process(child: &mut dyn ChildWrapper) -> Result<CleanupReceip
         drain_ms: u128::from(status.code().is_none()),
     })
 }
-
 fn validate_limits(limits: ProcessLimits) -> Result<(), ProcessError> {
-    if limits.max_stdout_bytes == 0 || limits.max_stderr_bytes == 0 || limits.timeout.is_zero() {
+    if limits.max_stdout_bytes == 0
+        || limits.max_stderr_bytes == 0
+        || limits.timeout.is_some_and(|timeout| timeout.is_zero())
+    {
         return Err(ProcessError::InvalidLimits);
     }
     Ok(())
 }
-
 #[derive(Debug)]
 pub enum ProcessError {
     InvalidLimits,
@@ -675,7 +676,9 @@ pub enum ProcessError {
 impl fmt::Display for ProcessError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidLimits => formatter.write_str("process limits must be non-zero"),
+            Self::InvalidLimits => {
+                formatter.write_str("process output limits and configured timeout must be non-zero")
+            }
             Self::Spawn { program, message } => {
                 write!(formatter, "cannot spawn {program}: {message}")
             }
@@ -977,7 +980,6 @@ fn path_aliases(request: &ProcessRequest) -> BTreeMap<String, String> {
             ])
         })
 }
-
 fn ownership_name() -> String {
     #[cfg(unix)]
     {

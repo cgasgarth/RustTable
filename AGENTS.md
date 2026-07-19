@@ -34,9 +34,9 @@
 
 ## Shift-left validation
 
-- On the supported developer workstation, pre-commit has a hard 30-second budget, pre-push has a hard 150-second budget, and pull-request GitHub Actions have a hard 150-second budget (30/150/150).
-- Pre-commit runs independent high-signal Rust checks (locked workspace check, library/all-feature warnings-denied Clippy, and the measured fast workspace library-test slice) in parallel with deterministic repository, source/native, layout, and workflow-policy checks.
-- Pre-push keeps formatting, policy, workspace, library test, and library lint checks local; exhaustive all-target/all-feature Rust checks run only on merge-to-main.
+- Pre-commit is intentionally uncapped and runs the complete local Rust build, all-target/all-feature warnings-denied Clippy, and all-target/all-feature test gate alongside deterministic repository, source/native, layout, and workflow-policy checks. Pre-push has a hard 150-second budget and pull-request GitHub Actions have a hard 150-second budget.
+- Schedule independent checks in parallel, but serialize checks that contend for the shared Cargo target directory; never skip or weaken pre-commit coverage to satisfy a duration target.
+- Pre-push keeps formatting, policy, workspace, library test, and library lint checks local. Release-mode and other merge-only production validation remains on main.
 - Hooks must clean up the complete child-process tree on success, failure, interrupt, and timeout; failures report bounded actionable excerpts and measured duration.
 - Hooks must not use the network, mutate GitHub, require secrets, or run heavyweight packaging, corpus, benchmark, GUI, or merge-only validation.
 - PR validation stays technical and build/test/workflow focused; issue linkage and pull-request body conventions are human/process guidance only and are never blocking GitHub Actions gates.
@@ -55,7 +55,7 @@
 - Open every pull request ready for review by default. Do not open draft pull requests unless the user explicitly requests a draft; if tooling creates a draft, mark it ready before handoff.
 - Keep the required pull-request sections and issue linkage in human review guidance, not in blocking GitHub Actions checks.
 - After required checks pass and required review is present, enable GitHub auto-merge with squash for the pull request (`gh pr merge --auto --squash` or the equivalent UI). Do not enable auto-merge for drafts, failing checks, unresolved conflicts, or unapproved pull requests.
-- Keep pre-commit at or below 60 seconds and pre-push at or below 150 seconds. Treat pre-commit as a strong shift-left gate: include deterministic formatting, targeted static analysis, tests, repository policy, and workflow validation when their combined execution fits its budget. Schedule independent checks in parallel, but serialize checks that contend for shared resources or give them isolated resources; never weaken a check merely to meet a time budget.
+- Treat pre-commit as the strongest shift-left gate: it is uncapped, includes the complete local build/lint/test suite, and must clean up its owned process tree on interruption or failure. Keep pre-push at or below 150 seconds. Schedule independent checks in parallel, but serialize checks that contend for shared resources or give them isolated resources.
 
 For workflow/orchestration follow-up work, reuse a completed worker only when its prior context and isolated worktree are clean, relevant, and materially continue the new issue; otherwise start a fresh worker. Close completed workers before reuse, keep worktrees isolated, and maintain one GitHub issue per PR.
 

@@ -8,7 +8,7 @@ fn bounds_stdout_and_returns_a_stable_receipt() {
             ProcessRequest::new("sh", ["-c", "printf 1234567890"]).limits(ProcessLimits {
                 max_stdout_bytes: 4,
                 max_stderr_bytes: 16,
-                timeout: Duration::from_secs(2),
+                timeout: Some(Duration::from_secs(2)),
             }),
         )
         .expect("process result");
@@ -43,7 +43,7 @@ fn bounded_artifacts_preserve_success_and_failure() {
                     .limits(ProcessLimits {
                         max_stdout_bytes: 8,
                         max_stderr_bytes: 8,
-                        timeout: Duration::from_secs(10),
+                        timeout: Some(Duration::from_secs(10)),
                     })
                     .artifacts(&stdout, &stderr),
             )
@@ -71,7 +71,7 @@ fn empty_artifacts_are_fresh_after_process_completion() {
                 .limits(ProcessLimits {
                     max_stdout_bytes: 16,
                     max_stderr_bytes: 16,
-                    timeout: Duration::from_secs(2),
+                    timeout: Some(Duration::from_secs(2)),
                 })
                 .artifacts(&stdout, &stderr),
         )
@@ -104,7 +104,7 @@ fn timeout_terminates_a_child_tree() {
             ProcessRequest::new("sh", ["-c", "(sleep 30) & wait"]).limits(ProcessLimits {
                 max_stdout_bytes: 64,
                 max_stderr_bytes: 64,
-                timeout: Duration::from_millis(100),
+                timeout: Some(Duration::from_millis(100)),
             }),
         )
         .expect("process result");
@@ -122,7 +122,7 @@ fn quiet_owned_descendant_can_finish_output_drain_after_leader_exits() {
             ProcessRequest::new("sh", ["-c", "(sleep 3) & exit 0"]).limits(ProcessLimits {
                 max_stdout_bytes: 64,
                 max_stderr_bytes: 64,
-                timeout: Duration::from_secs(10),
+                timeout: Some(Duration::from_secs(10)),
             }),
         )
         .expect("short-lived owned descendant drains normally");
@@ -141,7 +141,7 @@ fn request_environment_is_allowlisted_and_receipt_is_redacted() {
                 .limits(ProcessLimits {
                     max_stdout_bytes: 16,
                     max_stderr_bytes: 16,
-                    timeout: Duration::from_secs(2),
+                    timeout: Some(Duration::from_secs(2)),
                 }),
         )
         .expect("process result");
@@ -204,7 +204,7 @@ fn explicit_paths_are_stable_aliases_in_durable_receipts() {
                 .limits(ProcessLimits {
                     max_stdout_bytes: 16,
                     max_stderr_bytes: 16,
-                    timeout: Duration::from_secs(2),
+                    timeout: Some(Duration::from_secs(2)),
                 }),
         )
         .expect("process result");

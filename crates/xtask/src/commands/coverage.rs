@@ -723,7 +723,7 @@ where
                 .limits(ProcessLimits {
                     max_stdout_bytes: 8 * 1024 * 1024,
                     max_stderr_bytes: 256 * 1024,
-                    timeout,
+                    timeout: Some(timeout),
                 }),
         )
         .map_err(|error| error.to_string())?;
