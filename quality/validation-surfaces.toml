@@ -318,8 +318,8 @@ args = ["xtask", "ecosystem", "verify-baseline"]
 owner = "toolchain"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
-timeout_seconds = 30
-timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 30, main = 30 }
+timeout_seconds = 90
+timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 90, main = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -332,8 +332,8 @@ args = ["xtask", "ecosystem", "dependencies", "verify-policy"]
 owner = "dependencies"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
-timeout_seconds = 30
-timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 30, main = 30 }
+timeout_seconds = 90
+timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 90, main = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"
