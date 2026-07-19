@@ -15,6 +15,7 @@ pub struct AllowedEdge {
     target: String,
     required: bool,
     feature_contexts: Vec<String>,
+    tooling_only: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -22,6 +23,7 @@ pub struct PackageReceipt {
     name: String,
     manifest: String,
     role: String,
+    integration_owner: String,
     public_features: Vec<String>,
     feature_sets: Vec<Vec<String>>,
 }
@@ -149,6 +151,7 @@ fn declared_package_receipts(contract: &Contract) -> Vec<PackageReceipt> {
             name: package.name.clone(),
             manifest: package.manifest.clone(),
             role: package.role.clone(),
+            integration_owner: package.integration_owner.clone(),
             public_features: sorted_strings(&package.features),
             feature_sets: sorted_feature_sets(&package.feature_sets),
         })
@@ -168,6 +171,7 @@ fn allowed_edge_receipts(contract: &Contract) -> Vec<AllowedEdge> {
             target: normalized_target(edge.target.as_deref()),
             required: edge.required,
             feature_contexts: sorted_strings(&edge.contexts),
+            tooling_only: edge.tooling_only,
         })
         .collect::<Vec<_>>();
     result.sort();

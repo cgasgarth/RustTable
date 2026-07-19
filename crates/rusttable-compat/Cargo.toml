@@ -1,0 +1,10 @@
+[package]
+name = "rusttable-compat"
+description = "Compatibility boundary contracts for RustTable integrations."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

@@ -3106,6 +3106,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-camera"
+version = "0.1.0"
+
+[[package]]
 name = "rusttable-catalog"
 version = "0.1.0"
 dependencies = [
@@ -3124,6 +3128,14 @@ dependencies = [
  "rusttable-image",
  "serde",
 ]
+
+[[package]]
+name = "rusttable-color"
+version = "0.1.0"
+
+[[package]]
+name = "rusttable-compat"
+version = "0.1.0"
 
 [[package]]
 name = "rusttable-core"
@@ -3147,6 +3159,10 @@ dependencies = [
  "rusttable-core",
  "sha2",
 ]
+
+[[package]]
+name = "rusttable-gpu"
+version = "0.1.0"
 
 [[package]]
 name = "rusttable-image"
@@ -3174,6 +3190,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-masks"
+version = "0.1.0"
+
+[[package]]
 name = "rusttable-metadata"
 version = "0.1.0"
 dependencies = [
@@ -3192,6 +3212,14 @@ dependencies = [
  "sha2",
  "toml",
 ]
+
+[[package]]
+name = "rusttable-pixelpipe"
+version = "0.1.0"
+
+[[package]]
+name = "rusttable-plugin-api"
+version = "0.1.0"
 
 [[package]]
 name = "rusttable-processing"
@@ -3222,6 +3250,10 @@ dependencies = [
  "wasmtime",
  "wasmtime-wasi",
 ]
+
+[[package]]
+name = "rusttable-simd"
+version = "0.1.0"
 
 [[package]]
 name = "rusttable-testkit"

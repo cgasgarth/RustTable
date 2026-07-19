@@ -71,9 +71,9 @@ target_scope = "image import"
 rationale = "No RAW decoder is present in the current graph; adoption requires a new exact receipt."
 
 [graph]
-lock_sha256 = "3796dca7322ad87b22ea8ef0004369a2600bd02fff91f47c1bce1fb88f424059"
-metadata_sha256 = "fd0689ecbb380b4fc99e8bc6ff37ed3e9785354d55069870f6dd9ee84db3c871"
-package_count = 513
+lock_sha256 = "0b9555a189610995eb48aba4c0b178d31a6cf4da6a7fb91dd458a43eb6ea04db"
+metadata_sha256 = "ac0d30afaf7aca176b818358a104e1a6d2345d7371f5fdd294d3e37bb92c5bff"
+package_count = 521
 
 [platforms.linux]
 target = "cfg(target_os = \"linux\")"

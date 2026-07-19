@@ -74,6 +74,7 @@ pub struct DeclaredPackage {
     pub(super) name: String,
     pub(super) manifest: String,
     pub(super) role: String,
+    pub(super) integration_owner: String,
     #[serde(default)]
     pub(super) features: Vec<String>,
     #[serde(default)]
@@ -92,6 +93,8 @@ pub struct DeclaredEdge {
     pub(super) contexts: Vec<String>,
     #[serde(default = "default_required")]
     pub(super) required: bool,
+    #[serde(default)]
+    pub(super) tooling_only: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -217,102 +220,227 @@ pub struct DiscoveredEdge {
 }
 
 impl Contract {
+    pub fn parse(source: &str) -> Result<Self> {
+        let contract: Self = toml::from_str(source)
+            .map_err(|error| format!("{CONTRACT_PATH}: invalid TOML: {error}"))?;
+        contract.validate()?;
+        Ok(contract)
+    }
+
     pub fn validate(&self) -> Result<()> {
-        if self.schema_version != 1 && self.schema_version != 2 {
+        if ![1, 2, 3].contains(&self.schema_version) {
             return Err(format!(
                 "{CONTRACT_PATH}: unsupported schema version {}",
                 self.schema_version
             ));
         }
-        let mut packages = BTreeSet::new();
-        let mut roots = Vec::new();
-        for package in &self.packages {
-            if package.name.is_empty() || !packages.insert(package.name.clone()) {
-                return Err(format!(
-                    "{CONTRACT_PATH}: package names must be unique and non-empty: {}",
-                    package.name
-                ));
-            }
-            if package.manifest.is_empty() {
-                return Err(format!(
-                    "{CONTRACT_PATH}: package {} has no manifest",
-                    package.name
-                ));
-            }
-            if !["product", "tooling", "composition-root"].contains(&package.role.as_str()) {
-                return Err(format!(
-                    "{CONTRACT_PATH}: package {} has invalid role {}",
-                    package.name, package.role
-                ));
-            }
-            if package.role == "composition-root" {
-                roots.push(package.name.clone());
-            }
-            validate_feature_declarations(package)?;
-        }
-        if roots != [self.composition_root.clone()] {
-            return Err(format!(
-                "{CONTRACT_PATH}: composition_root must name the only composition-root package"
-            ));
-        }
-        if !packages.contains(&self.composition_root) {
-            return Err(format!(
-                "{CONTRACT_PATH}: composition_root {} is not declared",
-                self.composition_root
-            ));
-        }
-        for tooling in &self.tooling_packages {
-            if !packages.contains(tooling)
-                || self
-                    .packages
-                    .iter()
-                    .find(|package| &package.name == tooling)
-                    .is_none_or(|package| package.role != "tooling")
-            {
-                return Err(format!(
-                    "{CONTRACT_PATH}: tooling package {tooling} is not declared with role tooling"
-                ));
-            }
-        }
-        let mut edges = BTreeSet::new();
-        for edge in &self.edges {
-            if !packages.contains(&edge.from) || !packages.contains(&edge.to) {
-                return Err(format!(
-                    "{CONTRACT_PATH}: edge {} -> {} references an undeclared package",
-                    edge.from, edge.to
-                ));
-            }
-            if edge.kind.is_empty() || edge.target.as_deref() == Some("") {
-                return Err(format!(
-                    "{CONTRACT_PATH}: edge {} -> {} has an incomplete dependency kind or target",
-                    edge.from, edge.to
-                ));
-            }
-            if !edges.insert(edge_key(edge)) {
-                return Err(format!(
-                    "{CONTRACT_PATH}: duplicate edge {} -> {}",
-                    edge.from, edge.to
-                ));
-            }
-        }
-        let mut external = BTreeSet::new();
-        for rule in &self.external_dependencies {
-            if rule.package.is_empty() || !external.insert(external_key(rule)) {
-                return Err(format!(
-                    "{CONTRACT_PATH}: external dependency rules must have unique package/source/kind/target identities"
-                ));
-            }
-            for role in &rule.source_roles {
-                if !["product", "tooling", "composition-root"].contains(&role.as_str()) {
-                    return Err(format!(
-                        "{CONTRACT_PATH}: external rule {} has invalid source role {}",
-                        rule.package, role
-                    ));
-                }
-            }
-        }
-        Ok(())
+        let packages = validate_packages(self)?;
+        validate_tooling_packages(self, &packages)?;
+        validate_edges(self, &packages)?;
+        validate_external_dependencies(self)
     }
+}
+
+fn validate_packages(contract: &Contract) -> Result<BTreeSet<String>> {
+    let mut packages = BTreeSet::new();
+    let mut roots = Vec::new();
+    for package in &contract.packages {
+        if package.name.is_empty() || !packages.insert(package.name.clone()) {
+            return Err(format!(
+                "{CONTRACT_PATH}: package names must be unique and non-empty: {}",
+                package.name
+            ));
+        }
+        if package.manifest.is_empty() {
+            return Err(format!(
+                "{CONTRACT_PATH}: package {} has no manifest",
+                package.name
+            ));
+        }
+        if !["product", "tooling", "composition-root"].contains(&package.role.as_str()) {
+            return Err(format!(
+                "{CONTRACT_PATH}: package {} has invalid role {}",
+                package.name, package.role
+            ));
+        }
+        if package.role == "composition-root" {
+            roots.push(package.name.clone());
+        }
+        validate_feature_declarations(package)?;
+    }
+    if roots != [contract.composition_root.clone()] {
+        return Err(format!(
+            "{CONTRACT_PATH}: composition_root must name the only composition-root package"
+        ));
+    }
+    if !packages.contains(&contract.composition_root) {
+        return Err(format!(
+            "{CONTRACT_PATH}: composition_root {} is not declared",
+            contract.composition_root
+        ));
+    }
+    for package in &contract.packages {
+        if package.integration_owner.is_empty() || !packages.contains(&package.integration_owner) {
+            return Err(format!(
+                "{CONTRACT_PATH}: package {} has an unknown integration owner {}",
+                package.name, package.integration_owner
+            ));
+        }
+    }
+    Ok(packages)
+}
+
+fn validate_tooling_packages(contract: &Contract, packages: &BTreeSet<String>) -> Result<()> {
+    for tooling in &contract.tooling_packages {
+        if !packages.contains(tooling)
+            || contract
+                .packages
+                .iter()
+                .find(|package| &package.name == tooling)
+                .is_none_or(|package| package.role != "tooling")
+        {
+            return Err(format!(
+                "{CONTRACT_PATH}: tooling package {tooling} is not declared with role tooling"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_edges(contract: &Contract, packages: &BTreeSet<String>) -> Result<()> {
+    let mut edges = BTreeSet::new();
+    let roles = contract
+        .packages
+        .iter()
+        .map(|package| (package.name.as_str(), package.role.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    for edge in &contract.edges {
+        if !packages.contains(&edge.from) || !packages.contains(&edge.to) {
+            return Err(format!(
+                "{CONTRACT_PATH}: edge {} -> {} references an undeclared package",
+                edge.from, edge.to
+            ));
+        }
+        if edge.kind.is_empty() || edge.target.as_deref() == Some("") {
+            return Err(format!(
+                "{CONTRACT_PATH}: edge {} -> {} has an incomplete dependency kind or target",
+                edge.from, edge.to
+            ));
+        }
+        if !edges.insert(edge_key(edge)) {
+            return Err(format!(
+                "{CONTRACT_PATH}: duplicate edge {} -> {}",
+                edge.from, edge.to
+            ));
+        }
+    }
+    validate_acyclic_edges(&contract.packages, &contract.edges)?;
+    for edge in &contract.edges {
+        if edge.tooling_only && roles.get(edge.from.as_str()) != Some(&"tooling") {
+            return Err(format!(
+                "{CONTRACT_PATH}: tooling-only edge {} -> {} must originate in tooling",
+                edge.from, edge.to
+            ));
+        }
+        if roles.get(edge.from.as_str()) == Some(&"product")
+            && roles.get(edge.to.as_str()) == Some(&"composition-root")
+        {
+            return Err(format!(
+                "{CONTRACT_PATH}: product package {} cannot depend on composition root {}",
+                edge.from, edge.to
+            ));
+        }
+        if roles.get(edge.from.as_str()) != Some(&"tooling")
+            && roles.get(edge.to.as_str()) == Some(&"tooling")
+        {
+            return Err(format!(
+                "{CONTRACT_PATH}: package {} cannot depend on tooling package {}",
+                edge.from, edge.to
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_external_dependencies(contract: &Contract) -> Result<()> {
+    let mut external = BTreeSet::new();
+    for rule in &contract.external_dependencies {
+        if rule.package.is_empty() || !external.insert(external_key(rule)) {
+            return Err(format!(
+                "{CONTRACT_PATH}: external dependency rules must have unique package/source/kind/target identities"
+            ));
+        }
+        for role in &rule.source_roles {
+            if !["product", "tooling", "composition-root"].contains(&role.as_str()) {
+                return Err(format!(
+                    "{CONTRACT_PATH}: external rule {} has invalid source role {}",
+                    rule.package, role
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_acyclic_edges(packages: &[DeclaredPackage], edges: &[DeclaredEdge]) -> Result<()> {
+    let mut graph = packages
+        .iter()
+        .map(|package| (package.name.clone(), BTreeSet::new()))
+        .collect::<BTreeMap<_, _>>();
+    for edge in edges {
+        graph
+            .get_mut(&edge.from)
+            .expect("validated edge source")
+            .insert(edge.to.clone());
+    }
+
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    for package in graph.keys() {
+        if let Some(cycle) = visit_cycle(
+            package,
+            &graph,
+            &mut visiting,
+            &mut visited,
+            &mut Vec::new(),
+        ) {
+            return Err(format!(
+                "{CONTRACT_PATH}: dependency graph contains a cycle: {}",
+                cycle.join(" -> ")
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn visit_cycle(
+    node: &str,
+    graph: &BTreeMap<String, BTreeSet<String>>,
+    visiting: &mut BTreeSet<String>,
+    visited: &mut BTreeSet<String>,
+    path: &mut Vec<String>,
+) -> Option<Vec<String>> {
+    if visiting.contains(node) {
+        let start = path.iter().position(|item| item == node).unwrap_or(0);
+        let mut cycle = path[start..].to_vec();
+        cycle.push(node.to_owned());
+        return Some(cycle);
+    }
+    if !visited.insert(node.to_owned()) {
+        return None;
+    }
+    visiting.insert(node.to_owned());
+    path.push(node.to_owned());
+    if let Some(destinations) = graph.get(node) {
+        for destination in destinations {
+            if let Some(cycle) = visit_cycle(destination, graph, visiting, visited, path) {
+                return Some(cycle);
+            }
+        }
+    }
+    path.pop();
+    visiting.remove(node);
+    None
 }
 
 fn validate_feature_declarations(package: &DeclaredPackage) -> Result<()> {
