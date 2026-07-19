@@ -1,0 +1,52 @@
+# Issue-scoped source accounting. The canonical migration map in #555 consumes
+# this record; this file keeps #223 reviewable before that map is accepted.
+schema = 1
+issue = 223
+canonical_repository = "darktable-org/darktable"
+canonical_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+source_map_issue = 555
+rust_owner = "crates/rusttable-image-io"
+classification = "CrossCuttingReplacement"
+dependency_issues = [173, 178, 179, 222, 555]
+
+preserve = [
+  "immutable source identity, observed length/timestamp, and path evidence",
+  "bounded random-access and sequential reads with revalidation before publication",
+  "stable-copy streaming, incremental hashing, cancellation, and typed failure evidence",
+]
+
+redesign = [
+  "replace ambient C file handles and path reads with SourceSnapshot and explicit reader traits",
+  "make symlink/root policy, byte budgets, short reads, identity changes, and cancellation fail closed",
+  "publish stable copies through bounded stream, hash, sync, and atomic rename steps",
+]
+
+excluded = [
+  "codec probing and decoder implementation",
+  "metadata/EXIF parsing, sidecars, discovery, import, relocation, and compatibility policy",
+  "image processing, caches, GPU/OpenCL, and UI",
+]
+
+[[anchor]]
+role = "image-and-film-source-identity"
+paths = ["src/common/image.h", "src/common/image.c", "src/common/film.h", "src/common/film.c", "src/common/import_session.h", "src/common/import_session.c"]
+symbols = ["image/film source path, identity, length, timestamp, and import session observations"]
+rust_targets = ["crates/rusttable-image-io/src/source.rs"]
+
+[[anchor]]
+role = "filesystem-and-crawler-policy"
+paths = ["src/control/crawler.c", "src/common/utility.c", "src/common/grealpath.h", "src/common/file_location.c", "src/common/file_location.h"]
+symbols = ["path resolution, symlink handling, crawler reads, and file-location identity"]
+rust_targets = ["crates/rusttable-image-io/src/source.rs"]
+
+[[anchor]]
+role = "loader-and-metadata-read-boundary"
+paths = ["src/imageio/imageio_common.h", "src/imageio/imageio_module.h", "src/common/exif.cc", "src/common/exif.h"]
+symbols = ["loader input reads and metadata consumers that require stable source bytes"]
+rust_targets = ["crates/rusttable-image-io/src/input.rs", "crates/rusttable-image-io/src/source.rs"]
+
+[[anchor]]
+role = "sidecar-cache-and-import-callers"
+paths = ["src/control/jobs/sidecar_jobs.c", "src/control/jobs/sidecar_jobs.h", "src/common/mipmap_cache.c", "src/common/image_cache.c"]
+symbols = ["source reads before sidecar, cache, import, and publication decisions"]
+rust_targets = ["crates/rusttable-image-io/src/source.rs"]

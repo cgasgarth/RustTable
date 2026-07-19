@@ -3314,6 +3314,7 @@ dependencies = [
  "image",
  "rusttable-image",
  "rusttable-metadata",
+ "sha2",
 ]
 
 [[package]]

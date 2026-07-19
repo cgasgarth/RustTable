@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::path::Path;
 
 use image::{ImageFormat, ImageReader};
@@ -7,6 +6,8 @@ use rusttable_image::{
     DecodeLimits, DecodedImage, ImageDimensions, ImageInput, ImageInputError, ImageProbe,
     InputFormat, UnsupportedImageFeature,
 };
+
+use crate::{SnapshotPolicy, SourceSnapshotError};
 
 pub struct FileImageInput {
     limits: DecodeLimits,
@@ -24,25 +25,15 @@ impl FileImageInput {
     }
 
     fn read_source(&self, path: &Path) -> Result<Vec<u8>, ImageInputError> {
-        let read_limit = self
-            .limits
-            .max_source_bytes()
-            .checked_add(1)
-            .ok_or(ImageInputError::ArithmeticOverflow)?;
-        let mut file = File::open(path).map_err(|error| io_error(&error))?;
-        let mut bytes = Vec::new();
-        file.by_ref()
-            .take(read_limit)
-            .read_to_end(&mut bytes)
-            .map_err(|error| io_error(&error))?;
-        let actual = u64::try_from(bytes.len()).map_err(|_| ImageInputError::ArithmeticOverflow)?;
-        if actual > self.limits.max_source_bytes() {
-            return Err(ImageInputError::SourceTooLarge {
-                limit: self.limits.max_source_bytes(),
-                actual,
-            });
-        }
-        Ok(bytes)
+        let policy = SnapshotPolicy::from_decode_limits(self.limits).map_err(|error| {
+            ImageInputError::Io {
+                message: error.to_string(),
+            }
+        })?;
+        let snapshot = crate::SourceSnapshot::open(path, policy).map_err(snapshot_error)?;
+        snapshot.read_all().map_err(|error| ImageInputError::Io {
+            message: error.to_string(),
+        })
     }
 
     fn probe_bytes_inner(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
@@ -73,6 +64,17 @@ impl FileImageInput {
                 ImageInputError::DecodedBufferInvariant { expected, actual }
             }
         })
+    }
+}
+
+fn snapshot_error(error: SourceSnapshotError) -> ImageInputError {
+    match error {
+        SourceSnapshotError::SourceTooLarge { limit, actual } => {
+            ImageInputError::SourceTooLarge { limit, actual }
+        }
+        error => ImageInputError::Io {
+            message: error.to_string(),
+        },
     }
 }
 
@@ -452,15 +454,5 @@ fn malformed(format: InputFormat, error: &image::ImageError) -> ImageInputError 
     ImageInputError::MalformedInput {
         format,
         message: error.to_string(),
-    }
-}
-
-fn io_error(error: &std::io::Error) -> ImageInputError {
-    if error.kind() == std::io::ErrorKind::OutOfMemory {
-        ImageInputError::AllocationFailure
-    } else {
-        ImageInputError::Io {
-            message: error.to_string(),
-        }
     }
 }
