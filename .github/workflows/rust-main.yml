@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,11 +17,15 @@ jobs:
     name: linux / full validation
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Read canonical Bun pin
         id: bun-pin
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
@@ -32,13 +35,13 @@ jobs:
           rustup default 1.95.0
           test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: ${{ steps.bun-pin.outputs.bun-version }}
       - name: Verify canonical Bun version
         run: test "$(bun --version)" = "${{ steps.bun-pin.outputs.bun-version }}"
       - name: Restore Linux Cargo cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -47,11 +50,16 @@ jobs:
           key: rust-main-Linux-rust-1.95.0-${{ hashFiles('Cargo.lock', 'package.json') }}
       - name: Run Linux full validation
         run: bash scripts/main-ci.sh
+      - name: Verify workflow inventory
+        run: cargo xtask repo verify-workflows
 
   portable-tests:
     name: ${{ matrix.os }} / workspace tests
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}
     strategy:
       fail-fast: false
       matrix:
@@ -60,18 +68,18 @@ jobs:
           - windows-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Set up exact Rust toolchain
-        shell: bash
         run: |
           rustup toolchain install 1.95.0 --profile minimal --no-self-update
           rustup default 1.95.0
           active_toolchain="$(rustup show active-toolchain | awk '{print $1}')"
           [[ "$active_toolchain" == 1.95.0-* ]]
       - name: Restore portable Cargo cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -79,18 +87,21 @@ jobs:
             target
           key: rust-main-${{ matrix.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock') }}
       - name: Run portable workspace tests
-        shell: bash
         run: cargo test --workspace --all-targets --all-features --locked
 
   dependency-security:
     name: linux / dependency security
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Read canonical Bun pin
         id: bun-pin
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
@@ -100,13 +111,13 @@ jobs:
           rustup default 1.95.0
           test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: ${{ steps.bun-pin.outputs.bun-version }}
       - name: Verify canonical Bun version
         run: test "$(bun --version)" = "${{ steps.bun-pin.outputs.bun-version }}"
       - name: Restore security tool cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -126,7 +137,7 @@ jobs:
         run: bash scripts/dependency-security.sh
       - name: Upload dependency security reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rusttable-dependency-security-${{ github.sha }}
           path: target/security/
@@ -136,18 +147,22 @@ jobs:
     name: linux / performance budgets
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Set up exact Rust toolchain
         run: |
           rustup toolchain install 1.95.0 --profile minimal --no-self-update
           rustup default 1.95.0
           test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
       - name: Restore benchmark cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -158,7 +173,7 @@ jobs:
         run: bash scripts/performance-budgets.sh
       - name: Upload performance evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rusttable-performance-${{ github.sha }}
           path: target/performance/results.log
@@ -168,29 +183,32 @@ jobs:
     name: macOS / distribution smoke
     runs-on: macos-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Read canonical Bun pin
         id: bun-pin
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
       - name: Set up exact Rust toolchain
-        shell: bash
         run: |
           rustup toolchain install 1.95.0 --profile minimal --no-self-update
           rustup default 1.95.0
           active_toolchain="$(rustup show active-toolchain | awk '{print $1}')"
           [[ "$active_toolchain" == 1.95.0-* ]]
       - name: Set up exact Bun toolchain
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: ${{ steps.bun-pin.outputs.bun-version }}
       - name: Verify canonical Bun version
         run: test "$(bun --version)" = "${{ steps.bun-pin.outputs.bun-version }}"
       - name: Restore macOS Cargo cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -201,7 +219,7 @@ jobs:
         run: bash scripts/with-validation-budget.sh 600 macos-distribution-smoke bash scripts/macos-distribution-smoke.sh
       - name: Upload distribution evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rusttable-macos-distribution-${{ github.sha }}
           path: target/distribution/
@@ -211,11 +229,15 @@ jobs:
     name: Linux / x86_64 distribution smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
       - name: Read canonical Bun pin
         id: bun-pin
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
@@ -225,13 +247,13 @@ jobs:
           rustup default 1.95.0
           test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: ${{ steps.bun-pin.outputs.bun-version }}
       - name: Verify canonical Bun version
         run: test "$(bun --version)" = "${{ steps.bun-pin.outputs.bun-version }}"
       - name: Restore Linux distribution Cargo cache
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -242,7 +264,7 @@ jobs:
         run: bash scripts/with-validation-budget.sh 600 linux-distribution-smoke bash scripts/linux-distribution-smoke.sh
       - name: Upload Linux distribution evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rusttable-linux-distribution-${{ github.sha }}
           path: target/linux-distribution/

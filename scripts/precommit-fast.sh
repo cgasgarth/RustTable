@@ -68,6 +68,7 @@ run_checks() {
   start_check linux-distribution bash -c 'bun run test:linux-artifact-identity && bun run test:linux-distribution-smoke'
   start_check workspace-rust-version bash -c 'bun run test:workspace-rust-version && bun run check:workspace-rust-version'
   start_check workspace-layout bash -c 'bun run test:workspace-layout && bun run check:workspace-layout'
+  start_check workflow-policy cargo xtask repo verify-workflows
   start_check pr-ci bash scripts/test-pr-ci.sh
   start_check repository-policy bun run test:repository-policy
   start_check cache-workflow-policy bash -c 'bun run test:cache-workflow-policy && bun run check:cache-workflow-policy'

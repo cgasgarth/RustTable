@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,13 +17,17 @@ jobs:
     name: rust-pr / validate
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}
     steps:
-      - name: Start validation timer
-        run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 1
+          persist-credentials: false
+      - name: Start validation timer
+        run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Read canonical Bun pin
         id: bun-pin
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
@@ -34,13 +37,13 @@ jobs:
           rustup default 1.95.0
           test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
           bun-version: ${{ steps.bun-pin.outputs.bun-version }}
       - name: Verify canonical Bun version
         run: test "$(bun --version)" = "${{ steps.bun-pin.outputs.bun-version }}"
       - name: Restore Cargo cache
-        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: |
             ~/.cargo/registry
@@ -49,6 +52,8 @@ jobs:
           key: rust-main-${{ runner.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock', 'package.json') }}
           restore-keys: |
             rust-main-${{ runner.os }}-rust-1.95.0-
+      - name: Verify workflow inventory
+        run: cargo xtask repo verify-workflows
       - name: Run repository PR validation
         run: bash scripts/pr-ci.sh
       - name: Enforce 150-second validation budget
