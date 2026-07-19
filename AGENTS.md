@@ -57,6 +57,8 @@
 
 For workflow/orchestration follow-up work, reuse a completed worker only when its prior context and isolated worktree are clean, relevant, and materially continue the new issue; otherwise start a fresh worker. Close completed workers before reuse, preserve the active two-worker cap unless explicitly relaxed, keep worktrees isolated, and maintain one GitHub issue per PR.
 
+Leave long-running subagents running without routine polling; completion messages should wake/notify the orchestrator; inspect a worker only when its result arrives or an urgent dependency requires it; bounded waits are reserved for urgent dependencies.
+
 ## Documentation and review
 
 - Document architectural decisions, public APIs, safety invariants, and non-obvious performance tradeoffs.
