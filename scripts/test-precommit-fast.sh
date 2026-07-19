@@ -23,6 +23,7 @@ case "${1:-}" in
   check) label=rust-check ;;
   clippy) label=rust-clippy ;;
   test) label=rust-test ;;
+  xtask) label=workflow-policy ;;
   *) label=other ;;
 esac
 case ",${FAKE_FAILS:-}," in
@@ -126,11 +127,11 @@ grep -F 'validation duration:' "$output" >/dev/null
 grep -F 'budget: 60s' "$output" >/dev/null
 
 output="$temporary_directory/failures.log"
-if run_precommit 'rust-check,rust-clippy,source,cache-workflow-policy' "$output"; then
+if run_precommit 'rust-check,rust-clippy,source,cache-workflow-policy,workflow-policy' "$output"; then
   echo 'expected independent pre-commit failures' >&2
   exit 1
 fi
-for label in rust-check rust-clippy source cache-workflow-policy; do
+for label in rust-check rust-clippy source cache-workflow-policy workflow-policy; do
   grep -F "pre-commit check failed: $label" "$output" >/dev/null
   grep -F "fake $label failure" "$output" >/dev/null
 done
