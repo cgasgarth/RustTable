@@ -9,6 +9,7 @@ mod files;
 mod fixtures;
 mod github;
 mod github_reconciliation;
+mod issue_spec;
 mod lua;
 mod parity;
 mod reference;
@@ -35,7 +36,15 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Repo { command } => repo::run(&root, command, &runner),
         Command::Reference { command } => reference::run(&root, command, &runner),
         Command::Ci { command } => ci::run(&root, command, &runner),
-        Command::Github { command } => github::run(&root, command, &runner),
+        Command::Github { command } => match command {
+            crate::cli::GithubCommand::RefreshIssueSpecSnapshot(arguments)
+            | crate::cli::GithubCommand::VerifyIssueSpecs(arguments)
+            | crate::cli::GithubCommand::ReadyIssues(arguments)
+            | crate::cli::GithubCommand::ApplyIssueSpecPlan(arguments) => {
+                issue_spec::run(&root, command, arguments, &runner)
+            }
+            _ => github::run(&root, command, &runner),
+        },
         Command::LuaConformance(arguments) => lua::run(&root, arguments),
         Command::Ecosystem { command } => match command {
             EcosystemCommand::VerifyBaseline(arguments) => {

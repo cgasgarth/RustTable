@@ -272,6 +272,14 @@ pub enum GithubCommand {
     VerifyPrContract(VerifyPrContractArgs),
     #[command(name = "verify-queue", alias = "queue")]
     VerifyQueue(VerifyQueueArgs),
+    #[command(name = "refresh-issue-spec-snapshot")]
+    RefreshIssueSpecSnapshot(IssueSpecArgs),
+    #[command(name = "verify-issue-specs")]
+    VerifyIssueSpecs(IssueSpecArgs),
+    #[command(name = "ready-issues")]
+    ReadyIssues(IssueSpecArgs),
+    #[command(name = "apply-issue-spec-plan")]
+    ApplyIssueSpecPlan(IssueSpecArgs),
 }
 
 #[derive(Debug, Args)]
@@ -298,6 +306,18 @@ pub struct TemplateMatrixArgs {
 pub struct VerifyQueueArgs {
     #[arg(long)]
     pub api_fixture: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct IssueSpecArgs {
+    #[arg(long, default_value = "architecture/issue-spec-snapshot.json")]
+    pub snapshot: PathBuf,
+    #[arg(long, default_value = "quality/issue-spec-policy.toml")]
+    pub policy: PathBuf,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
+    #[arg(long)]
+    pub reviewed_plan: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
