@@ -207,6 +207,10 @@ from = "xtask"
 to = "rusttable-parity"
 
 [[edges]]
+from = "rusttable-parity"
+to = "rusttable-testkit"
+
+[[edges]]
 from = "xtask"
 to = "rusttable-testkit"
 

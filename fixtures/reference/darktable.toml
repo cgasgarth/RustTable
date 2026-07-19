@@ -1,4 +1,21 @@
+schema_version = 1
 version = "5.7.0"
-commit = "0eba994d638a4ae0c4e5fccd185600cf6f2118db"
+commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+source_path = "local-source"
+executable_path = "darktable-cli"
 data_dir = "data"
+executable_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+data_dir_sha256 = "9a9f5dbb9a05fcdb3e1b66a350eb44d6173c38fd85a041e43ce48bac11199b8b"
+opencl_bundle_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+target = "x86_64-unknown-linux-gnu"
+architecture = "x86_64"
+build_options_hash = "unprovisioned-local-build"
+compiler = "unprovisioned-local-compiler"
+native_library_identity = "unprovisioned-local-native-libraries"
 normalized_log_ruleset = 1
+
+[cli]
+name = "darktable-cli"
+reference_hash = "darktable-cli-man-v1"
+required_flags = ["--width", "--height", "--core"]
+core_flags = ["--configdir", "--cachedir", "--datadir", "--library", "--disable-opencl", "--icc-type", "--icc"]

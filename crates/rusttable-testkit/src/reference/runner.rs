@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use sha2::{Digest, Sha256};
 
 use super::identity::{ReferenceIdentity, isolation_arguments};
+use super::resolution::verify_reference_unchanged;
 use super::schema::{
     CancellationToken, ExecutionMode, ExitStatus, ReferenceLimits, ReferenceReceipt,
     ReferenceRequest, ReferenceStatus,
@@ -86,6 +87,8 @@ impl ReferenceRunner {
         cancellation: &CancellationToken,
     ) -> Result<ReferenceRun, ReferenceError> {
         validate_request(request, &self.limits)?;
+        verify_reference_unchanged(&self.identity)
+            .map_err(|error| ReferenceError::ReferenceChanged(error.to_string()))?;
         let environment = TempEnvironment::new()?;
         let output_path = environment
             .output
@@ -183,6 +186,8 @@ impl ReferenceRunner {
                 });
             }
         };
+        verify_reference_unchanged(&self.identity)
+            .map_err(|error| ReferenceError::ReferenceChanged(error.to_string()))?;
         if matches!(
             final_status,
             ReferenceStatus::Completed(ExitStatus { success: true, .. })
@@ -262,7 +267,7 @@ fn command_arguments(
     environment: &TempEnvironment,
     output: &Path,
 ) -> Result<Vec<String>, ReferenceError> {
-    let mut args = isolation_arguments(
+    let isolation = isolation_arguments(
         &identity.required_flags,
         &identity.data_dir,
         &environment.config,
@@ -270,32 +275,54 @@ fn command_arguments(
         &environment.library,
     )
     .map_err(|error| ReferenceError::UnsupportedFlag(error.to_string()))?;
-    for pair in args.as_chunks_mut::<2>().0 {
-        if pair[0] == "--width" {
-            pair[1] = request.dimensions.width.to_string();
+    let mut direct = vec![
+        "--width".to_owned(),
+        request.dimensions.width.to_string(),
+        "--height".to_owned(),
+        request.dimensions.height.to_string(),
+    ];
+    let mut core = vec![identity.cli.core_prefix.clone()];
+    let mut index = 0;
+    while index < isolation.len() {
+        let flag = &isolation[index];
+        let value = isolation
+            .get(index + 1)
+            .filter(|value| !value.starts_with('-'));
+        let include = request.execution_mode == ExecutionMode::Cpu || flag != "--disable-opencl";
+        if include {
+            match flag.as_str() {
+                "--width" | "--height" | "--out-ext" => {
+                    direct.push(flag.clone());
+                    if value.is_some() {
+                        direct.push(match flag.as_str() {
+                            "--width" => request.dimensions.width.to_string(),
+                            "--height" => request.dimensions.height.to_string(),
+                            _ => request.output_format.cli_name().to_owned(),
+                        });
+                    }
+                }
+                "--icc-type" | "--icc" => {
+                    core.push(flag.clone());
+                    core.push(request.output_profile.cli_name().to_owned());
+                }
+                _ => {
+                    core.push(flag.clone());
+                    if let Some(value) = value {
+                        core.push(value.clone());
+                    }
+                }
+            }
         }
-        if pair[0] == "--height" {
-            pair[1] = request.dimensions.height.to_string();
-        }
-        if pair[0] == "--icc-type" {
-            request.output_profile.cli_name().clone_into(&mut pair[1]);
-        }
-        if pair[0] == "--icc" {
-            request.output_profile.cli_name().clone_into(&mut pair[1]);
-        }
-        if pair[0] == "--out-ext" {
-            request.output_format.cli_name().clone_into(&mut pair[1]);
-        }
+        index += if value.is_some() { 2 } else { 1 };
     }
-    if request.execution_mode == ExecutionMode::Gpu {
-        args.retain(|arg| arg != "--disable-opencl");
-    }
-    args.extend([
-        request.source_path.display().to_string(),
-        output.display().to_string(),
-    ]);
+    let mut args = vec![request.source_path.display().to_string()];
     if let Some(xmp) = &request.xmp_path {
         args.push(xmp.display().to_string());
+    }
+    args.push(output.display().to_string());
+    args.extend(direct);
+    if core.len() > 1 {
+        args.extend(core);
     }
     Ok(args)
 }
@@ -526,8 +553,8 @@ fn receipt(
 ) -> ReferenceReceipt {
     ReferenceReceipt {
         source_fixture_id: request.source_fixture_id.clone(),
-        xmp_path: request.xmp_path.clone(),
-        config_path: request.config_path.clone(),
+        xmp_path: logical_path_alias(request.xmp_path.as_deref(), "xmp"),
+        config_path: logical_path_alias(request.config_path.as_deref(), "config"),
         output_format: request.output_format,
         output_profile: request.output_profile,
         dimensions: request.dimensions,
@@ -540,6 +567,11 @@ fn receipt(
         normalized_log_ruleset: identity.normalized_log_ruleset,
         execution_mode: request.execution_mode,
     }
+}
+
+fn logical_path_alias(path: Option<&Path>, kind: &str) -> Option<String> {
+    path.and_then(Path::file_name)
+        .map(|name| format!("{kind}/{}", name.to_string_lossy()))
 }
 
 fn normalize_logs(bytes: &[u8], ruleset: u32) -> Vec<u8> {
@@ -634,6 +666,7 @@ pub enum ReferenceError {
     UnsupportedFlag(String),
     StreamLimit(String, u64),
     OutputLimit(u64),
+    ReferenceChanged(String),
 }
 
 impl fmt::Display for ReferenceError {
@@ -676,6 +709,9 @@ impl fmt::Display for ReferenceError {
             }
             Self::OutputLimit(limit) => {
                 write!(formatter, "reference output exceeded {limit} bytes")
+            }
+            Self::ReferenceChanged(message) => {
+                write!(formatter, "reference input changed during run: {message}")
             }
         }
     }

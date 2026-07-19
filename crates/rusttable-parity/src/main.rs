@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use rusttable_parity::{
-    render_manifest, render_operation_manifest, render_receipt, scan_darktable, scan_operations,
+    render_manifest, render_operation_manifest, render_receipt, scan_darktable_with_identity,
+    scan_operations,
 };
+use rusttable_testkit::reference::{ReferenceIdentityOverrides, resolve_reference};
 
 fn main() -> ExitCode {
     let args = env::args().skip(1).collect::<Vec<_>>();
@@ -25,9 +27,12 @@ fn run(args: &[String]) -> Result<(), String> {
         return run_operations(args);
     }
     if command != Some("scan-darktable") {
-        return Err("usage: rusttable-parity scan-darktable|scan-operations --source <path> [--overrides <path>] [--output <path>] [--receipt <path>]".to_owned());
+        return Err("usage: rusttable-parity scan-darktable [--identity <path>] [--source <path> --executable <path> --data-dir <path>] [--overrides <path>] [--output <path>]".to_owned());
     }
-    let source = argument(args, "--source")?;
+    let identity = argument_or(args, "--identity", "fixtures/reference/darktable.toml");
+    let source = optional_argument(args, "--source");
+    let executable = optional_argument(args, "--executable");
+    let data_dir = optional_argument(args, "--data-dir");
     let overrides = argument_or(
         args,
         "--overrides",
@@ -39,7 +44,16 @@ fn run(args: &[String]) -> Result<(), String> {
         "--receipt",
         "architecture/darktable-capabilities.receipt.toml",
     );
-    let manifest = scan_darktable(&PathBuf::from(source), &PathBuf::from(overrides))
+    let identity = resolve_reference(
+        PathBuf::from(identity),
+        &ReferenceIdentityOverrides {
+            source_path: source.map(PathBuf::from),
+            executable_path: executable.map(PathBuf::from),
+            data_dir: data_dir.map(PathBuf::from),
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    let manifest = scan_darktable_with_identity(&identity, &PathBuf::from(overrides))
         .map_err(|error| error.to_string())?;
     std::fs::write(
         &output,
@@ -86,4 +100,10 @@ fn argument_or(args: &[String], name: &str, default: &str) -> String {
     args.windows(2)
         .find(|pair| pair[0] == name)
         .map_or_else(|| default.to_owned(), |pair| pair[1].clone())
+}
+
+fn optional_argument(args: &[String], name: &str) -> Option<String> {
+    args.windows(2)
+        .find(|pair| pair[0] == name)
+        .map(|pair| pair[1].clone())
 }

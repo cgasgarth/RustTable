@@ -3,15 +3,25 @@ use std::fs;
 use super::{Result, report};
 use crate::cli::ParityCommand;
 use crate::root::RepositoryRoot;
+use rusttable_parity::scan_darktable_with_identity;
+use rusttable_testkit::reference::{ReferenceIdentityOverrides, resolve_reference};
 
 pub(super) fn run(root: &RepositoryRoot, command: &ParityCommand) -> Result {
     match command {
         ParityCommand::ScanDarktable(arguments) => {
-            let source = root.join(&arguments.source);
             let overrides = root.join(&arguments.overrides);
             let output = root.join(&arguments.output);
             let receipt = root.join(&arguments.receipt);
-            let manifest = rusttable_parity::scan_darktable(&source, &overrides)
+            let identity = resolve_reference(
+                root.join(&arguments.identity),
+                &ReferenceIdentityOverrides {
+                    source_path: arguments.source.as_ref().map(|path| root.join(path)),
+                    executable_path: arguments.executable.as_ref().map(|path| root.join(path)),
+                    data_dir: arguments.data_dir.as_ref().map(|path| root.join(path)),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+            let manifest = scan_darktable_with_identity(&identity, &overrides)
                 .map_err(|error| error.to_string())?;
             let rendered =
                 rusttable_parity::render_manifest(&manifest).map_err(|error| error.to_string())?;

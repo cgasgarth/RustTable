@@ -7,9 +7,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusttable_testkit::reference::{
-    CancellationToken, CapabilityProbe, ColorProfile, Dimensions, ExecutionMode, OutputFormat,
-    ReferenceError, ReferenceIdentity, ReferenceLimits, ReferencePin, ReferenceRequest,
-    ReferenceRunner, ReferenceStatus,
+    CancellationToken, CapabilityProbe, CliReference, ColorProfile, Dimensions, ExecutionMode,
+    OutputFormat, ReferenceError, ReferenceIdentity, ReferenceLimits, ReferencePin,
+    ReferenceRequest, ReferenceRunner, ReferenceStatus,
 };
 
 static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
@@ -71,10 +71,20 @@ esac
 
 fn identity(executable: PathBuf, data_dir: PathBuf) -> ReferenceIdentity {
     ReferenceIdentity {
+        source_dir: PathBuf::new(),
         executable,
         version: VERSION.to_owned(),
         commit: COMMIT.to_owned(),
         data_dir,
+        executable_sha256: String::new(),
+        data_dir_sha256: String::new(),
+        opencl_bundle_sha256: String::new(),
+        target: String::new(),
+        architecture: String::new(),
+        build_options_hash: String::new(),
+        compiler: String::new(),
+        native_library_identity: String::new(),
+        cli: CliReference::default(),
         required_flags: [
             "--configdir",
             "--cachedir",
@@ -158,7 +168,10 @@ fn success_receipt_is_repeatable_and_keeps_raw_logs() {
     let data = directory.path().join("data");
     fs::create_dir(&data).expect("data");
     let runner = ReferenceRunner::new(identity(executable, data), ReferenceLimits::default());
-    let request = request(&source, 3000);
+    let mut request = request(&source, 3000);
+    let xmp = directory.path().join("source.raw.xmp");
+    fs::write(&xmp, b"xmp").expect("xmp");
+    request.xmp_path = Some(xmp);
     let first = runner
         .run_with_artifacts(&request, &CancellationToken::new())
         .expect("first run");
@@ -176,6 +189,10 @@ fn success_receipt_is_repeatable_and_keeps_raw_logs() {
     assert_eq!(
         first.receipt.reference_identity.target_triple,
         "aarch64-apple-darwin"
+    );
+    assert_eq!(
+        first.receipt.xmp_path.as_deref(),
+        Some("xmp/source.raw.xmp")
     );
     assert_eq!(
         first.receipt.status,
