@@ -91,6 +91,11 @@ fn identity(executable: PathBuf, data_dir: PathBuf) -> ReferenceIdentity {
         .map(|flag| (*flag).to_owned())
         .collect(),
         normalized_log_ruleset: 1,
+        executable_hash: "fixture-executable".to_owned(),
+        data_bundle_hash: "fixture-data".to_owned(),
+        target_triple: "aarch64-apple-darwin".to_owned(),
+        c_abi_model: "aarch64-apple-darwin".to_owned(),
+        build_option_hash: "fixture-options".to_owned(),
     }
 }
 
@@ -160,6 +165,18 @@ fn success_receipt_is_repeatable_and_keeps_raw_logs() {
     let second = runner.run(&request).expect("second run");
     assert_eq!(first.receipt, second);
     assert_eq!(first.artifacts.output, b"fake-image\n");
+    assert_eq!(
+        first.receipt.reference_identity.executable_hash,
+        "fixture-executable"
+    );
+    assert_eq!(
+        first.receipt.reference_identity.data_bundle_hash,
+        "fixture-data"
+    );
+    assert_eq!(
+        first.receipt.reference_identity.target_triple,
+        "aarch64-apple-darwin"
+    );
     assert_eq!(
         first.receipt.status,
         ReferenceStatus::Completed(rusttable_testkit::reference::ExitStatus {

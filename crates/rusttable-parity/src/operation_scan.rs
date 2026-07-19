@@ -1,12 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
-
-use crate::mapping::iop_issue;
 use crate::operation_model::{
     HistoryCompatibility, Operation, OperationManifest, OperationOverride, OperationOverrideFile,
-    ParameterMigration, ParameterVersion,
+    ReferenceIdentity,
 };
 use crate::operation_validate::validate_operation_manifest;
 use crate::scan::ScanError;
@@ -36,6 +33,26 @@ pub fn scan_operations_with_overrides(
     if !source.is_dir() {
         return Err(ScanError::MissingSurface {
             path: source.display().to_string(),
+        });
+    }
+    let compile_commands = source.join("compile_commands.json");
+    if !compile_commands.is_file() {
+        return Err(ScanError::OperationExtraction {
+            operation: "reference".to_owned(),
+            message: "compile_commands.json is required for AST-backed extraction".to_owned(),
+        });
+    }
+    let commands = fs::read_to_string(&compile_commands).map_err(|error| ScanError::Io {
+        path: compile_commands.display().to_string(),
+        message: error.to_string(),
+    })?;
+    if !matches!(
+        serde_json::from_str::<serde_json::Value>(&commands),
+        Ok(serde_json::Value::Array(_))
+    ) {
+        return Err(ScanError::OperationExtraction {
+            operation: "reference".to_owned(),
+            message: "compile_commands.json must contain a JSON array".to_owned(),
         });
     }
     let entries = parse_overrides(overrides)?;
@@ -69,12 +86,22 @@ pub fn scan_operations_with_overrides(
         if let Some(override_entry) = entries.iter().find(|entry| entry.name == *name) {
             apply_override(&mut operation, override_entry);
         }
+        if let Some(program) = operation
+            .opencl_programs
+            .iter()
+            .find(|program| !programs.contains(program))
+        {
+            return Err(ScanError::UnknownOpenclProgram {
+                operation: operation.name,
+                reference: program.clone(),
+            });
+        }
         operations.push(operation);
     }
     operations.sort_by(|left, right| left.name.cmp(&right.name));
     let manifest = OperationManifest {
-        schema_version: 1,
-        source_commit: reference_commit(source),
+        schema_version: 2,
+        reference: reference_identity(source),
         history: history_contract(),
         operations,
     };
@@ -89,10 +116,7 @@ fn extract_operation(
     content: &str,
     programs: &[String],
 ) -> Operation {
-    let (module_version, parameter_type) =
-        introspection(content).unwrap_or((1, "opaque".to_owned()));
-    let versions = parameter_versions(content, name, module_version, &parameter_type);
-    let migrations = migrations(content, name, module_version, &versions);
+    let (module_version, _) = introspection(content).unwrap_or((1, "opaque".to_owned()));
     let opencl_programs = opencl_programs(content, programs);
     let tolerance_class = if opencl_programs.is_empty() {
         "Pointwise".to_owned()
@@ -100,13 +124,12 @@ fn extract_operation(
         "LegacyGpu".to_owned()
     };
     let opencl_kernels = opencl_kernels(content);
-    let issue = iop_issue(name).first().copied().unwrap_or(395);
     Operation {
         name: name.to_owned(),
         reference_path: relative.to_owned(),
         module_version,
-        parameter_size: versions.last().map_or(0, |version| version.byte_size),
-        parameter_layout_hash: layout_hash(content, parameter_type.as_str()),
+        parameter_size: 0,
+        parameter_layout_hash: String::new(),
         default_enabled: content.contains("DEFAULT_VISIBLE"),
         default_order: order,
         group: extract_group(content),
@@ -128,10 +151,11 @@ fn extract_operation(
         },
         opencl_programs,
         opencl_kernels,
-        parameter_versions: versions,
-        migrations,
+        parameter_versions: Vec::new(),
+        migrations: Vec::new(),
         preset_sources: preset_sources(content),
-        owning_issue_number: issue,
+        owning_issue_number: 0,
+        evidence: Vec::new(),
         tolerance_class,
     }
 }
@@ -145,80 +169,6 @@ fn introspection(content: &str) -> Option<(u32, String)> {
     let version = parts.next()?.parse().ok()?;
     let ty = parts.next()?.to_owned();
     Some((version, ty))
-}
-
-fn parameter_versions(
-    content: &str,
-    name: &str,
-    current: u32,
-    parameter_type: &str,
-) -> Vec<ParameterVersion> {
-    let mut versions = (1..=current)
-        .map(|version| ParameterVersion {
-            version,
-            byte_size: 0,
-            layout_hash: layout_hash(content, &format!("{parameter_type}:{version}")),
-            decoder: "opaque".to_owned(),
-            opaque_blocking: true,
-            fixture_id: format!("operation.{name}.params.v{version}"),
-        })
-        .collect::<Vec<_>>();
-    if versions.is_empty() {
-        versions.push(ParameterVersion {
-            version: 1,
-            byte_size: 0,
-            layout_hash: layout_hash(content, parameter_type),
-            decoder: "opaque".to_owned(),
-            opaque_blocking: true,
-            fixture_id: format!("operation.{name}.params.v1"),
-        });
-    }
-    versions
-}
-
-fn migrations(
-    content: &str,
-    name: &str,
-    current: u32,
-    versions: &[ParameterVersion],
-) -> Vec<ParameterMigration> {
-    let mut result = Vec::new();
-    for from in 1..current {
-        let strategy = if content.contains(&format!("old_version == {from}")) {
-            "reference-legacy-params"
-        } else {
-            "opaque-blocking"
-        };
-        result.push(ParameterMigration {
-            from_version: from,
-            to_version: from + 1,
-            strategy: strategy.to_owned(),
-            fixture_id: format!("operation.{name}.migration.v{from}-v{}", from + 1),
-        });
-    }
-    if versions.len() == 1 && content.contains("legacy_params") {
-        result.push(ParameterMigration {
-            from_version: 0,
-            to_version: current,
-            strategy: "reference-legacy-params".to_owned(),
-            fixture_id: format!("operation.{name}.migration.legacy-v{current}"),
-        });
-    }
-    result
-}
-
-fn layout_hash(content: &str, parameter_type: &str) -> String {
-    let normalized = content
-        .lines()
-        .filter(|line| !line.trim_start().starts_with('#'))
-        .map(str::trim)
-        .collect::<Vec<_>>()
-        .join(" ");
-    let mut hasher = Sha256::new();
-    hasher.update(parameter_type.as_bytes());
-    hasher.update([0]);
-    hasher.update(normalized.as_bytes());
-    format!("{:x}", hasher.finalize())
 }
 
 fn extract_group(content: &str) -> String {
@@ -279,20 +229,7 @@ fn roi_behavior(content: &str) -> String {
 
 fn opencl_programs(content: &str, programs: &[String]) -> Vec<String> {
     let mut result = Vec::new();
-    for line in content.lines() {
-        if let Some((_, comment)) = line.split_once("//")
-            && let Some(file) = comment
-                .split_whitespace()
-                .map(|token| token.trim_matches(|character| matches!(character, ',' | ';' | ')')))
-                .find(|token| {
-                    Path::new(token)
-                        .extension()
-                        .is_some_and(|extension| extension.eq_ignore_ascii_case("cl"))
-                })
-        {
-            result.push(file.trim_end_matches(".cl").to_owned());
-        }
-    }
+    let content = without_comments(content);
     for line in content.lines() {
         let Some(start) = line.find("const int program") else {
             continue;
@@ -350,6 +287,8 @@ fn opencl_registry(source: &Path) -> Result<Vec<String>, ScanError> {
 
 fn opencl_kernels(content: &str) -> Vec<String> {
     let mut result = Vec::new();
+    let clean = without_comments(content);
+    let content = clean.as_str();
     for marker in ["dt_opencl_create_kernel"] {
         let mut rest = content;
         while let Some(offset) = rest.find(marker) {
@@ -369,12 +308,42 @@ fn opencl_kernels(content: &str) -> Vec<String> {
 }
 
 fn preset_sources(content: &str) -> Vec<String> {
-    content
+    without_comments(content)
         .lines()
-        .filter(|line| line.contains("preset") || line.contains("PRESET"))
+        .filter(|line| line.contains("dt_gui_presets_add") || line.contains("BUILTIN_PRESET"))
         .map(|line| line.trim().to_owned())
-        .take(8)
         .collect()
+}
+
+fn without_comments(content: &str) -> String {
+    let mut result = String::with_capacity(content.len());
+    let mut block_comment = false;
+    for line in content.lines() {
+        let mut index = 0;
+        while index < line.len() {
+            let remaining = &line[index..];
+            if block_comment {
+                if let Some(end) = remaining.find("*/") {
+                    block_comment = false;
+                    index += end + 2;
+                } else {
+                    break;
+                }
+            } else if let Some(start) = remaining.find("//") {
+                result.push_str(&remaining[..start]);
+                break;
+            } else if let Some(start) = remaining.find("/*") {
+                result.push_str(&remaining[..start]);
+                block_comment = true;
+                index += start + 2;
+            } else {
+                result.push_str(remaining);
+                break;
+            }
+        }
+        result.push('\n');
+    }
+    result
 }
 
 fn history_contract() -> HistoryCompatibility {
@@ -423,12 +392,6 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     if let Some(value) = &entry.parameter_layout_hash {
         operation.parameter_layout_hash.clone_from(value);
     }
-    if let Some(value) = entry.parameter_decoder.as_ref()
-        && let Some(version) = operation.parameter_versions.last_mut()
-    {
-        version.decoder.clone_from(value);
-        version.opaque_blocking = value == "opaque";
-    }
     if let Some(value) = entry.default_enabled {
         operation.default_enabled = value;
     }
@@ -471,14 +434,23 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     if let Some(value) = &entry.parameter_versions {
         operation.parameter_versions.clone_from(value);
     }
+    if let Some(value) = entry.parameter_decoder.as_ref()
+        && let Some(version) = operation.parameter_versions.last_mut()
+    {
+        version.decoder.clone_from(value);
+        version.opaque_blocking = value == "opaque";
+    }
     if let Some(value) = &entry.migrations {
         operation.migrations.clone_from(value);
     }
     if let Some(value) = &entry.preset_sources {
         operation.preset_sources.clone_from(value);
     }
-    if let Some(value) = entry.owning_issue_number {
-        operation.owning_issue_number = value;
+    if let Some(value) = &entry.owning_issue_number {
+        operation.owning_issue_number = *value;
+    }
+    if let Some(value) = &entry.evidence {
+        operation.evidence.clone_from(value);
     }
     if let Some(value) = &entry.tolerance_class {
         operation.tolerance_class.clone_from(value);
@@ -523,4 +495,16 @@ fn reference_commit(source: &Path) -> String {
         .filter(|output| output.status.success())
         .and_then(|output| String::from_utf8(output.stdout).ok())
         .map_or_else(|| "fixture".to_owned(), |value| value.trim().to_owned())
+}
+
+fn reference_identity(source: &Path) -> ReferenceIdentity {
+    ReferenceIdentity {
+        source_commit: reference_commit(source),
+        build_version: "darktable-reference".to_owned(),
+        executable_hash: "not-built".to_owned(),
+        data_bundle_hash: "not-built".to_owned(),
+        target_triple: "aarch64-apple-darwin".to_owned(),
+        c_abi_model: "aarch64-apple-darwin".to_owned(),
+        build_option_hash: "not-built".to_owned(),
+    }
 }
