@@ -1147,7 +1147,7 @@ mod tests {
             if surface == "pull_request" {
                 assert!(!rust_check.on(surface));
                 assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-                assert_eq!(rust_test.timeout_for(surface), 110);
+                assert_eq!(rust_test.timeout_for(surface), 150);
                 assert!(rust_test.prerequisites_for(surface).is_empty());
                 continue;
             }
