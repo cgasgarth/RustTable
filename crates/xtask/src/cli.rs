@@ -75,6 +75,113 @@ pub enum Command {
     TemplateMatrix(TemplateMatrixArgs),
     #[command(name = "ui-shell")]
     UiShell(UiShellArgs),
+    Migration {
+        #[command(subcommand)]
+        command: MigrationCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MigrationCommand {
+    #[command(name = "source-map")]
+    SourceMap {
+        #[command(subcommand)]
+        command: SourceMapCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SourceMapCommand {
+    Generate(SourceMapGenerateArgs),
+    Verify(SourceMapVerifyArgs),
+    #[command(name = "audit-issues")]
+    AuditIssues(SourceMapAuditArgs),
+    Drift(SourceMapDriftArgs),
+    Apply(SourceMapApplyArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SourceMapGenerateArgs {
+    #[arg(long)]
+    pub reference: PathBuf,
+    #[arg(long, default_value = "cfe57f3bbf5269bfacf31e832267279caa6938ad")]
+    pub commit: String,
+    #[arg(long, default_value = "architecture/darktable-source-map.toml")]
+    pub map: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-source-inventory.json")]
+    pub inventory: PathBuf,
+    #[arg(long, default_value = "architecture/issue-spec-snapshot.json")]
+    pub issue_snapshot: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-capabilities.toml")]
+    pub capabilities: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-issue-index.toml")]
+    pub issue_index: PathBuf,
+    #[arg(long, default_value = "target/validation/source-map-plan.json")]
+    pub plan: PathBuf,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct SourceMapVerifyArgs {
+    #[arg(long, default_value = "architecture/darktable-source-map.toml")]
+    pub map: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-source-inventory.json")]
+    pub inventory: PathBuf,
+    #[arg(long, default_value = "architecture/issue-spec-snapshot.json")]
+    pub issue_snapshot: PathBuf,
+    #[arg(long)]
+    pub issue: Option<u64>,
+    #[arg(long)]
+    pub reference: Option<PathBuf>,
+    #[arg(long)]
+    pub commit: Option<String>,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct SourceMapAuditArgs {
+    #[arg(long, default_value_t = 158)]
+    pub parent: u64,
+    #[arg(long, default_value = "architecture/darktable-source-map.toml")]
+    pub map: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-source-inventory.json")]
+    pub inventory: PathBuf,
+    #[arg(long, default_value = "architecture/issue-spec-snapshot.json")]
+    pub issue_snapshot: PathBuf,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
+    #[arg(long, default_value = "architecture/source-map-migration-debt.json")]
+    pub debt_report: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct SourceMapDriftArgs {
+    #[arg(long)]
+    pub reference: PathBuf,
+    #[arg(long)]
+    pub candidate_commit: String,
+    #[arg(long, default_value = "architecture/darktable-source-inventory.json")]
+    pub inventory: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-source-map.toml")]
+    pub map: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct SourceMapApplyArgs {
+    #[arg(long)]
+    pub plan: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-source-map.toml")]
+    pub map: PathBuf,
+    #[arg(long, default_value = "architecture/darktable-source-inventory.json")]
+    pub inventory: PathBuf,
+    #[arg(long, default_value = "architecture/issue-spec-snapshot.json")]
+    pub issue_snapshot: PathBuf,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
+    #[arg(long)]
+    pub confirm: bool,
 }
 
 #[derive(Debug, Args)]

@@ -13,5 +13,6 @@ pub use extract::{
     canonical_body_hash, canonical_spec_hash, extract_sections, normalize_text,
     normalized_body_fingerprint, parse_dependencies,
 };
+pub use types::SectionRole;
 #[cfg(test)]
 mod tests;

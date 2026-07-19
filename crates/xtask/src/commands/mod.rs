@@ -20,6 +20,7 @@ mod parity;
 mod platform;
 mod reference;
 mod repo;
+mod source_map;
 mod template_matrix;
 mod ui_shell;
 
@@ -77,6 +78,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::ExtensionConformance(arguments) => extension_conformance::run(&root, arguments),
         Command::TemplateMatrix(args) => template_matrix::run(&root, args),
         Command::UiShell(args) => ui_shell::run(&root, args),
+        Command::Migration { command } => source_map::run(&root, command, &runner),
     }
     .map_err(CommandError::Surface)
 }

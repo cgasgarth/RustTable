@@ -13,7 +13,8 @@ use crate::root::RepositoryRoot;
 use super::super::github;
 use super::extract_sections;
 use super::types::{
-    IssueSnapshot, IssueSpecPolicy, ReferenceIndex, SCHEMA, SectionRole, SpecificationStatus,
+    IssueAudit, IssueSnapshot, IssueSpecPolicy, ReferenceIndex, SCHEMA, SectionRole,
+    SpecificationStatus,
 };
 use super::{canonical_body_hash, parse_dependencies};
 
@@ -24,6 +25,23 @@ struct IssueSpecSnapshotFile {
     parent_issue: u64,
     issues: Vec<IssueSnapshot>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct SourceMapFile {
+    parent_issue: u64,
+    source_commit: String,
+    issues: Vec<SourceMapIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct SourceMapIssue {
+    number: u64,
+    body_hash: String,
+    source_anchor_hash: String,
+    source_status: String,
+}
+
+const PINNED_DARKTABLE_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct IssueSpecPolicyFile {
@@ -105,6 +123,24 @@ fn refresh_snapshot(
 
 fn verify_issue_specs(root: &RepositoryRoot, arguments: &IssueSpecArgs) -> Result {
     let snapshot = read_snapshot(&root.join(&arguments.snapshot))?;
+    for issue in &snapshot.issues {
+        let actual_body = canonical_body_hash(&issue.body);
+        if actual_body != issue.body_hash {
+            return Err(format!(
+                "issue-spec snapshot body drift for #{}: expected {}, found {}",
+                issue.number, issue.body_hash, actual_body
+            ));
+        }
+        let actual = extract_sections(&issue.body)
+            .get(SectionRole::SourceAnchors)
+            .map_or_else(String::new, |section| section.content_hash.clone());
+        if actual != issue.source_anchor_hash {
+            return Err(format!(
+                "issue-spec snapshot source block drift for #{}: expected {}, found {}",
+                issue.number, issue.source_anchor_hash, actual
+            ));
+        }
+    }
     let policy = read_policy(&root.join(&arguments.policy), &snapshot)?;
     let audits = policy.audit_all(&open_child_issues(&snapshot));
     let ready = audits
@@ -142,6 +178,7 @@ fn verify_issue_specs(root: &RepositoryRoot, arguments: &IssueSpecArgs) -> Resul
 fn ready_issues(root: &RepositoryRoot, arguments: &IssueSpecArgs) -> Result {
     let snapshot = read_snapshot(&root.join(&arguments.snapshot))?;
     let policy = read_policy(&root.join(&arguments.policy), &snapshot)?;
+    let source_map = read_source_map(root, snapshot.parent_issue)?;
     let issues = open_child_issues(&snapshot);
     let audits = policy.audit_all(&issues);
     let audit_by_number = audits
@@ -156,44 +193,12 @@ fn ready_issues(root: &RepositoryRoot, arguments: &IssueSpecArgs) -> Result {
     let mut entries = issues
         .iter()
         .map(|issue| {
-            let audit = &audit_by_number[&issue.number];
-            let mut blockers = Vec::new();
-            if !audit.status.is_ready() {
-                blockers.push(format!("spec: {}", audit.status));
-            }
-            for dependency in &audit.dependencies.references {
-                if let Some(target) = by_number.get(&dependency.issue) {
-                    if target.state == "open" {
-                        blockers.push(format!("depends on open #{}", dependency.issue));
-                    } else if matches!(
-                        target.state_reason.as_deref(),
-                        Some("not planned" | "duplicate")
-                    ) {
-                        blockers.push(format!(
-                            "depends on #{} closed as {}",
-                            dependency.issue,
-                            target.state_reason.as_deref().unwrap_or("unresolved")
-                        ));
-                    }
-                } else {
-                    blockers.push(format!("unknown dependency #{}", dependency.issue));
-                }
-            }
-            let priority = priority_label(issue).unwrap_or("invalid").to_owned();
-            IssueReadyEntry {
-                issue: issue.number,
-                title: issue.title.clone(),
-                priority,
-                status: audit.status,
-                dependencies: audit
-                    .dependencies
-                    .references
-                    .iter()
-                    .map(|dependency| dependency.issue)
-                    .collect(),
-                ready: blockers.is_empty(),
-                blockers,
-            }
+            ready_entry(
+                issue,
+                &audit_by_number[&issue.number],
+                &source_map,
+                &by_number,
+            )
         })
         .collect::<Vec<_>>();
     let selected = entries
@@ -238,15 +243,118 @@ fn ready_issues(root: &RepositoryRoot, arguments: &IssueSpecArgs) -> Result {
     ))
 }
 
+fn ready_entry(
+    issue: &IssueSnapshot,
+    audit: &IssueAudit,
+    source_map: &BTreeMap<u64, SourceMapIssue>,
+    by_number: &BTreeMap<u64, &IssueSnapshot>,
+) -> IssueReadyEntry {
+    let mut blockers = Vec::new();
+    if !audit.status.is_ready() {
+        blockers.push(format!("spec: {}", audit.status));
+    }
+    let source_status = source_status(issue.number, audit, source_map, &mut blockers);
+    dependency_blockers(audit, by_number, &mut blockers);
+    IssueReadyEntry {
+        issue: issue.number,
+        title: issue.title.clone(),
+        priority: priority_label(issue).unwrap_or("invalid").to_owned(),
+        status: audit.status,
+        source_status,
+        dependencies: audit
+            .dependencies
+            .references
+            .iter()
+            .map(|dependency| dependency.issue)
+            .collect(),
+        ready: blockers.is_empty(),
+        blockers,
+    }
+}
+
+fn source_status(
+    issue: u64,
+    audit: &IssueAudit,
+    source_map: &BTreeMap<u64, SourceMapIssue>,
+    blockers: &mut Vec<String>,
+) -> String {
+    match source_map.get(&issue) {
+        Some(source) if source.body_hash != audit.body_hash => {
+            blockers.push("source map body hash is stale".to_owned());
+            "stale-body-hash".to_owned()
+        }
+        Some(source) if source.source_anchor_hash != audit.source_anchor_hash => {
+            blockers.push("source map anchor hash is stale".to_owned());
+            "stale-anchor-hash".to_owned()
+        }
+        Some(source) if source.source_status != "anchored" => {
+            blockers.push(format!("source: {}", source.source_status));
+            source.source_status.clone()
+        }
+        Some(source) => source.source_status.clone(),
+        None => {
+            blockers.push("source map record is missing".to_owned());
+            "missing".to_owned()
+        }
+    }
+}
+
+fn dependency_blockers(
+    audit: &IssueAudit,
+    by_number: &BTreeMap<u64, &IssueSnapshot>,
+    blockers: &mut Vec<String>,
+) {
+    for dependency in &audit.dependencies.references {
+        if let Some(target) = by_number.get(&dependency.issue) {
+            if target.state == "open" {
+                blockers.push(format!("depends on open #{}", dependency.issue));
+            } else if matches!(
+                target.state_reason.as_deref(),
+                Some("not planned" | "duplicate")
+            ) {
+                blockers.push(format!(
+                    "depends on #{} closed as {}",
+                    dependency.issue,
+                    target.state_reason.as_deref().unwrap_or("unresolved")
+                ));
+            }
+        } else {
+            blockers.push(format!("unknown dependency #{}", dependency.issue));
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct IssueReadyEntry {
     issue: u64,
     title: String,
     priority: String,
     status: SpecificationStatus,
+    source_status: String,
     dependencies: Vec<u64>,
     ready: bool,
     blockers: Vec<String>,
+}
+
+fn read_source_map(
+    root: &RepositoryRoot,
+    expected_parent: u64,
+) -> Result<BTreeMap<u64, SourceMapIssue>> {
+    let path = root.join("architecture/darktable-source-map.toml");
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("source map {}: {error}", path.display()))?;
+    let map: SourceMapFile =
+        toml::from_str(&text).map_err(|error| format!("source map {}: {error}", path.display()))?;
+    if map.parent_issue != expected_parent || map.source_commit != PINNED_DARKTABLE_COMMIT {
+        return Err("source map has the wrong parent or canonical source commit".to_owned());
+    }
+    let mut issues = BTreeMap::new();
+    for issue in map.issues {
+        if issues.insert(issue.number, issue).is_some() {
+            return Err("source map has duplicate issue records".to_owned());
+        }
+    }
+    Ok(issues)
 }
 
 #[expect(
@@ -518,6 +626,10 @@ fn issue_from_value(value: &Value) -> std::result::Result<IssueSnapshot, String>
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
         is_pull_request: value.get("pull_request").is_some(),
+        source_anchor_hash: extract_sections(body)
+            .get(SectionRole::SourceAnchors)
+            .map_or_else(String::new, |section| section.content_hash.clone()),
+        body_hash: canonical_body_hash(body),
     })
 }
 

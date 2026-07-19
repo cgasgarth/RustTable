@@ -37,6 +37,7 @@ pub enum SectionRole {
     AcceptanceEvidence,
     Dependencies,
     OnePrBoundary,
+    SourceAnchors,
     Capabilities,
     QualificationDecision,
     ObservedDefects,
@@ -65,6 +66,7 @@ impl SectionRole {
             Self::AcceptanceEvidence => "Acceptance evidence",
             Self::Dependencies => "Dependencies",
             Self::OnePrBoundary => "One-PR boundary",
+            Self::SourceAnchors => "Upstream darktable source anchors",
             Self::Capabilities => "Capabilities",
             Self::QualificationDecision => "Qualification decision",
             Self::ObservedDefects => "Observed defects",
@@ -125,6 +127,10 @@ pub struct IssueSnapshot {
     pub state_reason: Option<String>,
     #[serde(default)]
     pub is_pull_request: bool,
+    #[serde(default)]
+    pub source_anchor_hash: String,
+    #[serde(default)]
+    pub body_hash: String,
 }
 
 fn default_issue_state() -> String {
@@ -143,6 +149,8 @@ impl IssueSnapshot {
             state: default_issue_state(),
             state_reason: None,
             is_pull_request: false,
+            source_anchor_hash: String::new(),
+            body_hash: String::new(),
         }
     }
 }
@@ -319,6 +327,7 @@ pub struct IssueAudit {
     pub class: IssueClass,
     pub status: SpecificationStatus,
     pub body_hash: String,
+    pub source_anchor_hash: String,
     pub spec_hash: String,
     pub sections: SectionExtraction,
     pub dependencies: DependencyParse,

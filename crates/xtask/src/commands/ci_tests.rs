@@ -239,13 +239,15 @@ fn checked_in_contract_keeps_local_coverage_and_merge_only_exhaustiveness() {
     assert_eq!(library_lint.parallel_group_for("prepush"), "rust-02-clippy");
     assert_eq!(library_lint.prerequisites_for("prepush"), vec!["rust-test"]);
     for item in std::iter::once(rust_build_all).chain(
-        ["rust-test-all", "rust-clippy-all"].iter().map(|id| {
-            contract
-                .checks
-                .iter()
-                .find(|check| check.id == *id)
-                .unwrap_or_else(|| panic!("missing {id}"))
-        }),
+        ["rust-test-all", "rust-clippy-all", "migration-source-map"]
+            .iter()
+            .map(|id| {
+                contract
+                    .checks
+                    .iter()
+                    .find(|check| check.id == *id)
+                    .unwrap_or_else(|| panic!("missing {id}"))
+            }),
     ) {
         assert!(item.on("precommit"), "{} must run on precommit", item.id);
         assert!(item.on("main"), "{} must run on main", item.id);
