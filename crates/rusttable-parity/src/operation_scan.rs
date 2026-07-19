@@ -904,6 +904,12 @@ fn read(source: &Path, path: &Path) -> Result<String, ScanError> {
 }
 
 fn reference_commit(source: &Path) -> String {
+    if let Ok(commit) = fs::read_to_string(source.join(".rusttable-reference-commit")) {
+        let commit = commit.trim();
+        if !commit.is_empty() {
+            return commit.to_owned();
+        }
+    }
     std::process::Command::new("git")
         .args([
             "-C",
