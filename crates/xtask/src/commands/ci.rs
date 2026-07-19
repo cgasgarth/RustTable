@@ -744,7 +744,7 @@ mod tests {
             .find(|check| check.id == "rust-clippy")
             .expect("library lint");
         assert_eq!(library_lint.timeout_for("precommit"), 20);
-        assert_eq!(library_lint.timeout_for("prepush"), 40);
+        assert_eq!(library_lint.timeout_for("prepush"), 20);
 
         let rust_check = contract
             .checks
@@ -765,6 +765,9 @@ mod tests {
             "rust-02-clippy"
         );
         assert_eq!(rust_test.parallel_group_for("pull_request"), "rust-03-test");
+        assert_eq!(rust_check.timeout_for("pull_request"), 60);
+        assert_eq!(library_lint.timeout_for("pull_request"), 20);
+        assert_eq!(rust_test.timeout_for("pull_request"), 55);
         assert_eq!(
             library_lint.prerequisites_for("pull_request"),
             vec!["rust-check"]
