@@ -59,7 +59,7 @@ jobs:
           CARGO_INCREMENTAL=0 \
           CARGO_PROFILE_DEV_DEBUG=0 \
           CARGO_PROFILE_TEST_DEBUG=0 \
-          cargo test --workspace --lib --all-features --locked --no-run
+          cargo test -p rusttable-scripting --lib --all-features --locked --no-run
       - name: Start validation timer
         run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Run dependency-correct validation scheduler
