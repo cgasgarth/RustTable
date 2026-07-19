@@ -1,0 +1,73 @@
+schema = "rusttable.rust-channels.v1"
+authoritative = "primary-beta"
+product_artifacts = ["primary-beta"]
+
+[[channels]]
+id = "primary-beta"
+source = "date-pinned"
+toolchain = "beta-2026-07-17"
+archive = "https://static.rust-lang.org/dist/2026-07-17/"
+release_line = "1.98"
+stabilization_date = "2026-08-20"
+gating = "product"
+update_cadence = "explicit-refresh-pr"
+moving = false
+required_components = ["clippy", "rust-docs", "rust-src", "rustfmt", "llvm-tools-preview"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+commands = ["cargo check --workspace --all-features --locked", "cargo test --workspace --all-targets --all-features --locked", "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings", "cargo doc --workspace --all-features --locked --no-deps"]
+
+[[channels]]
+id = "rolling-beta"
+source = "moving-channel"
+toolchain = "beta"
+archive = "https://static.rust-lang.org/dist/channel-rust-beta.toml"
+release_line = "1.98"
+stabilization_date = "2026-08-20"
+gating = "monitoring"
+update_cadence = "daily"
+moving = true
+required_components = ["clippy", "rust-docs", "rust-src", "rustfmt", "llvm-tools-preview"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+commands = ["cargo check --workspace --all-features --locked", "cargo test --workspace --all-targets --all-features --locked", "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings", "cargo doc --workspace --all-features --locked --no-deps"]
+
+[[channels]]
+id = "previous-stable"
+source = "date-pinned"
+toolchain = "1.97.1"
+archive = "https://static.rust-lang.org/dist/1.97.1/"
+release_line = "1.97"
+stabilization_date = "2026-06-04"
+gating = "sentinel-only"
+update_cadence = "until-1.98-stable"
+moving = false
+required_components = ["clippy", "rustfmt"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+commands = ["cargo test --package rusttable-core --lib --locked", "cargo test --package rusttable-parity --lib --locked"]
+
+[[channels]]
+id = "current-nightly"
+source = "moving-channel"
+toolchain = "nightly"
+archive = "https://static.rust-lang.org/dist/channel-rust-nightly.toml"
+release_line = "1.99"
+stabilization_date = "2026-10-15"
+gating = "monitoring"
+update_cadence = "daily"
+moving = true
+required_components = ["clippy", "rust-docs", "rust-src", "rustfmt"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+commands = ["cargo check --workspace --all-features --locked", "cargo clippy --workspace --all-features --locked -- -D warnings", "cargo doc --workspace --all-features --locked --no-deps"]
+
+[[channels]]
+id = "pinned-nightly-lab"
+source = "date-and-commit-pinned"
+toolchain = "nightly-2026-07-15"
+archive = "https://static.rust-lang.org/dist/2026-07-15/"
+release_line = "1.99"
+stabilization_date = "2026-10-15"
+gating = "lab-only"
+update_cadence = "issue-owned"
+moving = false
+required_components = ["clippy", "rust-src", "rustfmt"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+commands = ["registered commands from quality/nightly-labs.toml only"]

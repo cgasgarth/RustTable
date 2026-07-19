@@ -1,0 +1,20 @@
+schema = "rusttable.nightly-labs.v1"
+toolchain = "pinned-nightly-lab"
+
+[[labs]]
+id = "portable-simd-0133a"
+owner_issue = 133
+owner = "rusttable-core"
+feature_gates = ["portable_simd"]
+allowed_unstable_flags = []
+package = "not-yet-in-workspace"
+target = "library"
+commands = ["cargo test --manifest-path labs/portable-simd/Cargo.toml --features portable_simd --locked"]
+outputs = ["target/compiler-channels/labs/portable-simd.json"]
+platforms = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+resource_timeout_seconds = 600
+resource_memory_mb = 4096
+promotion_condition = "available on primary-beta and adopted by issue 133"
+removal_condition = "promotion PR deletes or converts the lab"
+forbidden_product_edges = ["workspace-member", "default-feature", "release-dependency", "build-script", "proc-macro", "package-example", "debug-symbol"]
+enabled = false

@@ -1,0 +1,76 @@
+schema = "rusttable.compiler-channel-fixtures.v1"
+
+[[cases]]
+id = "primary-beta-success"
+channel = "primary-beta"
+expected = "pass"
+
+[[cases]]
+id = "newer-beta-source-break"
+channel = "rolling-beta"
+expected = "source-break"
+
+[[cases]]
+id = "newer-beta-numerical-regression"
+channel = "rolling-beta"
+expected = "numerical-regression"
+
+[[cases]]
+id = "previous-stable-expected-api-failure"
+channel = "previous-stable"
+expected = "expected-api-failure"
+
+[[cases]]
+id = "nightly-lint-break"
+channel = "current-nightly"
+expected = "lint-break"
+
+[[cases]]
+id = "compiler-ice"
+channel = "rolling-beta"
+expected = "compiler-ice"
+
+[[cases]]
+id = "unavailable-channel"
+channel = "current-nightly"
+expected = "channel-unavailable"
+
+[[cases]]
+id = "moving-fingerprint"
+channel = "rolling-beta"
+expected = "moving-fingerprint"
+
+[[cases]]
+id = "stale-unused-exception"
+channel = "rolling-beta"
+expected = "stale-exception"
+
+[[cases]]
+id = "unregistered-feature-gate"
+channel = "pinned-nightly-lab"
+expected = "unregistered-feature"
+
+[[cases]]
+id = "hidden-lab-dependency"
+channel = "pinned-nightly-lab"
+expected = "lab-dependency-leak"
+
+[[cases]]
+id = "build-script-proc-macro-leakage"
+channel = "pinned-nightly-lab"
+expected = "product-graph-leak"
+
+[[cases]]
+id = "rustc-bootstrap"
+channel = "primary-beta"
+expected = "bootstrap-forbidden"
+
+[[cases]]
+id = "encoded-z-flags"
+channel = "pinned-nightly-lab"
+expected = "unstable-flag"
+
+[[cases]]
+id = "wrong-compiler-package-provenance"
+channel = "rolling-beta"
+expected = "wrong-artifact-compiler"

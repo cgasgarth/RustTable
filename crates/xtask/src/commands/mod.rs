@@ -1,4 +1,5 @@
 mod bench;
+mod channels;
 mod ci;
 mod dag;
 mod files;
@@ -11,7 +12,7 @@ mod repo;
 
 use std::fmt;
 
-use crate::cli::{Cli, Command};
+use crate::cli::{Cli, Command, EcosystemCommand};
 use crate::output::Report;
 use crate::process::{ProcessError, ProcessRunner};
 use crate::root::{RepositoryRoot, RootError};
@@ -30,6 +31,9 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Ci { command } => ci::run(&root, command, &runner),
         Command::Github { command } => github::run(&root, command, &runner),
         Command::LuaConformance(arguments) => lua::run(&root, arguments),
+        Command::Ecosystem { command } => match command {
+            EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
+        },
     }
     .map_err(CommandError::Surface)
 }

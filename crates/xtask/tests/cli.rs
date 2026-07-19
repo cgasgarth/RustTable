@@ -13,7 +13,15 @@ fn help_exposes_the_complete_initial_command_tree() {
     let output = xtask(&["--help"]);
     assert!(output.status.success());
     let help = String::from_utf8(output.stdout).expect("help is utf8");
-    for command in ["parity", "fixtures", "bench", "repo", "reference", "ci"] {
+    for command in [
+        "parity",
+        "fixtures",
+        "bench",
+        "repo",
+        "reference",
+        "ci",
+        "ecosystem",
+    ] {
         assert!(help.contains(command), "missing {command} in {help}");
     }
 }
@@ -71,7 +79,7 @@ fn workspace_dag_emits_a_clean_stable_receipt() {
     );
     assert_eq!(
         value["data"]["feature_contexts"].as_array().map(Vec::len),
-        Some(4)
+        Some(5)
     );
 }
 
