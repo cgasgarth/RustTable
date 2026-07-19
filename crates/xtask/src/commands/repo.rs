@@ -7,11 +7,7 @@ use crate::root::RepositoryRoot;
 
 pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand, runner: &ProcessRunner) -> Result {
     match command {
-        RepoCommand::Dag => Ok(report(
-            root,
-            "repo.verify-dag",
-            serde_json::json!({ "placeholder": true, "message": "dependency DAG policy pending its issue" }),
-        )),
+        RepoCommand::Dag => super::dag::run(root, runner),
         RepoCommand::Files => files::run(root, runner),
         RepoCommand::Workflows => verify_workflows(root),
     }

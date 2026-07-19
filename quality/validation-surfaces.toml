@@ -252,6 +252,19 @@ platforms = ["all"]
 severity = "error"
 
 [[checks]]
+id = "workspace-dag"
+label = "workspace-dag"
+program = "cargo"
+args = ["xtask", "repo", "verify-dag"]
+owner = "architecture"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
 id = "workspace-rust-version"
 label = "workspace-rust-version"
 program = "bun"
