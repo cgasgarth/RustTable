@@ -25,6 +25,7 @@ args = ["fmt", "--all", "--", "--check"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+parallel_group_by_surface = { pull_request = "rust-01-test" }
 timeout_seconds = 5
 network = "none"
 platforms = ["all"]
@@ -38,6 +39,7 @@ args = ["metadata", "--locked", "--no-deps", "--format-version", "1"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+parallel_group_by_surface = { pull_request = "rust-01-test" }
 timeout_seconds = 5
 network = "none"
 platforms = ["all"]
@@ -329,6 +331,7 @@ owner = "desktop"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
 timeout_seconds = 10
+timeout_seconds_by_surface = { pull_request = 5 }
 network = "none"
 platforms = ["macos"]
 severity = "error"

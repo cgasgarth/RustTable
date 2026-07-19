@@ -22,7 +22,6 @@ jobs:
       matrix:
         group:
           - repository
-          - rust
           - rust-01-test
     env:
       RUSTTABLE_CI_GROUP: ${{ matrix.group }}
