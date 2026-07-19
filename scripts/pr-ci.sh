@@ -8,9 +8,8 @@ set -euo pipefail
 export CARGO_INCREMENTAL=0
 export CARGO_PROFILE_DEV_DEBUG=0
 export CARGO_PROFILE_TEST_DEBUG=0
-# Three Cargo processes are intentionally run in parallel by the validation
-# contract. Keep each process bounded so cold dependency builds share the
-# runner instead of multiplying compiler fan-out.
-export CARGO_BUILD_JOBS=2
+# The GitHub Linux runner has multiple cores; use its reported capacity so the
+# cold test/clippy/check lanes finish inside the strict PR wall-clock budget.
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')}"
 
 exec cargo xtask ci pr

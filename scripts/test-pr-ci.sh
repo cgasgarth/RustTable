@@ -30,10 +30,10 @@ FAKE_ENV_LOG="$temporary_directory/env"
 export FAKE_LOG
 export FAKE_ENV_LOG
 
-PATH="$temporary_directory:$PATH" /bin/bash "$root_directory/scripts/pr-ci.sh"
+CARGO_BUILD_JOBS=1 PATH="$temporary_directory:$PATH" /bin/bash "$root_directory/scripts/pr-ci.sh"
 grep -Fx 'xtask ci pr' "$FAKE_LOG" >/dev/null
 grep -Fx 'CARGO_INCREMENTAL=0' "$FAKE_ENV_LOG" >/dev/null
-grep -Fx 'CARGO_BUILD_JOBS=2' "$FAKE_ENV_LOG" >/dev/null
+grep -Fx 'CARGO_BUILD_JOBS=1' "$FAKE_ENV_LOG" >/dev/null
 grep -Fx 'CARGO_PROFILE_DEV_DEBUG=0' "$FAKE_ENV_LOG" >/dev/null
 grep -Fx 'CARGO_PROFILE_TEST_DEBUG=0' "$FAKE_ENV_LOG" >/dev/null
 
