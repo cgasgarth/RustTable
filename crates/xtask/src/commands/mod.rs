@@ -12,6 +12,7 @@ mod github;
 mod github_reconciliation;
 mod issue_spec;
 mod lua;
+mod native_boundaries;
 mod parity;
 mod reference;
 mod repo;

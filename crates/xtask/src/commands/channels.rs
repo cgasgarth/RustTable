@@ -106,6 +106,10 @@ struct LabSpec {
     platforms: Vec<String>,
     resource_timeout_seconds: u64,
     resource_memory_mb: u64,
+    #[serde(default)]
+    expected_exclusions: Vec<String>,
+    #[serde(default)]
+    artifact_retention_days: u32,
     promotion_condition: String,
     removal_condition: String,
     forbidden_product_edges: Vec<String>,
@@ -441,7 +445,7 @@ impl Policy {
                 || !lab_ids.insert(&lab.id)
                 || lab.owner_issue == 0
                 || lab.owner.is_empty()
-                || lab.feature_gates.is_empty()
+                || lab.feature_gates.iter().any(String::is_empty)
                 || lab.allowed_unstable_flags.iter().any(String::is_empty)
                 || lab.package.is_empty()
                 || lab.target.is_empty()
@@ -450,6 +454,9 @@ impl Policy {
                 || lab.platforms.is_empty()
                 || lab.resource_timeout_seconds == 0
                 || lab.resource_memory_mb == 0
+                || lab.expected_exclusions.is_empty()
+                || lab.artifact_retention_days == 0
+                || lab.artifact_retention_days > 30
                 || lab.promotion_condition.is_empty()
                 || lab.removal_condition.is_empty()
                 || lab.forbidden_product_edges.is_empty()

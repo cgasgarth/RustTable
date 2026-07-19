@@ -1,0 +1,1 @@
+pub struct ForeignHandle(*mut std::ffi::c_void);

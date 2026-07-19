@@ -14,7 +14,7 @@ native_packages = [
     { name = "jni-sys", owner_issue = 453, rationale = "Android target surface" },
     { name = "js-sys", owner_issue = 453, rationale = "WASM target surface" },
     { name = "linux-raw-sys", owner_issue = 453, rationale = "Linux target surface" },
-    { name = "mlua-sys", owner_issue = 453, rationale = "Lua native embedding surface" },
+    { name = "mlua-sys", owner_issue = 168, rationale = "Lua native embedding surface" },
     { name = "ndk-sys", owner_issue = 453, rationale = "Android target surface" },
     { name = "objc-sys", owner_issue = 453, rationale = "Apple Objective-C surface" },
     { name = "renderdoc-sys", owner_issue = 453, rationale = "graphics diagnostics surface" },
