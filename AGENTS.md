@@ -56,7 +56,7 @@
 - Keep the required pull-request sections and issue linkage in human review guidance, not in blocking GitHub Actions checks.
 - After required checks pass and required review is present, enable GitHub auto-merge with squash for the pull request (`gh pr merge --auto --squash` or the equivalent UI). Do not enable auto-merge for drafts, failing checks, unresolved conflicts, or unapproved pull requests.
 
-For workflow/orchestration follow-up work, reuse a completed worker only when its prior context and isolated worktree are clean, relevant, and materially continue the new issue; otherwise start a fresh worker. Close completed workers before reuse, preserve the active two-worker cap unless explicitly relaxed, keep worktrees isolated, and maintain one GitHub issue per PR.
+For workflow/orchestration follow-up work, serialize PRs strictly: do not start or modify another PR until the current active PR merges. Any number of isolated subagents may collaborate on that single active PR when useful; keep every worker in an isolated worktree for that PR and maintain one GitHub issue per PR.
 
 Drain the currently open PR queue without starting new PRs. After it is empty, select exactly one highest-priority issue/PR; multiple workers may collaborate only on that PR, and no other PR may start or be modified until it merges. Preserve one issue per ready-for-review PR, squash auto-merge, strict checks, and no branch-protection bypass.
 

@@ -22,12 +22,14 @@ const SUPPORTED_SURFACES: [&str; 4] = ["precommit", "prepush", "pull_request", "
 pub(super) fn run(root: &RepositoryRoot, command: &CiCommand, runner: &ProcessRunner) -> Result {
     let surface = command.surface();
     let group = command.group();
+    let skip_groups = command.skip_groups();
     let contract = Contract::load(root)?;
     contract.validate()?;
     if let Some(group) = group {
         contract.validate_group(surface, group)?;
     }
-    let result = execute_surface_with_scheduler(root, &contract, surface, group, runner);
+    let result =
+        execute_surface_with_scheduler(root, &contract, surface, group, skip_groups, runner);
     match result {
         Ok(receipt) => Ok(report(
             root,
@@ -44,14 +46,21 @@ impl CiCommand {
             Self::Precommit => "precommit",
             Self::Prepush => "prepush",
             Self::Pr { .. } => "pull_request",
-            Self::Main => "main",
+            Self::Main { .. } => "main",
         }
     }
 
     fn group(&self) -> Option<&str> {
         match self {
-            Self::Pr { group } => group.as_deref(),
-            Self::Precommit | Self::Prepush | Self::Main => None,
+            Self::Pr { group } | Self::Main { group, .. } => group.as_deref(),
+            Self::Precommit | Self::Prepush => None,
+        }
+    }
+
+    fn skip_groups(&self) -> &[String] {
+        match self {
+            Self::Main { skip_groups, .. } => skip_groups,
+            Self::Precommit | Self::Prepush | Self::Pr { .. } => &[],
         }
     }
 }
@@ -577,6 +586,7 @@ fn execute_surface_with_scheduler(
     contract: &Contract,
     surface: &str,
     selected_group: Option<&str>,
+    skipped_groups: &[String],
     runner: &ProcessRunner,
 ) -> Result<SurfaceReceipt> {
     let budget_seconds = contract.budgets[surface];
@@ -587,6 +597,9 @@ fn execute_surface_with_scheduler(
         .filter(|check| {
             check.on(surface)
                 && selected_group.is_none_or(|group| check.parallel_group_for(surface) == group)
+                && !skipped_groups
+                    .iter()
+                    .any(|group| group == check.parallel_group_for(surface))
                 && check.runs_on_current_platform()
         })
         .collect::<Vec<_>>();
@@ -600,6 +613,9 @@ fn execute_surface_with_scheduler(
         .filter(|check| {
             !check.on(surface)
                 || selected_group.is_some_and(|group| check.parallel_group_for(surface) != group)
+                || skipped_groups
+                    .iter()
+                    .any(|group| group == check.parallel_group_for(surface))
                 || !check.runs_on_current_platform()
         })
         .map(|check| OmittedCheck {
@@ -612,6 +628,11 @@ fn execute_surface_with_scheduler(
                     "not assigned to selected group {}",
                     selected_group.unwrap_or_default()
                 )
+            } else if skipped_groups
+                .iter()
+                .any(|group| group == check.parallel_group_for(surface))
+            {
+                "skipped by selected merge job group policy".to_owned()
             } else {
                 format!("not assigned to platform {}", current_platform())
             },
@@ -747,7 +768,7 @@ fn execute_surface_for_group(
     selected_group: Option<&str>,
     runner: &ProcessRunner,
 ) -> Result<SurfaceReceipt> {
-    execute_surface_with_scheduler(root, contract, surface, selected_group, runner)
+    execute_surface_with_scheduler(root, contract, surface, selected_group, &[], runner)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1189,6 +1210,15 @@ mod tests {
             assert_eq!(item.surfaces, vec!["main".to_owned()]);
             assert!(item.merge_only);
         }
+        let coverage = contract
+            .checks
+            .iter()
+            .find(|check| check.id == "coverage")
+            .expect("merge-only coverage");
+        assert_eq!(coverage.surfaces, vec!["main".to_owned()]);
+        assert!(coverage.merge_only);
+        assert_eq!(coverage.timeout_for("main"), 900);
+        assert!(coverage.args.iter().any(|arg| arg.contains("coverage run")));
         assert!(
             contract
                 .checks

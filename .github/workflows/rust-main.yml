@@ -254,6 +254,36 @@ jobs:
       - name: Verify workflow inventory
         run: cargo xtask repo verify-workflows
 
+  coverage:
+    name: linux / merge-only coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step bash {0}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up exact Rust toolchain
+        run: |
+          rustup toolchain install "$(bash scripts/rust-baseline.sh channel)" --profile minimal --no-self-update --component clippy --component rust-src --component rustfmt --component llvm-tools-preview
+          rustup default "$(bash scripts/rust-baseline.sh channel)"
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "$(bash scripts/rust-baseline.sh channel)-x86_64-unknown-linux-gnu"
+      - name: Install pinned cargo llvm-cov
+        run: cargo install cargo-llvm-cov --version 0.6.16 --locked
+      - name: Run coverage contract
+        run: cargo xtask ci main --group coverage
+      - name: Upload coverage evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rusttable-coverage-${{ github.sha }}
+          path: target/coverage/
+          if-no-files-found: error
+
   portable-tests:
     name: ${{ matrix.os }} / workspace tests
     needs: platform-matrix

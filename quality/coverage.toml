@@ -1,0 +1,146 @@
+# Human-reviewed Rust coverage policy. Receipts contain only repository-relative paths.
+schema = "rusttable.coverage-policy.v1"
+toolchain = "beta-2026-07-17"
+cargo_llvm_cov_version = "0.6.16"
+llvm_version = "22.1.8"
+target = "x86_64-unknown-linux-gnu"
+features = ["all-features"]
+generated_markers = ["// rusttable:coverage-generated", "// rusttable:coverage-exclude"]
+
+[exclusions]
+# These boundary-only packages do not compile runnable production code on the
+# Linux merge runner; keep their absence explicit rather than compensating with
+# workspace totals.
+packages = [
+  "xtask",
+  "rusttable-testkit",
+  "rusttable-camera",
+  "rusttable-color",
+  "rusttable-compat",
+  "rusttable-gpu",
+  "rusttable-masks",
+  "rusttable-pixelpipe",
+  "rusttable-plugin-api",
+  "rusttable-simd",
+]
+# Rust module declarations without executable lines are not emitted by llvm-cov.
+paths = [
+  "crates/rusttable-app/src/library/mod.rs",
+  "crates/rusttable-catalog-store/src/lib.rs",
+  "crates/rusttable-catalog/src/command.rs",
+  "crates/rusttable-core/src/edit/mod.rs",
+  "crates/rusttable-core/src/metadata/mod.rs",
+  "crates/rusttable-core/src/model/mod.rs",
+  "crates/rusttable-export/src/lib.rs",
+  "crates/rusttable-image-io/src/lib.rs",
+  "crates/rusttable-image/src/format.rs",
+  "crates/rusttable-image/src/lib.rs",
+  "crates/rusttable-import/src/lib.rs",
+  "crates/rusttable-metadata/src/lib.rs",
+  "crates/rusttable-processing/src/lib.rs",
+  "crates/rusttable-scripting/src/component/mod.rs",
+  "crates/rusttable-scripting/src/lib.rs",
+  "crates/rusttable-ui/src/lib.rs",
+  "crates/rusttable-ui/src/widgets/mod.rs",
+  # Boundary/error/runner-entry files with no executable lines on the merge runner.
+  "crates/rusttable-catalog/src/edit_repository.rs",
+  "crates/rusttable-catalog/src/error.rs",
+  "crates/rusttable-catalog/src/lib.rs",
+  "crates/rusttable-catalog/src/repository.rs",
+  "crates/rusttable-metadata/src/error.rs",
+  "crates/rusttable-parity/src/lib.rs",
+  "crates/rusttable-parity/src/main.rs",
+  "crates/rusttable-scripting/src/component/conformance.rs",
+  "crates/rusttable-scripting/src/component/wit.rs",
+  "crates/rusttable-scripting/src/dto.rs",
+]
+
+[[packages]]
+name = "rusttable-app"
+line_floor = 90.0
+baseline_line = 92.47
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-catalog"
+line_floor = 83.0
+baseline_line = 83.29
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-catalog-store"
+line_floor = 90.0
+baseline_line = 97.19
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-core"
+line_floor = 83.0
+baseline_line = 83.07
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-diagnostics"
+line_floor = 84.0
+baseline_line = 84.96
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-export"
+line_floor = 90.0
+baseline_line = 91.95
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-image"
+line_floor = 79.0
+baseline_line = 79.47
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-image-io"
+line_floor = 87.0
+baseline_line = 87.06
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-import"
+line_floor = 90.0
+baseline_line = 90.51
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-metadata"
+line_floor = 79.0
+baseline_line = 79.04
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-parity"
+line_floor = 72.0
+baseline_line = 72.83
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-processing"
+line_floor = 78.0
+baseline_line = 78.73
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-render"
+line_floor = 87.0
+baseline_line = 87.40
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-scripting"
+line_floor = 67.0
+baseline_line = 67.28
+max_drop = 5.0
+
+[[packages]]
+name = "rusttable-ui"
+line_floor = 83.0
+baseline_line = 83.41
+max_drop = 5.0

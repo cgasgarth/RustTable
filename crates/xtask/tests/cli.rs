@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn xtask(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_xtask"))
@@ -20,6 +21,7 @@ fn help_exposes_the_complete_initial_command_tree() {
         "repo",
         "reference",
         "ci",
+        "coverage",
         "ecosystem",
     ] {
         assert!(help.contains(command), "missing {command} in {help}");
@@ -209,5 +211,79 @@ fn reference_probe_reports_missing_local_assets_as_structured_json() {
         value["data"]["message"]
             .as_str()
             .is_some_and(|message| message.contains("reference source is missing"))
+    );
+}
+
+#[test]
+fn coverage_summary_normalizes_paths_and_merges_lcov_records_deterministically() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output_path = root.join(format!(
+        "target/coverage-test-{}-summary.json",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "coverage",
+            "summarize",
+            "--lcov",
+            "crates/xtask/tests/fixtures/coverage/mixed-paths.lcov",
+            "--policy",
+            "crates/xtask/tests/fixtures/coverage/policy.toml",
+            "--output",
+            output_path.to_str().expect("output path"),
+            "--format",
+            "json",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(value["command"], "coverage.summarize");
+    assert_eq!(value["data"]["packages"][0]["name"], "rusttable-core");
+    assert_eq!(value["data"]["packages"][0]["line"]["total"], 3);
+    assert_eq!(value["data"]["packages"][0]["line"]["covered"], 2);
+    assert!(!value.to_string().contains("/Users/"));
+    let _ = std::fs::remove_file(output_path);
+}
+
+#[test]
+fn coverage_verify_rejects_stale_source_evidence() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "coverage",
+            "verify",
+            "--report",
+            "crates/xtask/tests/fixtures/coverage/stale-report.json",
+            "--lcov",
+            "crates/xtask/tests/fixtures/coverage/mixed-paths.lcov",
+            "--policy",
+            "crates/xtask/tests/fixtures/coverage/policy.toml",
+            "--format",
+            "json",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(!output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json error");
+    assert!(
+        value["data"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("stale source SHA"))
     );
 }

@@ -1,6 +1,7 @@
 mod bench;
 mod channels;
 mod ci;
+mod coverage;
 mod dag;
 mod dependencies;
 mod ecosystem;
@@ -38,6 +39,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Repo { command } => repo::run(&root, command, &runner),
         Command::Reference { command } => reference::run(&root, command, &runner),
         Command::Ci { command } => ci::run(&root, command, &runner),
+        Command::Coverage { command } => coverage::run(&root, command, &runner),
         Command::Github { command } => match command {
             crate::cli::GithubCommand::RefreshIssueSpecSnapshot(arguments)
             | crate::cli::GithubCommand::VerifyIssueSpecs(arguments)

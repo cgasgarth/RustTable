@@ -107,6 +107,19 @@ severity = "error"
 merge_only = true
 
 [[checks]]
+id = "coverage-fixtures"
+label = "coverage-fixtures"
+program = "cargo"
+args = ["test", "-p", "xtask", "coverage", "--locked"]
+owner = "xtask"
+surfaces = ["precommit"]
+parallel_group = "rust"
+timeout_seconds = 20
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
 id = "rust-clippy-all"
 label = "rust-clippy-all"
 program = "cargo"
@@ -446,6 +459,21 @@ surfaces = ["main"]
 parallel_group = "release"
 timeout_seconds = 600
 network = "none"
+platforms = ["linux"]
+severity = "error"
+merge_only = true
+
+[[checks]]
+id = "coverage"
+label = "coverage"
+program = "bash"
+args = ["-c", "cargo xtask coverage run && cargo xtask coverage verify"]
+owner = "xtask"
+surfaces = ["main"]
+parallel_group = "coverage"
+timeout_seconds = 900
+network = "none"
+artifacts = ["target/coverage/coverage.json", "target/coverage/coverage.lcov"]
 platforms = ["linux"]
 severity = "error"
 merge_only = true
