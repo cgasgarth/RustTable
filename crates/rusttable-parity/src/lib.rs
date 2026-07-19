@@ -4,6 +4,7 @@
 mod mapping;
 mod model;
 mod operation_model;
+mod operation_reference;
 mod operation_scan;
 mod operation_validate;
 mod parameter_codec;
