@@ -57,6 +57,8 @@ pub enum Command {
         #[command(subcommand)]
         command: EcosystemCommand,
     },
+    #[command(name = "extension-conformance")]
+    ExtensionConformance(ExtensionConformanceArgs),
     #[command(name = "template-matrix")]
     TemplateMatrix(TemplateMatrixArgs),
     #[command(name = "ui-shell")]
@@ -71,6 +73,16 @@ pub struct UiShellArgs {
     pub verify_a11y: bool,
     #[arg(long)]
     pub verify_window_lifecycle: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ExtensionConformanceArgs {
+    #[arg(long)]
+    pub all_fixtures: bool,
+    #[arg(long)]
+    pub verify_isolation: bool,
+    #[arg(long)]
+    pub verify_limits: bool,
 }
 
 #[derive(Debug, Subcommand)]

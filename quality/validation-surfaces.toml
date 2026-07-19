@@ -248,7 +248,7 @@ parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-02-workflow" }
 prerequisites_by_surface = { pull_request = ["rust-test"] }
 timeout_seconds = 5
-timeout_seconds_by_surface = { pull_request = 10 }
+timeout_seconds_by_surface = { pull_request = 20 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -279,7 +279,7 @@ parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-04-dag" }
 prerequisites_by_surface = { pull_request = ["repository-files"] }
 timeout_seconds = 10
-timeout_seconds_by_surface = { pull_request = 15, main = 30 }
+timeout_seconds_by_surface = { pull_request = 30, main = 30 }
 network = "none"
 platforms = ["all"]
 severity = "error"

@@ -8,6 +8,10 @@ unreviewed_advisories = "deny"
 duplicate_minor_patch_lines = "deny"
 
 [exceptions]
-git = []
+git = [
+    { url = "https://github.com/iced-rs/cryoglyph.git", rev = "53ba3e879539d19ed8162942126a977ec896cc3b", issue = 456 },
+    { url = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6", issue = 456 },
+    { url = "https://github.com/iced-rs/winit.git", rev = "05b8ff17a06562f0a10bb46e6eaacbe2a95cb5ed", issue = 456 },
+]
 duplicate_versions = []
 advisories = []

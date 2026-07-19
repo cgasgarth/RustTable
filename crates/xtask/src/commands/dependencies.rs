@@ -208,11 +208,26 @@ fn is_local_dependency(name: &str, requirement: &Value) -> bool {
 fn is_exact_version(version: &str) -> bool {
     let rest = version.strip_prefix('=');
     rest.is_some_and(|value| {
-        let mut pieces = value.split('.');
-        pieces.clone().count() == 3
-            && pieces.all(|piece| {
+        let pieces = value.split('.').collect::<Vec<_>>();
+        pieces.len() == 3
+            && pieces[..2].iter().all(|piece| {
                 !piece.is_empty() && piece.chars().all(|character| character.is_ascii_digit())
             })
+            && pieces[2].split_once('-').map_or_else(
+                || {
+                    pieces[2]
+                        .chars()
+                        .all(|character| character.is_ascii_digit())
+                },
+                |(patch, prerelease)| {
+                    !patch.is_empty()
+                        && patch.chars().all(|character| character.is_ascii_digit())
+                        && !prerelease.is_empty()
+                        && prerelease
+                            .chars()
+                            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+                },
+            )
     })
 }
 
@@ -289,6 +304,15 @@ mod tests {
                 .iter()
                 .any(|finding| finding.contains("immutable rev"))
         );
+    }
+
+    #[test]
+    fn exact_prerelease_versions_are_allowed() {
+        let workspace: toml::Value = toml::from_str(
+            "[workspace.dependencies]\niced = { version = \"=0.15.0-dev\", git = \"https://example.invalid/iced\", rev = \"abc\" }\n",
+        )
+        .expect("workspace");
+        assert!(validate_workspace(&workspace).is_empty());
     }
 
     #[test]

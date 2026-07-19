@@ -68,7 +68,9 @@ file_mode() {
 }
 
 rm -rf "$distribution_directory" "$bundle"
-mkdir -p "$work_directory"
+mkdir -p "$distribution_directory"
+work_directory="$(mktemp -d "$distribution_directory/.work.XXXXXX")"
+pass_records_file="$work_directory/pass-records"
 
 metadata_json="$work_directory/cargo-metadata.json"
 cargo metadata --locked --no-deps --format-version 1 >"$metadata_json"

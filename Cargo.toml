@@ -31,8 +31,8 @@ clap = { version = "=4.6.1", features = ["derive"] }
 directories = "=6.0.0"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 futures = "=0.3.32"
-iced = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6", default-features = false, features = ["advanced", "sipper", "thread-pool", "tiny-skia", "wgpu"] }
-iced_test = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6" }
+iced = { version = "=0.15.0-dev", git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6", default-features = false, features = ["advanced", "sipper", "thread-pool", "tiny-skia", "wgpu"] }
+iced_test = { version = "=0.15.0-dev", git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6" }
 image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
 kamadak-exif = { version = "=0.6.1", default-features = false }
 mlua = { version = "=0.11.4", default-features = false, features = ["async", "serialize"] }

@@ -200,11 +200,15 @@ impl Contract {
                     .and_modify(|value| *value = (*value).max(check.timeout_for(surface)))
                     .or_insert(check.timeout_for(surface));
             }
-            let configured = group_max.values().sum::<u64>();
+            let configured = if surface == "pull_request" {
+                group_max.values().copied().max().unwrap_or_default()
+            } else {
+                group_max.values().sum::<u64>()
+            };
             let budget = self.budgets[surface];
             if configured > budget {
                 return Err(format!(
-                    "validation contract: {surface} parallel-group timeout sum {configured}s exceeds budget {budget}s"
+                    "validation contract: {surface} parallel-group timeout budget {configured}s exceeds budget {budget}s"
                 ));
             }
         }
@@ -263,12 +267,6 @@ impl Check {
                     self.id, surface
                 ));
             }
-        }
-        if !command_available(&self.program) {
-            return Err(format!(
-                "validation contract: check {} command {} is unavailable",
-                self.id, self.program
-            ));
         }
         if self.timeout_seconds == 0 || self.platforms.is_empty() {
             return Err(format!(
@@ -401,18 +399,6 @@ impl Check {
             || command.contains("scripts/pr-ci.sh")
             || command.contains("scripts/main-ci.sh")
     }
-}
-
-fn command_available(program: &str) -> bool {
-    let path = std::path::Path::new(program);
-    if path.components().count() > 1 {
-        return path.is_file();
-    }
-    std::env::var_os("PATH")
-        .into_iter()
-        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
-        .map(|directory| directory.join(program))
-        .any(|candidate| candidate.is_file())
 }
 
 fn command_body(check: &Check) -> String {

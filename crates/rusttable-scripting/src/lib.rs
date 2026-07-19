@@ -10,6 +10,7 @@ mod host;
 mod limits;
 mod storage;
 
+pub mod component;
 pub mod conformance;
 
 pub use api::{

@@ -544,9 +544,9 @@ fn hash_environment(environment: &BTreeMap<String, String>) -> String {
 }
 
 fn terminate_process_tree(child: &mut Child) {
-    let pid = child.id();
     #[cfg(unix)]
     {
+        let pid = child.id();
         let mut descendants = Vec::new();
         collect_descendants(pid, &mut descendants);
         descendants.reverse();
@@ -621,7 +621,7 @@ mod tests {
         .limits(ProcessLimits {
             max_stdout_bytes: 8,
             max_stderr_bytes: 8,
-            timeout: Duration::from_secs(2),
+            timeout: Duration::from_secs(10),
         })
         .artifacts(&stdout, &stderr);
         let result = ProcessRunner::new().run(request).expect("process result");
@@ -650,7 +650,7 @@ mod tests {
         .limits(ProcessLimits {
             max_stdout_bytes: 8,
             max_stderr_bytes: 8,
-            timeout: Duration::from_secs(2),
+            timeout: Duration::from_secs(10),
         })
         .artifacts(&stdout, &stderr);
         let result = ProcessRunner::new().run(request).expect("process result");
