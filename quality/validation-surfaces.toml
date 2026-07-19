@@ -1,7 +1,7 @@
 [budgets]
 precommit = 30
 prepush = 150
-pull_request = 150
+pull_request = 300
 main = 2700
 
 [[checks]]
