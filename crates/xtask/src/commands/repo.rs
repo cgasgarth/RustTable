@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn accepts_an_always_run_summary_job_without_a_shell_budget() {
         let valid = "name: RustTable PR\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  validate-groups:\n    runs-on: ubuntu-latest\n    timeout-minutes: 3\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}\n  validate:\n    if: ${{ always() }}\n    needs: validate-groups\n    runs-on: ubuntu-latest\n    timeout-minutes: 1\n";
-        validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, &valid).expect("valid");
+        validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, valid).expect("valid");
     }
 
     #[test]
