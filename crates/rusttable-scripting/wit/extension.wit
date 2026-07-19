@@ -1,0 +1,25 @@
+package rusttable:extension@1.0.0;
+
+interface host {
+    record catalog-snapshot {
+        revision: u64,
+        json: string,
+    }
+
+    variant capability-error {
+        denied,
+        limit,
+        unavailable,
+    }
+
+    get-catalog-snapshot: func() -> result<catalog-snapshot, capability-error>;
+    notify: func(kind: string, payload: string) -> result<_, capability-error>;
+    storage-get: func(key: string) -> result<option<string>, capability-error>;
+    storage-put: func(key: string, value: string) -> result<_, capability-error>;
+    submit-export: func(proposal: string) -> result<_, capability-error>;
+}
+
+world extension {
+    import host;
+    export run: func() -> result<string, string>;
+}

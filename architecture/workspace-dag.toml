@@ -296,6 +296,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 source_packages = ["rusttable-core", "rusttable-export", "rusttable-import", "rusttable-parity", "rusttable-scripting", "rusttable-testkit", "xtask"]
 
 [[external_dependencies]]
+package = "tokio"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-scripting"]
+
+[[external_dependencies]]
 package = "toml"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 source_packages = ["rusttable-parity", "rusttable-testkit", "xtask"]
@@ -304,3 +309,13 @@ source_packages = ["rusttable-parity", "rusttable-testkit", "xtask"]
 package = "unicode-normalization-alignments"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 source_packages = ["rusttable-core", "xtask"]
+
+[[external_dependencies]]
+package = "wasmtime"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-scripting"]
+
+[[external_dependencies]]
+package = "wasmtime-wasi"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-scripting"]

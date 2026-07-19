@@ -1,6 +1,6 @@
 [package]
 name = "rusttable-scripting"
-description = "Bounded, capability-based Lua 5.4 scripting host for RustTable."
+description = "Bounded Lua 5.4 and Wasmtime Component Model scripting hosts for RustTable."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
@@ -17,6 +17,9 @@ mlua.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tokio = { version = "=1.51.1", features = ["macros", "rt", "time"] }
+wasmtime = { version = "=46.0.1", default-features = false, features = ["async", "component-model", "component-model-async", "cranelift", "runtime", "wat"] }
+wasmtime-wasi = { version = "=46.0.1", default-features = false, features = ["p2"] }
 
 [lints]
 workspace = true
