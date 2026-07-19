@@ -1,23 +1,33 @@
-import { access, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { access, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   RUSTTABLE_BUNDLE_IDENTIFIER,
+  RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+  RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
   parseBundleIdentifier,
   readBundleManifest,
   validateBundle,
   type BundleManifest,
 } from './rusttable-app-bundle';
 
-export { RUSTTABLE_BUNDLE_IDENTIFIER } from './rusttable-app-bundle';
+export {
+  RUSTTABLE_BUNDLE_IDENTIFIER,
+  RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+} from './rusttable-app-bundle';
+export const RUSTTABLE_LEGACY_BUNDLE_IDENTIFIER = RUSTTABLE_BUNDLE_IDENTIFIER;
 export const DEFAULT_COMPUTER_USE_APP_PATH = join(
   process.env.HOME ?? '/tmp',
   'Applications',
-  'RustTable.app',
+  `${RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY.displayName}.app`,
 );
 
 const LAUNCH_SERVICES =
   '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
-const REPOSITORY_BUNDLE_IDENTIFIERS = new Set([RUSTTABLE_BUNDLE_IDENTIFIER]);
+const REPOSITORY_BUNDLE_IDENTIFIERS = new Set([
+  RUSTTABLE_BUNDLE_IDENTIFIER,
+  RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+]);
 const TARGET_BUNDLE_DIRECTORIES = [
   'target/debug/bundle/macos',
   'target/release/bundle/macos',
@@ -70,19 +80,11 @@ export const parseComputerUseInstallOptions = (
     const argument = args[index];
     if (argument === undefined) continue;
     if (!knownFlags.has(argument)) throw new Error(`Unknown computer-use install option: ${argument}`);
-    if (argument === '--app-path') {
-      const value = args[index + 1];
-      if (value === undefined || value.startsWith('--')) throw new Error('--app-path requires a path value.');
-      index += 1;
-    }
+    if (argument === '--app-path') throw new Error('Computer Use install path is fixed and cannot be overridden.');
   }
 
-  const appPathIndex = args.indexOf('--app-path');
-  const appPath = appPathIndex === -1 ? DEFAULT_COMPUTER_USE_APP_PATH : args[appPathIndex + 1];
-  if (appPath === undefined) throw new Error('--app-path requires a path value.');
-
   return {
-    installPath: resolve(cwd, appPath),
+    installPath: resolve(cwd, DEFAULT_COMPUTER_USE_APP_PATH),
     shouldBuild: !args.includes('--no-build'),
     shouldInstall: !args.includes('--no-install'),
     shouldLaunch: !args.includes('--no-launch'),
@@ -110,10 +112,16 @@ const assertCompleteBundle = async (
   readIdentifier: BundleIdentifierReader,
   readManifest: BundleManifestReader,
 ): Promise<void> => {
-  await validateBundle(bundlePath);
+  await validateBundle(bundlePath, undefined, RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY);
   const manifest = await readManifest(bundlePath);
   const identifier = await readIdentifier(bundlePath);
-  if (manifest.CFBundleIdentifier !== RUSTTABLE_BUNDLE_IDENTIFIER || identifier !== RUSTTABLE_BUNDLE_IDENTIFIER) {
+  const expected = RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY;
+  if (
+    manifest.CFBundleDisplayName !== expected.displayName ||
+    manifest.CFBundleName !== expected.bundleName ||
+    manifest.CFBundleIdentifier !== expected.bundleIdentifier ||
+    identifier !== expected.bundleIdentifier
+  ) {
     throw new Error(`Refusing RustTable app mutation for ${bundlePath}: unexpected bundle identifier ${identifier}.`);
   }
 };
@@ -164,12 +172,21 @@ const isWorktreeTargetBundle = (path: string, worktreePaths: readonly string[]):
   );
 };
 
+const isRepositoryOwnedBundlePath = (
+  path: string,
+  worktreePaths: readonly string[],
+  exactPaths: readonly string[],
+): boolean =>
+  isWorktreeTargetBundle(path, worktreePaths) || exactPaths.some((exactPath) => resolve(exactPath) === resolve(path));
+
 export const findStaleRepositoryRegistrationPaths = ({
   canonicalPath,
+  legacyPaths = [],
   registrations,
   worktreePaths,
 }: {
   canonicalPath: string;
+  legacyPaths?: readonly string[];
   registrations: readonly LaunchServicesRegistration[];
   worktreePaths: readonly string[];
 }): string[] => {
@@ -178,7 +195,7 @@ export const findStaleRepositoryRegistrationPaths = ({
     .filter((registration) => REPOSITORY_BUNDLE_IDENTIFIERS.has(registration.bundleIdentifier))
     .map((registration) => resolve(registration.path))
     .filter((path) => path !== canonical)
-    .filter((path) => isWorktreeTargetBundle(path, worktreePaths))
+    .filter((path) => isRepositoryOwnedBundlePath(path, worktreePaths, legacyPaths))
     .filter((path, index, paths) => paths.indexOf(path) === index)
     .sort();
 };
@@ -252,14 +269,30 @@ export const installCanonicalComputerUseApp = async ({
   }
 };
 
+const moveBundleToRecovery = async (bundlePath: string, recoveryDirectory: string): Promise<string> => {
+  await mkdir(recoveryDirectory, { recursive: true });
+  const recoveryPath = join(
+    recoveryDirectory,
+    `${basename(bundlePath, '.app')}-${randomUUID()}.app`,
+  );
+  await rename(bundlePath, recoveryPath);
+  return recoveryPath;
+};
+
 export const cleanupRepositoryAppBundles = async ({
   bundlePaths,
   keepPaths,
+  recoveryDirectory = join(process.env.HOME ?? '/tmp', '.Trash'),
+  repositoryPaths = [],
+  worktreePaths = [],
   readIdentifier = readBundleIdentifier,
   run,
 }: {
   bundlePaths: readonly string[];
   keepPaths: readonly string[];
+  recoveryDirectory?: string;
+  repositoryPaths?: readonly string[];
+  worktreePaths?: readonly string[];
   readIdentifier?: BundleIdentifierReader;
   run: CommandRunner;
 }): Promise<string[]> => {
@@ -268,11 +301,17 @@ export const cleanupRepositoryAppBundles = async ({
   for (const bundlePath of bundlePaths) {
     const resolvedPath = resolve(bundlePath);
     if (keep.has(resolvedPath)) continue;
+    if (!isRepositoryOwnedBundlePath(resolvedPath, worktreePaths, repositoryPaths)) continue;
+    if ((await lstat(resolvedPath).catch(() => undefined))?.isSymbolicLink()) continue;
     const identifier = await readIdentifier(resolvedPath).catch(() => 'unreadable');
     if (!REPOSITORY_BUNDLE_IDENTIFIERS.has(identifier)) continue;
-    await validateBundle(resolvedPath);
+    try {
+      await validateBundle(resolvedPath);
+    } catch {
+      continue;
+    }
     await unregisterBundle(resolvedPath, run);
-    await rm(resolvedPath, { force: true, recursive: true });
+    await moveBundleToRecovery(resolvedPath, recoveryDirectory);
     removed.push(resolvedPath);
   }
   return removed;
@@ -292,4 +331,15 @@ export const unregisterMissingRepositoryBundles = async ({
     unregistered.push(path);
   }
   return unregistered;
+};
+
+export const unregisterRepositoryBundles = async ({
+  paths,
+  run,
+}: {
+  paths: readonly string[];
+  run: CommandRunner;
+}): Promise<string[]> => {
+  for (const path of paths) await unregisterBundle(path, run);
+  return [...paths];
 };

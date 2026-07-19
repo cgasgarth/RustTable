@@ -60,6 +60,12 @@ For workflow/orchestration follow-up work, reuse a completed worker only when it
 - Keep code, tests, and documentation consistent with the current RustTable design; do not copy stale darktable assumptions into new APIs without validation.
 - Before submitting changes, inspect the diff, run the fastest relevant checks, and report any skipped validation explicitly.
 
+### Computer Use installation
+
+- `bun run install:computer-use` must install exactly the canonical `rusttable - latest` app at `~/Applications/rusttable - latest.app` with the stable `com.cgasgarth.rusttable.latest` bundle identity.
+- Rerunning the installer replaces that canonical app transactionally; never create a versioned or alternate canonical path.
+- Cleanup may target only repository-owned RustTable bundles and LaunchServices registrations from the repository worktrees or the known legacy `~/Applications/RustTable.app` path. Preserve unrelated applications and prefer recoverable cleanup (such as moving duplicates to the user Trash) where possible.
+
 ## Issue queue and consults
 
 - Treat open GitHub issues and milestones as the migration plan's source of truth; each issue maps to exactly one pull request.

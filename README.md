@@ -45,7 +45,8 @@ cargo build --package rusttable-app --bin rusttable-app --locked
 cargo run --package rusttable-app --bin rusttable-app --locked
 ```
 
-On macOS, the Computer Use application path is:
+On macOS, Computer Use installs the canonical `rusttable - latest` app at
+`~/Applications/rusttable - latest.app`:
 
 ```sh
 bun run install:computer-use

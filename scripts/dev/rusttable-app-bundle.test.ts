@@ -7,6 +7,7 @@ import {
   parseBundleManifest,
   parseCargoMetadataVersion,
   renderBundlePlist,
+  RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
   validateBundle,
 } from './rusttable-app-bundle';
 
@@ -53,6 +54,20 @@ describe('RustTable bundle metadata and manifest contracts', () => {
       CFBundleShortVersionString: '0.1.0',
       CFBundleVersion: '0.1.0',
     });
+  });
+
+  test('renders the dedicated Computer Use identity exactly', () => {
+    const plist = renderBundlePlist(parseBundleManifest(renderBundlePlist({
+      CFBundleDisplayName: 'rusttable - latest',
+      CFBundleExecutable: 'RustTable',
+      CFBundleIdentifier: 'com.cgasgarth.rusttable.latest',
+      CFBundleName: 'rusttable - latest',
+      CFBundlePackageType: 'APPL',
+      CFBundleShortVersionString: '0.1.0',
+      CFBundleVersion: '0.1.0',
+    }), RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY));
+    expect(plist).toContain('<key>CFBundleDisplayName</key><string>rusttable - latest</string>');
+    expect(plist).toContain('<key>CFBundleIdentifier</key><string>com.cgasgarth.rusttable.latest</string>');
   });
 
   test('rejects every missing, duplicate, and mismatched required field', () => {
