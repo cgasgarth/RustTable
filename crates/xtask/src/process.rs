@@ -559,6 +559,15 @@ fn wait_for_exit(
 
 fn terminate_owned_process(child: &mut dyn ChildWrapper) -> Result<CleanupReceipt, ProcessError> {
     let started = Instant::now();
+    if child.try_wait().map_err(ProcessError::Wait)?.is_some() {
+        let _ = child.wait().map_err(ProcessError::Wait)?;
+        return Ok(CleanupReceipt {
+            outcome: "reaped".to_owned(),
+            termination: "already-exited".to_owned(),
+            grace_ms: started.elapsed().as_millis(),
+            drain_ms: 0,
+        });
+    }
     #[cfg(unix)]
     child.signal(15).map_err(ProcessError::Cleanup)?;
     let grace_deadline = Instant::now() + CLEANUP_GRACE;
@@ -917,10 +926,9 @@ fn hash_policy(request: &ProcessRequest) -> String {
 }
 
 fn logical_command_id(request: &ProcessRequest) -> String {
-    hash_bytes(format!("{}\n{}", request.program, request.public_args().join("\n")).as_bytes())[
-        ..16
-    ]
-    .to_owned()
+    hash_bytes(format!("{}\n{}", request.program, request.public_args().join("\n")).as_bytes())
+        [..16]
+        .to_owned()
 }
 
 fn stable_path(path: &str, current_dir: Option<&Path>) -> String {
