@@ -444,10 +444,13 @@ fn roi_behavior(content: &str) -> String {
 }
 
 fn opencl_programs(content: &str, programs: &[String]) -> Vec<String> {
-    let mut result = Vec::new();
     let content = without_comments(content);
+    let mut assignments = BTreeMap::new();
     for line in content.lines() {
         let Some(rest) = line.split_once("const int ").map(|(_, rest)| rest) else {
+            continue;
+        };
+        let Some((name, _)) = rest.split_once('=') else {
             continue;
         };
         let Some(value) = rest
@@ -462,9 +465,23 @@ fn opencl_programs(content: &str, programs: &[String]) -> Vec<String> {
         else {
             continue;
         };
-        if let Some(program) = programs.get(value) {
+        assignments.insert(name.trim().to_owned(), value);
+    }
+    let mut result = Vec::new();
+    let mut rest = content.as_str();
+    while let Some(offset) = rest.find("dt_opencl_create_kernel") {
+        rest = &rest[offset + "dt_opencl_create_kernel".len()..];
+        let Some(open) = rest.find('(') else { break };
+        let call = &rest[open + 1..];
+        let Some((variable, _)) = call.split_once(',') else {
+            break;
+        };
+        if let Some(index) = assignments.get(variable.trim())
+            && let Some(program) = programs.get(*index)
+        {
             result.push(program.clone());
         }
+        rest = call;
     }
     result.sort();
     result.dedup();
