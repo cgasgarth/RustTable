@@ -544,9 +544,9 @@ fn hash_environment(environment: &BTreeMap<String, String>) -> String {
 }
 
 fn terminate_process_tree(child: &mut Child) {
-    let pid = child.id();
     #[cfg(unix)]
     {
+        let pid = child.id();
         let mut descendants = Vec::new();
         collect_descendants(pid, &mut descendants);
         descendants.reverse();
