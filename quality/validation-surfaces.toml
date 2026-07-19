@@ -477,3 +477,18 @@ artifacts = ["target/coverage/coverage.json", "target/coverage/coverage.lcov"]
 platforms = ["linux"]
 severity = "error"
 merge_only = true
+
+[[checks]]
+id = "offline-source-closure"
+label = "offline-source-closure"
+program = "cargo"
+args = ["xtask", "ecosystem", "dependencies", "verify-offline", "--receipt", "target/validation/offline-closure.json"]
+owner = "dependencies"
+surfaces = ["main"]
+parallel_group = "offline-source-closure"
+timeout_seconds = 2400
+network = "read"
+artifacts = ["target/validation/offline-closure.json"]
+platforms = ["linux"]
+severity = "error"
+merge_only = true

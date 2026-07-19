@@ -1,0 +1,2 @@
+scenario = "incorrect-checksum"
+expected = "registry checksum differs from Cargo.lock"
