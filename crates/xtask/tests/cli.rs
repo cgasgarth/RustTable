@@ -47,34 +47,32 @@ fn json_output_is_one_parseable_ansi_free_record_from_a_subdirectory() {
 }
 
 #[test]
-fn product_crates_do_not_depend_on_repository_tooling() {
+fn workspace_dag_emits_a_clean_stable_receipt() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .expect("workspace root");
-    for entry in std::fs::read_dir(root.join("crates")).expect("crates directory") {
-        let entry = entry.expect("crate entry");
-        if !entry.file_type().expect("crate type").is_dir() {
-            continue;
-        }
-        if matches!(
-            entry.file_name().to_str(),
-            Some("rusttable-testkit" | "rusttable-parity" | "xtask")
-        ) {
-            continue;
-        }
-        let manifest = std::fs::read_to_string(entry.path().join("Cargo.toml")).expect("manifest");
-        assert!(
-            !manifest.contains("xtask"),
-            "{} depends on xtask",
-            entry.path().display()
-        );
-        assert!(
-            !manifest.contains("rusttable-testkit"),
-            "{} depends on testkit",
-            entry.path().display()
-        );
-    }
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["repo", "verify-dag", "--format", "json"])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(value["command"], "repo.verify-dag");
+    assert_eq!(value["status"], "ok");
+    assert_eq!(
+        value["data"]["violations"].as_array().map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        value["data"]["feature_contexts"].as_array().map(Vec::len),
+        Some(4)
+    );
 }
 
 #[test]

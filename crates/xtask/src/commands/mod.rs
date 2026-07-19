@@ -1,5 +1,6 @@
 mod bench;
 mod ci;
+mod dag;
 mod files;
 mod fixtures;
 mod github;

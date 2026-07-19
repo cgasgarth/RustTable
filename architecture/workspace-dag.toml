@@ -1,0 +1,219 @@
+# Authoritative local workspace ownership and dependency direction.
+# Keep package names and manifest paths synchronized with Cargo metadata.
+schema_version = 1
+composition_root = "rusttable-app"
+tooling_packages = ["rusttable-parity", "rusttable-testkit", "xtask"]
+target_platforms = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+
+[[packages]]
+name = "rusttable-app"
+manifest = "crates/rusttable-app/Cargo.toml"
+role = "composition-root"
+
+[[packages]]
+name = "rusttable-catalog"
+manifest = "crates/rusttable-catalog/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-catalog-store"
+manifest = "crates/rusttable-catalog-store/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-core"
+manifest = "crates/rusttable-core/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-diagnostics"
+manifest = "crates/rusttable-diagnostics/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-image"
+manifest = "crates/rusttable-image/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-image-io"
+manifest = "crates/rusttable-image-io/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-import"
+manifest = "crates/rusttable-import/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-metadata"
+manifest = "crates/rusttable-metadata/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-parity"
+manifest = "crates/rusttable-parity/Cargo.toml"
+role = "tooling"
+
+[[packages]]
+name = "rusttable-processing"
+manifest = "crates/rusttable-processing/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-render"
+manifest = "crates/rusttable-render/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "rusttable-testkit"
+manifest = "crates/rusttable-testkit/Cargo.toml"
+role = "tooling"
+
+[[packages]]
+name = "rusttable-ui"
+manifest = "crates/rusttable-ui/Cargo.toml"
+role = "product"
+
+[[packages]]
+name = "xtask"
+manifest = "crates/xtask/Cargo.toml"
+role = "tooling"
+
+# Every edge is intentionally explicit. `dev` owns the import integration
+# tests; it is not a second production path.
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-catalog"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-catalog-store"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-diagnostics"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-ui"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-catalog"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-catalog"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-catalog-store"
+to = "rusttable-catalog"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-catalog-store"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-catalog-store"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-image-io"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-image-io"
+to = "rusttable-metadata"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-import"
+to = "rusttable-catalog"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-import"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-import"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-import"
+to = "rusttable-metadata"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-import"
+to = "rusttable-catalog-store"
+kind = "dev"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-metadata"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-metadata"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-processing"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-render"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-render"
+to = "rusttable-image"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-render"
+to = "rusttable-processing"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "rusttable-ui"
+to = "rusttable-core"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "xtask"
+to = "rusttable-parity"
+contexts = ["default", "all-features"]
+
+[[edges]]
+from = "xtask"
+to = "rusttable-testkit"
+contexts = ["default", "all-features"]
