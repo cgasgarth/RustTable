@@ -7,7 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-image = { version = "0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
+image.workspace = true
 rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
 rusttable-metadata = { path = "../rusttable-metadata", version = "0.1.0" }
 

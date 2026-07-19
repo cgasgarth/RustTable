@@ -4,6 +4,7 @@ set -euo pipefail
 root_directory="$(cd "$(dirname "$0")/.." && pwd -P)"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
+export RUSTTABLE_EXPECTED_RELEASE="$(bash "$root_directory/scripts/rust-baseline.sh" release)"
 
 fixture="$temporary_directory/fixture"
 fake_tools="$temporary_directory/tools"
@@ -57,27 +58,21 @@ if [ "$1" = -e ]; then
   input="$(cat)"
   case "$input" in
     *RUSTTABLE_LINUX_DISTRIBUTION_V1*)
-      printf 'rust_release=1.98.0-beta.4\nrust_host=x86_64-unknown-linux-gnu\nelf_class=ELF64\nelf_data=2'\''s complement, little endian\nelf_machine=Advanced Micro Devices X86-64\nelf_type=DYN\nprogram_interpreter=/lib64/ld-linux-x86-64.so.2\nneeded_library=libc.so.6\n'
+      printf 'rust_release=%s\nrust_host=x86_64-unknown-linux-gnu\nelf_class=ELF64\nelf_data=2'\''s complement, little endian\nelf_machine=Advanced Micro Devices X86-64\nelf_type=DYN\nprogram_interpreter=/lib64/ld-linux-x86-64.so.2\nneeded_library=libc.so.6\n' "$RUSTTABLE_EXPECTED_RELEASE"
       ;;
     *) printf '0.1.0' ;;
   esac
   exit 0
 fi
 if [ "$1" = scripts/linux-artifact-identity.ts ]; then
-  cat <<'JSON'
-{"schema":"RUSTTABLE_LINUX_DISTRIBUTION_V1","packageVersion":"0.1.0","archiveBasename":"RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz","rustRelease":"1.98.0-beta.4","rustHost":"x86_64-unknown-linux-gnu","elfClass":"ELF64","elfData":"2's complement, little endian","elfMachine":"Advanced Micro Devices X86-64","elfType":"DYN","interpreter":"/lib64/ld-linux-x86-64.so.2","needed":["libc.so.6"]}
-JSON
+  printf '{"schema":"RUSTTABLE_LINUX_DISTRIBUTION_V1","packageVersion":"0.1.0","archiveBasename":"RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz","rustRelease":"%s","rustHost":"x86_64-unknown-linux-gnu","elfClass":"ELF64","elfData":"2'\''s complement, little endian","elfMachine":"Advanced Micro Devices X86-64","elfType":"DYN","interpreter":"/lib64/ld-linux-x86-64.so.2","needed":["libc.so.6"]}\n' "$RUSTTABLE_EXPECTED_RELEASE"
   exit 0
 fi
 exit 79
 EOF
 cat >"$fake_tools/rustc" <<'EOF'
 #!/bin/sh
-cat <<'OUT'
-rustc 1.98.0-beta.4 (fixture)
-release: 1.98.0-beta.4
-host: x86_64-unknown-linux-gnu
-OUT
+printf 'rustc %s (fixture)\nrelease: %s\nhost: x86_64-unknown-linux-gnu\n' "$RUSTTABLE_EXPECTED_RELEASE" "$RUSTTABLE_EXPECTED_RELEASE"
 EOF
 cat >"$fake_tools/readelf" <<'EOF'
 #!/bin/sh

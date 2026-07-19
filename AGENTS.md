@@ -11,9 +11,9 @@
 ## Rust safety and compiler strictness
 
 - Rust code must compile with strict diagnostics and all warnings treated as errors.
-- GitHub issue #174 is the authoritative compiler/dependency-baseline change: keep the
-  current pinned toolchain until that issue lands, then move all accepted validation and
-  package surfaces together to its date-pinned Rust 1.98 beta baseline.
+- GitHub issue #456 is the authoritative compiler/dependency-baseline change: keep every
+  compiler, dependency, cache, packaging, and validation surface derived from the
+  repository's exact date-pinned Rust 1.98 beta baseline.
 - Enable and maintain strict Clippy and rustfmt checks in CI and local hooks.
 - Unsafe Rust is forbidden by default. Use it only when it is absolutely necessary, isolate it behind the smallest safe API, document the safety invariants at the unsafe boundary, and add focused tests.
 - Do not weaken lints to make code pass. Any lint exception must be narrow, justified in a comment, and reviewed.

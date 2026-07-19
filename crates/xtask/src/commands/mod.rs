@@ -2,6 +2,8 @@ mod bench;
 mod channels;
 mod ci;
 mod dag;
+mod dependencies;
+mod ecosystem;
 mod files;
 mod fixtures;
 mod github;
@@ -14,7 +16,7 @@ mod ui_shell;
 
 use std::fmt;
 
-use crate::cli::{Cli, Command, EcosystemCommand};
+use crate::cli::{Cli, Command, DependencyCommand, EcosystemCommand};
 use crate::output::Report;
 use crate::process::{ProcessError, ProcessRunner};
 use crate::root::{RepositoryRoot, RootError};
@@ -34,6 +36,13 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Github { command } => github::run(&root, command, &runner),
         Command::LuaConformance(arguments) => lua::run(&root, arguments),
         Command::Ecosystem { command } => match command {
+            EcosystemCommand::VerifyBaseline(arguments) => {
+                ecosystem::verify_baseline(&root, arguments, &runner)
+            }
+            EcosystemCommand::UpgradeDiff => ecosystem::upgrade_diff(&root),
+            EcosystemCommand::Dependencies { command } => match command {
+                DependencyCommand::VerifyPolicy => dependencies::verify_policy(&root),
+            },
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
         Command::TemplateMatrix(args) => template_matrix::run(&root, args),

@@ -12,11 +12,11 @@ lua54-vendored = ["mlua/lua54", "mlua/vendored"]
 lua54-system = ["mlua/lua54"]
 
 [dependencies]
-futures = "=0.3.32"
-mlua = { version = "=0.11.4", default-features = false, features = ["async", "serialize"] }
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.150"
-sha2 = { version = "0.10.9", default-features = false }
+futures.workspace = true
+mlua.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 
 [lints]
 workspace = true

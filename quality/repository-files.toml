@@ -41,6 +41,7 @@ binary_filenames = []
 executable_paths = [
     "scripts/bun-pin.sh",
     "scripts/check-bun-toolchain-policy.sh",
+    "scripts/check-compiler-baseline-surfaces.sh",
     "scripts/check-native-removal.sh",
     "scripts/check-source-policy.sh",
     "scripts/dependency-security.sh",
@@ -54,6 +55,7 @@ executable_paths = [
     "scripts/pr-ci.sh",
     "scripts/precommit-fast.sh",
     "scripts/prepush-fast.sh",
+    "scripts/rust-baseline.sh",
     "scripts/test-bun-pin.sh",
     "scripts/test-dependency-security.sh",
     "scripts/test-linux-distribution-smoke.sh",
