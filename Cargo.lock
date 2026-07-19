@@ -2107,12 +2107,24 @@ dependencies = [
 [[package]]
 name = "rusttable-core"
 version = "0.1.0"
+dependencies = [
+ "sha2",
+ "unicode-normalization-alignments",
+]
 
 [[package]]
 name = "rusttable-diagnostics"
 version = "0.1.0"
 dependencies = [
  "directories",
+]
+
+[[package]]
+name = "rusttable-export"
+version = "0.1.0"
+dependencies = [
+ "rusttable-core",
+ "sha2",
 ]
 
 [[package]]
@@ -3098,6 +3110,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "rusttable-core",
  "rusttable-parity",
  "rusttable-scripting",
  "rusttable-testkit",

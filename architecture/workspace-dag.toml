@@ -31,6 +31,11 @@ manifest = "crates/rusttable-diagnostics/Cargo.toml"
 role = "product"
 
 [[packages]]
+name = "rusttable-export"
+manifest = "crates/rusttable-export/Cargo.toml"
+role = "product"
+
+[[packages]]
 name = "rusttable-image"
 manifest = "crates/rusttable-image/Cargo.toml"
 role = "product"
@@ -219,6 +224,11 @@ to = "rusttable-core"
 contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
+from = "rusttable-export"
+to = "rusttable-core"
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
+
+[[edges]]
 from = "xtask"
 to = "rusttable-parity"
 contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
@@ -231,4 +241,9 @@ contexts = ["default", "all-features", "no-default-features:rusttable-scripting"
 [[edges]]
 from = "xtask"
 to = "rusttable-scripting"
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
+
+[[edges]]
+from = "xtask"
+to = "rusttable-core"
 contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]

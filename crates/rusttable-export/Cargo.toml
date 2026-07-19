@@ -1,14 +1,14 @@
 [package]
-name = "rusttable-core"
-description = "Core foundation for the RustTable rewrite."
+name = "rusttable-export"
+description = "Deterministic logical export artifact planning for RustTable."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
 sha2 = { version = "0.10.9", default-features = false }
-unicode-normalization = { package = "unicode-normalization-alignments", version = "=0.1.12" }
 
 [lints]
 workspace = true
