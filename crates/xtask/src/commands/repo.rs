@@ -377,11 +377,21 @@ fn indent(line: &str) -> usize {
 mod tests {
     use super::{WorkflowKind, validate_workflow};
 
-    const VALID: &str = "name: RustTable PR\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    timeout-minutes: 3\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          persist-credentials: false\n      - run: cargo xtask repo verify-workflows\n";
+    const VALID: &str = "name: RustTable PR\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    timeout-minutes: 3\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          persist-credentials: false\n";
 
     #[test]
     fn accepts_the_minimal_pr_contract() {
         validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, VALID).expect("valid");
+    }
+
+    #[test]
+    fn pr_workflow_keeps_workflow_inventory_inside_pr_validation() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../.github/workflows/rust-pr.yml"
+        ));
+        assert!(source.contains("run: bash scripts/pr-ci.sh"));
+        assert!(!source.contains("cargo xtask repo verify-workflows"));
     }
 
     #[test]

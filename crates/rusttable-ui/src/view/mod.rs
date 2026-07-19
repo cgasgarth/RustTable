@@ -1,5 +1,5 @@
 use iced::widget::{column, container, row, scrollable, text};
-use iced::{Element, Length};
+use iced::{Element, Fill, Length};
 use rusttable_core::product_name;
 
 use crate::input::{FocusTarget, UiMessage};
@@ -31,15 +31,15 @@ pub fn view(state: &UiState) -> Element<'_, UiMessage> {
         ]
         .spacing(REGION_SPACING),
     )
-    .width(Length::Fill)
+    .width(Fill)
     .height(Length::Fixed(HEADER_HEIGHT));
     let workspace_content = match state.route() {
         WorkspaceRoute::Library => library_content(state),
         WorkspaceRoute::PhotoDetail(photo_id) => detail_content(state, photo_id),
     };
     let workspace = container(column![text("Workspace"), workspace_content])
-        .width(Length::Fill)
-        .height(Length::Fill);
+        .width(Fill)
+        .height(Fill);
     let body = if state.sidebar_visible() {
         row![
             container(column![
@@ -59,8 +59,8 @@ pub fn view(state: &UiState) -> Element<'_, UiMessage> {
     };
 
     column![header, body]
-        .width(Length::Fill)
-        .height(Length::Fill)
+        .width(Fill)
+        .height(Fill)
         .padding(CONTENT_PADDING)
         .spacing(REGION_SPACING)
         .into()
@@ -105,8 +105,8 @@ fn ready_library_content<'a>(
             .into()
     });
     let grid = scrollable(column(rows).spacing(PHOTO_GRID_SPACING))
-        .width(Length::Fill)
-        .height(Length::Fill);
+        .width(Fill)
+        .height(Fill);
 
     column![text("Library"), grid].into()
 }

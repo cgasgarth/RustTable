@@ -1,18 +1,19 @@
-use crate::application::{Message, Shell, boot, update};
 use crate::lifecycle::run_with_bootstrap;
+use crate::ui_shell::{DaemonState, boot, subscription, update, view as daemon_view};
 
 #[cfg(test)]
-mod ui_smoke;
-
 mod view {
     use iced::Element;
 
-    use super::{Message, Shell};
+    use crate::application::{Message, Shell};
 
     pub(super) fn view(shell: &Shell) -> Element<'_, Message> {
         rusttable_ui::view::view(shell.ui_state()).map(Message::from)
     }
 }
+
+#[cfg(test)]
+mod ui_smoke;
 
 /// Starts the `RustTable` desktop application.
 ///
@@ -23,10 +24,10 @@ pub fn run() -> iced::Result {
     run_with_bootstrap(
         rusttable_diagnostics::install,
         || {
-            iced::application(boot, update, view::view)
+            iced::daemon(boot, update, daemon_view)
                 .title("RustTable")
-                .theme(rusttable_ui::theme::theme)
-                .centered()
+                .theme(|state: &DaemonState, _window| rusttable_ui::tokens::theme(state.ui_theme()))
+                .subscription(subscription)
                 .run()
         },
         |warning| eprintln!("{warning}"),

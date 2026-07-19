@@ -8,7 +8,9 @@ version.workspace = true
 
 [dependencies]
 directories = "=6.0.0"
-iced = { version = "0.14.0", default-features = false, features = ["advanced", "thread-pool", "tiny-skia", "x11"] }
+# Reviewed Iced 0.15.0-dev development-line revision (the upstream repository's
+# development line is currently published from `master`; keep the revision pinned).
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6", default-features = false, features = ["advanced", "sipper", "thread-pool", "tiny-skia", "wgpu", "x11"] }
 rusttable-catalog = { path = "../rusttable-catalog", version = "0.1.0" }
 rusttable-catalog-store = { path = "../rusttable-catalog-store", version = "0.1.0" }
 rusttable-diagnostics = { path = "../rusttable-diagnostics", version = "0.1.0" }
@@ -18,7 +20,7 @@ rusttable-scripting = { path = "../rusttable-scripting", version = "0.1.0" }
 rusttable-ui = { path = "../rusttable-ui", version = "0.1.0" }
 
 [dev-dependencies]
-iced_test = "0.14.0"
+iced_test = { git = "https://github.com/iced-rs/iced.git", rev = "56b706fcd35aa881baede77a696bbb842773fdc6" }
 
 [lints]
 workspace = true

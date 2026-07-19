@@ -7,6 +7,14 @@ trap 'rm -rf "$temporary_directory"' EXIT
 
 bash "$helper" 5 success bash -c ':' >/dev/null
 
+quick_start="$(perl -MTime::HiRes=time -e 'printf "%.6f", time')"
+bash "$helper" 5 quick bash -c 'sleep 0.2' >/dev/null
+quick_end="$(perl -MTime::HiRes=time -e 'printf "%.6f", time')"
+if ! perl -e 'exit !(($ARGV[1] - $ARGV[0]) < 0.8)' "$quick_start" "$quick_end"; then
+  printf 'budget polling should not add a full second to short commands\n' >&2
+  exit 1
+fi
+
 if bash "$helper" 5 status bash -c 'exit 7' >/dev/null 2>&1; then
   printf 'expected a nonzero command status to propagate\n' >&2
   exit 1

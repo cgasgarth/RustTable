@@ -52,8 +52,6 @@ jobs:
           key: rust-main-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
           restore-keys: |
             rust-main-${{ runner.os }}-rust-beta-2026-07-17-
-      - name: Verify workflow inventory
-        run: cargo xtask repo verify-workflows
       - name: Run repository PR validation
         run: bash scripts/pr-ci.sh
       - name: Enforce 150-second validation budget

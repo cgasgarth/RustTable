@@ -10,7 +10,7 @@ label = "diff"
 program = "git"
 args = ["diff", "--check"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 timeout_seconds = 3
 network = "none"
@@ -49,10 +49,12 @@ label = "rust-check"
 program = "cargo"
 args = ["check", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "rust"
+prerequisites_by_surface = { prepush = ["rust-clippy"] }
+parallel_group_by_surface = { prepush = "rust-03-check" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
+timeout_seconds_by_surface = { prepush = 25 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -61,12 +63,14 @@ severity = "error"
 id = "rust-clippy"
 label = "rust-clippy"
 program = "cargo"
-args = ["clippy", "--workspace", "--lib", "--all-features", "--locked", "--", "-D", "warnings"]
+args = ["clippy", "--workspace", "--lib", "--all-features", "--locked", "--no-deps", "--", "-D", "warnings"]
 owner = "workspace"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "rust"
+prerequisites_by_surface = { prepush = ["rust-test"] }
+parallel_group_by_surface = { prepush = "rust-02-clippy" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
+timeout_seconds_by_surface = { prepush = 35 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -79,8 +83,9 @@ args = ["test", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
+timeout_seconds_by_surface = { prepush = 75, pull_request = 75 }
 network = "none"
 platforms = ["all"]
 severity = "error"
