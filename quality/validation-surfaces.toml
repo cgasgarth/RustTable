@@ -51,8 +51,9 @@ args = ["check", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+parallel_group_by_surface = { prepush = "rust-01-check", pull_request = "rust-01-check" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
+timeout_seconds_by_surface = { prepush = 55, pull_request = 55 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -65,8 +66,10 @@ args = ["clippy", "--workspace", "--lib", "--all-features", "--locked", "--", "-
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+prerequisites_by_surface = { prepush = ["rust-check"], pull_request = ["rust-check"] }
+parallel_group_by_surface = { prepush = "rust-02-clippy", pull_request = "rust-02-clippy" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
+timeout_seconds_by_surface = { prepush = 40, pull_request = 40 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -79,8 +82,10 @@ args = ["test", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+prerequisites_by_surface = { prepush = ["rust-clippy"], pull_request = ["rust-clippy"] }
+parallel_group_by_surface = { prepush = "rust-03-test", pull_request = "rust-03-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
+timeout_seconds_by_surface = { prepush = 40, pull_request = 40 }
 network = "none"
 platforms = ["all"]
 severity = "error"
