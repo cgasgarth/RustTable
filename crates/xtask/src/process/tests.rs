@@ -113,6 +113,23 @@ fn timeout_terminates_a_child_tree() {
     assert_eq!(result.receipt.cleanup.outcome, "reaped");
 }
 
+#[cfg(unix)]
+#[test]
+fn quiet_owned_descendant_can_finish_output_drain_after_leader_exits() {
+    let started = std::time::Instant::now();
+    let result = ProcessRunner::new()
+        .run(
+            ProcessRequest::new("sh", ["-c", "(sleep 3) & exit 0"]).limits(ProcessLimits {
+                max_stdout_bytes: 64,
+                max_stderr_bytes: 64,
+                timeout: Duration::from_secs(10),
+            }),
+        )
+        .expect("short-lived owned descendant drains normally");
+    assert!(result.receipt.success());
+    assert!(started.elapsed() >= Duration::from_secs(3));
+}
+
 #[test]
 fn request_environment_is_allowlisted_and_receipt_is_redacted() {
     let result = ProcessRunner::new()

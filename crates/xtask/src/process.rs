@@ -25,7 +25,10 @@ const READ_CHUNK: usize = 8192;
 const DEFAULT_OUTPUT_LIMIT: usize = 64 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_mins(5);
 const CLEANUP_GRACE: Duration = Duration::from_secs(1);
-const DRAIN_DEADLINE: Duration = Duration::from_secs(2);
+// Process-session leaders can exit just ahead of supervised helpers that still
+// hold an output descriptor. Keep this bounded, but allow normal teardown to
+// complete before declaring a leaked output handle.
+const DRAIN_DEADLINE: Duration = Duration::from_secs(5);
 const ARTIFACT_LIMIT: usize = 256 * 1024;
 const ARTIFACT_TAIL_LIMIT: usize = 64 * 1024;
 const ARTIFACT_MARKER: &[u8] =
