@@ -25,6 +25,7 @@ args = ["fmt", "--all", "--", "--check"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+parallel_group_by_surface = { pull_request = "rust-01-test" }
 timeout_seconds = 5
 network = "none"
 platforms = ["all"]
@@ -38,6 +39,7 @@ args = ["metadata", "--locked", "--no-deps", "--format-version", "1"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
+parallel_group_by_surface = { pull_request = "rust-01-test" }
 timeout_seconds = 5
 network = "none"
 platforms = ["all"]
@@ -85,7 +87,7 @@ surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 75, pull_request = 75 }
+timeout_seconds_by_surface = { prepush = 75, pull_request = 110 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -243,7 +245,10 @@ args = ["xtask", "repo", "verify-workflows"]
 owner = "xtask"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
+parallel_group_by_surface = { pull_request = "rust-02-workflow" }
+prerequisites_by_surface = { pull_request = ["rust-test"] }
 timeout_seconds = 5
+timeout_seconds_by_surface = { pull_request = 20 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -256,6 +261,8 @@ args = ["xtask", "repo", "verify-files"]
 owner = "repository"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
+parallel_group_by_surface = { pull_request = "rust-03-files" }
+prerequisites_by_surface = { pull_request = ["workflow-policy"] }
 timeout_seconds = 5
 network = "none"
 platforms = ["all"]
@@ -269,6 +276,8 @@ args = ["xtask", "repo", "verify-dag"]
 owner = "architecture"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
+parallel_group_by_surface = { pull_request = "rust-04-dag" }
+prerequisites_by_surface = { pull_request = ["repository-files"] }
 timeout_seconds = 10
 network = "none"
 platforms = ["all"]
@@ -322,6 +331,7 @@ owner = "desktop"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
 timeout_seconds = 10
+timeout_seconds_by_surface = { pull_request = 5 }
 network = "none"
 platforms = ["macos"]
 severity = "error"
