@@ -53,6 +53,10 @@ pub enum Command {
     },
     #[command(name = "lua-conformance")]
     LuaConformance(LuaConformanceArgs),
+    Ecosystem {
+        #[command(subcommand)]
+        command: EcosystemCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -163,4 +167,34 @@ pub struct LuaConformanceArgs {
     pub verify_limits: bool,
     #[arg(long, default_value_t = false)]
     pub verify_events: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EcosystemCommand {
+    Channels {
+        #[command(subcommand)]
+        command: ChannelsCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ChannelsCommand {
+    Verify(ChannelVerifyArgs),
+    Refresh(ChannelRefreshArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ChannelVerifyArgs {
+    #[arg(long = "channel")]
+    pub channels: Vec<String>,
+    #[arg(long)]
+    pub receipt: Option<PathBuf>,
+    #[arg(long)]
+    pub artifact: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ChannelRefreshArgs {
+    #[arg(long)]
+    pub receipt: Option<PathBuf>,
 }
