@@ -1,5 +1,7 @@
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
+use std::path::Path;
 
 use super::github::{
     FixtureApi, GitHubApi, ISSUE_SPEC_PARENT, ReadApi, TARGET_REPOSITORY, WriteApi, is_child_issue,
@@ -16,6 +18,45 @@ type Result<T = crate::output::Report, E = String> = std::result::Result<T, E>;
 struct SpecificationFile {
     #[serde(rename = "specification")]
     specifications: Vec<rusttable_parity::IssueSpecification>,
+}
+
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+struct ApplyReceipt {
+    schema_version: u32,
+    plan_sha256: String,
+    applied_actions: BTreeSet<String>,
+}
+
+fn receipt_path(plan: &Path) -> std::path::PathBuf {
+    plan.with_extension("receipt.json")
+}
+
+fn load_receipt(path: &Path, plan_sha256: &str) -> Result<ApplyReceipt, String> {
+    if !path.exists() {
+        return Ok(ApplyReceipt {
+            schema_version: 1,
+            plan_sha256: plan_sha256.to_owned(),
+            applied_actions: BTreeSet::new(),
+        });
+    }
+    let receipt: ApplyReceipt = serde_json::from_str(
+        &fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))?,
+    )
+    .map_err(|error| format!("parse {}: {error}", path.display()))?;
+    if receipt.schema_version != 1 || receipt.plan_sha256 != plan_sha256 {
+        return Err("issue reconciliation receipt does not match the plan".to_owned());
+    }
+    Ok(receipt)
+}
+
+fn save_receipt(path: &Path, receipt: &ApplyReceipt) -> Result<(), String> {
+    let rendered = serde_json::to_vec_pretty(receipt)
+        .map_err(|error| format!("serialize {}: {error}", path.display()))?;
+    fs::write(path, rendered).map_err(|error| format!("write {}: {error}", path.display()))
+}
+
+fn action_key(kind: &str, issue: u64) -> String {
+    format!("{kind}:{issue}")
 }
 
 fn digest(bytes: &[u8]) -> String {
@@ -98,6 +139,9 @@ pub(crate) fn apply_issue_reconciliation(
             plan.blocked_ambiguities.len()
         ));
     }
+    let receipt_file = receipt_path(&path);
+    let mut receipt = load_receipt(&receipt_file, &plan.plan_sha256)?;
+    let resumed = !receipt.applied_actions.is_empty();
     let api = GitHubApi::from_environment(runner)?;
     let inputs = reconciliation_inputs(&api)?;
     let candidates = reconciliation_candidates(root)?;
@@ -109,12 +153,21 @@ pub(crate) fn apply_issue_reconciliation(
         &inputs,
         &specifications,
     )?;
-    if current.source_hash != plan.source_hash || current.audits.len() != plan.audits.len() {
+    if !resumed
+        && (current.source_hash != plan.source_hash || current.audits.len() != plan.audits.len())
+    {
         return Err("issue reconciliation plan is stale: live issue snapshot changed".to_owned());
     }
-    plan.validate_for_apply(&inputs)?;
+    if !resumed {
+        plan.validate_for_apply(&inputs)?;
+    }
     let mut applied = 0usize;
-    for action in &plan.updates {
+
+    for action in &plan.label_changes {
+        let key = action_key("label", action.issue);
+        if receipt.applied_actions.contains(&key) {
+            continue;
+        }
         let current = current_input(&inputs, action.issue)?;
         assert_unchanged(
             current,
@@ -125,11 +178,38 @@ pub(crate) fn apply_issue_reconciliation(
         api.update_issue(
             TARGET_REPOSITORY,
             action.issue,
-            serde_json::json!({ "body": action.replacement_body }),
+            serde_json::json!({ "labels": action.labels }),
         )?;
+        receipt.applied_actions.insert(key);
+        save_receipt(&receipt_file, &receipt)?;
+        applied += 1;
+    }
+    for action in &plan.milestone_changes {
+        let key = action_key("milestone", action.issue);
+        if receipt.applied_actions.contains(&key) {
+            continue;
+        }
+        let current = current_input(&inputs, action.issue)?;
+        assert_unchanged(
+            current,
+            action.issue,
+            &action.expected_body_sha256,
+            &action.expected_etag,
+        )?;
+        api.update_issue(
+            TARGET_REPOSITORY,
+            action.issue,
+            serde_json::json!({ "milestone": action.milestone_number }),
+        )?;
+        receipt.applied_actions.insert(key);
+        save_receipt(&receipt_file, &receipt)?;
         applied += 1;
     }
     for action in &plan.closures {
+        let key = action_key("closure", action.issue);
+        if receipt.applied_actions.contains(&key) {
+            continue;
+        }
         let current = current_input(&inputs, action.issue)?;
         assert_unchanged(
             current,
@@ -146,25 +226,45 @@ pub(crate) fn apply_issue_reconciliation(
                 "body": format!("{}\n\n## Replacement\n\nSuperseded by #{}.", current.body.trim_end(), action.replacement_issue),
             }),
         )?;
+        receipt.applied_actions.insert(key);
+        save_receipt(&receipt_file, &receipt)?;
         applied += 1;
     }
-    for action in &plan.label_changes {
+    for action in &plan.updates {
+        let key = action_key("update", action.issue);
+        if receipt.applied_actions.contains(&key) {
+            continue;
+        }
+        let current = current_input(&inputs, action.issue)?;
+        assert_unchanged(
+            current,
+            action.issue,
+            &action.expected_body_sha256,
+            &action.expected_etag,
+        )?;
         api.update_issue(
             TARGET_REPOSITORY,
             action.issue,
-            serde_json::json!({ "labels": action.labels }),
+            serde_json::json!({ "body": action.replacement_body }),
         )?;
-        applied += 1;
-    }
-    for action in &plan.milestone_changes {
-        api.update_issue(
-            TARGET_REPOSITORY,
-            action.issue,
-            serde_json::json!({ "milestone": action.milestone_number }),
-        )?;
+        receipt.applied_actions.insert(key);
+        save_receipt(&receipt_file, &receipt)?;
         applied += 1;
     }
     for action in &plan.creations {
+        let key = format!("create:{}", action.capability_id);
+        if receipt.applied_actions.contains(&key) {
+            continue;
+        }
+        if !current
+            .creations
+            .iter()
+            .any(|creation| creation.capability_id == action.capability_id)
+        {
+            receipt.applied_actions.insert(key);
+            save_receipt(&receipt_file, &receipt)?;
+            continue;
+        }
         api.create_issue(
             TARGET_REPOSITORY,
             serde_json::json!({
@@ -174,15 +274,22 @@ pub(crate) fn apply_issue_reconciliation(
                 "milestone": action.milestone_number,
             }),
         )?;
+        receipt.applied_actions.insert(key);
+        save_receipt(&receipt_file, &receipt)?;
         applied += 1;
     }
     Ok(report(
         root,
         "parity.apply-issue-reconciliation",
-        serde_json::json!({ "plan": path, "plan_sha256": plan.plan_sha256, "applied": applied }),
+        serde_json::json!({
+            "plan": path,
+            "receipt": receipt_file,
+            "plan_sha256": plan.plan_sha256,
+            "applied": applied,
+            "total_applied": receipt.applied_actions.len(),
+        }),
     ))
 }
-
 fn current_input(
     inputs: &[rusttable_parity::IssueInput],
     issue: u64,
