@@ -177,6 +177,15 @@ pub enum RepoCommand {
     Files,
     #[command(name = "verify-workflows")]
     Workflows,
+    #[command(name = "verify-native-boundaries")]
+    NativeBoundaries(NativeBoundariesArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct NativeBoundariesArgs {
+    /// Write the deterministic boundary evidence receipt to this path.
+    #[arg(long)]
+    pub receipt: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

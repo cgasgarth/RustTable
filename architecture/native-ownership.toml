@@ -1,0 +1,108 @@
+# Generated ownership index consumed by verify-native-boundaries.
+# Regenerate with the exact primary compiler after changing Cargo metadata.
+schema = "rusttable.native-ownership.v1"
+generated = true
+generated_by = "cargo xtask repo verify-native-boundaries"
+source_manifest = "architecture/native-boundaries.toml"
+workspace_dag = "architecture/workspace-dag.toml"
+dependency_policy = "quality/dependency-sources.toml"
+
+workspace_members = ["rusttable-app", "rusttable-camera", "rusttable-catalog", "rusttable-catalog-store", "rusttable-color", "rusttable-compat", "rusttable-core", "rusttable-diagnostics", "rusttable-export", "rusttable-gpu", "rusttable-image", "rusttable-image-io", "rusttable-import", "rusttable-masks", "rusttable-metadata", "rusttable-parity", "rusttable-pixelpipe", "rusttable-plugin-api", "rusttable-processing", "rusttable-render", "rusttable-scripting", "rusttable-simd", "rusttable-testkit", "rusttable-ui", "xtask"]
+
+[[native_packages]]
+name = "core-foundation-sys"
+owner_issue = 168
+owner_crate = "rusttable-app"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "dirs-sys"
+owner_issue = 168
+owner_crate = "rusttable-app"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "glutin_wgl_sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "jni-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "js-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "linux-raw-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "mlua-sys"
+owner_issue = 168
+owner_crate = "rusttable-scripting"
+classification = "adapter-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock", "architecture/native-boundaries.toml"]
+
+[[native_packages]]
+name = "ndk-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "objc-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "renderdoc-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "wasm-bindgen-shared"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "wayland-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "web-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
+
+[[native_packages]]
+name = "windows-sys"
+owner_issue = 453
+owner_crate = "rusttable-gpu"
+classification = "platform-transitive"
+evidence = ["quality/dependency-sources.toml", "Cargo.lock"]
