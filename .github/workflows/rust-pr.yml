@@ -16,7 +16,7 @@ jobs:
   validate:
     name: rust-pr / validate
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash scripts/with-validation-budget.sh 150 workflow-step bash {0}
@@ -54,6 +54,7 @@ jobs:
       - name: Fetch locked dependencies for offline validation
         run: cargo fetch --locked
       - name: Warm PR test runner artifacts
+        shell: bash scripts/with-validation-budget.sh 300 warmup bash {0}
         run: |
           CARGO_BUILD_JOBS=16 \
           CARGO_INCREMENTAL=0 \
@@ -64,7 +65,7 @@ jobs:
           CARGO_INCREMENTAL=0 \
           CARGO_PROFILE_DEV_DEBUG=0 \
           CARGO_PROFILE_TEST_DEBUG=0 \
-          cargo test -p rusttable-scripting --lib --all-features --locked --no-run
+          cargo test --workspace --lib --all-features --locked --no-run
       - name: Start validation timer
         run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Run dependency-correct validation scheduler
