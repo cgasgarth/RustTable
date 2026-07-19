@@ -274,6 +274,14 @@ impl Check {
                 self.id
             ));
         }
+        for platform in &self.platforms {
+            if !["all", "linux", "macos", "windows"].contains(&platform.as_str()) {
+                return Err(format!(
+                    "validation contract: check {} has unknown platform {}",
+                    self.id, platform
+                ));
+            }
+        }
         for (surface, timeout) in &self.timeout_seconds_by_surface {
             if !SUPPORTED_SURFACES.contains(&surface.as_str()) || *timeout == 0 {
                 return Err(format!(
@@ -361,6 +369,12 @@ impl Check {
         self.surfaces.iter().any(|candidate| candidate == surface)
     }
 
+    fn runs_on_current_platform(&self) -> bool {
+        self.platforms
+            .iter()
+            .any(|platform| platform == "all" || platform == current_platform())
+    }
+
     fn parallel_group_for(&self, surface: &str) -> &str {
         self.parallel_group_by_surface
             .get(surface)
@@ -398,6 +412,25 @@ impl Check {
             || command.contains("scripts/prepush-fast.sh")
             || command.contains("scripts/pr-ci.sh")
             || command.contains("scripts/main-ci.sh")
+    }
+}
+
+fn current_platform() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        "linux"
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "windows"
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        "other"
     }
 }
 
@@ -442,6 +475,20 @@ fn execute_surface_for_group(
     runner: &ProcessRunner,
 ) -> Result<SurfaceReceipt> {
     let budget_seconds = contract.budgets[surface];
+    if let Some(group) = selected_group {
+        for check in contract
+            .checks
+            .iter()
+            .filter(|check| check.on(surface) && check.parallel_group_for(surface) == group)
+        {
+            if let Some(prerequisite) = check.prerequisites_for(surface).first() {
+                return Err(format!(
+                    "ci.{surface}: selected group {group} has unmet prerequisite {prerequisite} for {}; run the full surface",
+                    check.id
+                ));
+            }
+        }
+    }
     let surface_start = Instant::now();
     let selected = contract
         .checks
@@ -449,6 +496,7 @@ fn execute_surface_for_group(
         .filter(|check| {
             check.on(surface)
                 && selected_group.is_none_or(|group| check.parallel_group_for(surface) == group)
+                && check.runs_on_current_platform()
         })
         .collect::<Vec<_>>();
     let omitted = contract
@@ -457,16 +505,20 @@ fn execute_surface_for_group(
         .filter(|check| {
             !check.on(surface)
                 || selected_group.is_some_and(|group| check.parallel_group_for(surface) != group)
+                || !check.runs_on_current_platform()
         })
         .map(|check| OmittedCheck {
             id: check.id.clone(),
             reason: if !check.on(surface) {
                 format!("not assigned to {surface}")
-            } else {
+            } else if selected_group.is_some_and(|group| check.parallel_group_for(surface) != group)
+            {
                 format!(
                     "not assigned to selected group {}",
                     selected_group.unwrap_or_default()
                 )
+            } else {
+                format!("not assigned to platform {}", current_platform())
             },
         })
         .collect::<Vec<_>>();
@@ -565,11 +617,16 @@ fn execute_check(
             detail: None,
         },
         Ok(result) => {
-            cancellation.store(true, Ordering::Release);
+            let status = if check.severity == "warning" {
+                "warning"
+            } else {
+                cancellation.store(true, Ordering::Release);
+                "failed"
+            };
             CheckReceipt {
                 id: check.id.clone(),
                 label: check.label.clone(),
-                status: "failed".to_owned(),
+                status: status.to_owned(),
                 duration_ms,
                 severity: check.severity.clone(),
                 artifacts,
@@ -577,11 +634,16 @@ fn execute_check(
             }
         }
         Err(error) => {
-            cancellation.store(true, Ordering::Release);
+            let status = if check.severity == "warning" {
+                "warning"
+            } else {
+                cancellation.store(true, Ordering::Release);
+                "failed"
+            };
             CheckReceipt {
                 id: check.id.clone(),
                 label: check.label.clone(),
-                status: "failed".to_owned(),
+                status: status.to_owned(),
                 duration_ms,
                 severity: check.severity.clone(),
                 artifacts,
@@ -661,6 +723,14 @@ mod tests {
         item.network = "read".to_owned();
         let error = contract(vec![item]).validate().expect_err("network");
         assert!(error.contains("network = none"));
+    }
+
+    #[test]
+    fn rejects_unknown_platforms() {
+        let mut item = check("platform", "a", 1);
+        item.platforms = vec!["solaris".to_owned()];
+        let error = contract(vec![item]).validate().expect_err("platform");
+        assert!(error.contains("unknown platform solaris"));
     }
 
     #[test]
@@ -872,6 +942,20 @@ mod tests {
     }
 
     #[test]
+    fn warning_failure_does_not_cancel_siblings_or_group() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut warning = check("warning", "a", 5);
+        warning.program = "sh".to_owned();
+        warning.args = vec!["-c".to_owned(), "exit 7".to_owned()];
+        warning.severity = "warning".to_owned();
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let receipt = execute_check(&root, &warning, "precommit", &runner, &cancellation);
+        assert_eq!(receipt.status, "warning");
+        assert!(!cancellation.load(Ordering::Acquire));
+    }
+
+    #[test]
     fn records_a_timed_out_check_receipt() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
@@ -920,6 +1004,48 @@ mod tests {
         assert_eq!(
             receipt.omitted[0].reason,
             "not assigned to selected group rust"
+        );
+    }
+
+    #[test]
+    fn selected_group_rejects_unmet_prerequisites() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut dependent = check("dependent", "dependent", 5);
+        dependent.surfaces = vec!["pull_request".to_owned()];
+        dependent.prerequisites = vec!["prerequisite".to_owned()];
+        let mut prerequisite = check("prerequisite", "prerequisite", 5);
+        prerequisite.surfaces = vec!["pull_request".to_owned()];
+        let contract = Contract {
+            budgets: BTreeMap::from([(String::from("pull_request"), 150)]),
+            checks: vec![dependent, prerequisite],
+        };
+
+        let error =
+            execute_surface_for_group(&root, &contract, "pull_request", Some("dependent"), &runner)
+                .expect_err("selected group with prerequisite");
+        assert!(error.contains("unmet prerequisite prerequisite"));
+    }
+
+    #[test]
+    fn omits_checks_for_other_platforms_before_execution() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut item = check("other-platform", "rust", 5);
+        item.platforms = vec![if current_platform() == "linux" {
+            "macos".to_owned()
+        } else {
+            "linux".to_owned()
+        }];
+        let contract = contract(vec![item]);
+
+        let receipt = execute_surface_for_group(&root, &contract, "precommit", None, &runner)
+            .expect("platform omission succeeds");
+
+        assert!(receipt.checks.is_empty());
+        assert_eq!(
+            receipt.omitted[0].reason,
+            format!("not assigned to platform {}", current_platform())
         );
     }
 

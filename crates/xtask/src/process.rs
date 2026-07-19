@@ -3,25 +3,112 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
+#[cfg(windows)]
+use process_wrap::std::JobObject;
+#[cfg(unix)]
+use process_wrap::std::ProcessSession;
+use process_wrap::std::{ChildWrapper, CommandWrap};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const READ_CHUNK: usize = 8192;
 const DEFAULT_OUTPUT_LIMIT: usize = 64 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_mins(5);
+const CLEANUP_GRACE: Duration = Duration::from_secs(1);
+const DRAIN_DEADLINE: Duration = Duration::from_secs(2);
 const ARTIFACT_LIMIT: usize = 256 * 1024;
 const ARTIFACT_TAIL_LIMIT: usize = 64 * 1024;
 const ARTIFACT_MARKER: &[u8] =
     b"\n[output truncated; inspect the command receipt for the bounded artifact]\n";
 const ARTIFACT_HEAD_LIMIT: usize = ARTIFACT_LIMIT - ARTIFACT_TAIL_LIMIT - ARTIFACT_MARKER.len();
+
+/// Named environment policies prevent accidental inheritance from the parent process.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum EnvironmentProfile {
+    #[default]
+    Empty,
+    RustTool,
+    GitTool,
+    GitHubApi,
+    ReferenceTool,
+    PlatformTool,
+    TestFixture,
+}
+
+impl EnvironmentProfile {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::RustTool => "rust-tool",
+            Self::GitTool => "git-tool",
+            Self::GitHubApi => "github-api",
+            Self::ReferenceTool => "reference-tool",
+            Self::PlatformTool => "platform-tool",
+            Self::TestFixture => "test-fixture",
+        }
+    }
+}
+
+/// Secret values are intentionally not serializable or printable.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SecretValue(String);
+
+impl SecretValue {
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
+
+impl fmt::Debug for SecretValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("[REDACTED]")
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum NetworkPolicy {
+    #[default]
+    None,
+    Read,
+}
+
+impl NetworkPolicy {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Read => "read",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CleanupReceipt {
+    pub outcome: String,
+    pub termination: String,
+    pub grace_ms: u128,
+    pub drain_ms: u128,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactReceipt {
+    pub path: String,
+    pub size_bytes: u64,
+    pub sha256: String,
+    pub kind: String,
+    pub fresh: bool,
+}
 
 #[derive(Debug, Clone)]
 pub struct ProcessRequest {
@@ -29,6 +116,11 @@ pub struct ProcessRequest {
     args: Vec<String>,
     current_dir: Option<PathBuf>,
     environment: BTreeMap<String, String>,
+    secrets: BTreeMap<String, SecretValue>,
+    #[allow(dead_code)]
+    secret_args: BTreeMap<usize, SecretValue>,
+    profile: EnvironmentProfile,
+    network: NetworkPolicy,
     limits: ProcessLimits,
     cancellation: Option<Arc<AtomicBool>>,
     stdout_artifact: Option<PathBuf>,
@@ -46,12 +138,51 @@ impl ProcessRequest {
             program: program.into(),
             args: args.into_iter().map(Into::into).collect(),
             current_dir: None,
-            environment: std::env::vars().collect(),
+            environment: BTreeMap::new(),
+            secrets: BTreeMap::new(),
+            secret_args: BTreeMap::new(),
+            profile: EnvironmentProfile::Empty,
+            network: NetworkPolicy::None,
             limits: ProcessLimits::default(),
             cancellation: None,
             stdout_artifact: None,
             stderr_artifact: None,
         }
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn profile(mut self, profile: EnvironmentProfile) -> Self {
+        self.profile = profile;
+        self
+    }
+
+    #[allow(dead_code)]
+    #[must_use]
+    pub fn network(mut self, network: NetworkPolicy) -> Self {
+        self.network = network;
+        self
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.environment.insert(key.into(), value.into());
+        self
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn secret(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.secrets.insert(key.into(), SecretValue::new(value));
+        self
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn secret_arg(mut self, index: usize, value: impl Into<String>) -> Self {
+        self.secret_args.insert(index, SecretValue::new(value));
+        self
     }
 
     #[must_use]
@@ -83,6 +214,82 @@ impl ProcessRequest {
         self.stdout_artifact = Some(stdout.into());
         self.stderr_artifact = Some(stderr.into());
         self
+    }
+
+    fn effective_environment(&self) -> BTreeMap<String, String> {
+        let mut environment = BTreeMap::from([
+            ("LANG".to_owned(), "C".to_owned()),
+            ("LC_ALL".to_owned(), "C".to_owned()),
+            ("TZ".to_owned(), "UTC".to_owned()),
+        ]);
+        if let Ok(path) = std::env::var("PATH") {
+            environment.insert("PATH".to_owned(), path);
+        }
+        match self.profile {
+            EnvironmentProfile::RustTool => {
+                environment.insert("CARGO_TERM_COLOR".to_owned(), "never".to_owned());
+                environment.insert("CARGO_NET_OFFLINE".to_owned(), "true".to_owned());
+            }
+            EnvironmentProfile::GitTool => {
+                environment.insert("GIT_CONFIG_NOSYSTEM".to_owned(), "1".to_owned());
+                environment.insert("GIT_TERMINAL_PROMPT".to_owned(), "0".to_owned());
+            }
+            EnvironmentProfile::GitHubApi => {
+                environment.insert("GIT_CONFIG_NOSYSTEM".to_owned(), "1".to_owned());
+            }
+            EnvironmentProfile::ReferenceTool => {
+                environment.insert("RUST_BACKTRACE".to_owned(), "0".to_owned());
+            }
+            EnvironmentProfile::PlatformTool
+            | EnvironmentProfile::TestFixture
+            | EnvironmentProfile::Empty => {}
+        }
+        if self.network == NetworkPolicy::None {
+            environment.insert("CARGO_NET_OFFLINE".to_owned(), "true".to_owned());
+        }
+        environment.extend(self.environment.clone());
+        environment.extend(
+            self.secrets
+                .iter()
+                .map(|(key, value)| (key.clone(), value.0.clone())),
+        );
+        environment
+    }
+
+    fn public_environment(&self) -> BTreeMap<String, String> {
+        let mut environment = self.effective_environment();
+        for key in self.secrets.keys() {
+            environment.remove(key);
+        }
+        environment
+    }
+
+    #[allow(dead_code)]
+    fn effective_args(&self) -> Vec<String> {
+        self.args
+            .iter()
+            .enumerate()
+            .map(|(index, arg)| {
+                self.secret_args
+                    .get(&index)
+                    .map_or_else(|| arg.clone(), |secret| secret.0.clone())
+            })
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    fn public_args(&self) -> Vec<String> {
+        self.args
+            .iter()
+            .enumerate()
+            .map(|(index, arg)| {
+                if self.secret_args.contains_key(&index) {
+                    "[REDACTED]".to_owned()
+                } else {
+                    arg.clone()
+                }
+            })
+            .collect()
     }
 }
 
@@ -118,6 +325,30 @@ pub struct CommandReceipt {
     pub stdout_truncated: bool,
     #[serde(default)]
     pub stderr_truncated: bool,
+    #[serde(default)]
+    pub logical_command_id: String,
+    #[serde(default)]
+    pub redacted_args: Vec<String>,
+    #[serde(default)]
+    pub path_aliases: BTreeMap<String, String>,
+    #[serde(default)]
+    pub environment_names: Vec<String>,
+    #[serde(default)]
+    pub environment_policy_hash: String,
+    #[serde(default)]
+    pub network_policy: String,
+    #[serde(default)]
+    pub process_ownership: String,
+    #[serde(default)]
+    pub process_id: u32,
+    #[serde(default)]
+    pub cleanup: CleanupReceipt,
+    #[serde(default)]
+    pub artifacts: Vec<ArtifactReceipt>,
+    #[serde(default)]
+    pub stdout_error: Option<String>,
+    #[serde(default)]
+    pub stderr_error: Option<String>,
 }
 
 impl CommandReceipt {
@@ -151,38 +382,65 @@ impl ProcessRunner {
         }
     }
 
-    /// Runs a command with explicit environment construction and bounded pipes.
+    /// Runs a command with an allowlisted environment, owned process tree, and bounded pipes.
     pub fn run(&self, mut request: ProcessRequest) -> Result<ProcessResult, ProcessError> {
         if request.limits == ProcessLimits::default() {
             request.limits = self.default_limits;
         }
         validate_limits(request.limits)?;
+        let started = SystemTime::now();
         let (mut child, receiver, stdout_thread, stderr_thread) = spawn_process(&request)?;
+        let process_id = child.id();
         let mut streams = Streams::default();
-        let (mut reason, exit_code) = wait_for_exit(&mut child, &receiver, &mut streams, &request)?;
+        let (reason, exit_code, cleanup) =
+            wait_for_exit(child.as_mut(), &receiver, &mut streams, &request)?;
         join_readers(
             &receiver,
             &mut streams,
-            &mut reason,
             stdout_thread,
             stderr_thread,
+            reason,
         )?;
         if let Some((path, message)) = streams.artifact_error {
             return Err(ProcessError::Artifact { path, message });
         }
-        let status = reason.status();
+        let artifacts = collect_artifacts(&request, started)?;
+        let public_environment = request.public_environment();
         let receipt = CommandReceipt {
-            schema_version: 1,
-            program: request.program,
-            args: request.args,
-            current_dir: request.current_dir.map(|path| path.display().to_string()),
-            environment_hash: hash_environment(&request.environment),
-            status: status.to_owned(),
+            schema_version: 2,
+            program: stable_path(&request.program, request.current_dir.as_deref()),
+            args: redact_args(
+                &request.public_args(),
+                &request.secrets,
+                request.current_dir.as_deref(),
+            ),
+            current_dir: request
+                .current_dir
+                .as_deref()
+                .map(|_| "<worktree>".to_owned()),
+            environment_hash: hash_environment(&public_environment),
+            status: reason.status().to_owned(),
             exit_code,
             stdout_hash: hash_bytes(&streams.stdout.bytes),
             stderr_hash: hash_bytes(&streams.stderr.bytes),
             stdout_truncated: streams.stdout.truncated,
             stderr_truncated: streams.stderr.truncated,
+            logical_command_id: logical_command_id(&request),
+            redacted_args: redact_args(
+                &request.public_args(),
+                &request.secrets,
+                request.current_dir.as_deref(),
+            ),
+            path_aliases: path_aliases(&request),
+            environment_names: public_environment.keys().cloned().collect(),
+            environment_policy_hash: hash_policy(&request),
+            network_policy: request.network.name().to_owned(),
+            process_ownership: ownership_name(),
+            process_id,
+            cleanup,
+            artifacts,
+            stdout_error: streams.stdout.read_error,
+            stderr_error: streams.stderr.read_error,
         };
         Ok(ProcessResult {
             receipt,
@@ -192,7 +450,12 @@ impl ProcessRunner {
     }
 }
 
-type RunningProcess = (Child, Receiver<StreamEvent>, JoinHandle<()>, JoinHandle<()>);
+type RunningProcess = (
+    Box<dyn ChildWrapper>,
+    Receiver<StreamEvent>,
+    JoinHandle<()>,
+    JoinHandle<()>,
+);
 
 fn spawn_process(request: &ProcessRequest) -> Result<RunningProcess, ProcessError> {
     let stdout_artifact = request
@@ -205,25 +468,34 @@ fn spawn_process(request: &ProcessRequest) -> Result<RunningProcess, ProcessErro
         .as_deref()
         .map(ArtifactWriter::create)
         .transpose()?;
-    let mut command = Command::new(&request.program);
-    command.args(&request.args);
-    command.stdin(Stdio::null());
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
-    command.env_clear().envs(&request.environment);
-    if let Some(directory) = &request.current_dir {
-        command.current_dir(directory);
-    }
+    let environment = request.effective_environment();
+    let args = request.effective_args();
+    let mut command = CommandWrap::with_new(&request.program, |command| {
+        command
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .env_clear()
+            .envs(&environment);
+        if let Some(directory) = &request.current_dir {
+            command.current_dir(directory);
+        }
+    });
+    #[cfg(unix)]
+    command.wrap(ProcessSession);
+    #[cfg(windows)]
+    command.wrap(JobObject);
     let mut child = command.spawn().map_err(|source| ProcessError::Spawn {
         program: request.program.clone(),
         message: source.to_string(),
     })?;
     let stdout = child
-        .stdout
+        .stdout()
         .take()
         .ok_or(ProcessError::MissingPipe("stdout"))?;
     let stderr = child
-        .stderr
+        .stderr()
         .take()
         .ok_or(ProcessError::MissingPipe("stderr"))?;
     let (sender, receiver) = mpsc::channel();
@@ -245,11 +517,11 @@ fn spawn_process(request: &ProcessRequest) -> Result<RunningProcess, ProcessErro
 }
 
 fn wait_for_exit(
-    child: &mut Child,
+    child: &mut dyn ChildWrapper,
     receiver: &Receiver<StreamEvent>,
     streams: &mut Streams,
     request: &ProcessRequest,
-) -> Result<(StopReason, Option<i32>), ProcessError> {
+) -> Result<(StopReason, Option<i32>, CleanupReceipt), ProcessError> {
     let deadline = Instant::now() + request.limits.timeout;
     let cancellation = request
         .cancellation
@@ -258,7 +530,7 @@ fn wait_for_exit(
     let mut reason = StopReason::None;
     let mut exit_code = None;
     while matches!(reason, StopReason::None) && exit_code.is_none() {
-        drain_events(receiver, streams, &mut reason);
+        drain_events(receiver, streams);
         if cancellation.load(Ordering::Acquire) {
             reason = StopReason::Cancelled;
         } else if Instant::now() >= deadline {
@@ -267,18 +539,48 @@ fn wait_for_exit(
             exit_code = status.code();
         } else {
             match receiver.recv_timeout(Duration::from_millis(10)) {
-                Ok(event) => accept_event(event, streams, &mut reason),
+                Ok(event) => accept_event(event, streams),
                 Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {}
             }
         }
     }
-    if !matches!(reason, StopReason::None) {
-        terminate_process_tree(child);
+    let cleanup = if matches!(reason, StopReason::None) {
+        let status = child.wait().map_err(ProcessError::Wait)?;
+        exit_code = status.code();
+        CleanupReceipt {
+            outcome: "reaped".to_owned(),
+            ..CleanupReceipt::default()
+        }
+    } else {
+        terminate_owned_process(child)?
+    };
+    Ok((reason, exit_code, cleanup))
+}
+
+fn terminate_owned_process(child: &mut dyn ChildWrapper) -> Result<CleanupReceipt, ProcessError> {
+    let started = Instant::now();
+    #[cfg(unix)]
+    child.signal(15).map_err(ProcessError::Cleanup)?;
+    let grace_deadline = Instant::now() + CLEANUP_GRACE;
+    while Instant::now() < grace_deadline {
+        if child.try_wait().map_err(ProcessError::Wait)?.is_some() {
+            return Ok(CleanupReceipt {
+                outcome: "reaped".to_owned(),
+                termination: "term".to_owned(),
+                grace_ms: started.elapsed().as_millis(),
+                drain_ms: 0,
+            });
+        }
+        thread::sleep(Duration::from_millis(10));
     }
-    if exit_code.is_none() {
-        exit_code = child.wait().map_err(ProcessError::Wait)?.code();
-    }
-    Ok((reason, exit_code))
+    child.start_kill().map_err(ProcessError::Cleanup)?;
+    let status = child.wait().map_err(ProcessError::Wait)?;
+    Ok(CleanupReceipt {
+        outcome: "reaped".to_owned(),
+        termination: "kill".to_owned(),
+        grace_ms: started.elapsed().as_millis(),
+        drain_ms: u128::from(status.code().is_none()),
+    })
 }
 
 fn validate_limits(limits: ProcessLimits) -> Result<(), ProcessError> {
@@ -291,11 +593,23 @@ fn validate_limits(limits: ProcessLimits) -> Result<(), ProcessError> {
 #[derive(Debug)]
 pub enum ProcessError {
     InvalidLimits,
-    Spawn { program: String, message: String },
+    Spawn {
+        program: String,
+        message: String,
+    },
     MissingPipe(&'static str),
     Wait(std::io::Error),
+    Cleanup(std::io::Error),
     ReaderPanic,
-    Artifact { path: PathBuf, message: String },
+    DrainTimeout,
+    OutputRead {
+        stream: &'static str,
+        message: String,
+    },
+    Artifact {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 impl fmt::Display for ProcessError {
@@ -307,14 +621,17 @@ impl fmt::Display for ProcessError {
             }
             Self::MissingPipe(stream) => write!(formatter, "child did not provide {stream} pipe"),
             Self::Wait(error) => write!(formatter, "cannot wait for child: {error}"),
+            Self::Cleanup(error) => write!(formatter, "cannot clean up child process: {error}"),
             Self::ReaderPanic => formatter.write_str("child output reader panicked"),
-            Self::Artifact { path, message } => {
-                write!(
-                    formatter,
-                    "cannot write process artifact {}: {message}",
-                    path.display()
-                )
+            Self::DrainTimeout => formatter.write_str("child output drain exceeded its deadline"),
+            Self::OutputRead { stream, message } => {
+                write!(formatter, "cannot read {stream}: {message}")
             }
+            Self::Artifact { path, message } => write!(
+                formatter,
+                "cannot write process artifact {}: {message}",
+                path.display()
+            ),
         }
     }
 }
@@ -327,11 +644,21 @@ enum StreamKind {
     Stderr,
 }
 
+impl StreamKind {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+    }
+}
+
 #[derive(Debug)]
 enum StreamEvent {
     Data(StreamKind, Vec<u8>),
     Limit(StreamKind),
     Done(StreamKind),
+    ReadError(StreamKind, String),
     ArtifactError(StreamKind, PathBuf, String),
 }
 
@@ -348,18 +675,13 @@ fn spawn_reader<R: Read + Send + 'static>(
         let mut buffer = [0; READ_CHUNK];
         loop {
             match reader.read(&mut buffer) {
-                Ok(0) | Err(_) => {
-                    let _ = sender.send(StreamEvent::Data(stream, bytes));
-                    if truncated {
-                        let _ = sender.send(StreamEvent::Limit(stream));
-                    }
-                    if let Some(artifact) = artifact.take() {
-                        let path = artifact.path.clone();
-                        if let Err(message) = artifact.finish() {
-                            let _ = sender.send(StreamEvent::ArtifactError(stream, path, message));
-                        }
-                    }
-                    let _ = sender.send(StreamEvent::Done(stream));
+                Ok(0) => {
+                    finish_reader(&sender, stream, bytes, truncated, artifact.take());
+                    return;
+                }
+                Err(error) => {
+                    let _ = sender.send(StreamEvent::ReadError(stream, error.to_string()));
+                    finish_reader(&sender, stream, bytes, truncated, artifact.take());
                     return;
                 }
                 Ok(count) => {
@@ -369,8 +691,7 @@ fn spawn_reader<R: Read + Send + 'static>(
                     }
                     let retained = bytes.len();
                     if retained < limit {
-                        let remaining = limit - retained;
-                        bytes.extend_from_slice(&chunk[..remaining.min(count)]);
+                        bytes.extend_from_slice(&chunk[..(limit - retained).min(count)]);
                     }
                     truncated |= retained.saturating_add(count) > limit;
                 }
@@ -379,11 +700,32 @@ fn spawn_reader<R: Read + Send + 'static>(
     })
 }
 
+fn finish_reader(
+    sender: &Sender<StreamEvent>,
+    stream: StreamKind,
+    bytes: Vec<u8>,
+    truncated: bool,
+    artifact: Option<ArtifactWriter>,
+) {
+    let _ = sender.send(StreamEvent::Data(stream, bytes));
+    if truncated {
+        let _ = sender.send(StreamEvent::Limit(stream));
+    }
+    if let Some(artifact) = artifact {
+        let path = artifact.path.clone();
+        if let Err(message) = artifact.finish() {
+            let _ = sender.send(StreamEvent::ArtifactError(stream, path, message));
+        }
+    }
+    let _ = sender.send(StreamEvent::Done(stream));
+}
+
 #[derive(Debug, Default)]
 struct StreamCapture {
     bytes: Vec<u8>,
     done: bool,
     truncated: bool,
+    read_error: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -393,16 +735,16 @@ struct Streams {
     artifact_error: Option<(PathBuf, String)>,
 }
 
-fn drain_events(receiver: &Receiver<StreamEvent>, streams: &mut Streams, reason: &mut StopReason) {
+fn drain_events(receiver: &Receiver<StreamEvent>, streams: &mut Streams) {
     loop {
         match receiver.try_recv() {
-            Ok(event) => accept_event(event, streams, reason),
+            Ok(event) => accept_event(event, streams),
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => return,
         }
     }
 }
 
-fn accept_event(event: StreamEvent, streams: &mut Streams, _reason: &mut StopReason) {
+fn accept_event(event: StreamEvent, streams: &mut Streams) {
     match event {
         StreamEvent::Data(StreamKind::Stdout, bytes) => streams.stdout.bytes = bytes,
         StreamEvent::Data(StreamKind::Stderr, bytes) => streams.stderr.bytes = bytes,
@@ -410,8 +752,12 @@ fn accept_event(event: StreamEvent, streams: &mut Streams, _reason: &mut StopRea
         StreamEvent::Limit(StreamKind::Stderr) => streams.stderr.truncated = true,
         StreamEvent::Done(StreamKind::Stdout) => streams.stdout.done = true,
         StreamEvent::Done(StreamKind::Stderr) => streams.stderr.done = true,
+        StreamEvent::ReadError(stream, message) => match stream {
+            StreamKind::Stdout => streams.stdout.read_error = Some(message),
+            StreamKind::Stderr => streams.stderr.read_error = Some(message),
+        },
         StreamEvent::ArtifactError(stream, path, message) => {
-            streams.artifact_error = Some((path, format!("{stream:?}: {message}")));
+            streams.artifact_error = Some((path, format!("{}: {message}", stream.name())));
         }
     }
 }
@@ -419,19 +765,19 @@ fn accept_event(event: StreamEvent, streams: &mut Streams, _reason: &mut StopRea
 fn join_readers(
     receiver: &Receiver<StreamEvent>,
     streams: &mut Streams,
-    reason: &mut StopReason,
     stdout_thread: JoinHandle<()>,
     stderr_thread: JoinHandle<()>,
+    _reason: StopReason,
 ) -> Result<(), ProcessError> {
-    while !(streams.stdout.done && streams.stderr.done) {
-        match receiver.recv_timeout(Duration::from_millis(100)) {
-            Ok(event) => accept_event(event, streams, reason),
-            Err(RecvTimeoutError::Timeout) if !matches!(reason, StopReason::None) => {
-                break;
-            }
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+    let deadline = Instant::now() + DRAIN_DEADLINE;
+    while !(streams.stdout.done && streams.stderr.done) && Instant::now() < deadline {
+        match receiver.recv_timeout(Duration::from_millis(25)) {
+            Ok(event) => accept_event(event, streams),
+            Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {}
         }
+    }
+    if !(streams.stdout.done && streams.stderr.done) {
+        return Err(ProcessError::DrainTimeout);
     }
     stdout_thread
         .join()
@@ -439,6 +785,18 @@ fn join_readers(
     stderr_thread
         .join()
         .map_err(|_| ProcessError::ReaderPanic)?;
+    if let Some(message) = streams.stdout.read_error.clone() {
+        return Err(ProcessError::OutputRead {
+            stream: "stdout",
+            message,
+        });
+    }
+    if let Some(message) = streams.stderr.read_error.clone() {
+        return Err(ProcessError::OutputRead {
+            stream: "stderr",
+            message,
+        });
+    }
     Ok(())
 }
 
@@ -468,14 +826,14 @@ struct ArtifactWriter {
     truncated: bool,
 }
 
-pub(crate) fn write_bounded_artifact(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_bounded_artifact(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut writer = ArtifactWriter::create(path).map_err(|error| error.to_string())?;
     writer.push(bytes);
     writer.finish()
 }
 
 impl ArtifactWriter {
-    fn create(path: &std::path::Path) -> Result<Self, ProcessError> {
+    fn create(path: &Path) -> Result<Self, ProcessError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|error| ProcessError::Artifact {
                 path: path.to_owned(),
@@ -494,7 +852,6 @@ impl ArtifactWriter {
             truncated: false,
         })
     }
-
     fn push(&mut self, bytes: &[u8]) {
         let remaining = ARTIFACT_HEAD_LIMIT.saturating_sub(self.head.len());
         let head_count = remaining.min(bytes.len());
@@ -504,14 +861,12 @@ impl ArtifactWriter {
             self.push_tail(&bytes[head_count..]);
         }
     }
-
     fn push_tail(&mut self, bytes: &[u8]) {
         self.tail.extend(bytes.iter().copied());
         while self.tail.len() > ARTIFACT_TAIL_LIMIT {
             let _ = self.tail.pop_front();
         }
     }
-
     fn finish(mut self) -> Result<(), String> {
         self.file
             .write_all(&self.head)
@@ -543,50 +898,159 @@ fn hash_environment(environment: &BTreeMap<String, String>) -> String {
     hash_bytes(canonical.as_bytes())
 }
 
-fn terminate_process_tree(child: &mut Child) {
+fn hash_policy(request: &ProcessRequest) -> String {
+    let names = request
+        .public_environment()
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    hash_bytes(
+        format!(
+            "{}\n{}\n{}",
+            request.profile.name(),
+            request.network.name(),
+            names
+        )
+        .as_bytes(),
+    )
+}
+
+fn logical_command_id(request: &ProcessRequest) -> String {
+    hash_bytes(format!("{}\n{}", request.program, request.public_args().join("\n")).as_bytes())[
+        ..16
+    ]
+    .to_owned()
+}
+
+fn stable_path(path: &str, current_dir: Option<&Path>) -> String {
+    current_dir
+        .and_then(|dir| path.strip_prefix(dir.to_string_lossy().as_ref()))
+        .map_or_else(
+            || {
+                if Path::new(path).is_absolute() {
+                    "<program>".to_owned()
+                } else {
+                    path.to_owned()
+                }
+            },
+            |suffix| format!("<worktree>{suffix}"),
+        )
+}
+
+fn redact_args(
+    args: &[String],
+    secrets: &BTreeMap<String, SecretValue>,
+    current_dir: Option<&Path>,
+) -> Vec<String> {
+    args.iter()
+        .map(|arg| {
+            if secrets
+                .values()
+                .any(|secret| !secret.0.is_empty() && arg.contains(&secret.0))
+            {
+                return "[REDACTED]".to_owned();
+            }
+            if let Some(dir) = current_dir
+                .and_then(|dir| dir.to_str())
+                .filter(|dir| arg.starts_with(*dir))
+            {
+                return format!("<worktree>{}", &arg[dir.len()..]);
+            }
+            if Path::new(arg).is_absolute() {
+                "<path>".to_owned()
+            } else {
+                arg.clone()
+            }
+        })
+        .collect()
+}
+
+fn path_aliases(request: &ProcessRequest) -> BTreeMap<String, String> {
+    request
+        .current_dir
+        .as_ref()
+        .map_or_else(BTreeMap::new, |dir| {
+            BTreeMap::from([
+                (String::from("current_dir"), String::from("<worktree>")),
+                (dir.display().to_string(), String::from("<worktree>")),
+            ])
+        })
+}
+
+fn ownership_name() -> String {
     #[cfg(unix)]
     {
-        let pid = child.id();
-        let mut descendants = Vec::new();
-        collect_descendants(pid, &mut descendants);
-        descendants.reverse();
-        for descendant in descendants {
-            signal_process(descendant, "TERM");
-        }
-        signal_process(pid, "TERM");
+        "unix-process-session".to_owned()
     }
-    let _ = child.kill();
-}
-
-#[cfg(unix)]
-fn collect_descendants(pid: u32, descendants: &mut Vec<u32>) {
-    let output = Command::new("pgrep")
-        .args(["-P", &pid.to_string()])
-        .output();
-    let Ok(output) = output else { return };
-    let mut children = output
-        .stdout
-        .split(u8::is_ascii_whitespace)
-        .filter_map(|bytes| std::str::from_utf8(bytes).ok())
-        .filter_map(|value| value.parse::<u32>().ok())
-        .collect::<Vec<_>>();
-    children.sort_unstable();
-    for child in children {
-        collect_descendants(child, descendants);
-        descendants.push(child);
+    #[cfg(windows)]
+    {
+        return "windows-job-object".to_owned();
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        "platform-process-wrapper".to_owned()
     }
 }
 
-#[cfg(unix)]
-fn signal_process(pid: u32, signal: &str) {
-    let _ = Command::new("kill")
-        .args([format!("-{signal}"), pid.to_string()])
-        .status();
+fn collect_artifacts(
+    request: &ProcessRequest,
+    started: SystemTime,
+) -> Result<Vec<ArtifactReceipt>, ProcessError> {
+    let entries = [
+        (request.stdout_artifact.as_ref(), "stdout"),
+        (request.stderr_artifact.as_ref(), "stderr"),
+    ];
+    entries
+        .into_iter()
+        .filter_map(|(path, kind)| path.map(|path| (path, kind)))
+        .map(|(path, kind)| {
+            let metadata = fs::symlink_metadata(path).map_err(|error| ProcessError::Artifact {
+                path: path.clone(),
+                message: error.to_string(),
+            })?;
+            if !metadata.file_type().is_file() {
+                return Err(ProcessError::Artifact {
+                    path: path.clone(),
+                    message: "artifact must be a regular file".to_owned(),
+                });
+            }
+            let fresh = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| modified.duration_since(started).ok())
+                .is_some();
+            if !fresh {
+                return Err(ProcessError::Artifact {
+                    path: path.clone(),
+                    message: "artifact was not created during execution".to_owned(),
+                });
+            }
+            let size = metadata.len();
+            if size > ARTIFACT_LIMIT as u64 {
+                return Err(ProcessError::Artifact {
+                    path: path.clone(),
+                    message: "artifact exceeds the bounded size".to_owned(),
+                });
+            }
+            let bytes = fs::read(path).map_err(|error| ProcessError::Artifact {
+                path: path.clone(),
+                message: error.to_string(),
+            })?;
+            Ok(ArtifactReceipt {
+                path: stable_path(&path.display().to_string(), request.current_dir.as_deref()),
+                size_bytes: size,
+                sha256: hash_bytes(&bytes),
+                kind: kind.to_owned(),
+                fresh,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ProcessLimits, ProcessRequest, ProcessRunner};
+    use super::{EnvironmentProfile, ProcessLimits, ProcessRequest, ProcessRunner};
     use std::time::Duration;
 
     #[test]
@@ -601,7 +1065,7 @@ mod tests {
         assert_eq!(result.receipt.status, "completed");
         assert_eq!(result.stdout, b"1234");
         assert!(result.receipt.stdout_truncated);
-        assert_eq!(result.receipt.schema_version, 1);
+        assert_eq!(result.receipt.schema_version, 2);
     }
 
     #[cfg(unix)]
@@ -686,5 +1150,73 @@ mod tests {
             });
         let result = ProcessRunner::new().run(request).expect("process result");
         assert_eq!(result.receipt.status, "timed-out");
+        assert_eq!(result.receipt.process_ownership, "unix-process-session");
+        assert_eq!(result.receipt.cleanup.outcome, "reaped");
+    }
+
+    #[test]
+    fn request_environment_is_allowlisted_and_receipt_is_redacted() {
+        let result = ProcessRunner::new()
+            .run(
+                ProcessRequest::new("/bin/sh", ["-c", "printf %s \"$VISIBLE\""])
+                    .profile(EnvironmentProfile::TestFixture)
+                    .env("VISIBLE", "ok")
+                    .secret("RUSTTABLE_TOKEN", "do-not-persist")
+                    .limits(ProcessLimits {
+                        max_stdout_bytes: 16,
+                        max_stderr_bytes: 16,
+                        timeout: Duration::from_secs(2),
+                    }),
+            )
+            .expect("process result");
+        assert_eq!(result.stdout, b"ok");
+        assert!(
+            result
+                .receipt
+                .environment_names
+                .contains(&"VISIBLE".to_owned())
+        );
+        assert!(
+            !result
+                .receipt
+                .environment_names
+                .contains(&"RUSTTABLE_TOKEN".to_owned())
+        );
+        assert!(
+            !result
+                .receipt
+                .redacted_args
+                .iter()
+                .any(|arg| arg == "do-not-persist")
+        );
+        assert_ne!(
+            result.receipt.environment_policy_hash,
+            result.receipt.environment_hash
+        );
+    }
+
+    #[test]
+    fn explicit_paths_are_stable_aliases_in_durable_receipts() {
+        let directory =
+            std::env::temp_dir().join(format!("rusttable-receipt-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).expect("receipt directory");
+        let result = ProcessRunner::new()
+            .run(
+                ProcessRequest::new("/bin/sh", ["-c", "exit 0"])
+                    .profile(EnvironmentProfile::TestFixture)
+                    .current_dir(&directory)
+                    .limits(ProcessLimits {
+                        max_stdout_bytes: 16,
+                        max_stderr_bytes: 16,
+                        timeout: Duration::from_secs(2),
+                    }),
+            )
+            .expect("process result");
+        assert_eq!(result.receipt.current_dir.as_deref(), Some("<worktree>"));
+        assert_eq!(
+            result.receipt.path_aliases.get("current_dir"),
+            Some(&"<worktree>".to_owned())
+        );
+        let _ = std::fs::remove_dir_all(directory);
     }
 }

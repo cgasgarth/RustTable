@@ -43,7 +43,11 @@ fail() {
 }
 
 pass() {
-  printf '%s\n' "$1" >>"$pass_records_file"
+  # A smoke assertion may be revisited by a platform helper. Keep the durable
+  # receipt canonical while retaining the first successful observation.
+  if ! grep -Fqx -- "$1" "$pass_records_file" 2>/dev/null; then
+    printf '%s\n' "$1" >>"$pass_records_file"
+  fi
 }
 
 capture() {
