@@ -57,6 +57,10 @@ pub enum Command {
         #[command(subcommand)]
         command: EcosystemCommand,
     },
+    Foundation {
+        #[command(subcommand)]
+        command: FoundationCommand,
+    },
     #[command(name = "extension-conformance")]
     ExtensionConformance(ExtensionConformanceArgs),
     #[command(name = "template-matrix")]
@@ -352,6 +356,27 @@ pub enum EcosystemCommand {
         #[command(subcommand)]
         command: ChannelsCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FoundationCommand {
+    Verify(FoundationVerifyArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct FoundationVerifyArgs {
+    #[arg(long, value_enum, default_value_t = FoundationMode::Pr)]
+    pub mode: FoundationMode,
+    #[arg(long, default_value = "quality/foundation-gate.toml")]
+    pub contract: PathBuf,
+    #[arg(long, default_value = "target/validation/foundation")]
+    pub receipts: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, ValueEnum)]
+pub enum FoundationMode {
+    Pr,
+    Merge,
 }
 
 #[derive(Debug, Args)]
