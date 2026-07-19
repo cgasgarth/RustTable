@@ -27,7 +27,7 @@ enum WorkflowKind {
 impl WorkflowKind {
     const fn timeout_limit(self) -> u32 {
         match self {
-            Self::PullRequest => 5,
+            Self::PullRequest => 10,
             Self::Main => 45,
         }
     }
@@ -421,7 +421,7 @@ mod tests {
     fn rejects_write_permissions_and_unbounded_jobs() {
         let invalid = VALID
             .replace("contents: read", "contents: write")
-            .replace("timeout-minutes: 3", "timeout-minutes: 6");
+            .replace("timeout-minutes: 3", "timeout-minutes: 11");
         let error = validate_workflow("fixture.yml", WorkflowKind::PullRequest, &invalid)
             .expect_err("invalid workflow");
         assert!(error.contains("permissions"));
