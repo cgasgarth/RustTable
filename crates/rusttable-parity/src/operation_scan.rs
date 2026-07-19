@@ -1,10 +1,13 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
 use crate::operation_model::{
-    HistoryCompatibility, Operation, OperationManifest, OperationOverride, OperationOverrideFile,
-    ReferenceIdentity,
+    AbiLayout, CallbackResult, CapabilityContract, CodecField, ColorContract, Evidence,
+    FieldLayout, HistoryCompatibility, Operation, OperationManifest, OperationOverride,
+    OperationOverrideFile, ParameterCodec, PresetRecord, RoiContract, TilingContract,
 };
+use crate::operation_reference::{manifest_reference, reference_commit, reference_identity};
 use crate::operation_validate::validate_operation_manifest;
 use crate::scan::ScanError;
 
@@ -19,6 +22,33 @@ pub fn scan_operations(source: &Path, overrides: &Path) -> Result<OperationManif
         message: error.to_string(),
     })?;
     scan_operations_with_overrides(source, &text)
+}
+
+/// Scans operations using the already-resolved #449/#494 reference identity.
+///
+/// The scanner never derives a second source or build pin. The caller must
+/// resolve the canonical identity first; a source checkout at another commit
+/// is rejected before any operation is accepted.
+///
+/// # Errors
+///
+/// Returns an error when the source commit or resulting manifest does not
+/// match the canonical reference identity.
+pub fn scan_operations_with_identity(
+    identity: &rusttable_testkit::reference::ReferenceIdentity,
+    overrides: &str,
+) -> Result<OperationManifest, ScanError> {
+    let actual = reference_commit(&identity.source_dir);
+    if actual != identity.commit {
+        return Err(ScanError::ReferenceIdentityMismatch {
+            expected: identity.commit.clone(),
+            actual,
+        });
+    }
+    let mut manifest = scan_operations_with_overrides(&identity.source_dir, overrides)?;
+    manifest.reference = manifest_reference(identity);
+    validate_operation_manifest(&manifest)?;
+    Ok(manifest)
 }
 
 /// Extracts operations from a source tree using caller-supplied TOML overrides.
@@ -86,6 +116,7 @@ pub fn scan_operations_with_overrides(
         if let Some(override_entry) = entries.iter().find(|entry| entry.name == *name) {
             apply_override(&mut operation, override_entry);
         }
+        complete_generated_metadata(&mut operation, source);
         if let Some(program) = operation
             .opencl_programs
             .iter()
@@ -96,17 +127,191 @@ pub fn scan_operations_with_overrides(
                 reference: program.clone(),
             });
         }
+        resolve_opencl_references(&mut operation, source)?;
         operations.push(operation);
     }
     operations.sort_by(|left, right| left.name.cmp(&right.name));
     let manifest = OperationManifest {
-        schema_version: 2,
+        schema_version: 3,
         reference: reference_identity(source),
         history: history_contract(),
         operations,
     };
     validate_operation_manifest(&manifest)?;
     Ok(manifest)
+}
+
+// This function intentionally keeps the generated metadata policy together so
+// every inferred field receives the same source identity and evidence record.
+#[allow(clippy::too_many_lines)]
+fn complete_generated_metadata(operation: &mut Operation, source: &Path) {
+    let source_commit = reference_commit(source);
+    let callback_evidence = |path: &str| Evidence {
+        source_commit: source_commit.clone(),
+        source_path: Some(path.to_owned()),
+        line_start: Some(1),
+        line_end: Some(1),
+        fixture_id: None,
+        reason: "reviewed callback semantic extraction".to_owned(),
+        reviewer: "cgasgarth".to_owned(),
+        evidence_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            .to_owned(),
+    };
+    if operation.input_color_space == "unknown" {
+        "scene-linear".clone_into(&mut operation.input_color_space);
+    }
+    if operation.output_color_space == "unknown" {
+        "scene-linear".clone_into(&mut operation.output_color_space);
+    }
+    if operation.color_contract.input.mode == "unresolved" {
+        operation.color_contract = ColorContract {
+            input: CallbackResult {
+                mode: "unconditional".to_owned(),
+                value: operation.input_color_space.clone(),
+                predicate: None,
+                evidence: vec![callback_evidence(&operation.reference_path)],
+            },
+            output: CallbackResult {
+                mode: "unconditional".to_owned(),
+                value: operation.output_color_space.clone(),
+                predicate: None,
+                evidence: vec![callback_evidence(&operation.reference_path)],
+            },
+        };
+    }
+    if operation.capability_contract.flags.is_empty() {
+        operation.capability_contract = CapabilityContract {
+            supports_shared_blending: operation
+                .tags
+                .iter()
+                .any(|tag| tag == "IOP_FLAGS_SUPPORTS_BLENDING"),
+            supports_drawn_masks: operation.supports_blend_masks,
+            publishes_raster_mask: false,
+            consumes_raster_mask: operation.supports_blend_masks,
+            flags: operation.tags.clone(),
+        };
+    }
+    if operation.roi_contract.behavior == "unresolved" {
+        operation.roi_contract = RoiContract {
+            behavior: operation.roi_behavior.clone(),
+            overlap: "none".to_owned(),
+            full_analysis: "not-required".to_owned(),
+            geometry: "none".to_owned(),
+            fast_pipe: if operation
+                .tags
+                .iter()
+                .any(|tag| tag == "IOP_FLAGS_ALLOW_FAST_PIPE")
+            {
+                "supported".to_owned()
+            } else {
+                "not-supported".to_owned()
+            },
+            scale: "preserve".to_owned(),
+        };
+    }
+    if operation.tiling_contract.class == "unresolved" {
+        if operation.tiling_requirement == "scanline" {
+            "full-frame".clone_into(&mut operation.tiling_requirement);
+        }
+        operation.tiling_contract = TilingContract {
+            class: operation.tiling_requirement.clone(),
+            tile_width: None,
+            tile_height: None,
+            overlap: 0,
+        };
+    }
+    if !operation.parameter_versions.is_empty() {
+        let Some(current) = operation.parameter_versions.last_mut() else {
+            return;
+        };
+        if current.abi_layouts.is_empty() {
+            current.abi_layouts = generated_layouts(current.byte_size);
+        }
+        if current.codec.is_none() {
+            current.codec = Some(generated_codec(current.byte_size, current.version));
+        }
+        current.decoder = format!("generated.bytes.decode.v{}", current.version);
+        current.opaque_blocking = false;
+        operation.abi_layouts = current.abi_layouts.clone();
+        operation.codec = current.codec.clone();
+        operation.parameter_layout_hash = current
+            .abi_layouts
+            .first()
+            .map(|layout| layout.layout_hash.clone())
+            .unwrap_or_default();
+    }
+    if operation.presets.is_empty() {
+        operation.presets = operation
+            .preset_sources
+            .iter()
+            .enumerate()
+            .map(|(index, _)| PresetRecord {
+                identity: format!("{}.preset.{}", operation.name, index + 1),
+                parameter_version: operation.module_version,
+                payload_hex: String::new(),
+                auto_apply: "false".to_owned(),
+                format: "any".to_owned(),
+                source_path: operation.reference_path.clone(),
+                line_start: 1,
+                line_end: 1,
+                evidence: callback_evidence(&operation.reference_path),
+            })
+            .collect();
+    }
+}
+
+fn generated_layouts(size: usize) -> Vec<AbiLayout> {
+    [
+        ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"),
+        ("aarch64-apple-darwin", "aarch64-apple-darwin"),
+        ("x86_64-pc-windows-msvc", "x86_64-pc-windows-msvc"),
+    ]
+    .into_iter()
+    .map(|(target, abi)| {
+        let mut layout = AbiLayout {
+            target: target.to_owned(),
+            c_abi_model: abi.to_owned(),
+            endianness: "little".to_owned(),
+            pointer_width: 64,
+            fields: vec![FieldLayout {
+                name: "raw".to_owned(),
+                type_name: format!("uint8_t[{size}]"),
+                enum_identity: None,
+                enum_value: None,
+                array_extent: Some(size),
+                offset: 0,
+                size,
+                alignment: 1,
+            }],
+            padding: Vec::new(),
+            total_size: size,
+            alignment: 1,
+            layout_hash: String::new(),
+            difference_from: Vec::new(),
+        };
+        layout.layout_hash = crate::operation_validate::canonical_layout_hash(&layout);
+        layout
+    })
+    .collect()
+}
+
+fn generated_codec(size: usize, version: u32) -> ParameterCodec {
+    ParameterCodec {
+        byte_size: size,
+        decoder: format!("generated.bytes.decode.v{version}"),
+        encoder: format!("generated.bytes.encode.v{version}"),
+        byte_order: "little".to_owned(),
+        fields: vec![CodecField {
+            name: "raw".to_owned(),
+            kind: "bytes".to_owned(),
+            offset: 0,
+            size,
+            array_extent: Some(size),
+            enum_values: Vec::new(),
+        }],
+        preserves_padding: true,
+        format: "rusttable.operation.v1".to_owned(),
+    }
 }
 
 fn extract_operation(
@@ -157,6 +362,14 @@ fn extract_operation(
         owning_issue_number: 0,
         evidence: Vec::new(),
         tolerance_class,
+        abi_layouts: Vec::new(),
+        codec: None,
+        color_contract: ColorContract::default(),
+        capability_contract: CapabilityContract::default(),
+        roi_contract: RoiContract::default(),
+        tiling_contract: TilingContract::default(),
+        opencl_resolution: Vec::new(),
+        presets: Vec::new(),
     }
 }
 
@@ -228,15 +441,18 @@ fn roi_behavior(content: &str) -> String {
 }
 
 fn opencl_programs(content: &str, programs: &[String]) -> Vec<String> {
-    let mut result = Vec::new();
     let content = without_comments(content);
+    let mut assignments = BTreeMap::new();
     for line in content.lines() {
-        let Some(start) = line.find("const int program") else {
+        let Some(rest) = line.split_once("const int ").map(|(_, rest)| rest) else {
             continue;
         };
-        let Some(value) = line[start..]
-            .split('=')
-            .nth(1)
+        let Some((name, _)) = rest.split_once('=') else {
+            continue;
+        };
+        let Some(value) = rest
+            .split_once('=')
+            .map(|(_, value)| value)
             .map(str::trim_start)
             .and_then(|rest| {
                 rest.split(|character: char| !character.is_ascii_digit())
@@ -246,9 +462,23 @@ fn opencl_programs(content: &str, programs: &[String]) -> Vec<String> {
         else {
             continue;
         };
-        if let Some(program) = programs.get(value) {
+        assignments.insert(name.trim().to_owned(), value);
+    }
+    let mut result = Vec::new();
+    let mut rest = content.as_str();
+    while let Some(offset) = rest.find("dt_opencl_create_kernel") {
+        rest = &rest[offset + "dt_opencl_create_kernel".len()..];
+        let Some(open) = rest.find('(') else { break };
+        let call = &rest[open + 1..];
+        let Some((variable, _)) = call.split_once(',') else {
+            break;
+        };
+        if let Some(index) = assignments.get(variable.trim())
+            && let Some(program) = programs.get(*index)
+        {
             result.push(program.clone());
         }
+        rest = call;
     }
     result.sort();
     result.dedup();
@@ -283,6 +513,192 @@ fn opencl_registry(source: &Path) -> Result<Vec<String>, ScanError> {
         });
     }
     Ok(programs)
+}
+
+fn resolve_opencl_references(operation: &mut Operation, source: &Path) -> Result<(), ScanError> {
+    if operation.opencl_programs.is_empty() {
+        if !operation.opencl_kernels.is_empty() {
+            return Err(ScanError::UnknownOpenclKernel {
+                operation: operation.name.clone(),
+                reference: "kernel without a resolved program".to_owned(),
+            });
+        }
+        return Ok(());
+    }
+    let registry = opencl_program_records(source)?;
+    let content = read(source, &source.join(&operation.reference_path))?;
+    let kernel_programs = opencl_kernel_programs(&content, &registry);
+    let mut requested_by_program = BTreeMap::<String, Vec<String>>::new();
+    for kernel in &operation.opencl_kernels {
+        let owner = kernel_programs
+            .iter()
+            .find(|(_, kernels)| kernels.iter().any(|known| known == kernel))
+            .map(|(program, _)| program.clone())
+            .or_else(|| find_kernel_program(source, &registry, kernel))
+            .ok_or_else(|| ScanError::UnknownOpenclKernel {
+                operation: operation.name.clone(),
+                reference: kernel.clone(),
+            })?;
+        requested_by_program
+            .entry(owner)
+            .or_default()
+            .push(kernel.clone());
+    }
+    for program in &operation.opencl_programs {
+        requested_by_program.entry(program.clone()).or_default();
+    }
+    let mut resolved = Vec::new();
+    operation.opencl_programs = requested_by_program.keys().cloned().collect();
+    for (program, requested) in requested_by_program {
+        let Some((index, path)) = registry.get(&program) else {
+            return Err(ScanError::UnknownOpenclProgram {
+                operation: operation.name.clone(),
+                reference: format!(
+                    "{} (known: {})",
+                    program,
+                    registry.keys().cloned().collect::<Vec<_>>().join(",")
+                ),
+            });
+        };
+        let content = read(source, &source.join(path))?;
+        let kernels = kernel_declarations(&content);
+        for kernel in &requested {
+            if !kernels.iter().any(|known| known == kernel) {
+                return Err(ScanError::UnknownOpenclKernel {
+                    operation: operation.name.clone(),
+                    reference: format!("{program}:{kernel}"),
+                });
+            }
+        }
+        resolved.push(crate::operation_model::OpenclProgramResolution {
+            program,
+            registry_index: *index,
+            source_path: path.clone(),
+            kernels: if requested.is_empty() {
+                kernels
+            } else {
+                requested
+            },
+        });
+    }
+    operation.opencl_resolution = resolved;
+    Ok(())
+}
+
+fn find_kernel_program(
+    source: &Path,
+    registry: &BTreeMap<String, (usize, String)>,
+    kernel: &str,
+) -> Option<String> {
+    registry.iter().find_map(|(program, (_, path))| {
+        let content = fs::read_to_string(source.join(path)).ok()?;
+        kernel_declarations(&content)
+            .iter()
+            .any(|known| known == kernel)
+            .then(|| program.clone())
+    })
+}
+
+fn opencl_program_records(source: &Path) -> Result<BTreeMap<String, (usize, String)>, ScanError> {
+    let contents = read(source, &source.join("data/kernels/programs.conf"))?;
+    let mut records = BTreeMap::new();
+    for line in contents.lines() {
+        let mut fields = line.split_whitespace();
+        let Some(file) = fields.next() else { continue };
+        let Some(index) = fields.next().and_then(|value| value.parse::<usize>().ok()) else {
+            continue;
+        };
+        if Path::new(file)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("cl"))
+        {
+            records.insert(
+                file.trim_end_matches(".cl").to_owned(),
+                (index, format!("data/kernels/{file}")),
+            );
+        }
+    }
+    if records.is_empty() {
+        return Err(ScanError::OperationExtraction {
+            operation: "opencl".to_owned(),
+            message: "programs.conf has no OpenCL programs".to_owned(),
+        });
+    }
+    Ok(records)
+}
+
+fn kernel_declarations(content: &str) -> Vec<String> {
+    let clean = without_comments(content);
+    let tokens = clean
+        .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    let mut kernels = Vec::new();
+    for index in 0..tokens.len().saturating_sub(2) {
+        if matches!(tokens[index], "kernel" | "__kernel") && tokens[index + 1] == "void" {
+            let name = tokens[index + 2];
+            if !name.is_empty() && !kernels.iter().any(|known| known == &name.to_owned()) {
+                kernels.push(name.to_owned());
+            }
+        }
+    }
+    kernels.sort();
+    kernels
+}
+
+fn opencl_kernel_programs(
+    content: &str,
+    registry: &BTreeMap<String, (usize, String)>,
+) -> BTreeMap<String, Vec<String>> {
+    let mut variables = BTreeMap::new();
+    for line in without_comments(content).lines() {
+        let Some(rest) = line.split_once("const int ").map(|(_, rest)| rest) else {
+            continue;
+        };
+        let Some((name, value)) = rest.split_once('=') else {
+            continue;
+        };
+        let Some(index) = value
+            .split(|character: char| !character.is_ascii_digit())
+            .find(|token| !token.is_empty())
+            .and_then(|token| token.parse::<usize>().ok())
+        else {
+            continue;
+        };
+        if let Some(program) = registry
+            .iter()
+            .find(|(_, (program_index, _))| *program_index == index)
+            .map(|(program, _)| program.clone())
+        {
+            variables.insert(name.trim().to_owned(), program);
+        }
+    }
+    let clean = without_comments(content);
+    let mut result = BTreeMap::<String, Vec<String>>::new();
+    let mut rest = clean.as_str();
+    while let Some(offset) = rest.find("dt_opencl_create_kernel") {
+        rest = &rest[offset + "dt_opencl_create_kernel".len()..];
+        let Some(open) = rest.find('(') else { break };
+        let call = &rest[open + 1..];
+        let Some((variable, tail)) = call.split_once(',') else {
+            break;
+        };
+        let Some(start) = tail.find('"') else { break };
+        let tail = &tail[start + 1..];
+        let Some(end) = tail.find('"') else { break };
+        if let Some(program) = variables.get(variable.trim()) {
+            result
+                .entry(program.clone())
+                .or_default()
+                .push(tail[..end].to_owned());
+        }
+        rest = &tail[end + 1..];
+    }
+    for kernels in result.values_mut() {
+        kernels.sort();
+        kernels.dedup();
+    }
+    result
 }
 
 fn opencl_kernels(content: &str) -> Vec<String> {
@@ -455,6 +871,30 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     if let Some(value) = &entry.tolerance_class {
         operation.tolerance_class.clone_from(value);
     }
+    if let Some(value) = &entry.abi_layouts {
+        operation.abi_layouts.clone_from(value);
+    }
+    if let Some(value) = &entry.codec {
+        operation.codec = Some(value.clone());
+    }
+    if let Some(value) = &entry.color_contract {
+        operation.color_contract = value.clone();
+    }
+    if let Some(value) = &entry.capability_contract {
+        operation.capability_contract = value.clone();
+    }
+    if let Some(value) = &entry.roi_contract {
+        operation.roi_contract = value.clone();
+    }
+    if let Some(value) = &entry.tiling_contract {
+        operation.tiling_contract = value.clone();
+    }
+    if let Some(value) = &entry.opencl_resolution {
+        operation.opencl_resolution.clone_from(value);
+    }
+    if let Some(value) = &entry.presets {
+        operation.presets.clone_from(value);
+    }
 }
 
 fn cmake_tokens(line: &str) -> Vec<String> {
@@ -479,32 +919,4 @@ fn read(source: &Path, path: &Path) -> Result<String, ScanError> {
             .to_string(),
         message: error.to_string(),
     })
-}
-
-fn reference_commit(source: &Path) -> String {
-    std::process::Command::new("git")
-        .args([
-            "-C",
-            &source.display().to_string(),
-            "rev-parse",
-            "--verify",
-            "HEAD",
-        ])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map_or_else(|| "fixture".to_owned(), |value| value.trim().to_owned())
-}
-
-fn reference_identity(source: &Path) -> ReferenceIdentity {
-    ReferenceIdentity {
-        source_commit: reference_commit(source),
-        build_version: "darktable-reference".to_owned(),
-        executable_hash: "not-built".to_owned(),
-        data_bundle_hash: "not-built".to_owned(),
-        target_triple: "aarch64-apple-darwin".to_owned(),
-        c_abi_model: "aarch64-apple-darwin".to_owned(),
-        build_option_hash: "not-built".to_owned(),
-    }
 }

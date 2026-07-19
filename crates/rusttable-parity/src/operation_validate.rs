@@ -1,6 +1,12 @@
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 
-use crate::operation_model::{Evidence, Operation, OperationManifest, ParameterVersion};
+use sha2::{Digest, Sha256};
+
+use crate::operation_model::{
+    AbiLayout, CallbackResult, Evidence, Operation, OperationManifest, ParameterCodec,
+    ParameterVersion,
+};
 use crate::scan::ScanError;
 
 /// Parses an operation manifest from TOML.
@@ -41,7 +47,7 @@ pub fn render_operation_manifest(manifest: &OperationManifest) -> Result<String,
 ///
 /// Returns an error when any compatibility invariant is violated.
 pub fn validate_operation_manifest(manifest: &OperationManifest) -> Result<(), ScanError> {
-    if manifest.schema_version != 2 {
+    if manifest.schema_version != 3 {
         return Err(ScanError::InvalidManifest {
             message: format!(
                 "unsupported operation schema version {}",
@@ -106,7 +112,10 @@ fn validate_operation(
         });
     }
     validate_versions(operation.name.as_str(), &operation.parameter_versions)?;
+    validate_semantics(operation)?;
     validate_opencl(operation)?;
+    validate_layout_matrix(operation)?;
+    validate_current_codec(operation)?;
     for migration in &operation.migrations {
         if migration.from_version >= migration.to_version || migration.fixture_id.trim().is_empty()
         {
@@ -152,6 +161,298 @@ fn validate_current_layout(operation: &Operation) -> Result<(), ScanError> {
             message: "current operation layout does not match its version record".to_owned(),
         });
     }
+    if operation
+        .parameter_versions
+        .last()
+        .is_some_and(|version| version.abi_layouts.len() != 3)
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "current parameter version requires all supported ABI layouts".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+const SUPPORTED_TARGETS: [&str; 3] = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+];
+
+fn validate_layout_matrix(operation: &Operation) -> Result<(), ScanError> {
+    let Some(version) = operation.parameter_versions.last() else {
+        return Ok(());
+    };
+    if version.abi_layouts.len() != SUPPORTED_TARGETS.len() {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "current layout matrix is incomplete".to_owned(),
+        });
+    }
+    for target in SUPPORTED_TARGETS {
+        let Some(layout) = version
+            .abi_layouts
+            .iter()
+            .find(|layout| layout.target == target)
+        else {
+            return Err(ScanError::OperationValidation {
+                operation: operation.name.clone(),
+                message: format!("missing current ABI layout for {target}"),
+            });
+        };
+        validate_layout(operation.name.as_str(), layout)?;
+    }
+    let baseline = version
+        .abi_layouts
+        .iter()
+        .find(|layout| layout.target == SUPPORTED_TARGETS[0])
+        .expect("baseline layout was checked above");
+    let differs = version
+        .abi_layouts
+        .iter()
+        .skip(1)
+        .any(|layout| layout_signature(layout) != layout_signature(baseline));
+    if differs && version.target_codecs.len() != SUPPORTED_TARGETS.len() {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "ABI differences require one decoder/encoder per target".to_owned(),
+        });
+    }
+    if !version.target_codecs.is_empty() {
+        for target in SUPPORTED_TARGETS {
+            if !version
+                .target_codecs
+                .iter()
+                .any(|codec| codec.target == target)
+            {
+                return Err(ScanError::OperationValidation {
+                    operation: operation.name.clone(),
+                    message: format!("missing target-specific codec for {target}"),
+                });
+            }
+        }
+    }
+    if operation.abi_layouts.is_empty() {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "operation is missing its current ABI layout projection".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_layout(operation: &str, layout: &AbiLayout) -> Result<(), ScanError> {
+    if layout.c_abi_model.trim().is_empty()
+        || layout.endianness != "little"
+        || layout.pointer_width != 64
+        || layout.total_size == 0
+        || layout.alignment == 0
+        || !valid_hash(&layout.layout_hash)
+        || layout.fields.is_empty()
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.to_owned(),
+            message: format!("incomplete ABI layout for {}", layout.target),
+        });
+    }
+    let mut names = BTreeSet::new();
+    let mut ranges = Vec::new();
+    for field in &layout.fields {
+        let extent = field.array_extent.unwrap_or(1);
+        if field.name.trim().is_empty()
+            || field.type_name.trim().is_empty()
+            || field.size == 0
+            || field.alignment == 0
+            || extent == 0
+            || field.offset + field.size > layout.total_size
+            || !names.insert(field.name.clone())
+        {
+            return Err(ScanError::OperationValidation {
+                operation: operation.to_owned(),
+                message: format!("invalid field layout in {}", layout.target),
+            });
+        }
+        let end = field.offset + field.size;
+        if ranges
+            .iter()
+            .any(|(start, stop): &(usize, usize)| field.offset < *stop && end > *start)
+        {
+            return Err(ScanError::OperationValidation {
+                operation: operation.to_owned(),
+                message: format!("overlapping field layout in {}", layout.target),
+            });
+        }
+        ranges.push((field.offset, end));
+    }
+    for padding in &layout.padding {
+        if padding.size == 0
+            || padding.offset + padding.size > layout.total_size
+            || !matches!(padding.kind.as_str(), "explicit" | "implicit")
+            || ranges.iter().any(|(start, stop)| {
+                padding.offset < *stop && padding.offset + padding.size > *start
+            })
+        {
+            return Err(ScanError::OperationValidation {
+                operation: operation.to_owned(),
+                message: format!("invalid padding interval in {}", layout.target),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn layout_signature(
+    layout: &AbiLayout,
+) -> Vec<(String, String, Option<usize>, usize, usize, usize)> {
+    layout
+        .fields
+        .iter()
+        .map(|field| {
+            (
+                field.name.clone(),
+                field.type_name.clone(),
+                field.array_extent,
+                field.offset,
+                field.size,
+                field.alignment,
+            )
+        })
+        .collect()
+}
+
+fn validate_current_codec(operation: &Operation) -> Result<(), ScanError> {
+    let Some(version) = operation.parameter_versions.last() else {
+        return Ok(());
+    };
+    let Some(codec) = version.codec.as_ref().or(operation.codec.as_ref()) else {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "current parameter version has no executable decoder/encoder".to_owned(),
+        });
+    };
+    if version.decoder == "opaque" || version.opaque_blocking || codec.decoder == "opaque" {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "current parameter version cannot use an opaque blocking decoder".to_owned(),
+        });
+    }
+    validate_codec(
+        operation.name.as_str(),
+        codec,
+        version.byte_size,
+        &version.abi_layouts,
+    )?;
+    Ok(())
+}
+
+fn validate_codec(
+    operation: &str,
+    codec: &ParameterCodec,
+    byte_size: usize,
+    layouts: &[AbiLayout],
+) -> Result<(), ScanError> {
+    if codec.byte_size != byte_size
+        || codec.decoder.trim().is_empty()
+        || codec.encoder.trim().is_empty()
+        || codec.byte_order != "little"
+        || codec.format.trim().is_empty()
+        || !codec.preserves_padding
+        || codec.fields.is_empty()
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.to_owned(),
+            message: "current decoder/encoder is incomplete".to_owned(),
+        });
+    }
+    for layout in layouts {
+        for field in &codec.fields {
+            if !layout.fields.iter().any(|candidate| {
+                candidate.name == field.name
+                    && candidate.offset == field.offset
+                    && candidate.size == field.size
+            }) {
+                return Err(ScanError::OperationValidation {
+                    operation: operation.to_owned(),
+                    message: format!(
+                        "codec field {} is absent from {}",
+                        field.name, layout.target
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_semantics(operation: &Operation) -> Result<(), ScanError> {
+    validate_callback(operation, "input color", &operation.color_contract.input)?;
+    validate_callback(operation, "output color", &operation.color_contract.output)?;
+    if operation.color_contract.input.value == "unknown"
+        || operation.color_contract.output.value == "unknown"
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "executable operation has an unknown color-space contract".to_owned(),
+        });
+    }
+    if operation
+        .capability_contract
+        .flags
+        .iter()
+        .any(|flag| flag == "IOP_FLAGS_SUPPORTS_BLENDING")
+        && !operation.capability_contract.supports_shared_blending
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "blending flag contradicts capability contract".to_owned(),
+        });
+    }
+    if operation.supports_blend_masks
+        != (operation.capability_contract.supports_drawn_masks
+            || operation.capability_contract.consumes_raster_mask)
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "legacy blend-mask field contradicts split mask capabilities".to_owned(),
+        });
+    }
+    if ![
+        "identity",
+        "expands",
+        "reduces",
+        "expands-and-reduces",
+        "conditional",
+    ]
+    .contains(&operation.roi_contract.behavior.as_str())
+        || operation.roi_contract.behavior == "unresolved"
+        || operation.tiling_contract.class == "unresolved"
+        || operation.tiling_requirement == "scanline"
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: "ROI and tiling contracts must be explicit".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_callback(
+    operation: &Operation,
+    label: &str,
+    callback: &CallbackResult,
+) -> Result<(), ScanError> {
+    if !matches!(callback.mode.as_str(), "unconditional" | "conditional")
+        || callback.value.trim().is_empty()
+        || (callback.mode == "conditional"
+            && callback.predicate.as_deref().is_none_or(str::is_empty))
+        || callback.evidence.is_empty()
+    {
+        return Err(ScanError::OperationValidation {
+            operation: operation.name.clone(),
+            message: format!("{label} callback result is unresolved"),
+        });
+    }
     Ok(())
 }
 
@@ -172,6 +473,30 @@ fn validate_opencl(operation: &Operation) -> Result<(), ScanError> {
             operation: operation.name.clone(),
             reference: "kernel without program".to_owned(),
         });
+    }
+    if operation.opencl_programs.len() != operation.opencl_resolution.len() {
+        return Err(ScanError::UnknownOpenclProgram {
+            operation: operation.name.clone(),
+            reference: "missing resolved program registry record".to_owned(),
+        });
+    }
+    for resolution in &operation.opencl_resolution {
+        if !programs.contains(&resolution.program)
+            || std::path::Path::new(&resolution.source_path)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("c"))
+            || resolution.source_path.trim().is_empty()
+            || resolution.kernels.is_empty()
+            || operation
+                .opencl_kernels
+                .iter()
+                .any(|kernel| !resolution.kernels.contains(kernel))
+        {
+            return Err(ScanError::UnknownOpenclProgram {
+                operation: operation.name.clone(),
+                reference: resolution.program.clone(),
+            });
+        }
     }
     Ok(())
 }
@@ -230,7 +555,58 @@ fn validate_reference_identity(manifest: &OperationManifest) -> Result<(), ScanE
             message: "complete reference identity is required".to_owned(),
         });
     }
+    if manifest.reference.canonical_identity != "fixture"
+        && manifest.reference.canonical_identity != "fixtures/reference/darktable.toml"
+    {
+        return Err(ScanError::InvalidManifest {
+            message: "operation manifest must reference the canonical #449 identity".to_owned(),
+        });
+    }
+    if manifest.reference.canonical_identity == "fixtures/reference/darktable.toml"
+        && manifest.reference.source_commit != "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+    {
+        return Err(ScanError::InvalidManifest {
+            message: "operation manifest source commit differs from #449/#494 identity".to_owned(),
+        });
+    }
+    if manifest.reference.canonical_identity != "fixture" {
+        for (label, value) in [
+            ("executable", identity.executable_hash.as_str()),
+            ("data", identity.data_bundle_hash.as_str()),
+            ("build", identity.build_option_hash.as_str()),
+        ] {
+            if value.starts_with("not-built") || value == "unprovisioned-local-build" {
+                return Err(ScanError::InvalidManifest {
+                    message: format!("{label} identity is not qualified"),
+                });
+            }
+        }
+    }
+    if manifest.reference.canonical_identity == "fixtures/reference/darktable.toml"
+        && !valid_hash(&manifest.reference.identity_hash)
+    {
+        return Err(ScanError::InvalidManifest {
+            message: "canonical reference identity hash is required".to_owned(),
+        });
+    }
     Ok(())
+}
+
+fn valid_hash(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// Computes the stable hash used for a field-level ABI layout receipt.
+#[must_use]
+pub fn canonical_layout_hash(layout: &AbiLayout) -> String {
+    let mut normalized = layout.clone();
+    normalized.layout_hash.clear();
+    let bytes = serde_json::to_vec(&normalized).unwrap_or_default();
+    let mut hash = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(&mut hash, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    hash
 }
 
 fn validate_operation_evidence(

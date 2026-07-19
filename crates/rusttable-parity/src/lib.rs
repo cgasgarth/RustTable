@@ -4,21 +4,29 @@
 mod mapping;
 mod model;
 mod operation_model;
+mod operation_reference;
 mod operation_scan;
 mod operation_validate;
+mod parameter_codec;
 mod reconciliation;
 mod scan;
 mod validate;
 
 pub use model::{Capability, CapabilityReceipt, IssueOwnership, Manifest, Override, SummaryGroup};
 pub use operation_model::{
-    Evidence, HistoryCompatibility, Operation, OperationEvidence, OperationManifest,
-    OperationOverride, ParameterMigration, ParameterVersion, ReferenceIdentity,
+    AbiLayout, CallbackResult, CapabilityContract, CodecField, ColorContract, EnumValue, Evidence,
+    FieldLayout, HistoryCompatibility, OpenclProgramResolution, Operation, OperationEvidence,
+    OperationManifest, OperationOverride, PaddingInterval, ParameterCodec, ParameterMigration,
+    ParameterVersion, PresetRecord, ReferenceIdentity, RoiContract, TargetCodec, TilingContract,
 };
-pub use operation_scan::{scan_operations, scan_operations_with_overrides};
+pub use operation_scan::{
+    scan_operations, scan_operations_with_identity, scan_operations_with_overrides,
+};
 pub use operation_validate::{
-    parse_operation_manifest, render_operation_manifest, validate_operation_manifest,
+    canonical_layout_hash, parse_operation_manifest, render_operation_manifest,
+    validate_operation_manifest,
 };
+pub use parameter_codec::{DecodedParameter, ParameterValue, decode_parameter, encode_parameter};
 pub use reconciliation::{
     CapabilityCandidate, CapabilityDeclaration, IssueAudit, IssueInput, IssueSpecification,
     PlannedClosure, PlannedCreation, PlannedLabelChange, PlannedMilestoneChange, PlannedUpdate,
