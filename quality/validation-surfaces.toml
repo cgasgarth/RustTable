@@ -185,6 +185,19 @@ platforms = ["all"]
 severity = "error"
 
 [[checks]]
+id = "migration-source-map"
+label = "migration-source-map"
+program = "cargo"
+args = ["xtask", "migration", "source-map", "audit-issues", "--parent", "158", "--api-fixture", "architecture/issue-spec-snapshot.json"]
+owner = "architecture"
+surfaces = ["precommit", "main"]
+parallel_group = "repository"
+resources = ["cargo-target-dir"]
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
 id = "repository-policy"
 label = "repository-policy"
 program = "bun"

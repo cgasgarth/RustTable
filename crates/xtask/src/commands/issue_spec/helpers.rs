@@ -30,6 +30,10 @@ pub(super) fn role_for_heading(heading: &str) -> Option<(SectionRole, SectionSou
         ("acceptance evidence", SectionRole::AcceptanceEvidence),
         ("dependencies", SectionRole::Dependencies),
         ("one pr boundary", SectionRole::OnePrBoundary),
+        (
+            "upstream darktable source anchors",
+            SectionRole::SourceAnchors,
+        ),
         ("capabilities", SectionRole::Capabilities),
         ("qualification decision", SectionRole::QualificationDecision),
         ("observed defects", SectionRole::ObservedDefects),

@@ -156,6 +156,9 @@ pub fn audit_issue(
     }
     let spec_hash = canonical_spec_hash(&sections);
     let body_hash = canonical_body_hash(&issue.body);
+    let source_anchor_hash = sections
+        .get(SectionRole::SourceAnchors)
+        .map_or_else(String::new, |section| section.content_hash.clone());
     let status = status_for(&sections, &findings);
     let remediation = remediation_for(issue.number, status, &findings);
     IssueAudit {
@@ -165,6 +168,7 @@ pub fn audit_issue(
         class,
         status,
         body_hash,
+        source_anchor_hash,
         spec_hash,
         sections,
         dependencies,

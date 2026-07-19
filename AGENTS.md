@@ -81,3 +81,9 @@ Leave long-running subagents running without routine polling; completion message
 - When fewer than 10 open GitHub issues remain, kick off fresh consults to scope additional work against the current repository and milestones.
 - Prompt each consult for concrete issue-sized proposals with a title, rationale, scope, acceptance criteria, dependencies, and recommended milestone.
 - Convert accepted consult proposals into GitHub issues before implementation, then work from those issues without using consult chats as a second task tracker.
+
+## Pinned darktable migration evidence
+
+- Treat `darktable-org/darktable@cfe57f3bbf5269bfacf31e832267279caa6938ad` as the only accepted upstream baseline; inspect it with Git object reads from the separate `Darktable` reference clone, never by copying or compiling its C/C++/OpenCL code.
+- Before starting or closing a migration issue, keep its `## Upstream darktable source anchors` section and `architecture/darktable-source-map.toml` synchronized. Source-ready work needs explicit, verified typed anchors (symbol, type, table, config key, kernel, action, or registration) plus Preserve/Redesign/Excluded, Rust ownership, and an oracle.
+- A path-only, generic, stale, or unverifiable anchor is migration debt, not acceptance evidence. Keep it in the deterministic debt receipt linked to #570 and do not bypass the source-map audit or ready queue.
