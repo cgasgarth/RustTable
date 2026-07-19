@@ -29,6 +29,25 @@ fn help_exposes_the_complete_initial_command_tree() {
 }
 
 #[test]
+fn benchmark_receipt_commands_have_explicit_input_contracts() {
+    let help = xtask(&["bench", "--help"]);
+    assert!(help.status.success());
+    let help = String::from_utf8(help.stdout).expect("help is utf8");
+    assert!(help.contains("verify-benchmark-receipt"));
+
+    let comparison = xtask(&["bench", "compare"]);
+    assert!(!comparison.status.success());
+    let error = String::from_utf8(comparison.stderr).expect("error is utf8");
+    assert!(error.contains("--baseline"));
+    assert!(error.contains("--current"));
+
+    let command_receipt = xtask(&["bench", "verify-receipt"]);
+    assert!(!command_receipt.status.success());
+    let error = String::from_utf8(command_receipt.stderr).expect("error is utf8");
+    assert!(error.contains("--receipt"));
+}
+
+#[test]
 fn json_output_is_one_parseable_ansi_free_record_from_a_subdirectory() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

@@ -155,8 +155,9 @@ pub struct FixtureArgs {
 #[derive(Debug, Subcommand)]
 pub enum BenchCommand {
     Run(BenchRunArgs),
-    Compare(BenchReceiptArgs),
+    Compare(BenchCompareArgs),
     VerifyReceipt(BenchReceiptArgs),
+    VerifyBenchmarkReceipt(BenchReceiptArgs),
 }
 
 #[derive(Debug, Args)]
@@ -170,7 +171,17 @@ pub struct BenchRunArgs {
 #[derive(Debug, Args)]
 pub struct BenchReceiptArgs {
     #[arg(long)]
-    pub receipt: Option<PathBuf>,
+    pub receipt: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct BenchCompareArgs {
+    /// Baseline benchmark receipt used by `bench compare`.
+    #[arg(long)]
+    pub baseline: PathBuf,
+    /// Current benchmark receipt used by `bench compare`.
+    #[arg(long)]
+    pub current: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]
