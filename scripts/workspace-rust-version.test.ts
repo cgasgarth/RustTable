@@ -16,14 +16,14 @@ const fixture = (changes: {
     name,
     id: `path+file:///repo/crates/${name}#0.1.0`,
     manifest_path: `/repo/crates/${name}/Cargo.toml`,
-    rust_version: '1.95',
+    rust_version: '1.98',
   }));
   const manifests = changes.manifests ?? Object.fromEntries(members.map((name) => [
     `/repo/crates/${name}/Cargo.toml`, packageManifest(name),
   ]));
   return {
     root,
-    rootManifest: changes.rootManifest ?? '[workspace.package]\nrust-version = "1.95"\n',
+    rootManifest: changes.rootManifest ?? '[workspace.package]\nrust-version = "1.98"\n',
     metadata: changes.metadata ?? JSON.stringify({ workspace_members: packages.map((entry) => entry.id), packages }),
     packageManifests: manifests,
   };
@@ -37,16 +37,16 @@ describe('workspace rust-version checker fixtures', () => {
   });
 
   test.each([
-    ['malformed root field', '[workspace.package]\nrust-version = 1.95\n', 'exact stable major.minor'],
-    ['pre-release', '[workspace.package]\nrust-version = "1.95.0-alpha"\n', 'exact stable major.minor'],
-    ['range', '[workspace.package]\nrust-version = ">=1.95"\n', 'exact stable major.minor'],
+    ['malformed root field', '[workspace.package]\nrust-version = 1.98\n', 'exact stable major.minor'],
+    ['pre-release', '[workspace.package]\nrust-version = "1.98.0-alpha"\n', 'exact stable major.minor'],
+    ['range', '[workspace.package]\nrust-version = ">=1.98"\n', 'exact stable major.minor'],
     ['wildcard', '[workspace.package]\nrust-version = "1.*"\n', 'exact stable major.minor'],
   ])('%s', (_name, manifest, expected) => {
     expect(errors({ rootManifest: manifest }).join('\n')).toContain(expected);
   });
 
   test('rejects duplicate root fields', () => {
-    expect(errors({ rootManifest: '[workspace.package]\nrust-version = "1.95"\nrust-version = "1.95"\n' }).join('\n'))
+    expect(errors({ rootManifest: '[workspace.package]\nrust-version = "1.98"\nrust-version = "1.98"\n' }).join('\n'))
       .toContain('rust-version is duplicated');
   });
 
@@ -63,8 +63,8 @@ describe('workspace rust-version checker fixtures', () => {
     const metadata = JSON.stringify({
       workspace_members: ['one', 'two'],
       packages: [
-        { name: 'one', id: 'one', manifest_path: '/repo/crates/one/Cargo.toml', rust_version: '1.95' },
-        { name: 'one-copy', id: 'one', manifest_path: '/repo/crates/one-copy/Cargo.toml', rust_version: '1.95' },
+        { name: 'one', id: 'one', manifest_path: '/repo/crates/one/Cargo.toml', rust_version: '1.98' },
+        { name: 'one-copy', id: 'one', manifest_path: '/repo/crates/one-copy/Cargo.toml', rust_version: '1.98' },
       ],
     });
     const output = errors({ metadata });
@@ -75,7 +75,7 @@ describe('workspace rust-version checker fixtures', () => {
   test('rejects a package outside crates', () => {
     const metadata = JSON.stringify({
       workspace_members: ['one'],
-      packages: [{ name: 'one', id: 'one', manifest_path: '/repo/outside/Cargo.toml', rust_version: '1.95' }],
+      packages: [{ name: 'one', id: 'one', manifest_path: '/repo/outside/Cargo.toml', rust_version: '1.98' }],
     });
     expect(errors({ members: ['one'], metadata }).join('\n')).toContain('manifest must be crates/one/Cargo.toml');
   });
@@ -95,7 +95,7 @@ describe('workspace rust-version checker fixtures', () => {
 
   test.each([
     ['missing inheritance', '[package]\nname = "one"\n', 'is missing'],
-    ['package-local literal', '[package]\nname = "one"\nrust-version = "1.95"\n', 'package-local rust-version is forbidden'],
+    ['package-local literal', '[package]\nname = "one"\nrust-version = "1.98"\n', 'package-local rust-version is forbidden'],
     ['false inheritance', '[package]\nname = "one"\nrust-version.workspace = false\n', 'must be boolean true'],
     ['non-boolean inheritance', '[package]\nname = "one"\nrust-version.workspace = "true"\n', 'must be boolean true'],
     ['duplicate inheritance', '[package]\nrust-version.workspace = true\nrust-version.workspace = true\n', 'is duplicated'],
@@ -108,13 +108,13 @@ describe('workspace rust-version checker fixtures', () => {
       workspace_members: ['one'],
       packages: [{ name: 'one', id: 'one', manifest_path: '/repo/crates/one/Cargo.toml', rust_version: null }],
     });
-    expect(errors({ members: ['one'], metadata }).join('\n')).toContain('metadata rust_version must be 1.95');
+    expect(errors({ members: ['one'], metadata }).join('\n')).toContain('metadata rust_version must be 1.98');
   });
 
   test('reports simultaneous package violations in package-name order', () => {
     const output = errors({
       manifests: {
-        '/repo/crates/one/Cargo.toml': '[package]\nrust-version = "1.95"\n',
+        '/repo/crates/one/Cargo.toml': '[package]\nrust-version = "1.98"\n',
         '/repo/crates/two/Cargo.toml': '[package]\nrust-version.workspace = false\n',
       },
     });

@@ -1,0 +1,15 @@
+# Checked-in ecosystem receipt for the pinned Rust 1.98 beta baseline.
+schema = "rusttable.ecosystem-baseline.v1"
+rust_channel = "beta-2026-07-17"
+rust_release = "1.98.0-beta.4"
+edition = "2024"
+
+[features]
+unstable_product_features = false
+nightly_tooling_in_product_graph = false
+warnings = "deny"
+
+[capabilities]
+stable = ["cargo-warnings-deny", "rustdoc-remap-path-prefix", "target-has-atomic-primitive-alignment"]
+beta = []
+nightly_lab = []

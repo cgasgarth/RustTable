@@ -270,7 +270,7 @@ fn command_arguments(
         &environment.library,
     )
     .map_err(|error| ReferenceError::UnsupportedFlag(error.to_string()))?;
-    for pair in args.chunks_exact_mut(2) {
+    for pair in args.as_chunks_mut::<2>().0 {
         if pair[0] == "--width" {
             pair[1] = request.dimensions.width.to_string();
         }

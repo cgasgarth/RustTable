@@ -65,5 +65,8 @@ fn matching_photo_with_probe_dimension_mismatch_fails_before_plan() {
     .unwrap_err();
 
     assert_eq!(error.stage(), RenderFailureStage::SourceDimensions);
-    assert!(error.context().source().probe().dimensions() != input().dimensions());
+    assert_ne!(
+        error.context().source().probe().dimensions(),
+        input().dimensions()
+    );
 }

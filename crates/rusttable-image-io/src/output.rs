@@ -518,7 +518,7 @@ fn rgba_to_opaque_rgb(
     _quality: JpegQuality,
 ) -> Result<Vec<u8>, ImageOutputError> {
     let pixels = image.pixels();
-    for (index, pixel) in pixels.chunks_exact(4).enumerate() {
+    for (index, pixel) in pixels.as_chunks::<4>().0.iter().enumerate() {
         if pixel[3] != 255 {
             return Err(ImageOutputError::NonOpaqueJpegInput {
                 pixel_index: u64::try_from(index).unwrap_or(u64::MAX),
@@ -533,7 +533,7 @@ fn rgba_to_opaque_rgb(
     let mut rgb = Vec::new();
     rgb.try_reserve_exact(rgb_length)
         .map_err(|_| ImageOutputError::AllocationFailure)?;
-    for pixel in pixels.chunks_exact(4) {
+    for pixel in pixels.as_chunks::<4>().0 {
         rgb.extend_from_slice(&pixel[..3]);
     }
     Ok(rgb)

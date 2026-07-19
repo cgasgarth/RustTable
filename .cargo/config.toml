@@ -1,5 +1,5 @@
 [build]
-rustflags = ["-D", "warnings"]
+warnings = "deny"
 
 [alias]
 xtask = "run --quiet --package xtask --"

@@ -307,7 +307,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
     match input.color_encoding() {
         ColorEncoding::DisplayP3 => {
             let mut source_pixels = Vec::with_capacity(pixel_count);
-            for pixel in input.pixels().chunks_exact(4) {
+            for pixel in input.pixels().as_chunks::<4>().0 {
                 source_pixels.push(DisplayP3Rgb::new(
                     DisplayP3Channel::new(f32::from(pixel[0]) / 255.0)
                         .expect("normalized byte is valid Display P3"),
@@ -328,7 +328,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
         }
         ColorEncoding::Unspecified | ColorEncoding::Srgb => {
             let mut source_pixels = Vec::with_capacity(pixel_count);
-            for pixel in input.pixels().chunks_exact(4) {
+            for pixel in input.pixels().as_chunks::<4>().0 {
                 source_pixels.push(SourceRgb::new(
                     SrgbChannel::new(f32::from(pixel[0]) / 255.0)
                         .expect("normalized byte is valid sRGB"),

@@ -51,7 +51,7 @@ if [ "$1" = -e ]; then
   input="$(cat)"
   case "$input" in
     *RUSTTABLE_LINUX_DISTRIBUTION_V1*)
-      printf 'rust_release=1.95.0\nrust_host=x86_64-unknown-linux-gnu\nelf_class=ELF64\nelf_data=2'\''s complement, little endian\nelf_machine=Advanced Micro Devices X86-64\nelf_type=DYN\nprogram_interpreter=/lib64/ld-linux-x86-64.so.2\nneeded_library=libc.so.6\n'
+      printf 'rust_release=1.98.0-beta.4\nrust_host=x86_64-unknown-linux-gnu\nelf_class=ELF64\nelf_data=2'\''s complement, little endian\nelf_machine=Advanced Micro Devices X86-64\nelf_type=DYN\nprogram_interpreter=/lib64/ld-linux-x86-64.so.2\nneeded_library=libc.so.6\n'
       ;;
     *) printf '0.1.0' ;;
   esac
@@ -59,7 +59,7 @@ if [ "$1" = -e ]; then
 fi
 if [ "$1" = scripts/linux-artifact-identity.ts ]; then
   cat <<'JSON'
-{"schema":"RUSTTABLE_LINUX_DISTRIBUTION_V1","packageVersion":"0.1.0","archiveBasename":"RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz","rustRelease":"1.95.0","rustHost":"x86_64-unknown-linux-gnu","elfClass":"ELF64","elfData":"2's complement, little endian","elfMachine":"Advanced Micro Devices X86-64","elfType":"DYN","interpreter":"/lib64/ld-linux-x86-64.so.2","needed":["libc.so.6"]}
+{"schema":"RUSTTABLE_LINUX_DISTRIBUTION_V1","packageVersion":"0.1.0","archiveBasename":"RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz","rustRelease":"1.98.0-beta.4","rustHost":"x86_64-unknown-linux-gnu","elfClass":"ELF64","elfData":"2's complement, little endian","elfMachine":"Advanced Micro Devices X86-64","elfType":"DYN","interpreter":"/lib64/ld-linux-x86-64.so.2","needed":["libc.so.6"]}
 JSON
   exit 0
 fi
@@ -68,8 +68,8 @@ EOF
 cat >"$fake_tools/rustc" <<'EOF'
 #!/bin/sh
 cat <<'OUT'
-rustc 1.95.0 (fixture)
-release: 1.95.0
+rustc 1.98.0-beta.4 (fixture)
+release: 1.98.0-beta.4
 host: x86_64-unknown-linux-gnu
 OUT
 EOF

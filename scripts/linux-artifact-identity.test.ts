@@ -8,7 +8,7 @@ import {
   validateLdd,
 } from './linux-artifact-identity';
 
-const rustc = 'rustc 1.95.0 (fixture)\nrelease: 1.95.0\ncommit-hash: fixture\nhost: x86_64-unknown-linux-gnu\n';
+const rustc = 'rustc 1.98.0-beta.4 (fixture)\nrelease: 1.98.0-beta.4\ncommit-hash: fixture\nhost: x86_64-unknown-linux-gnu\n';
 const elfHeader = `ELF Header:
   Magic:   7f 45 4c 46 02 01 01 00
   Class:                             ELF64
@@ -44,7 +44,7 @@ describe('Linux artifact identity', () => {
   });
 
   test('parses each authoritative identity source strictly', () => {
-    expect(parseRustcVersion(rustc)).toEqual({ release: '1.95.0', host: 'x86_64-unknown-linux-gnu' });
+    expect(parseRustcVersion(rustc)).toEqual({ release: '1.98.0-beta.4', host: 'x86_64-unknown-linux-gnu' });
     expect(parseElfHeader(elfHeader).elfClass).toBe('ELF64');
     expect(parseProgramInterpreter(elfProgram)).toBe('/lib64/ld-linux-x86-64.so.2');
     expect(parseNeededLibraries(elfDynamic)).toEqual(['libc.so.6', 'libm.so.6']);

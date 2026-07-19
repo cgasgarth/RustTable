@@ -3,7 +3,7 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-const EXPECTED_VERSION = '1.95';
+const EXPECTED_VERSION = '1.98';
 const ROOT_SECTION = 'workspace.package';
 const PACKAGE_SECTION = 'package';
 

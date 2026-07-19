@@ -57,7 +57,9 @@ fn metadata_jpeg_places_one_canonical_app1_after_soi_and_round_trips() {
     assert!(
         decoded
             .pixels()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|pixel| pixel[3] == 255)
     );
     fs::remove_file(destination).expect("cleanup");
