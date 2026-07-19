@@ -1,7 +1,18 @@
+use std::cmp::Ordering;
+
 use serde::{Deserialize, Serialize};
 
-pub const DIFF_SCHEMA_VERSION: u32 = 1;
-const MAX_OUTLIERS: usize = 32;
+#[path = "image_diff_artifacts.rs"]
+mod artifacts;
+#[path = "image_diff_color.rs"]
+mod color;
+use artifacts::make_artifacts;
+pub use color::ciede2000;
+use color::{converter_error, delta_e_2000};
+
+pub const DIFF_SCHEMA_VERSION: u32 = 2;
+pub const MAX_OUTLIERS: usize = 32;
+const MAX_NEIGHBORHOOD_RADIUS: u32 = 8;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ToleranceClass {
@@ -25,6 +36,33 @@ impl ToleranceClass {
     }
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+pub enum CanonicalProfile {
+    Srgb,
+    DisplayP3,
+    Rec2020,
+}
+
+pub type CanonicalProfileId = CanonicalProfile;
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ComparisonProfile {
+    pub canonical: CanonicalProfile,
+}
+
+impl ComparisonProfile {
+    #[must_use]
+    pub const fn new(canonical: CanonicalProfile) -> Self {
+        Self { canonical }
+    }
+}
+
+impl Default for ComparisonProfile {
+    fn default() -> Self {
+        Self::new(CanonicalProfile::Srgb)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub enum TransferFunction {
     Linear,
@@ -39,25 +77,207 @@ pub enum AlphaMode {
     Opaque,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-pub struct ComparisonProfile {
-    pub transfer: TransferFunctionName,
-    pub d50_lab: bool,
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ImageInput {
+    pub width: u32,
+    pub height: u32,
+    pub channels: u8,
+    pub stride: usize,
+    pub alpha: AlphaMode,
+    pub profile: CanonicalProfile,
+    pub transfer: TransferFunction,
+    pub pixels: Vec<f32>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-pub enum TransferFunctionName {
-    Linear,
-    Srgb,
-}
-
-impl Default for ComparisonProfile {
-    fn default() -> Self {
+impl ImageInput {
+    #[must_use]
+    pub fn rgba(width: u32, height: u32, pixels: Vec<f32>) -> Self {
+        let stride = usize::try_from(width)
+            .ok()
+            .and_then(|width| width.checked_mul(4))
+            .unwrap_or(0);
         Self {
-            transfer: TransferFunctionName::Srgb,
-            d50_lab: true,
+            width,
+            height,
+            channels: 4,
+            stride,
+            alpha: AlphaMode::Straight,
+            profile: CanonicalProfile::Srgb,
+            transfer: TransferFunction::Linear,
+            pixels,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MatrixProfileConverter;
+
+pub trait ProfileConverter {
+    fn convert(
+        &self,
+        source: CanonicalProfile,
+        target: CanonicalProfile,
+        rgb: [f32; 3],
+    ) -> Option<[f32; 3]>;
+}
+
+impl ProfileConverter for MatrixProfileConverter {
+    fn convert(
+        &self,
+        source: CanonicalProfile,
+        target: CanonicalProfile,
+        rgb: [f32; 3],
+    ) -> Option<[f32; 3]> {
+        Some(color::profile_convert(source, target, rgb))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ImageBuffer {
+    pub width: u32,
+    pub height: u32,
+    pub channels: u8,
+    pub alpha: AlphaMode,
+    pub profile: CanonicalProfile,
+    pub pixels: Vec<f32>,
+}
+
+impl ImageBuffer {
+    #[must_use]
+    pub fn rgba(width: u32, height: u32, pixels: Vec<f32>) -> Self {
+        Self::canonical_rgba(width, height, CanonicalProfile::Srgb, pixels)
+    }
+
+    #[must_use]
+    pub fn canonical_rgba(
+        width: u32,
+        height: u32,
+        profile: CanonicalProfile,
+        pixels: Vec<f32>,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            channels: 4,
+            alpha: AlphaMode::Straight,
+            profile,
+            pixels,
+        }
+    }
+
+    fn pixel_count(&self) -> Result<usize, DiffError> {
+        checked_pixel_count(self.width, self.height)
+    }
+
+    fn expected_len(&self) -> Result<usize, DiffError> {
+        self.pixel_count()?
+            .checked_mul(usize::from(self.channels))
+            .ok_or_else(|| DiffError::InvalidImage("image dimensions overflow".to_owned()))
+    }
+
+    fn pixel(&self, index: usize) -> [f32; 4] {
+        let offset = index * 4;
+        [
+            self.pixels[offset],
+            self.pixels[offset + 1],
+            self.pixels[offset + 2],
+            self.pixels[offset + 3],
+        ]
+    }
+}
+
+/// Converts one explicitly described input into a tightly packed canonical buffer.
+///
+/// RGB transfer decoding and premultiplied unassociation happen here, never in
+/// `compare`. Alpha remains a linear scalar and zero-alpha RGB is normalized to
+/// zero so hidden premultiplied RGB cannot affect a comparison.
+///
+/// # Errors
+///
+/// Returns a typed error for invalid dimensions, layout, channel count, or an
+/// undeclared profile conversion.
+pub fn normalize(
+    input: &ImageInput,
+    target: CanonicalProfile,
+    converter: Option<&dyn ProfileConverter>,
+) -> Result<ImageBuffer, DiffError> {
+    if input.width == 0 || input.height == 0 {
+        return Err(DiffError::InvalidImage(
+            "image dimensions must be non-zero".to_owned(),
+        ));
+    }
+    if input.channels != 4 {
+        return Err(DiffError::ChannelMismatch {
+            source: input.channels,
+            reference: 4,
+        });
+    }
+    let row_len = usize::try_from(input.width)
+        .ok()
+        .and_then(|width| width.checked_mul(usize::from(input.channels)))
+        .ok_or_else(|| DiffError::InvalidImage("image dimensions overflow".to_owned()))?;
+    if input.stride < row_len {
+        return Err(DiffError::InvalidImage(
+            "stride is shorter than one packed row".to_owned(),
+        ));
+    }
+    let input_len = input
+        .stride
+        .checked_mul(usize::try_from(input.height).unwrap_or(usize::MAX))
+        .ok_or_else(|| DiffError::InvalidImage("image dimensions overflow".to_owned()))?;
+    if input.pixels.len() != input_len {
+        return Err(DiffError::InvalidImage(
+            "pixel buffer length does not match stride and dimensions".to_owned(),
+        ));
+    }
+    if input.profile != target && converter.is_none() {
+        return Err(DiffError::ProfileMismatch {
+            source: input.profile,
+            reference: target,
+        });
+    }
+    let pixel_count = checked_pixel_count(input.width, input.height)?;
+    let mut pixels = Vec::with_capacity(pixel_count * 4);
+    for row in 0..usize::try_from(input.height).unwrap_or(0) {
+        let row_start = row * input.stride;
+        for column in 0..usize::try_from(input.width).unwrap_or(0) {
+            let offset = row_start + column * 4;
+            let alpha = match input.alpha {
+                AlphaMode::Opaque => 1.0,
+                _ => input.pixels[offset + 3],
+            };
+            let mut rgb = [
+                input.pixels[offset],
+                input.pixels[offset + 1],
+                input.pixels[offset + 2],
+            ];
+            if input.alpha == AlphaMode::Premultiplied {
+                if alpha == 0.0 {
+                    rgb = [0.0; 3];
+                } else if alpha > 0.0 {
+                    for channel in &mut rgb {
+                        *channel /= alpha;
+                    }
+                }
+            }
+            for channel in &mut rgb {
+                *channel = decode_transfer(*channel, input.transfer);
+            }
+            if input.profile != target {
+                rgb = converter
+                    .and_then(|converter| converter.convert(input.profile, target, rgb))
+                    .ok_or_else(converter_error)?;
+            }
+            pixels.extend_from_slice(&rgb);
+            pixels.push(alpha);
+        }
+    }
+    Ok(ImageBuffer::canonical_rgba(
+        input.width,
+        input.height,
+        target,
+        pixels,
+    ))
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -72,6 +292,8 @@ pub struct DiffPolicy {
     pub max_delta_e: f32,
     pub max_outliers: usize,
     pub neighborhood_radius: u32,
+    pub psnr_peak: Option<f32>,
+    pub allow_matching_infinities: bool,
     pub include_heatmap: bool,
     pub include_blink: bool,
 }
@@ -79,12 +301,12 @@ pub struct DiffPolicy {
 impl DiffPolicy {
     #[must_use]
     pub fn for_class(class: ToleranceClass) -> Self {
-        let (absolute, relative, rmse, delta_e, outliers, radius) = match class {
+        let (absolute, relative, rmse, delta_e, radius, max_outliers) = match class {
             ToleranceClass::Exact => (0.0, 0.0, 0.0, 0.0, 0, 0),
             ToleranceClass::Transfer => (2.0e-5, 2.0e-4, 2.0e-5, 0.02, 0, 0),
             ToleranceClass::Pointwise => (1.0e-3, 1.0e-2, 1.0e-3, 1.0, 0, 0),
-            ToleranceClass::Neighborhood => (2.0e-3, 2.0e-2, 2.0e-3, 2.0, 0, 1),
-            ToleranceClass::LegacyGpu => (8.0e-3, 8.0e-2, 8.0e-3, 4.0, 64, 1),
+            ToleranceClass::Neighborhood => (2.0e-3, 2.0e-2, 2.0e-3, 2.0, 1, 0),
+            ToleranceClass::LegacyGpu => (8.0e-3, 8.0e-2, 8.0e-3, 4.0, 1, MAX_OUTLIERS),
         };
         Self {
             schema_version: DIFF_SCHEMA_VERSION,
@@ -95,19 +317,20 @@ impl DiffPolicy {
             max_relative_error: relative,
             max_rmse: rmse,
             max_delta_e: delta_e,
-            max_outliers: outliers,
+            max_outliers,
             neighborhood_radius: radius,
+            psnr_peak: Some(1.0),
+            allow_matching_infinities: false,
             include_heatmap: false,
             include_blink: false,
         }
     }
 
-    /// Validates a policy before it is used for a comparison.
+    /// Validates thresholds and all report/artifact bounds before traversal.
     ///
     /// # Errors
     ///
-    /// Returns an error when a policy contains a non-finite value or exceeds
-    /// the bounded report/artifact limits.
+    /// Returns an error when the schema, thresholds, PSNR peak, or bounds are invalid.
     pub fn validate(&self) -> Result<(), DiffError> {
         if self.schema_version != DIFF_SCHEMA_VERSION {
             return Err(DiffError::InvalidPolicy(
@@ -130,7 +353,15 @@ impl DiffPolicy {
                 "thresholds must be finite and nonnegative".to_owned(),
             ));
         }
-        if self.max_outliers > MAX_OUTLIERS || self.neighborhood_radius > 8 {
+        if self
+            .psnr_peak
+            .is_some_and(|peak| !peak.is_finite() || peak <= 0.0)
+        {
+            return Err(DiffError::InvalidPolicy(
+                "PSNR peak must be finite and positive".to_owned(),
+            ));
+        }
+        if self.max_outliers > MAX_OUTLIERS || self.neighborhood_radius > MAX_NEIGHBORHOOD_RADIUS {
             return Err(DiffError::InvalidPolicy(
                 "report bound exceeds policy limit".to_owned(),
             ));
@@ -140,59 +371,11 @@ impl DiffPolicy {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct ImageBuffer {
-    pub width: u32,
-    pub height: u32,
-    pub channels: u8,
-    pub alpha: AlphaMode,
-    pub profile: ComparisonProfile,
-    pub pixels: Vec<f32>,
-}
-
-impl ImageBuffer {
-    #[must_use]
-    pub fn rgba(width: u32, height: u32, pixels: Vec<f32>) -> Self {
-        Self {
-            width,
-            height,
-            channels: 4,
-            alpha: AlphaMode::Straight,
-            profile: ComparisonProfile::default(),
-            pixels,
-        }
-    }
-
-    fn expected_len(&self) -> Result<usize, DiffError> {
-        usize::try_from(self.width)
-            .ok()
-            .and_then(|width| {
-                usize::try_from(self.height)
-                    .ok()
-                    .map(|height| width * height)
-            })
-            .and_then(|pixels| pixels.checked_mul(usize::from(self.channels)))
-            .ok_or(DiffError::InvalidImage(
-                "image dimensions overflow".to_owned(),
-            ))
-    }
-
-    fn pixel(&self, index: usize) -> [f32; 4] {
-        let offset = index * 4;
-        [
-            self.pixels[offset],
-            self.pixels[offset + 1],
-            self.pixels[offset + 2],
-            self.pixels[offset + 3],
-        ]
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DiffMetrics {
     pub maximum_absolute_error: f32,
     pub maximum_relative_error: f32,
     pub rmse: f32,
-    pub psnr: f32,
+    pub psnr: Option<f32>,
     pub maximum_delta_e: f32,
     pub changed_pixel_count: usize,
     pub outlier_count: usize,
@@ -212,6 +395,7 @@ pub struct DiffOutlier {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DiffArtifact {
+    pub schema_version: u32,
     pub kind: ArtifactKind,
     pub width: u32,
     pub height: u32,
@@ -222,6 +406,32 @@ pub struct DiffArtifact {
 pub enum ArtifactKind {
     HeatmapRgba8,
     BlinkRgba32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlinkPlanes {
+    pub source: Vec<f32>,
+    pub reference: Vec<f32>,
+}
+
+impl DiffArtifact {
+    /// Validates the versioned artifact envelope and exact byte length.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an unknown schema, malformed heatmap, or malformed blink artifact.
+    pub fn validate(&self) -> Result<(), DiffError> {
+        artifacts::validate(self)
+    }
+
+    /// Parses the blink manifest and its two separately framed canonical planes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the artifact is not a valid framed blink artifact.
+    pub fn blink_planes(&self) -> Result<BlinkPlanes, DiffError> {
+        artifacts::blink_planes(self)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -235,13 +445,48 @@ pub struct DiffReceipt {
 }
 
 impl DiffReceipt {
-    /// Serializes a receipt with stable field ordering and no image dump.
+    /// Serializes a validated receipt without embedding an unbounded image dump.
     ///
     /// # Errors
     ///
-    /// Returns an error when JSON serialization cannot represent a receipt.
+    /// Returns an error when the receipt or one of its artifacts is invalid or cannot serialize.
     pub fn stable_json(&self) -> Result<String, DiffError> {
+        self.validate()?;
         serde_json::to_string(self).map_err(|error| DiffError::Serialization(error.to_string()))
+    }
+
+    /// Decodes only the current receipt schema; old receipts fail closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for malformed JSON, an old schema, or invalid artifacts.
+    pub fn from_json(json: &str) -> Result<Self, DiffError> {
+        let receipt: Self = serde_json::from_str(json)
+            .map_err(|error| DiffError::Serialization(error.to_string()))?;
+        receipt.validate()?;
+        Ok(receipt)
+    }
+
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the receipt schema, policy, or bounded artifacts are invalid.
+    pub fn validate(&self) -> Result<(), DiffError> {
+        if self.schema_version != DIFF_SCHEMA_VERSION {
+            return Err(DiffError::InvalidReceipt(
+                "receipt schema is not current".to_owned(),
+            ));
+        }
+        self.policy.validate()?;
+        if self.outliers.len() > MAX_OUTLIERS {
+            return Err(DiffError::InvalidReceipt(
+                "receipt retains more than the bounded outlier limit".to_owned(),
+            ));
+        }
+        for artifact in &self.artifacts {
+            artifact.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -258,6 +503,13 @@ pub enum DiffError {
         reference: u8,
     },
     AlphaMismatch,
+    ProfileMismatch {
+        source: CanonicalProfile,
+        reference: CanonicalProfile,
+    },
+    NonCanonicalImage,
+    Artifact(String),
+    InvalidReceipt(String),
     Serialization(String),
 }
 
@@ -273,6 +525,17 @@ impl std::fmt::Display for DiffError {
                 write!(formatter, "channel mismatch: {source} vs {reference}")
             }
             Self::AlphaMismatch => write!(formatter, "alpha mode mismatch"),
+            Self::ProfileMismatch { source, reference } => {
+                write!(
+                    formatter,
+                    "canonical profile mismatch: {source:?} vs {reference:?}"
+                )
+            }
+            Self::NonCanonicalImage => {
+                write!(formatter, "comparison requires straight canonical RGBA")
+            }
+            Self::Artifact(message) => write!(formatter, "invalid diff artifact: {message}"),
+            Self::InvalidReceipt(message) => write!(formatter, "invalid diff receipt: {message}"),
             Self::Serialization(message) => {
                 write!(formatter, "receipt serialization failed: {message}")
             }
@@ -282,23 +545,89 @@ impl std::fmt::Display for DiffError {
 
 impl std::error::Error for DiffError {}
 
-/// Compares two decoded RGBA images in the canonical comparison profile.
+/// Compares two tightly packed, straight-alpha, linear canonical RGBA images.
+/// Input normalization and profile conversion are intentionally separate.
 ///
 /// # Errors
 ///
-/// Returns an error for malformed buffers or incompatible dimensions, channels,
-/// and alpha modes. A metric mismatch is represented by `DiffReceipt::passed`.
+/// Returns an error for malformed images, mismatched profiles, or invalid policies.
 pub fn compare(
     source: &ImageBuffer,
     reference: &ImageBuffer,
     policy: &DiffPolicy,
 ) -> Result<DiffReceipt, DiffError> {
     policy.validate()?;
+    validate_images(source, reference)?;
+    let pixel_count = source.pixel_count()?;
+    let mut metrics = MetricsAccumulator::new(policy.alpha_weight);
+    let mut retained = RetainedOutliers::default();
+    let mut severities = if policy.include_heatmap {
+        vec![0.0; pixel_count]
+    } else {
+        Vec::new()
+    };
+    for index in 0..pixel_count {
+        let observation = if policy.neighborhood_radius > 0 {
+            symmetric_neighborhood_match(index, source, reference, policy)
+        } else {
+            let source_pixel = source.pixel(index);
+            let reference_pixel = reference.pixel(index);
+            observe_pair(source_pixel, reference_pixel, source.profile, policy)
+        };
+        metrics.observe(&observation);
+        if let Some(severity) = severities.get_mut(index) {
+            *severity = observation.severity;
+        }
+        let (x, y) = coordinates(index, source.width);
+        if observation.severity > 1.0 || observation.invalid {
+            retained.push(
+                observation.severity,
+                DiffOutlier {
+                    x,
+                    y,
+                    source: source.pixel(index),
+                    reference: reference.pixel(index),
+                    channel_error: observation.errors,
+                    delta_e: observation.delta_e,
+                    tile_identity: format!("pixel:{x}:{y}"),
+                },
+            );
+            metrics.outlier_count += 1;
+        }
+    }
+    metrics.finish(pixel_count, policy.psnr_peak);
+    let metrics = metrics.into_metrics();
+    let artifacts = make_artifacts(source, reference, policy, &severities)?;
+    let passed = metrics.maximum_absolute_error <= policy.max_absolute_error
+        && metrics.maximum_relative_error <= policy.max_relative_error
+        && metrics.rmse <= policy.max_rmse
+        && metrics.maximum_delta_e.is_finite()
+        && metrics.maximum_delta_e <= policy.max_delta_e
+        && metrics.outlier_count <= policy.max_outliers
+        && metrics.nonfinite_mismatch_count == 0;
+    let receipt = DiffReceipt {
+        schema_version: DIFF_SCHEMA_VERSION,
+        policy: policy.clone(),
+        metrics,
+        outliers: retained.finish(),
+        artifacts,
+        passed,
+    };
+    receipt.validate()?;
+    Ok(receipt)
+}
+
+fn validate_images(source: &ImageBuffer, reference: &ImageBuffer) -> Result<(), DiffError> {
     if (source.width, source.height) != (reference.width, reference.height) {
         return Err(DiffError::DimensionMismatch {
             source: (source.width, source.height),
             reference: (reference.width, reference.height),
         });
+    }
+    if source.width == 0 || source.height == 0 {
+        return Err(DiffError::InvalidImage(
+            "image dimensions must be non-zero".to_owned(),
+        ));
     }
     if source.channels != reference.channels || source.channels != 4 {
         return Err(DiffError::ChannelMismatch {
@@ -309,77 +638,74 @@ pub fn compare(
     if source.alpha != reference.alpha {
         return Err(DiffError::AlphaMismatch);
     }
+    if source.alpha != AlphaMode::Straight || reference.alpha != AlphaMode::Straight {
+        return Err(DiffError::NonCanonicalImage);
+    }
+    if source.profile != reference.profile {
+        return Err(DiffError::ProfileMismatch {
+            source: source.profile,
+            reference: reference.profile,
+        });
+    }
     let expected = source.expected_len()?;
     if source.pixels.len() != expected || reference.pixels.len() != expected {
         return Err(DiffError::InvalidImage(
             "pixel buffer length does not match dimensions".to_owned(),
         ));
     }
-    let mut metrics = MetricsAccumulator::default();
-    let mut outliers = Vec::new();
-    for index in 0..(expected / 4) {
-        let source_pixel = source.pixel(index);
-        let reference_pixel = reference.pixel(index);
-        let errors = channel_errors(source_pixel, reference_pixel, source.alpha, policy);
-        let nonfinite = source_pixel
-            .iter()
-            .zip(reference_pixel)
-            .any(|(left, right)| left.is_finite() != right.is_finite());
-        let delta_e = delta_e_2000(source_pixel, reference_pixel, source.profile);
-        metrics.observe(
-            &errors,
-            source_pixel,
-            reference_pixel,
-            delta_e,
-            nonfinite,
-            policy.epsilon,
-        );
-        let (x, y) = (
-            u32::try_from(index % usize::try_from(source.width).unwrap_or(1)).unwrap_or(0),
-            u32::try_from(index / usize::try_from(source.width).unwrap_or(1)).unwrap_or(0),
-        );
-        let outlier = is_outlier(index, source, &errors, delta_e, nonfinite, policy);
-        if outlier {
-            metrics.outlier_count += 1;
-            outliers.push(DiffOutlier {
-                x,
-                y,
-                source: source_pixel,
-                reference: reference_pixel,
-                channel_error: errors,
-                delta_e,
-                tile_identity: format!("tile:{x}:{y}"),
-            });
+    Ok(())
+}
+
+struct RetainedOutliers {
+    values: Vec<ScoredOutlier>,
+}
+
+impl Default for RetainedOutliers {
+    fn default() -> Self {
+        Self {
+            values: Vec::with_capacity(MAX_OUTLIERS),
         }
     }
-    metrics.finish(expected / 4);
-    let metrics: DiffMetrics = metrics.into();
-    outliers.sort_by(|left, right| {
-        right
-            .channel_error
+}
+
+struct ScoredOutlier {
+    severity: f32,
+    value: DiffOutlier,
+}
+
+impl RetainedOutliers {
+    fn push(&mut self, severity: f32, value: DiffOutlier) {
+        let candidate = ScoredOutlier { severity, value };
+        if self.values.len() < MAX_OUTLIERS {
+            self.values.push(candidate);
+            return;
+        }
+        let Some(worst) = self
+            .values
             .iter()
-            .copied()
-            .fold(0.0, f32::max)
-            .total_cmp(&left.channel_error.iter().copied().fold(0.0, f32::max))
-            .then_with(|| left.y.cmp(&right.y))
-            .then_with(|| left.x.cmp(&right.x))
-    });
-    outliers.truncate(MAX_OUTLIERS);
-    let artifacts = make_artifacts(source, reference, policy, &outliers);
-    let passed = metrics.maximum_absolute_error <= policy.max_absolute_error
-        && metrics.maximum_relative_error <= policy.max_relative_error
-        && metrics.rmse <= policy.max_rmse
-        && metrics.maximum_delta_e <= policy.max_delta_e
-        && metrics.outlier_count <= policy.max_outliers
-        && metrics.nonfinite_mismatch_count == 0;
-    Ok(DiffReceipt {
-        schema_version: DIFF_SCHEMA_VERSION,
-        policy: policy.clone(),
-        metrics,
-        outliers,
-        artifacts,
-        passed,
-    })
+            .enumerate()
+            .min_by(|(_, left), (_, right)| compare_outlier(left, right))
+            .map(|(index, _)| index)
+        else {
+            return;
+        };
+        if compare_outlier(&candidate, &self.values[worst]) == Ordering::Greater {
+            self.values[worst] = candidate;
+        }
+    }
+
+    fn finish(mut self) -> Vec<DiffOutlier> {
+        self.values
+            .sort_by(|left, right| compare_outlier(right, left));
+        self.values.into_iter().map(|entry| entry.value).collect()
+    }
+}
+
+fn compare_outlier(left: &ScoredOutlier, right: &ScoredOutlier) -> Ordering {
+    left.severity
+        .total_cmp(&right.severity)
+        .then_with(|| right.value.y.cmp(&left.value.y))
+        .then_with(|| right.value.x.cmp(&left.value.x))
 }
 
 #[derive(Default)]
@@ -391,105 +717,251 @@ struct MetricsAccumulator {
     changed_pixel_count: usize,
     outlier_count: usize,
     nonfinite_mismatch_count: usize,
+    alpha_weight: f32,
+    psnr: Option<f32>,
 }
 
 impl MetricsAccumulator {
-    fn observe(
-        &mut self,
-        errors: &[f32; 4],
-        source: [f32; 4],
-        reference: [f32; 4],
-        delta_e: f32,
-        nonfinite: bool,
-        epsilon: f32,
-    ) {
-        let maximum = errors.iter().copied().fold(0.0, f32::max);
+    fn new(alpha_weight: f32) -> Self {
+        Self {
+            alpha_weight,
+            ..Self::default()
+        }
+    }
+
+    fn observe(&mut self, observation: &Observation) {
+        let maximum = observation.errors.iter().copied().fold(0.0, f32::max);
         self.maximum_absolute_error = self.maximum_absolute_error.max(maximum);
-        self.maximum_delta_e = self.maximum_delta_e.max(delta_e);
-        let relative = errors
-            .iter()
-            .zip(source.into_iter().zip(reference))
-            .map(|(error, (left, right))| {
-                if left.is_finite() && right.is_finite() {
-                    *error / right.abs().max(left.abs()).max(epsilon)
-                } else if left.is_finite() == right.is_finite() {
-                    0.0
-                } else {
-                    f32::MAX
-                }
-            })
-            .fold(0.0, f32::max);
-        self.maximum_relative_error = self.maximum_relative_error.max(relative);
-        if maximum > 0.0 {
+        self.maximum_delta_e = self.maximum_delta_e.max(observation.delta_e);
+        self.maximum_relative_error = self.maximum_relative_error.max(observation.relative_error);
+        if observation.invalid || maximum > 0.0 {
             self.changed_pixel_count += 1;
         }
-        if nonfinite {
+        if observation.invalid {
             self.nonfinite_mismatch_count += 1;
         }
-        for error in errors {
-            self.squared_error += f64::from(*error) * f64::from(*error);
+        for (channel, error) in observation.errors.iter().enumerate() {
+            let weight = if channel == 3 {
+                self.alpha_weight * self.alpha_weight
+            } else {
+                1.0
+            };
+            self.squared_error += f64::from(*error) * f64::from(*error) * f64::from(weight);
         }
     }
 
     #[allow(clippy::cast_precision_loss)]
-    fn finish(&mut self, pixels: usize) {
-        self.squared_error /= (pixels.max(1) * 4) as f64;
-    }
-}
-
-impl From<MetricsAccumulator> for DiffMetrics {
     #[allow(clippy::cast_possible_truncation)]
-    fn from(value: MetricsAccumulator) -> Self {
-        let rmse = value.squared_error.sqrt() as f32;
-        let psnr = if rmse == 0.0 {
-            f32::INFINITY
-        } else {
-            20.0 * (1.0 / rmse).log10()
-        };
-        Self {
-            maximum_absolute_error: value.maximum_absolute_error,
-            maximum_relative_error: value.maximum_relative_error,
-            rmse,
-            psnr,
-            maximum_delta_e: value.maximum_delta_e,
-            changed_pixel_count: value.changed_pixel_count,
-            outlier_count: value.outlier_count,
-            nonfinite_mismatch_count: value.nonfinite_mismatch_count,
+    fn finish(&mut self, pixels: usize, peak: Option<f32>) {
+        let channel_weight = 3.0 + self.alpha_weight * self.alpha_weight;
+        self.squared_error /= pixels.max(1) as f64 * f64::from(channel_weight);
+        self.psnr = peak.and_then(|peak| {
+            let rmse = self.squared_error.sqrt() as f32;
+            (rmse > 0.0)
+                .then(|| 20.0 * (peak / rmse).log10())
+                .filter(|psnr| psnr.is_finite())
+        });
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn into_metrics(self) -> DiffMetrics {
+        DiffMetrics {
+            maximum_absolute_error: self.maximum_absolute_error,
+            maximum_relative_error: self.maximum_relative_error,
+            rmse: self.squared_error.sqrt() as f32,
+            psnr: self.psnr,
+            maximum_delta_e: self.maximum_delta_e,
+            changed_pixel_count: self.changed_pixel_count,
+            outlier_count: self.outlier_count,
+            nonfinite_mismatch_count: self.nonfinite_mismatch_count,
         }
     }
 }
 
-#[allow(clippy::float_cmp)]
-fn channel_errors(
-    source: [f32; 4],
-    reference: [f32; 4],
-    alpha: AlphaMode,
-    policy: &DiffPolicy,
-) -> [f32; 4] {
-    let mut errors = [0.0; 4];
-    for channel in 0..4 {
-        let left = linear_sample(source[channel], source[3], alpha);
-        let right = linear_sample(reference[channel], reference[3], alpha);
-        errors[channel] = if left.is_finite() && right.is_finite() {
-            (left - right).abs()
-        } else if left.is_finite() == right.is_finite() && left == right {
-            0.0
-        } else {
-            f32::MAX
-        };
-    }
-    if (policy.alpha_weight - 1.0).abs() > f32::EPSILON {
-        errors[3] *= policy.alpha_weight;
-    }
-    errors
+#[derive(Clone, Copy)]
+struct Observation {
+    errors: [f32; 4],
+    relative_error: f32,
+    delta_e: f32,
+    invalid: bool,
+    severity: f32,
 }
 
-fn linear_sample(value: f32, alpha: f32, mode: AlphaMode) -> f32 {
-    let value = match mode {
-        AlphaMode::Premultiplied if alpha > 0.0 => value / alpha,
-        _ => value,
+fn symmetric_neighborhood_match(
+    index: usize,
+    source: &ImageBuffer,
+    reference: &ImageBuffer,
+    policy: &DiffPolicy,
+) -> Observation {
+    let (x, y) = coordinates(index, source.width);
+    let source_to_reference =
+        best_neighborhood_match(source.pixel(index), x, y, reference, source.profile, policy);
+    let reference_to_source =
+        best_neighborhood_match(reference.pixel(index), x, y, source, source.profile, policy);
+    Observation {
+        errors: std::array::from_fn(|channel| {
+            source_to_reference.errors[channel].max(reference_to_source.errors[channel])
+        }),
+        relative_error: source_to_reference
+            .relative_error
+            .max(reference_to_source.relative_error),
+        delta_e: source_to_reference.delta_e.max(reference_to_source.delta_e),
+        invalid: source_to_reference.invalid || reference_to_source.invalid,
+        severity: source_to_reference
+            .severity
+            .max(reference_to_source.severity),
+    }
+}
+
+fn best_neighborhood_match(
+    pixel: [f32; 4],
+    x: u32,
+    y: u32,
+    target: &ImageBuffer,
+    profile: CanonicalProfile,
+    policy: &DiffPolicy,
+) -> Observation {
+    let radius = usize::try_from(policy.neighborhood_radius).unwrap_or(0);
+    let width = usize::try_from(target.width).unwrap_or(0);
+    let height = usize::try_from(target.height).unwrap_or(0);
+    let x = usize::try_from(x).unwrap_or(0);
+    let y = usize::try_from(y).unwrap_or(0);
+    let mut best = None;
+    for neighbor_y in y.saturating_sub(radius)..=(y + radius).min(height - 1) {
+        for neighbor_x in x.saturating_sub(radius)..=(x + radius).min(width - 1) {
+            let candidate = observe_pair(
+                pixel,
+                target.pixel(neighbor_y * width + neighbor_x),
+                profile,
+                policy,
+            );
+            if best
+                .as_ref()
+                .is_none_or(|best: &Observation| candidate.severity < best.severity)
+            {
+                best = Some(candidate);
+            }
+        }
+    }
+    best.unwrap_or_else(|| observe_pair(pixel, target.pixel(0), profile, policy))
+}
+
+fn observe_pair(
+    source: [f32; 4],
+    reference: [f32; 4],
+    profile: CanonicalProfile,
+    policy: &DiffPolicy,
+) -> Observation {
+    let mut errors = [0.0; 4];
+    let mut invalid = false;
+    for channel in 0..4 {
+        let (error, valid) = scalar_error(source[channel], reference[channel], policy);
+        errors[channel] = if channel == 3 {
+            error * policy.alpha_weight
+        } else {
+            error
+        };
+        invalid |= !valid;
+    }
+    let relative_error = (0..4)
+        .map(|channel| {
+            let (error, valid) = scalar_error(source[channel], reference[channel], policy);
+            if valid {
+                error
+                    * if channel == 3 {
+                        policy.alpha_weight
+                    } else {
+                        1.0
+                    }
+                    / source[channel]
+                        .abs()
+                        .max(reference[channel].abs())
+                        .max(policy.epsilon)
+            } else {
+                f32::MAX
+            }
+        })
+        .fold(0.0, f32::max);
+    let delta_e = if !invalid && source[..3].iter().any(|value| !value.is_finite()) {
+        0.0
+    } else {
+        delta_e_2000(source, reference, profile)
     };
-    srgb_to_linear(value)
+    let severity = if invalid {
+        f32::INFINITY
+    } else {
+        [
+            threshold_ratio(
+                errors.iter().copied().fold(0.0, f32::max),
+                policy.max_absolute_error,
+            ),
+            threshold_ratio(relative_error, policy.max_relative_error),
+            threshold_ratio(delta_e, policy.max_delta_e),
+        ]
+        .into_iter()
+        .fold(0.0, f32::max)
+    };
+    Observation {
+        errors,
+        relative_error,
+        delta_e,
+        invalid,
+        severity,
+    }
+}
+
+fn scalar_error(left: f32, right: f32, policy: &DiffPolicy) -> (f32, bool) {
+    if left.is_finite() && right.is_finite() {
+        ((left - right).abs(), true)
+    } else if policy.allow_matching_infinities
+        && left.is_infinite()
+        && right.is_infinite()
+        && left.is_sign_positive() == right.is_sign_positive()
+    {
+        (0.0, true)
+    } else {
+        (f32::MAX, false)
+    }
+}
+
+fn threshold_ratio(value: f32, threshold: f32) -> f32 {
+    if value == 0.0 {
+        0.0
+    } else if threshold == 0.0 {
+        f32::INFINITY
+    } else {
+        value / threshold
+    }
+}
+
+fn checked_pixel_count(width: u32, height: u32) -> Result<usize, DiffError> {
+    usize::try_from(width)
+        .ok()
+        .and_then(|width| {
+            usize::try_from(height)
+                .ok()
+                .and_then(|height| width.checked_mul(height))
+        })
+        .ok_or_else(|| DiffError::InvalidImage("image dimensions overflow".to_owned()))
+}
+
+fn coordinates(index: usize, width: u32) -> (u32, u32) {
+    let width = usize::try_from(width).unwrap_or(1);
+    (
+        u32::try_from(index % width).unwrap_or(0),
+        u32::try_from(index / width).unwrap_or(0),
+    )
+}
+
+fn decode_transfer(value: f32, transfer: TransferFunction) -> f32 {
+    match transfer {
+        TransferFunction::Linear => value,
+        TransferFunction::Srgb => srgb_to_linear(value),
+        TransferFunction::Gamma(gamma) if gamma.is_finite() && gamma > 0.0 => {
+            value.signum() * value.abs().powf(gamma)
+        }
+        TransferFunction::Gamma(_) => f32::NAN,
+    }
 }
 
 fn srgb_to_linear(value: f32) -> f32 {
@@ -498,175 +970,4 @@ fn srgb_to_linear(value: f32) -> f32 {
     } else {
         value.signum() * (((value.abs() + 0.055) / 1.055).powf(2.4))
     }
-}
-
-fn is_outlier(
-    index: usize,
-    image: &ImageBuffer,
-    errors: &[f32; 4],
-    delta_e: f32,
-    nonfinite: bool,
-    policy: &DiffPolicy,
-) -> bool {
-    if nonfinite {
-        return true;
-    }
-    let maximum = errors.iter().copied().fold(0.0, f32::max);
-    let exceeded = maximum > policy.max_absolute_error || delta_e > policy.max_delta_e;
-    if !exceeded {
-        return false;
-    }
-    if policy.class != ToleranceClass::Neighborhood || policy.neighborhood_radius == 0 {
-        return true;
-    }
-    let width = usize::try_from(image.width).unwrap_or(1);
-    let x = index % width;
-    let y = index / width;
-    let radius = usize::try_from(policy.neighborhood_radius).unwrap_or(0);
-    for neighbor_y in y.saturating_sub(radius)
-        ..=(y + radius).min(usize::try_from(image.height).unwrap_or(1).saturating_sub(1))
-    {
-        for neighbor_x in x.saturating_sub(radius)..=(x + radius).min(width.saturating_sub(1)) {
-            if neighbor_x == x && neighbor_y == y {
-                continue;
-            }
-            let neighbor = image.pixel(neighbor_y * width + neighbor_x);
-            if neighbor.iter().all(|value| value.is_finite()) {
-                return false;
-            }
-        }
-    }
-    true
-}
-
-fn delta_e_2000(left: [f32; 4], right: [f32; 4], profile: ComparisonProfile) -> f32 {
-    let first = lab(left, profile);
-    let second = lab(right, profile);
-    let c1 = (first[1] * first[1] + first[2] * first[2]).sqrt();
-    let c2 = (second[1] * second[1] + second[2] * second[2]).sqrt();
-    let c_bar = f32::midpoint(c1, c2);
-    let c_bar_7 = c_bar.powi(7);
-    let twenty_five_7 = 25.0_f32.powi(7);
-    let g = 0.5 * (1.0 - (c_bar_7 / (c_bar_7 + twenty_five_7)).sqrt());
-    let a1 = (1.0 + g) * first[1];
-    let a2 = (1.0 + g) * second[1];
-    let c1 = (a1 * a1 + first[2] * first[2]).sqrt();
-    let c2 = (a2 * a2 + second[2] * second[2]).sqrt();
-    let h1 = hue_angle(a1, first[2]);
-    let h2 = hue_angle(a2, second[2]);
-    let delta_l = second[0] - first[0];
-    let delta_c = c2 - c1;
-    let delta_h = if c1 * c2 == 0.0 {
-        0.0
-    } else if (h2 - h1).abs() <= 180.0 {
-        h2 - h1
-    } else if h2 <= h1 {
-        h2 - h1 + 360.0
-    } else {
-        h2 - h1 - 360.0
-    };
-    let delta_big_h = 2.0 * (c1 * c2).sqrt() * (delta_h.to_radians() / 2.0).sin();
-    let l_bar = f32::midpoint(first[0], second[0]);
-    let c_bar = f32::midpoint(c1, c2);
-    let h_bar = if c1 * c2 == 0.0 {
-        h1 + h2
-    } else if (h1 - h2).abs() <= 180.0 {
-        f32::midpoint(h1, h2)
-    } else if h1 + h2 < 360.0 {
-        (h1 + h2 + 360.0) / 2.0
-    } else {
-        (h1 + h2 - 360.0) / 2.0
-    };
-    let t = 1.0 - 0.17 * ((h_bar - 30.0).to_radians()).cos()
-        + 0.24 * ((2.0 * h_bar).to_radians()).cos()
-        + 0.32 * ((3.0 * h_bar + 6.0).to_radians()).cos()
-        - 0.20 * ((4.0 * h_bar - 63.0).to_radians()).cos();
-    let delta_theta = 30.0 * (-((h_bar - 275.0) / 25.0).powi(2)).exp();
-    let rc = 2.0 * (c_bar.powi(7) / (c_bar.powi(7) + twenty_five_7)).sqrt();
-    let sl = 1.0 + 0.015 * (l_bar - 50.0).powi(2) / (20.0 + (l_bar - 50.0).powi(2)).sqrt();
-    let sc = 1.0 + 0.045 * c_bar;
-    let sh = 1.0 + 0.015 * c_bar * t;
-    let rt = -(2.0 * delta_theta.to_radians()).sin() * rc;
-    ((delta_l / sl).powi(2)
-        + (delta_c / sc).powi(2)
-        + (delta_big_h / sh).powi(2)
-        + rt * (delta_c / sc) * (delta_big_h / sh))
-        .max(0.0)
-        .sqrt()
-}
-
-fn hue_angle(a: f32, b: f32) -> f32 {
-    let angle = b.atan2(a).to_degrees();
-    if angle < 0.0 { angle + 360.0 } else { angle }
-}
-
-#[allow(clippy::excessive_precision)]
-fn lab(pixel: [f32; 4], profile: ComparisonProfile) -> [f32; 3] {
-    let red = transfer(pixel[0], profile.transfer);
-    let green = transfer(pixel[1], profile.transfer);
-    let blue = transfer(pixel[2], profile.transfer);
-    let xyz_x = 0.412_456_4 * red + 0.357_576_1 * green + 0.180_437_5 * blue;
-    let xyz_y = 0.212_672_9 * red + 0.715_152_2 * green + 0.072_175_0 * blue;
-    let xyz_z = 0.019_333_9 * red + 0.119_192 * green + 0.950_304_1 * blue;
-    let (x, y, z) = if profile.d50_lab {
-        (
-            1.047_929_8 * xyz_x + 0.022_946_8 * xyz_y - 0.050_192_2 * xyz_z,
-            0.029_627_8 * xyz_x + 0.990_434_5 * xyz_y - 0.017_073_8 * xyz_z,
-            -0.009_243_1 * xyz_x + 0.015_055_2 * xyz_y + 0.751_874_3 * xyz_z,
-        )
-    } else {
-        (xyz_x, xyz_y, xyz_z)
-    };
-    let f = |value: f32| {
-        if value > 0.008_856 {
-            value.powf(1.0 / 3.0)
-        } else {
-            7.787 * value + 16.0 / 116.0
-        }
-    };
-    let (xn, yn, zn) = (0.96422, 1.0, 0.82521);
-    let (fx, fy, fz) = (f(x / xn), f(y / yn), f(z / zn));
-    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
-}
-
-fn transfer(value: f32, transfer: TransferFunctionName) -> f32 {
-    match transfer {
-        TransferFunctionName::Linear => value,
-        TransferFunctionName::Srgb => srgb_to_linear(value),
-    }
-}
-
-fn make_artifacts(
-    source: &ImageBuffer,
-    reference: &ImageBuffer,
-    policy: &DiffPolicy,
-    outliers: &[DiffOutlier],
-) -> Vec<DiffArtifact> {
-    let mut artifacts = Vec::new();
-    if policy.include_heatmap {
-        let mut bytes = Vec::with_capacity(outliers.len() * 8);
-        for outlier in outliers {
-            bytes.extend_from_slice(&outlier.x.to_le_bytes());
-            bytes.extend_from_slice(&outlier.y.to_le_bytes());
-        }
-        artifacts.push(DiffArtifact {
-            kind: ArtifactKind::HeatmapRgba8,
-            width: source.width,
-            height: source.height,
-            bytes,
-        });
-    }
-    if policy.include_blink {
-        let mut bytes = Vec::with_capacity((source.pixels.len() + reference.pixels.len()) * 4);
-        for value in source.pixels.iter().chain(&reference.pixels) {
-            bytes.extend_from_slice(&value.to_le_bytes());
-        }
-        artifacts.push(DiffArtifact {
-            kind: ArtifactKind::BlinkRgba32,
-            width: source.width,
-            height: source.height,
-            bytes,
-        });
-    }
-    artifacts
 }
