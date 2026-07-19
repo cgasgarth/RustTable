@@ -3,9 +3,14 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
-use crate::mapping::map_discovered;
-use crate::model::{Capability, Discovered, Manifest, OverrideFile};
-use crate::validate::{summary_for, validate_capability_fields, validate_manifest};
+use crate::mapping::{map_discovered, ownership_for};
+use crate::model::{Capability, Discovered, IssueIndex, IssueOwnership, Manifest, OverrideFile};
+use crate::validate::{
+    parse_issue_index, summary_for, validate_capability_fields, validate_issue_index,
+    validate_manifest_with_issue_index,
+};
+
+const ISSUE_INDEX: &str = include_str!("../../../architecture/darktable-issue-index.toml");
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScanError {
@@ -17,6 +22,9 @@ pub enum ScanError {
         message: String,
     },
     InvalidManifest {
+        message: String,
+    },
+    InvalidIssueIndex {
         message: String,
     },
     MissingReferencePath {
@@ -35,6 +43,21 @@ pub enum ScanError {
     },
     DuplicateCapabilityId {
         id: String,
+    },
+    DuplicateOwnership {
+        id: String,
+        issue_number: u64,
+        role: String,
+    },
+    UnknownIssueCapability {
+        id: String,
+    },
+    MissingOwnership {
+        id: String,
+    },
+    StaleIssue {
+        issue_number: u64,
+        reason: String,
     },
     UnmappedDiscoveredModule {
         id: String,
@@ -74,6 +97,9 @@ impl Display for ScanError {
             Self::Io { path, message } => write!(formatter, "I/O error at {path}: {message}"),
             Self::InvalidOverrides { message } => write!(formatter, "invalid overrides: {message}"),
             Self::InvalidManifest { message } => write!(formatter, "invalid manifest: {message}"),
+            Self::InvalidIssueIndex { message } => {
+                write!(formatter, "invalid issue index: {message}")
+            }
             Self::MissingReferencePath { path } => {
                 write!(formatter, "missing reference path: {path}")
             }
@@ -87,6 +113,27 @@ impl Display for ScanError {
             Self::DuplicateCapabilityId { id } => {
                 write!(formatter, "duplicate capability ID: {id}")
             }
+            Self::DuplicateOwnership {
+                id,
+                issue_number,
+                role,
+            } => write!(
+                formatter,
+                "duplicate ownership for {id}: issue #{issue_number} role {role}"
+            ),
+            Self::UnknownIssueCapability { id } => {
+                write!(formatter, "issue index names unknown capability: {id}")
+            }
+            Self::MissingOwnership { id } => {
+                write!(
+                    formatter,
+                    "missing issue ownership for discovered capability: {id}"
+                )
+            }
+            Self::StaleIssue {
+                issue_number,
+                reason,
+            } => write!(formatter, "stale issue #{issue_number}: {reason}"),
             Self::UnmappedDiscoveredModule { id, path } => {
                 write!(formatter, "unmapped discovered module {id} at {path}")
             }
@@ -137,7 +184,7 @@ impl std::error::Error for ScanError {}
 /// mapping, override, or manifest invariant is invalid.
 pub fn scan_darktable(source: &Path, overrides: &Path) -> Result<Manifest, ScanError> {
     let contents = read_text(overrides)?;
-    scan_darktable_with_overrides(source, &contents)
+    scan_darktable_with_issue_index(source, &contents, ISSUE_INDEX)
 }
 
 /// Scans a reference tree with override TOML supplied by the caller.
@@ -150,16 +197,38 @@ pub fn scan_darktable_with_overrides(
     source: &Path,
     overrides: &str,
 ) -> Result<Manifest, ScanError> {
+    scan_darktable_with_issue_index(source, overrides, ISSUE_INDEX)
+}
+
+/// Scans a reference tree using an explicit GitHub-derived issue index.
+///
+/// # Errors
+///
+/// Returns an error when the index, discovery surface, ownership, override,
+/// or deterministic manifest contract is invalid.
+pub fn scan_darktable_with_issue_index(
+    source: &Path,
+    overrides: &str,
+    issue_index: &str,
+) -> Result<Manifest, ScanError> {
     require_directory(source)?;
+    let index: IssueIndex = parse_issue_index(issue_index)?;
+    validate_issue_index(&index, None)?;
     let mut capabilities = Vec::new();
-    discover_cmake_surface(source, "iop", "src/iop", &mut capabilities)?;
-    discover_cmake_surface(source, "lib", "src/libs", &mut capabilities)?;
-    discover_cmake_surface(source, "view", "src/views", &mut capabilities)?;
-    discover_cmake_surface(source, "format", "src/imageio/format", &mut capabilities)?;
-    discover_storage_surface(source, &mut capabilities)?;
-    discover_lua_surface(source, &mut capabilities)?;
-    discover_build_options(source, &mut capabilities)?;
-    discover_opencl_surface(source, &mut capabilities)?;
+    discover_cmake_surface(source, "iop", "src/iop", &index, &mut capabilities)?;
+    discover_cmake_surface(source, "lib", "src/libs", &index, &mut capabilities)?;
+    discover_cmake_surface(source, "view", "src/views", &index, &mut capabilities)?;
+    discover_cmake_surface(
+        source,
+        "format",
+        "src/imageio/format",
+        &index,
+        &mut capabilities,
+    )?;
+    discover_storage_surface(source, &index, &mut capabilities)?;
+    discover_lua_surface(source, &index, &mut capabilities)?;
+    discover_build_options(source, &index, &mut capabilities)?;
+    discover_opencl_surface(source, &index, &mut capabilities)?;
 
     let override_file: OverrideFile = if overrides.trim().is_empty() {
         OverrideFile {
@@ -170,18 +239,33 @@ pub fn scan_darktable_with_overrides(
             message: error.to_string(),
         })?
     };
-    apply_overrides(source, &mut capabilities, override_file.override_entries)?;
+    apply_overrides(
+        source,
+        &index,
+        &mut capabilities,
+        override_file.override_entries,
+    )?;
 
     normalize_capabilities(&mut capabilities);
     capabilities.sort_by(|left, right| left.id.cmp(&right.id));
     let mut manifest = Manifest {
-        schema_version: 1,
+        schema_version: 2,
         source_commit: reference_commit(source),
         summary: Vec::new(),
         capabilities,
     };
     manifest.summary = summary_for(&manifest.capabilities);
-    validate_manifest(&manifest)?;
+    validate_issue_index(
+        &index,
+        Some(
+            &manifest
+                .capabilities
+                .iter()
+                .map(|capability| capability.id.clone())
+                .collect::<Vec<_>>(),
+        ),
+    )?;
+    validate_manifest_with_issue_index(&manifest, &index)?;
     Ok(manifest)
 }
 
@@ -189,6 +273,7 @@ fn discover_cmake_surface(
     root: &Path,
     kind: &str,
     relative_directory: &str,
+    issue_index: &IssueIndex,
     capabilities: &mut Vec<Capability>,
 ) -> Result<(), ScanError> {
     let directory = root.join(relative_directory);
@@ -213,13 +298,14 @@ fn discover_cmake_surface(
         };
         let relative_path = normalize_relative_path(relative_directory, source);
         require_file(root, &relative_path)?;
-        add_discovered(capabilities, kind, name, &relative_path)?;
+        add_discovered(capabilities, issue_index, kind, name, &relative_path)?;
     }
     Ok(())
 }
 
 fn discover_storage_surface(
     root: &Path,
+    issue_index: &IssueIndex,
     capabilities: &mut Vec<Capability>,
 ) -> Result<(), ScanError> {
     let relative_directory = "src/imageio/storage";
@@ -238,13 +324,17 @@ fn discover_storage_surface(
             }
             let relative_path = format!("{relative_directory}/{name}.c");
             require_file(root, &relative_path)?;
-            add_discovered(capabilities, "storage", name, &relative_path)?;
+            add_discovered(capabilities, issue_index, "storage", name, &relative_path)?;
         }
     }
     Ok(())
 }
 
-fn discover_lua_surface(root: &Path, capabilities: &mut Vec<Capability>) -> Result<(), ScanError> {
+fn discover_lua_surface(
+    root: &Path,
+    issue_index: &IssueIndex,
+    capabilities: &mut Vec<Capability>,
+) -> Result<(), ScanError> {
     let relative_path = "src/lua/init.c";
     let contents = read_text(&root.join(relative_path))?;
     let mut in_registry = false;
@@ -271,13 +361,14 @@ fn discover_lua_surface(root: &Path, capabilities: &mut Vec<Capability>) -> Resu
     }
     names.sort();
     for name in names {
-        add_discovered(capabilities, "lua", &name, relative_path)?;
+        add_discovered(capabilities, issue_index, "lua", &name, relative_path)?;
     }
     Ok(())
 }
 
 fn discover_build_options(
     root: &Path,
+    issue_index: &IssueIndex,
     capabilities: &mut Vec<Capability>,
 ) -> Result<(), ScanError> {
     let relative_path = "DefineOptions.cmake";
@@ -288,7 +379,13 @@ fn discover_build_options(
             continue;
         }
         if let Some(name) = tokens.get(1) {
-            add_discovered(capabilities, "build-option", name, relative_path)?;
+            add_discovered(
+                capabilities,
+                issue_index,
+                "build-option",
+                name,
+                relative_path,
+            )?;
         }
     }
     Ok(())
@@ -296,6 +393,7 @@ fn discover_build_options(
 
 fn discover_opencl_surface(
     root: &Path,
+    issue_index: &IssueIndex,
     capabilities: &mut Vec<Capability>,
 ) -> Result<(), ScanError> {
     let relative_registry = "data/kernels/programs.conf";
@@ -315,7 +413,7 @@ fn discover_opencl_surface(
         let relative_path = format!("data/kernels/{file}");
         require_file(root, &relative_path)?;
         registered.push(file.to_owned());
-        add_discovered(capabilities, "opencl", name, &relative_path)?;
+        add_discovered(capabilities, issue_index, "opencl", name, &relative_path)?;
     }
     let directory = root.join("data/kernels");
     let mut paths = read_directory(&directory)?;
@@ -341,11 +439,12 @@ fn discover_opencl_surface(
 
 fn add_discovered(
     capabilities: &mut Vec<Capability>,
+    issue_index: &IssueIndex,
     kind: &str,
     name: &str,
     relative_path: &str,
 ) -> Result<(), ScanError> {
-    let Some(mapped) = map_discovered(kind, name, relative_path) else {
+    let Some(mapped) = map_discovered(issue_index, kind, name, relative_path) else {
         return Err(ScanError::UnmappedDiscoveredModule {
             id: format!("{kind}.{name}"),
             path: relative_path.to_owned(),
@@ -364,12 +463,19 @@ fn add_discovered(
 
 fn apply_overrides(
     root: &Path,
+    issue_index: &IssueIndex,
     capabilities: &mut Vec<Capability>,
     overrides: Vec<crate::model::Override>,
 ) -> Result<(), ScanError> {
     let mut override_ids = Vec::new();
     for entry in overrides {
-        validate_capability_fields(&entry.id, &entry.status, &entry.issue_numbers)?;
+        validate_capability_fields(
+            &entry.id,
+            &entry.status,
+            ownership_for(issue_index, &entry.id).count(),
+            &entry.behavioral_evidence,
+            &entry.acceptance_test_id,
+        )?;
         if entry.reason.trim().is_empty() {
             return Err(ScanError::InvalidOverride {
                 id: entry.id,
@@ -377,6 +483,7 @@ fn apply_overrides(
             });
         }
         require_file(root, &entry.reference_path)?;
+        let reference_path = entry.reference_path.clone();
         if override_ids.iter().any(|id| id == &entry.id) {
             return Err(ScanError::DuplicateCapabilityId { id: entry.id });
         }
@@ -394,8 +501,24 @@ fn apply_overrides(
                 .unwrap_or_else(|| "cross-cutting".to_owned()),
             category: entry.category,
             status: entry.status,
-            issue_numbers: entry.issue_numbers,
-            test_evidence: entry.test_evidence,
+            ownership: ownership_for(issue_index, &override_ids[override_ids.len() - 1])
+                .map(|record| {
+                    let issue = issue_index
+                        .issues
+                        .iter()
+                        .find(|issue| issue.number == record.issue_number)
+                        .expect("validated issue index contains ownership issue");
+                    IssueOwnership {
+                        issue_number: record.issue_number,
+                        role: record.role.clone(),
+                        milestone: issue.milestone.clone(),
+                        priority: issue.priority.clone(),
+                    }
+                })
+                .collect(),
+            structural_evidence: vec![format!("reference:{reference_path}")],
+            behavioral_evidence: entry.behavioral_evidence,
+            acceptance_test_id: entry.acceptance_test_id,
             redesign_note: entry.redesign_note,
         };
         capabilities.push(capability);
@@ -408,20 +531,28 @@ fn capability_from_discovered(discovered: Discovered) -> Capability {
         id: discovered.id,
         reference_path: discovered.reference_path,
         reference_symbol: discovered.reference_symbol,
-        category: discovered.category.to_owned(),
-        status: discovered.status.to_owned(),
-        issue_numbers: discovered.issue_numbers,
-        test_evidence: discovered.test_evidence,
+        category: discovered.category,
+        status: discovered.status,
+        ownership: discovered.ownership,
+        structural_evidence: discovered.structural_evidence,
+        behavioral_evidence: discovered.behavioral_evidence,
+        acceptance_test_id: discovered.acceptance_test_id,
         redesign_note: discovered.redesign_note,
     }
 }
 
 fn normalize_capabilities(capabilities: &mut [Capability]) {
     for capability in capabilities {
-        capability.issue_numbers.sort_unstable();
-        capability.issue_numbers.dedup();
-        capability.test_evidence.sort();
-        capability.test_evidence.dedup();
+        capability.ownership.sort_by(|left, right| {
+            left.issue_number
+                .cmp(&right.issue_number)
+                .then_with(|| left.role.cmp(&right.role))
+        });
+        capability.ownership.dedup();
+        capability.structural_evidence.sort();
+        capability.structural_evidence.dedup();
+        capability.behavioral_evidence.sort();
+        capability.behavioral_evidence.dedup();
     }
 }
 

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use rusttable_parity::{
-    render_manifest, render_operation_manifest, scan_darktable, scan_operations,
+    render_manifest, render_operation_manifest, render_receipt, scan_darktable, scan_operations,
 };
 
 fn main() -> ExitCode {
@@ -25,7 +25,7 @@ fn run(args: &[String]) -> Result<(), String> {
         return run_operations(args);
     }
     if command != Some("scan-darktable") {
-        return Err("usage: rusttable-parity scan-darktable|scan-operations --source <path> [--overrides <path>] [--output <path>]".to_owned());
+        return Err("usage: rusttable-parity scan-darktable|scan-operations --source <path> [--overrides <path>] [--output <path>] [--receipt <path>]".to_owned());
     }
     let source = argument(args, "--source")?;
     let overrides = argument_or(
@@ -34,6 +34,11 @@ fn run(args: &[String]) -> Result<(), String> {
         "architecture/capability-overrides.toml",
     );
     let output = argument_or(args, "--output", "architecture/darktable-capabilities.toml");
+    let receipt = argument_or(
+        args,
+        "--receipt",
+        "architecture/darktable-capabilities.receipt.toml",
+    );
     let manifest = scan_darktable(&PathBuf::from(source), &PathBuf::from(overrides))
         .map_err(|error| error.to_string())?;
     std::fs::write(
@@ -41,8 +46,13 @@ fn run(args: &[String]) -> Result<(), String> {
         render_manifest(&manifest).map_err(|error| error.to_string())?,
     )
     .map_err(|error| format!("write {output}: {error}"))?;
+    std::fs::write(
+        &receipt,
+        render_receipt(&manifest).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| format!("write {receipt}: {error}"))?;
     println!(
-        "wrote {output}: {} capabilities",
+        "wrote {output} and {receipt}: {} capabilities",
         manifest.capabilities.len()
     );
     Ok(())

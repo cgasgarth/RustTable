@@ -75,6 +75,11 @@ pub struct ParityScanArgs {
     pub overrides: PathBuf,
     #[arg(long, default_value = "architecture/darktable-capabilities.toml")]
     pub output: PathBuf,
+    #[arg(
+        long,
+        default_value = "architecture/darktable-capabilities.receipt.toml"
+    )]
+    pub receipt: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]

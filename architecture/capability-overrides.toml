@@ -1,5 +1,5 @@
-# Reviewed cross-cutting capabilities that have no single plugin registration.
-# Discoverable modules must never be added here.
+# Cross-cutting reference surfaces. Ownership is resolved only through the
+# generated GitHub child-issue index; this file cannot contain issue numbers.
 
 [[override]]
 id = "domain.catalog-library"
@@ -7,8 +7,8 @@ reference_path = "src/common/collection.c"
 reference_symbol = "catalog and collection services"
 category = "catalog/library"
 status = "required"
-issue_numbers = [213, 214, 215]
-test_evidence = ["catalog:query-and-state"]
+behavioral_evidence = ["catalog:query-and-state"]
+acceptance_test_id = "capability.domain.catalog-library"
 reason = "Library and collection behavior spans core services rather than one registered lighttable module."
 
 [[override]]
@@ -17,8 +17,8 @@ reference_path = "src/develop/blend.c"
 reference_symbol = "blend and mask evaluation"
 category = "masks/blending"
 status = "required"
-issue_numbers = [283, 284]
-test_evidence = ["processing:mask-blend-parity"]
+behavioral_evidence = ["processing:mask-blend-parity"]
+acceptance_test_id = "capability.domain.masks-blending"
 reason = "Mask geometry and blend-if evaluation are cross-cutting pixelpipe behavior, not a single plugin."
 
 [[override]]
@@ -27,8 +27,8 @@ reference_path = "src/common/colorspaces.h"
 reference_symbol = "color-space and profile contracts"
 category = "color management"
 status = "required"
-issue_numbers = [257, 261, 262]
-test_evidence = ["color:cpu-gpu-transform-parity"]
+behavioral_evidence = ["color:cpu-gpu-transform-parity"]
+acceptance_test_id = "capability.domain.color-management"
 reason = "Color management is shared by input, processing, viewport, and export paths."
 
 [[override]]
@@ -37,8 +37,8 @@ reference_path = "src/imageio/imageio.c"
 reference_symbol = "image metadata integration"
 category = "metadata"
 status = "required"
-issue_numbers = [237, 240, 243]
-test_evidence = ["metadata:canonical-precedence"]
+behavioral_evidence = ["metadata:canonical-precedence"]
+acceptance_test_id = "capability.domain.metadata"
 reason = "Metadata extraction and publication are shared image-I/O contracts rather than a plugin."
 
 [[override]]
@@ -47,8 +47,8 @@ reference_path = "src/common/darktable.c"
 reference_symbol = "application import lifecycle"
 category = "import"
 status = "required"
-issue_numbers = [247, 248, 252]
-test_evidence = ["import:resumable-session"]
+behavioral_evidence = ["import:resumable-session"]
+acceptance_test_id = "capability.domain.import"
 reason = "Import lifecycle and failure recovery are orchestrated across the application boundary."
 
 [[override]]
@@ -57,8 +57,8 @@ reference_path = "src/common/camera_control.c"
 reference_symbol = "camera control transport"
 category = "camera/tethering"
 status = "required"
-issue_numbers = [191]
-test_evidence = ["camera:tethered-capture-contract"]
+behavioral_evidence = ["camera:tethered-capture-contract"]
+acceptance_test_id = "capability.domain.camera-tethering"
 reason = "Camera transport is shared by camera, live-view, and tethering registrations."
 
 [[override]]
@@ -67,8 +67,8 @@ reference_path = "src/common/gpx.c"
 reference_symbol = "GPX track matching"
 category = "map/geotagging"
 status = "required"
-issue_numbers = [216, 255]
-test_evidence = ["map:gpx-track-match"]
+behavioral_evidence = ["map:gpx-track-match"]
+acceptance_test_id = "capability.domain.map-geotagging"
 reason = "GPX matching is a cross-cutting geotagging service and is not a view module."
 
 [[override]]
@@ -77,8 +77,8 @@ reference_path = "src/common/printing.c"
 reference_symbol = "print pipeline"
 category = "printing"
 status = "required"
-issue_numbers = [191]
-test_evidence = ["printing:deterministic-job"]
+behavioral_evidence = ["printing:deterministic-job"]
+acceptance_test_id = "capability.domain.printing"
 reason = "Print preparation and device output are shared by the print view and storage path."
 
 [[override]]
@@ -87,8 +87,8 @@ reference_path = "src/gui/accelerators.c"
 reference_symbol = "keyboard and device actions"
 category = "input devices"
 status = "required"
-issue_numbers = [191]
-test_evidence = ["input:keyboard-device-actions"]
+behavioral_evidence = ["input:keyboard-device-actions"]
+acceptance_test_id = "capability.domain.input-devices"
 reason = "Input routing spans application actions and optional device backends."
 
 [[override]]
@@ -97,8 +97,8 @@ reference_path = "src/gui/gtk.c"
 reference_symbol = "GUI accessibility integration"
 category = "accessibility"
 status = "required"
-issue_numbers = [191]
-test_evidence = ["ui:accessibility-semantics"]
+behavioral_evidence = ["ui:accessibility-semantics"]
+acceptance_test_id = "capability.domain.accessibility"
 reason = "Accessibility semantics are a UI-wide contract and cannot be discovered from one module."
 
 [[override]]
@@ -107,8 +107,8 @@ reference_path = "po/CMakeLists.txt"
 reference_symbol = "translation catalog build"
 category = "localization"
 status = "required"
-issue_numbers = [173]
-test_evidence = ["localization:catalog-build"]
+behavioral_evidence = ["localization:catalog-build"]
+acceptance_test_id = "capability.domain.localization"
 reason = "Localization is represented by translation catalogs and build wiring, not a runtime module."
 
 [[override]]
@@ -117,6 +117,6 @@ reference_path = "CMakeLists.txt"
 reference_symbol = "package and install policy"
 category = "packaging"
 status = "required"
-issue_numbers = [170, 173]
-test_evidence = ["packaging:platform-policy"]
+behavioral_evidence = ["packaging:platform-policy"]
+acceptance_test_id = "capability.domain.packaging"
 reason = "Packaging is build/install policy and has no user-visible plugin registration."
