@@ -759,8 +759,8 @@ mod tests {
         for surface in ["prepush", "pull_request"] {
             assert_eq!(rust_check.parallel_group_for(surface), "rust-03-check");
             assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-            assert_eq!(rust_check.timeout_for(surface), 15);
-            assert_eq!(rust_test.timeout_for(surface), 85);
+            assert_eq!(rust_check.timeout_for(surface), 25);
+            assert_eq!(rust_test.timeout_for(surface), 75);
             let expected_prerequisites = if surface == "prepush" {
                 vec!["rust-clippy"]
             } else {

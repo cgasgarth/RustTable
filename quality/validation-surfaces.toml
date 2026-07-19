@@ -54,7 +54,7 @@ parallel_group = "rust"
 prerequisites_by_surface = { prepush = ["rust-clippy"], pull_request = ["rust-test"] }
 parallel_group_by_surface = { prepush = "rust-03-check", pull_request = "rust-03-check" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 15, pull_request = 15 }
+timeout_seconds_by_surface = { prepush = 25, pull_request = 25 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -85,7 +85,7 @@ surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 85, pull_request = 85 }
+timeout_seconds_by_surface = { prepush = 75, pull_request = 75 }
 network = "none"
 platforms = ["all"]
 severity = "error"
