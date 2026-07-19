@@ -264,6 +264,38 @@ fn checked_in_contract_keeps_local_coverage_and_merge_only_exhaustiveness() {
 }
 
 #[test]
+fn dependency_security_has_one_dedicated_main_workflow_owner() {
+    let runner = ProcessRunner::new();
+    let root = RepositoryRoot::discover(&runner).expect("repository root");
+    let contract = Contract::load(&root).expect("validation contract");
+    let dependency_security = contract
+        .checks
+        .iter()
+        .find(|check| check.id == "dependency-security")
+        .expect("dependency-security check");
+    assert_eq!(dependency_security.surfaces, vec!["main".to_owned()]);
+    assert_eq!(dependency_security.parallel_group, "security");
+
+    let main_scheduler = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scripts/main-ci.sh"
+    ));
+    assert!(main_scheduler.contains("--skip-group security"));
+
+    let workflow = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../.github/workflows/rust-main.yml"
+    ));
+    assert_eq!(workflow.matches("  dependency-security:\n").count(), 1);
+    assert_eq!(
+        workflow
+            .matches("run: bash scripts/dependency-security.sh")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn records_a_failed_check_receipt() {
     let runner = ProcessRunner::new();
     let root = RepositoryRoot::discover(&runner).expect("repository root");
