@@ -48,6 +48,7 @@
 
 - Use `/Users/cgas/Documents/RustTable/worktrees` for all development worktrees.
 - Do not develop directly in the `fork` checkout; reserve it for repository management and worktree creation.
+- Create agent worktrees with `scripts/dev/create-agent-worktree.sh --issue NUMBER`. The script fetches `origin/main`, creates the isolated branch under the canonical `worktrees/` directory, and accepts repeated `--include PATH` options only for intentional repository-relative untracked inputs. Never copy an entire source checkout or silently copy tracked files; update the script's focused test when its safety contract changes.
 - In the RustTable checkout, `origin` and `upstream` refer to `https://github.com/cgasgarth/RustTable.git`; the original project is retained as the read-only `darktable` remote for history and reference.
 - Never push to or open pull requests against `darktable-org/darktable`.
 - Use focused branches and descriptive commit messages. Keep changes small enough to review and validate quickly.
