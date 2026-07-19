@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   validate:
-    name: rust-pr / scheduler
+    name: rust-pr / validate
     runs-on: ubuntu-latest
     timeout-minutes: 3
     defaults:
