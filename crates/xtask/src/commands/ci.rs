@@ -89,9 +89,6 @@ struct Check {
     parallel_group_by_surface: BTreeMap<String, String>,
     #[serde(default)]
     resources: Vec<String>,
-    timeout_seconds: u64,
-    #[serde(default)]
-    timeout_seconds_by_surface: BTreeMap<String, u64>,
     network: String,
     #[serde(default)]
     artifacts: Vec<String>,
@@ -130,8 +127,7 @@ impl Contract {
         }
         self.validate_prerequisites(&ids)?;
         self.validate_commands()?;
-        self.validate_surface_drift()?;
-        self.validate_budgets()
+        self.validate_surface_drift()
     }
 
     fn validate_prerequisites(&self, ids: &BTreeSet<String>) -> Result<()> {
@@ -230,48 +226,6 @@ impl Contract {
         Ok(())
     }
 
-    fn validate_budgets(&self) -> Result<()> {
-        for surface in FAST_SURFACES {
-            let mut group_max = BTreeMap::<&str, u64>::new();
-            for check in self.checks.iter().filter(|check| check.on(surface)) {
-                group_max
-                    .entry(check.parallel_group_for(surface))
-                    .and_modify(|value| *value = (*value).max(check.timeout_for(surface)))
-                    .or_insert(check.timeout_for(surface));
-            }
-            let configured = if surface == "precommit" || surface == "pull_request" {
-                group_max.values().copied().max().unwrap_or_default()
-            } else {
-                group_max.values().sum::<u64>()
-            };
-            let budget = self.budgets[surface];
-            if configured > budget {
-                return Err(format!(
-                    "validation contract: {surface} parallel-group timeout budget {configured}s exceeds budget {budget}s"
-                ));
-            }
-        }
-        let mut main_group_max = BTreeMap::<&str, u64>::new();
-        for check in self
-            .checks
-            .iter()
-            .filter(|check| check.on("main") && !check.merge_only)
-        {
-            main_group_max
-                .entry(check.parallel_group_for("main"))
-                .and_modify(|value| *value = (*value).max(check.timeout_for("main")))
-                .or_insert(check.timeout_for("main"));
-        }
-        let main_configured = main_group_max.values().sum::<u64>();
-        if main_configured > self.budgets["main"] {
-            return Err(format!(
-                "validation contract: main sequential timeout budget {main_configured}s exceeds budget {}s",
-                self.budgets["main"]
-            ));
-        }
-        Ok(())
-    }
-
     fn validate_group(&self, surface: &str, group: &str) -> Result<()> {
         if self
             .checks
@@ -364,9 +318,9 @@ impl Check {
                 ));
             }
         }
-        if self.timeout_seconds == 0 || self.platforms.is_empty() {
+        if self.platforms.is_empty() {
             return Err(format!(
-                "validation contract: check {} has an invalid timeout or platform matrix",
+                "validation contract: check {} has an empty platform matrix",
                 self.id
             ));
         }
@@ -375,14 +329,6 @@ impl Check {
                 return Err(format!(
                     "validation contract: check {} has unknown platform {}",
                     self.id, platform
-                ));
-            }
-        }
-        for (surface, timeout) in &self.timeout_seconds_by_surface {
-            if !SUPPORTED_SURFACES.contains(&surface.as_str()) || *timeout == 0 {
-                return Err(format!(
-                    "validation contract: check {} has an invalid surface timeout for {}",
-                    self.id, surface
                 ));
             }
         }
@@ -501,13 +447,6 @@ impl Check {
             .collect()
     }
 
-    fn timeout_for(&self, surface: &str) -> u64 {
-        self.timeout_seconds_by_surface
-            .get(surface)
-            .copied()
-            .unwrap_or(self.timeout_seconds)
-    }
-
     fn recursive(&self) -> bool {
         let command = std::iter::once(self.program.as_str())
             .chain(self.args.iter().map(String::as_str))
@@ -618,6 +557,7 @@ fn execute_surface_with_scheduler(
 ) -> Result<SurfaceReceipt> {
     let budget_seconds = contract.budgets[surface];
     let surface_start = Instant::now();
+    let surface_deadline = surface_start + Duration::from_secs(budget_seconds);
     let active = contract
         .checks
         .iter()
@@ -739,6 +679,9 @@ fn execute_surface_with_scheduler(
         }
         let mut remaining_ready = ready;
         while !remaining_ready.is_empty() {
+            if Instant::now() >= surface_deadline {
+                return Err(surface_budget_error(surface, budget_seconds, &receipts)?);
+            }
             let wave = take_resource_compatible_batch(&mut remaining_ready);
             let mut wave_resources = BTreeSet::new();
             for check in &wave {
@@ -755,7 +698,14 @@ fn execute_surface_with_scheduler(
                     let cancellation = Arc::clone(&cancellation);
                     let results = &results;
                     scope.spawn(move || {
-                        let receipt = execute_check(root, check, surface, runner, &cancellation);
+                        let receipt = execute_check(
+                            root,
+                            check,
+                            surface,
+                            runner,
+                            &cancellation,
+                            surface_deadline,
+                        );
                         results
                             .lock()
                             .expect("receipt mutex")
@@ -776,11 +726,8 @@ fn execute_surface_with_scheduler(
                 states.insert(id, state);
                 receipts.push(receipt);
             }
-            if surface_start.elapsed() > Duration::from_secs(budget_seconds) {
-                return Err(format!(
-                    "ci.{surface}: configured budget of {budget_seconds}s exceeded; receipt={}",
-                    serde_json::to_string(&receipts).map_err(|error| error.to_string())?
-                ));
+            if Instant::now() >= surface_deadline {
+                return Err(surface_budget_error(surface, budget_seconds, &receipts)?);
             }
             if receipts.iter().any(|receipt| receipt.status == "failed") {
                 receipts.sort_by(|left, right| left.id.cmp(&right.id));
@@ -800,6 +747,17 @@ fn execute_surface_with_scheduler(
         omitted,
         resource_waves,
     })
+}
+
+fn surface_budget_error(
+    surface: &str,
+    budget_seconds: u64,
+    receipts: &[CheckReceipt],
+) -> Result<String> {
+    Ok(format!(
+        "ci.{surface}: surface budget of {budget_seconds}s exhausted; receipt={}",
+        serde_json::to_string(receipts).map_err(|error| error.to_string())?
+    ))
 }
 
 fn take_resource_compatible_batch<'a>(ready: &mut Vec<&'a Check>) -> Vec<&'a Check> {
@@ -840,11 +798,16 @@ fn execute_check(
     surface: &str,
     runner: &ProcessRunner,
     cancellation: &Arc<AtomicBool>,
+    surface_deadline: Instant,
 ) -> CheckReceipt {
     const CHECK_OUTPUT_LIMIT: usize = 64 * 1024;
     const DAG_RECEIPT_OUTPUT_LIMIT: usize = 4 * 1024 * 1024;
     let start = Instant::now();
     let started_at = SystemTime::now();
+    let Some(timeout) = surface_deadline.checked_duration_since(start) else {
+        cancellation.store(true, Ordering::Release);
+        return expired_surface_receipt(check, surface);
+    };
     let (args, artifacts, process_artifacts) = check_process_contract(check, surface);
     let profile = match check.program.as_str() {
         "cargo" | "rustc" | "rustup" => EnvironmentProfile::RustTool,
@@ -872,7 +835,7 @@ fn execute_check(
                 CHECK_OUTPUT_LIMIT
             },
             max_stderr_bytes: CHECK_OUTPUT_LIMIT,
-            timeout: Duration::from_secs(check.timeout_for(surface)),
+            timeout,
         });
     if let Some((stdout, stderr)) = process_artifacts {
         request = request.artifacts(root.join(stdout), root.join(stderr));
@@ -932,10 +895,7 @@ fn execute_check(
                 resources: check.resources.clone(),
                 artifacts,
                 artifact_receipts: Vec::new(),
-                detail: Some(format!(
-                    "process status {}, exit code {:?}",
-                    result.receipt.status, result.receipt.exit_code
-                )),
+                detail: Some(process_failure_detail(&result.receipt, surface)),
                 process: Some(result.receipt),
             }
         }
@@ -959,6 +919,35 @@ fn execute_check(
                 process: None,
             }
         }
+    }
+}
+
+fn expired_surface_receipt(check: &Check, surface: &str) -> CheckReceipt {
+    CheckReceipt {
+        id: check.id.clone(),
+        label: check.label.clone(),
+        status: "failed".to_owned(),
+        duration_ms: 0,
+        severity: check.severity.clone(),
+        resources: check.resources.clone(),
+        artifacts: Vec::new(),
+        artifact_receipts: Vec::new(),
+        detail: Some(format!(
+            "surface deadline exhausted before {} could start on {surface}",
+            check.id
+        )),
+        process: None,
+    }
+}
+
+fn process_failure_detail(receipt: &crate::process::CommandReceipt, surface: &str) -> String {
+    if receipt.status == "timed-out" {
+        format!("surface deadline exhausted on {surface}")
+    } else {
+        format!(
+            "process status {}, exit code {:?}",
+            receipt.status, receipt.exit_code
+        )
     }
 }
 
@@ -1034,7 +1023,7 @@ fn verify_declared_artifacts(
 mod tests {
     use super::*;
 
-    fn check(id: &str, group: &str, timeout: u64) -> Check {
+    fn check(id: &str, group: &str) -> Check {
         Check {
             id: id.to_owned(),
             label: id.to_owned(),
@@ -1047,8 +1036,6 @@ mod tests {
             parallel_group: group.to_owned(),
             parallel_group_by_surface: BTreeMap::new(),
             resources: Vec::new(),
-            timeout_seconds: timeout,
-            timeout_seconds_by_surface: BTreeMap::new(),
             network: "none".to_owned(),
             artifacts: Vec::new(),
             platforms: vec!["all".to_owned()],
@@ -1072,7 +1059,7 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_ids_and_labels() {
-        let error = contract(vec![check("same", "a", 1), check("same", "b", 1)])
+        let error = contract(vec![check("same", "a"), check("same", "b")])
             .validate()
             .expect_err("duplicate");
         assert!(error.contains("duplicate"));
@@ -1080,7 +1067,7 @@ mod tests {
 
     #[test]
     fn rejects_fast_network_checks() {
-        let mut item = check("network", "a", 1);
+        let mut item = check("network", "a");
         item.network = "read".to_owned();
         let error = contract(vec![item]).validate().expect_err("network");
         assert!(error.contains("network = none"));
@@ -1088,7 +1075,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_platforms() {
-        let mut item = check("platform", "a", 1);
+        let mut item = check("platform", "a");
         item.platforms = vec!["solaris".to_owned()];
         let error = contract(vec![item]).validate().expect_err("platform");
         assert!(error.contains("unknown platform solaris"));
@@ -1096,7 +1083,7 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_resources() {
-        let mut item = check("resource", "a", 1);
+        let mut item = check("resource", "a");
         item.resources = vec!["cargo-target-dir".to_owned(), "cargo-target-dir".to_owned()];
         let error = contract(vec![item])
             .validate()
@@ -1106,11 +1093,11 @@ mod tests {
 
     #[test]
     fn resource_batch_keeps_unrelated_checks_parallel() {
-        let mut first = check("first", "a", 1);
+        let mut first = check("first", "a");
         first.resources = vec!["cargo-target-dir".to_owned()];
-        let mut second = check("second", "a", 1);
+        let mut second = check("second", "a");
         second.resources = vec!["cargo-target-dir".to_owned()];
-        let independent = check("independent", "a", 1);
+        let independent = check("independent", "a");
         let mut ready = vec![&first, &second, &independent];
 
         let batch = take_resource_compatible_batch(&mut ready);
@@ -1131,22 +1118,21 @@ mod tests {
     }
 
     #[test]
-    fn rejects_sequential_budget_overflow() {
-        let mut first = check("a", "a", 90);
+    fn surface_budget_is_not_preallocated_to_checks() {
+        let mut first = check("a", "a");
         first.surfaces = vec!["prepush".to_owned()];
         first.args = vec!["a".to_owned()];
-        let mut second = check("b", "b", 90);
+        let mut second = check("b", "b");
         second.surfaces = vec!["prepush".to_owned()];
         second.args = vec!["b".to_owned()];
-        let error = contract(vec![first, second])
+        contract(vec![first, second])
             .validate()
-            .expect_err("budget");
-        assert!(error.contains("exceeds budget"));
+            .expect("surface deadline is enforced at execution time");
     }
 
     #[test]
     fn rejects_recursive_surface_invocation() {
-        let mut item = check("recursive", "a", 1);
+        let mut item = check("recursive", "a");
         item.program = "cargo".to_owned();
         item.args = vec!["xtask".to_owned(), "ci".to_owned(), "precommit".to_owned()];
         let error = contract(vec![item]).validate().expect_err("recursive");
@@ -1155,7 +1141,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_prerequisites() {
-        let mut item = check("dependent", "dependent", 1);
+        let mut item = check("dependent", "dependent");
         item.prerequisites = vec!["missing".to_owned()];
         let error = contract(vec![item]).validate().expect_err("prerequisite");
         assert!(error.contains("unknown prerequisite"));
@@ -1163,9 +1149,9 @@ mod tests {
 
     #[test]
     fn rejects_incompatible_prerequisite_groups() {
-        let mut dependent = check("dependent", "same", 1);
+        let mut dependent = check("dependent", "same");
         dependent.prerequisites = vec!["prerequisite".to_owned()];
-        let prerequisite = check("prerequisite", "same", 1);
+        let prerequisite = check("prerequisite", "same");
         let error = contract(vec![dependent, prerequisite])
             .validate()
             .expect_err("parallel group");
@@ -1174,11 +1160,11 @@ mod tests {
 
     #[test]
     fn rejects_surface_prerequisite_that_runs_after_dependent() {
-        let mut dependent = check("dependent", "dependent", 1);
+        let mut dependent = check("dependent", "dependent");
         dependent.surfaces = vec!["prepush".to_owned()];
         dependent.prerequisites_by_surface =
             BTreeMap::from([("prepush".to_owned(), vec!["prerequisite".to_owned()])]);
-        let mut prerequisite = check("prerequisite", "prerequisite", 1);
+        let mut prerequisite = check("prerequisite", "prerequisite");
         prerequisite.surfaces = vec!["prepush".to_owned()];
         dependent.parallel_group_by_surface =
             BTreeMap::from([("prepush".to_owned(), "rust-02".to_owned())]);
@@ -1192,7 +1178,7 @@ mod tests {
 
     #[test]
     fn rejects_pull_request_checks_that_drift_from_main() {
-        let mut item = check("pr", "pr", 1);
+        let mut item = check("pr", "pr");
         item.surfaces = vec!["pull_request".to_owned()];
         let error = contract(vec![item]).validate().expect_err("surface drift");
         assert!(error.contains("drifts from main"));
@@ -1200,7 +1186,7 @@ mod tests {
 
     #[test]
     fn rejects_merge_only_checks_on_a_fast_surface() {
-        let mut item = check("merge-only", "main", 1);
+        let mut item = check("merge-only", "main");
         item.merge_only = true;
         item.surfaces = vec!["prepush".to_owned(), "main".to_owned()];
         let error = contract(vec![item])
@@ -1245,14 +1231,6 @@ mod tests {
                 .unwrap_or_else(|| panic!("missing {id}"));
             assert!(item.on("prepush"), "{id} must run on prepush");
         }
-        let library_lint = contract
-            .checks
-            .iter()
-            .find(|check| check.id == "rust-clippy")
-            .expect("library lint");
-        assert_eq!(library_lint.timeout_for("precommit"), 20);
-        assert_eq!(library_lint.timeout_for("prepush"), 25);
-
         let rust_check = contract
             .checks
             .iter()
@@ -1263,43 +1241,26 @@ mod tests {
             .iter()
             .find(|check| check.id == "rust-test")
             .expect("library test");
-        let workflow_policy = contract
-            .checks
-            .iter()
-            .find(|check| check.id == "workflow-policy")
-            .expect("workflow policy check");
-        assert_eq!(
-            workflow_policy.parallel_group_for("pull_request"),
-            "rust-02-workflow"
-        );
-        assert_eq!(workflow_policy.timeout_for("pull_request"), 20);
         for surface in ["prepush", "pull_request"] {
             if surface == "pull_request" {
                 assert!(!rust_check.on(surface));
                 assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-                assert_eq!(rust_test.timeout_for(surface), 150);
                 assert!(rust_test.prerequisites_for(surface).is_empty());
                 continue;
             }
             assert_eq!(rust_check.parallel_group_for(surface), "rust-03-check");
             assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-            assert_eq!(rust_check.timeout_for(surface), 25);
-            assert_eq!(rust_test.timeout_for(surface), 65);
-            let expected_prerequisites = if surface == "prepush" {
-                vec!["rust-clippy"]
-            } else {
-                vec!["rust-test"]
-            };
-            assert_eq!(
-                rust_check.prerequisites_for(surface),
-                expected_prerequisites
-            );
+            assert_eq!(rust_check.prerequisites_for(surface), vec!["rust-clippy"]);
             assert!(rust_test.prerequisites_for(surface).is_empty());
         }
+        let library_lint = contract
+            .checks
+            .iter()
+            .find(|check| check.id == "rust-clippy")
+            .expect("library lint");
         assert!(library_lint.on("prepush"));
         assert!(!library_lint.on("pull_request"));
         assert_eq!(library_lint.parallel_group_for("prepush"), "rust-02-clippy");
-        assert_eq!(library_lint.timeout_for("prepush"), 25);
         assert_eq!(library_lint.prerequisites_for("prepush"), vec!["rust-test"]);
         assert_eq!(rust_check.parallel_group_for("precommit"), "rust");
         assert_eq!(library_lint.parallel_group_for("precommit"), "rust");
@@ -1320,7 +1281,6 @@ mod tests {
             .expect("merge-only coverage");
         assert_eq!(coverage.surfaces, vec!["main".to_owned()]);
         assert!(coverage.merge_only);
-        assert_eq!(coverage.timeout_for("main"), 900);
         assert!(coverage.args.iter().any(|arg| arg.contains("coverage run")));
         assert!(
             contract
@@ -1335,7 +1295,7 @@ mod tests {
     fn records_a_failed_check_receipt() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut item = check("failure", "a", 5);
+        let mut item = check("failure", "a");
         item.program = "sh".to_owned();
         item.args = vec!["-c".to_owned(), "exit 7".to_owned()];
         let receipt = execute_check(
@@ -1344,6 +1304,7 @@ mod tests {
             "precommit",
             &runner,
             &Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(5),
         );
         assert_eq!(receipt.status, "failed");
         assert!(
@@ -1358,21 +1319,28 @@ mod tests {
     fn warning_failure_does_not_cancel_siblings_or_group() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut warning = check("warning", "a", 5);
+        let mut warning = check("warning", "a");
         warning.program = "sh".to_owned();
         warning.args = vec!["-c".to_owned(), "exit 7".to_owned()];
         warning.severity = "warning".to_owned();
         let cancellation = Arc::new(AtomicBool::new(false));
-        let receipt = execute_check(&root, &warning, "precommit", &runner, &cancellation);
+        let receipt = execute_check(
+            &root,
+            &warning,
+            "precommit",
+            &runner,
+            &cancellation,
+            Instant::now() + Duration::from_secs(5),
+        );
         assert_eq!(receipt.status, "warning");
         assert!(!cancellation.load(Ordering::Acquire));
     }
 
     #[test]
-    fn records_a_timed_out_check_receipt() {
+    fn records_a_surface_deadline_receipt() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut item = check("timeout", "a", 1);
+        let mut item = check("timeout", "a");
         item.program = "sh".to_owned();
         item.args = vec!["-c".to_owned(), "sleep 2".to_owned()];
         let receipt = execute_check(
@@ -1381,23 +1349,60 @@ mod tests {
             "precommit",
             &runner,
             &Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_millis(50),
         );
         assert_eq!(receipt.status, "failed");
         assert!(
             receipt
                 .detail
                 .expect("timeout detail")
-                .contains("timed-out")
+                .contains("surface deadline exhausted")
         );
+    }
+
+    #[test]
+    fn check_can_exceed_a_former_individual_cap_with_surface_time_remaining() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut item = check("longer-than-legacy-cap", "a");
+        item.program = "sh".to_owned();
+        item.args = vec!["-c".to_owned(), "sleep 0.1".to_owned()];
+        let receipt = execute_check(
+            &root,
+            &item,
+            "precommit",
+            &runner,
+            &Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(1),
+        );
+        assert_eq!(receipt.status, "passed");
+    }
+
+    #[test]
+    fn surface_budget_terminates_hung_owned_work() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut item = check("hung", "a");
+        item.program = "sh".to_owned();
+        item.args = vec!["-c".to_owned(), "sleep 2".to_owned()];
+        let contract = Contract {
+            budgets: BTreeMap::from([(String::from("precommit"), 1)]),
+            checks: vec![item],
+        };
+
+        let error = execute_surface_for_group(&root, &contract, "precommit", None, &runner)
+            .expect_err("surface deadline");
+        assert!(error.contains("surface budget of 1s exhausted"));
+        assert!(error.contains("surface deadline exhausted"));
     }
 
     #[test]
     fn selected_group_receipt_omits_other_parallel_groups() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut rust_check = check("rust", "rust", 5);
+        let mut rust_check = check("rust", "rust");
         rust_check.surfaces = vec!["pull_request".to_owned()];
-        let mut repository_check = check("repository", "repository", 5);
+        let mut repository_check = check("repository", "repository");
         repository_check.surfaces = vec!["pull_request".to_owned()];
         let contract = contract(vec![rust_check, repository_check]);
 
@@ -1424,10 +1429,10 @@ mod tests {
     fn selected_group_rejects_unmet_prerequisites() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut dependent = check("dependent", "dependent", 5);
+        let mut dependent = check("dependent", "dependent");
         dependent.surfaces = vec!["pull_request".to_owned()];
         dependent.prerequisites = vec!["prerequisite".to_owned()];
-        let mut prerequisite = check("prerequisite", "prerequisite", 5);
+        let mut prerequisite = check("prerequisite", "prerequisite");
         prerequisite.surfaces = vec!["pull_request".to_owned()];
         let contract = Contract {
             budgets: BTreeMap::from([(String::from("pull_request"), 150)]),
@@ -1444,7 +1449,7 @@ mod tests {
     fn omits_checks_for_other_platforms_before_execution() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut item = check("other-platform", "rust", 5);
+        let mut item = check("other-platform", "rust");
         item.platforms = vec![if current_platform() == "linux" {
             "macos".to_owned()
         } else {
@@ -1464,7 +1469,7 @@ mod tests {
 
     #[test]
     fn workspace_dag_receipt_contract_has_deterministic_artifacts() {
-        let item = check("workspace-dag", "repository", 5);
+        let item = check("workspace-dag", "repository");
         let (args, artifacts, process_artifacts) = check_process_contract(&item, "pull_request");
         assert!(args.ends_with(&[
             "--artifact".to_owned(),
@@ -1491,11 +1496,11 @@ mod tests {
     fn cancels_siblings_and_keeps_failure_receipts_sorted() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");
-        let mut failure = check("a-failure", "group", 5);
+        let mut failure = check("a-failure", "group");
         failure.program = "sh".to_owned();
         failure.args = vec!["-c".to_owned(), "exit 7".to_owned()];
         failure.surfaces = vec!["prepush".to_owned()];
-        let mut sibling = check("z-sibling", "group", 5);
+        let mut sibling = check("z-sibling", "group");
         sibling.program = "sh".to_owned();
         sibling.args = vec!["-c".to_owned(), "sleep 10".to_owned()];
         sibling.surfaces = vec!["prepush".to_owned()];
