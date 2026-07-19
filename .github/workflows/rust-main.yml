@@ -230,6 +230,25 @@ jobs:
             ~/.cargo/git
             target
           key: rust-main-Linux-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-${{ hashFiles('Cargo.lock', 'package.json') }}
+      - name: Fetch locked dependencies for offline validation
+        run: cargo fetch --locked
+      - name: Restore security tool cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-audit
+            ~/.cargo/bin/cargo-deny
+            ~/.cargo/advisory-dbs
+            target
+          key: rust-security-Linux-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-audit-0.22.2-deny-0.19.8-${{ hashFiles('Cargo.lock', 'package.json') }}
+      - name: Install exact security tools
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked --force
+          cargo install cargo-deny --version 0.19.8 --locked --force
+          test "$(cargo-audit --version)" = "cargo-audit 0.22.2"
+          test "$(cargo-deny --version)" = "cargo-deny 0.19.8"
       - name: Run Linux full validation
         run: bash scripts/main-ci.sh
       - name: Verify workflow inventory
@@ -267,6 +286,8 @@ jobs:
             ~/.cargo/git
             target
           key: rust-main-${{ matrix.triple }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-${{ hashFiles('Cargo.lock') }}
+      - name: Fetch locked dependencies for offline validation
+        run: cargo fetch --locked
       - name: Run portable workspace tests
         run: cargo test --workspace --all-targets --all-features --locked
 

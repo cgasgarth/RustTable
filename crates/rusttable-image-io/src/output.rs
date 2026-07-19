@@ -130,11 +130,13 @@ impl DurableImageOutput for FileImageOutput {
                 },
             });
         }
-        let parent = destination.parent().unwrap_or_else(|| Path::new("."));
-        let directory =
+        #[cfg(not(windows))]
+        let directory = {
+            let parent = destination.parent().unwrap_or_else(|| Path::new("."));
             File::open(parent).map_err(|_| DurableImageOutputError::DurabilityUnsupported {
                 destination: destination.to_owned(),
-            })?;
+            })?
+        };
         let encoded = encode(image, options, self.limits)
             .map_err(|source| DurableImageOutputError::BeforePublication { source })?;
         let temporary = create_temporary(destination)
@@ -181,6 +183,7 @@ impl DurableImageOutput for FileImageOutput {
         if fs::remove_file(&temporary).is_err() {
             return Err(DurableImageOutputError::PublishedTemporaryCleanupFailure { receipt });
         }
+        #[cfg(not(windows))]
         if sync_directory(&directory).is_err() {
             return Err(DurableImageOutputError::PublishedDirectorySyncFailure { receipt });
         }
@@ -191,14 +194,6 @@ impl DurableImageOutput for FileImageOutput {
 #[cfg(not(windows))]
 fn sync_directory(directory: &File) -> io::Result<()> {
     directory.sync_all()
-}
-
-#[cfg(windows)]
-fn sync_directory(_directory: &File) -> io::Result<()> {
-    // Windows does not support opening a directory as a synchronizable file.
-    // The temporary file is flushed before publication; the directory entry is
-    // durable according to the platform's rename/link semantics.
-    Ok(())
 }
 
 fn validate_destination(destination: &Path) -> Result<(), ImageOutputError> {
