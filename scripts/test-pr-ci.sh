@@ -5,6 +5,12 @@ root_directory="$(cd "$(dirname "$0")/.." && pwd)"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 
+if grep -nE 'verify-pr-contract|GITHUB_EVENT_PATH' "$root_directory/.github/workflows/rust-pr.yml"; then
+  echo 'PR validation must not enforce issue linkage or body structure' >&2
+  exit 1
+fi
+grep -Fx 'pull_request = 150' "$root_directory/quality/validation-surfaces.toml" >/dev/null
+
 cat >"$temporary_directory/cargo" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"${FAKE_LOG:?}"
