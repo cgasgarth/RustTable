@@ -61,6 +61,10 @@ pub enum Command {
         #[command(subcommand)]
         command: FoundationCommand,
     },
+    Platform {
+        #[command(subcommand)]
+        command: PlatformCommand,
+    },
     Coverage {
         #[command(subcommand)]
         command: CoverageCommand,
@@ -410,6 +414,21 @@ pub enum EcosystemCommand {
 #[derive(Debug, Subcommand)]
 pub enum FoundationCommand {
     Verify(FoundationVerifyArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlatformCommand {
+    Verify(PlatformVerifyArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct PlatformVerifyArgs {
+    #[arg(long)]
+    pub all_targets: bool,
+    #[arg(long)]
+    pub runtime_current: bool,
+    #[arg(long)]
+    pub verify_startup_preflight: bool,
 }
 
 #[derive(Debug, Subcommand)]
