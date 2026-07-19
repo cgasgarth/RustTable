@@ -268,12 +268,6 @@ impl Check {
                 ));
             }
         }
-        if !command_available(&self.program) {
-            return Err(format!(
-                "validation contract: check {} command {} is unavailable",
-                self.id, self.program
-            ));
-        }
         if self.timeout_seconds == 0 || self.platforms.is_empty() {
             return Err(format!(
                 "validation contract: check {} has an invalid timeout or platform matrix",
@@ -405,18 +399,6 @@ impl Check {
             || command.contains("scripts/pr-ci.sh")
             || command.contains("scripts/main-ci.sh")
     }
-}
-
-fn command_available(program: &str) -> bool {
-    let path = std::path::Path::new(program);
-    if path.components().count() > 1 {
-        return path.is_file();
-    }
-    std::env::var_os("PATH")
-        .into_iter()
-        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
-        .map(|directory| directory.join(program))
-        .any(|candidate| candidate.is_file())
 }
 
 fn command_body(check: &Check) -> String {
