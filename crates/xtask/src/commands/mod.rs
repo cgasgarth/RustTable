@@ -2,6 +2,7 @@ mod bench;
 mod channels;
 mod ci;
 mod dag;
+mod extension_conformance;
 mod files;
 mod fixtures;
 mod github;
@@ -34,6 +35,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Ecosystem { command } => match command {
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
+        Command::ExtensionConformance(arguments) => extension_conformance::run(&root, arguments),
     }
     .map_err(CommandError::Surface)
 }

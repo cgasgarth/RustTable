@@ -22,7 +22,7 @@ allowed_extensions = [
     "arw", "avif", "b64", "cr2", "db", "dng", "dt", "env", "exr", "gz",
     "gitattributes", "gitignore", "hdr", "heif", "icc", "jp2", "jpg", "json",
     "jxl", "lock", "mailmap", "md", "nef", "orf", "pfm", "png", "raf", "raw",
-    "rs", "rw2", "sh", "tiff", "toml", "ts", "lua", "webp", "xmp", "yaml", "yml", "zip",
+    "rs", "rw2", "sh", "tiff", "toml", "ts", "lua", "webp", "wit", "xmp", "yaml", "yml", "zip",
 ]
 
 allowed_filenames = [".gitattributes", ".gitignore", ".gitkeep", ".mailmap", "AUTHORS", "LICENSE"]

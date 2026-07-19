@@ -3,10 +3,12 @@
 
 mod application;
 mod composition;
+mod extensions;
 mod library;
 mod lifecycle;
 
 pub use composition::run;
+pub use extensions::ApplicationExtensions;
 
 #[cfg(test)]
 mod lua_host {

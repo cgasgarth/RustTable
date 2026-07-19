@@ -19,6 +19,7 @@ rusttable-ui = { path = "../rusttable-ui", version = "0.1.0" }
 
 [dev-dependencies]
 iced_test = "0.14.0"
+tempfile = "=3.27.0"
 
 [lints]
 workspace = true

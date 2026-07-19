@@ -57,6 +57,18 @@ pub enum Command {
         #[command(subcommand)]
         command: EcosystemCommand,
     },
+    #[command(name = "extension-conformance")]
+    ExtensionConformance(ExtensionConformanceArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ExtensionConformanceArgs {
+    #[arg(long)]
+    pub all_fixtures: bool,
+    #[arg(long)]
+    pub verify_isolation: bool,
+    #[arg(long)]
+    pub verify_limits: bool,
 }
 
 #[derive(Debug, Subcommand)]
