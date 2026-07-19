@@ -61,6 +61,9 @@ jobs:
             rust-linux-distribution-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-
       - name: Fetch locked dependencies for offline validation
         run: cargo fetch --locked
+      - name: Warm PR test runner artifacts
+        if: matrix.group == 'rust-01-test'
+        run: cargo build --package xtask --locked
       - name: Start validation timer
         run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Run parallel PR validation group
