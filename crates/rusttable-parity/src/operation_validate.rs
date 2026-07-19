@@ -63,10 +63,11 @@ pub fn validate_operation_manifest(manifest: &OperationManifest) -> Result<(), S
                 message: "duplicate operation name".to_owned(),
             });
         }
-        if operation.reference_path.trim().is_empty() || operation.owning_issue.len() != 4 {
+        if operation.reference_path.trim().is_empty() || operation.owning_issue_number == 0 {
             return Err(ScanError::OperationValidation {
                 operation: operation.name.clone(),
-                message: "reference path and four-digit owning issue are required".to_owned(),
+                message: "reference path and positive owning GitHub issue number are required"
+                    .to_owned(),
             });
         }
         if ![

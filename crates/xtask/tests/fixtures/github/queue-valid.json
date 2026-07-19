@@ -1,0 +1,53 @@
+{
+  "issue": {
+    "number": 446,
+    "state": "open",
+    "title": "Migrate backlog governance to priority labels and dependency links",
+    "body": "Parent: #158\n\n## Dependencies\nNo product dependency.",
+    "milestone": { "number": 1 },
+    "repository": { "full_name": "cgasgarth/RustTable" },
+    "labels": [
+      { "name": "enhancement" },
+      { "name": "priority: P0" }
+    ]
+  },
+  "issues": [
+    {
+      "number": 446,
+      "state": "open",
+      "title": "Migrate backlog governance to priority labels and dependency links",
+      "body": "Parent: #158\n\n## Dependencies\nNo product dependency.",
+      "milestone": { "number": 1 },
+      "repository": { "full_name": "cgasgarth/RustTable" },
+      "labels": [
+        { "name": "enhancement" },
+        { "name": "priority: P0" }
+      ]
+    },
+    {
+      "number": 447,
+      "state": "open",
+      "title": "Correct the differential image oracle for alpha, profiles, neighborhoods, and bounded reports",
+      "body": "Parent: #158\n\nDepends on #446.",
+      "milestone": { "number": 1 },
+      "repository": { "full_name": "cgasgarth/RustTable" },
+      "labels": [
+        { "name": "enhancement" },
+        { "name": "priority: P0" }
+      ]
+    },
+    {
+      "number": 500,
+      "state": "open",
+      "title": "A lower-priority ready issue",
+      "body": "Parent: #158",
+      "milestone": { "number": 1 },
+      "repository": { "full_name": "cgasgarth/RustTable" },
+      "labels": [
+        { "name": "enhancement" },
+        { "name": "priority: P1" }
+      ]
+    }
+  ],
+  "commit_pages": []
+}

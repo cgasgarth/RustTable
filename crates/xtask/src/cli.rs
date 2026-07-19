@@ -145,6 +145,8 @@ pub enum CiCommand {
 pub enum GithubCommand {
     #[command(name = "verify-pr-contract")]
     VerifyPrContract(VerifyPrContractArgs),
+    #[command(name = "verify-queue", alias = "queue")]
+    VerifyQueue(VerifyQueueArgs),
 }
 
 #[derive(Debug, Args)]
@@ -165,6 +167,12 @@ pub struct TemplateMatrixArgs {
     pub verify_privacy: bool,
     #[arg(long, default_value_t = 1)]
     pub repeat: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct VerifyQueueArgs {
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

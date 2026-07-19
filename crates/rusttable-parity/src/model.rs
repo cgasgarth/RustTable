@@ -16,7 +16,7 @@ pub struct Capability {
     pub reference_symbol: String,
     pub category: String,
     pub status: String,
-    pub issue_sequences: Vec<String>,
+    pub issue_numbers: Vec<u64>,
     pub test_evidence: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redesign_note: Option<String>,
@@ -35,7 +35,7 @@ pub struct Override {
     #[serde(default = "default_override_category")]
     pub category: String,
     pub status: String,
-    pub issue_sequences: Vec<String>,
+    pub issue_numbers: Vec<u64>,
     #[serde(default)]
     pub test_evidence: Vec<String>,
     #[serde(default)]
@@ -67,7 +67,7 @@ pub(crate) struct Discovered {
     pub reference_symbol: String,
     pub category: &'static str,
     pub status: &'static str,
-    pub issue_sequences: Vec<String>,
+    pub issue_numbers: Vec<u64>,
     pub test_evidence: Vec<String>,
     pub redesign_note: Option<String>,
 }
