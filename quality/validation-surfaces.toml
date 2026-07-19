@@ -1,6 +1,6 @@
 [budgets]
 precommit = 30
-prepush = 60
+prepush = 150
 pull_request = 150
 main = 2700
 
@@ -36,7 +36,7 @@ label = "metadata"
 program = "cargo"
 args = ["metadata", "--locked", "--no-deps", "--format-version", "1"]
 owner = "workspace"
-surfaces = ["precommit", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 timeout_seconds = 5
 network = "none"
@@ -47,11 +47,12 @@ severity = "error"
 id = "rust-check"
 label = "rust-check"
 program = "cargo"
-args = ["check", "--workspace", "--all-targets", "--all-features", "--locked"]
+args = ["check", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
-surfaces = ["precommit"]
+surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 timeout_seconds = 20
+timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -60,11 +61,12 @@ severity = "error"
 id = "rust-clippy"
 label = "rust-clippy"
 program = "cargo"
-args = ["clippy", "--workspace", "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"]
+args = ["clippy", "--workspace", "--lib", "--all-features", "--locked", "--", "-D", "warnings"]
 owner = "workspace"
-surfaces = ["precommit"]
+surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 timeout_seconds = 20
+timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -75,9 +77,10 @@ label = "rust-test"
 program = "cargo"
 args = ["test", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
-surfaces = ["precommit"]
+surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 timeout_seconds = 20
+timeout_seconds_by_surface = { prepush = 90, pull_request = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -88,12 +91,13 @@ label = "rust-test-all"
 program = "cargo"
 args = ["test", "--workspace", "--all-targets", "--all-features", "--locked"]
 owner = "workspace"
-surfaces = ["prepush", "main"]
+surfaces = ["main"]
 parallel_group = "rust-heavy"
 timeout_seconds = 45
 network = "none"
 platforms = ["all"]
 severity = "error"
+merge_only = true
 
 [[checks]]
 id = "rust-clippy-all"
@@ -101,12 +105,13 @@ label = "rust-clippy-all"
 program = "cargo"
 args = ["clippy", "--workspace", "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"]
 owner = "workspace"
-surfaces = ["prepush", "main"]
+surfaces = ["main"]
 parallel_group = "rust-heavy"
 timeout_seconds = 45
 network = "none"
 platforms = ["all"]
 severity = "error"
+merge_only = true
 
 [[checks]]
 id = "macos-artifact-identity"
