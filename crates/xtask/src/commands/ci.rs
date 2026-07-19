@@ -458,16 +458,19 @@ fn execute_check(
     cancellation: &Arc<AtomicBool>,
 ) -> CheckReceipt {
     let start = Instant::now();
-    let result = runner.run(
-        ProcessRequest::new(check.program.clone(), check.args.clone())
-            .current_dir(root.path())
-            .cancellation(cancellation.clone())
-            .limits(ProcessLimits {
-                max_stdout_bytes: 64 * 1024,
-                max_stderr_bytes: 64 * 1024,
-                timeout: Duration::from_secs(check.timeout_for(surface)),
-            }),
-    );
+    let (args, artifacts, process_artifacts) = check_process_contract(check, surface);
+    let mut request = ProcessRequest::new(check.program.clone(), args)
+        .current_dir(root.path())
+        .cancellation(cancellation.clone())
+        .limits(ProcessLimits {
+            max_stdout_bytes: 64 * 1024,
+            max_stderr_bytes: 64 * 1024,
+            timeout: Duration::from_secs(check.timeout_for(surface)),
+        });
+    if let Some((stdout, stderr)) = process_artifacts {
+        request = request.artifacts(root.join(stdout), root.join(stderr));
+    }
+    let result = runner.run(request);
     let duration_ms = start.elapsed().as_millis();
     match result {
         Ok(result) if result.receipt.success() => CheckReceipt {
@@ -476,7 +479,7 @@ fn execute_check(
             status: "passed".to_owned(),
             duration_ms,
             severity: check.severity.clone(),
-            artifacts: check.artifacts.clone(),
+            artifacts,
             detail: None,
         },
         Ok(result) => {
@@ -487,7 +490,7 @@ fn execute_check(
                 status: "failed".to_owned(),
                 duration_ms,
                 severity: check.severity.clone(),
-                artifacts: check.artifacts.clone(),
+                artifacts,
                 detail: Some(format!("process status {}", result.receipt.status)),
             }
         }
@@ -499,11 +502,29 @@ fn execute_check(
                 status: "failed".to_owned(),
                 duration_ms,
                 severity: check.severity.clone(),
-                artifacts: check.artifacts.clone(),
+                artifacts,
                 detail: Some(error.to_string()),
             }
         }
     }
+}
+
+fn check_process_contract(
+    check: &Check,
+    surface: &str,
+) -> (Vec<String>, Vec<String>, Option<(String, String)>) {
+    if check.id != "workspace-dag" {
+        return (check.args.clone(), check.artifacts.clone(), None);
+    }
+    let directory = "target/validation/workspace-dag";
+    let report = format!("{directory}/{surface}.json");
+    let stdout = format!("{directory}/{surface}.stdout.log");
+    let stderr = format!("{directory}/{surface}.stderr.log");
+    let mut args = check.args.clone();
+    args.extend(["--artifact".to_owned(), report.clone()]);
+    let mut artifacts = check.artifacts.clone();
+    artifacts.extend([report, stdout.clone(), stderr.clone()]);
+    (args, artifacts, Some((stdout, stderr)))
 }
 
 #[cfg(test)]
@@ -717,6 +738,31 @@ mod tests {
                 .detail
                 .expect("timeout detail")
                 .contains("timed-out")
+        );
+    }
+
+    #[test]
+    fn workspace_dag_receipt_contract_has_deterministic_artifacts() {
+        let item = check("workspace-dag", "repository", 5);
+        let (args, artifacts, process_artifacts) = check_process_contract(&item, "pull_request");
+        assert!(args.ends_with(&[
+            "--artifact".to_owned(),
+            "target/validation/workspace-dag/pull_request.json".to_owned(),
+        ]));
+        assert_eq!(
+            artifacts,
+            vec![
+                "target/validation/workspace-dag/pull_request.json".to_owned(),
+                "target/validation/workspace-dag/pull_request.stdout.log".to_owned(),
+                "target/validation/workspace-dag/pull_request.stderr.log".to_owned(),
+            ]
+        );
+        assert_eq!(
+            process_artifacts,
+            Some((
+                "target/validation/workspace-dag/pull_request.stdout.log".to_owned(),
+                "target/validation/workspace-dag/pull_request.stderr.log".to_owned(),
+            ))
         );
     }
 

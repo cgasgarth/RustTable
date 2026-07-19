@@ -119,11 +119,18 @@ pub struct BenchReceiptArgs {
 #[derive(Debug, Subcommand)]
 pub enum RepoCommand {
     #[command(name = "verify-dag")]
-    Dag,
+    Dag(DagArgs),
     #[command(name = "verify-files")]
     Files,
     #[command(name = "verify-workflows")]
     Workflows,
+}
+
+#[derive(Debug, Args)]
+pub struct DagArgs {
+    /// Write the deterministic, bounded verification artifact to this path.
+    #[arg(long)]
+    pub artifact: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]

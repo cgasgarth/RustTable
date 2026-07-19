@@ -10,22 +10,28 @@ use crate::root::RepositoryRoot;
 
 #[path = "dag_metadata.rs"]
 mod metadata;
+#[path = "dag_receipt.rs"]
+mod receipt;
 
 const CONTRACT_PATH: &str = "architecture/workspace-dag.toml";
 
-pub(super) fn run(root: &RepositoryRoot, runner: &ProcessRunner) -> Result {
+pub(super) fn run(
+    root: &RepositoryRoot,
+    runner: &ProcessRunner,
+    artifact: Option<&Path>,
+) -> Result {
     let contract = load_contract(root)?;
     contract.validate()?;
     let contexts = load_contexts(root, &contract, runner)?;
     let verification = verify(&contract, &contexts);
     let serialized = serde_json::to_value(&verification).map_err(|error| error.to_string())?;
+    if let Some(path) = artifact {
+        receipt::write(root, path, &verification)?;
+    }
     if verification.violations.is_empty() {
         Ok(report(root, "repo.verify-dag", serialized))
     } else {
-        Err(format!(
-            "repo.verify-dag failed: {}",
-            serde_json::to_string(&serialized).map_err(|error| error.to_string())?
-        ))
+        Err(receipt::failure_message(&verification, artifact))
     }
 }
 
@@ -303,6 +309,7 @@ struct Violation {
 struct DagReport {
     schema_version: u32,
     contract: String,
+    first_violation: Option<Violation>,
     package_inventory: Vec<PackageReceipt>,
     allowed_edges: Vec<AllowedEdge>,
     discovered_edges: Vec<DiscoveredEdge>,
@@ -457,9 +464,11 @@ fn verify(contract: &Contract, contexts: &[MetadataContext]) -> DagReport {
     let mut package_violations = verify_package_inventory(contract, contexts);
     all_violations.append(&mut package_violations);
     all_violations.sort_by(violation_order);
+    let first_violation = all_violations.first().cloned();
     DagReport {
         schema_version: 1,
         contract: CONTRACT_PATH.to_owned(),
+        first_violation,
         package_inventory: packages,
         allowed_edges,
         discovered_edges: all_discovered.into_iter().collect(),

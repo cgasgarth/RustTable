@@ -1,7 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 use std::fmt::Write as _;
-use std::io::Read;
+use std::fs::{self, File};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -16,6 +17,11 @@ use sha2::{Digest, Sha256};
 const READ_CHUNK: usize = 8192;
 const DEFAULT_OUTPUT_LIMIT: usize = 64 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_mins(5);
+const ARTIFACT_LIMIT: usize = 256 * 1024;
+const ARTIFACT_TAIL_LIMIT: usize = 64 * 1024;
+const ARTIFACT_MARKER: &[u8] =
+    b"\n[output truncated; inspect the command receipt for the bounded artifact]\n";
+const ARTIFACT_HEAD_LIMIT: usize = ARTIFACT_LIMIT - ARTIFACT_TAIL_LIMIT - ARTIFACT_MARKER.len();
 
 #[derive(Debug, Clone)]
 pub struct ProcessRequest {
@@ -25,6 +31,8 @@ pub struct ProcessRequest {
     environment: BTreeMap<String, String>,
     limits: ProcessLimits,
     cancellation: Option<Arc<AtomicBool>>,
+    stdout_artifact: Option<PathBuf>,
+    stderr_artifact: Option<PathBuf>,
 }
 
 impl ProcessRequest {
@@ -41,6 +49,8 @@ impl ProcessRequest {
             environment: std::env::vars().collect(),
             limits: ProcessLimits::default(),
             cancellation: None,
+            stdout_artifact: None,
+            stderr_artifact: None,
         }
     }
 
@@ -65,6 +75,13 @@ impl ProcessRequest {
     #[must_use]
     pub fn cancellation(mut self, cancellation: Arc<AtomicBool>) -> Self {
         self.cancellation = Some(cancellation);
+        self
+    }
+
+    #[must_use]
+    pub fn artifacts(mut self, stdout: impl Into<PathBuf>, stderr: impl Into<PathBuf>) -> Self {
+        self.stdout_artifact = Some(stdout.into());
+        self.stderr_artifact = Some(stderr.into());
         self
     }
 }
@@ -97,6 +114,10 @@ pub struct CommandReceipt {
     pub exit_code: Option<i32>,
     pub stdout_hash: String,
     pub stderr_hash: String,
+    #[serde(default)]
+    pub stdout_truncated: bool,
+    #[serde(default)]
+    pub stderr_truncated: bool,
 }
 
 impl CommandReceipt {
@@ -136,77 +157,9 @@ impl ProcessRunner {
             request.limits = self.default_limits;
         }
         validate_limits(request.limits)?;
-        let mut command = Command::new(&request.program);
-        command.args(&request.args);
-        command.stdin(Stdio::null());
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::piped());
-        command.env_clear().envs(&request.environment);
-        if let Some(directory) = &request.current_dir {
-            command.current_dir(directory);
-        }
-        let mut child = command.spawn().map_err(|source| ProcessError::Spawn {
-            program: request.program.clone(),
-            message: source.to_string(),
-        })?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or(ProcessError::MissingPipe("stdout"))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or(ProcessError::MissingPipe("stderr"))?;
-        let (sender, receiver) = mpsc::channel();
-        let stdout_thread = spawn_reader(
-            stdout,
-            StreamKind::Stdout,
-            request.limits.max_stdout_bytes,
-            sender.clone(),
-        );
-        let stderr_thread = spawn_reader(
-            stderr,
-            StreamKind::Stderr,
-            request.limits.max_stderr_bytes,
-            sender,
-        );
-        let deadline = Instant::now() + request.limits.timeout;
-        let cancellation = request
-            .cancellation
-            .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+        let (mut child, receiver, stdout_thread, stderr_thread) = spawn_process(&request)?;
         let mut streams = Streams::default();
-        let mut reason = StopReason::None;
-        let mut exit_code = None;
-
-        while matches!(reason, StopReason::None) && exit_code.is_none() {
-            drain_events(&receiver, &mut streams, &mut reason);
-            if !matches!(reason, StopReason::None) {
-                break;
-            }
-            if cancellation.load(Ordering::Acquire) {
-                reason = StopReason::Cancelled;
-                break;
-            }
-            if Instant::now() >= deadline {
-                reason = StopReason::TimedOut;
-                break;
-            }
-            if let Some(status) = child.try_wait().map_err(ProcessError::Wait)? {
-                exit_code = status.code();
-                break;
-            }
-            match receiver.recv_timeout(Duration::from_millis(10)) {
-                Ok(event) => accept_event(event, &mut streams, &mut reason),
-                Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => break,
-            }
-        }
-        if !matches!(reason, StopReason::None) {
-            terminate_process_tree(&mut child);
-        }
-        if exit_code.is_none() {
-            exit_code = child.wait().map_err(ProcessError::Wait)?.code();
-        }
+        let (mut reason, exit_code) = wait_for_exit(&mut child, &receiver, &mut streams, &request)?;
         join_readers(
             &receiver,
             &mut streams,
@@ -214,6 +167,9 @@ impl ProcessRunner {
             stdout_thread,
             stderr_thread,
         )?;
+        if let Some((path, message)) = streams.artifact_error {
+            return Err(ProcessError::Artifact { path, message });
+        }
         let status = reason.status();
         let receipt = CommandReceipt {
             schema_version: 1,
@@ -223,15 +179,106 @@ impl ProcessRunner {
             environment_hash: hash_environment(&request.environment),
             status: status.to_owned(),
             exit_code,
-            stdout_hash: hash_bytes(&streams.stdout),
-            stderr_hash: hash_bytes(&streams.stderr),
+            stdout_hash: hash_bytes(&streams.stdout.bytes),
+            stderr_hash: hash_bytes(&streams.stderr.bytes),
+            stdout_truncated: streams.stdout.truncated,
+            stderr_truncated: streams.stderr.truncated,
         };
         Ok(ProcessResult {
             receipt,
-            stdout: streams.stdout,
-            stderr: streams.stderr,
+            stdout: streams.stdout.bytes,
+            stderr: streams.stderr.bytes,
         })
     }
+}
+
+type RunningProcess = (Child, Receiver<StreamEvent>, JoinHandle<()>, JoinHandle<()>);
+
+fn spawn_process(request: &ProcessRequest) -> Result<RunningProcess, ProcessError> {
+    let stdout_artifact = request
+        .stdout_artifact
+        .as_deref()
+        .map(ArtifactWriter::create)
+        .transpose()?;
+    let stderr_artifact = request
+        .stderr_artifact
+        .as_deref()
+        .map(ArtifactWriter::create)
+        .transpose()?;
+    let mut command = Command::new(&request.program);
+    command.args(&request.args);
+    command.stdin(Stdio::null());
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+    command.env_clear().envs(&request.environment);
+    if let Some(directory) = &request.current_dir {
+        command.current_dir(directory);
+    }
+    let mut child = command.spawn().map_err(|source| ProcessError::Spawn {
+        program: request.program.clone(),
+        message: source.to_string(),
+    })?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(ProcessError::MissingPipe("stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or(ProcessError::MissingPipe("stderr"))?;
+    let (sender, receiver) = mpsc::channel();
+    let stdout_thread = spawn_reader(
+        stdout,
+        StreamKind::Stdout,
+        request.limits.max_stdout_bytes,
+        sender.clone(),
+        stdout_artifact,
+    );
+    let stderr_thread = spawn_reader(
+        stderr,
+        StreamKind::Stderr,
+        request.limits.max_stderr_bytes,
+        sender,
+        stderr_artifact,
+    );
+    Ok((child, receiver, stdout_thread, stderr_thread))
+}
+
+fn wait_for_exit(
+    child: &mut Child,
+    receiver: &Receiver<StreamEvent>,
+    streams: &mut Streams,
+    request: &ProcessRequest,
+) -> Result<(StopReason, Option<i32>), ProcessError> {
+    let deadline = Instant::now() + request.limits.timeout;
+    let cancellation = request
+        .cancellation
+        .clone()
+        .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+    let mut reason = StopReason::None;
+    let mut exit_code = None;
+    while matches!(reason, StopReason::None) && exit_code.is_none() {
+        drain_events(receiver, streams, &mut reason);
+        if cancellation.load(Ordering::Acquire) {
+            reason = StopReason::Cancelled;
+        } else if Instant::now() >= deadline {
+            reason = StopReason::TimedOut;
+        } else if let Some(status) = child.try_wait().map_err(ProcessError::Wait)? {
+            exit_code = status.code();
+        } else {
+            match receiver.recv_timeout(Duration::from_millis(10)) {
+                Ok(event) => accept_event(event, streams, &mut reason),
+                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {}
+            }
+        }
+    }
+    if !matches!(reason, StopReason::None) {
+        terminate_process_tree(child);
+    }
+    if exit_code.is_none() {
+        exit_code = child.wait().map_err(ProcessError::Wait)?.code();
+    }
+    Ok((reason, exit_code))
 }
 
 fn validate_limits(limits: ProcessLimits) -> Result<(), ProcessError> {
@@ -248,6 +295,7 @@ pub enum ProcessError {
     MissingPipe(&'static str),
     Wait(std::io::Error),
     ReaderPanic,
+    Artifact { path: PathBuf, message: String },
 }
 
 impl fmt::Display for ProcessError {
@@ -260,6 +308,13 @@ impl fmt::Display for ProcessError {
             Self::MissingPipe(stream) => write!(formatter, "child did not provide {stream} pipe"),
             Self::Wait(error) => write!(formatter, "cannot wait for child: {error}"),
             Self::ReaderPanic => formatter.write_str("child output reader panicked"),
+            Self::Artifact { path, message } => {
+                write!(
+                    formatter,
+                    "cannot write process artifact {}: {message}",
+                    path.display()
+                )
+            }
         }
     }
 }
@@ -277,6 +332,7 @@ enum StreamEvent {
     Data(StreamKind, Vec<u8>),
     Limit(StreamKind),
     Done(StreamKind),
+    ArtifactError(StreamKind, PathBuf, String),
 }
 
 fn spawn_reader<R: Read + Send + 'static>(
@@ -284,36 +340,57 @@ fn spawn_reader<R: Read + Send + 'static>(
     stream: StreamKind,
     limit: usize,
     sender: Sender<StreamEvent>,
+    mut artifact: Option<ArtifactWriter>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         let mut bytes = Vec::new();
+        let mut truncated = false;
         let mut buffer = [0; READ_CHUNK];
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => {
                     let _ = sender.send(StreamEvent::Data(stream, bytes));
+                    if truncated {
+                        let _ = sender.send(StreamEvent::Limit(stream));
+                    }
+                    if let Some(artifact) = artifact.take() {
+                        let path = artifact.path.clone();
+                        if let Err(message) = artifact.finish() {
+                            let _ = sender.send(StreamEvent::ArtifactError(stream, path, message));
+                        }
+                    }
                     let _ = sender.send(StreamEvent::Done(stream));
                     return;
                 }
-                Ok(count) if bytes.len().saturating_add(count) > limit => {
-                    let remaining = limit.saturating_sub(bytes.len());
-                    bytes.extend_from_slice(&buffer[..remaining.min(count)]);
-                    let _ = sender.send(StreamEvent::Data(stream, bytes));
-                    let _ = sender.send(StreamEvent::Limit(stream));
-                    return;
+                Ok(count) => {
+                    let chunk = &buffer[..count];
+                    if let Some(artifact) = artifact.as_mut() {
+                        artifact.push(chunk);
+                    }
+                    let retained = bytes.len();
+                    if retained < limit {
+                        let remaining = limit - retained;
+                        bytes.extend_from_slice(&chunk[..remaining.min(count)]);
+                    }
+                    truncated |= retained.saturating_add(count) > limit;
                 }
-                Ok(count) => bytes.extend_from_slice(&buffer[..count]),
             }
         }
     })
 }
 
 #[derive(Debug, Default)]
+struct StreamCapture {
+    bytes: Vec<u8>,
+    done: bool,
+    truncated: bool,
+}
+
+#[derive(Debug, Default)]
 struct Streams {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    stdout_done: bool,
-    stderr_done: bool,
+    stdout: StreamCapture,
+    stderr: StreamCapture,
+    artifact_error: Option<(PathBuf, String)>,
 }
 
 fn drain_events(receiver: &Receiver<StreamEvent>, streams: &mut Streams, reason: &mut StopReason) {
@@ -325,14 +402,17 @@ fn drain_events(receiver: &Receiver<StreamEvent>, streams: &mut Streams, reason:
     }
 }
 
-fn accept_event(event: StreamEvent, streams: &mut Streams, reason: &mut StopReason) {
+fn accept_event(event: StreamEvent, streams: &mut Streams, _reason: &mut StopReason) {
     match event {
-        StreamEvent::Data(StreamKind::Stdout, bytes) => streams.stdout = bytes,
-        StreamEvent::Data(StreamKind::Stderr, bytes) => streams.stderr = bytes,
-        StreamEvent::Limit(StreamKind::Stdout) => *reason = StopReason::StdoutLimit,
-        StreamEvent::Limit(StreamKind::Stderr) => *reason = StopReason::StderrLimit,
-        StreamEvent::Done(StreamKind::Stdout) => streams.stdout_done = true,
-        StreamEvent::Done(StreamKind::Stderr) => streams.stderr_done = true,
+        StreamEvent::Data(StreamKind::Stdout, bytes) => streams.stdout.bytes = bytes,
+        StreamEvent::Data(StreamKind::Stderr, bytes) => streams.stderr.bytes = bytes,
+        StreamEvent::Limit(StreamKind::Stdout) => streams.stdout.truncated = true,
+        StreamEvent::Limit(StreamKind::Stderr) => streams.stderr.truncated = true,
+        StreamEvent::Done(StreamKind::Stdout) => streams.stdout.done = true,
+        StreamEvent::Done(StreamKind::Stderr) => streams.stderr.done = true,
+        StreamEvent::ArtifactError(stream, path, message) => {
+            streams.artifact_error = Some((path, format!("{stream:?}: {message}")));
+        }
     }
 }
 
@@ -343,7 +423,7 @@ fn join_readers(
     stdout_thread: JoinHandle<()>,
     stderr_thread: JoinHandle<()>,
 ) -> Result<(), ProcessError> {
-    while !(streams.stdout_done && streams.stderr_done) {
+    while !(streams.stdout.done && streams.stderr.done) {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => accept_event(event, streams, reason),
             Err(RecvTimeoutError::Timeout) if !matches!(reason, StopReason::None) => {
@@ -367,8 +447,6 @@ enum StopReason {
     None,
     TimedOut,
     Cancelled,
-    StdoutLimit,
-    StderrLimit,
 }
 
 impl StopReason {
@@ -377,9 +455,74 @@ impl StopReason {
             Self::None => "completed",
             Self::TimedOut => "timed-out",
             Self::Cancelled => "cancelled",
-            Self::StdoutLimit => "stdout-limit",
-            Self::StderrLimit => "stderr-limit",
         }
+    }
+}
+
+#[derive(Debug)]
+struct ArtifactWriter {
+    path: PathBuf,
+    file: File,
+    head: Vec<u8>,
+    tail: VecDeque<u8>,
+    truncated: bool,
+}
+
+pub(crate) fn write_bounded_artifact(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    let mut writer = ArtifactWriter::create(path).map_err(|error| error.to_string())?;
+    writer.push(bytes);
+    writer.finish()
+}
+
+impl ArtifactWriter {
+    fn create(path: &std::path::Path) -> Result<Self, ProcessError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| ProcessError::Artifact {
+                path: path.to_owned(),
+                message: error.to_string(),
+            })?;
+        }
+        let file = File::create(path).map_err(|error| ProcessError::Artifact {
+            path: path.to_owned(),
+            message: error.to_string(),
+        })?;
+        Ok(Self {
+            path: path.to_owned(),
+            file,
+            head: Vec::with_capacity(ARTIFACT_HEAD_LIMIT),
+            tail: VecDeque::with_capacity(ARTIFACT_TAIL_LIMIT),
+            truncated: false,
+        })
+    }
+
+    fn push(&mut self, bytes: &[u8]) {
+        let remaining = ARTIFACT_HEAD_LIMIT.saturating_sub(self.head.len());
+        let head_count = remaining.min(bytes.len());
+        self.head.extend_from_slice(&bytes[..head_count]);
+        if head_count < bytes.len() {
+            self.truncated = true;
+            self.push_tail(&bytes[head_count..]);
+        }
+    }
+
+    fn push_tail(&mut self, bytes: &[u8]) {
+        self.tail.extend(bytes.iter().copied());
+        while self.tail.len() > ARTIFACT_TAIL_LIMIT {
+            let _ = self.tail.pop_front();
+        }
+    }
+
+    fn finish(mut self) -> Result<(), String> {
+        self.file
+            .write_all(&self.head)
+            .and_then(|()| {
+                if self.truncated {
+                    self.file.write_all(ARTIFACT_MARKER)?;
+                    self.file.write_all(self.tail.make_contiguous())?;
+                }
+                self.file.flush()
+            })
+            .map_err(|error| format!("{}: {error}", self.path.display()))
     }
 }
 
@@ -455,9 +598,81 @@ mod tests {
                 timeout: Duration::from_secs(2),
             });
         let result = ProcessRunner::new().run(request).expect("process result");
-        assert_eq!(result.receipt.status, "stdout-limit");
+        assert_eq!(result.receipt.status, "completed");
         assert_eq!(result.stdout, b"1234");
+        assert!(result.receipt.stdout_truncated);
         assert_eq!(result.receipt.schema_version, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn large_valid_output_is_bounded_without_changing_success() {
+        let root =
+            std::env::temp_dir().join(format!("rusttable-process-artifact-{}", std::process::id()));
+        let stdout = root.join("stdout.log");
+        let stderr = root.join("stderr.log");
+        let request = ProcessRequest::new(
+            "sh",
+            [
+                "-c",
+                "i=0; while [ $i -lt 400000 ]; do printf x; i=$((i+1)); done",
+            ],
+        )
+        .limits(ProcessLimits {
+            max_stdout_bytes: 8,
+            max_stderr_bytes: 8,
+            timeout: Duration::from_secs(2),
+        })
+        .artifacts(&stdout, &stderr);
+        let result = ProcessRunner::new().run(request).expect("process result");
+        let artifact = std::fs::read_to_string(&stdout).expect("stdout artifact");
+        assert!(result.receipt.success());
+        assert!(result.receipt.stdout_truncated);
+        assert!(artifact.contains("output truncated"));
+        assert!(artifact.len() <= super::ARTIFACT_LIMIT);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn large_failing_output_keeps_strict_failure_semantics_and_tail() {
+        let root =
+            std::env::temp_dir().join(format!("rusttable-process-failure-{}", std::process::id()));
+        let stdout = root.join("stdout.log");
+        let stderr = root.join("stderr.log");
+        let request = ProcessRequest::new(
+            "sh",
+            [
+                "-c",
+                "i=0; while [ $i -lt 400000 ]; do printf x; i=$((i+1)); done; exit 7",
+            ],
+        )
+        .limits(ProcessLimits {
+            max_stdout_bytes: 8,
+            max_stderr_bytes: 8,
+            timeout: Duration::from_secs(2),
+        })
+        .artifacts(&stdout, &stderr);
+        let result = ProcessRunner::new().run(request).expect("process result");
+        let artifact = std::fs::read_to_string(&stdout).expect("stdout artifact");
+        assert!(!result.receipt.success());
+        assert_eq!(result.receipt.exit_code, Some(7));
+        assert!(result.receipt.stdout_truncated);
+        assert!(artifact.contains("output truncated"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn artifact_paths_are_platform_joined_and_stable() {
+        let path = std::path::Path::new("target")
+            .join("validation")
+            .join("workspace-dag")
+            .join("pull_request.stdout.log");
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("pull_request.stdout.log")
+        );
+        assert!(path.to_string_lossy().contains("workspace-dag"));
     }
 
     #[cfg(unix)]
