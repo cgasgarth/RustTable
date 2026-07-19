@@ -34,15 +34,14 @@
 
 ## Shift-left validation
 
-- Pre-commit is intentionally uncapped and runs the complete local Rust build, all-target/all-feature warnings-denied Clippy, and all-target/all-feature test gate alongside deterministic repository, source/native, layout, and workflow-policy checks. Pre-push has a hard 150-second budget and pull-request GitHub Actions have a hard 150-second budget.
+- Pre-commit is intentionally uncapped and runs the complete local Rust build, all-target/all-feature warnings-denied Clippy, and all-target/all-feature test gate alongside deterministic repository, source/native, layout, and workflow-policy checks. There is no pull-request GitHub Actions validation lane; hosted validation runs only after pushes to `main`.
 - Schedule independent checks in parallel, but serialize checks that contend for the shared Cargo target directory; never skip or weaken pre-commit coverage to satisfy a duration target.
 - Pre-push keeps formatting, policy, workspace, library test, and library lint checks local. Release-mode and other merge-only production validation remains on main.
 - Hooks must clean up the complete child-process tree on success, failure, interrupt, and timeout; failures report bounded actionable excerpts and measured duration.
 - Hooks must not use the network, mutate GitHub, require secrets, or run heavyweight packaging, corpus, benchmark, GUI, or merge-only validation.
-- PR validation stays technical and build/test/workflow focused; issue linkage and pull-request body conventions are human/process guidance only and are never blocking GitHub Actions gates.
-- Main validation retains exhaustive all-target/all-feature Rust coverage and heavyweight checks outside the local hook tiers.
+- Pull-request linkage and body conventions are human/process guidance only; they are never blocking hosted gates. Main validation retains exhaustive all-target/all-feature Rust coverage and heavyweight checks outside the local hook tiers.
 - Formatting, linting, compilation, tests, dependency checks, file-size checks, and unsafe-code checks should fail as early as practical.
-- Measure hook and workflow duration when changing validation so the time budgets remain enforceable.
+- Measure hook and workflow duration when changing validation for diagnostics, but never add an elapsed-time cap to pre-commit.
 
 ## Worktrees and Git remotes
 

@@ -21,12 +21,12 @@ Rewrite darktable completely in Rust, using iced for the UI, while preserving th
 - Prefer established Rust crates and standard-library/framework features where appropriate.
 - Use test-driven development with deterministic, focused regression coverage.
 
-## Validation budgets
+## Validation policy
 
-- Pre-commit: no more than 60 seconds.
+- Pre-commit: complete local merge-readiness checks; no elapsed-time cap.
 - Pre-push: no more than 150 seconds.
-- Pull-request GitHub Actions: no more than 150 seconds.
-- Put exhaustive or heavyweight validation in merge-to-main workflows.
+- Pull-request GitHub Actions: none.
+- Pushes to `main`: rerun the complete gate and all exhaustive or heavyweight validation.
 
 ## Execution loop
 

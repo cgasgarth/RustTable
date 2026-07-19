@@ -2,7 +2,6 @@
 
 const API_ROOT = 'https://api.github.com';
 const ACCEPT = 'application/vnd.github+json';
-const REQUIRED_CONTEXT = 'rust-pr / validate';
 const APPLY_FLAG = '--apply';
 
 export type RepositoryPolicy = {
@@ -59,7 +58,7 @@ export const expectedRepositoryPolicy: RepositoryPolicy = {
 };
 
 export const expectedProtectionPolicy: ProtectionPolicy = {
-  required_status_checks: { strict: true, contexts: [REQUIRED_CONTEXT] },
+  required_status_checks: { strict: true, contexts: [] },
   required_pull_request_reviews: {
     required_approving_review_count: 0,
     bypass_pull_request_allowances: { users: [], teams: [], apps: [] },
@@ -169,7 +168,7 @@ const protectionPath = (repository: string, branch: string): string => `${reposi
 const protectionRequest = (): Request => ({
   method: 'PUT',
   body: JSON.stringify({
-    required_status_checks: { strict: true, contexts: [REQUIRED_CONTEXT] },
+    required_status_checks: { strict: true, contexts: [] },
     enforce_admins: true,
     required_pull_request_reviews: {
       dismiss_stale_reviews: false,

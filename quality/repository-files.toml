@@ -52,7 +52,6 @@ executable_paths = [
     "scripts/macos-distribution-smoke.sh",
     "scripts/main-ci.sh",
     "scripts/performance-budgets.sh",
-    "scripts/pr-ci.sh",
     "scripts/precommit-fast.sh",
     "scripts/prepush-fast.sh",
     "scripts/rust-baseline.sh",

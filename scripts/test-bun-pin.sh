@@ -28,8 +28,7 @@ make_root() {
   local fixture="$temporary_directory/$name"
   mkdir -p "$fixture/.github/workflows"
   printf '%s\n' "{\"name\":\"fixture\",\"packageManager\":$package_manager}" >"$fixture/package.json"
-  printf '%s\n' "$(valid_workflow)" >"$fixture/.github/workflows/rust-pr.yml"
-  cp "$fixture/.github/workflows/rust-pr.yml" "$fixture/.github/workflows/rust-main.yml"
+  printf '%s\n' "$(valid_workflow)" >"$fixture/.github/workflows/rust-main.yml"
   printf '%s\n' "$fixture"
 }
 
@@ -37,7 +36,7 @@ valid_workflow() {
   cat <<'EOF'
 name: Fixture
 on:
-  pull_request:
+  push:
     branches: [main]
 permissions:
   contents: read
@@ -155,7 +154,7 @@ policy_cases=(literal-drift missing-verification wrong-order stale-cache duplica
 for case_name in "${policy_cases[@]}"; do
   fixture="$temporary_directory/policy-$case_name"
   cp -R "$valid_fixture" "$fixture"
-  workflow="$fixture/.github/workflows/rust-pr.yml"
+  workflow="$fixture/.github/workflows/rust-main.yml"
   case "$case_name" in
     literal-drift)
       sed -i.bak 's/${{ steps.bun-pin.outputs.bun-version }}/1.3.14/g' "$workflow"
@@ -175,7 +174,6 @@ for case_name in "${policy_cases[@]}"; do
       insert_duplicate_pin_step "$workflow"
       ;;
   esac
-  cp "$workflow" "$fixture/.github/workflows/rust-main.yml"
   if bash "$root_directory/scripts/check-bun-toolchain-policy.sh" "$fixture" >"$temporary_directory/policy.log" 2>&1; then
     printf 'expected policy fixture to fail: %s\n' "$case_name" >&2
     exit 1
@@ -191,12 +189,11 @@ done
 
 multi_fixture="$temporary_directory/policy-multiple"
 cp -R "$valid_fixture" "$multi_fixture"
-multi_workflow="$multi_fixture/.github/workflows/rust-pr.yml"
+multi_workflow="$multi_fixture/.github/workflows/rust-main.yml"
 sed -i.bak 's/bun-version: .*/bun-version: latest/' "$multi_workflow"
 sed -i.bak '/Verify canonical Bun version/,+1d' "$multi_workflow"
 sed -i.bak "s/, 'package.json'//" "$multi_workflow"
 insert_duplicate_pin_step "$multi_workflow"
-cp "$multi_workflow" "$multi_fixture/.github/workflows/rust-main.yml"
 if bash "$root_directory/scripts/check-bun-toolchain-policy.sh" "$multi_fixture" >"$temporary_directory/multiple.log" 2>&1; then
   printf 'expected simultaneous policy fixture to fail\n' >&2
   exit 1

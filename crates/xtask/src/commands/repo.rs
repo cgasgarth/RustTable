@@ -16,31 +16,14 @@ pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand, runner: &Process
     }
 }
 
-const EXPECTED_WORKFLOWS: [(&str, WorkflowKind); 2] = [
-    ("rust-main.yml", WorkflowKind::Main),
-    ("rust-pr.yml", WorkflowKind::PullRequest),
-];
+const EXPECTED_WORKFLOWS: [&str; 1] = ["rust-main.yml"];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum WorkflowKind {
-    PullRequest,
-    Main,
+const fn timeout_limit() -> u32 {
+    45
 }
 
-impl WorkflowKind {
-    const fn timeout_limit(self) -> u32 {
-        match self {
-            Self::PullRequest => 10,
-            Self::Main => 45,
-        }
-    }
-
-    const fn shell_budget(self) -> u32 {
-        match self {
-            Self::PullRequest => 150,
-            Self::Main => 2_700,
-        }
-    }
+const fn shell_budget() -> u32 {
+    2_700
 }
 
 fn verify_workflows(root: &RepositoryRoot) -> Result {
@@ -64,10 +47,7 @@ fn verify_workflows(root: &RepositoryRoot) -> Result {
         .collect::<Vec<_>>();
     files.sort();
 
-    let expected = EXPECTED_WORKFLOWS
-        .iter()
-        .map(|(name, _)| *name)
-        .collect::<Vec<_>>();
+    let expected = EXPECTED_WORKFLOWS.to_vec();
     if files != expected {
         return Err(format!(
             ".github/workflows: executable inventory mismatch: found [{}], required [{}]",
@@ -76,11 +56,11 @@ fn verify_workflows(root: &RepositoryRoot) -> Result {
         ));
     }
 
-    for (name, kind) in EXPECTED_WORKFLOWS {
+    for name in EXPECTED_WORKFLOWS {
         let path = directory.join(name);
         let source = fs::read_to_string(&path)
             .map_err(|error| format!("{name}: cannot read workflow: {error}"))?;
-        validate_workflow(name, kind, &source)?;
+        validate_workflow(name, &source)?;
     }
 
     Ok(report(
@@ -93,11 +73,7 @@ fn verify_workflows(root: &RepositoryRoot) -> Result {
     ))
 }
 
-fn validate_workflow(
-    name: &str,
-    kind: WorkflowKind,
-    source: &str,
-) -> std::result::Result<(), String> {
+fn validate_workflow(name: &str, source: &str) -> std::result::Result<(), String> {
     let lines = source.lines().collect::<Vec<_>>();
     let mut errors = Vec::new();
     let top_level = top_level_keys(&lines);
@@ -106,9 +82,9 @@ fn validate_workflow(
     require_top_level(name, &top_level, "permissions", &mut errors);
     require_top_level(name, &top_level, "jobs", &mut errors);
 
-    validate_events(name, kind, &lines, &mut errors);
+    validate_events(name, &lines, &mut errors);
     validate_permissions(name, &lines, &mut errors);
-    validate_jobs(name, kind, &lines, &mut errors);
+    validate_jobs(name, &lines, &mut errors);
     validate_actions(name, &lines, &mut errors);
     validate_prohibited_content(name, &lines, &mut errors);
 
@@ -138,7 +114,7 @@ fn require_top_level(name: &str, keys: &[&str], key: &str, errors: &mut Vec<Stri
     }
 }
 
-fn validate_events(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut Vec<String>) {
+fn validate_events(name: &str, lines: &[&str], errors: &mut Vec<String>) {
     let Some(start) = section_start(lines, "on") else {
         return;
     };
@@ -151,10 +127,7 @@ fn validate_events(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut 
             events.push(key.to_owned());
         }
     }
-    let expected = match kind {
-        WorkflowKind::PullRequest => vec!["pull_request"],
-        WorkflowKind::Main => vec!["push"],
-    };
+    let expected = vec!["push"];
     if events != expected {
         errors.push(format!(
             "{name}: YAML path on: events must be [{}], found [{}]",
@@ -162,27 +135,23 @@ fn validate_events(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut 
             events.join(", ")
         ));
     }
-    if kind == WorkflowKind::Main {
-        let push_start = lines[start + 1..end]
+    let push_start = lines[start + 1..end]
+        .iter()
+        .position(|line| indent(line) == 2 && key_value(line).is_some_and(|(key, _)| key == "push"))
+        .map(|offset| start + 1 + offset);
+    if let Some(push_start) = push_start {
+        let push_end = section_end_from(lines, push_start, end);
+        let branches = lines[push_start + 1..push_end].iter().find_map(|line| {
+            (indent(line) == 4 && key_value(line).is_some_and(|(key, _)| key == "branches"))
+                .then_some(())
+        });
+        let main_branch = lines[push_start + 1..push_end]
             .iter()
-            .position(|line| {
-                indent(line) == 2 && key_value(line).is_some_and(|(key, _)| key == "push")
-            })
-            .map(|offset| start + 1 + offset);
-        if let Some(push_start) = push_start {
-            let push_end = section_end_from(lines, push_start, end);
-            let branches = lines[push_start + 1..push_end].iter().find_map(|line| {
-                (indent(line) == 4 && key_value(line).is_some_and(|(key, _)| key == "branches"))
-                    .then_some(())
-            });
-            let main_branch = lines[push_start + 1..push_end]
-                .iter()
-                .any(|line| indent(line) == 6 && line.trim() == "- main");
-            if branches.is_none() || !main_branch {
-                errors.push(format!(
-                    "{name}: YAML path on.push.branches: must contain main"
-                ));
-            }
+            .any(|line| indent(line) == 6 && line.trim() == "- main");
+        if branches.is_none() || !main_branch {
+            errors.push(format!(
+                "{name}: YAML path on.push.branches: must contain main"
+            ));
         }
     }
 }
@@ -205,7 +174,7 @@ fn validate_permissions(name: &str, lines: &[&str], errors: &mut Vec<String>) {
     }
 }
 
-fn validate_jobs(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut Vec<String>) {
+fn validate_jobs(name: &str, lines: &[&str], errors: &mut Vec<String>) {
     let Some(start) = section_start(lines, "jobs") else {
         return;
     };
@@ -241,10 +210,10 @@ fn validate_jobs(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut Ve
             }
         });
         match timeout {
-            Some(value) if value <= kind.timeout_limit() => {}
+            Some(value) if value <= timeout_limit() => {}
             Some(value) => errors.push(format!(
                 "{name}: YAML path jobs.{job_name}.timeout-minutes: {value} exceeds {} minutes",
-                kind.timeout_limit()
+                timeout_limit()
             )),
             None => errors.push(format!(
                 "{name}: YAML path jobs.{job_name}.timeout-minutes: required and must be bounded"
@@ -258,7 +227,7 @@ fn validate_jobs(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut Ve
             ));
         }
         if !summary_job {
-            let budget = format!("scripts/with-validation-budget.sh {}", kind.shell_budget());
+            let budget = format!("scripts/with-validation-budget.sh {}", shell_budget());
             if !body.iter().any(|line| {
                 line.contains("shell:") && line.contains(&budget) && line.contains("{0}")
             }) {
@@ -384,38 +353,32 @@ fn indent(line: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{WorkflowKind, validate_workflow};
+    use super::validate_workflow;
 
-    const VALID: &str = "name: RustTable PR\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    timeout-minutes: 3\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          persist-credentials: false\n";
+    const VALID: &str = "name: RustTable Main\non:\n  push:\n    branches:\n      - main\npermissions:\n  contents: read\njobs:\n  validate:\n    runs-on: ubuntu-latest\n    timeout-minutes: 45\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}\n    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2\n        with:\n          persist-credentials: false\n";
 
     #[test]
-    fn accepts_the_minimal_pr_contract() {
-        validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, VALID).expect("valid");
+    fn accepts_the_minimal_main_contract() {
+        validate_workflow("rust-main.yml", VALID).expect("valid");
     }
 
     #[test]
     fn accepts_an_always_run_summary_job_without_a_shell_budget() {
-        let valid = "name: RustTable PR\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  validate-groups:\n    runs-on: ubuntu-latest\n    timeout-minutes: 3\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}\n  validate:\n    if: ${{ always() }}\n    needs: validate-groups\n    runs-on: ubuntu-latest\n    timeout-minutes: 1\n";
-        validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, valid).expect("valid");
+        let valid = "name: RustTable Main\non:\n  push:\n    branches:\n      - main\npermissions:\n  contents: read\njobs:\n  validate-groups:\n    runs-on: ubuntu-latest\n    timeout-minutes: 45\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 2700 workflow-step {0}\n  validate:\n    if: ${{ always() }}\n    needs: validate-groups\n    runs-on: ubuntu-latest\n    timeout-minutes: 1\n";
+        validate_workflow("rust-main.yml", valid).expect("valid");
     }
 
     #[test]
-    fn pr_workflow_keeps_workflow_inventory_inside_pr_validation() {
-        let source = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../.github/workflows/rust-pr.yml"
-        ));
-        assert!(source.contains("run: bash scripts/pr-ci.sh"));
-        assert!(!source.contains("cargo xtask repo verify-workflows"));
+    fn main_workflow_is_the_only_hosted_validation_surface() {
+        assert_eq!(super::EXPECTED_WORKFLOWS, ["rust-main.yml"]);
     }
 
     #[test]
     fn rejects_extra_events_and_floating_actions() {
         let invalid = VALID
-            .replace("  pull_request:", "  pull_request:\n  workflow_dispatch:")
+            .replace("  push:", "  pull_request:\n  workflow_dispatch:")
             .replace("@11bd71901bbe5b1630ceea73d27597364c9af683", "@v4");
-        let error = validate_workflow("fixture.yaml", WorkflowKind::PullRequest, &invalid)
-            .expect_err("invalid workflow");
+        let error = validate_workflow("fixture.yaml", &invalid).expect_err("invalid workflow");
         assert!(error.contains("workflow_dispatch"));
         assert!(error.contains("not pinned by full commit SHA"));
     }
@@ -424,9 +387,8 @@ mod tests {
     fn rejects_write_permissions_and_unbounded_jobs() {
         let invalid = VALID
             .replace("contents: read", "contents: write")
-            .replace("timeout-minutes: 3", "timeout-minutes: 11");
-        let error = validate_workflow("fixture.yml", WorkflowKind::PullRequest, &invalid)
-            .expect_err("invalid workflow");
+            .replace("timeout-minutes: 45", "timeout-minutes: 46");
+        let error = validate_workflow("fixture.yml", &invalid).expect_err("invalid workflow");
         assert!(error.contains("permissions"));
         assert!(error.contains("timeout-minutes"));
     }
