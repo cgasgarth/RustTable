@@ -29,8 +29,8 @@ pub enum ScanError {
         value: String,
         id: String,
     },
-    StaleIssueSequence {
-        sequence: String,
+    InvalidIssueNumber {
+        number: u64,
         id: String,
     },
     DuplicateCapabilityId {
@@ -81,8 +81,8 @@ impl Display for ScanError {
             Self::InvalidStatus { value, id } => {
                 write!(formatter, "invalid status {value:?} for {id}")
             }
-            Self::StaleIssueSequence { sequence, id } => {
-                write!(formatter, "stale issue sequence {sequence:?} for {id}")
+            Self::InvalidIssueNumber { number, id } => {
+                write!(formatter, "invalid GitHub issue number {number} for {id}")
             }
             Self::DuplicateCapabilityId { id } => {
                 write!(formatter, "duplicate capability ID: {id}")
@@ -369,7 +369,7 @@ fn apply_overrides(
 ) -> Result<(), ScanError> {
     let mut override_ids = Vec::new();
     for entry in overrides {
-        validate_capability_fields(&entry.id, &entry.status, &entry.issue_sequences)?;
+        validate_capability_fields(&entry.id, &entry.status, &entry.issue_numbers)?;
         if entry.reason.trim().is_empty() {
             return Err(ScanError::InvalidOverride {
                 id: entry.id,
@@ -394,7 +394,7 @@ fn apply_overrides(
                 .unwrap_or_else(|| "cross-cutting".to_owned()),
             category: entry.category,
             status: entry.status,
-            issue_sequences: entry.issue_sequences,
+            issue_numbers: entry.issue_numbers,
             test_evidence: entry.test_evidence,
             redesign_note: entry.redesign_note,
         };
@@ -410,7 +410,7 @@ fn capability_from_discovered(discovered: Discovered) -> Capability {
         reference_symbol: discovered.reference_symbol,
         category: discovered.category.to_owned(),
         status: discovered.status.to_owned(),
-        issue_sequences: discovered.issue_sequences,
+        issue_numbers: discovered.issue_numbers,
         test_evidence: discovered.test_evidence,
         redesign_note: discovered.redesign_note,
     }
@@ -418,8 +418,8 @@ fn capability_from_discovered(discovered: Discovered) -> Capability {
 
 fn normalize_capabilities(capabilities: &mut [Capability]) {
     for capability in capabilities {
-        capability.issue_sequences.sort();
-        capability.issue_sequences.dedup();
+        capability.issue_numbers.sort_unstable();
+        capability.issue_numbers.dedup();
         capability.test_evidence.sort();
         capability.test_evidence.dedup();
     }

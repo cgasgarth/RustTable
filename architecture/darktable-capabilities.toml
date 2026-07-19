@@ -9,7 +9,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BINARY_PACKAGE_BUILD"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -19,7 +19,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BUILD_CMSTEST"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -29,7 +29,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BUILD_CURVE_TOOLS"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -39,7 +39,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BUILD_MSYS2_INSTALL"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -49,7 +49,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BUILD_NOISE_TOOLS"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -59,7 +59,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BUILD_PRINT"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -69,7 +69,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "BUILD_RS_IDENTIFY"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -79,7 +79,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "CUSTOM_CFLAGS"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -89,7 +89,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "DONT_USE_INTERNAL_LIBRAW"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -99,7 +99,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "DONT_USE_INTERNAL_LUA"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -109,7 +109,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "FORCE_COLORED_OUTPUT"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -119,7 +119,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "TESTBUILD_OPENCL_PROGRAMS"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -129,7 +129,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_AI"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -139,7 +139,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_AVIF"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -149,7 +149,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_CAMERA_SUPPORT"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -159,7 +159,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_COLORD"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -169,7 +169,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_DARKTABLE_PROFILING"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -179,7 +179,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_GMIC"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -189,7 +189,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_GRAPHICSMAGICK"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -199,7 +199,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_HEIF"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -209,7 +209,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_ICU"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -219,7 +219,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_IMAGEMAGICK"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -229,7 +229,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_ISOBMFF"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -239,7 +239,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_JXL"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -249,7 +249,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_KWALLET"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -259,7 +259,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_LIBRAW"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -269,7 +269,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_LIBSECRET"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -279,7 +279,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_LUA"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -289,7 +289,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_MAC_INTEGRATION"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -299,7 +299,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_MAP"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -309,7 +309,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_OPENCL"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -319,7 +319,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_OPENEXR"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -329,7 +329,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_OPENJPEG"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -339,7 +339,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_OPENMP"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -349,7 +349,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_PORTMIDI"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -359,7 +359,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_SDL2"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -369,7 +369,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_UNITY"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -379,7 +379,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_WEBP"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -389,7 +389,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_XCF"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -399,7 +399,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "USE_XMLLINT"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -409,7 +409,7 @@ reference_path = "DefineOptions.cmake"
 reference_symbol = "VALIDATE_APPDATA_FILE"
 category = "packaging"
 status = "redesigned"
-issue_sequences = ["0014"]
+issue_numbers = [170]
 test_evidence = ["reference-scan:build-option"]
 redesign_note = "RustTable records the option as a Rust-owned platform or feature policy."
 
@@ -419,7 +419,7 @@ reference_path = "src/gui/gtk.c"
 reference_symbol = "GUI accessibility integration"
 category = "accessibility"
 status = "required"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["ui:accessibility-semantics"]
 
 [[capabilities]]
@@ -428,7 +428,7 @@ reference_path = "src/common/camera_control.c"
 reference_symbol = "camera control transport"
 category = "camera/tethering"
 status = "required"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["camera:tethered-capture-contract"]
 
 [[capabilities]]
@@ -437,10 +437,10 @@ reference_path = "src/common/collection.c"
 reference_symbol = "catalog and collection services"
 category = "catalog/library"
 status = "required"
-issue_sequences = [
-    "0057",
-    "0058",
-    "0059",
+issue_numbers = [
+    213,
+    214,
+    215,
 ]
 test_evidence = ["catalog:query-and-state"]
 
@@ -450,10 +450,10 @@ reference_path = "src/common/colorspaces.h"
 reference_symbol = "color-space and profile contracts"
 category = "color management"
 status = "required"
-issue_sequences = [
-    "0101",
-    "0105",
-    "0106",
+issue_numbers = [
+    257,
+    261,
+    262,
 ]
 test_evidence = ["color:cpu-gpu-transform-parity"]
 
@@ -463,10 +463,10 @@ reference_path = "src/common/darktable.c"
 reference_symbol = "application import lifecycle"
 category = "import"
 status = "required"
-issue_sequences = [
-    "0091",
-    "0092",
-    "0096",
+issue_numbers = [
+    247,
+    248,
+    252,
 ]
 test_evidence = ["import:resumable-session"]
 
@@ -476,7 +476,7 @@ reference_path = "src/gui/accelerators.c"
 reference_symbol = "keyboard and device actions"
 category = "input devices"
 status = "required"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["input:keyboard-device-actions"]
 
 [[capabilities]]
@@ -485,7 +485,7 @@ reference_path = "po/CMakeLists.txt"
 reference_symbol = "translation catalog build"
 category = "localization"
 status = "required"
-issue_sequences = ["0017"]
+issue_numbers = [173]
 test_evidence = ["localization:catalog-build"]
 
 [[capabilities]]
@@ -494,9 +494,9 @@ reference_path = "src/common/gpx.c"
 reference_symbol = "GPX track matching"
 category = "map/geotagging"
 status = "required"
-issue_sequences = [
-    "0060",
-    "0099",
+issue_numbers = [
+    216,
+    255,
 ]
 test_evidence = ["map:gpx-track-match"]
 
@@ -506,9 +506,9 @@ reference_path = "src/develop/blend.c"
 reference_symbol = "blend and mask evaluation"
 category = "masks/blending"
 status = "required"
-issue_sequences = [
-    "0127",
-    "0128",
+issue_numbers = [
+    283,
+    284,
 ]
 test_evidence = ["processing:mask-blend-parity"]
 
@@ -518,10 +518,10 @@ reference_path = "src/imageio/imageio.c"
 reference_symbol = "image metadata integration"
 category = "metadata"
 status = "required"
-issue_sequences = [
-    "0081",
-    "0084",
-    "0087",
+issue_numbers = [
+    237,
+    240,
+    243,
 ]
 test_evidence = ["metadata:canonical-precedence"]
 
@@ -531,9 +531,9 @@ reference_path = "CMakeLists.txt"
 reference_symbol = "package and install policy"
 category = "packaging"
 status = "required"
-issue_sequences = [
-    "0014",
-    "0017",
+issue_numbers = [
+    170,
+    173,
 ]
 test_evidence = ["packaging:platform-policy"]
 
@@ -543,7 +543,7 @@ reference_path = "src/common/printing.c"
 reference_symbol = "print pipeline"
 category = "printing"
 status = "required"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["printing:deterministic-job"]
 
 [[capabilities]]
@@ -552,9 +552,9 @@ reference_path = "src/imageio/format/avif.c"
 reference_symbol = "avif_format"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0075",
-    "0246",
+issue_numbers = [
+    231,
+    407,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -564,7 +564,7 @@ reference_path = "src/imageio/format/copy.c"
 reference_symbol = "copy"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = ["0239"]
+issue_numbers = [399]
 test_evidence = ["reference-scan:format"]
 
 [[capabilities]]
@@ -573,9 +573,9 @@ reference_path = "src/imageio/format/exr.cc"
 reference_symbol = "exr"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0072",
-    "0248",
+issue_numbers = [
+    228,
+    409,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -585,9 +585,9 @@ reference_path = "src/imageio/format/xcf.c"
 reference_symbol = "gimp_xcf"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0083",
-    "0251",
+issue_numbers = [
+    239,
+    412,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -597,9 +597,9 @@ reference_path = "src/imageio/format/heif.c"
 reference_symbol = "heif_format"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0075",
-    "0247",
+issue_numbers = [
+    231,
+    408,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -609,9 +609,9 @@ reference_path = "src/imageio/format/j2k.c"
 reference_symbol = "j2k"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0076",
-    "0249",
+issue_numbers = [
+    232,
+    410,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -621,9 +621,9 @@ reference_path = "src/imageio/format/jpeg.c"
 reference_symbol = "jpeg"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0069",
-    "0240",
+issue_numbers = [
+    225,
+    400,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -633,9 +633,9 @@ reference_path = "src/imageio/format/jxl.c"
 reference_symbol = "jxl_format"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0073",
-    "0244",
+issue_numbers = [
+    229,
+    404,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -645,7 +645,7 @@ reference_path = "src/imageio/format/pdf.c"
 reference_symbol = "pdf"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = ["0250"]
+issue_numbers = [411]
 test_evidence = ["reference-scan:format"]
 
 [[capabilities]]
@@ -654,9 +654,9 @@ reference_path = "src/imageio/format/pfm.c"
 reference_symbol = "pfm"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0076",
-    "0243",
+issue_numbers = [
+    232,
+    403,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -666,9 +666,9 @@ reference_path = "src/imageio/format/png.c"
 reference_symbol = "png"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0070",
-    "0241",
+issue_numbers = [
+    226,
+    401,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -678,9 +678,9 @@ reference_path = "src/imageio/format/ppm.c"
 reference_symbol = "ppm"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0076",
-    "0243",
+issue_numbers = [
+    232,
+    403,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -690,9 +690,9 @@ reference_path = "src/imageio/format/tiff.c"
 reference_symbol = "tiff"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0071",
-    "0242",
+issue_numbers = [
+    227,
+    402,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -702,9 +702,9 @@ reference_path = "src/imageio/format/webp.c"
 reference_symbol = "webp"
 category = "RAW/raster I/O"
 status = "required"
-issue_sequences = [
-    "0074",
-    "0245",
+issue_numbers = [
+    230,
+    406,
 ]
 test_evidence = ["reference-scan:format"]
 
@@ -714,7 +714,7 @@ reference_path = "src/iop/agx.c"
 reference_symbol = "agx"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0181"]
+issue_numbers = [337]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -723,7 +723,7 @@ reference_path = "src/iop/ashift.c"
 reference_symbol = "ashift"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0229"]
+issue_numbers = [387]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -732,7 +732,7 @@ reference_path = "src/iop/atrous.c"
 reference_symbol = "atrous"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0155"]
+issue_numbers = [311]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -741,7 +741,7 @@ reference_path = "src/iop/basecurve.c"
 reference_symbol = "basecurve"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0174"]
+issue_numbers = [330]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -750,7 +750,7 @@ reference_path = "src/iop/basicadj.c"
 reference_symbol = "basicadj"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0165"]
+issue_numbers = [321]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -759,7 +759,7 @@ reference_path = "src/iop/bilat.c"
 reference_symbol = "bilat"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0160"]
+issue_numbers = [316]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -768,7 +768,7 @@ reference_path = "src/iop/bilateral.cc"
 reference_symbol = "bilateral"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0161"]
+issue_numbers = [317]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -777,7 +777,7 @@ reference_path = "src/iop/bloom.c"
 reference_symbol = "bloom"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0213"]
+issue_numbers = [371]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -786,7 +786,7 @@ reference_path = "src/iop/blurs.c"
 reference_symbol = "blurs"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0162"]
+issue_numbers = [318]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -795,7 +795,7 @@ reference_path = "src/iop/borders.c"
 reference_symbol = "borders"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0219"]
+issue_numbers = [377]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -804,7 +804,7 @@ reference_path = "src/iop/cacorrect.c"
 reference_symbol = "cacorrect"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0149"]
+issue_numbers = [305]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -813,7 +813,7 @@ reference_path = "src/iop/cacorrectrgb.c"
 reference_symbol = "cacorrectrgb"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0149"]
+issue_numbers = [305]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -822,7 +822,7 @@ reference_path = "src/iop/censorize.c"
 reference_symbol = "censorize"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0235"]
+issue_numbers = [395]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -831,7 +831,7 @@ reference_path = "src/iop/channelmixer.c"
 reference_symbol = "channelmixer"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0197"]
+issue_numbers = [353]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -840,7 +840,7 @@ reference_path = "src/iop/channelmixerrgb.c"
 reference_symbol = "channelmixerrgb"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0196"]
+issue_numbers = [352]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -849,7 +849,7 @@ reference_path = "src/iop/clahe.c"
 reference_symbol = "clahe"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0235"]
+issue_numbers = [395]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -858,7 +858,7 @@ reference_path = "src/iop/clipping.c"
 reference_symbol = "clipping"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0235"]
+issue_numbers = [395]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -867,7 +867,7 @@ reference_path = "src/iop/colisa.c"
 reference_symbol = "colisa"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0191"]
+issue_numbers = [347]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -876,7 +876,7 @@ reference_path = "src/iop/colorbalance.c"
 reference_symbol = "colorbalance"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0190"]
+issue_numbers = [346]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -885,7 +885,7 @@ reference_path = "src/iop/colorbalancergb.c"
 reference_symbol = "colorbalancergb"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0189"]
+issue_numbers = [345]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -894,7 +894,7 @@ reference_path = "src/iop/colorchecker.c"
 reference_symbol = "colorchecker"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0202"]
+issue_numbers = [358]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -903,7 +903,7 @@ reference_path = "src/iop/colorcontrast.c"
 reference_symbol = "colorcontrast"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0188"]
+issue_numbers = [344]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -912,7 +912,7 @@ reference_path = "src/iop/colorcorrection.c"
 reference_symbol = "colorcorrection"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0195"]
+issue_numbers = [351]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -921,7 +921,7 @@ reference_path = "src/iop/colorequal.c"
 reference_symbol = "colorequal"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0187"]
+issue_numbers = [343]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -930,7 +930,7 @@ reference_path = "src/iop/colorharmonizer.c"
 reference_symbol = "colorharmonizer"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0203"]
+issue_numbers = [359]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -939,7 +939,7 @@ reference_path = "src/iop/colorin.c"
 reference_symbol = "colorin"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0193"]
+issue_numbers = [349]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -948,7 +948,7 @@ reference_path = "src/iop/colorize.c"
 reference_symbol = "colorize"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0201"]
+issue_numbers = [357]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -957,7 +957,7 @@ reference_path = "src/iop/colormapping.c"
 reference_symbol = "colormapping"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0199"]
+issue_numbers = [355]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -966,7 +966,7 @@ reference_path = "src/iop/colorout.c"
 reference_symbol = "colorout"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0192"]
+issue_numbers = [348]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -975,7 +975,7 @@ reference_path = "src/iop/colorreconstruction.c"
 reference_symbol = "colorreconstruct"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0206"]
+issue_numbers = [364]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -984,7 +984,7 @@ reference_path = "src/iop/colortransfer.c"
 reference_symbol = "colortransfer"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0200"]
+issue_numbers = [356]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -993,7 +993,7 @@ reference_path = "src/iop/colorzones.c"
 reference_symbol = "colorzones"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0204"]
+issue_numbers = [360]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1002,7 +1002,7 @@ reference_path = "src/iop/crop.c"
 reference_symbol = "crop"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0223"]
+issue_numbers = [381]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1011,7 +1011,7 @@ reference_path = "src/iop/defringe.c"
 reference_symbol = "defringe"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0235"]
+issue_numbers = [395]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1020,7 +1020,7 @@ reference_path = "src/iop/demosaic.c"
 reference_symbol = "demosaic"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0147"]
+issue_numbers = [303]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1029,7 +1029,7 @@ reference_path = "src/iop/denoiseprofile.c"
 reference_symbol = "denoiseprofile"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0151"]
+issue_numbers = [307]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1038,7 +1038,7 @@ reference_path = "src/iop/diffuse.c"
 reference_symbol = "diffuse"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0163"]
+issue_numbers = [319]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1047,7 +1047,7 @@ reference_path = "src/iop/dither.c"
 reference_symbol = "dither"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0218"]
+issue_numbers = [376]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1056,7 +1056,7 @@ reference_path = "src/iop/enlargecanvas.c"
 reference_symbol = "enlargecanvas"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0228"]
+issue_numbers = [386]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1065,7 +1065,7 @@ reference_path = "src/iop/equalizer.c"
 reference_symbol = "equalizer"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0156"]
+issue_numbers = [312]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1074,7 +1074,7 @@ reference_path = "src/iop/exposure.c"
 reference_symbol = "exposure"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0164"]
+issue_numbers = [320]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1083,7 +1083,7 @@ reference_path = "src/iop/filmic.c"
 reference_symbol = "filmic"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0173"]
+issue_numbers = [329]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1092,7 +1092,7 @@ reference_path = "src/iop/filmicrgb.c"
 reference_symbol = "filmicrgb"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0172"]
+issue_numbers = [328]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1101,7 +1101,7 @@ reference_path = "src/iop/finalscale.c"
 reference_symbol = "finalscale"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0227"]
+issue_numbers = [385]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1110,7 +1110,7 @@ reference_path = "src/iop/flip.c"
 reference_symbol = "flip"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0224"]
+issue_numbers = [382]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1119,7 +1119,7 @@ reference_path = "src/iop/gamma.c"
 reference_symbol = "gamma"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0168"]
+issue_numbers = [324]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1128,7 +1128,7 @@ reference_path = "src/iop/globaltonemap.c"
 reference_symbol = "globaltonemap"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0179"]
+issue_numbers = [335]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1137,7 +1137,7 @@ reference_path = "src/iop/graduatednd.c"
 reference_symbol = "graduatednd"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0211"]
+issue_numbers = [369]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1146,7 +1146,7 @@ reference_path = "src/iop/grain.c"
 reference_symbol = "grain"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0212"]
+issue_numbers = [370]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1155,7 +1155,7 @@ reference_path = "src/iop/hazeremoval.c"
 reference_symbol = "hazeremoval"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0154"]
+issue_numbers = [310]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1164,7 +1164,7 @@ reference_path = "src/iop/highlights.c"
 reference_symbol = "highlights"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0205"]
+issue_numbers = [363]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1173,7 +1173,7 @@ reference_path = "src/iop/highpass.c"
 reference_symbol = "highpass"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0158"]
+issue_numbers = [314]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1182,7 +1182,7 @@ reference_path = "src/iop/hotpixels.c"
 reference_symbol = "hotpixels"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0150"]
+issue_numbers = [306]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1191,7 +1191,7 @@ reference_path = "src/iop/invert.c"
 reference_symbol = "invert"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0235"]
+issue_numbers = [395]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1200,7 +1200,7 @@ reference_path = "src/iop/lens.cc"
 reference_symbol = "lens"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0230"]
+issue_numbers = [388]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1209,7 +1209,7 @@ reference_path = "src/iop/levels.c"
 reference_symbol = "levels"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0170"]
+issue_numbers = [326]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1218,7 +1218,7 @@ reference_path = "src/iop/liquify.c"
 reference_symbol = "liquify"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0231"]
+issue_numbers = [389]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1227,7 +1227,7 @@ reference_path = "src/iop/lowlight.c"
 reference_symbol = "lowlight"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0166"]
+issue_numbers = [322]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1236,7 +1236,7 @@ reference_path = "src/iop/lowpass.c"
 reference_symbol = "lowpass"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0159"]
+issue_numbers = [315]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1245,7 +1245,7 @@ reference_path = "src/iop/lut3d.c"
 reference_symbol = "lut3d"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0198"]
+issue_numbers = [354]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1254,7 +1254,7 @@ reference_path = "src/iop/mask_manager.c"
 reference_symbol = "mask_manager"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0234"]
+issue_numbers = [393]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1263,7 +1263,7 @@ reference_path = "src/iop/monochrome.c"
 reference_symbol = "monochrome"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0184"]
+issue_numbers = [340]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1272,7 +1272,7 @@ reference_path = "src/iop/negadoctor.c"
 reference_symbol = "negadoctor"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0182"]
+issue_numbers = [338]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1281,7 +1281,7 @@ reference_path = "src/iop/nlmeans.c"
 reference_symbol = "nlmeans"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0153"]
+issue_numbers = [309]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1290,7 +1290,7 @@ reference_path = "src/iop/overexposed.c"
 reference_symbol = "overexposed"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0208"]
+issue_numbers = [366]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1299,7 +1299,7 @@ reference_path = "src/iop/overlay.c"
 reference_symbol = "overlay"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0235"]
+issue_numbers = [395]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1308,7 +1308,7 @@ reference_path = "src/iop/primaries.c"
 reference_symbol = "primaries"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0194"]
+issue_numbers = [350]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1317,7 +1317,7 @@ reference_path = "src/iop/profile_gamma.c"
 reference_symbol = "profile_gamma"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0167"]
+issue_numbers = [323]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1326,7 +1326,7 @@ reference_path = "src/iop/rasterfile.c"
 reference_symbol = "rasterfile"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0209"]
+issue_numbers = [367]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1335,7 +1335,7 @@ reference_path = "src/iop/rawdenoise.c"
 reference_symbol = "rawdenoise"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0152"]
+issue_numbers = [308]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1344,7 +1344,7 @@ reference_path = "src/iop/rawoverexposed.c"
 reference_symbol = "rawoverexposed"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0207"]
+issue_numbers = [365]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1353,7 +1353,7 @@ reference_path = "src/iop/rawprepare.c"
 reference_symbol = "rawprepare"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0146"]
+issue_numbers = [302]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1362,7 +1362,7 @@ reference_path = "src/iop/relight.c"
 reference_symbol = "relight"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0216"]
+issue_numbers = [374]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1371,7 +1371,7 @@ reference_path = "src/iop/retouch.c"
 reference_symbol = "retouch"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0233"]
+issue_numbers = [392]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1380,7 +1380,7 @@ reference_path = "src/iop/rgbcurve.c"
 reference_symbol = "rgbcurve"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0175"]
+issue_numbers = [331]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1389,7 +1389,7 @@ reference_path = "src/iop/rgblevels.c"
 reference_symbol = "rgblevels"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0169"]
+issue_numbers = [325]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1398,7 +1398,7 @@ reference_path = "src/iop/rotatepixels.c"
 reference_symbol = "rotatepixels"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0225"]
+issue_numbers = [383]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1407,7 +1407,7 @@ reference_path = "src/iop/scalepixels.c"
 reference_symbol = "scalepixels"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0226"]
+issue_numbers = [384]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1416,7 +1416,7 @@ reference_path = "src/iop/shadhi.c"
 reference_symbol = "shadhi"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0215"]
+issue_numbers = [373]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1425,7 +1425,7 @@ reference_path = "src/iop/sharpen.c"
 reference_symbol = "sharpen"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0157"]
+issue_numbers = [313]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1434,7 +1434,7 @@ reference_path = "src/iop/sigmoid.c"
 reference_symbol = "sigmoid"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0180"]
+issue_numbers = [336]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1443,7 +1443,7 @@ reference_path = "src/iop/soften.c"
 reference_symbol = "soften"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0214"]
+issue_numbers = [372]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1452,7 +1452,7 @@ reference_path = "src/iop/splittoning.c"
 reference_symbol = "splittoning"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0183"]
+issue_numbers = [339]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1461,7 +1461,7 @@ reference_path = "src/iop/spots.c"
 reference_symbol = "spots"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0232"]
+issue_numbers = [391]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1470,7 +1470,7 @@ reference_path = "src/iop/temperature.c"
 reference_symbol = "temperature"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0148"]
+issue_numbers = [304]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1479,7 +1479,7 @@ reference_path = "src/iop/tonecurve.c"
 reference_symbol = "tonecurve"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0176"]
+issue_numbers = [332]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1488,7 +1488,7 @@ reference_path = "src/iop/toneequal.c"
 reference_symbol = "toneequal"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0171"]
+issue_numbers = [327]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1497,7 +1497,7 @@ reference_path = "src/iop/tonemap.cc"
 reference_symbol = "tonemap"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0178"]
+issue_numbers = [334]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1506,7 +1506,7 @@ reference_path = "src/iop/velvia.c"
 reference_symbol = "velvia"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0186"]
+issue_numbers = [342]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1515,7 +1515,7 @@ reference_path = "src/iop/vibrance.c"
 reference_symbol = "vibrance"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0185"]
+issue_numbers = [341]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1524,7 +1524,7 @@ reference_path = "src/iop/vignette.c"
 reference_symbol = "vignette"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0210"]
+issue_numbers = [368]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1533,7 +1533,7 @@ reference_path = "src/iop/watermark.c"
 reference_symbol = "watermark"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0220"]
+issue_numbers = [378]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1542,7 +1542,7 @@ reference_path = "src/iop/zonesystem.c"
 reference_symbol = "zonesystem"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0177"]
+issue_numbers = [333]
 test_evidence = ["reference-scan:iop"]
 
 [[capabilities]]
@@ -1551,7 +1551,7 @@ reference_path = "src/libs/backgroundjobs.c"
 reference_symbol = "backgroundjobs"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1560,7 +1560,7 @@ reference_path = "src/libs/camera.c"
 reference_symbol = "camera"
 category = "camera/tethering"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1569,7 +1569,7 @@ reference_path = "src/libs/collect.c"
 reference_symbol = "collect"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1578,7 +1578,7 @@ reference_path = "src/libs/tools/colorlabels.c"
 reference_symbol = "colorlabels"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1587,7 +1587,7 @@ reference_path = "src/libs/colorpicker.c"
 reference_symbol = "colorpicker"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1596,7 +1596,7 @@ reference_path = "src/libs/copy_history.c"
 reference_symbol = "copy_history"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1605,7 +1605,7 @@ reference_path = "src/libs/tools/darktable.c"
 reference_symbol = "darktable_label"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1614,7 +1614,7 @@ reference_path = "src/libs/duplicate.c"
 reference_symbol = "duplicate"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1623,7 +1623,7 @@ reference_path = "src/libs/export.c"
 reference_symbol = "export"
 category = "export/storage"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1632,7 +1632,7 @@ reference_path = "src/libs/tools/filmstrip.c"
 reference_symbol = "filmstrip"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1641,7 +1641,7 @@ reference_path = "src/libs/tools/filter.c"
 reference_symbol = "filter"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1650,7 +1650,7 @@ reference_path = "src/libs/filtering.c"
 reference_symbol = "filtering"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1659,7 +1659,7 @@ reference_path = "src/libs/tools/gamepad.c"
 reference_symbol = "gamepad"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1668,7 +1668,7 @@ reference_path = "src/libs/geotagging.c"
 reference_symbol = "geotagging"
 category = "map/geotagging"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1677,7 +1677,7 @@ reference_path = "src/libs/tools/global_toolbox.c"
 reference_symbol = "global_toolbox"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1686,7 +1686,7 @@ reference_path = "src/libs/tools/hinter.c"
 reference_symbol = "hinter"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1695,7 +1695,7 @@ reference_path = "src/libs/histogram.c"
 reference_symbol = "histogram"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1704,7 +1704,7 @@ reference_path = "src/libs/history.c"
 reference_symbol = "history"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1713,7 +1713,7 @@ reference_path = "src/libs/image.c"
 reference_symbol = "image"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1722,7 +1722,7 @@ reference_path = "src/libs/tools/image_infos.c"
 reference_symbol = "image_infos"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1731,7 +1731,7 @@ reference_path = "src/libs/import.c"
 reference_symbol = "import"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1740,7 +1740,7 @@ reference_path = "src/libs/ioporder.c"
 reference_symbol = "ioporder"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1749,7 +1749,7 @@ reference_path = "src/libs/tools/lighttable.c"
 reference_symbol = "lighttable_mode"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1758,7 +1758,7 @@ reference_path = "src/libs/live_view.c"
 reference_symbol = "live_view"
 category = "camera/tethering"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1767,7 +1767,7 @@ reference_path = "src/libs/location.c"
 reference_symbol = "location"
 category = "map/geotagging"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1776,7 +1776,7 @@ reference_path = "src/libs/tools/log_history.c"
 reference_symbol = "log_history"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1785,7 +1785,7 @@ reference_path = "src/libs/map_locations.c"
 reference_symbol = "map_locations"
 category = "map/geotagging"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1794,7 +1794,7 @@ reference_path = "src/libs/map_settings.c"
 reference_symbol = "map_settings"
 category = "map/geotagging"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1803,7 +1803,7 @@ reference_path = "src/libs/masks.c"
 reference_symbol = "masks"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1812,7 +1812,7 @@ reference_path = "src/libs/metadata.c"
 reference_symbol = "metadata"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1821,7 +1821,7 @@ reference_path = "src/libs/metadata_view.c"
 reference_symbol = "metadata_view"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1830,7 +1830,7 @@ reference_path = "src/libs/tools/midi.c"
 reference_symbol = "midi"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1839,7 +1839,7 @@ reference_path = "src/libs/tools/module_toolbox.c"
 reference_symbol = "module_toolbox"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1848,7 +1848,7 @@ reference_path = "src/libs/modulegroups.c"
 reference_symbol = "modulegroups"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1857,7 +1857,7 @@ reference_path = "src/libs/navigation.c"
 reference_symbol = "navigation"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1866,7 +1866,7 @@ reference_path = "src/libs/neural_restore.c"
 reference_symbol = "neural_restore"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1875,7 +1875,7 @@ reference_path = "src/libs/print_settings.c"
 reference_symbol = "print_settings"
 category = "printing"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1884,7 +1884,7 @@ reference_path = "src/libs/tools/ratings.c"
 reference_symbol = "ratings"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1893,7 +1893,7 @@ reference_path = "src/libs/recentcollect.c"
 reference_symbol = "recentcollect"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1902,7 +1902,7 @@ reference_path = "src/libs/select.c"
 reference_symbol = "select"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1911,7 +1911,7 @@ reference_path = "src/libs/session.c"
 reference_symbol = "session"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1920,7 +1920,7 @@ reference_path = "src/libs/snapshots.c"
 reference_symbol = "snapshots"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1929,7 +1929,7 @@ reference_path = "src/libs/styles.c"
 reference_symbol = "styles"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1938,7 +1938,7 @@ reference_path = "src/libs/tagging.c"
 reference_symbol = "tagging"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1947,7 +1947,7 @@ reference_path = "src/libs/tools/timeline.c"
 reference_symbol = "timeline"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1956,7 +1956,7 @@ reference_path = "src/libs/tools/view_toolbox.c"
 reference_symbol = "view_toolbox"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1965,7 +1965,7 @@ reference_path = "src/libs/tools/viewswitcher.c"
 reference_symbol = "viewswitcher"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:lib"]
 
 [[capabilities]]
@@ -1974,7 +1974,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "ai"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -1984,7 +1984,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "cairo"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -1994,7 +1994,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "call"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2004,7 +2004,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "configuration"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2014,7 +2014,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "database"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2024,7 +2024,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_events"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2034,7 +2034,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_format"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2044,7 +2044,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_lib"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2054,7 +2054,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_modules"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2064,7 +2064,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_storage"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2074,7 +2074,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_types"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2084,7 +2084,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "early_view"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2094,7 +2094,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "events"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2104,7 +2104,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "film"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2114,7 +2114,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "gettext"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2124,7 +2124,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "glist"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2134,7 +2134,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "gui"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2144,7 +2144,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "guides"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2154,7 +2154,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "image"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2164,7 +2164,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "init"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2174,7 +2174,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "lualib"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2184,7 +2184,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "luastorages"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2194,7 +2194,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "metadata"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2204,7 +2204,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "password"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2214,7 +2214,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "preferences"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2224,7 +2224,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "print"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2234,7 +2234,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "styles"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2244,7 +2244,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "tags"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2254,7 +2254,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "util"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2264,7 +2264,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "view"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2274,7 +2274,7 @@ reference_path = "src/lua/init.c"
 reference_symbol = "widget"
 category = "scripting"
 status = "redesigned"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:lua"]
 redesign_note = "RustTable exposes the Lua-compatible boundary through a versioned host."
 
@@ -2284,7 +2284,7 @@ reference_path = "data/kernels/agx.cl"
 reference_symbol = "agx"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2294,7 +2294,7 @@ reference_path = "data/kernels/atrous.cl"
 reference_symbol = "atrous"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2304,7 +2304,7 @@ reference_path = "data/kernels/basecurve.cl"
 reference_symbol = "basecurve"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2314,7 +2314,7 @@ reference_path = "data/kernels/basic.cl"
 reference_symbol = "basic"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2324,7 +2324,7 @@ reference_path = "data/kernels/basicadj.cl"
 reference_symbol = "basicadj"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2334,7 +2334,7 @@ reference_path = "data/kernels/bilateral.cl"
 reference_symbol = "bilateral"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2344,7 +2344,7 @@ reference_path = "data/kernels/blendop.cl"
 reference_symbol = "blendop"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2354,7 +2354,7 @@ reference_path = "data/kernels/bloom.cl"
 reference_symbol = "bloom"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2364,7 +2364,7 @@ reference_path = "data/kernels/blurs.cl"
 reference_symbol = "blurs"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2374,7 +2374,7 @@ reference_path = "data/kernels/bspline.cl"
 reference_symbol = "bspline"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2384,7 +2384,7 @@ reference_path = "data/kernels/capture.cl"
 reference_symbol = "capture"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2394,7 +2394,7 @@ reference_path = "data/kernels/channelmixer.cl"
 reference_symbol = "channelmixer"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2404,7 +2404,7 @@ reference_path = "data/kernels/colorequal.cl"
 reference_symbol = "colorequal"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2414,7 +2414,7 @@ reference_path = "data/kernels/colorharmonizer.cl"
 reference_symbol = "colorharmonizer"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2424,7 +2424,7 @@ reference_path = "data/kernels/colorreconstruction.cl"
 reference_symbol = "colorreconstruction"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2434,7 +2434,7 @@ reference_path = "data/kernels/colorspaces.cl"
 reference_symbol = "colorspaces"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2444,7 +2444,7 @@ reference_path = "data/kernels/demosaic_markesteijn.cl"
 reference_symbol = "demosaic_markesteijn"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2454,7 +2454,7 @@ reference_path = "data/kernels/demosaic_other.cl"
 reference_symbol = "demosaic_other"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2464,7 +2464,7 @@ reference_path = "data/kernels/demosaic_ppg.cl"
 reference_symbol = "demosaic_ppg"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2474,7 +2474,7 @@ reference_path = "data/kernels/demosaic_rcd.cl"
 reference_symbol = "demosaic_rcd"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2484,7 +2484,7 @@ reference_path = "data/kernels/demosaic_vng.cl"
 reference_symbol = "demosaic_vng"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2494,7 +2494,7 @@ reference_path = "data/kernels/denoiseprofile.cl"
 reference_symbol = "denoiseprofile"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2504,7 +2504,7 @@ reference_path = "data/kernels/diffuse.cl"
 reference_symbol = "diffuse"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2514,7 +2514,7 @@ reference_path = "data/kernels/dwt.cl"
 reference_symbol = "dwt"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2524,7 +2524,7 @@ reference_path = "data/kernels/extended.cl"
 reference_symbol = "extended"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2534,7 +2534,7 @@ reference_path = "data/kernels/filmic.cl"
 reference_symbol = "filmic"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2544,7 +2544,7 @@ reference_path = "data/kernels/gaussian.cl"
 reference_symbol = "gaussian"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2554,7 +2554,7 @@ reference_path = "data/kernels/guided_filter.cl"
 reference_symbol = "guided_filter"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2564,7 +2564,7 @@ reference_path = "data/kernels/hazeremoval.cl"
 reference_symbol = "hazeremoval"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2574,7 +2574,7 @@ reference_path = "data/kernels/highpass.cl"
 reference_symbol = "highpass"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2584,7 +2584,7 @@ reference_path = "data/kernels/liquify.cl"
 reference_symbol = "liquify"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2594,7 +2594,7 @@ reference_path = "data/kernels/locallaplacian.cl"
 reference_symbol = "locallaplacian"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2604,7 +2604,7 @@ reference_path = "data/kernels/lut3d.cl"
 reference_symbol = "lut3d"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2614,7 +2614,7 @@ reference_path = "data/kernels/negadoctor.cl"
 reference_symbol = "negadoctor"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2624,7 +2624,7 @@ reference_path = "data/kernels/nlmeans.cl"
 reference_symbol = "nlmeans"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2634,7 +2634,7 @@ reference_path = "data/kernels/overlay.cl"
 reference_symbol = "overlay"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2644,7 +2644,7 @@ reference_path = "data/kernels/retouch.cl"
 reference_symbol = "retouch"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2654,7 +2654,7 @@ reference_path = "data/kernels/rgbcurve.cl"
 reference_symbol = "rgbcurve"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2664,7 +2664,7 @@ reference_path = "data/kernels/rgblevels.cl"
 reference_symbol = "rgblevels"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2674,7 +2674,7 @@ reference_path = "data/kernels/sharpen.cl"
 reference_symbol = "sharpen"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2684,7 +2684,7 @@ reference_path = "data/kernels/sigmoid.cl"
 reference_symbol = "sigmoid"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2694,7 +2694,7 @@ reference_path = "data/kernels/soften.cl"
 reference_symbol = "soften"
 category = "darkroom"
 status = "redesigned"
-issue_sequences = ["0136"]
+issue_numbers = [292]
 test_evidence = ["reference-scan:opencl"]
 redesign_note = "OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback."
 
@@ -2704,7 +2704,7 @@ reference_path = "src/imageio/storage/disk.c"
 reference_symbol = "disk"
 category = "export/storage"
 status = "required"
-issue_sequences = ["0254"]
+issue_numbers = [415]
 test_evidence = ["reference-scan:storage"]
 
 [[capabilities]]
@@ -2713,7 +2713,7 @@ reference_path = "src/imageio/storage/email.c"
 reference_symbol = "email"
 category = "export/storage"
 status = "required"
-issue_sequences = ["0255"]
+issue_numbers = [416]
 test_evidence = ["reference-scan:storage"]
 
 [[capabilities]]
@@ -2722,7 +2722,7 @@ reference_path = "src/imageio/storage/gallery.c"
 reference_symbol = "gallery"
 category = "export/storage"
 status = "required"
-issue_sequences = ["0256"]
+issue_numbers = [417]
 test_evidence = ["reference-scan:storage"]
 
 [[capabilities]]
@@ -2731,7 +2731,7 @@ reference_path = "src/imageio/storage/latex.c"
 reference_symbol = "latex"
 category = "export/storage"
 status = "required"
-issue_sequences = ["0257"]
+issue_numbers = [418]
 test_evidence = ["reference-scan:storage"]
 
 [[capabilities]]
@@ -2740,7 +2740,7 @@ reference_path = "src/imageio/storage/piwigo.c"
 reference_symbol = "piwigo"
 category = "export/storage"
 status = "required"
-issue_sequences = ["0256"]
+issue_numbers = [417]
 test_evidence = ["reference-scan:storage"]
 
 [[capabilities]]
@@ -2749,7 +2749,7 @@ reference_path = "src/views/darkroom.c"
 reference_symbol = "darkroom"
 category = "darkroom"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:view"]
 
 [[capabilities]]
@@ -2758,7 +2758,7 @@ reference_path = "src/views/lighttable.c"
 reference_symbol = "lighttable"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:view"]
 
 [[capabilities]]
@@ -2767,7 +2767,7 @@ reference_path = "src/views/map.c"
 reference_symbol = "map"
 category = "map/geotagging"
 status = "required"
-issue_sequences = ["0060"]
+issue_numbers = [216]
 test_evidence = ["reference-scan:view"]
 
 [[capabilities]]
@@ -2776,7 +2776,7 @@ reference_path = "src/views/print.c"
 reference_symbol = "print"
 category = "printing"
 status = "required"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:view"]
 
 [[capabilities]]
@@ -2785,7 +2785,7 @@ reference_path = "src/views/slideshow.c"
 reference_symbol = "slideshow"
 category = "catalog/library"
 status = "required"
-issue_sequences = ["0057"]
+issue_numbers = [213]
 test_evidence = ["reference-scan:view"]
 
 [[capabilities]]
@@ -2794,7 +2794,7 @@ reference_path = "src/views/tethering.c"
 reference_symbol = "tethering"
 category = "camera/tethering"
 status = "required"
-issue_sequences = ["0035"]
+issue_numbers = [191]
 test_evidence = ["reference-scan:view"]
 
 [[summary]]
@@ -2824,7 +2824,15 @@ unsupported = 0
 [[summary]]
 phase = "processing"
 milestone = "5"
-capability_count = 144
-required = 102
+capability_count = 140
+required = 98
 redesigned = 42
+unsupported = 0
+
+[[summary]]
+phase = "release"
+milestone = "6"
+capability_count = 4
+required = 4
+redesigned = 0
 unsupported = 0

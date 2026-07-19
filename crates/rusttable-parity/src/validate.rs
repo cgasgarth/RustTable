@@ -4,8 +4,6 @@ use crate::model::{Capability, Manifest, SummaryGroup};
 use crate::scan::ScanError;
 
 const VALID_STATUSES: &[&str] = &["required", "redesigned", "unsupported"];
-const LAST_ISSUE_SEQUENCE: u16 = 257;
-
 /// Parses a normalized capability manifest.
 ///
 /// # Errors
@@ -39,7 +37,7 @@ pub fn render_manifest(manifest: &Manifest) -> Result<String, ScanError> {
     Ok(rendered)
 }
 
-/// Checks IDs, statuses, issue sequences, evidence, and deterministic summary.
+/// Checks IDs, statuses, issue ownership numbers, evidence, and deterministic summary.
 ///
 /// # Errors
 ///
@@ -55,7 +53,7 @@ pub fn validate_manifest(manifest: &Manifest) -> Result<(), ScanError> {
         validate_capability_fields(
             &capability.id,
             &capability.status,
-            &capability.issue_sequences,
+            &capability.issue_numbers,
         )?;
         if capability.reference_path.trim().is_empty() {
             return Err(ScanError::InvalidManifest {
@@ -96,7 +94,7 @@ pub fn validate_manifest(manifest: &Manifest) -> Result<(), ScanError> {
 pub(crate) fn validate_capability_fields(
     id: &str,
     status: &str,
-    issue_sequences: &[String],
+    issue_numbers: &[u64],
 ) -> Result<(), ScanError> {
     if !VALID_STATUSES.contains(&status) {
         return Err(ScanError::InvalidStatus {
@@ -104,21 +102,16 @@ pub(crate) fn validate_capability_fields(
             id: id.to_owned(),
         });
     }
-    if issue_sequences.is_empty() {
+    if issue_numbers.is_empty() {
         return Err(ScanError::InvalidOverride {
             id: id.to_owned(),
-            message: "at least one issue sequence is required".to_owned(),
+            message: "at least one GitHub issue number is required".to_owned(),
         });
     }
-    for sequence in issue_sequences {
-        let valid_shape =
-            sequence.len() == 4 && sequence.chars().all(|character| character.is_ascii_digit());
-        let valid_range = sequence
-            .parse::<u16>()
-            .is_ok_and(|number| (1..=LAST_ISSUE_SEQUENCE).contains(&number));
-        if !valid_shape || !valid_range {
-            return Err(ScanError::StaleIssueSequence {
-                sequence: sequence.clone(),
+    for number in issue_numbers {
+        if *number == 0 {
+            return Err(ScanError::InvalidIssueNumber {
+                number: *number,
                 id: id.to_owned(),
             });
         }
@@ -129,12 +122,11 @@ pub(crate) fn validate_capability_fields(
 pub(crate) fn summary_for(capabilities: &[Capability]) -> Vec<SummaryGroup> {
     let mut groups = BTreeMap::<(String, String), SummaryGroup>::new();
     for capability in capabilities {
-        let sequence = capability
-            .issue_sequences
-            .first()
-            .and_then(|value| value.parse::<u16>().ok())
-            .unwrap_or(1);
-        let key = (phase(sequence).to_owned(), milestone(sequence).to_owned());
+        let issue_number = capability.issue_numbers.first().copied().unwrap_or(159);
+        let key = (
+            phase(issue_number).to_owned(),
+            milestone(issue_number).to_owned(),
+        );
         let group = groups.entry(key.clone()).or_insert_with(|| SummaryGroup {
             phase: key.0.clone(),
             milestone: key.1.clone(),
@@ -160,24 +152,24 @@ pub(crate) fn summary_for(capabilities: &[Capability]) -> Vec<SummaryGroup> {
     summary
 }
 
-fn phase(sequence: u16) -> &'static str {
-    match sequence {
-        1..=25 => "foundation",
-        26..=65 => "compatibility",
-        66..=100 => "image",
-        101..=265 => "processing",
-        266..=300 => "product-ui",
+fn phase(issue_number: u64) -> &'static str {
+    match issue_number {
+        159..=183 => "foundation",
+        184..=221 => "compatibility",
+        222..=256 => "image",
+        257..=415 => "processing",
+        420..=422 => "product-ui",
         _ => "release",
     }
 }
 
-fn milestone(sequence: u16) -> &'static str {
-    match sequence {
-        1..=25 => "1",
-        26..=65 => "3",
-        66..=100 => "4",
-        101..=265 => "5",
-        266..=300 => "2",
+fn milestone(issue_number: u64) -> &'static str {
+    match issue_number {
+        159..=183 => "1",
+        184..=221 => "3",
+        222..=256 => "4",
+        257..=415 => "5",
+        420..=422 => "2",
         _ => "6",
     }
 }

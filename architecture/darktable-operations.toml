@@ -58,7 +58,7 @@ preset_sources = [
     "// make sure a double-click sets it to 100%, overriding preset defaults",
     "// sigmoid'd scene-referred defaults and those used by its 'smooth' preset,",
 ]
-owning_issue = "0181"
+owning_issue_number = 337
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -190,7 +190,7 @@ opencl_kernels = [
     "ashift_lanczos3",
 ]
 preset_sources = []
-owning_issue = "0229"
+owning_issue_number = 387
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -296,7 +296,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("denoise"), self->op,',
     'dt_gui_presets_add_generic(_("bloom"), self->op,',
 ]
-owning_issue = "0155"
+owning_issue_number = 311
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -374,7 +374,7 @@ preset_sources = [
     "static const basecurve_preset_t basecurve_presets[] = {",
     "static const int basecurve_presets_cnt = sizeof(basecurve_presets) / sizeof(basecurve_preset_t);",
 ]
-owning_issue = "0174"
+owning_issue_number = 330
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -481,7 +481,7 @@ cpu_implementation = "process"
 opencl_programs = ["basicadj"]
 opencl_kernels = ["basicadj"]
 preset_sources = []
-owning_issue = "0165"
+owning_issue_number = 321
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -537,7 +537,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("clarity"), self->op,',
     'dt_gui_presets_add_generic(_("HDR local tone-mapping"), self->op,',
 ]
-owning_issue = "0160"
+owning_issue_number = 316
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -602,7 +602,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0161"
+owning_issue_number = 317
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -644,7 +644,7 @@ opencl_kernels = [
 ]
 migrations = []
 preset_sources = []
-owning_issue = "0213"
+owning_issue_number = 371
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -686,7 +686,7 @@ opencl_kernels = [
 ]
 migrations = []
 preset_sources = []
-owning_issue = "0162"
+owning_issue_number = 318
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -729,7 +729,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("15:10 postcard white"), self->op,',
     'dt_gui_presets_add_generic(_("15:10 postcard black"), self->op,',
 ]
-owning_issue = "0219"
+owning_issue_number = 377
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -806,7 +806,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = []
-owning_issue = "0149"
+owning_issue_number = 305
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -857,7 +857,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0149"
+owning_issue_number = 305
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -894,7 +894,7 @@ opencl_programs = ["gaussian"]
 opencl_kernels = ["lowpass_mix"]
 migrations = []
 preset_sources = ['#include "gui/presets.h"']
-owning_issue = "0235"
+owning_issue_number = 395
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -941,7 +941,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("color details boost"), self->op, self->version(),',
     'dt_gui_presets_add_generic(_("color artifacts boost"), self->op, self->version(),',
 ]
-owning_issue = "0197"
+owning_issue_number = 353
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1009,7 +1009,7 @@ preset_sources = [
     "// Create B&W presets",
     'dt_gui_presets_add_generic(_("monochrome | luminance-based"), self->op,',
 ]
-owning_issue = "0196"
+owning_issue_number = 352
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1074,7 +1074,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0235"
+owning_issue_number = 395
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -1129,7 +1129,7 @@ preset_sources = [
     "dt_bauhaus_combobox_set(g->aspect_presets, act);",
     "/* reset aspect preset to default */",
 ]
-owning_issue = "0235"
+owning_issue_number = 395
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1224,7 +1224,7 @@ opencl_programs = ["basic"]
 opencl_kernels = ["colisa"]
 migrations = []
 preset_sources = ['#include "gui/presets.h"']
-owning_issue = "0191"
+owning_issue_number = 347
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1273,7 +1273,7 @@ preset_sources = [
     'add_preset(self, N_("generic film"),',
     'add_preset(self, N_("similar to Kodak Portra"),',
 ]
-owning_issue = "0190"
+owning_issue_number = 346
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1346,7 +1346,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("basic colorfulness | vibrant colors"), self->op, self->version(), &p, sizeof(p), TRUE, DEVELOP_BLEND_CS_RGB_SCENE);',
     'dt_gui_presets_add_generic(_("basic colorfulness | standard"), self->op, self->version(), &p, sizeof(p), TRUE, DEVELOP_BLEND_CS_RGB_SCENE);',
 ]
-owning_issue = "0189"
+owning_issue_number = 345
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1447,7 +1447,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("Fuji Classic Chrome emulation"), self->op,',
     'dt_gui_presets_add_generic(_("Fuji Monochrome emulation"), self->op,',
 ]
-owning_issue = "0202"
+owning_issue_number = 358
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1498,7 +1498,7 @@ cpu_implementation = "process"
 opencl_programs = ["extended"]
 opencl_kernels = ["colorcontrast"]
 preset_sources = []
-owning_issue = "0188"
+owning_issue_number = 344
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1556,7 +1556,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("warming filter"), self->op,',
     'dt_gui_presets_add_generic(_("cooling filter"), self->op,',
 ]
-owning_issue = "0195"
+owning_issue_number = 351
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1617,7 +1617,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("Kodak Portra 400 like"), self->op,',
     'dt_gui_presets_add_generic(_("teal & orange"), self->op,',
 ]
-owning_issue = "0187"
+owning_issue_number = 343
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1698,7 +1698,7 @@ opencl_kernels = [
 ]
 migrations = []
 preset_sources = []
-owning_issue = "0203"
+owning_issue_number = 359
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1737,7 +1737,7 @@ opencl_kernels = [
     "colorin_unbound",
 ]
 preset_sources = []
-owning_issue = "0193"
+owning_issue_number = 349
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1858,7 +1858,7 @@ cpu_implementation = "process"
 opencl_programs = ["extended"]
 opencl_kernels = ["colorize"]
 preset_sources = []
-owning_issue = "0201"
+owning_issue_number = 357
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1915,7 +1915,7 @@ preset_sources = [
     "* - right click store as preset",
     "* - right click and apply the preset",
 ]
-owning_issue = "0199"
+owning_issue_number = 355
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -1952,7 +1952,7 @@ cpu_implementation = "process"
 opencl_programs = ["basic"]
 opencl_kernels = ["colorout"]
 preset_sources = []
-owning_issue = "0192"
+owning_issue_number = 348
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -2052,7 +2052,7 @@ opencl_kernels = [
     "colorreconstruction_zero",
 ]
 preset_sources = ['#include "gui/presets.h"']
-owning_issue = "0206"
+owning_issue_number = 364
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -2122,7 +2122,7 @@ preset_sources = [
     "* - right click and apply the preset",
     "// same as params. (need duplicate because database table preset contains params_t)",
 ]
-owning_issue = "0200"
+owning_issue_number = 356
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -2171,7 +2171,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("B&W: film"), self->op,',
     "// neutral preset with just a set of nodes uniformly distributed along the hue axis",
 ]
-owning_issue = "0204"
+owning_issue_number = 360
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -2277,7 +2277,7 @@ preset_sources = [
     "dt_bauhaus_combobox_set(g->aspect_presets, act);",
     "/* reset aspect preset to default */",
 ]
-owning_issue = "0223"
+owning_issue_number = 381
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -2342,7 +2342,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0235"
+owning_issue_number = 395
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -2444,7 +2444,7 @@ preset_sources = [
     '"Note: a threshold set to zero will be reset to defaults the next run. use for presets"));',
     "DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_PRESET_APPLIED, _preset_applied_callback);",
 ]
-owning_issue = "0147"
+owning_issue_number = 303
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -2573,7 +2573,7 @@ preset_sources = [
     "void init_presets(dt_iop_module_so_t *self)",
     'dt_gui_presets_add_generic(_("wavelets: chroma only"), self->op, 12, &p,',
 ]
-owning_issue = "0151"
+owning_issue_number = 307
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -2783,7 +2783,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("dehaze | default"), self->op, self->version(),',
     'dt_gui_presets_add_generic(_("dehaze | extra contrast"), self->op, self->version(),',
 ]
-owning_issue = "0163"
+owning_issue_number = 319
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -2838,7 +2838,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("dither"), self->op,',
     '// dt_gui_presets_update_autoapply(BUILTIN_PRESET("dither"), self->op, self->version(), 1);',
 ]
-owning_issue = "0218"
+owning_issue_number = 376
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -2889,7 +2889,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0228"
+owning_issue_number = 386
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -2928,7 +2928,7 @@ preset_sources = [
     '#include "gui/presets.h"',
     "GtkComboBox *presets;",
 ]
-owning_issue = "0156"
+owning_issue_number = 312
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -2973,7 +2973,7 @@ preset_sources = [
     'dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,',
     'dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),',
 ]
-owning_issue = "0164"
+owning_issue_number = 320
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3104,7 +3104,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("13 EV (bright outdoors)"), self->op,',
     'dt_gui_presets_add_generic(_("14 EV (backlighting)"), self->op,',
 ]
-owning_issue = "0173"
+owning_issue_number = 329
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3192,7 +3192,7 @@ preset_sources = [
     'dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,',
     'dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),',
 ]
-owning_issue = "0172"
+owning_issue_number = 328
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3303,7 +3303,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0227"
+owning_issue_number = 385
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -3351,7 +3351,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("flip horizontally"), self->op,',
     'dt_gui_presets_add_generic(_("flip vertically"), self->op,',
 ]
-owning_issue = "0224"
+owning_issue_number = 382
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3405,7 +3405,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0168"
+owning_issue_number = 324
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -3449,7 +3449,7 @@ opencl_kernels = [
     "pixelmax_second",
 ]
 preset_sources = []
-owning_issue = "0179"
+owning_issue_number = 335
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3528,7 +3528,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("neutral gray | ND4 (hard)"), self->op, self->version(),',
     'dt_gui_presets_add_generic(_("neutral gray | ND8 (hard)"), self->op, self->version(),',
 ]
-owning_issue = "0211"
+owning_issue_number = 369
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3564,7 +3564,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = []
-owning_issue = "0212"
+owning_issue_number = 370
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -3621,7 +3621,7 @@ opencl_kernels = [
     "hazeremoval_transision_map",
 ]
 preset_sources = []
-owning_issue = "0154"
+owning_issue_number = 310
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3712,7 +3712,7 @@ preset_sources = [
     "- copied as part of the history of another pic or by preset / style or",
     "// we might be called from presets update infrastructure => there is no image",
 ]
-owning_issue = "0205"
+owning_issue_number = 363
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3797,7 +3797,7 @@ opencl_kernels = [
 ]
 migrations = []
 preset_sources = []
-owning_issue = "0158"
+owning_issue_number = 314
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3834,7 +3834,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0150"
+owning_issue_number = 306
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -3873,7 +3873,7 @@ opencl_kernels = [
     "invert_4f",
 ]
 preset_sources = []
-owning_issue = "0235"
+owning_issue_number = 395
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -3937,7 +3937,7 @@ preset_sources = [
     "* method that must be kept for presets and mass-export",
     "* method that must be kept for presets and mass-export",
 ]
-owning_issue = "0230"
+owning_issue_number = 388
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4105,7 +4105,7 @@ preset_sources = [
     "//  p.levels_preset = 0;",
     '//  dt_gui_presets_add_generic(_("unmodified"), self->op, self->version(), &p, sizeof(p), 1);',
 ]
-owning_issue = "0170"
+owning_issue_number = 326
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4155,7 +4155,7 @@ opencl_programs = ["liquify"]
 opencl_kernels = ["warp_kernel"]
 migrations = []
 preset_sources = []
-owning_issue = "0231"
+owning_issue_number = 389
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4202,7 +4202,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("twilight"), self->op,',
     'dt_gui_presets_add_generic(_("night street lit"), self->op,',
 ]
-owning_issue = "0166"
+owning_issue_number = 322
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4243,7 +4243,7 @@ preset_sources = [
     "void init_presets(dt_iop_module_so_t *self)",
     'dt_gui_presets_add_generic(_("local contrast mask"), self->op, self->version(),',
 ]
-owning_issue = "0159"
+owning_issue_number = 315
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4329,7 +4329,7 @@ opencl_kernels = [
     "lut3d_trilinear",
 ]
 preset_sources = []
-owning_issue = "0198"
+owning_issue_number = 354
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4394,7 +4394,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = []
-owning_issue = "0234"
+owning_issue_number = 393
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -4455,7 +4455,7 @@ preset_sources = [
     '// dt_gui_presets_add_generic(_("blue filter"), self->op, self->version(), &p, sizeof(p), 1);',
     '// dt_gui_presets_add_generic(_("green filter"), self->op, self->version(), &p, sizeof(p), 1);',
 ]
-owning_issue = "0184"
+owning_issue_number = 340
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4511,7 +4511,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("color film"), self->op,',
     'dt_gui_presets_add_generic(_("black and white film"), self->op,',
 ]
-owning_issue = "0182"
+owning_issue_number = 338
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4568,7 +4568,7 @@ opencl_kernels = [
     "nlmeans_vert",
 ]
 preset_sources = []
-owning_issue = "0153"
+owning_issue_number = 309
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4621,7 +4621,7 @@ opencl_programs = ["basic"]
 opencl_kernels = ["overexposed"]
 migrations = []
 preset_sources = []
-owning_issue = "0208"
+owning_issue_number = 366
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4658,7 +4658,7 @@ opencl_programs = ["overlay"]
 opencl_kernels = ["overlay_blend"]
 migrations = []
 preset_sources = []
-owning_issue = "0235"
+owning_issue_number = 395
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4695,7 +4695,7 @@ opencl_programs = ["extended"]
 opencl_kernels = ["primaries"]
 migrations = []
 preset_sources = []
-owning_issue = "0194"
+owning_issue_number = 350
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4745,7 +4745,7 @@ preset_sources = [
     "// 12 EV preset",
     'dt_gui_presets_add_generic(_("12 EV dynamic range (generic)"), self->op,',
 ]
-owning_issue = "0167"
+owning_issue_number = 323
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4794,7 +4794,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = ["// we might be called from presets update infrastructure => there is"]
-owning_issue = "0209"
+owning_issue_number = 367
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -4835,7 +4835,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = []
-owning_issue = "0152"
+owning_issue_number = 308
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -4892,7 +4892,7 @@ opencl_kernels = [
 ]
 migrations = []
 preset_sources = []
-owning_issue = "0207"
+owning_issue_number = 365
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -4942,7 +4942,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("passthrough"), self->op, self->version(),',
     '_("please reset to defaults, update your preset or set to something correct"),',
 ]
-owning_issue = "0146"
+owning_issue_number = 302
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5000,7 +5000,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("fill-light 0.25EV with 4 zones"), self->op, self->version(),',
     'dt_gui_presets_add_generic(_("fill-shadow -0.25EV with 4 zones"), self->op, self->version(),',
 ]
-owning_issue = "0216"
+owning_issue_number = 374
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5047,7 +5047,7 @@ opencl_kernels = [
     "retouch_image_rgb2lab",
 ]
 preset_sources = []
-owning_issue = "0233"
+owning_issue_number = 392
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5121,7 +5121,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("contrast | high (linear)"), self->op,',
     'dt_gui_presets_add_generic(_("contrast | medium (gamma 2.2)"), self->op,',
 ]
-owning_issue = "0175"
+owning_issue_number = 331
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5157,7 +5157,7 @@ opencl_programs = ["rgblevels"]
 opencl_kernels = ["rgblevels"]
 migrations = []
 preset_sources = []
-owning_issue = "0169"
+owning_issue_number = 325
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5197,7 +5197,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0225"
+owning_issue_number = 383
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -5236,7 +5236,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0226"
+owning_issue_number = 384
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -5273,7 +5273,7 @@ cpu_implementation = "process"
 opencl_programs = ["gaussian"]
 opencl_kernels = ["shadows_highlights_mix"]
 preset_sources = ['#include "gui/presets.h"']
-owning_issue = "0215"
+owning_issue_number = 373
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5376,7 +5376,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("sharpen"), self->op,',
     'dt_gui_presets_update_format(BUILTIN_PRESET("sharpen"), self->op,',
 ]
-owning_issue = "0157"
+owning_issue_number = 313
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5424,7 +5424,7 @@ preset_sources = [
     'dt_gui_presets_add_generic(_("neutral gray"), self->op,',
     'dt_gui_presets_add_generic(_("ACES 100-nit like"), self->op,',
 ]
-owning_issue = "0180"
+owning_issue_number = 336
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5495,7 +5495,7 @@ opencl_kernels = [
 ]
 migrations = []
 preset_sources = []
-owning_issue = "0214"
+owning_issue_number = 372
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5540,7 +5540,7 @@ preset_sources = [
     "dt_gui_presets_add_generic(",
     "dt_gui_presets_add_generic(",
 ]
-owning_issue = "0183"
+owning_issue_number = 339
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5577,7 +5577,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = []
-owning_issue = "0232"
+owning_issue_number = 391
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -5641,7 +5641,7 @@ preset_sources = [
     "int preset_num[54];",
     "int preset;",
 ]
-owning_issue = "0148"
+owning_issue_number = 304
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5728,7 +5728,7 @@ preset_sources = [
     "n->tonecurve_preset = o->tonecurve_preset;",
     "int tonecurve_preset;",
 ]
-owning_issue = "0176"
+owning_issue_number = 332
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5829,7 +5829,7 @@ preset_sources = [
     "dt_gui_presets_add_generic",
     "dt_gui_presets_add_generic",
 ]
-owning_issue = "0171"
+owning_issue_number = 327
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -5880,7 +5880,7 @@ opencl_programs = []
 opencl_kernels = []
 migrations = []
 preset_sources = []
-owning_issue = "0178"
+owning_issue_number = 334
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -5917,7 +5917,7 @@ cpu_implementation = "process"
 opencl_programs = ["extended"]
 opencl_kernels = ["velvia"]
 preset_sources = []
-owning_issue = "0186"
+owning_issue_number = 342
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -5969,7 +5969,7 @@ cpu_implementation = "process"
 opencl_programs = ["extended"]
 opencl_kernels = ["vibrance"]
 preset_sources = []
-owning_issue = "0185"
+owning_issue_number = 341
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -6025,7 +6025,7 @@ preset_sources = [
     "void init_presets(dt_iop_module_so_t *self)",
     'dt_gui_presets_add_generic(_("lomo"), self->op,',
 ]
-owning_issue = "0210"
+owning_issue_number = 368
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
@@ -6103,7 +6103,7 @@ cpu_implementation = "process"
 opencl_programs = []
 opencl_kernels = []
 preset_sources = []
-owning_issue = "0220"
+owning_issue_number = 378
 tolerance_class = "Pointwise"
 
 [[operations.parameter_versions]]
@@ -6227,7 +6227,7 @@ opencl_programs = ["basic"]
 opencl_kernels = ["zonesystem"]
 migrations = []
 preset_sources = ['#include "gui/presets.h"']
-owning_issue = "0177"
+owning_issue_number = 333
 tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]

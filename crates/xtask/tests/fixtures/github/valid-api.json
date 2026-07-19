@@ -2,9 +2,14 @@
   "issue": {
     "number": 171,
     "state": "open",
-    "title": "[0015] Enforce one numbered open issue per pull request",
+    "title": "Enforce one open issue per pull request",
     "body": "Parent: #158\n\nIssue contract.",
+    "labels": [
+      { "name": "enhancement" },
+      { "name": "priority: P0" }
+    ],
     "milestone": {
+      "number": 1,
       "title": "Foundation & Developer Workflow"
     },
     "repository": {

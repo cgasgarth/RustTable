@@ -91,33 +91,33 @@ fn unregistered_opencl_programs_fail_closed() {
 }
 
 #[test]
-fn invalid_status_and_stale_sequence_are_rejected() {
+fn invalid_status_and_zero_issue_number_are_rejected() {
     let fixture = Fixture::new();
-    let invalid_status = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"deferred\"\nissue_sequences = [\"0004\"]\nreason = \"test\"\n";
+    let invalid_status = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"deferred\"\nissue_numbers = [160]\nreason = \"test\"\n";
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, invalid_status),
         Err(ScanError::InvalidStatus { value, .. }) if value == "deferred"
     ));
 
-    let stale = invalid_status
+    let invalid = invalid_status
         .replace("deferred", "required")
-        .replace("0004", "9999");
+        .replace("160", "0");
     assert!(matches!(
-        scan_darktable_with_overrides(&fixture.root, &stale),
-        Err(ScanError::StaleIssueSequence { sequence, .. }) if sequence == "9999"
+        scan_darktable_with_overrides(&fixture.root, &invalid),
+        Err(ScanError::InvalidIssueNumber { number, .. }) if number == 0
     ));
 }
 
 #[test]
 fn duplicate_ids_and_masking_overrides_are_rejected() {
     let fixture = Fixture::new();
-    let duplicate = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_sequences = [\"0004\"]\nreason = \"one\"\n[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/collection.c\"\nstatus = \"required\"\nissue_sequences = [\"0004\"]\nreason = \"two\"\n";
+    let duplicate = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_numbers = [160]\nreason = \"one\"\n[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/collection.c\"\nstatus = \"required\"\nissue_numbers = [160]\nreason = \"two\"\n";
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, duplicate),
         Err(ScanError::DuplicateCapabilityId { id }) if id == "domain.extra"
     ));
 
-    let masking = "[[override]]\nid = \"iop.rawprepare\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_sequences = [\"0004\"]\nreason = \"mask\"\n";
+    let masking = "[[override]]\nid = \"iop.rawprepare\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_numbers = [160]\nreason = \"mask\"\n";
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, masking),
         Err(ScanError::MaskingOverride { id }) if id == "iop.rawprepare"
@@ -126,7 +126,7 @@ fn duplicate_ids_and_masking_overrides_are_rejected() {
 
 #[test]
 fn manifest_validation_rejects_unknown_status_after_toml_parse() {
-    let manifest = "schema_version = 1\nsource_commit = \"fixture\"\n\n[[capabilities]]\nid = \"iop.rawprepare\"\nreference_path = \"src/iop/rawprepare.c\"\nreference_symbol = \"rawprepare\"\ncategory = \"darkroom\"\nstatus = \"unknown\"\nissue_sequences = [\"0004\"]\ntest_evidence = [\"unit\"]\n";
+    let manifest = "schema_version = 1\nsource_commit = \"fixture\"\n\n[[capabilities]]\nid = \"iop.rawprepare\"\nreference_path = \"src/iop/rawprepare.c\"\nreference_symbol = \"rawprepare\"\ncategory = \"darkroom\"\nstatus = \"unknown\"\nissue_numbers = [160]\ntest_evidence = [\"unit\"]\n";
     let parsed = parse_manifest(manifest).unwrap();
     assert!(matches!(
         validate_manifest(&parsed),
@@ -220,7 +220,7 @@ impl Fixture {
     }
 
     fn overrides() -> &'static str {
-        "[[override]]\nid = \"domain.catalog\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_sequences = [\"0057\"]\ntest_evidence = [\"fixture\"]\nreason = \"cross-cutting\"\n"
+        "[[override]]\nid = \"domain.catalog\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_numbers = [213]\ntest_evidence = [\"fixture\"]\nreason = \"cross-cutting\"\n"
     }
 }
 

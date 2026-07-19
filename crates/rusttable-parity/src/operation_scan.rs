@@ -100,11 +100,7 @@ fn extract_operation(
         "LegacyGpu".to_owned()
     };
     let opencl_kernels = opencl_kernels(content);
-    let issue = iop_issue(name)
-        .first()
-        .copied()
-        .unwrap_or("0235")
-        .to_owned();
+    let issue = iop_issue(name).first().copied().unwrap_or(395);
     Operation {
         name: name.to_owned(),
         reference_path: relative.to_owned(),
@@ -135,7 +131,7 @@ fn extract_operation(
         parameter_versions: versions,
         migrations,
         preset_sources: preset_sources(content),
-        owning_issue: issue,
+        owning_issue_number: issue,
         tolerance_class,
     }
 }
@@ -481,8 +477,8 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     if let Some(value) = &entry.preset_sources {
         operation.preset_sources.clone_from(value);
     }
-    if let Some(value) = &entry.owning_issue {
-        operation.owning_issue.clone_from(value);
+    if let Some(value) = entry.owning_issue_number {
+        operation.owning_issue_number = value;
     }
     if let Some(value) = &entry.tolerance_class {
         operation.tolerance_class.clone_from(value);

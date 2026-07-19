@@ -112,3 +112,36 @@ fn github_pr_contract_fixture_runs_without_network_access() {
     assert_eq!(value["command"], "github.verify-pr-contract");
     assert_eq!(value["data"]["issue"], 171);
 }
+
+#[test]
+fn github_queue_fixture_emits_a_deterministic_receipt() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "github",
+            "verify-queue",
+            "--api-fixture",
+            "crates/xtask/tests/fixtures/github/queue-valid.json",
+            "--format",
+            "json",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(value["command"], "github.verify-queue");
+    assert_eq!(value["data"]["selected_issue"], 446);
+    assert_eq!(value["data"]["issues"][1]["ready"], false);
+    assert_eq!(
+        value["data"]["issues"][1]["blocking_reason"],
+        "depends on open #446"
+    );
+}
