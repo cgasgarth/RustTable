@@ -8,13 +8,13 @@ set -euo pipefail
 export CARGO_INCREMENTAL=0
 export CARGO_PROFILE_DEV_DEBUG=0
 export CARGO_PROFILE_TEST_DEBUG=0
-# The GitHub Linux runner has multiple cores; keep an eight-job floor because
+# The GitHub Linux runner has multiple cores; keep a sixteen-job floor because
 # ubuntu-latest can report only a small number of schedulable CPUs while the
 # cold Wasmtime test lane is compiling. An explicit caller override remains
 # authoritative.
 reported_jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
-if [[ "$reported_jobs" =~ ^[0-9]+$ ]] && (( reported_jobs < 8 )); then
-  reported_jobs=8
+if [[ "$reported_jobs" =~ ^[0-9]+$ ]] && (( reported_jobs < 16 )); then
+  reported_jobs=16
 fi
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$reported_jobs}"
 
