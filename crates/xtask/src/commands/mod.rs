@@ -7,6 +7,7 @@ mod ecosystem;
 mod extension_conformance;
 mod files;
 mod fixtures;
+mod foundation;
 mod github;
 mod github_reconciliation;
 mod issue_spec;
@@ -59,6 +60,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
             },
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
+        Command::Foundation { command } => foundation::run(&root, command, &runner),
         Command::ExtensionConformance(arguments) => extension_conformance::run(&root, arguments),
         Command::TemplateMatrix(args) => template_matrix::run(&root, args),
         Command::UiShell(args) => ui_shell::run(&root, args),
