@@ -59,13 +59,8 @@ run_with_budget() {
 
 terminate_process_tree() {
   local process_id="$1"
-  local child_id
-  local child_ids
-
-  child_ids="$(pgrep -P "$process_id" 2>/dev/null || true)"
-  for child_id in $child_ids; do
-    terminate_process_tree "$child_id"
-  done
+  # The Rust process service owns process groups/jobs. This shell fallback only
+  # terminates the wrapper child; it deliberately does not discover processes.
   kill -TERM "$process_id" 2>/dev/null || true
 }
 

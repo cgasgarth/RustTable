@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 flate2.workspace = true
+process-wrap = { version = "=9.1.0", default-features = false, features = ["std", "process-session", "job-object", "creation-flags", "kill-on-drop"] }
 serde.workspace = true
 sha2.workspace = true
 serde_json.workspace = true

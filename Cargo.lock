@@ -3228,6 +3228,7 @@ name = "rusttable-testkit"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "process-wrap",
  "serde",
  "serde_json",
  "sha2",

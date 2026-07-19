@@ -3,12 +3,18 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use process_wrap::std::ChildWrapper;
+use process_wrap::std::CommandWrap;
+#[cfg(windows)]
+use process_wrap::std::JobObject;
+#[cfg(unix)]
+use process_wrap::std::ProcessSession;
 use sha2::{Digest, Sha256};
 
 use super::identity::{ReferenceIdentity, isolation_arguments};
@@ -103,11 +109,11 @@ impl ReferenceRunner {
         )?;
         let (tx, rx) = mpsc::channel();
         let stdout = child
-            .stdout
+            .stdout()
             .take()
             .ok_or(ReferenceError::MissingPipe("stdout"))?;
         let stderr = child
-            .stderr
+            .stderr()
             .take()
             .ok_or(ReferenceError::MissingPipe("stderr"))?;
         let stdout_thread = spawn_reader(
@@ -151,7 +157,7 @@ impl ReferenceRunner {
             }
         }
         if reason.is_some() {
-            terminate_process_tree(&mut child);
+            terminate_process_tree(child.as_mut());
         }
         collect_until_done(&rx, &mut streams, &mut reason);
         stdout_thread
@@ -333,29 +339,35 @@ fn spawn(
     environment: &TempEnvironment,
     arguments: &[String],
     output: &Path,
-) -> Result<Child, ReferenceError> {
-    let mut command = Command::new(&identity.executable);
-    command
-        .env_clear()
-        .env("PATH", "/usr/bin:/bin")
-        .env("HOME", &environment.home)
-        .env("XDG_CONFIG_HOME", &environment.config)
-        .env("XDG_CACHE_HOME", &environment.cache)
-        .env("XDG_DATA_HOME", &environment.data)
-        .env("RUSTTABLE_OPENCL_CACHE", &environment.opencl)
-        .env(
-            "RUSTTABLE_REFERENCE_CONFIG",
-            request.config_path.as_deref().unwrap_or(Path::new("")),
-        )
-        .env("RUSTTABLE_REFERENCE_OUTPUT", output)
-        .env("RUSTTABLE_REFERENCE_ROOT", &environment.root)
-        .env("LC_ALL", "C")
-        .env("LANG", "C")
-        .env("TZ", "UTC")
-        .current_dir(&environment.root)
-        .args(arguments)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+) -> Result<Box<dyn ChildWrapper>, ReferenceError> {
+    let mut command = CommandWrap::with_new(&identity.executable, |command| {
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", &environment.home)
+            .env("XDG_CONFIG_HOME", &environment.config)
+            .env("XDG_CACHE_HOME", &environment.cache)
+            .env("XDG_DATA_HOME", &environment.data)
+            .env("RUSTTABLE_OPENCL_CACHE", &environment.opencl)
+            .env(
+                "RUSTTABLE_REFERENCE_CONFIG",
+                request.config_path.as_deref().unwrap_or(Path::new("")),
+            )
+            .env("RUSTTABLE_REFERENCE_OUTPUT", output)
+            .env("RUSTTABLE_REFERENCE_ROOT", &environment.root)
+            .env("LC_ALL", "C")
+            .env("LANG", "C")
+            .env("TZ", "UTC")
+            .current_dir(&environment.root)
+            .args(arguments)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+    });
+    #[cfg(unix)]
+    command.wrap(ProcessSession);
+    #[cfg(windows)]
+    command.wrap(JobObject);
     command.spawn().map_err(|error| ReferenceError::Spawn {
         path: identity.executable.clone(),
         message: error.to_string(),
@@ -493,51 +505,19 @@ fn read_output(path: &Path, limit: u64) -> Result<Vec<u8>, ReferenceError> {
     })
 }
 
-fn terminate_process_tree(child: &mut Child) {
-    if let Some(pid) = child.id().checked_add(0) {
-        kill_descendants(pid, false);
+fn terminate_process_tree(child: &mut dyn ChildWrapper) {
+    #[cfg(unix)]
+    let _ = child.signal(15);
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < deadline {
+        if child.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
     }
-    let _ = child.kill();
-    if let Some(pid) = child.id().checked_add(0) {
-        kill_descendants(pid, true);
-    }
+    let _ = child.start_kill();
     let _ = child.wait();
 }
-
-#[cfg(unix)]
-fn kill_descendants(pid: u32, force: bool) {
-    let output = Command::new("pgrep")
-        .args(["-P", &pid.to_string()])
-        .output();
-    let children = output
-        .ok()
-        .map(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .filter_map(|line| line.trim().parse().ok())
-                .collect::<Vec<u32>>()
-        })
-        .unwrap_or_default();
-    for child in &children {
-        kill_descendants(*child, force);
-    }
-    for child in children {
-        let signal = if force { "-KILL" } else { "-TERM" };
-        let _ = Command::new("kill")
-            .args([signal, &child.to_string()])
-            .status();
-    }
-}
-
-#[cfg(windows)]
-fn kill_descendants(pid: u32, _force: bool) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/T", "/F"])
-        .status();
-}
-
-#[cfg(not(any(unix, windows)))]
-fn kill_descendants(_pid: u32, _force: bool) {}
 
 fn exit_status(code: Option<i32>, success: bool) -> ExitStatus {
     ExitStatus { code, success }

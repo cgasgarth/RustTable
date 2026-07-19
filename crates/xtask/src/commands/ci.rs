@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use super::{Result, report};
 use crate::cli::CiCommand;
@@ -163,6 +164,28 @@ impl Contract {
                 }
             }
         }
+        for surface in SUPPORTED_SURFACES {
+            self.validate_prerequisite_cycles(surface)?;
+        }
+        Ok(())
+    }
+
+    fn validate_prerequisite_cycles(&self, surface: &str) -> Result<()> {
+        let ids = self
+            .checks
+            .iter()
+            .filter(|check| check.on(surface))
+            .map(|check| check.id.clone())
+            .collect::<BTreeSet<_>>();
+        let mut visiting = BTreeSet::new();
+        let mut visited = BTreeSet::new();
+        for id in &ids {
+            if has_cycle(self, surface, id, &ids, &mut visiting, &mut visited) {
+                return Err(format!(
+                    "validation contract: prerequisite cycle detected on {surface} at {id}"
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -216,6 +239,20 @@ impl Contract {
                 ));
             }
         }
+        let mut main_group_max = BTreeMap::<&str, u64>::new();
+        for check in self.checks.iter().filter(|check| check.on("main")) {
+            main_group_max
+                .entry(check.parallel_group_for("main"))
+                .and_modify(|value| *value = (*value).max(check.timeout_for("main")))
+                .or_insert(check.timeout_for("main"));
+        }
+        let main_configured = main_group_max.values().sum::<u64>();
+        if main_configured > self.budgets["main"] {
+            return Err(format!(
+                "validation contract: main sequential timeout budget {main_configured}s exceeds budget {}s",
+                self.budgets["main"]
+            ));
+        }
         Ok(())
     }
 
@@ -231,6 +268,35 @@ impl Contract {
             "validation contract: no checks use parallel group {group} on {surface}"
         ))
     }
+}
+
+fn has_cycle(
+    contract: &Contract,
+    surface: &str,
+    id: &str,
+    ids: &BTreeSet<String>,
+    visiting: &mut BTreeSet<String>,
+    visited: &mut BTreeSet<String>,
+) -> bool {
+    if visiting.contains(id) {
+        return true;
+    }
+    if visited.contains(id) {
+        return false;
+    }
+    visiting.insert(id.to_owned());
+    if let Some(check) = contract.checks.iter().find(|check| check.id == id) {
+        for prerequisite in check.prerequisites_for(surface) {
+            if ids.contains(prerequisite)
+                && has_cycle(contract, surface, prerequisite, ids, visiting, visited)
+            {
+                return true;
+            }
+        }
+    }
+    visiting.remove(id);
+    visited.insert(id.to_owned());
+    false
 }
 
 impl Check {
@@ -468,9 +534,18 @@ struct CheckReceipt {
     duration_ms: u128,
     severity: String,
     artifacts: Vec<String>,
+    artifact_receipts: Vec<DeclaredArtifactReceipt>,
     detail: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     process: Option<crate::process::CommandReceipt>,
+}
+
+#[derive(Debug, Serialize)]
+struct DeclaredArtifactReceipt {
+    path: String,
+    size_bytes: u64,
+    sha256: String,
+    fresh: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -600,6 +675,7 @@ fn execute_surface_with_scheduler(
                 duration_ms: 0,
                 severity: check.severity.clone(),
                 artifacts: Vec::new(),
+                artifact_receipts: Vec::new(),
                 detail: Some(
                     "a prerequisite did not pass its declared acceptance policy".to_owned(),
                 ),
@@ -682,6 +758,7 @@ fn execute_check(
     const CHECK_OUTPUT_LIMIT: usize = 64 * 1024;
     const DAG_RECEIPT_OUTPUT_LIMIT: usize = 4 * 1024 * 1024;
     let start = Instant::now();
+    let started_at = SystemTime::now();
     let (args, artifacts, process_artifacts) = check_process_contract(check, surface);
     let profile = match check.program.as_str() {
         "cargo" | "rustc" | "rustup" => EnvironmentProfile::RustTool,
@@ -717,16 +794,40 @@ fn execute_check(
     let result = runner.run(request);
     let duration_ms = start.elapsed().as_millis();
     match result {
-        Ok(result) if result.receipt.success() => CheckReceipt {
-            id: check.id.clone(),
-            label: check.label.clone(),
-            status: "passed".to_owned(),
-            duration_ms,
-            severity: check.severity.clone(),
-            artifacts,
-            detail: None,
-            process: Some(result.receipt),
-        },
+        Ok(result) if result.receipt.success() => {
+            match verify_declared_artifacts(root, &artifacts, started_at) {
+                Ok(artifact_receipts) => CheckReceipt {
+                    id: check.id.clone(),
+                    label: check.label.clone(),
+                    status: "passed".to_owned(),
+                    duration_ms,
+                    severity: check.severity.clone(),
+                    artifacts,
+                    artifact_receipts,
+                    detail: None,
+                    process: Some(result.receipt),
+                },
+                Err(error) => {
+                    let status = if check.severity == "warning" {
+                        "warning"
+                    } else {
+                        cancellation.store(true, Ordering::Release);
+                        "failed"
+                    };
+                    CheckReceipt {
+                        id: check.id.clone(),
+                        label: check.label.clone(),
+                        status: status.to_owned(),
+                        duration_ms,
+                        severity: check.severity.clone(),
+                        artifacts,
+                        artifact_receipts: Vec::new(),
+                        detail: Some(error),
+                        process: Some(result.receipt),
+                    }
+                }
+            }
+        }
         Ok(result) => {
             let status = if check.severity == "warning" {
                 "warning"
@@ -741,6 +842,7 @@ fn execute_check(
                 duration_ms,
                 severity: check.severity.clone(),
                 artifacts,
+                artifact_receipts: Vec::new(),
                 detail: Some(format!(
                     "process status {}, exit code {:?}",
                     result.receipt.status, result.receipt.exit_code
@@ -762,6 +864,7 @@ fn execute_check(
                 duration_ms,
                 severity: check.severity.clone(),
                 artifacts,
+                artifact_receipts: Vec::new(),
                 detail: Some(error.to_string()),
                 process: None,
             }
@@ -785,6 +888,52 @@ fn check_process_contract(
     let mut artifacts = check.artifacts.clone();
     artifacts.extend([report, stdout.clone(), stderr.clone()]);
     (args, artifacts, Some((stdout, stderr)))
+}
+
+fn verify_declared_artifacts(
+    root: &RepositoryRoot,
+    artifacts: &[String],
+    started_at: SystemTime,
+) -> Result<Vec<DeclaredArtifactReceipt>> {
+    let mut receipts = Vec::new();
+    for relative in artifacts {
+        let path = root.join(relative);
+        if std::path::Path::new(relative).is_absolute() {
+            return Err(format!(
+                "declared artifact {relative} must be relative to the worktree"
+            ));
+        }
+        let metadata = std::fs::symlink_metadata(&path)
+            .map_err(|error| format!("declared artifact {relative} is missing: {error}"))?;
+        if !metadata.file_type().is_file() {
+            return Err(format!(
+                "declared artifact {relative} must be a regular file"
+            ));
+        }
+        if metadata.len() > 256 * 1024 {
+            return Err(format!(
+                "declared artifact {relative} exceeds the 256 KiB limit"
+            ));
+        }
+        if metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(started_at).ok())
+            .is_none()
+        {
+            return Err(format!("declared artifact {relative} is stale"));
+        }
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("declared artifact {relative} cannot be read: {error}"))?;
+        let digest = Sha256::digest(&bytes);
+        receipts.push(DeclaredArtifactReceipt {
+            path: relative.clone(),
+            size_bytes: metadata.len(),
+            sha256: digest.iter().map(|byte| format!("{byte:02x}")).collect(),
+            fresh: true,
+        });
+    }
+    Ok(receipts)
 }
 
 #[cfg(test)]
