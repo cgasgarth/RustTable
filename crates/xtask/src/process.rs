@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write as _;
 use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -134,6 +135,7 @@ pub struct ProcessRequest {
     cancellation: Option<Arc<AtomicBool>>,
     stdout_artifact: Option<PathBuf>,
     stderr_artifact: Option<PathBuf>,
+    stdin: Option<Vec<u8>>,
 }
 
 impl ProcessRequest {
@@ -156,6 +158,7 @@ impl ProcessRequest {
             cancellation: None,
             stdout_artifact: None,
             stderr_artifact: None,
+            stdin: None,
         }
     }
 
@@ -222,6 +225,12 @@ impl ProcessRequest {
     pub fn artifacts(mut self, stdout: impl Into<PathBuf>, stderr: impl Into<PathBuf>) -> Self {
         self.stdout_artifact = Some(stdout.into());
         self.stderr_artifact = Some(stderr.into());
+        self
+    }
+
+    #[must_use]
+    pub fn stdin_bytes(mut self, bytes: impl Into<Vec<u8>>) -> Self {
+        self.stdin = Some(bytes.into());
         self
     }
 
@@ -497,7 +506,11 @@ fn spawn_process(request: &ProcessRequest) -> Result<RunningProcess, ProcessErro
     let mut command = CommandWrap::with_new(&request.program, |command| {
         command
             .args(&args)
-            .stdin(Stdio::null())
+            .stdin(if request.stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env_clear()
@@ -514,6 +527,16 @@ fn spawn_process(request: &ProcessRequest) -> Result<RunningProcess, ProcessErro
         program: request.program.clone(),
         message: source.to_string(),
     })?;
+    if let Some(input) = request.stdin.as_deref() {
+        let stdin = child
+            .stdin()
+            .as_mut()
+            .ok_or(ProcessError::MissingPipe("stdin"))?;
+        stdin
+            .write_all(input)
+            .map_err(|source| ProcessError::InputWrite(source.to_string()))?;
+    }
+    let _ = child.stdin().take();
     let stdout = child
         .stdout()
         .take()
@@ -631,6 +654,7 @@ pub enum ProcessError {
         message: String,
     },
     MissingPipe(&'static str),
+    InputWrite(String),
     Wait(std::io::Error),
     Cleanup(std::io::Error),
     ReaderPanic,
@@ -653,6 +677,7 @@ impl fmt::Display for ProcessError {
                 write!(formatter, "cannot spawn {program}: {message}")
             }
             Self::MissingPipe(stream) => write!(formatter, "child did not provide {stream} pipe"),
+            Self::InputWrite(message) => write!(formatter, "cannot write child stdin: {message}"),
             Self::Wait(error) => write!(formatter, "cannot wait for child: {error}"),
             Self::Cleanup(error) => write!(formatter, "cannot clean up child process: {error}"),
             Self::ReaderPanic => formatter.write_str("child output reader panicked"),

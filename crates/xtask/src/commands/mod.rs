@@ -6,6 +6,7 @@ mod dag;
 mod dependencies;
 mod ecosystem;
 mod extension_conformance;
+mod file_source;
 mod files;
 mod fixtures;
 mod foundation;

@@ -178,11 +178,29 @@ pub enum RepoCommand {
     #[command(name = "verify-dag")]
     Dag(DagArgs),
     #[command(name = "verify-files")]
-    Files,
+    Files(FilePolicyArgs),
     #[command(name = "verify-workflows")]
     Workflows,
     #[command(name = "verify-native-boundaries")]
     NativeBoundaries(NativeBoundariesArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct FilePolicyArgs {
+    /// Select the immutable source of repository bytes.
+    #[arg(long, value_enum, default_value_t = FileSource::Auto)]
+    pub source: FileSource,
+    /// Tree-ish used by --source tree.
+    #[arg(long, default_value = "HEAD")]
+    pub treeish: String,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum FileSource {
+    Auto,
+    Index,
+    Tree,
+    Worktree,
 }
 
 #[derive(Debug, Args)]

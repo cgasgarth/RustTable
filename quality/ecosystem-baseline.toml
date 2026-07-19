@@ -71,9 +71,9 @@ target_scope = "image import"
 rationale = "No RAW decoder is present in the current graph; adoption requires a new exact receipt."
 
 [graph]
-lock_sha256 = "0b9555a189610995eb48aba4c0b178d31a6cf4da6a7fb91dd458a43eb6ea04db"
-metadata_sha256 = "ac0d30afaf7aca176b818358a104e1a6d2345d7371f5fdd294d3e37bb92c5bff"
-package_count = 521
+lock_sha256 = "12cdb4cccbae6ec2b09a975265292c1776bf21182caf8035443ab2040a36cd87"
+metadata_sha256 = "d48dfc7b4cf513afb5138717c3f2862afe2e06deabe77b559bdb55b12752aa8c"
+package_count = 523
 
 [platforms.linux]
 target = "cfg(target_os = \"linux\")"
@@ -255,6 +255,15 @@ version = "=0.9.12+spec-1.1.0"
 source = "registry+crates.io"
 target_scope = "quality-receipts"
 rationale = "Policy receipt parser is exact and centrally owned."
+
+[[packages]]
+id = "icu_casemap"
+status = "adopted"
+owner_issue = 454
+version = "=2.2.0"
+source = "registry+crates.io"
+target_scope = "repository-file-policy"
+rationale = "ICU4X full case folding prevents non-ASCII path collision policy drift."
 
 [[packages]]
 id = "raw-codec-stack"

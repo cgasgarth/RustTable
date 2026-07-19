@@ -592,6 +592,11 @@ source_packages = ["rusttable-app", "rusttable-ui"]
 kinds = ["dev"]
 
 [[external_dependencies]]
+package = "icu_casemap"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["xtask"]
+
+[[external_dependencies]]
 package = "image"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 source_packages = ["rusttable-image-io"]
