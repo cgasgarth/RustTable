@@ -15,6 +15,7 @@ mod github_reconciliation;
 mod issue_spec;
 mod lua;
 mod native_boundaries;
+mod offline_closure;
 mod parity;
 mod reference;
 mod repo;
@@ -61,6 +62,12 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
             }
             EcosystemCommand::Dependencies { command } => match command {
                 DependencyCommand::VerifyPolicy => dependencies::verify_policy(&root, &runner),
+                DependencyCommand::VendorClosure(arguments) => {
+                    offline_closure::vendor_closure(&root, arguments, &runner)
+                }
+                DependencyCommand::VerifyOffline(arguments) => {
+                    offline_closure::verify_offline(&root, arguments, &runner)
+                }
             },
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },

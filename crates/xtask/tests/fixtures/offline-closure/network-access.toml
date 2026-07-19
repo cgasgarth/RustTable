@@ -1,0 +1,2 @@
+scenario = "undeclared-network-access"
+expected = "CARGO_NET_OFFLINE prevents undeclared network access"

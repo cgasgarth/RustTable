@@ -1,0 +1,2 @@
+scenario = "Cargo.lock changes during offline verification"
+expected = "Cargo.lock: changed during offline verification"

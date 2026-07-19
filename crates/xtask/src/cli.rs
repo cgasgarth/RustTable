@@ -474,6 +474,16 @@ pub struct RefreshBaselineArgs {
 pub enum DependencyCommand {
     #[command(name = "verify-policy")]
     VerifyPolicy,
+    #[command(name = "vendor-closure")]
+    VendorClosure(OfflineClosureArgs),
+    #[command(name = "verify-offline")]
+    VerifyOffline(OfflineClosureArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct OfflineClosureArgs {
+    #[arg(long)]
+    pub receipt: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]

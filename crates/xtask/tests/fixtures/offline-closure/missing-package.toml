@@ -1,0 +1,2 @@
+scenario = "missing-package"
+expected = "offline closure missing vendored package"

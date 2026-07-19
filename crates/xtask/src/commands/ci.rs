@@ -250,7 +250,11 @@ impl Contract {
             }
         }
         let mut main_group_max = BTreeMap::<&str, u64>::new();
-        for check in self.checks.iter().filter(|check| check.on("main")) {
+        for check in self
+            .checks
+            .iter()
+            .filter(|check| check.on("main") && !check.merge_only)
+        {
             main_group_max
                 .entry(check.parallel_group_for("main"))
                 .and_modify(|value| *value = (*value).max(check.timeout_for("main")))

@@ -284,6 +284,34 @@ jobs:
           path: target/coverage/
           if-no-files-found: error
 
+  offline-source-closure:
+    name: linux / offline source closure
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash scripts/with-validation-budget.sh 2700 workflow-step bash {0}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up exact Rust toolchain
+        run: |
+          rustup toolchain install "$(bash scripts/rust-baseline.sh channel)" --profile minimal --no-self-update --component rust-src --component rustfmt
+          rustup default "$(bash scripts/rust-baseline.sh channel)"
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "$(bash scripts/rust-baseline.sh channel)-x86_64-unknown-linux-gnu"
+      - name: Verify offline source closure
+        run: cargo xtask ecosystem dependencies verify-offline --receipt target/validation/offline-closure.json
+      - name: Upload offline closure receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rusttable-offline-closure-${{ github.sha }}
+          path: target/validation/offline-closure.json
+          if-no-files-found: warn
+
   portable-tests:
     name: ${{ matrix.os }} / workspace tests
     needs: platform-matrix

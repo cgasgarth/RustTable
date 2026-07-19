@@ -1,0 +1,2 @@
+scenario = "build-script-download"
+expected = "frozen offline build rejects a download attempt"
