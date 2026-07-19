@@ -20,9 +20,13 @@ impl ImageDimensions {
     /// # Errors
     ///
     /// Returns an error when either axis is zero.
-    pub fn new(width: u32, height: u32) -> Result<Self, ImageDimensionsError> {
-        let width = NonZeroU32::new(width).ok_or(ImageDimensionsError::ZeroWidth)?;
-        let height = NonZeroU32::new(height).ok_or(ImageDimensionsError::ZeroHeight)?;
+    pub const fn new(width: u32, height: u32) -> Result<Self, ImageDimensionsError> {
+        let Some(width) = NonZeroU32::new(width) else {
+            return Err(ImageDimensionsError::ZeroWidth);
+        };
+        let Some(height) = NonZeroU32::new(height) else {
+            return Err(ImageDimensionsError::ZeroHeight);
+        };
         Ok(Self { width, height })
     }
 

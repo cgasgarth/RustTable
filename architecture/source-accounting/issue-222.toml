@@ -1,0 +1,58 @@
+# Issue-scoped source accounting. The canonical migration map in #555 consumes
+# this record; this file keeps #222 reviewable before that map is accepted.
+schema = 1
+issue = 222
+canonical_repository = "darktable-org/darktable"
+canonical_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+source_map_issue = 555
+rust_owner = "crates/rusttable-image"
+classification = "CrossCuttingReplacement"
+dependency_issues = [159, 162, 269, 555]
+
+preserve = [
+  "explicit dimensions, row strides, channel/sample/storage layout, byte order, alpha, color, and orientation",
+  "checked RAW mosaic geometry, CFA phase, black/white levels, and canonical linear RGBA representation",
+  "logical EXIF orientation behavior and alias-safe immutable/mutable views",
+]
+
+redesign = [
+  "replace dt_image_t and C buffer ownership with ImageDescriptor, PlaneDescriptor, OwnedPlane, and typed views",
+  "replace implicit decoder/pixel conventions with PixelFormat, DecodeRequest, DecodeReceipt, and typed errors",
+  "make allocation, ROI arithmetic, alignment, and canonical buffer sizing fail closed",
+]
+
+excluded = [
+  "codecs and file I/O",
+  "color management implementation and profile conversion",
+  "mipmap/image caches, GPU/OpenCL, pixel processing, and UI",
+]
+
+[[anchor]]
+role = "image-identity-and-storage"
+paths = ["src/common/image.h", "src/common/image.c"]
+symbols = ["dt_image_t", "dt_image_t's dimensions, flags, and storage metadata"]
+rust_targets = ["crates/rusttable-image/src/image.rs", "crates/rusttable-image/src/plane.rs"]
+
+[[anchor]]
+role = "pipeline-and-buffer-contracts"
+paths = ["src/develop/pixelpipe.h", "src/develop/imageop.h", "src/develop/tiling.h", "src/develop/tiling.c"]
+symbols = ["pixelpipe dimensions and tile extents", "image operation pixel format assumptions", "tiling strides and bounds"]
+rust_targets = ["crates/rusttable-image/src/decode.rs", "crates/rusttable-image/src/plane.rs", "crates/rusttable-image/src/roi.rs"]
+
+[[anchor]]
+role = "cache-and-imageio-boundary"
+paths = ["src/common/mipmap_cache.h", "src/common/mipmap_cache.c", "src/common/image_cache.h", "src/common/image_cache.c", "src/imageio/imageio_common.h", "src/imageio/imageio_module.h"]
+symbols = ["image dimensions and decoded-buffer contracts at cache/loader boundaries"]
+rust_targets = ["crates/rusttable-image/src/decode.rs"]
+
+[[anchor]]
+role = "pixel-and-color-descriptors"
+paths = ["src/common/colorspaces.h", "src/common/iop_profile.h", "src/common/exif.h", "src/common/exif.c"]
+symbols = ["pixel layout, profile reference, and EXIF orientation declarations"]
+rust_targets = ["crates/rusttable-image/src/pixel.rs", "crates/rusttable-image/src/orientation.rs"]
+
+[[anchor]]
+role = "raw-mosaic-consumers"
+paths = ["src/imageio/imageio_rawspeed.cc", "src/imageio/imageio_libraw.c", "src/iop/rawprepare.c", "src/iop/demosaic.c"]
+symbols = ["RAW sample type, CFA pattern/phase, and black/white level assumptions"]
+rust_targets = ["crates/rusttable-image/src/cfa.rs", "crates/rusttable-image/src/plane.rs"]
