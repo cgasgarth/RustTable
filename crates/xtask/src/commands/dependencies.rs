@@ -1,19 +1,86 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::time::Duration;
 
+use serde::Deserialize;
 use toml::Value;
 
 use crate::commands::{Result, report};
+use crate::process::{EnvironmentProfile, ProcessLimits, ProcessRequest, ProcessRunner};
 use crate::root::RepositoryRoot;
 
 const LOCKFILE: &str = "Cargo.lock";
 const WORKSPACE: &str = "Cargo.toml";
+const POLICY: &str = "quality/dependency-sources.toml";
 
-pub(crate) fn verify_policy(root: &RepositoryRoot) -> Result {
+#[derive(Debug, Deserialize)]
+struct DependencyPolicy {
+    schema: String,
+    default_registry: String,
+    lockfile: String,
+    exact_workspace_versions: bool,
+    git_dependencies: String,
+    unreviewed_advisories: String,
+    duplicate_minor_patch_lines: String,
+    exceptions: Exceptions,
+    #[serde(default)]
+    native_packages: Vec<NativePackage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Exceptions {
+    #[serde(default)]
+    git: Vec<GitException>,
+    #[serde(default)]
+    duplicate_versions: Vec<DuplicateException>,
+    #[serde(default)]
+    advisories: Vec<AdvisoryException>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitException {
+    url: String,
+    rev: String,
+    issue: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct DuplicateException {
+    name: String,
+    versions: Vec<String>,
+    reason: String,
+    issue: u64,
+    review: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AdvisoryException {
+    id: String,
+    package: String,
+    version: String,
+    source: String,
+    disposition: String,
+    issue: u64,
+    review: String,
+    removal_condition: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativePackage {
+    name: String,
+    owner_issue: u64,
+    rationale: String,
+}
+
+pub(crate) fn verify_policy(root: &RepositoryRoot, runner: &ProcessRunner) -> Result {
     let workspace_text = read(root, WORKSPACE)?;
     let workspace: Value =
         toml::from_str(&workspace_text).map_err(|error| format!("{WORKSPACE}: {error}"))?;
-    let mut findings = validate_workspace(&workspace);
+    let policy_text = read(root, POLICY)?;
+    let policy: DependencyPolicy =
+        toml::from_str(&policy_text).map_err(|error| format!("{POLICY}: invalid TOML: {error}"))?;
+    let mut findings = validate_policy_document(&policy);
+    findings.extend(validate_workspace(&workspace));
     let members = workspace
         .get("workspace")
         .and_then(|value| value.get("members"))
@@ -40,6 +107,8 @@ pub(crate) fn verify_policy(root: &RepositoryRoot) -> Result {
     if let Some(message) = validate_iced_targets(members, root) {
         findings.push(message);
     }
+    let lock_text = read(root, LOCKFILE)?;
+    findings.extend(validate_lock_graph(root, runner, &policy, &lock_text));
     if !findings.is_empty() {
         return Err(findings.join("; "));
     }
@@ -48,10 +117,227 @@ pub(crate) fn verify_policy(root: &RepositoryRoot) -> Result {
         "workspace_dependency_count": workspace_dependencies(workspace.get("workspace")).len(),
         "members": checked,
         "lockfile": LOCKFILE,
-        "provenance": "direct requirements are exact and centrally owned",
+        "package_policy": "complete metadata and lock graph reconciled",
+        "native_packages": policy.native_packages.len(),
+        "duplicate_exceptions": policy.exceptions.duplicate_versions.len(),
+        "advisory_exceptions": policy.exceptions.advisories.len(),
+        "provenance": "direct and transitive requirements are exact and centrally owned",
         "diagnostics": "credentials and absolute paths omitted",
     });
     Ok(report(root, "dependencies.verify-policy", data))
+}
+
+fn validate_policy_document(policy: &DependencyPolicy) -> Vec<String> {
+    let mut findings = Vec::new();
+    if policy.schema != "rusttable.dependency-sources.v2" {
+        findings.push(format!("{POLICY}: schema is not authoritative"));
+    }
+    if policy.default_registry != "crates.io"
+        || policy.lockfile != LOCKFILE
+        || !policy.exact_workspace_versions
+        || policy.git_dependencies != "deny-unless-immutable-commit-exception"
+        || policy.unreviewed_advisories != "deny"
+        || policy.duplicate_minor_patch_lines != "deny"
+    {
+        findings.push(format!(
+            "{POLICY}: source/advisory/duplicate policy is weakened"
+        ));
+    }
+    for exception in &policy.exceptions.git {
+        if exception.url.is_empty() || exception.rev.len() < 12 || exception.issue == 0 {
+            findings.push(format!(
+                "{POLICY}: Git exceptions require URL, commit, and owner issue"
+            ));
+        }
+    }
+    for exception in &policy.exceptions.duplicate_versions {
+        if exception.name.is_empty()
+            || exception.versions.is_empty()
+            || exception.reason.is_empty()
+            || exception.issue == 0
+            || exception.review.is_empty()
+        {
+            findings.push(format!(
+                "{POLICY}: duplicate exceptions require exact versions, reason, owner, and review"
+            ));
+        }
+    }
+    for exception in &policy.exceptions.advisories {
+        if exception.id.is_empty()
+            || exception.package.is_empty()
+            || exception.version.is_empty()
+            || exception.source.is_empty()
+            || exception.disposition.is_empty()
+            || exception.issue == 0
+            || exception.review.is_empty()
+            || exception.removal_condition.is_empty()
+        {
+            findings.push(format!(
+                "{POLICY}: advisory exceptions must be exact and time-bounded"
+            ));
+        }
+    }
+    for package in &policy.native_packages {
+        if package.name.is_empty() || package.owner_issue == 0 || package.rationale.is_empty() {
+            findings.push(format!("{POLICY}: native package ownership is incomplete"));
+        }
+    }
+    findings
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "The lock-graph gate reports each independent provenance finding."
+)]
+fn validate_lock_graph(
+    root: &RepositoryRoot,
+    runner: &ProcessRunner,
+    policy: &DependencyPolicy,
+    lock_text: &str,
+) -> Vec<String> {
+    let mut findings = Vec::new();
+    let lock: Value = match toml::from_str(lock_text) {
+        Ok(lock) => lock,
+        Err(error) => {
+            findings.push(format!("{LOCKFILE}: invalid TOML: {error}"));
+            return findings;
+        }
+    };
+    let packages = lock
+        .get("package")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if packages.is_empty() {
+        findings.push(format!("{LOCKFILE}: package graph is empty"));
+    }
+    let mut versions = BTreeMap::<String, BTreeSet<String>>::new();
+    for package in &packages {
+        let Some(name) = package.get("name").and_then(Value::as_str) else {
+            findings.push(format!("{LOCKFILE}: package name is missing"));
+            continue;
+        };
+        let Some(version) = package.get("version").and_then(Value::as_str) else {
+            findings.push(format!("{LOCKFILE}: {name} version is missing"));
+            continue;
+        };
+        versions
+            .entry(name.to_owned())
+            .or_default()
+            .insert(version.to_owned());
+        let source = package.get("source").and_then(Value::as_str);
+        if source.is_some_and(|source| source.starts_with("registry+"))
+            && package.get("checksum").and_then(Value::as_str).is_none()
+        {
+            findings.push(format!(
+                "{LOCKFILE}: registry package {name} {version} has no checksum"
+            ));
+        }
+        if let Some(source) = source.filter(|source| source.starts_with("git+")) {
+            let allowed = policy.exceptions.git.iter().any(|exception| {
+                source.contains(&exception.url) && source.contains(&exception.rev)
+            });
+            if !allowed {
+                findings.push(format!(
+                    "{LOCKFILE}: Git package {name} {version} is not an approved immutable source"
+                ));
+            }
+        }
+    }
+    for (name, found_versions) in versions.iter().filter(|(_, versions)| versions.len() > 1) {
+        let allowed = policy
+            .exceptions
+            .duplicate_versions
+            .iter()
+            .any(|exception| {
+                exception.name == *name
+                    && found_versions
+                        .iter()
+                        .all(|version| exception.versions.contains(version))
+            });
+        if !allowed {
+            findings.push(format!(
+                "{LOCKFILE}: duplicate versions for {name} require an exact reviewed exception ({})",
+                found_versions.iter().cloned().collect::<Vec<_>>().join(", ")
+            ));
+        }
+    }
+    let metadata = match runner.run(
+        ProcessRequest::new(
+            "cargo",
+            ["metadata", "--locked", "--offline", "--format-version", "1"],
+        )
+        .profile(EnvironmentProfile::RustTool)
+        .limits(ProcessLimits {
+            max_stdout_bytes: 4 * 1024 * 1024,
+            max_stderr_bytes: 256 * 1024,
+            timeout: Duration::from_secs(120),
+        })
+        .current_dir(root.path().to_path_buf()),
+    ) {
+        Ok(result) if result.receipt.success() => {
+            match serde_json::from_slice::<serde_json::Value>(&result.stdout) {
+                Ok(metadata) => Some(metadata),
+                Err(error) => {
+                    findings.push(format!("cargo metadata: invalid JSON: {error}"));
+                    None
+                }
+            }
+        }
+        Ok(result) => {
+            findings.push(format!(
+                "cargo metadata failed ({}): {}",
+                result.receipt.status,
+                String::from_utf8_lossy(&result.stderr).trim()
+            ));
+            None
+        }
+        Err(error) => {
+            findings.push(format!("cargo metadata: {error}"));
+            None
+        }
+    };
+    if let Some(metadata) = metadata {
+        let metadata_packages = metadata
+            .get("packages")
+            .and_then(serde_json::Value::as_array)
+            .map_or(0, Vec::len);
+        if metadata_packages != packages.len() {
+            findings.push(format!(
+                "{LOCKFILE}: lock graph has {} packages but cargo metadata resolved {metadata_packages}",
+                packages.len()
+            ));
+        }
+        let native_names = metadata
+            .get("packages")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|package| {
+                let name = package
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                name.ends_with("-sys")
+                    || name.ends_with("_sys")
+                    || package.get("links").is_some_and(|links| !links.is_null())
+            })
+            .filter_map(|package| package.get("name").and_then(serde_json::Value::as_str))
+            .collect::<BTreeSet<_>>();
+        let owned_names = policy
+            .native_packages
+            .iter()
+            .map(|package| package.name.as_str())
+            .collect::<BTreeSet<_>>();
+        for name in native_names {
+            if !owned_names.contains(name) {
+                findings.push(format!(
+                    "{POLICY}: native package {name} has no explicit owner"
+                ));
+            }
+        }
+    }
+    findings
 }
 
 pub(crate) fn validate_workspace(workspace: &Value) -> Vec<String> {

@@ -279,7 +279,9 @@ pub enum EcosystemCommand {
     #[command(name = "verify-baseline")]
     VerifyBaseline(BaselineVerifyArgs),
     #[command(name = "upgrade-diff")]
-    UpgradeDiff,
+    UpgradeDiff(UpgradeDiffArgs),
+    #[command(name = "refresh-baseline")]
+    RefreshBaseline(RefreshBaselineArgs),
     Dependencies {
         #[command(subcommand)]
         command: DependencyCommand,
@@ -294,6 +296,18 @@ pub enum EcosystemCommand {
 pub struct BaselineVerifyArgs {
     #[arg(long)]
     pub receipt: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct UpgradeDiffArgs {
+    #[arg(long)]
+    pub candidate: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct RefreshBaselineArgs {
+    #[arg(long)]
+    pub candidate: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]

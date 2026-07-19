@@ -37,7 +37,7 @@ pub(super) fn collect(
                     message: "artifact must be a regular file".to_owned(),
                 });
             }
-            let fresh = metadata.modified().ok().is_some_and(|modified| {
+            let fresh = metadata.modified().is_ok_and(|modified| {
                 modified.duration_since(started).is_ok()
                     || started
                         .duration_since(modified)

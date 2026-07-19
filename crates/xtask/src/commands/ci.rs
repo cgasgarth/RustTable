@@ -918,7 +918,7 @@ fn verify_declared_artifacts(
                 "declared artifact {relative} exceeds the 256 KiB limit"
             ));
         }
-        let fresh = metadata.modified().ok().is_some_and(|modified| {
+        let fresh = metadata.modified().is_ok_and(|modified| {
             modified.duration_since(started_at).is_ok()
                 || started_at
                     .duration_since(modified)
@@ -1086,6 +1086,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "This test exhaustively checks the checked-in validation contract."
+    )]
     fn checked_in_contract_keeps_local_coverage_and_merge_only_exhaustiveness() {
         let runner = ProcessRunner::new();
         let root = RepositoryRoot::discover(&runner).expect("repository root");

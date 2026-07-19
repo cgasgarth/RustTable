@@ -41,9 +41,12 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
             EcosystemCommand::VerifyBaseline(arguments) => {
                 ecosystem::verify_baseline(&root, arguments, &runner)
             }
-            EcosystemCommand::UpgradeDiff => ecosystem::upgrade_diff(&root),
+            EcosystemCommand::UpgradeDiff(arguments) => ecosystem::upgrade_diff(&root, arguments),
+            EcosystemCommand::RefreshBaseline(arguments) => {
+                ecosystem::refresh_baseline(&root, arguments, &runner)
+            }
             EcosystemCommand::Dependencies { command } => match command {
-                DependencyCommand::VerifyPolicy => dependencies::verify_policy(&root),
+                DependencyCommand::VerifyPolicy => dependencies::verify_policy(&root, &runner),
             },
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
