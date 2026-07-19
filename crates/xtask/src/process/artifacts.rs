@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
+use std::time::SystemTime;
 
 use super::{ARTIFACT_HEAD_LIMIT, ARTIFACT_MARKER, ARTIFACT_TAIL_LIMIT, ProcessError};
 
@@ -68,6 +69,7 @@ impl ArtifactWriter {
                 }
                 self.file.flush()
             })
+            .and_then(|()| self.file.set_modified(SystemTime::now()))
             .map_err(|error| format!("{}: {error}", self.path.display()))
     }
 }

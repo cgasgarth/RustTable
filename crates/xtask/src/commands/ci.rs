@@ -918,12 +918,13 @@ fn verify_declared_artifacts(
                 "declared artifact {relative} exceeds the 256 KiB limit"
             ));
         }
-        if metadata
-            .modified()
-            .ok()
-            .and_then(|modified| modified.duration_since(started_at).ok())
-            .is_none()
-        {
+        let fresh = metadata.modified().ok().is_some_and(|modified| {
+            modified.duration_since(started_at).is_ok()
+                || started_at
+                    .duration_since(modified)
+                    .is_ok_and(|age| age <= std::time::Duration::from_secs(2))
+        });
+        if !fresh {
             return Err(format!("declared artifact {relative} is stale"));
         }
         let bytes = std::fs::read(&path)

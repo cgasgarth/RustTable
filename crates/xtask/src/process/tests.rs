@@ -60,6 +60,30 @@ fn bounded_artifacts_preserve_success_and_failure() {
 }
 
 #[test]
+fn empty_artifacts_are_fresh_after_process_completion() {
+    let root =
+        std::env::temp_dir().join(format!("rusttable-empty-artifacts-{}", std::process::id()));
+    let stdout = root.join("stdout.log");
+    let stderr = root.join("stderr.log");
+    let result = ProcessRunner::new()
+        .run(
+            ProcessRequest::new("sh", ["-c", "exit 0"])
+                .limits(ProcessLimits {
+                    max_stdout_bytes: 16,
+                    max_stderr_bytes: 16,
+                    timeout: Duration::from_secs(2),
+                })
+                .artifacts(&stdout, &stderr),
+        )
+        .expect("empty artifacts are valid");
+    assert!(result.receipt.success());
+    assert_eq!(result.receipt.artifacts.len(), 2);
+    assert_eq!(std::fs::metadata(stdout).expect("stdout artifact").len(), 0);
+    assert_eq!(std::fs::metadata(stderr).expect("stderr artifact").len(), 0);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn artifact_paths_are_platform_joined_and_stable() {
     let path = std::path::Path::new("target")
         .join("validation")

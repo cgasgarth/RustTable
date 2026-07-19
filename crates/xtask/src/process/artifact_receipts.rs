@@ -1,5 +1,5 @@
 use std::fs;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use super::{
     ARTIFACT_LIMIT, ArtifactReceipt, ProcessError, ProcessRequest, hash_bytes, stable_path,
@@ -27,11 +27,12 @@ pub(super) fn collect(
                     message: "artifact must be a regular file".to_owned(),
                 });
             }
-            let fresh = metadata
-                .modified()
-                .ok()
-                .and_then(|modified| modified.duration_since(started).ok())
-                .is_some();
+            let fresh = metadata.modified().ok().is_some_and(|modified| {
+                modified.duration_since(started).is_ok()
+                    || started
+                        .duration_since(modified)
+                        .is_ok_and(|age| age <= Duration::from_secs(2))
+            });
             if !fresh {
                 return Err(ProcessError::Artifact {
                     path: path.clone(),
@@ -58,4 +59,29 @@ pub(super) fn collect(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Duration;
+    use std::time::SystemTime;
+
+    #[test]
+    fn accepts_small_filesystem_clock_skew() {
+        let started = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
+        let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(9);
+        assert!(modified.duration_since(started).is_err());
+        assert!(started
+            .duration_since(modified)
+            .is_ok_and(|age| age <= Duration::from_secs(2)));
+    }
+
+    #[test]
+    fn rejects_stale_artifacts_beyond_clock_skew() {
+        let started = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
+        let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(7);
+        assert!(started
+            .duration_since(modified)
+            .is_ok_and(|age| age > Duration::from_secs(2)));
+    }
 }
