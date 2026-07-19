@@ -1,32 +1,617 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use serde::Deserialize;
+use serde::Serialize;
+
 use super::{Result, report};
 use crate::cli::CiCommand;
-use crate::process::{ProcessRequest, ProcessRunner};
+use crate::process::{ProcessLimits, ProcessRequest, ProcessRunner};
 use crate::root::RepositoryRoot;
 
+const FAST_SURFACES: [&str; 3] = ["precommit", "prepush", "pull_request"];
+const SUPPORTED_SURFACES: [&str; 4] = ["precommit", "prepush", "pull_request", "main"];
+
 pub(super) fn run(root: &RepositoryRoot, command: &CiCommand, runner: &ProcessRunner) -> Result {
-    let (name, script, timeout) = match command {
-        CiCommand::Precommit => ("ci.precommit", "scripts/precommit-fast.sh", 60),
-        CiCommand::Prepush => ("ci.prepush", "scripts/prepush-fast.sh", 60),
-        CiCommand::Pr => ("ci.pr", "scripts/pr-ci.sh", 150),
-        CiCommand::Main => ("ci.main", "scripts/main-ci.sh", 300),
-    };
-    let result = runner
-        .run(
-            ProcessRequest::new("bash", [script])
-                .current_dir(root.path())
-                .limits(crate::process::ProcessLimits {
-                    max_stdout_bytes: 64 * 1024,
-                    max_stderr_bytes: 64 * 1024,
-                    timeout: std::time::Duration::from_secs(timeout),
-                }),
-        )
-        .map_err(|error| error.to_string())?;
-    if !result.receipt.success() {
-        return Err(format!("{name} failed ({})", result.receipt.status));
+    let surface = command.surface();
+    let contract = Contract::load(root)?;
+    contract.validate()?;
+    let result = execute_surface(root, &contract, surface, runner);
+    match result {
+        Ok(receipt) => Ok(report(
+            root,
+            &format!("ci.{surface}"),
+            serde_json::to_value(receipt).map_err(|error| error.to_string())?,
+        )),
+        Err(error) => Err(error),
     }
-    Ok(report(
-        root,
-        name,
-        serde_json::json!({ "receipt": result.receipt }),
-    ))
+}
+
+impl CiCommand {
+    const fn surface(&self) -> &'static str {
+        match self {
+            Self::Precommit => "precommit",
+            Self::Prepush => "prepush",
+            Self::Pr => "pull_request",
+            Self::Main => "main",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct Contract {
+    budgets: BTreeMap<String, u64>,
+    checks: Vec<Check>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Check {
+    id: String,
+    label: String,
+    program: String,
+    #[serde(default)]
+    args: Vec<String>,
+    owner: String,
+    #[serde(default)]
+    prerequisites: Vec<String>,
+    surfaces: Vec<String>,
+    parallel_group: String,
+    timeout_seconds: u64,
+    network: String,
+    #[serde(default)]
+    artifacts: Vec<String>,
+    platforms: Vec<String>,
+    severity: String,
+    #[serde(default)]
+    merge_only: bool,
+}
+
+impl Contract {
+    fn load(root: &RepositoryRoot) -> Result<Self> {
+        let path = root.join("quality/validation-surfaces.toml");
+        let source = fs::read_to_string(&path)
+            .map_err(|error| format!("validation contract {}: {error}", path.display()))?;
+        toml::from_str(&source).map_err(|error| format!("validation contract: {error}"))
+    }
+
+    fn validate(&self) -> Result<()> {
+        for surface in SUPPORTED_SURFACES {
+            let budget = self
+                .budgets
+                .get(surface)
+                .ok_or_else(|| format!("validation contract: missing budget for {surface}"))?;
+            if surface != "main" && *budget == 0 {
+                return Err(format!(
+                    "validation contract: {surface} budget must be positive"
+                ));
+            }
+        }
+        let mut ids = BTreeSet::<String>::new();
+        let mut labels = BTreeSet::<String>::new();
+        for check in &self.checks {
+            check.validate(&mut ids, &mut labels)?;
+        }
+        self.validate_prerequisites(&ids)?;
+        self.validate_commands()?;
+        self.validate_surface_drift()?;
+        self.validate_budgets()
+    }
+
+    fn validate_prerequisites(&self, ids: &BTreeSet<String>) -> Result<()> {
+        for check in &self.checks {
+            for prerequisite in &check.prerequisites {
+                let prerequisite_check = self
+                    .checks
+                    .iter()
+                    .find(|candidate| candidate.id == *prerequisite)
+                    .ok_or_else(|| {
+                        format!(
+                            "validation contract: check {} references unknown prerequisite {}",
+                            check.id, prerequisite
+                        )
+                    })?;
+                if !ids.contains(prerequisite) {
+                    return Err(format!(
+                        "validation contract: check {} references unknown prerequisite {}",
+                        check.id, prerequisite
+                    ));
+                }
+                if prerequisite_check.parallel_group == check.parallel_group {
+                    return Err(format!(
+                        "validation contract: check {} has incompatible prerequisite group {}",
+                        check.id, check.parallel_group
+                    ));
+                }
+                if check
+                    .surfaces
+                    .iter()
+                    .any(|surface| !prerequisite_check.on(surface))
+                {
+                    return Err(format!(
+                        "validation contract: prerequisite {} does not run on every surface of {}",
+                        prerequisite, check.id
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_commands(&self) -> Result<()> {
+        for (index, check) in self.checks.iter().enumerate() {
+            let command = command_body(check);
+            for other in self.checks.iter().skip(index + 1) {
+                if command == command_body(other)
+                    && check.surfaces.iter().any(|surface| other.on(surface))
+                {
+                    return Err(format!(
+                        "duplicate command body on an overlapping surface: {} and {}",
+                        check.id, other.id
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_surface_drift(&self) -> Result<()> {
+        for check in &self.checks {
+            if check.on("pull_request") && !check.on("main") {
+                return Err(format!(
+                    "validation contract: pull_request check {} drifts from main",
+                    check.id
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_budgets(&self) -> Result<()> {
+        for surface in FAST_SURFACES {
+            let mut group_max = BTreeMap::<&str, u64>::new();
+            for check in self.checks.iter().filter(|check| check.on(surface)) {
+                group_max
+                    .entry(check.parallel_group.as_str())
+                    .and_modify(|value| *value = (*value).max(check.timeout_seconds))
+                    .or_insert(check.timeout_seconds);
+            }
+            let configured = group_max.values().sum::<u64>();
+            let budget = self.budgets[surface];
+            if configured > budget {
+                return Err(format!(
+                    "validation contract: {surface} parallel-group timeout sum {configured}s exceeds budget {budget}s"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Check {
+    fn validate(&self, ids: &mut BTreeSet<String>, labels: &mut BTreeSet<String>) -> Result<()> {
+        if self.id.is_empty() || !ids.insert(self.id.clone()) {
+            return Err(format!(
+                "validation contract: duplicate or empty check id {}",
+                self.id
+            ));
+        }
+        if self.label.is_empty() || !labels.insert(self.label.clone()) {
+            return Err(format!(
+                "validation contract: duplicate or empty check label {}",
+                self.label
+            ));
+        }
+        if self.program.is_empty() || self.owner.is_empty() || self.parallel_group.is_empty() {
+            return Err(format!(
+                "validation contract: check {} has a missing required field",
+                self.id
+            ));
+        }
+        if !command_available(&self.program) {
+            return Err(format!(
+                "validation contract: check {} command {} is unavailable",
+                self.id, self.program
+            ));
+        }
+        if self.timeout_seconds == 0 || self.platforms.is_empty() {
+            return Err(format!(
+                "validation contract: check {} has an invalid timeout or platform matrix",
+                self.id
+            ));
+        }
+        if !["none", "read"].contains(&self.network.as_str()) {
+            return Err(format!(
+                "validation contract: check {} has invalid network policy {}",
+                self.id, self.network
+            ));
+        }
+        if !["error", "warning"].contains(&self.severity.as_str()) {
+            return Err(format!(
+                "validation contract: check {} has invalid failure severity {}",
+                self.id, self.severity
+            ));
+        }
+        if self.surfaces.is_empty() {
+            return Err(format!(
+                "validation contract: check {} has no surface",
+                self.id
+            ));
+        }
+        self.validate_surfaces()?;
+        if self.recursive() {
+            return Err(format!(
+                "validation contract: check {} recursively invokes a surface wrapper",
+                self.id
+            ));
+        }
+        if self
+            .prerequisites
+            .iter()
+            .any(|prerequisite| prerequisite == &self.id)
+        {
+            return Err(format!(
+                "validation contract: check {} has a recursive prerequisite",
+                self.id
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_surfaces(&self) -> Result<()> {
+        let mut surfaces = BTreeSet::new();
+        for surface in &self.surfaces {
+            if !SUPPORTED_SURFACES.contains(&surface.as_str()) {
+                return Err(format!(
+                    "validation contract: check {} has unknown surface {}",
+                    self.id, surface
+                ));
+            }
+            if !surfaces.insert(surface) {
+                return Err(format!(
+                    "validation contract: check {} repeats surface {}",
+                    self.id, surface
+                ));
+            }
+            if FAST_SURFACES.contains(&surface.as_str()) && self.network != "none" {
+                return Err(format!(
+                    "validation contract: fast check {} must have network = none",
+                    self.id
+                ));
+            }
+            if surface == "pull_request" && self.merge_only {
+                return Err(format!(
+                    "validation contract: merge-only check {} is assigned to pull_request",
+                    self.id
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn on(&self, surface: &str) -> bool {
+        self.surfaces.iter().any(|candidate| candidate == surface)
+    }
+
+    fn recursive(&self) -> bool {
+        let command = std::iter::once(self.program.as_str())
+            .chain(self.args.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(" ");
+        command.contains("cargo xtask ci")
+            || command.contains("scripts/precommit-fast.sh")
+            || command.contains("scripts/prepush-fast.sh")
+            || command.contains("scripts/pr-ci.sh")
+            || command.contains("scripts/main-ci.sh")
+    }
+}
+
+fn command_available(program: &str) -> bool {
+    let path = std::path::Path::new(program);
+    if path.components().count() > 1 {
+        return path.is_file();
+    }
+    std::env::var_os("PATH")
+        .into_iter()
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .map(|directory| directory.join(program))
+        .any(|candidate| candidate.is_file())
+}
+
+fn command_body(check: &Check) -> String {
+    std::iter::once(check.program.as_str())
+        .chain(check.args.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join("\u{1f}")
+}
+
+#[derive(Debug, Serialize)]
+struct SurfaceReceipt {
+    surface: String,
+    budget_seconds: u64,
+    checks: Vec<CheckReceipt>,
+    omitted: Vec<OmittedCheck>,
+}
+
+#[derive(Debug, Serialize)]
+struct CheckReceipt {
+    id: String,
+    label: String,
+    status: String,
+    duration_ms: u128,
+    severity: String,
+    artifacts: Vec<String>,
+    detail: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct OmittedCheck {
+    id: String,
+    reason: String,
+}
+
+fn execute_surface(
+    root: &RepositoryRoot,
+    contract: &Contract,
+    surface: &str,
+    runner: &ProcessRunner,
+) -> Result<SurfaceReceipt> {
+    let budget_seconds = contract.budgets[surface];
+    let surface_start = Instant::now();
+    let selected = contract
+        .checks
+        .iter()
+        .filter(|check| check.on(surface))
+        .collect::<Vec<_>>();
+    let omitted = contract
+        .checks
+        .iter()
+        .filter(|check| !check.on(surface))
+        .map(|check| OmittedCheck {
+            id: check.id.clone(),
+            reason: format!("not assigned to {surface}"),
+        })
+        .collect::<Vec<_>>();
+    let mut groups = BTreeMap::<&str, Vec<&Check>>::new();
+    for check in selected {
+        groups
+            .entry(check.parallel_group.as_str())
+            .or_default()
+            .push(check);
+    }
+    let mut receipts = Vec::new();
+    for checks in groups.values() {
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let results = Mutex::new(Vec::<CheckReceipt>::new());
+        std::thread::scope(|scope| {
+            for check in checks {
+                let cancellation = Arc::clone(&cancellation);
+                let results = &results;
+                scope.spawn(move || {
+                    let receipt = execute_check(root, check, runner, &cancellation);
+                    results.lock().expect("receipt mutex").push(receipt);
+                });
+            }
+        });
+        let mut group_receipts = results
+            .into_inner()
+            .map_err(|_| "receipt mutex poisoned".to_owned())?;
+        group_receipts.sort_by(|left, right| left.id.cmp(&right.id));
+        if group_receipts
+            .iter()
+            .any(|receipt| receipt.status == "failed")
+        {
+            receipts.extend(group_receipts);
+            return Err(format!(
+                "ci.{surface}: validation group {} failed; receipt={}",
+                checks[0].parallel_group,
+                serde_json::to_string(&receipts).map_err(|error| error.to_string())?
+            ));
+        }
+        receipts.extend(group_receipts);
+        if surface != "main" && surface_start.elapsed() > Duration::from_secs(budget_seconds) {
+            return Err(format!(
+                "ci.{surface}: configured budget of {budget_seconds}s exceeded; receipt={}",
+                serde_json::to_string(&receipts).map_err(|error| error.to_string())?
+            ));
+        }
+    }
+    receipts.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(SurfaceReceipt {
+        surface: surface.to_owned(),
+        budget_seconds,
+        checks: receipts,
+        omitted,
+    })
+}
+
+fn execute_check(
+    root: &RepositoryRoot,
+    check: &Check,
+    runner: &ProcessRunner,
+    cancellation: &Arc<AtomicBool>,
+) -> CheckReceipt {
+    let start = Instant::now();
+    let result = runner.run(
+        ProcessRequest::new(check.program.clone(), check.args.clone())
+            .current_dir(root.path())
+            .cancellation(cancellation.clone())
+            .limits(ProcessLimits {
+                max_stdout_bytes: 64 * 1024,
+                max_stderr_bytes: 64 * 1024,
+                timeout: Duration::from_secs(check.timeout_seconds),
+            }),
+    );
+    let duration_ms = start.elapsed().as_millis();
+    match result {
+        Ok(result) if result.receipt.success() => CheckReceipt {
+            id: check.id.clone(),
+            label: check.label.clone(),
+            status: "passed".to_owned(),
+            duration_ms,
+            severity: check.severity.clone(),
+            artifacts: check.artifacts.clone(),
+            detail: None,
+        },
+        Ok(result) => {
+            cancellation.store(true, Ordering::Release);
+            CheckReceipt {
+                id: check.id.clone(),
+                label: check.label.clone(),
+                status: "failed".to_owned(),
+                duration_ms,
+                severity: check.severity.clone(),
+                artifacts: check.artifacts.clone(),
+                detail: Some(format!("process status {}", result.receipt.status)),
+            }
+        }
+        Err(error) => {
+            cancellation.store(true, Ordering::Release);
+            CheckReceipt {
+                id: check.id.clone(),
+                label: check.label.clone(),
+                status: "failed".to_owned(),
+                duration_ms,
+                severity: check.severity.clone(),
+                artifacts: check.artifacts.clone(),
+                detail: Some(error.to_string()),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(id: &str, group: &str, timeout: u64) -> Check {
+        Check {
+            id: id.to_owned(),
+            label: id.to_owned(),
+            program: "true".to_owned(),
+            args: Vec::new(),
+            owner: "test".to_owned(),
+            prerequisites: Vec::new(),
+            surfaces: vec!["precommit".to_owned()],
+            parallel_group: group.to_owned(),
+            timeout_seconds: timeout,
+            network: "none".to_owned(),
+            artifacts: Vec::new(),
+            platforms: vec!["all".to_owned()],
+            severity: "error".to_owned(),
+            merge_only: false,
+        }
+    }
+
+    fn contract(checks: Vec<Check>) -> Contract {
+        Contract {
+            budgets: BTreeMap::from([
+                ("precommit".to_owned(), 30),
+                ("prepush".to_owned(), 60),
+                ("pull_request".to_owned(), 150),
+                ("main".to_owned(), 2_700),
+            ]),
+            checks,
+        }
+    }
+
+    #[test]
+    fn rejects_duplicate_ids_and_labels() {
+        let error = contract(vec![check("same", "a", 1), check("same", "b", 1)])
+            .validate()
+            .expect_err("duplicate");
+        assert!(error.contains("duplicate"));
+    }
+
+    #[test]
+    fn rejects_fast_network_checks() {
+        let mut item = check("network", "a", 1);
+        item.network = "read".to_owned();
+        let error = contract(vec![item]).validate().expect_err("network");
+        assert!(error.contains("network = none"));
+    }
+
+    #[test]
+    fn rejects_sequential_budget_overflow() {
+        let mut first = check("a", "a", 20);
+        first.args = vec!["a".to_owned()];
+        let mut second = check("b", "b", 20);
+        second.args = vec!["b".to_owned()];
+        let error = contract(vec![first, second])
+            .validate()
+            .expect_err("budget");
+        assert!(error.contains("exceeds budget"));
+    }
+
+    #[test]
+    fn rejects_recursive_surface_invocation() {
+        let mut item = check("recursive", "a", 1);
+        item.program = "cargo".to_owned();
+        item.args = vec!["xtask".to_owned(), "ci".to_owned(), "precommit".to_owned()];
+        let error = contract(vec![item]).validate().expect_err("recursive");
+        assert!(error.contains("recursively"));
+    }
+
+    #[test]
+    fn rejects_unknown_prerequisites() {
+        let mut item = check("dependent", "dependent", 1);
+        item.prerequisites = vec!["missing".to_owned()];
+        let error = contract(vec![item]).validate().expect_err("prerequisite");
+        assert!(error.contains("unknown prerequisite"));
+    }
+
+    #[test]
+    fn rejects_incompatible_prerequisite_groups() {
+        let mut dependent = check("dependent", "same", 1);
+        dependent.prerequisites = vec!["prerequisite".to_owned()];
+        let prerequisite = check("prerequisite", "same", 1);
+        let error = contract(vec![dependent, prerequisite])
+            .validate()
+            .expect_err("parallel group");
+        assert!(error.contains("incompatible prerequisite group"));
+    }
+
+    #[test]
+    fn rejects_pull_request_checks_that_drift_from_main() {
+        let mut item = check("pr", "pr", 1);
+        item.surfaces = vec!["pull_request".to_owned()];
+        let error = contract(vec![item]).validate().expect_err("surface drift");
+        assert!(error.contains("drifts from main"));
+    }
+
+    #[test]
+    fn records_a_failed_check_receipt() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut item = check("failure", "a", 5);
+        item.program = "sh".to_owned();
+        item.args = vec!["-c".to_owned(), "exit 7".to_owned()];
+        let receipt = execute_check(&root, &item, &runner, &Arc::new(AtomicBool::new(false)));
+        assert_eq!(receipt.status, "failed");
+        assert!(
+            receipt
+                .detail
+                .expect("failure detail")
+                .contains("completed")
+        );
+    }
+
+    #[test]
+    fn records_a_timed_out_check_receipt() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut item = check("timeout", "a", 1);
+        item.program = "sh".to_owned();
+        item.args = vec!["-c".to_owned(), "sleep 2".to_owned()];
+        let receipt = execute_check(&root, &item, &runner, &Arc::new(AtomicBool::new(false)));
+        assert_eq!(receipt.status, "failed");
+        assert!(
+            receipt
+                .detail
+                .expect("timeout detail")
+                .contains("timed-out")
+        );
+    }
 }

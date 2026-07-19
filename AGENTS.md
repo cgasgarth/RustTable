@@ -11,6 +11,9 @@
 ## Rust safety and compiler strictness
 
 - Rust code must compile with strict diagnostics and all warnings treated as errors.
+- GitHub issue #174 is the authoritative compiler/dependency-baseline change: keep the
+  current pinned toolchain until that issue lands, then move all accepted validation and
+  package surfaces together to its date-pinned Rust 1.98 beta baseline.
 - Enable and maintain strict Clippy and rustfmt checks in CI and local hooks.
 - Unsafe Rust is forbidden by default. Use it only when it is absolutely necessary, isolate it behind the smallest safe API, document the safety invariants at the unsafe boundary, and add focused tests.
 - Do not weaken lints to make code pass. Any lint exception must be narrow, justified in a comment, and reviewed.
@@ -31,7 +34,7 @@
 
 ## Shift-left validation
 
-- On the supported developer workstation, pre-commit has a hard 60-second budget, pre-push has a hard 60-second budget, and pull-request GitHub Actions have a hard 150-second budget (60/60/150).
+- On the supported developer workstation, pre-commit has a hard 30-second budget, pre-push has a hard 60-second budget, and pull-request GitHub Actions have a hard 150-second budget (30/60/150).
 - Pre-commit runs independent high-signal Rust checks (locked workspace check, all-target/all-feature warnings-denied Clippy, and the measured fast workspace test slice) in parallel with deterministic repository, source/native, layout, and workflow-policy checks.
 - Hooks must clean up the complete child-process tree on success, failure, interrupt, and timeout; failures report bounded actionable excerpts and measured duration.
 - Hooks must not use the network, mutate GitHub, require secrets, or run heavyweight packaging, corpus, benchmark, GUI, or merge-only validation.
