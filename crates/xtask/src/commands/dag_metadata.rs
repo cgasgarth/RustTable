@@ -45,6 +45,8 @@ pub(super) fn run(
         name: name.to_owned(),
         package,
         args: args.iter().map(|arg| (*arg).to_owned()).collect(),
+        target: None,
+        feature_set: Vec::new(),
         metadata,
     })
 }

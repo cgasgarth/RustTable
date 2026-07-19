@@ -70,14 +70,16 @@ if (packages.length !== 1 || typeof packages[0].version !== "string") throw new 
 process.stdout.write(packages[0].version);
 ' <"$metadata_json")" || fail 'cargo-package-version'
 [[ -n "$version" ]] || fail 'cargo-package-version-empty'
-archive_basename="RustTable-${version}-x86_64-unknown-linux-gnu-unsigned.tar.gz"
+target_triple="$(bun scripts/platform-support.ts --target-os linux --target-architecture x86_64 | awk 'NF { print; exit }')" || fail 'platform-contract'
+[[ -n "$target_triple" ]] || fail 'platform-target-empty'
+archive_basename="RustTable-${version}-${target_triple}-unsigned.tar.gz"
 git_sha="$(git -C "$root" rev-parse HEAD)"
 
 cargo build --release --package rusttable-app --bin rusttable-app --locked
 release_binary="$root/target/release/rusttable-app"
 [[ -f "$release_binary" ]] || fail 'release-binary-exists'
 
-stage_top="$stage_directory/RustTable-${version}-x86_64-unknown-linux-gnu"
+stage_top="$stage_directory/RustTable-${version}-${target_triple}"
 mkdir -p "$stage_top/bin"
 cp -- "$release_binary" "$stage_top/bin/RustTable"
 cp -- "$root/LICENSE" "$stage_top/LICENSE"

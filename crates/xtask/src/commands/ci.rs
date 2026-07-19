@@ -128,8 +128,7 @@ impl Contract {
                     }
                     if !prerequisite_check.on(surface) {
                         return Err(format!(
-                            "validation contract: prerequisite {} does not run on {}",
-                            prerequisite, surface
+                            "validation contract: prerequisite {prerequisite} does not run on {surface}"
                         ));
                     }
                     let prerequisite_group = prerequisite_check.parallel_group_for(surface);
@@ -506,14 +505,22 @@ fn execute_check(
     runner: &ProcessRunner,
     cancellation: &Arc<AtomicBool>,
 ) -> CheckReceipt {
+    const CHECK_OUTPUT_LIMIT: usize = 64 * 1024;
+    const DAG_RECEIPT_OUTPUT_LIMIT: usize = 4 * 1024 * 1024;
     let start = Instant::now();
     let (args, artifacts, process_artifacts) = check_process_contract(check, surface);
     let mut request = ProcessRequest::new(check.program.clone(), args)
         .current_dir(root.path())
         .cancellation(cancellation.clone())
         .limits(ProcessLimits {
-            max_stdout_bytes: 64 * 1024,
-            max_stderr_bytes: 64 * 1024,
+            // The DAG receipt intentionally includes every target/feature edge;
+            // keep its cap bounded without truncating a valid deterministic receipt.
+            max_stdout_bytes: if check.id == "workspace-dag" {
+                DAG_RECEIPT_OUTPUT_LIMIT
+            } else {
+                CHECK_OUTPUT_LIMIT
+            },
+            max_stderr_bytes: CHECK_OUTPUT_LIMIT,
             timeout: Duration::from_secs(check.timeout_for(surface)),
         });
     if let Some((stdout, stderr)) = process_artifacts {

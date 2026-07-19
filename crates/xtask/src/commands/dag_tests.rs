@@ -1,3 +1,7 @@
+use super::model::{
+    CargoMetadata, DeclaredEdge, DeclaredExternal, DeclaredPackage, PlatformTarget,
+};
+use super::verify::DagReport;
 use super::*;
 
 fn package(name: &str, role: &str) -> DeclaredPackage {
@@ -5,6 +9,8 @@ fn package(name: &str, role: &str) -> DeclaredPackage {
         name: name.to_owned(),
         manifest: format!("crates/{name}/Cargo.toml"),
         role: role.to_owned(),
+        features: Vec::new(),
+        feature_sets: Vec::new(),
     }
 }
 
@@ -24,9 +30,9 @@ fn contract(packages: Vec<DeclaredPackage>, edges: Vec<DeclaredEdge>) -> Contrac
         schema_version: 1,
         composition_root: "app".to_owned(),
         tooling_packages: vec!["testkit".to_owned()],
-        target_platforms: Vec::new(),
         packages,
         edges,
+        external_dependencies: Vec::new(),
     }
 }
 
@@ -44,6 +50,10 @@ fn fixture(name: &str) -> CargoMetadata {
         "tooling-leak" => include_str!("../../tests/fixtures/dag/tooling-leak.json"),
         "reverse-edge" => include_str!("../../tests/fixtures/dag/reverse-edge.json"),
         "new-package" => include_str!("../../tests/fixtures/dag/new-package.json"),
+        "external-dependency" => {
+            include_str!("../../tests/fixtures/dag/external-dependency.json")
+        }
+        "windows-target" => include_str!("../../tests/fixtures/dag/windows-target.json"),
         _ => panic!("unknown fixture {name}"),
     })
     .expect("fixture metadata")
@@ -54,12 +64,44 @@ fn context(name: &str, metadata: CargoMetadata) -> MetadataContext {
         name: name.to_owned(),
         package: None,
         args: vec!["fixture".to_owned()],
+        target: None,
+        feature_set: Vec::new(),
         metadata,
     }
 }
 
+fn platform() -> PlatformContract {
+    PlatformContract {
+        schema_version: 1,
+        targets: vec![PlatformTarget {
+            triple: "x86_64-unknown-linux-gnu".to_owned(),
+            os: "linux".to_owned(),
+            architecture: "x86_64".to_owned(),
+            runner: "ubuntu-latest".to_owned(),
+        }],
+    }
+}
+
 fn verify_fixture(name: &str, contract: &Contract) -> DagReport {
-    verify(contract, &[context("all-features", fixture(name))])
+    verify(
+        contract,
+        &platform(),
+        &[context("all-features", fixture(name))],
+    )
+}
+
+fn external_rule(package: &str, owner: &str) -> DeclaredExternal {
+    DeclaredExternal {
+        package: package.to_owned(),
+        source: Some("registry+https://github.com/rust-lang/crates.io-index".to_owned()),
+        source_roles: Vec::new(),
+        source_packages: vec![owner.to_owned()],
+        kinds: Vec::new(),
+        targets: Vec::new(),
+        contexts: Vec::new(),
+        optional: Some(false),
+        allow_transitive: false,
+    }
 }
 
 #[test]
@@ -134,6 +176,7 @@ fn optional_feature_edges_may_be_absent_from_minimal_context() {
             ],
             vec![allowed],
         ),
+        &platform(),
         &[
             context("all-features", fixture("optional-feature")),
             context(
@@ -260,5 +303,114 @@ fn undeclared_reverse_edges_are_reported_explicitly() {
             .violations
             .iter()
             .any(|violation| violation.code == "forbidden-reverse-edge")
+    );
+}
+
+#[test]
+fn external_aliases_are_checked_by_resolved_package_and_preserve_alias_receipts() {
+    let mut contract = contract(vec![package("app", "composition-root")], vec![]);
+    contract.external_dependencies = vec![external_rule("redb", "app")];
+    let report = verify_fixture("external-dependency", &contract);
+    assert!(report.violations.is_empty(), "{report:?}");
+    let edge = report
+        .discovered_edges
+        .iter()
+        .find(|edge| edge.external)
+        .expect("external edge");
+    assert_eq!(edge.destination, "redb");
+    assert_eq!(edge.alias, "database");
+    assert_eq!(
+        edge.destination_source,
+        "registry+https://github.com/rust-lang/crates.io-index"
+    );
+    assert!(edge.rule.starts_with("external:redb:"));
+}
+
+#[test]
+fn unapproved_external_dependency_fails_with_owner_and_provenance_fields() {
+    let report = verify_fixture(
+        "external-dependency",
+        &contract(vec![package("app", "composition-root")], vec![]),
+    );
+    let violation = report
+        .violations
+        .iter()
+        .find(|violation| violation.code == "undeclared-external-edge")
+        .expect("external violation");
+    assert_eq!(violation.destination, "redb");
+    assert_eq!(violation.alias, "database");
+    assert_eq!(violation.source_role, "composition-root");
+    assert_eq!(violation.rule, "<unmatched>");
+}
+
+#[test]
+fn windows_target_predicates_are_applied_to_windows_contexts() {
+    let mut allowed = edge("app", "core", "normal");
+    allowed.target = Some("cfg(windows)".to_owned());
+    let mut windows = context(
+        "default@target:x86_64-pc-windows-msvc",
+        fixture("windows-target"),
+    );
+    windows.target = Some("x86_64-pc-windows-msvc".to_owned());
+    let report = verify(
+        &contract(
+            vec![
+                package("app", "composition-root"),
+                package("core", "product"),
+            ],
+            vec![allowed],
+        ),
+        &platform(),
+        &[windows],
+    );
+    assert!(report.violations.is_empty(), "{report:?}");
+    assert_eq!(
+        report.discovered_edges[0].platform,
+        "x86_64-pc-windows-msvc"
+    );
+}
+
+#[test]
+fn unix_target_rules_do_not_match_windows_metadata() {
+    let mut allowed = edge("app", "core", "normal");
+    allowed.target = Some("cfg(unix)".to_owned());
+    let mut windows = context(
+        "default@target:x86_64-pc-windows-msvc",
+        fixture("windows-target"),
+    );
+    windows.target = Some("x86_64-pc-windows-msvc".to_owned());
+    let report = verify(
+        &contract(
+            vec![
+                package("app", "composition-root"),
+                package("core", "product"),
+            ],
+            vec![allowed],
+        ),
+        &platform(),
+        &[windows],
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.code == "undeclared-edge")
+    );
+}
+
+#[test]
+fn declared_feature_singletons_and_interactions_are_required() {
+    let mut app = package("app", "composition-root");
+    app.features = vec!["one".to_owned(), "two".to_owned()];
+    app.feature_sets = vec![vec!["one".to_owned(), "two".to_owned()]];
+    let report = verify_fixture(
+        "optional-feature",
+        &contract(vec![app, package("core", "product")], vec![]),
+    );
+    assert!(
+        report
+            .violations
+            .iter()
+            .any(|violation| violation.code == "stale-feature")
     );
 }
