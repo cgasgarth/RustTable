@@ -17,9 +17,13 @@ const SUPPORTED_SURFACES: [&str; 4] = ["precommit", "prepush", "pull_request", "
 
 pub(super) fn run(root: &RepositoryRoot, command: &CiCommand, runner: &ProcessRunner) -> Result {
     let surface = command.surface();
+    let group = command.group();
     let contract = Contract::load(root)?;
     contract.validate()?;
-    let result = execute_surface(root, &contract, surface, runner);
+    if let Some(group) = group {
+        contract.validate_group(surface, group)?;
+    }
+    let result = execute_surface_for_group(root, &contract, surface, group, runner);
     match result {
         Ok(receipt) => Ok(report(
             root,
@@ -35,8 +39,15 @@ impl CiCommand {
         match self {
             Self::Precommit => "precommit",
             Self::Prepush => "prepush",
-            Self::Pr => "pull_request",
+            Self::Pr { .. } => "pull_request",
             Self::Main => "main",
+        }
+    }
+
+    fn group(&self) -> Option<&str> {
+        match self {
+            Self::Pr { group } => group.as_deref(),
+            Self::Precommit | Self::Prepush | Self::Main => None,
         }
     }
 }
@@ -198,6 +209,19 @@ impl Contract {
             }
         }
         Ok(())
+    }
+
+    fn validate_group(&self, surface: &str, group: &str) -> Result<()> {
+        if self
+            .checks
+            .iter()
+            .any(|check| check.on(surface) && check.parallel_group_for(surface) == group)
+        {
+            return Ok(());
+        }
+        Err(format!(
+            "validation contract: no checks use parallel group {group} on {surface}"
+        ))
     }
 }
 
@@ -401,6 +425,7 @@ fn command_body(check: &Check) -> String {
 #[derive(Debug, Serialize)]
 struct SurfaceReceipt {
     surface: String,
+    group: Option<String>,
     budget_seconds: u64,
     checks: Vec<CheckReceipt>,
     omitted: Vec<OmittedCheck>,
@@ -423,10 +448,11 @@ struct OmittedCheck {
     reason: String,
 }
 
-fn execute_surface(
+fn execute_surface_for_group(
     root: &RepositoryRoot,
     contract: &Contract,
     surface: &str,
+    selected_group: Option<&str>,
     runner: &ProcessRunner,
 ) -> Result<SurfaceReceipt> {
     let budget_seconds = contract.budgets[surface];
@@ -434,15 +460,28 @@ fn execute_surface(
     let selected = contract
         .checks
         .iter()
-        .filter(|check| check.on(surface))
+        .filter(|check| {
+            check.on(surface)
+                && selected_group.is_none_or(|group| check.parallel_group_for(surface) == group)
+        })
         .collect::<Vec<_>>();
     let omitted = contract
         .checks
         .iter()
-        .filter(|check| !check.on(surface))
+        .filter(|check| {
+            !check.on(surface)
+                || selected_group.is_some_and(|group| check.parallel_group_for(surface) != group)
+        })
         .map(|check| OmittedCheck {
             id: check.id.clone(),
-            reason: format!("not assigned to {surface}"),
+            reason: if !check.on(surface) {
+                format!("not assigned to {surface}")
+            } else {
+                format!(
+                    "not assigned to selected group {}",
+                    selected_group.unwrap_or_default()
+                )
+            },
         })
         .collect::<Vec<_>>();
     let mut groups = BTreeMap::<&str, Vec<&Check>>::new();
@@ -492,6 +531,7 @@ fn execute_surface(
     receipts.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(SurfaceReceipt {
         surface: surface.to_owned(),
+        group: selected_group.map(str::to_owned),
         budget_seconds,
         checks: receipts,
         omitted,
@@ -859,6 +899,35 @@ mod tests {
     }
 
     #[test]
+    fn selected_group_receipt_omits_other_parallel_groups() {
+        let runner = ProcessRunner::new();
+        let root = RepositoryRoot::discover(&runner).expect("repository root");
+        let mut rust_check = check("rust", "rust", 5);
+        rust_check.surfaces = vec!["pull_request".to_owned()];
+        let mut repository_check = check("repository", "repository", 5);
+        repository_check.surfaces = vec!["pull_request".to_owned()];
+        let contract = contract(vec![rust_check, repository_check]);
+
+        let receipt =
+            execute_surface_for_group(&root, &contract, "pull_request", Some("rust"), &runner)
+                .expect("selected group succeeds");
+
+        assert_eq!(receipt.group.as_deref(), Some("rust"));
+        assert_eq!(
+            receipt
+                .checks
+                .iter()
+                .map(|check| check.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["rust"]
+        );
+        assert_eq!(
+            receipt.omitted[0].reason,
+            "not assigned to selected group rust"
+        );
+    }
+
+    #[test]
     fn workspace_dag_receipt_contract_has_deterministic_artifacts() {
         let item = check("workspace-dag", "repository", 5);
         let (args, artifacts, process_artifacts) = check_process_contract(&item, "pull_request");
@@ -900,8 +969,8 @@ mod tests {
             checks: vec![failure, sibling],
         };
 
-        let error =
-            execute_surface(&root, &contract, "prepush", &runner).expect_err("failing group");
+        let error = execute_surface_for_group(&root, &contract, "prepush", None, &runner)
+            .expect_err("failing group");
         let failure_position = error.find("\"id\":\"a-failure\"").expect("failure receipt");
         let sibling_position = error.find("\"id\":\"z-sibling\"").expect("sibling receipt");
         assert!(failure_position < sibling_position);
