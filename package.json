@@ -5,6 +5,8 @@
   "scripts": {
     "install:computer-use": "bun scripts/dev/install-computer-use-app.ts",
     "test:computer-use": "bun test scripts/dev/computer-use-app-install.test.ts scripts/dev/rusttable-app-bundle.test.ts",
+    "worktree:create": "bash scripts/dev/create-agent-worktree.sh",
+    "test:worktree:create": "bash scripts/dev/test-create-agent-worktree.sh",
     "test:macos-artifact-identity": "bun test scripts/macos-artifact-identity.test.ts",
     "test:doctor": "bash scripts/dev/test-doctor.sh",
     "test:readme-contract": "bash scripts/dev/test-readme-contract.sh",
