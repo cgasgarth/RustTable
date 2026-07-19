@@ -1,0 +1,347 @@
+[budgets]
+precommit = 30
+prepush = 60
+pull_request = 150
+main = 2700
+
+[[checks]]
+id = "diff"
+label = "diff"
+program = "git"
+args = ["diff", "--check"]
+owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 3
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "fmt"
+label = "fmt"
+program = "cargo"
+args = ["fmt", "--all", "--", "--check"]
+owner = "workspace"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "rust"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "metadata"
+label = "metadata"
+program = "cargo"
+args = ["metadata", "--locked", "--no-deps", "--format-version", "1"]
+owner = "workspace"
+surfaces = ["precommit", "pull_request", "main"]
+parallel_group = "rust"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "rust-check"
+label = "rust-check"
+program = "cargo"
+args = ["check", "--workspace", "--all-targets", "--all-features", "--locked"]
+owner = "workspace"
+surfaces = ["precommit"]
+parallel_group = "rust"
+timeout_seconds = 20
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "rust-clippy"
+label = "rust-clippy"
+program = "cargo"
+args = ["clippy", "--workspace", "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"]
+owner = "workspace"
+surfaces = ["precommit"]
+parallel_group = "rust"
+timeout_seconds = 20
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "rust-test"
+label = "rust-test"
+program = "cargo"
+args = ["test", "--workspace", "--lib", "--all-features", "--locked"]
+owner = "workspace"
+surfaces = ["precommit"]
+parallel_group = "rust"
+timeout_seconds = 20
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "rust-test-all"
+label = "rust-test-all"
+program = "cargo"
+args = ["test", "--workspace", "--all-targets", "--all-features", "--locked"]
+owner = "workspace"
+surfaces = ["prepush", "pull_request", "main"]
+parallel_group = "rust-heavy"
+timeout_seconds = 45
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "rust-clippy-all"
+label = "rust-clippy-all"
+program = "cargo"
+args = ["clippy", "--workspace", "--all-targets", "--all-features", "--locked", "--", "-D", "warnings"]
+owner = "workspace"
+surfaces = ["prepush", "pull_request", "main"]
+parallel_group = "rust-heavy"
+timeout_seconds = 45
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "macos-artifact-identity"
+label = "macos-artifact-identity"
+program = "bun"
+args = ["test", "scripts/macos-artifact-identity.test.ts"]
+owner = "desktop"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["macos"]
+severity = "error"
+
+[[checks]]
+id = "developer-doctor"
+label = "developer-doctor"
+program = "bash"
+args = ["scripts/dev/test-doctor.sh"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "readme-contract"
+label = "readme-contract"
+program = "bash"
+args = ["scripts/dev/test-readme-contract.sh"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "native-removal"
+label = "native-removal"
+program = "bash"
+args = ["-c", "bun run test:native-removal && bun run check:native-removal"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "repository-policy"
+label = "repository-policy"
+program = "bun"
+args = ["test", "scripts/github/repository-policy.test.ts"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "bun-pin-fixtures"
+label = "bun-pin-fixtures"
+program = "bash"
+args = ["scripts/test-bun-pin.sh"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "bun-pin-policy"
+label = "bun-pin-policy"
+program = "bash"
+args = ["scripts/check-bun-toolchain-policy.sh"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "pr-ci-fixtures"
+label = "pr-ci-fixtures"
+program = "bash"
+args = ["scripts/test-pr-ci.sh"]
+owner = "repository"
+surfaces = ["precommit"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "source"
+label = "source"
+program = "bash"
+args = ["scripts/check-source-policy.sh"]
+owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "workflow-policy"
+label = "workflow-policy"
+program = "cargo"
+args = ["xtask", "repo", "verify-workflows"]
+owner = "xtask"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "workspace-rust-version"
+label = "workspace-rust-version"
+program = "bun"
+args = ["scripts/workspace-rust-version.ts"]
+owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "workspace-layout"
+label = "workspace-layout"
+program = "bash"
+args = ["scripts/check-workspace-layout.sh"]
+owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "cache-workflow-policy"
+label = "cache-workflow-policy"
+program = "bun"
+args = ["scripts/github/cache-workflow-policy.ts"]
+owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
+id = "computer-use"
+label = "computer-use"
+program = "bun"
+args = ["test", "scripts/dev/computer-use-app-install.test.ts", "scripts/dev/rusttable-app-bundle.test.ts"]
+owner = "desktop"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 10
+network = "none"
+platforms = ["macos"]
+severity = "error"
+
+[[checks]]
+id = "dependency-security"
+label = "dependency-security"
+program = "bash"
+args = ["scripts/dependency-security.sh"]
+owner = "security"
+surfaces = ["main"]
+parallel_group = "security"
+timeout_seconds = 300
+network = "read"
+platforms = ["linux"]
+severity = "error"
+merge_only = true
+
+[[checks]]
+id = "documentation"
+label = "documentation"
+program = "bash"
+args = ["-c", "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --all-features --no-deps --locked"]
+owner = "workspace"
+surfaces = ["main"]
+parallel_group = "release"
+timeout_seconds = 300
+network = "none"
+platforms = ["all"]
+severity = "error"
+merge_only = true
+
+[[checks]]
+id = "release-tests"
+label = "release-tests"
+program = "cargo"
+args = ["test", "--workspace", "--all-targets", "--all-features", "--release", "--locked"]
+owner = "workspace"
+surfaces = ["main"]
+parallel_group = "release"
+timeout_seconds = 600
+network = "none"
+platforms = ["linux"]
+severity = "error"
+merge_only = true
+
+[[checks]]
+id = "release-build"
+label = "release-build"
+program = "cargo"
+args = ["build", "--workspace", "--all-targets", "--all-features", "--release", "--locked"]
+owner = "workspace"
+surfaces = ["main"]
+parallel_group = "release"
+timeout_seconds = 600
+network = "none"
+platforms = ["linux"]
+severity = "error"
+merge_only = true
