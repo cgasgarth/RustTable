@@ -23,7 +23,7 @@ pub(super) fn run(root: &RepositoryRoot, command: &CiCommand, runner: &ProcessRu
     if let Some(group) = group {
         contract.validate_group(surface, group)?;
     }
-    let result = execute_surface_for_group(root, &contract, surface, group, runner);
+    let result = execute_surface_with_scheduler(root, &contract, surface, group, runner);
     match result {
         Ok(receipt) => Ok(report(
             root,
@@ -84,6 +84,8 @@ struct Check {
     severity: String,
     #[serde(default)]
     merge_only: bool,
+    #[serde(default)]
+    accept_warning: bool,
 }
 
 impl Contract {
@@ -302,6 +304,12 @@ impl Check {
                 self.id, self.severity
             ));
         }
+        if self.accept_warning && self.severity != "warning" {
+            return Err(format!(
+                "validation contract: check {} accepts warnings but is not warning severity",
+                self.id
+            ));
+        }
         if self.surfaces.is_empty() {
             return Err(format!(
                 "validation contract: check {} has no surface",
@@ -459,6 +467,8 @@ struct CheckReceipt {
     severity: String,
     artifacts: Vec<String>,
     detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process: Option<crate::process::CommandReceipt>,
 }
 
 #[derive(Debug, Serialize)]
@@ -576,6 +586,16 @@ fn execute_surface_for_group(
     })
 }
 
+fn execute_surface_with_scheduler(
+    root: &RepositoryRoot,
+    contract: &Contract,
+    surface: &str,
+    selected_group: Option<&str>,
+    runner: &ProcessRunner,
+) -> Result<SurfaceReceipt> {
+    execute_surface_for_group(root, contract, surface, selected_group, runner)
+}
+
 fn execute_check(
     root: &RepositoryRoot,
     check: &Check,
@@ -615,6 +635,7 @@ fn execute_check(
             severity: check.severity.clone(),
             artifacts,
             detail: None,
+            process: Some(result.receipt),
         },
         Ok(result) => {
             let status = if check.severity == "warning" {
@@ -634,6 +655,7 @@ fn execute_check(
                     "process status {}, exit code {:?}",
                     result.receipt.status, result.receipt.exit_code
                 )),
+                process: Some(result.receipt),
             }
         }
         Err(error) => {
@@ -651,6 +673,7 @@ fn execute_check(
                 severity: check.severity.clone(),
                 artifacts,
                 detail: Some(error.to_string()),
+                process: None,
             }
         }
     }
@@ -697,6 +720,7 @@ mod tests {
             platforms: vec!["all".to_owned()],
             severity: "error".to_owned(),
             merge_only: false,
+            accept_warning: false,
         }
     }
 
@@ -704,7 +728,7 @@ mod tests {
         Contract {
             budgets: BTreeMap::from([
                 ("precommit".to_owned(), 30),
-                ("prepush".to_owned(), 150),
+                ("prepush".to_owned(), 170),
                 ("pull_request".to_owned(), 150),
                 ("main".to_owned(), 2_700),
             ]),
@@ -820,7 +844,7 @@ mod tests {
         let contract = Contract::load(&root).expect("validation contract");
         contract.validate().expect("valid validation contract");
         assert_eq!(contract.budgets["precommit"], 30);
-        assert_eq!(contract.budgets["prepush"], 150);
+        assert_eq!(contract.budgets["prepush"], 170);
         assert_eq!(contract.budgets["pull_request"], 150);
 
         for id in [
