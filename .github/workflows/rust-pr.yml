@@ -63,7 +63,7 @@ jobs:
         run: cargo fetch --locked
       - name: Warm PR test runner artifacts
         if: matrix.group == 'rust-01-test'
-        run: cargo build --package xtask --locked
+        run: cargo test -p rusttable-scripting --lib --all-features --locked --no-run
       - name: Start validation timer
         run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Run parallel PR validation group
