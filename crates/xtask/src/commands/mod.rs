@@ -8,6 +8,7 @@ mod extension_conformance;
 mod files;
 mod fixtures;
 mod github;
+mod github_reconciliation;
 mod lua;
 mod parity;
 mod reference;
@@ -28,7 +29,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
     let runner = ProcessRunner::new();
     let root = RepositoryRoot::discover(&runner).map_err(CommandError::Root)?;
     match &cli.command {
-        Command::Parity { command } => parity::run(&root, command),
+        Command::Parity { command } => parity::run(&root, command, &runner),
         Command::Fixtures { command } => fixtures::run(&root, command),
         Command::Bench { command } => bench::run(&root, command, &runner),
         Command::Repo { command } => repo::run(&root, command, &runner),

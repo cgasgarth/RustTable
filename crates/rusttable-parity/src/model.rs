@@ -89,6 +89,10 @@ pub(crate) struct IssueIndex {
     pub schema_version: u32,
     pub repository: String,
     pub parent_issue: u64,
+    #[serde(default)]
+    pub issue_body_contract_version: u32,
+    #[serde(default)]
+    pub source_snapshot: String,
     pub capability_ids: Vec<String>,
     pub issues: Vec<IssueRecord>,
     pub ownership: Vec<OwnershipRecord>,
@@ -107,6 +111,16 @@ pub(crate) struct IssueRecord {
     #[serde(default)]
     pub replacement_issue: Option<u64>,
     pub capability_ids: Vec<String>,
+    #[serde(default)]
+    pub superseded_capability_ids: Vec<String>,
+    #[serde(default)]
+    pub canonical_owner: bool,
+    #[serde(default)]
+    pub issue_body_contract_version: u32,
+    #[serde(default)]
+    pub body_completeness: String,
+    #[serde(default)]
+    pub operation_identity: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -119,6 +133,10 @@ pub(crate) struct OwnershipRecord {
     pub structural_evidence: Vec<String>,
     pub behavioral_evidence: Vec<String>,
     pub acceptance_test_id: String,
+    #[serde(default)]
+    pub canonical_owner: bool,
+    #[serde(default)]
+    pub replacement_chain: Vec<u64>,
     #[serde(default)]
     pub redesign_note: Option<String>,
 }

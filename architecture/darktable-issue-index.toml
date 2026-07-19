@@ -1,9 +1,11 @@
 # GENERATED FILE: GitHub child-issue capability ownership snapshot; do not hand-edit.
 # Source: cgasgarth/RustTable child issues of #158.
 
-schema_version = 1
+schema_version = 2
 repository = "cgasgarth/RustTable"
 parent_issue = 158
+issue_body_contract_version = 1
+source_snapshot = "live-child-issues-under-158"
 capability_ids = ["build-option.BINARY_PACKAGE_BUILD","build-option.BUILD_CMSTEST","build-option.BUILD_CURVE_TOOLS","build-option.BUILD_MSYS2_INSTALL","build-option.BUILD_NOISE_TOOLS","build-option.BUILD_PRINT","build-option.BUILD_RS_IDENTIFY","build-option.CUSTOM_CFLAGS","build-option.DONT_USE_INTERNAL_LIBRAW","build-option.DONT_USE_INTERNAL_LUA","build-option.FORCE_COLORED_OUTPUT","build-option.TESTBUILD_OPENCL_PROGRAMS","build-option.USE_AI","build-option.USE_AVIF","build-option.USE_CAMERA_SUPPORT","build-option.USE_COLORD","build-option.USE_DARKTABLE_PROFILING","build-option.USE_GMIC","build-option.USE_GRAPHICSMAGICK","build-option.USE_HEIF","build-option.USE_ICU","build-option.USE_IMAGEMAGICK","build-option.USE_ISOBMFF","build-option.USE_JXL","build-option.USE_KWALLET","build-option.USE_LIBRAW","build-option.USE_LIBSECRET","build-option.USE_LUA","build-option.USE_MAC_INTEGRATION","build-option.USE_MAP","build-option.USE_OPENCL","build-option.USE_OPENEXR","build-option.USE_OPENJPEG","build-option.USE_OPENMP","build-option.USE_PORTMIDI","build-option.USE_SDL2","build-option.USE_UNITY","build-option.USE_WEBP","build-option.USE_XCF","build-option.USE_XMLLINT","build-option.VALIDATE_APPDATA_FILE","domain.accessibility","domain.camera-tethering","domain.catalog-library","domain.color-management","domain.import","domain.input-devices","domain.localization","domain.map-geotagging","domain.masks-blending","domain.metadata","domain.packaging","domain.printing","format.avif_format","format.copy","format.exr","format.gimp_xcf","format.heif_format","format.j2k","format.jpeg","format.jxl_format","format.pdf","format.pfm","format.png","format.ppm","format.tiff","format.webp","iop.agx","iop.ashift","iop.atrous","iop.basecurve","iop.basicadj","iop.bilat","iop.bilateral","iop.bloom","iop.blurs","iop.borders","iop.cacorrect","iop.cacorrectrgb","iop.censorize","iop.channelmixer","iop.channelmixerrgb","iop.clahe","iop.clipping","iop.colisa","iop.colorbalance","iop.colorbalancergb","iop.colorchecker","iop.colorcontrast","iop.colorcorrection","iop.colorequal","iop.colorharmonizer","iop.colorin","iop.colorize","iop.colormapping","iop.colorout","iop.colorreconstruct","iop.colortransfer","iop.colorzones","iop.crop","iop.defringe","iop.demosaic","iop.denoiseprofile","iop.diffuse","iop.dither","iop.enlargecanvas","iop.equalizer","iop.exposure","iop.filmic","iop.filmicrgb","iop.finalscale","iop.flip","iop.gamma","iop.globaltonemap","iop.graduatednd","iop.grain","iop.hazeremoval","iop.highlights","iop.highpass","iop.hotpixels","iop.invert","iop.lens","iop.levels","iop.liquify","iop.lowlight","iop.lowpass","iop.lut3d","iop.mask_manager","iop.monochrome","iop.negadoctor","iop.nlmeans","iop.overexposed","iop.overlay","iop.primaries","iop.profile_gamma","iop.rasterfile","iop.rawdenoise","iop.rawoverexposed","iop.rawprepare","iop.relight","iop.retouch","iop.rgbcurve","iop.rgblevels","iop.rotatepixels","iop.scalepixels","iop.shadhi","iop.sharpen","iop.sigmoid","iop.soften","iop.splittoning","iop.spots","iop.temperature","iop.tonecurve","iop.toneequal","iop.tonemap","iop.velvia","iop.vibrance","iop.vignette","iop.watermark","iop.zonesystem","lib.backgroundjobs","lib.camera","lib.collect","lib.colorlabels","lib.colorpicker","lib.copy_history","lib.darktable_label","lib.duplicate","lib.export","lib.filmstrip","lib.filter","lib.filtering","lib.gamepad","lib.geotagging","lib.global_toolbox","lib.hinter","lib.histogram","lib.history","lib.image","lib.image_infos","lib.import","lib.ioporder","lib.lighttable_mode","lib.live_view","lib.location","lib.log_history","lib.map_locations","lib.map_settings","lib.masks","lib.metadata","lib.metadata_view","lib.midi","lib.module_toolbox","lib.modulegroups","lib.navigation","lib.neural_restore","lib.print_settings","lib.ratings","lib.recentcollect","lib.select","lib.session","lib.snapshots","lib.styles","lib.tagging","lib.timeline","lib.view_toolbox","lib.viewswitcher","lua.ai","lua.cairo","lua.call","lua.configuration","lua.database","lua.early_events","lua.early_format","lua.early_lib","lua.early_modules","lua.early_storage","lua.early_types","lua.early_view","lua.events","lua.film","lua.gettext","lua.glist","lua.gui","lua.guides","lua.image","lua.init","lua.lualib","lua.luastorages","lua.metadata","lua.password","lua.preferences","lua.print","lua.styles","lua.tags","lua.util","lua.view","lua.widget","opencl.agx","opencl.atrous","opencl.basecurve","opencl.basic","opencl.basicadj","opencl.bilateral","opencl.blendop","opencl.bloom","opencl.blurs","opencl.bspline","opencl.capture","opencl.channelmixer","opencl.colorequal","opencl.colorharmonizer","opencl.colorreconstruction","opencl.colorspaces","opencl.demosaic_markesteijn","opencl.demosaic_other","opencl.demosaic_ppg","opencl.demosaic_rcd","opencl.demosaic_vng","opencl.denoiseprofile","opencl.diffuse","opencl.dwt","opencl.extended","opencl.filmic","opencl.gaussian","opencl.guided_filter","opencl.hazeremoval","opencl.highpass","opencl.liquify","opencl.locallaplacian","opencl.lut3d","opencl.negadoctor","opencl.nlmeans","opencl.overlay","opencl.retouch","opencl.rgbcurve","opencl.rgblevels","opencl.sharpen","opencl.sigmoid","opencl.soften","storage.disk","storage.email","storage.gallery","storage.latex","storage.piwigo","view.darkroom","view.lighttable","view.map","view.print","view.slideshow","view.tethering"]
 
 [[issues]]
@@ -1413,22 +1415,71 @@ parent_issue = 158
 capability_ids = ["build-option.USE_CAMERA_SUPPORT", "domain.camera-tethering", "lib.camera", "lib.live_view", "view.tethering"]
 
 [[issues]]
-number = 471
-title = "Implement the clipping diagnostic operation"
+number = 367
+title = "Implement raster overlay compositing operation"
 state = "open"
-milestone = "Foundation & Developer Workflow"
-priority = "P2"
-parent_issue = 158
-capability_ids = ["iop.clipping"]
-
-[[issues]]
-number = 472
-title = "Implement the overlay compositing operation"
-state = "open"
-milestone = "Foundation & Developer Workflow"
+milestone = "Processing Pipeline & Color"
 priority = "P2"
 parent_issue = 158
 capability_ids = ["iop.overlay"]
+canonical_owner = true
+issue_body_contract_version = 1
+body_completeness = "complete"
+operation_identity = "overlay"
+
+[[issues]]
+number = 375
+title = "Implement deprecated film-negative inversion"
+state = "open"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+parent_issue = 158
+capability_ids = ["iop.invert"]
+canonical_owner = true
+issue_body_contract_version = 1
+body_completeness = "complete"
+operation_identity = "invert"
+
+[[issues]]
+number = 380
+title = "Implement deprecated crop-and-rotate compatibility operation"
+state = "open"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+parent_issue = 158
+capability_ids = ["iop.clipping"]
+canonical_owner = true
+issue_body_contract_version = 1
+body_completeness = "complete"
+operation_identity = "clipping"
+
+[[issues]]
+number = 471
+title = "Superseded duplicate: deprecated crop-and-rotate compatibility operation"
+state = "closed"
+state_reason = "not_planned"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+parent_issue = 158
+capability_ids = []
+superseded_capability_ids = ["iop.clipping"]
+replacement_issue = 380
+issue_body_contract_version = 1
+body_completeness = "audit-only"
+
+[[issues]]
+number = 472
+title = "Superseded duplicate: raster overlay compositing operation"
+state = "closed"
+state_reason = "not_planned"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+parent_issue = 158
+capability_ids = []
+superseded_capability_ids = ["iop.overlay"]
+replacement_issue = 367
+issue_body_contract_version = 1
+body_completeness = "audit-only"
 
 [[issues]]
 number = 473
@@ -1441,12 +1492,17 @@ capability_ids = ["iop.clahe"]
 
 [[issues]]
 number = 474
-title = "Implement the invert operation"
-state = "open"
-milestone = "Foundation & Developer Workflow"
+title = "Superseded duplicate: deprecated film-negative inversion"
+state = "closed"
+state_reason = "not_planned"
+milestone = "Processing Pipeline & Color"
 priority = "P2"
 parent_issue = 158
-capability_ids = ["iop.invert"]
+capability_ids = []
+superseded_capability_ids = ["iop.invert"]
+replacement_issue = 375
+issue_body_contract_version = 1
+body_completeness = "audit-only"
 
 [[issues]]
 number = 475
@@ -2704,13 +2760,14 @@ acceptance_test_id = "capability.iop.clahe"
 
 [[ownership]]
 capability_id = "iop.clipping"
-issue_number = 471
+issue_number = 380
 role = "implementation"
 category = "darkroom"
 status = "required"
 structural_evidence = ["reference-scan:iop"]
 behavioral_evidence = ["parity:iop.clipping"]
 acceptance_test_id = "capability.iop.clipping"
+canonical_owner = true
 
 [[ownership]]
 capability_id = "iop.colisa"
@@ -3074,13 +3131,14 @@ acceptance_test_id = "capability.iop.hotpixels"
 
 [[ownership]]
 capability_id = "iop.invert"
-issue_number = 474
+issue_number = 375
 role = "implementation"
 category = "darkroom"
 status = "required"
 structural_evidence = ["reference-scan:iop"]
 behavioral_evidence = ["parity:iop.invert"]
 acceptance_test_id = "capability.iop.invert"
+canonical_owner = true
 
 [[ownership]]
 capability_id = "iop.lens"
@@ -3194,13 +3252,14 @@ acceptance_test_id = "capability.iop.overexposed"
 
 [[ownership]]
 capability_id = "iop.overlay"
-issue_number = 472
+issue_number = 367
 role = "implementation"
 category = "darkroom"
 status = "required"
 structural_evidence = ["reference-scan:iop"]
 behavioral_evidence = ["parity:iop.overlay"]
 acceptance_test_id = "capability.iop.overlay"
+canonical_owner = true
 
 [[ownership]]
 capability_id = "iop.primaries"

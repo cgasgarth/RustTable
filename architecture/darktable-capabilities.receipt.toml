@@ -1,7 +1,7 @@
 # GENERATED FILE: rusttable-parity capability inventory receipt; do not hand-edit.
 
 schema_version = 1
-manifest_sha256 = "c2a3c89fef21b3f3d9d4aa63bcbc5567312463a35357d3605c8400b3510a5260"
+manifest_sha256 = "76b7a40ee7d3876a1137a7cb07ce93e06d88aab21cf8aacbc7e94b964c9c536f"
 capability_count = 291
 ownership_count = 335
 issue_count = 165

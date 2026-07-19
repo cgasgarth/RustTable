@@ -89,6 +89,10 @@ pub struct ExtensionConformanceArgs {
 pub enum ParityCommand {
     ScanDarktable(ParityScanArgs),
     Verify,
+    #[command(name = "plan-issue-reconciliation")]
+    PlanIssueReconciliation(IssueReconciliationArgs),
+    #[command(name = "apply-issue-reconciliation")]
+    ApplyIssueReconciliation(IssueReconciliationArgs),
 }
 
 #[derive(Debug, Args)]
@@ -110,6 +114,21 @@ pub struct ParityScanArgs {
         default_value = "architecture/darktable-capabilities.receipt.toml"
     )]
     pub receipt: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct IssueReconciliationArgs {
+    #[arg(
+        long,
+        default_value = "target/validation/issue-reconciliation.plan.json"
+    )]
+    pub plan: PathBuf,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
+    #[arg(long)]
+    pub specifications: Option<PathBuf>,
+    #[arg(long, default_value_t = false)]
+    pub confirm: bool,
 }
 
 #[derive(Debug, Subcommand)]

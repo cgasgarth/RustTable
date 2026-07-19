@@ -209,6 +209,7 @@ pub(crate) fn validate_issue_index(
     let issues = collect_issue_metadata(index)?;
     let (ownership_by_issue, ownership_by_capability) = collect_ownership_metadata(index, &issues)?;
     validate_ownership_consistency(index)?;
+    validate_canonical_ownership(index, &issues, &ownership_by_issue)?;
     validate_capability_inventory(index, &ownership_by_capability)?;
     validate_issue_declarations(index, &ownership_by_issue)?;
     if let Some(known) = known_capability_ids {
@@ -222,8 +223,105 @@ pub(crate) fn validate_issue_index(
     Ok(())
 }
 
+fn validate_canonical_ownership(
+    index: &IssueIndex,
+    issues: &BTreeMap<u64, &crate::model::IssueRecord>,
+    ownership_by_issue: &OwnershipByIssue,
+) -> Result<(), ScanError> {
+    if index.schema_version < 2 {
+        return Ok(());
+    }
+    let mut canonical_by_capability = BTreeMap::<String, u64>::new();
+    for record in &index.ownership {
+        if !record.canonical_owner {
+            continue;
+        }
+        let issue =
+            issues
+                .get(&record.issue_number)
+                .ok_or_else(|| ScanError::InvalidIssueIndex {
+                    message: format!(
+                        "canonical ownership references missing issue #{}",
+                        record.issue_number
+                    ),
+                })?;
+        if !issue.canonical_owner || !issue.capability_ids.contains(&record.capability_id) {
+            return Err(ScanError::InvalidIssueIndex {
+                message: format!(
+                    "canonical ownership metadata disagrees for {} on #{}",
+                    record.capability_id, record.issue_number
+                ),
+            });
+        }
+        if canonical_by_capability
+            .insert(record.capability_id.clone(), record.issue_number)
+            .is_some()
+        {
+            return Err(ScanError::InvalidIssueIndex {
+                message: format!("multiple canonical owners for {}", record.capability_id),
+            });
+        }
+    }
+    for issue in issues.values() {
+        if issue.canonical_owner
+            && !ownership_by_issue
+                .get(&issue.number)
+                .is_some_and(|capabilities| {
+                    index.ownership.iter().any(|record| {
+                        record.issue_number == issue.number
+                            && record.canonical_owner
+                            && capabilities.contains(&record.capability_id)
+                    })
+                })
+        {
+            return Err(ScanError::InvalidIssueIndex {
+                message: format!(
+                    "issue #{} is marked canonical without ownership",
+                    issue.number
+                ),
+            });
+        }
+        if issue.state_reason.as_deref() == Some("not_planned")
+            || issue.state_reason.as_deref() == Some("duplicate")
+        {
+            if !issue.capability_ids.is_empty() || issue.superseded_capability_ids.is_empty() {
+                return Err(ScanError::InvalidIssueIndex {
+                    message: format!(
+                        "superseded issue #{} has invalid capability metadata",
+                        issue.number
+                    ),
+                });
+            }
+            let replacement = issue
+                .replacement_issue
+                .and_then(|number| issues.get(&number).copied())
+                .ok_or_else(|| ScanError::StaleIssue {
+                    issue_number: issue.number,
+                    reason: "superseded issue has no replacement owner".to_owned(),
+                })?;
+            if !replacement.canonical_owner {
+                return Err(ScanError::StaleIssue {
+                    issue_number: issue.number,
+                    reason: "replacement issue is not canonical".to_owned(),
+                });
+            }
+            for capability in &issue.superseded_capability_ids {
+                if !replacement.capability_ids.contains(capability) {
+                    return Err(ScanError::InvalidIssueIndex {
+                        message: format!(
+                            "superseded capability {} is absent from replacement #{}",
+                            capability, replacement.number
+                        ),
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_index_header(index: &IssueIndex) -> Result<(), ScanError> {
-    if index.schema_version != 1 {
+    if !matches!(index.schema_version, 1 | 2) {
         return Err(ScanError::InvalidIssueIndex {
             message: format!("unsupported schema version {}", index.schema_version),
         });
@@ -236,6 +334,11 @@ fn validate_index_header(index: &IssueIndex) -> Result<(), ScanError> {
     if index.parent_issue != PARENT_ISSUE {
         return Err(ScanError::InvalidIssueIndex {
             message: format!("wrong parent issue #{}", index.parent_issue),
+        });
+    }
+    if index.schema_version >= 2 && index.issue_body_contract_version == 0 {
+        return Err(ScanError::InvalidIssueIndex {
+            message: "issue body contract version is missing".to_owned(),
         });
     }
     Ok(())
