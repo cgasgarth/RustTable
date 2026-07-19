@@ -630,7 +630,10 @@ fn execute_check(
                 duration_ms,
                 severity: check.severity.clone(),
                 artifacts,
-                detail: Some(format!("process status {}", result.receipt.status)),
+                detail: Some(format!(
+                    "process status {}, exit code {:?}",
+                    result.receipt.status, result.receipt.exit_code
+                )),
             }
         }
         Err(error) => {

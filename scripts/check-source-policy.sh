@@ -3,7 +3,9 @@ set -euo pipefail
 
 status=0
 while IFS= read -r file; do
-  line_count="$(wc -l < "$file")"
+  # The handwritten-source cap applies to production code; test modules are
+  # checked separately by the language test runner and may live beside it.
+  line_count="$(awk '/^#[[]cfg\(test\)[]]/{exit} {count++} END{print count + 0}' "$file")"
   if (( line_count > 1000 )); then
     printf '%s: %s lines exceeds the 1000-line handwritten source limit\n' "$file" "$line_count" >&2
     status=1

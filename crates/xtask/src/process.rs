@@ -1,8 +1,7 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write as _;
-use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -18,6 +17,8 @@ use process_wrap::std::ProcessSession;
 use process_wrap::std::{ChildWrapper, CommandWrap};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
+mod artifact_receipts;
 
 const READ_CHUNK: usize = 8192;
 const DEFAULT_OUTPUT_LIMIT: usize = 64 * 1024;
@@ -404,7 +405,7 @@ impl ProcessRunner {
         if let Some((path, message)) = streams.artifact_error {
             return Err(ProcessError::Artifact { path, message });
         }
-        let artifacts = collect_artifacts(&request, started)?;
+        let artifacts = artifact_receipts::collect(&request, started)?;
         let public_environment = request.public_environment();
         let receipt = CommandReceipt {
             schema_version: 2,
@@ -826,69 +827,9 @@ impl StopReason {
     }
 }
 
-#[derive(Debug)]
-struct ArtifactWriter {
-    path: PathBuf,
-    file: File,
-    head: Vec<u8>,
-    tail: VecDeque<u8>,
-    truncated: bool,
-}
-
-pub(crate) fn write_bounded_artifact(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut writer = ArtifactWriter::create(path).map_err(|error| error.to_string())?;
-    writer.push(bytes);
-    writer.finish()
-}
-
-impl ArtifactWriter {
-    fn create(path: &Path) -> Result<Self, ProcessError> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|error| ProcessError::Artifact {
-                path: path.to_owned(),
-                message: error.to_string(),
-            })?;
-        }
-        let file = File::create(path).map_err(|error| ProcessError::Artifact {
-            path: path.to_owned(),
-            message: error.to_string(),
-        })?;
-        Ok(Self {
-            path: path.to_owned(),
-            file,
-            head: Vec::with_capacity(ARTIFACT_HEAD_LIMIT),
-            tail: VecDeque::with_capacity(ARTIFACT_TAIL_LIMIT),
-            truncated: false,
-        })
-    }
-    fn push(&mut self, bytes: &[u8]) {
-        let remaining = ARTIFACT_HEAD_LIMIT.saturating_sub(self.head.len());
-        let head_count = remaining.min(bytes.len());
-        self.head.extend_from_slice(&bytes[..head_count]);
-        if head_count < bytes.len() {
-            self.truncated = true;
-            self.push_tail(&bytes[head_count..]);
-        }
-    }
-    fn push_tail(&mut self, bytes: &[u8]) {
-        self.tail.extend(bytes.iter().copied());
-        while self.tail.len() > ARTIFACT_TAIL_LIMIT {
-            let _ = self.tail.pop_front();
-        }
-    }
-    fn finish(mut self) -> Result<(), String> {
-        self.file
-            .write_all(&self.head)
-            .and_then(|()| {
-                if self.truncated {
-                    self.file.write_all(ARTIFACT_MARKER)?;
-                    self.file.write_all(self.tail.make_contiguous())?;
-                }
-                self.file.flush()
-            })
-            .map_err(|error| format!("{}: {error}", self.path.display()))
-    }
-}
+mod artifacts;
+use artifacts::ArtifactWriter;
+pub(crate) use artifacts::write_bounded_artifact;
 
 fn hash_bytes(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
@@ -1001,230 +942,5 @@ fn ownership_name() -> String {
     }
 }
 
-fn collect_artifacts(
-    request: &ProcessRequest,
-    started: SystemTime,
-) -> Result<Vec<ArtifactReceipt>, ProcessError> {
-    let entries = [
-        (request.stdout_artifact.as_ref(), "stdout"),
-        (request.stderr_artifact.as_ref(), "stderr"),
-    ];
-    entries
-        .into_iter()
-        .filter_map(|(path, kind)| path.map(|path| (path, kind)))
-        .map(|(path, kind)| {
-            let metadata = fs::symlink_metadata(path).map_err(|error| ProcessError::Artifact {
-                path: path.clone(),
-                message: error.to_string(),
-            })?;
-            if !metadata.file_type().is_file() {
-                return Err(ProcessError::Artifact {
-                    path: path.clone(),
-                    message: "artifact must be a regular file".to_owned(),
-                });
-            }
-            let fresh = metadata
-                .modified()
-                .ok()
-                .and_then(|modified| modified.duration_since(started).ok())
-                .is_some();
-            if !fresh {
-                return Err(ProcessError::Artifact {
-                    path: path.clone(),
-                    message: "artifact was not created during execution".to_owned(),
-                });
-            }
-            let size = metadata.len();
-            if size > ARTIFACT_LIMIT as u64 {
-                return Err(ProcessError::Artifact {
-                    path: path.clone(),
-                    message: "artifact exceeds the bounded size".to_owned(),
-                });
-            }
-            let bytes = fs::read(path).map_err(|error| ProcessError::Artifact {
-                path: path.clone(),
-                message: error.to_string(),
-            })?;
-            Ok(ArtifactReceipt {
-                path: stable_path(&path.display().to_string(), request.current_dir.as_deref()),
-                size_bytes: size,
-                sha256: hash_bytes(&bytes),
-                kind: kind.to_owned(),
-                fresh,
-            })
-        })
-        .collect()
-}
-
 #[cfg(test)]
-mod tests {
-    use super::{EnvironmentProfile, ProcessLimits, ProcessRequest, ProcessRunner};
-    use std::time::Duration;
-
-    #[test]
-    fn bounds_stdout_and_returns_a_stable_receipt() {
-        let request =
-            ProcessRequest::new("sh", ["-c", "printf 1234567890"]).limits(ProcessLimits {
-                max_stdout_bytes: 4,
-                max_stderr_bytes: 16,
-                timeout: Duration::from_secs(2),
-            });
-        let result = ProcessRunner::new().run(request).expect("process result");
-        assert_eq!(result.receipt.status, "completed");
-        assert_eq!(result.stdout, b"1234");
-        assert!(result.receipt.stdout_truncated);
-        assert_eq!(result.receipt.schema_version, 2);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn large_valid_output_is_bounded_without_changing_success() {
-        let root =
-            std::env::temp_dir().join(format!("rusttable-process-artifact-{}", std::process::id()));
-        let stdout = root.join("stdout.log");
-        let stderr = root.join("stderr.log");
-        let request = ProcessRequest::new(
-            "sh",
-            [
-                "-c",
-                "i=0; while [ $i -lt 400000 ]; do printf x; i=$((i+1)); done",
-            ],
-        )
-        .limits(ProcessLimits {
-            max_stdout_bytes: 8,
-            max_stderr_bytes: 8,
-            timeout: Duration::from_secs(10),
-        })
-        .artifacts(&stdout, &stderr);
-        let result = ProcessRunner::new().run(request).expect("process result");
-        let artifact = std::fs::read_to_string(&stdout).expect("stdout artifact");
-        assert!(result.receipt.success());
-        assert!(result.receipt.stdout_truncated);
-        assert!(artifact.contains("output truncated"));
-        assert!(artifact.len() <= super::ARTIFACT_LIMIT);
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn large_failing_output_keeps_strict_failure_semantics_and_tail() {
-        let root =
-            std::env::temp_dir().join(format!("rusttable-process-failure-{}", std::process::id()));
-        let stdout = root.join("stdout.log");
-        let stderr = root.join("stderr.log");
-        let request = ProcessRequest::new(
-            "sh",
-            [
-                "-c",
-                "i=0; while [ $i -lt 400000 ]; do printf x; i=$((i+1)); done; exit 7",
-            ],
-        )
-        .limits(ProcessLimits {
-            max_stdout_bytes: 8,
-            max_stderr_bytes: 8,
-            timeout: Duration::from_secs(10),
-        })
-        .artifacts(&stdout, &stderr);
-        let result = ProcessRunner::new().run(request).expect("process result");
-        let artifact = std::fs::read_to_string(&stdout).expect("stdout artifact");
-        assert!(!result.receipt.success());
-        assert_eq!(result.receipt.exit_code, Some(7));
-        assert!(result.receipt.stdout_truncated);
-        assert!(artifact.contains("output truncated"));
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn artifact_paths_are_platform_joined_and_stable() {
-        let path = std::path::Path::new("target")
-            .join("validation")
-            .join("workspace-dag")
-            .join("pull_request.stdout.log");
-        assert_eq!(
-            path.file_name().and_then(|name| name.to_str()),
-            Some("pull_request.stdout.log")
-        );
-        assert!(path.to_string_lossy().contains("workspace-dag"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn timeout_terminates_a_child_tree() {
-        let request =
-            ProcessRequest::new("sh", ["-c", "(sleep 30) & wait"]).limits(ProcessLimits {
-                max_stdout_bytes: 64,
-                max_stderr_bytes: 64,
-                timeout: Duration::from_millis(100),
-            });
-        let result = ProcessRunner::new().run(request).expect("process result");
-        assert_eq!(result.receipt.status, "timed-out");
-        assert_eq!(result.receipt.process_ownership, "unix-process-session");
-        assert_eq!(result.receipt.cleanup.outcome, "reaped");
-    }
-
-    #[test]
-    fn request_environment_is_allowlisted_and_receipt_is_redacted() {
-        let result = ProcessRunner::new()
-            .run(
-                ProcessRequest::new("/bin/sh", ["-c", "printf %s \"$VISIBLE\""])
-                    .profile(EnvironmentProfile::TestFixture)
-                    .env("VISIBLE", "ok")
-                    .secret("RUSTTABLE_TOKEN", "do-not-persist")
-                    .limits(ProcessLimits {
-                        max_stdout_bytes: 16,
-                        max_stderr_bytes: 16,
-                        timeout: Duration::from_secs(2),
-                    }),
-            )
-            .expect("process result");
-        assert_eq!(result.stdout, b"ok");
-        assert!(
-            result
-                .receipt
-                .environment_names
-                .contains(&"VISIBLE".to_owned())
-        );
-        assert!(
-            !result
-                .receipt
-                .environment_names
-                .contains(&"RUSTTABLE_TOKEN".to_owned())
-        );
-        assert!(
-            !result
-                .receipt
-                .redacted_args
-                .iter()
-                .any(|arg| arg == "do-not-persist")
-        );
-        assert_ne!(
-            result.receipt.environment_policy_hash,
-            result.receipt.environment_hash
-        );
-    }
-
-    #[test]
-    fn explicit_paths_are_stable_aliases_in_durable_receipts() {
-        let directory =
-            std::env::temp_dir().join(format!("rusttable-receipt-{}", std::process::id()));
-        std::fs::create_dir_all(&directory).expect("receipt directory");
-        let result = ProcessRunner::new()
-            .run(
-                ProcessRequest::new("/bin/sh", ["-c", "exit 0"])
-                    .profile(EnvironmentProfile::TestFixture)
-                    .current_dir(&directory)
-                    .limits(ProcessLimits {
-                        max_stdout_bytes: 16,
-                        max_stderr_bytes: 16,
-                        timeout: Duration::from_secs(2),
-                    }),
-            )
-            .expect("process result");
-        assert_eq!(result.receipt.current_dir.as_deref(), Some("<worktree>"));
-        assert_eq!(
-            result.receipt.path_aliases.get("current_dir"),
-            Some(&"<worktree>".to_owned())
-        );
-        let _ = std::fs::remove_dir_all(directory);
-    }
-}
+mod tests;
