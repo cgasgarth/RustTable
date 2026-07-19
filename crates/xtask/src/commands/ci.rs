@@ -744,7 +744,7 @@ mod tests {
             .find(|check| check.id == "rust-clippy")
             .expect("library lint");
         assert_eq!(library_lint.timeout_for("precommit"), 20);
-        assert_eq!(library_lint.timeout_for("prepush"), 20);
+        assert_eq!(library_lint.timeout_for("prepush"), 35);
 
         let rust_check = contract
             .checks
@@ -758,15 +758,25 @@ mod tests {
             .expect("library test");
         for surface in ["prepush", "pull_request"] {
             assert_eq!(rust_check.parallel_group_for(surface), "rust-03-check");
-            assert_eq!(library_lint.parallel_group_for(surface), "rust-02-clippy");
             assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-            assert_eq!(rust_check.timeout_for(surface), 55);
-            assert_eq!(library_lint.timeout_for(surface), 20);
-            assert_eq!(rust_test.timeout_for(surface), 60);
-            assert_eq!(library_lint.prerequisites_for(surface), vec!["rust-test"]);
-            assert_eq!(rust_check.prerequisites_for(surface), vec!["rust-clippy"]);
+            assert_eq!(rust_check.timeout_for(surface), 15);
+            assert_eq!(rust_test.timeout_for(surface), 85);
+            let expected_prerequisites = if surface == "prepush" {
+                vec!["rust-clippy"]
+            } else {
+                vec!["rust-test"]
+            };
+            assert_eq!(
+                rust_check.prerequisites_for(surface),
+                expected_prerequisites
+            );
             assert!(rust_test.prerequisites_for(surface).is_empty());
         }
+        assert!(library_lint.on("prepush"));
+        assert!(!library_lint.on("pull_request"));
+        assert_eq!(library_lint.parallel_group_for("prepush"), "rust-02-clippy");
+        assert_eq!(library_lint.timeout_for("prepush"), 35);
+        assert_eq!(library_lint.prerequisites_for("prepush"), vec!["rust-test"]);
         assert_eq!(rust_check.parallel_group_for("precommit"), "rust");
         assert_eq!(library_lint.parallel_group_for("precommit"), "rust");
 
