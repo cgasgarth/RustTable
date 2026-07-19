@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use super::{Result, report};
 use crate::cli::{ChannelRefreshArgs, ChannelVerifyArgs, ChannelsCommand};
-use crate::process::{ProcessLimits, ProcessRequest, ProcessRunner};
+use crate::process::{EnvironmentProfile, ProcessLimits, ProcessRequest, ProcessRunner};
 use crate::root::RepositoryRoot;
 
 const CHANNELS_PATH: &str = "quality/rust-channels.toml";
@@ -657,8 +657,8 @@ where
     S: Into<String>,
 {
     let request = ProcessRequest::new("rustup", args)
+        .profile(EnvironmentProfile::RustTool)
         .current_dir(root.path())
-        .environment(env::vars().collect())
         .limits(ProcessLimits {
             max_stdout_bytes: OUTPUT_LIMIT,
             max_stderr_bytes: OUTPUT_LIMIT,

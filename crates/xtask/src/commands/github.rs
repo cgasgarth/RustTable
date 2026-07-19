@@ -6,7 +6,9 @@ use serde_json::Value;
 
 use super::report;
 use crate::cli::{GithubCommand, VerifyPrContractArgs, VerifyQueueArgs};
-use crate::process::{ProcessLimits, ProcessRequest, ProcessRunner};
+use crate::process::{
+    EnvironmentProfile, NetworkPolicy, ProcessLimits, ProcessRequest, ProcessRunner,
+};
 use crate::root::RepositoryRoot;
 
 const TARGET_REPOSITORY: &str = "cgasgarth/RustTable";
@@ -868,6 +870,9 @@ impl<'a> GitHubApi<'a> {
                 &url,
             ],
         )
+        .profile(EnvironmentProfile::GitHubApi)
+        .network(NetworkPolicy::Read)
+        .secret_arg(7, &self.token)
         .limits(ProcessLimits {
             max_stdout_bytes: 512 * 1024,
             max_stderr_bytes: 16 * 1024,
