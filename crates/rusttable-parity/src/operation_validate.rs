@@ -480,6 +480,11 @@ fn validate_opencl(operation: &Operation) -> Result<(), ScanError> {
             reference: "missing resolved program registry record".to_owned(),
         });
     }
+    let resolved_kernels = operation
+        .opencl_resolution
+        .iter()
+        .flat_map(|resolution| resolution.kernels.iter())
+        .collect::<BTreeSet<_>>();
     for resolution in &operation.opencl_resolution {
         if !programs.contains(&resolution.program)
             || std::path::Path::new(&resolution.source_path)
@@ -487,16 +492,22 @@ fn validate_opencl(operation: &Operation) -> Result<(), ScanError> {
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("c"))
             || resolution.source_path.trim().is_empty()
             || resolution.kernels.is_empty()
-            || operation
-                .opencl_kernels
-                .iter()
-                .any(|kernel| !resolution.kernels.contains(kernel))
         {
             return Err(ScanError::UnknownOpenclProgram {
                 operation: operation.name.clone(),
                 reference: resolution.program.clone(),
             });
         }
+    }
+    if operation
+        .opencl_kernels
+        .iter()
+        .any(|kernel| !resolved_kernels.contains(kernel))
+    {
+        return Err(ScanError::UnknownOpenclKernel {
+            operation: operation.name.clone(),
+            reference: "kernel missing from resolved program declarations".to_owned(),
+        });
     }
     Ok(())
 }

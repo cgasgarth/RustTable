@@ -117,16 +117,6 @@ pub fn scan_operations_with_overrides(
             apply_override(&mut operation, override_entry);
         }
         complete_generated_metadata(&mut operation, source);
-        if let Some(program) = operation
-            .opencl_programs
-            .iter()
-            .find(|program| !programs.contains(program))
-        {
-            return Err(ScanError::UnknownOpenclProgram {
-                operation: operation.name,
-                reference: program.clone(),
-            });
-        }
         resolve_opencl_references(&mut operation, source)?;
         operations.push(operation);
     }
@@ -553,11 +543,7 @@ fn resolve_opencl_references(operation: &mut Operation, source: &Path) -> Result
         let Some((index, path)) = registry.get(&program) else {
             return Err(ScanError::UnknownOpenclProgram {
                 operation: operation.name.clone(),
-                reference: format!(
-                    "{} (known: {})",
-                    program,
-                    registry.keys().cloned().collect::<Vec<_>>().join(",")
-                ),
+                reference: program,
             });
         };
         let content = read(source, &source.join(path))?;
