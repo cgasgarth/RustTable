@@ -26,7 +26,7 @@ impl RepositoryRoot {
                 .limits(ProcessLimits {
                     max_stdout_bytes: 4 * 1024 * 1024,
                     max_stderr_bytes: 256 * 1024,
-                    timeout: std::time::Duration::from_secs(4),
+                    timeout: Some(std::time::Duration::from_secs(4)),
                 })
                 .cancellation(Arc::new(AtomicBool::new(false)));
         let result = runner.run(request).map_err(RootError::MetadataProcess)?;

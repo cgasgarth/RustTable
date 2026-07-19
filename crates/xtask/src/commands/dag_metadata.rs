@@ -27,7 +27,7 @@ pub(super) fn run(
                 .limits(ProcessLimits {
                     max_stdout_bytes: METADATA_OUTPUT_LIMIT,
                     max_stderr_bytes: 256 * 1024,
-                    timeout: METADATA_TIMEOUT,
+                    timeout: Some(METADATA_TIMEOUT),
                 }),
         )
         .map_err(|error| format!("workspace DAG {name}: cargo metadata failed to run: {error}"))?;

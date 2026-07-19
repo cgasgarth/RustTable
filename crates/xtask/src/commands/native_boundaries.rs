@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -22,7 +22,8 @@ struct Policy {
     primary_compiler: String,
     ownership_map: String,
     workspace_dag: String,
-    dependency_policy: String,
+    #[serde(rename = "dependency_policy")]
+    dependency_manifest: String,
     reference_clone: String,
     forbidden_extensions: Vec<String>,
     forbidden_filenames: Vec<String>,
@@ -165,8 +166,8 @@ pub(super) fn run(
         },
         "workspace_members": workspace_members,
         "native_packages": native_packages,
-        "ownership_map_sha256": sha256_file(root.join(OWNERSHIP_PATH))?,
-        "policy_sha256": sha256_file(root.join(POLICY_PATH))?,
+        "ownership_map_sha256": sha256_file(&root.join(OWNERSHIP_PATH))?,
+        "policy_sha256": sha256_file(&root.join(POLICY_PATH))?,
         "tracked_files_checked": files.len(),
         "migration_receipts": policy.migration_receipts.iter().map(|receipt| receipt.id.as_str()).collect::<Vec<_>>(),
         "reference_clone": {
@@ -203,7 +204,7 @@ fn verify_compiler(
             .limits(ProcessLimits {
                 max_stdout_bytes: 16 * 1024,
                 max_stderr_bytes: 16 * 1024,
-                timeout: METADATA_TIMEOUT,
+                timeout: Some(METADATA_TIMEOUT),
             }),
         "rustc -vV",
     )?;
@@ -267,7 +268,7 @@ fn cargo_metadata(root: &RepositoryRoot, runner: &ProcessRunner) -> Result<Cargo
         .limits(ProcessLimits {
             max_stdout_bytes: 4 * 1024 * 1024,
             max_stderr_bytes: 256 * 1024,
-            timeout: METADATA_TIMEOUT,
+            timeout: Some(METADATA_TIMEOUT),
         }),
         "cargo metadata",
     )?;
@@ -283,7 +284,7 @@ fn tracked_files(root: &RepositoryRoot, runner: &ProcessRunner) -> Result<Vec<St
             .limits(ProcessLimits {
                 max_stdout_bytes: 4 * 1024 * 1024,
                 max_stderr_bytes: 64 * 1024,
-                timeout: METADATA_TIMEOUT,
+                timeout: Some(METADATA_TIMEOUT),
             }),
         "git ls-files",
     )?;
@@ -294,11 +295,7 @@ fn tracked_files(root: &RepositoryRoot, runner: &ProcessRunner) -> Result<Vec<St
         .collect())
 }
 
-fn validate_policy(
-    policy: &Policy,
-    ownership: &OwnershipMap,
-    root: &RepositoryRoot,
-) -> Vec<String> {
+fn validate_policy_metadata(policy: &Policy, root: &RepositoryRoot) -> Vec<String> {
     let mut findings = Vec::new();
     if policy.schema != "rusttable.native-boundaries.v1" || policy.owner_issue != 168 {
         findings.push(format!(
@@ -309,7 +306,7 @@ fn validate_policy(
         policy.primary_compiler.as_str(),
         policy.ownership_map.as_str(),
         policy.workspace_dag.as_str(),
-        policy.dependency_policy.as_str(),
+        policy.dependency_manifest.as_str(),
     ] {
         if !root.join(path).is_file() {
             findings.push(format!("{POLICY_PATH}: evidence path is missing: {path}"));
@@ -328,6 +325,15 @@ fn validate_policy(
             "{POLICY_PATH}: fail-closed policy lists must not be empty"
         ));
     }
+    findings
+}
+
+fn validate_policy(
+    policy: &Policy,
+    ownership: &OwnershipMap,
+    root: &RepositoryRoot,
+) -> Vec<String> {
+    let mut findings = validate_policy_metadata(policy, root);
     let mut ids = BTreeSet::new();
     for adapter in &policy.adapters {
         if adapter.id.is_empty()
@@ -566,7 +572,10 @@ fn scan_source_text(
             }
         }
     }
-    if path.ends_with(".rs") {
+    if Path::new(path)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("rs"))
+    {
         let unsafe_item = [
             concat!("unsafe", " {"),
             "unsafe fn",
@@ -765,8 +774,8 @@ fn baseline_string(baseline: &toml::Value, key: &str) -> Result<String> {
         .ok_or_else(|| format!("{COMPILER_BASELINE_PATH}: missing {key}"))
 }
 
-fn sha256_file(path: PathBuf) -> Result<String> {
-    let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+fn sha256_file(path: &Path) -> Result<String> {
+    let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
     Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
 }
 

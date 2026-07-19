@@ -271,7 +271,7 @@ fn validate_lock_graph(
         .limits(ProcessLimits {
             max_stdout_bytes: 4 * 1024 * 1024,
             max_stderr_bytes: 256 * 1024,
-            timeout: Duration::from_secs(120),
+            timeout: Some(Duration::from_secs(120)),
         })
         .current_dir(root.path().to_path_buf()),
     ) {

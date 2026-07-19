@@ -295,7 +295,7 @@ fn git_commit(
             )
             .profile(EnvironmentProfile::GitTool)
             .limits(ProcessLimits {
-                timeout: std::time::Duration::from_secs(30),
+                timeout: Some(std::time::Duration::from_secs(30)),
                 max_stdout_bytes: 1024,
                 max_stderr_bytes: 4096,
             }),

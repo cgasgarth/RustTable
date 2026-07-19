@@ -669,7 +669,7 @@ where
         .limits(ProcessLimits {
             max_stdout_bytes: OUTPUT_LIMIT,
             max_stderr_bytes: OUTPUT_LIMIT,
-            timeout: COMMAND_TIMEOUT,
+            timeout: Some(COMMAND_TIMEOUT),
         });
     let result = runner.run(request).map_err(|error| error.to_string())?;
     if !result.receipt.success() {

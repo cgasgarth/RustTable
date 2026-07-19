@@ -84,7 +84,7 @@ pub(crate) fn read_entries(
         .limits(ProcessLimits {
             max_stdout_bytes: COMMAND_OUTPUT_LIMIT,
             max_stderr_bytes: 64 * 1024,
-            timeout: COMMAND_TIMEOUT,
+            timeout: Some(COMMAND_TIMEOUT),
         });
     let result = runner
         .run(request)
@@ -203,7 +203,7 @@ fn batch_git(
         .limits(ProcessLimits {
             max_stdout_bytes: output_limit,
             max_stderr_bytes: 64 * 1024,
-            timeout: COMMAND_TIMEOUT,
+            timeout: Some(COMMAND_TIMEOUT),
         });
     let result = runner
         .run(request)

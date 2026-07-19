@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -185,8 +186,7 @@ fn provision(
     }
     let parent = identity_path
         .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| root.path().to_path_buf());
+        .map_or_else(|| root.path().to_path_buf(), Path::to_path_buf);
     let document = ReferenceIdentityDocument {
         schema_version: 1,
         version: arguments.version.clone(),
@@ -260,9 +260,10 @@ fn alias(
     parent: &Path,
     path: &Path,
 ) -> std::result::Result<PathBuf, String> {
-    let alias = configured
-        .map(PathBuf::from)
-        .unwrap_or_else(|| path.strip_prefix(parent).unwrap_or(path).to_path_buf());
+    let alias = configured.map_or_else(
+        || path.strip_prefix(parent).unwrap_or(path).to_path_buf(),
+        PathBuf::from,
+    );
     if alias.is_absolute() {
         return Err(format!(
             "reference identity alias must be relative: {}",
@@ -291,7 +292,7 @@ fn git_output(
             ProcessRequest::new("git", args)
                 .profile(EnvironmentProfile::GitTool)
                 .limits(ProcessLimits {
-                    timeout: std::time::Duration::from_secs(30),
+                    timeout: Some(std::time::Duration::from_secs(30)),
                     max_stdout_bytes: 64 * 1024,
                     max_stderr_bytes: 16 * 1024,
                 }),
@@ -344,6 +345,8 @@ fn hash_directory(path: &Path) -> std::result::Result<String, String> {
 fn hash_bytes(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+        .fold(String::new(), |mut output, byte| {
+            let _ = write!(output, "{byte:02x}");
+            output
+        })
 }

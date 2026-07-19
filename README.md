@@ -28,7 +28,7 @@ The canonical remotes are `origin` and `upstream`, both resolving to `cgasgarth/
 Run the fast checks before publishing work:
 
 ```sh
-bash scripts/precommit-fast.sh  # <= 60 seconds
+bash scripts/precommit-fast.sh  # full local build/lint/test gate; intentionally uncapped
 bash scripts/prepush-fast.sh    # <= 150 seconds
 bash scripts/pr-ci.sh           # PR-equivalent, <= 150 seconds in GHA
 bash scripts/main-ci.sh          # merge-to-main validation

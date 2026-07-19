@@ -421,7 +421,7 @@ fn run_raw<const N: usize>(
                 .limits(ProcessLimits {
                     max_stdout_bytes: 16 * 1024 * 1024,
                     max_stderr_bytes: 1024 * 1024,
-                    timeout,
+                    timeout: Some(timeout),
                 })
                 .current_dir(root.path().to_path_buf()),
         )
@@ -471,7 +471,7 @@ fn tool_output<const N: usize>(
                 .limits(ProcessLimits {
                     max_stdout_bytes: 256 * 1024,
                     max_stderr_bytes: 64 * 1024,
-                    timeout: Duration::from_secs(30),
+                    timeout: Some(Duration::from_secs(30)),
                 })
                 .current_dir(root.path().to_path_buf()),
         )
