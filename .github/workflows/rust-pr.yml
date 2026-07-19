@@ -60,6 +60,7 @@ jobs:
           key: rust-main-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-${{ hashFiles('Cargo.lock', 'package.json') }}
           restore-keys: |
             rust-main-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-
+            rust-linux-distribution-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-
       - name: Fetch locked dependencies for offline validation
         run: cargo fetch --locked
       - name: Run parallel PR validation group
