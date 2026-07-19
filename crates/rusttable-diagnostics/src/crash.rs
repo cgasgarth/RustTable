@@ -5,8 +5,10 @@ use std::io::Write;
 use std::panic::PanicHookInfo;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::DiagnosticsService;
 use crate::json::{PanicFields, crash_line};
 use crate::storage::refuse_symlink;
 
@@ -27,7 +29,7 @@ impl CrashState {
         if refuse_symlink(&path, "crash report").is_err() {
             return;
         }
-        let (payload_kind, payload_text) = payload(panic);
+        let payload_kind = payload_kind(panic);
         let backtrace = Backtrace::capture();
         let backtrace_status = match backtrace.status() {
             BacktraceStatus::Captured => "captured",
@@ -40,7 +42,6 @@ impl CrashState {
             line: panic.location().map(std::panic::Location::line),
             column: panic.location().map(std::panic::Location::column),
             payload_kind,
-            payload_text,
         };
         let bounded_backtrace = truncate_utf8(&backtrace_text, CRASH_LIMIT / 2);
         let mut line = crash_line(
@@ -97,13 +98,13 @@ impl CrashState {
     }
 }
 
-fn payload(panic: &PanicHookInfo<'_>) -> (&'static str, &'static str) {
-    if let Some(message) = panic.payload().downcast_ref::<&'static str>() {
-        ("static_str", message)
+fn payload_kind(panic: &PanicHookInfo<'_>) -> &'static str {
+    if panic.payload().downcast_ref::<&'static str>().is_some() {
+        "static_str"
     } else if panic.payload().downcast_ref::<String>().is_some() {
-        ("dynamic_string", "[redacted]")
+        "dynamic_string"
     } else {
-        ("unknown", "[redacted]")
+        "unknown"
     }
 }
 
@@ -133,15 +134,22 @@ pub(crate) type PanicHook = Box<dyn Fn(&PanicHookInfo<'_>) + Send + Sync + 'stat
 pub(crate) struct HookState {
     pub(crate) crash: Arc<CrashState>,
     pub(crate) previous: std::sync::Mutex<Option<PanicHook>>,
+    pub(crate) handling: AtomicBool,
+    pub(crate) service: Arc<DiagnosticsService>,
 }
 
 pub(crate) fn hook(state: Arc<HookState>) -> PanicHook {
     Box::new(move |panic| {
+        if state.handling.swap(true, Ordering::AcqRel) {
+            return;
+        }
         state.crash.write(panic);
+        state.service.flush();
         if let Ok(previous) = state.previous.lock()
             && let Some(previous) = previous.as_ref()
         {
             previous(panic);
         }
+        state.handling.store(false, Ordering::Release);
     })
 }

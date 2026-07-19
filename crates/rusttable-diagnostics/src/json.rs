@@ -1,35 +1,100 @@
-use crate::event::DiagnosticEvent;
+use crate::event::{DiagnosticRecord, SCHEMA_VERSION};
+use crate::redaction::Redactor;
 
 pub(crate) fn escape(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for character in value.chars() {
-        match character {
-            '"' => escaped.push_str("\\\""),
-            '\\' => escaped.push_str("\\\\"),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            '\u{08}' => escaped.push_str("\\b"),
-            '\u{0c}' => escaped.push_str("\\f"),
-            character if character.is_control() => {
-                use std::fmt::Write;
-                write!(&mut escaped, "\\u{:04x}", character as u32).expect("String cannot fail");
-            }
-            character => escaped.push(character),
-        }
-    }
-    escaped
+    serde_json::to_string(value)
+        .unwrap_or_else(|_| "\"[encoding-error]\"".to_owned())
+        .trim_matches('"')
+        .to_owned()
 }
 
-pub(crate) fn event_line(package_version: &str, timestamp: u128, event: DiagnosticEvent) -> String {
-    let failure = event
-        .failure_code()
-        .map_or_else(|| "null".to_owned(), |code| format!("\"{}\"", escape(code)));
-    format!(
-        "{{\"schema_version\":1,\"timestamp_unix_ms\":{timestamp},\"package_version\":\"{}\",\"event\":\"{}\",\"failure_code\":{failure}}}\n",
-        escape(package_version),
-        escape(event.name()),
-    )
+pub(crate) fn record_line(
+    record: &DiagnosticRecord,
+    sequence: u64,
+    timestamp: u128,
+    build: &str,
+    redactor: &Redactor,
+) -> String {
+    let mut output = format!(
+        "{{\"schema_version\":{SCHEMA_VERSION},\"sequence\":{sequence},\"timestamp_unix_ms\":{timestamp},\"build_identity\":\"{}\",\"code\":\"{}\",\"severity\":\"{}\",\"subsystem\":\"{}\",\"operation\":\"{}\",\"context\":{{",
+        escape(build),
+        escape(record.code.as_str()),
+        record.severity.as_str(),
+        record.subsystem.as_str(),
+        escape(&record.operation)
+    );
+    let mut first = true;
+    for (name, value) in record.context.values() {
+        if let Some(value) = value {
+            comma(&mut output, &mut first);
+            let field = crate::event::DiagnosticField::text(
+                name,
+                value,
+                crate::event::PrivacyClass::Private,
+            )
+            .expect("context field");
+            let rendered = redactor.render(&field).expect("private context");
+            let _ = write!(output, "\"{name}\":\"{}\"", escape(&rendered.value));
+        }
+    }
+    output.push_str("},\"fields\":{");
+    first = true;
+    for field in &record.fields {
+        if let Some(field) = redactor.render(field) {
+            comma(&mut output, &mut first);
+            let _ = write!(
+                output,
+                "\"{}\":{{\"value\":\"{}\",\"private\":{}}}",
+                escape(&field.name),
+                escape(&field.value),
+                field.private
+            );
+        }
+    }
+    output.push_str("}}\n");
+    output
+}
+
+pub(crate) fn human_line(
+    record: &DiagnosticRecord,
+    sequence: u64,
+    timestamp: u128,
+    redactor: &Redactor,
+) -> String {
+    let mut output = format!(
+        "{timestamp} #{sequence} {} {} {}",
+        record.severity.as_str(),
+        record.subsystem.as_str(),
+        record.code.as_str()
+    );
+    if !record.operation.is_empty() {
+        output.push(' ');
+        output.push_str(&record.operation);
+    }
+    for field in &record.fields {
+        if let Some(field) = redactor.render(field) {
+            output.push(' ');
+            output.push_str(&field.name);
+            output.push('=');
+            output.push_str(&field.value);
+        }
+    }
+    output.push('\n');
+    output
+}
+
+fn comma(output: &mut String, first: &mut bool) {
+    if !*first {
+        output.push(',');
+    }
+    *first = false;
+}
+
+pub(crate) struct PanicFields<'a> {
+    pub(crate) file: Option<&'a str>,
+    pub(crate) line: Option<u32>,
+    pub(crate) column: Option<u32>,
+    pub(crate) payload_kind: &'a str,
 }
 
 pub(crate) fn crash_line(
@@ -41,7 +106,7 @@ pub(crate) fn crash_line(
     backtrace_text: &str,
 ) -> String {
     format!(
-        "{{\"schema_version\":1,\"package_version\":\"{}\",\"timestamp_unix_ms\":{timestamp},\"pid\":{pid},\"target_os\":\"{}\",\"target_arch\":\"{}\",\"panic_file\":{},\"panic_line\":{},\"panic_column\":{},\"payload_kind\":\"{}\",\"payload_text\":\"{}\",\"backtrace_status\":\"{}\",\"backtrace_text\":\"{}\"}}\n",
+        "{{\"schema_version\":{SCHEMA_VERSION},\"package_version\":\"{}\",\"timestamp_unix_ms\":{timestamp},\"pid\":{pid},\"target_os\":\"{}\",\"target_arch\":\"{}\",\"panic_file\":{},\"panic_line\":{},\"panic_column\":{},\"payload_kind\":\"{}\",\"payload_text\":\"[redacted]\",\"backtrace_status\":\"{}\",\"backtrace_text\":\"{}\"}}\n",
         escape(package_version),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -53,9 +118,8 @@ pub(crate) fn crash_line(
             .column
             .map_or_else(|| "null".to_owned(), |value| value.to_string()),
         escape(panic.payload_kind),
-        escape(panic.payload_text),
         escape(backtrace_status),
-        escape(backtrace_text),
+        escape(backtrace_text)
     )
 }
 
@@ -65,24 +129,4 @@ fn optional_string(value: Option<&str>) -> String {
         |value| format!("\"{}\"", escape(value)),
     )
 }
-
-pub(crate) struct PanicFields<'a> {
-    pub(crate) file: Option<&'a str>,
-    pub(crate) line: Option<u32>,
-    pub(crate) column: Option<u32>,
-    pub(crate) payload_kind: &'a str,
-    pub(crate) payload_text: &'a str,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::escape;
-
-    #[test]
-    fn escapes_json_controls_and_preserves_unicode() {
-        assert_eq!(
-            escape("\"\\\n\r\t\u{08}\u{0c}\u{01}é"),
-            "\\\"\\\\\\n\\r\\t\\b\\f\\u0001é"
-        );
-    }
-}
+use std::fmt::Write;

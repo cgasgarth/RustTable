@@ -1,0 +1,105 @@
+# Contributor receipt for #178. The complete canonical map and verifier belong to #555.
+schema = "rusttable.source-map.receipt.v1"
+issue = 178
+parent_issue = 158
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+source_map_issue = 555
+source_map_schema = "rusttable.source-map.v1"
+source_map_status = "candidate-validated-pending-555-acceptance"
+rust_owners = [
+  "crates/rusttable-diagnostics",
+  "crates/rusttable-app",
+  "later-ui-and-scripting-consumers",
+]
+preserve = [
+  "severity intent",
+  "subsystem and operation context",
+  "progress and user-message delivery",
+  "startup and shutdown diagnostics",
+  "fatal-event capture",
+  "correlation with a processing or job stage",
+]
+redesign = [
+  "global debug flags into typed tracing events",
+  "printf-style text into typed bounded fields",
+  "GTK/control log proxies into explicit service ports",
+  "thread-local assumptions into explicit context propagation",
+  "raw backtrace/native dumps into privacy-aware local sinks",
+]
+excluded = [
+  "exact darktable log wording",
+  "terminal color formatting",
+  "raw pointer values",
+  "complete native environment dumps",
+  "automatic crash or network upload",
+]
+
+[[anchor]]
+path = "src/common/darktable.h"
+role = "authoritative-behavior"
+symbols = ["dt_debug_if", "dt_print", "dt_print_ext"]
+owner = "crates/rusttable-diagnostics"
+responsibility = "debug categories, typed diagnostic declarations, and process-wide diagnostic identity"
+
+[[anchor]]
+path = "src/common/darktable.c"
+role = "authoritative-behavior"
+symbols = ["dt_init", "dt_cleanup", "dt_set_signal_handlers", "dt_print_mem_usage"]
+owner = "crates/rusttable-app"
+responsibility = "startup, cleanup, signal setup, and lifecycle diagnostics"
+
+[[anchor]]
+path = "src/control/control.h"
+role = "authoritative-behavior"
+symbols = ["dt_control_log", "dt_control_log_ack_all", "dt_control_log_history_get_entries"]
+owner = "crates/rusttable-diagnostics"
+responsibility = "control logging and user-visible diagnostic history"
+
+[[anchor]]
+path = "src/control/control.c"
+role = "authoritative-behavior"
+symbols = ["dt_control_shutdown", "dt_control_log"]
+owner = "crates/rusttable-app"
+responsibility = "control-thread shutdown and log delivery"
+
+[[anchor]]
+path = "src/control/progress.c"
+role = "integration-boundary"
+symbols = ["dt_control_progress_init", "dt_control_progress_create", "dt_control_progress_destroy", "dt_control_progress_set_progress", "dt_control_progress_set_message"]
+owner = "crates/rusttable-diagnostics"
+responsibility = "bounded progress and user-message events for later UI consumers"
+
+[[anchor]]
+path = "src/common/system_signal_handling.c"
+role = "integration-boundary"
+symbols = ["dt_set_signal_handlers"]
+owner = "crates/rusttable-diagnostics"
+responsibility = "fatal signal capture, reentrancy, and termination diagnostics"
+
+[[anchor]]
+path = "src/common/system_signal_handling.h"
+role = "integration-boundary"
+symbols = ["dt_set_signal_handlers"]
+owner = "crates/rusttable-diagnostics"
+responsibility = "signal-handler boundary contract"
+
+[[anchor]]
+path = "src/common/profiling.c"
+role = "authoritative-behavior"
+symbols = ["dt_timer_start_with_name", "dt_timer_stop_with_name", "dt_print"]
+owner = "crates/rusttable-diagnostics"
+responsibility = "timing and performance diagnostics as typed operational events"
+
+[[anchor]]
+path = "src/lua/print.c"
+role = "integration-boundary"
+symbols = ["dt_lua_init_print", "dt_print", "dt_control_log"]
+owner = "later-ui-and-scripting-consumers"
+responsibility = "Lua print and error calls routed through the diagnostics service"
+
+[[anchor]]
+path = "src/lua/lua.c"
+role = "integration-boundary"
+symbols = ["dt_lua_debug_stack_internal", "dt_lua_debug_table_internal", "dt_lua_lock_internal"]
+owner = "later-ui-and-scripting-consumers"
+responsibility = "Lua debug output and context-bearing runtime diagnostics"

@@ -18,18 +18,16 @@ fn diagnostics_process() {
     let root = unique_directory("parent");
     fs::create_dir_all(&root).expect("temporary root");
     run_child("normal", &root).assert_success();
-    let log = fs::read_to_string(root.join("rusttable.log")).expect("normal log");
+    let log = fs::read_to_string(root.join("rusttable.jsonl")).expect("normal log");
     assert_eq!(log.lines().count(), 2);
-    assert!(log.starts_with("{\"schema_version\":1,\"timestamp_unix_ms\":"));
-    assert!(
-        log.contains("\"package_version\":\"0.1.0\",\"event\":\"startup\",\"failure_code\":null}")
-    );
-    assert!(log.contains("\"event\":\"shutdown\",\"failure_code\":null}"));
+    assert!(log.starts_with("{\"schema_version\":1,\"sequence\":1,\"timestamp_unix_ms\":"));
+    assert!(log.contains("\"build_identity\":\"0.1.0\",\"code\":\"application.startup\""));
+    assert!(log.contains("\"code\":\"application.shutdown\""));
 
     let concurrent = unique_directory("concurrent");
     run_child("concurrent", &concurrent).assert_success();
     assert_eq!(
-        fs::read_to_string(concurrent.join("rusttable.log"))
+        fs::read_to_string(concurrent.join("rusttable.jsonl"))
             .unwrap()
             .lines()
             .count(),
@@ -38,16 +36,20 @@ fn diagnostics_process() {
 
     let rotation = unique_directory("rotation");
     fs::create_dir_all(&rotation).unwrap();
-    fs::write(rotation.join("rusttable.log"), vec![b'x'; 5 * 1024 * 1024]).unwrap();
+    fs::write(
+        rotation.join("rusttable.jsonl"),
+        vec![b'x'; 10 * 1024 * 1024],
+    )
+    .unwrap();
     run_child("rotation", &rotation).assert_success();
     assert_eq!(
-        fs::metadata(rotation.join("rusttable.log.1"))
+        fs::metadata(rotation.join("rusttable.jsonl.1"))
             .unwrap()
             .len(),
-        5 * 1024 * 1024
+        10 * 1024 * 1024
     );
     assert!(
-        fs::read_to_string(rotation.join("rusttable.log"))
+        fs::read_to_string(rotation.join("rusttable.jsonl"))
             .unwrap()
             .contains("startup")
     );
@@ -59,7 +61,7 @@ fn diagnostics_process() {
     let static_crash = unique_directory("static-crash");
     let output = run_child("static-crash", &static_crash);
     assert!(!output.status.success());
-    assert_one_bounded_report(&static_crash, "static_str", "static diagnostics panic");
+    assert_one_bounded_report(&static_crash, "static_str", "[redacted]");
 
     let dynamic_crash = unique_directory("dynamic-crash");
     let output = run_child("dynamic-crash", &dynamic_crash);
@@ -88,7 +90,7 @@ fn diagnostics_process() {
         let target = symlink_dir.join("target.log");
         fs::write(&target, b"target").unwrap();
         std::os::unix::fs::symlink(&target, symlink_dir.join("rusttable.log")).unwrap();
-        assert!(!run_child("normal", &symlink_dir).status.success());
+        assert!(run_child("normal", &symlink_dir).status.success());
         assert_eq!(fs::read(&target).unwrap(), b"target");
     }
 }
@@ -195,7 +197,8 @@ fn assert_one_bounded_report(directory: &Path, payload_kind: &str, payload: &str
     assert!(report.len() <= 256 * 1024);
     assert!(report.ends_with('\n'));
     assert!(report.contains(&format!("\"payload_kind\":\"{payload_kind}\"")));
-    assert!(report.contains(&format!("\"payload_text\":\"{payload}\"")));
+    assert_eq!(payload, "[redacted]");
+    assert!(report.contains("\"payload_text\":\"[redacted]\""));
     assert!(report.contains("\"backtrace_status\":"));
 }
 
