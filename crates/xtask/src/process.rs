@@ -109,6 +109,12 @@ pub struct ArtifactReceipt {
     pub sha256: String,
     pub kind: String,
     pub fresh: bool,
+    #[serde(default = "default_artifact_present")]
+    pub present: bool,
+}
+
+fn default_artifact_present() -> bool {
+    true
 }
 
 #[derive(Debug, Clone)]
@@ -415,7 +421,12 @@ impl ProcessRunner {
         if let Some((path, message)) = streams.artifact_error {
             return Err(ProcessError::Artifact { path, message });
         }
-        let artifacts = artifact_receipts::collect(&request, started)?;
+        let artifacts = artifact_receipts::collect(
+            &request,
+            started,
+            &streams.stdout.bytes,
+            &streams.stderr.bytes,
+        )?;
         let public_environment = request.public_environment();
         let receipt = CommandReceipt {
             schema_version: 2,
