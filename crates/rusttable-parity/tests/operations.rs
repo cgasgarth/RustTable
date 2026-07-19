@@ -113,6 +113,7 @@ fn operation_scan_is_deterministic_and_uses_only_explicit_evidence() {
     assert_eq!(zeta.migrations.len(), 1);
     assert_eq!(zeta.opencl_programs, vec!["basic"]);
     assert_eq!(zeta.opencl_kernels, vec!["basic"]);
+    assert_eq!(zeta.opencl_resolution[0].kernels, vec!["basic"]);
     assert!(zeta.preset_sources.is_empty());
 
     let first = render_operation_manifest(&manifest).expect("render fixture");
