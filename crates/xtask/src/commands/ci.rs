@@ -9,7 +9,9 @@ use serde::Serialize;
 
 use super::{Result, report};
 use crate::cli::CiCommand;
-use crate::process::{ProcessLimits, ProcessRequest, ProcessRunner};
+use crate::process::{
+    EnvironmentProfile, NetworkPolicy, ProcessLimits, ProcessRequest, ProcessRunner,
+};
 use crate::root::RepositoryRoot;
 
 const FAST_SURFACES: [&str; 3] = ["precommit", "prepush", "pull_request"];
@@ -477,7 +479,22 @@ struct OmittedCheck {
     reason: String,
 }
 
-fn execute_surface_for_group(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CheckState {
+    Passed,
+    Warning,
+    Failed,
+    SkippedPrerequisite,
+    OmittedPlatform,
+}
+
+impl CheckState {
+    const fn acceptable_prerequisite(self, accept_warning: bool) -> bool {
+        matches!(self, Self::Passed) || (accept_warning && matches!(self, Self::Warning))
+    }
+}
+
+fn execute_surface_with_scheduler(
     root: &RepositoryRoot,
     contract: &Contract,
     surface: &str,
@@ -485,22 +502,8 @@ fn execute_surface_for_group(
     runner: &ProcessRunner,
 ) -> Result<SurfaceReceipt> {
     let budget_seconds = contract.budgets[surface];
-    if let Some(group) = selected_group {
-        for check in contract
-            .checks
-            .iter()
-            .filter(|check| check.on(surface) && check.parallel_group_for(surface) == group)
-        {
-            if let Some(prerequisite) = check.prerequisites_for(surface).first() {
-                return Err(format!(
-                    "ci.{surface}: selected group {group} has unmet prerequisite {prerequisite} for {}; run the full surface",
-                    check.id
-                ));
-            }
-        }
-    }
     let surface_start = Instant::now();
-    let selected = contract
+    let active = contract
         .checks
         .iter()
         .filter(|check| {
@@ -509,6 +512,10 @@ fn execute_surface_for_group(
                 && check.runs_on_current_platform()
         })
         .collect::<Vec<_>>();
+    let active_ids = active
+        .iter()
+        .map(|check| check.id.as_str())
+        .collect::<BTreeSet<_>>();
     let omitted = contract
         .checks
         .iter()
@@ -532,46 +539,114 @@ fn execute_surface_for_group(
             },
         })
         .collect::<Vec<_>>();
-    let mut groups = BTreeMap::<&str, Vec<&Check>>::new();
-    for check in selected {
-        groups
-            .entry(check.parallel_group_for(surface))
-            .or_default()
-            .push(check);
+    if let Some(group) = selected_group {
+        for check in &active {
+            if let Some(prerequisite) = check
+                .prerequisites_for(surface)
+                .into_iter()
+                .find(|id| !active_ids.contains(id))
+            {
+                return Err(format!(
+                    "ci.{surface}: selected group {group} has unmet prerequisite {prerequisite} for {}; run the full surface",
+                    check.id
+                ));
+            }
+        }
+    }
+
+    let omitted_ids = omitted
+        .iter()
+        .map(|check| check.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut pending = active_ids.clone();
+    let mut states = BTreeMap::<String, CheckState>::new();
+    for id in &omitted_ids {
+        states.insert((*id).to_owned(), CheckState::OmittedPlatform);
     }
     let mut receipts = Vec::new();
-    for checks in groups.values() {
+    while !pending.is_empty() {
+        let mut ready = Vec::new();
+        let mut skipped = Vec::new();
+        for check in &active {
+            if !pending.contains(check.id.as_str()) {
+                continue;
+            }
+            let prerequisites = check.prerequisites_for(surface);
+            if prerequisites.iter().all(|id| states.contains_key(*id)) {
+                if prerequisites.iter().any(|id| {
+                    states
+                        .get(*id)
+                        .is_some_and(|state| !state.acceptable_prerequisite(check.accept_warning))
+                }) {
+                    skipped.push(*check);
+                } else {
+                    ready.push(*check);
+                }
+            }
+        }
+        if ready.is_empty() && skipped.is_empty() {
+            return Err(format!(
+                "ci.{surface}: dependency graph made no progress for {:?}",
+                pending
+            ));
+        }
+        for check in skipped {
+            pending.remove(check.id.as_str());
+            states.insert(check.id.clone(), CheckState::SkippedPrerequisite);
+            receipts.push(CheckReceipt {
+                id: check.id.clone(),
+                label: check.label.clone(),
+                status: "skipped-prerequisite".to_owned(),
+                duration_ms: 0,
+                severity: check.severity.clone(),
+                artifacts: Vec::new(),
+                detail: Some(
+                    "a prerequisite did not pass its declared acceptance policy".to_owned(),
+                ),
+                process: None,
+            });
+        }
+        if ready.is_empty() {
+            continue;
+        }
         let cancellation = Arc::new(AtomicBool::new(false));
-        let results = Mutex::new(Vec::<CheckReceipt>::new());
+        let results = Mutex::new(Vec::<(String, CheckReceipt)>::new());
         std::thread::scope(|scope| {
-            for check in checks {
+            for check in ready {
                 let cancellation = Arc::clone(&cancellation);
                 let results = &results;
                 scope.spawn(move || {
                     let receipt = execute_check(root, check, surface, runner, &cancellation);
-                    results.lock().expect("receipt mutex").push(receipt);
+                    results
+                        .lock()
+                        .expect("receipt mutex")
+                        .push((check.id.clone(), receipt));
                 });
             }
         });
-        let mut group_receipts = results
+        let wave = results
             .into_inner()
             .map_err(|_| "receipt mutex poisoned".to_owned())?;
-        group_receipts.sort_by(|left, right| left.id.cmp(&right.id));
-        if group_receipts
-            .iter()
-            .any(|receipt| receipt.status == "failed")
-        {
-            receipts.extend(group_receipts);
+        for (id, receipt) in wave {
+            pending.remove(id.as_str());
+            let state = match receipt.status.as_str() {
+                "passed" => CheckState::Passed,
+                "warning" => CheckState::Warning,
+                _ => CheckState::Failed,
+            };
+            states.insert(id, state);
+            receipts.push(receipt);
+        }
+        if surface_start.elapsed() > Duration::from_secs(budget_seconds) {
             return Err(format!(
-                "ci.{surface}: validation group {} failed; receipt={}",
-                checks[0].parallel_group_for(surface),
+                "ci.{surface}: configured budget of {budget_seconds}s exceeded; receipt={}",
                 serde_json::to_string(&receipts).map_err(|error| error.to_string())?
             ));
         }
-        receipts.extend(group_receipts);
-        if surface != "main" && surface_start.elapsed() > Duration::from_secs(budget_seconds) {
+        if receipts.iter().any(|receipt| receipt.status == "failed") {
+            receipts.sort_by(|left, right| left.id.cmp(&right.id));
             return Err(format!(
-                "ci.{surface}: configured budget of {budget_seconds}s exceeded; receipt={}",
+                "ci.{surface}: validation wave failed; receipt={}",
                 serde_json::to_string(&receipts).map_err(|error| error.to_string())?
             ));
         }
@@ -586,14 +661,15 @@ fn execute_surface_for_group(
     })
 }
 
-fn execute_surface_with_scheduler(
+#[cfg(test)]
+fn execute_surface_for_group(
     root: &RepositoryRoot,
     contract: &Contract,
     surface: &str,
     selected_group: Option<&str>,
     runner: &ProcessRunner,
 ) -> Result<SurfaceReceipt> {
-    execute_surface_for_group(root, contract, surface, selected_group, runner)
+    execute_surface_with_scheduler(root, contract, surface, selected_group, runner)
 }
 
 fn execute_check(
@@ -607,7 +683,21 @@ fn execute_check(
     const DAG_RECEIPT_OUTPUT_LIMIT: usize = 4 * 1024 * 1024;
     let start = Instant::now();
     let (args, artifacts, process_artifacts) = check_process_contract(check, surface);
+    let profile = match check.program.as_str() {
+        "cargo" | "rustc" | "rustup" => EnvironmentProfile::RustTool,
+        "git" => EnvironmentProfile::GitTool,
+        "curl" => EnvironmentProfile::GitHubApi,
+        "bash" | "bun" => EnvironmentProfile::PlatformTool,
+        _ => EnvironmentProfile::Empty,
+    };
+    let network = if check.network == "read" {
+        NetworkPolicy::Read
+    } else {
+        NetworkPolicy::None
+    };
     let mut request = ProcessRequest::new(check.program.clone(), args)
+        .profile(profile)
+        .network(network)
         .current_dir(root.path())
         .cancellation(cancellation.clone())
         .limits(ProcessLimits {
