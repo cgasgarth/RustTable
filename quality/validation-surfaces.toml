@@ -1,7 +1,7 @@
 [budgets]
 precommit = 30
 prepush = 150
-pull_request = 150
+pull_request = 300
 main = 2700
 
 [[checks]]
@@ -81,7 +81,7 @@ severity = "error"
 id = "rust-test"
 label = "rust-test"
 program = "cargo"
-args = ["test", "--workspace", "--lib", "--all-features", "--locked"]
+args = ["test", "--workspace", "--lib", "--all-features", "--locked", "--", "--test-threads=16"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"

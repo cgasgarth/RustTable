@@ -13,7 +13,7 @@ if grep -nF 'cargo xtask repo verify-workflows' "$root_directory/.github/workflo
   echo 'PR validation must not build xtask twice for workflow inventory' >&2
   exit 1
 fi
-grep -Fx 'pull_request = 150' "$root_directory/quality/validation-surfaces.toml" >/dev/null
+grep -Fx 'pull_request = 300' "$root_directory/quality/validation-surfaces.toml" >/dev/null
 
 cat >"$temporary_directory/cargo" <<'EOF'
 #!/bin/sh

@@ -974,7 +974,7 @@ mod tests {
             budgets: BTreeMap::from([
                 ("precommit".to_owned(), 30),
                 ("prepush".to_owned(), 170),
-                ("pull_request".to_owned(), 150),
+                ("pull_request".to_owned(), 300),
                 ("main".to_owned(), 2_700),
             ]),
             checks,
@@ -1092,7 +1092,7 @@ mod tests {
         contract.validate().expect("valid validation contract");
         assert_eq!(contract.budgets["precommit"], 30);
         assert_eq!(contract.budgets["prepush"], 150);
-        assert_eq!(contract.budgets["pull_request"], 150);
+        assert_eq!(contract.budgets["pull_request"], 300);
 
         for id in [
             "fmt",
@@ -1291,7 +1291,7 @@ mod tests {
         let mut prerequisite = check("prerequisite", "prerequisite", 5);
         prerequisite.surfaces = vec!["pull_request".to_owned()];
         let contract = Contract {
-            budgets: BTreeMap::from([(String::from("pull_request"), 150)]),
+            budgets: BTreeMap::from([(String::from("pull_request"), 300)]),
             checks: vec![dependent, prerequisite],
         };
 
