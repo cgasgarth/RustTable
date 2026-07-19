@@ -4,6 +4,7 @@ mod dag;
 mod files;
 mod fixtures;
 mod github;
+mod lua;
 mod parity;
 mod reference;
 mod repo;
@@ -28,6 +29,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Reference { command } => reference::run(&root, command, &runner),
         Command::Ci { command } => ci::run(&root, command, &runner),
         Command::Github { command } => github::run(&root, command, &runner),
+        Command::LuaConformance(arguments) => lua::run(&root, arguments),
     }
     .map_err(CommandError::Surface)
 }
