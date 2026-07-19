@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use serde::Deserialize;
 
 use crate::fixtures::{
-    FixtureManifest, FixtureRepository, ManifestError, VerificationError, sha256_hex,
+    ArtifactClass, FixtureManifest, FixtureRepository, ManifestError, VerificationError, sha256_hex,
 };
 
 const HEX_LENGTH: usize = 64;
@@ -122,8 +122,18 @@ impl CorpusManifest {
                 });
             }
             seen_cells.push(key);
-            validate_fixture_reference(fixtures, cell.positive_fixture.as_deref(), &cell.axis)?;
-            validate_fixture_reference(fixtures, Some(&cell.malformed_fixture), &cell.axis)?;
+            validate_fixture_reference(
+                fixtures,
+                cell.positive_fixture.as_deref(),
+                &cell.axis,
+                Some(ArtifactClass::ValidBinary),
+            )?;
+            validate_fixture_reference(
+                fixtures,
+                Some(&cell.malformed_fixture),
+                &cell.axis,
+                Some(ArtifactClass::MalformedBinary),
+            )?;
             if cell.status == SupportStatus::Supported && cell.positive_fixture.is_none() {
                 return Err(CorpusError::MissingPositive {
                     axis: cell.axis.clone(),
@@ -167,7 +177,7 @@ impl CorpusManifest {
                     id: edge.id.clone(),
                 });
             }
-            validate_fixture_reference(fixtures, edge.fixture.as_deref(), &edge.id)?;
+            validate_fixture_reference(fixtures, edge.fixture.as_deref(), &edge.id, None)?;
             if edge.expected == EdgeExpectation::Absent && edge.fixture.is_some() {
                 return Err(CorpusError::PresentAbsentEdge {
                     id: edge.id.clone(),
@@ -235,13 +245,25 @@ fn validate_fixture_reference(
     fixtures: &FixtureManifest,
     id: Option<&str>,
     owner: &str,
+    expected_class: Option<ArtifactClass>,
 ) -> Result<(), CorpusError> {
     if let Some(id) = id
-        && fixtures.fixture(id).is_none()
+        && let Some(entry) = fixtures.fixture(id)
     {
+        if let Some(expected_class) = expected_class
+            && entry.artifact_class != expected_class
+        {
+            return Err(CorpusError::WrongFixtureClass {
+                owner: owner.to_owned(),
+                id: id.to_owned(),
+                expected: expected_class,
+                actual: entry.artifact_class,
+            });
+        }
+    } else if id.is_some() {
         return Err(CorpusError::UnknownFixture {
             owner: owner.to_owned(),
-            id: id.to_owned(),
+            id: id.unwrap_or_default().to_owned(),
         });
     }
     Ok(())
@@ -359,27 +381,75 @@ impl CorpusReport {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CorpusError {
-    Parse { message: String },
-    UnsupportedVersion { version: u32 },
+    Parse {
+        message: String,
+    },
+    UnsupportedVersion {
+        version: u32,
+    },
     OfflineRequired,
     EmptyMatrix,
     EmptyAxis,
-    MissingAxis { axis: String },
-    DuplicateCell { axis: String, value: String },
-    MissingPositive { axis: String, value: String },
-    UnsupportedHasPositive { axis: String, value: String },
-    UnknownFixture { owner: String, id: String },
-    InvalidDimensions { axis: String, value: String },
-    InvalidHash { owner: String },
-    DuplicateEdge { id: String },
-    InvalidEdge { id: String },
-    PresentAbsentEdge { id: String },
-    MissingEdgeFixture { id: String },
-    DuplicateExternal { id: String },
-    InvalidExternal { id: String },
-    MissingExternal { id: String },
-    ExternalDrift { id: String },
-    ExternalIo { id: String, message: String },
+    MissingAxis {
+        axis: String,
+    },
+    DuplicateCell {
+        axis: String,
+        value: String,
+    },
+    MissingPositive {
+        axis: String,
+        value: String,
+    },
+    UnsupportedHasPositive {
+        axis: String,
+        value: String,
+    },
+    UnknownFixture {
+        owner: String,
+        id: String,
+    },
+    WrongFixtureClass {
+        owner: String,
+        id: String,
+        expected: ArtifactClass,
+        actual: ArtifactClass,
+    },
+    InvalidDimensions {
+        axis: String,
+        value: String,
+    },
+    InvalidHash {
+        owner: String,
+    },
+    DuplicateEdge {
+        id: String,
+    },
+    InvalidEdge {
+        id: String,
+    },
+    PresentAbsentEdge {
+        id: String,
+    },
+    MissingEdgeFixture {
+        id: String,
+    },
+    DuplicateExternal {
+        id: String,
+    },
+    InvalidExternal {
+        id: String,
+    },
+    MissingExternal {
+        id: String,
+    },
+    ExternalDrift {
+        id: String,
+    },
+    ExternalIo {
+        id: String,
+        message: String,
+    },
     Manifest(ManifestError),
     Verification(VerificationError),
     Overflow,
@@ -412,6 +482,15 @@ impl fmt::Display for CorpusError {
             Self::UnknownFixture { owner, id } => {
                 write!(formatter, "{owner} references unknown fixture {id}")
             }
+            Self::WrongFixtureClass {
+                owner,
+                id,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "{owner} references {id} as {expected:?}, but it is {actual:?}"
+            ),
             Self::InvalidDimensions { axis, value } => {
                 write!(formatter, "corpus cell {axis}={value} has zero dimensions")
             }

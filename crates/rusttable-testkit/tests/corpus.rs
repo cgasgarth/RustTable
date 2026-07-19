@@ -45,7 +45,7 @@ fn merge_mode_turns_large_asset_skip_into_a_hard_failure() {
 fn completeness_rejects_unknown_matrix_fixture() {
     let (fixtures, _) = committed_manifests();
     let source = include_str!("../../../fixtures/corpus.toml").replacen(
-        "positive_fixture = \"corpus.raw.bayer.12-2row\"",
+        "positive_fixture = \"corpus.geometry.portrait\"",
         "positive_fixture = \"missing.positive\"",
         1,
     );

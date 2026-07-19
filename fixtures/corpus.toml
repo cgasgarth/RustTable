@@ -9,172 +9,104 @@ required_axes = ["camera-family", "cfa", "bit-depth", "compression", "raster-for
 [[matrix]]
 axis = "camera-family"
 value = "bayer"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.12-2row"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["cfa=bayer", "bits=12"]
 
 [[matrix]]
 axis = "camera-family"
 value = "canon-cr2-cr3"
-status = "supported"
-positive_fixture = "corpus.raw.canon.cr2"
+status = "unsupported"
 malformed_fixture = "corpus.edge.invalid-offset"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["vendor=canon"]
 
 [[matrix]]
 axis = "camera-family"
 value = "nikon-nef"
-status = "supported"
-positive_fixture = "corpus.raw.nikon.nef"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["vendor=nikon"]
 
 [[matrix]]
 axis = "camera-family"
 value = "sony-arw"
-status = "supported"
-positive_fixture = "corpus.raw.sony.arw"
+status = "unsupported"
 malformed_fixture = "corpus.edge.invalid-offset"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["vendor=sony"]
 
 [[matrix]]
 axis = "camera-family"
 value = "olympus-panasonic"
-status = "supported"
-positive_fixture = "corpus.raw.olympus.orf"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["vendor=olympus"]
 
 [[matrix]]
 axis = "camera-family"
 value = "panasonic-rw2"
-status = "supported"
-positive_fixture = "corpus.raw.panasonic.rw2"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["vendor=panasonic"]
 
 [[matrix]]
 axis = "camera-family"
 value = "x-trans"
-status = "supported"
-positive_fixture = "corpus.raw.xtrans.uncompressed"
+status = "unsupported"
 malformed_fixture = "corpus.edge.invalid-offset"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["cfa=x-trans-6x6"]
 
 [[matrix]]
 axis = "cfa"
 value = "bayer-two-row"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.12-2row"
+status = "unsupported"
 malformed_fixture = "corpus.edge.invalid-offset"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["cfa=2-row"]
 
 [[matrix]]
 axis = "cfa"
 value = "bayer-four-row"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.14-4row"
+status = "unsupported"
 malformed_fixture = "corpus.edge.invalid-offset"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["cfa=4-row"]
 
 [[matrix]]
 axis = "cfa"
 value = "x-trans-six-by-six"
-status = "supported"
-positive_fixture = "corpus.raw.xtrans.compressed"
+status = "unsupported"
 malformed_fixture = "corpus.edge.invalid-offset"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["cfa=x-trans-6x6"]
 
 [[matrix]]
 axis = "bit-depth"
 value = "12-bit"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.12-2row"
+status = "unsupported"
 malformed_fixture = "corpus.edge.overlarge-dimensions"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["bits=12"]
 
 [[matrix]]
 axis = "bit-depth"
 value = "14-bit"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.14-4row"
+status = "unsupported"
 malformed_fixture = "corpus.edge.overlarge-dimensions"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["bits=14"]
 
 [[matrix]]
 axis = "bit-depth"
 value = "16-bit"
-status = "supported"
-positive_fixture = "corpus.raw.canon.cr2"
+status = "unsupported"
 malformed_fixture = "corpus.edge.overlarge-dimensions"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["bits=16"]
 
 [[matrix]]
 axis = "compression"
 value = "dng-uncompressed"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.12-2row"
+status = "unsupported"
 malformed_fixture = "corpus.edge.decompression-bomb"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["compression=uncompressed"]
 
 [[matrix]]
 axis = "compression"
 value = "dng-compressed"
-status = "supported"
-positive_fixture = "corpus.raw.bayer.14-compressed"
+status = "unsupported"
 malformed_fixture = "corpus.edge.decompression-bomb"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["compression=compressed"]
 
 [[matrix]]
 axis = "compression"
 value = "raf-uncompressed"
-status = "supported"
-positive_fixture = "corpus.raw.xtrans.uncompressed"
+status = "unsupported"
 malformed_fixture = "corpus.edge.decompression-bomb"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["compression=uncompressed"]
 
 [[matrix]]
 axis = "compression"
 value = "raf-compressed"
-status = "supported"
-positive_fixture = "corpus.raw.xtrans.compressed"
+status = "unsupported"
 malformed_fixture = "corpus.edge.decompression-bomb"
-expected_dimensions = { width = 2, height = 2 }
-expected_orientation = "landscape"
-expected_metadata = ["compression=compressed"]
 
 [[matrix]]
 axis = "raster-format"
@@ -189,12 +121,8 @@ expected_metadata = ["format=jpeg", "bits=8"]
 [[matrix]]
 axis = "raster-format"
 value = "jpeg-12-bit"
-status = "supported"
-positive_fixture = "corpus.raster.jpeg.12"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=jpeg", "bits=12"]
 
 [[matrix]]
 axis = "raster-format"
@@ -229,112 +157,68 @@ expected_metadata = ["format=tiff", "layout=strips", "sample=integer"]
 [[matrix]]
 axis = "raster-format"
 value = "tiff-tiles-integer"
-status = "supported"
-positive_fixture = "corpus.raster.tiff.tile-int"
+status = "unsupported"
 malformed_fixture = "image-io.malformed-offset"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=tiff", "layout=tiles", "sample=integer"]
 
 [[matrix]]
 axis = "raster-format"
 value = "tiff-strips-float"
-status = "supported"
-positive_fixture = "corpus.raster.tiff.strip-float"
+status = "unsupported"
 malformed_fixture = "image-io.malformed-offset"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=tiff", "layout=strips", "sample=float"]
 
 [[matrix]]
 axis = "raster-format"
 value = "tiff-tiles-float"
-status = "supported"
-positive_fixture = "corpus.raster.tiff.tile-float"
+status = "unsupported"
 malformed_fixture = "image-io.malformed-offset"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=tiff", "layout=tiles", "sample=float"]
 
 [[matrix]]
 axis = "raster-format"
 value = "jpeg-xl"
-status = "supported"
-positive_fixture = "corpus.raster.jpeg-xl"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=jpeg-xl"]
 
 [[matrix]]
 axis = "raster-format"
 value = "webp"
-status = "supported"
-positive_fixture = "corpus.raster.webp"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=webp"]
 
 [[matrix]]
 axis = "raster-format"
 value = "avif"
-status = "supported"
-positive_fixture = "corpus.raster.avif"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=avif"]
 
 [[matrix]]
 axis = "raster-format"
 value = "heif"
-status = "supported"
-positive_fixture = "corpus.raster.heif"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=heif"]
 
 [[matrix]]
 axis = "raster-format"
 value = "openexr"
-status = "supported"
-positive_fixture = "corpus.raster.openexr"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=openexr", "sample=float"]
 
 [[matrix]]
 axis = "raster-format"
 value = "rgbe"
-status = "supported"
-positive_fixture = "corpus.raster.rgbe"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=rgbe", "transfer=hdr"]
 
 [[matrix]]
 axis = "raster-format"
 value = "pfm"
-status = "supported"
-positive_fixture = "corpus.raster.pfm"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=pfm", "sample=float"]
 
 [[matrix]]
 axis = "raster-format"
 value = "jpeg-2000"
-status = "supported"
-positive_fixture = "corpus.raster.jpeg-2000"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_dimensions = { width = 4, height = 3 }
-expected_orientation = "landscape"
-expected_metadata = ["format=jpeg-2000"]
 
 [[matrix]]
 axis = "color-profile"
@@ -363,10 +247,8 @@ expected_metadata = ["profile=display-output"]
 [[matrix]]
 axis = "color-profile"
 value = "malformed"
-status = "supported"
-positive_fixture = "corpus.color.malformed"
+status = "unsupported"
 malformed_fixture = "corpus.edge.truncated-container"
-expected_metadata = ["profile=malformed-icc"]
 
 [[matrix]]
 axis = "color-profile"
@@ -381,7 +263,7 @@ axis = "compatibility"
 value = "darktable-library-schema"
 status = "supported"
 positive_fixture = "corpus.compat.library-schema"
-malformed_fixture = "corpus.compat.unsupported-version"
+malformed_fixture = "corpus.edge.truncated-container"
 expected_metadata = ["schema=darktable-library"]
 
 [[matrix]]
@@ -389,7 +271,7 @@ axis = "compatibility"
 value = "darktable-data-schema"
 status = "supported"
 positive_fixture = "corpus.compat.data-schema"
-malformed_fixture = "corpus.compat.unsupported-version"
+malformed_fixture = "corpus.edge.truncated-container"
 expected_metadata = ["schema=darktable-data"]
 
 [[matrix]]

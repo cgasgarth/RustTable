@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use super::compression;
-use super::manifest::{FixtureEntry, FixtureManifest, ManifestError};
+use super::manifest::{ArtifactClass, FixtureEntry, FixtureManifest, ManifestError};
 use super::privacy::{PrivacyFinding, PrivacyReport, PrivacyScanner};
+use super::qualification::{QualificationError, qualify_binary};
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
@@ -199,6 +200,7 @@ impl FixtureRepository {
                 findings,
             });
         }
+        qualify_entry(entry, &scan_bytes)?;
         Ok((
             VerifiedFixture {
                 id: entry.id.clone(),
@@ -221,6 +223,16 @@ impl FixtureRepository {
         }
         Ok(())
     }
+}
+
+fn qualify_entry(entry: &FixtureEntry, bytes: &[u8]) -> Result<(), VerificationError> {
+    if entry.artifact_class == ArtifactClass::ValidBinary {
+        qualify_binary(entry, bytes).map_err(|source| VerificationError::Qualification {
+            id: entry.id.clone(),
+            source,
+        })?;
+    }
+    Ok(())
 }
 
 fn collect_governed_files(
@@ -418,6 +430,10 @@ pub enum VerificationError {
         id: String,
         findings: Vec<PrivacyFinding>,
     },
+    Qualification {
+        id: String,
+        source: QualificationError,
+    },
     Overflow,
 }
 
@@ -489,6 +505,12 @@ impl fmt::Display for VerificationError {
             ),
             Self::PrivacyLeak { id, findings } => {
                 write!(formatter, "fixture {id} has privacy fields: {findings:?}")
+            }
+            Self::Qualification { id, source } => {
+                write!(
+                    formatter,
+                    "fixture {id} failed binary qualification: {source}"
+                )
             }
             Self::Overflow => formatter.write_str("fixture verification arithmetic overflowed"),
         }

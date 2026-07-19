@@ -12,634 +12,968 @@ id = "image-io.bigtiff"
 path = "crates/rusttable-image-io/tests/fixtures/bigtiff.tiff.b64"
 size = 17
 sha256 = "25b31f101da2f1c12988a1cfdb80dfe88435745b129ec56ecb753d6e65cd5182"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "malformed-binary"
+format = "base64-bigtiff"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
+seed_fixture = "image-io.rgb-tiff"
+mutation = "deterministic malformed image-io.bigtiff"
 [[fixtures]]
 id = "image-io.gray-tiff"
 path = "crates/rusttable-image-io/tests/fixtures/gray-2x1.tiff.b64"
 size = 185
 sha256 = "511ddf74846a0200999efe13902c6d3a9c95a6e88f75cadcfbff3459d40f377f"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.malformed-offset"
 path = "crates/rusttable-image-io/tests/fixtures/malformed-offset.tiff.b64"
 size = 197
 sha256 = "0a208ef8077da10d5eef005ad1f18993fddaa00f11f3a5b36febae08de3c2db7"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "malformed-binary"
+format = "binary"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
+seed_fixture = "image-io.rgb-tiff"
+mutation = "deterministic malformed image-io.malformed-offset"
 [[fixtures]]
 id = "image-io.multi-page"
 path = "crates/rusttable-image-io/tests/fixtures/multi-page.tiff.b64"
 size = 197
 sha256 = "39146b6f07a432032cb6840d71760b52d19abe2f8d12d4321b13852550e8eb63"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgb-16bit-tiff"
 path = "crates/rusttable-image-io/tests/fixtures/rgb-16bit.tiff.b64"
 size = 197
 sha256 = "208c9288917f09ee7dd7ed20b9f717f8fe9076eb4035056be8261c47729936fc"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgb-jpeg"
 path = "crates/rusttable-image-io/tests/fixtures/rgb-2x1.jpg.b64"
 size = 445
 sha256 = "3cdb0dbb451fe7a4a5abdb52d6046e9f68248e2a59d8008e3ef225f7b076f2ec"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgb-tiff"
 path = "crates/rusttable-image-io/tests/fixtures/rgb-2x1.tiff.b64"
 size = 197
 sha256 = "035ecb7f8fb58afff218de75b3b22183117bbb43c4da706e7a8ba68229b9774a"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgba-png"
 path = "crates/rusttable-image-io/tests/fixtures/rgba-1x2.png.b64"
 size = 97
 sha256 = "7f506c6f2434b50e5f465f6de330db567b73edf2c2cbfd87a84c6fa94a4ad9c9"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgba-png-transposed"
 path = "crates/rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
 size = 97
 sha256 = "cf9a5e966081298df36751cde67a10da395aeb248f9bff0ec330f0973c8c4ece"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgba-tiff"
 path = "crates/rusttable-image-io/tests/fixtures/rgba-1x2.tiff.b64"
 size = 201
 sha256 = "223c8aa278c63d4a8828160aa6724f02a4019183c5024ed84bcf77e1849ed62a"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.truncated-png"
 path = "crates/rusttable-image-io/tests/fixtures/truncated.png.b64"
 size = 29
 sha256 = "f2a5f32e4226f875484ef087f4f231354a2d1cf8dfa0c68144c650c8a87a1c81"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
-
+artifact_class = "malformed-binary"
+format = "binary"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
+seed_fixture = "image-io.rgba-png"
+mutation = "deterministic malformed image-io.truncated-png"
 [[fixtures]]
 id = "image-io.unsupported-gif"
 path = "crates/rusttable-image-io/tests/fixtures/unsupported.gif.b64"
 size = 57
 sha256 = "eb91db57857647708f344b883c1e95147519a74ba2d090f45fa76f69aacfa92b"
-media_type = "application/base64"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
+artifact_class = "malformed-binary"
+format = "binary"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
+seed_fixture = "image-io.rgb-jpeg"
+mutation = "deterministic malformed image-io.unsupported-gif"
 [[fixtures]]
 id = "corpus.color.display-output"
 path = "fixtures/corpus/assets/color-display-output.icc"
-size = 69
-sha256 = "aaafd39f66ca225aefb7a4a9cd416345ae017291de70498e279779474cd9790c"
-media_type = "application/x-rusttable-synthetic"
+size = 228
+sha256 = "ee03f2736a154673bfad3fe05faac12482edcd860c32a9baff7e0eac6bcc2972"
+media_type = "application/icc"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#101-#106"]
-
+artifact_class = "valid-binary"
+format = "icc"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.color.hdr-transfer"
 path = "fixtures/corpus/assets/color-hdr-transfer.icc"
-size = 65
-sha256 = "00439d3f8b32afab1c743eef6c3cce19e85db416f5401ce2c0280937f4fbe4f3"
-media_type = "application/x-rusttable-synthetic"
+size = 228
+sha256 = "5968caabbfbcf3402a8a7bb5882f6bb87af34861a21cbfa1f4c63436ed75223e"
+media_type = "application/icc"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#101-#106"]
-
+artifact_class = "valid-binary"
+format = "icc"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.color.lut-icc"
 path = "fixtures/corpus/assets/color-lut.icc"
-size = 61
-sha256 = "8d9fe27216725f9188470b8039345a83f3381ec9ddc03e8103c8cf68f81356cf"
-media_type = "application/x-rusttable-synthetic"
+size = 3372
+sha256 = "9c6c40e27c5572d19cf779a0d78e644156e7a1d995cb1d7b29c9f8920b7ad1a6"
+media_type = "application/icc"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#101-#106"]
-
+artifact_class = "valid-binary"
+format = "icc"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.color.malformed"
 path = "fixtures/corpus/assets/color-malformed.icc"
-size = 82
-sha256 = "ae91d0345d348994910c7ba4826f8b13313db8c89dd84802deef82257a3362dc"
-media_type = "application/x-rusttable-synthetic"
+size = 227
+sha256 = "3ad64160a22f88cd11b618dcc3087057841e18108580e9835237f40431b02aab"
+media_type = "application/icc"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#101-#106"]
-
+artifact_class = "malformed-binary"
+format = "icc"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.color.matrix-icc"
+mutation = "deterministic malformed corpus.color.malformed"
 [[fixtures]]
 id = "corpus.color.matrix-icc"
 path = "fixtures/corpus/assets/color-matrix.icc"
-size = 64
-sha256 = "1bd3618e25dbcc39e15e4310e31b74e515c4277994604acb3ffc8b926933b821"
-media_type = "application/x-rusttable-synthetic"
+size = 228
+sha256 = "1eab84f6e8e5544f9a924a5ae21dd523ca8ea7c5e5652244c827570e91d3e55c"
+media_type = "application/icc"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#101-#106"]
-
+artifact_class = "valid-binary"
+format = "icc"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.compat.blend-mask-style"
 path = "fixtures/corpus/assets/compat-blend-mask-style.dt"
-size = 76
-sha256 = "c770006dc7ca5a25a97ec3604b2a75962ff90cf39c1afaf18ad1b58a067b0ff5"
-media_type = "application/x-rusttable-synthetic"
+size = 592
+sha256 = "30955ca4142cd80444c68d5cbf8c5e31fbd383ea5363ea2725073c9367bdc8da"
+media_type = "application/xmp"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#37-#40", "#84-#90"]
-
+artifact_class = "valid-binary"
+format = "xmp"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.compat.data-schema"
 path = "fixtures/corpus/assets/compat-data-schema.db"
-size = 72
-sha256 = "bd15ef6eced782fa4d5e6fa3c76a66396438873cafbf4c054af0a549696ba5c5"
-media_type = "application/x-rusttable-catalog"
+size = 28672
+sha256 = "93e540cca2bef8e17c343de3ac0bc6dcfddb9ce494fd5dccd12a876a68c2296b"
+media_type = "application/sqlite"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#37-#40", "#84-#90"]
-
+artifact_class = "valid-binary"
+format = "sqlite"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.compat.library-schema"
 path = "fixtures/corpus/assets/compat-library-schema.db"
-size = 75
-sha256 = "774c0d8c1fdd7cdf280f8fcb07b0164081057343671efc86c0978ce1a74ebc46"
-media_type = "application/x-rusttable-catalog"
+size = 24576
+sha256 = "c13273f503793f445597291745427b2b10051af9dc397b8942c9257e59b25813"
+media_type = "application/sqlite"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#37-#40", "#84-#90"]
-
+artifact_class = "valid-binary"
+format = "sqlite"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.compat.unsupported-version"
-path = "fixtures/corpus/assets/compat-unsupported-version.dt"
-size = 74
-sha256 = "379f1322d2929e00adc87502f606597fa385b20d05c872077e48a0cceb95586a"
-media_type = "application/x-rusttable-synthetic"
+path = "fixtures/corpus/assets/compat-unsupported-version.fixture"
+size = 87
+sha256 = "2fce5e33fe31ed5d0b1223fd3888fed73f51410f9781dc7e4b7677576f6b028b"
+media_type = "application/descriptor"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#37-#40", "#84-#90"]
-
+artifact_class = "descriptor"
+format = "descriptor"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.compat.xmp.multi"
 path = "fixtures/corpus/assets/compat-xmp-multi.xmp"
-size = 76
-sha256 = "49aa02eac4843112e08eb79e9acb9e11c051b8bf52eb3fd11306016a799c83d2"
-media_type = "application/x-rusttable-xmp"
+size = 515
+sha256 = "4cdee10989d56a9ba3c0a4cb56209e33de4530b97b27d4a7fea647d3b003bf47"
+media_type = "application/xmp"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#37-#40", "#84-#90"]
-
+artifact_class = "valid-binary"
+format = "xmp"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.compat.xmp.simple"
 path = "fixtures/corpus/assets/compat-xmp-simple.xmp"
-size = 75
-sha256 = "81861f96ac118ef629ba5f37fd68e7005968719127992c3eaa77ddf1cd3217a6"
-media_type = "application/x-rusttable-xmp"
+size = 435
+sha256 = "663d9e632d61a8ed3002174494716b24245e670a4772afce97c03f75e96221f8"
+media_type = "application/xmp"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#37-#40", "#84-#90"]
-
+artifact_class = "valid-binary"
+format = "xmp"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.edge.conflicting-metadata"
 path = "fixtures/corpus/assets/edge-conflicting-metadata.xmp"
-size = 73
-sha256 = "df0198f4109438dfb941f642354f243e78ae4e03fd92ac2e0972a447b391b5e4"
-media_type = "application/x-rusttable-xmp"
+size = 512
+sha256 = "de2ab6a06b54f661031c74109e8e202afefe3e9f85b905f503d52112810d86d6"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.compat.xmp.simple"
+mutation = "deterministic malformed corpus.edge.conflicting-metadata"
 [[fixtures]]
 id = "corpus.edge.decompression-bomb"
 path = "fixtures/corpus/assets/edge-decompression-bomb.gz"
-size = 69
-sha256 = "fe55247d3943b819c24895046b153cc6b733f5bdfc24f3f6a8395341dd69c9e4"
-media_type = "application/x-rusttable-synthetic"
+size = 155
+sha256 = "50df15a19597624e2b5ec65c7329f23bf901252df7752a3794ac0c8dbbdba303"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.decompression-bomb"
 [[fixtures]]
 id = "corpus.edge.duplicate-tags"
 path = "fixtures/corpus/assets/edge-duplicate-tags.raw"
-size = 67
-sha256 = "2870fc68d14e35c2654ad3707b4d8a1cbb25ca06809a4c70ca78c0dc79a5a4f0"
-media_type = "application/x-rusttable-synthetic"
+size = 134
+sha256 = "1bf7f7238c107c2f15d1ef804d802716dfbc32c24dc896ab81b698ccb70e8f53"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.duplicate-tags"
 [[fixtures]]
 id = "corpus.edge.invalid-archive"
 path = "fixtures/corpus/assets/edge-invalid-archive.zip"
-size = 66
-sha256 = "a5917e1dfa1978258d3e7abe28bfbd616722b31df8210394ff6937094242a39f"
-media_type = "application/x-rusttable-synthetic"
+size = 90
+sha256 = "b0c4f332cd4fd8b52f4159eb8133862dc3dcfd78b3594465bb595a91383bcaaf"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.invalid-archive"
 [[fixtures]]
 id = "corpus.edge.invalid-offset"
 path = "fixtures/corpus/assets/edge-invalid-offset.raw"
-size = 65
-sha256 = "f1b82b082f94b4f1146d03550a30e0b48789a036a9d77ba3a18e5d52b0c56bab"
-media_type = "application/x-rusttable-synthetic"
+size = 136
+sha256 = "c71d4c396dbd38894f18419d16747e22e5c8a07394fac06f0f5249d6c0d99cf5"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.invalid-offset"
 [[fixtures]]
 id = "corpus.edge.nan-inf-parameters"
 path = "fixtures/corpus/assets/edge-nan-inf-parameters.toml"
-size = 69
-sha256 = "c065bc8941016e841731f8e5cd0b9f88754d1dae41eecacb9ebb4723b5a1d3bf"
-media_type = "application/x-rusttable-synthetic"
+size = 74
+sha256 = "3e06c20faea22e62762bda8360f4c4f732002e29a1f27529cabfd5cfe27b731a"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.nan-inf-parameters"
 [[fixtures]]
 id = "corpus.edge.overlarge-dimensions"
 path = "fixtures/corpus/assets/edge-overlarge-dimensions.raw"
-size = 71
-sha256 = "42c9ef02c70a26c682f890588dc555822f84d38d2ebaf755f779bb161d0f058b"
-media_type = "application/x-rusttable-synthetic"
+size = 88
+sha256 = "558bbb6eba84852d8f8dc43946b8035a43e981e800247f3644e989c7fdba346b"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.overlarge-dimensions"
 [[fixtures]]
 id = "corpus.edge.truncated-container"
 path = "fixtures/corpus/assets/edge-truncated-container.raw"
-size = 70
-sha256 = "515ffd118480ef920005eb9d9ba1a4febfea13be77eda8579b6f53d1f86de24e"
-media_type = "application/x-rusttable-synthetic"
+size = 80
+sha256 = "74ccde8fee19461a4de1251f47da0f85afd3e4c6e411cad1feb34d0a8f304dcf"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.truncated-container"
 [[fixtures]]
 id = "corpus.edge.unicode-path"
 path = "fixtures/corpus/assets/edge-unicode-café.raw"
-size = 65
-sha256 = "bb87e92aeaf12a9d65e87719a68f2bc155a86edac1e72c82d53d0272d1c2a0ca"
-media_type = "application/x-rusttable-synthetic"
+size = 66
+sha256 = "85afd14ab73fed99a410e24d41be2bf998dfd3db7c6f24b5b5cf06ba814f38ed"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#127"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.edge.unicode-path"
 [[fixtures]]
 id = "corpus.geometry.brush"
 path = "fixtures/corpus/assets/geometry-brush.raw"
-size = 59
-sha256 = "944bb69cb9a91ec813353e5f2d972c68d177530a070ee103338cb4da1c82a58d"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "792c060592dfd3520ea76fb1cc8e79e7b5e4120bfc7abf942330e3715324d62a"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.crop"
 path = "fixtures/corpus/assets/geometry-crop.raw"
-size = 65
-sha256 = "65fb04cb52723cf3879f96d0ca3488b214aae290476eeba6e71b44382c4eb3c0"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "8478a75e5e21c74bea7bfabacddbb99822b28c72c56f70a159708d94f4f6b2e4"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.extreme-aspect"
 path = "fixtures/corpus/assets/geometry-extreme.raw"
-size = 68
-sha256 = "ee7d479336b5d256bd92adc1449ca8a8a9076d66b2ce8cdf9da0b17d45dd1031"
-media_type = "application/x-rusttable-synthetic"
+size = 393
+sha256 = "43ac9bf103c318e64afbe18dae1e6957128536ab703dea4b6ec088ff7f28fbc0"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.gradient"
 path = "fixtures/corpus/assets/geometry-gradient.raw"
-size = 68
-sha256 = "fec229eaa7048f49f61c31eaec08fa3387671bec6e3f5c5371dd809f20643296"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "9d16d5fe834b46b74381ba058cfb8ab39a6d118efe18fdacc06d587ebb3f91f5"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.landscape"
 path = "fixtures/corpus/assets/geometry-landscape.raw"
-size = 72
-sha256 = "80e4383715c372d2fce902cda8e3eaaad70e84b20b2f26a789e98d00c5028c8b"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "26ee307f4de611d417fc16a9eae1976528f3f72718901d397157cf6c4a62b769"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.one-pixel"
 path = "fixtures/corpus/assets/geometry-one-pixel.raw"
-size = 65
-sha256 = "02587d659004eb01b79d546caa56efb703a9990a527350b95047d6e8fb6095ed"
-media_type = "application/x-rusttable-synthetic"
+size = 91
+sha256 = "be6130f9cf89a936c6f9d7c1cfec0651e31dccc66ee04d938b2e6d262b84262a"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.path"
 path = "fixtures/corpus/assets/geometry-path.raw"
-size = 64
-sha256 = "c56fd39d32797fd2ae2eb66ce2506fd62ed816a803173dded113b13263adfaef"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "21f4ebffd5cd5c474e88fa074676a9ccf7ebb49703f5e92369427d34a50eced0"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.portrait"
 path = "fixtures/corpus/assets/geometry-portrait.raw"
-size = 71
-sha256 = "5f6db31be9f6f119008733f9d3257d994d3ee9695176962f71632b22e69cd6a4"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "6ca4ee49ea9afe51b4b1015d3f16196c77b4cf9671f98c49544305ff2f46a4f2"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.raster-mask"
 path = "fixtures/corpus/assets/geometry-raster-mask.raw"
-size = 62
-sha256 = "93cf67c3d5621d969ad4b30f7ed04fbe262c0cb90fc6f2fcdd73dffe508e2273"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "dccd327068cc57cad61b0c0d6c73cdcad780c7f99fae5cc3c00722794377e817"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.geometry.source-heal"
 path = "fixtures/corpus/assets/geometry-source-heal.raw"
-size = 74
-sha256 = "63006401013f60b6fe07b75feba197971ecbebeaad0a57ccd9951c62de735883"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "db009d39ec9aabb67994889d75cf03a021e807a2b61098013a2407457190a97d"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#117-#127", "#208-#234"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.raster.avif"
 path = "fixtures/corpus/assets/raster-avif.avif"
-size = 71
-sha256 = "6e67a78e9a91b32d3eadb3bc0a9f5059377d6b2a72a585c1aaa80c1fd690df1b"
-media_type = "application/x-rusttable-synthetic"
+size = 82
+sha256 = "70231a6df2d22093557e056baad42d0803751b3ca6e2d386c6fdecb642e9df0c"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.avif"
 [[fixtures]]
 id = "corpus.raster.heif"
 path = "fixtures/corpus/assets/raster-heif.heif"
-size = 71
-sha256 = "76876affa1def7e30c280cfc8d271dfbc7b243e500587a294e343bac213a306d"
-media_type = "application/x-rusttable-synthetic"
+size = 82
+sha256 = "d813f77734c7e3dedd6fa265e085346a0ed3ae346e6b81b6e2074a7ddb969e89"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.heif"
 [[fixtures]]
 id = "corpus.raster.jpeg.12"
 path = "fixtures/corpus/assets/raster-jpeg-12.jpg"
-size = 68
-sha256 = "fe87e3dea43e8b250efe1f09711fb6b9b3f81dc9aa11cc57adc16c49733188aa"
-media_type = "application/x-rusttable-synthetic"
+size = 84
+sha256 = "67c4d90d47875f13c107a517c56da9f3199624768e7b36b24e25a1e175c874be"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.jpeg.12"
 [[fixtures]]
 id = "corpus.raster.jpeg-2000"
 path = "fixtures/corpus/assets/raster-jpeg-2000.jp2"
-size = 65
-sha256 = "31a3765de2def0d18df9968f5b52b75aeb2a600d4e901a5dec7c1aa1e6986ff0"
-media_type = "application/x-rusttable-synthetic"
+size = 86
+sha256 = "e599833b38273c52f36de3bbbf50378cab54112d6395f7772dd5d50c307699b8"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.jpeg-2000"
 [[fixtures]]
 id = "corpus.raster.jpeg-xl"
 path = "fixtures/corpus/assets/raster-jpeg-xl.jxl"
-size = 63
-sha256 = "9a7d762ce9b4569d699a275b01f0950ad72949850121454915141c2f65034215"
-media_type = "application/x-rusttable-synthetic"
+size = 84
+sha256 = "a50357a0a1c273ca152e58e7042310903f4a38c56c7e9eeebf2a499ee3e6d21c"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.jpeg-xl"
 [[fixtures]]
 id = "corpus.raster.openexr"
 path = "fixtures/corpus/assets/raster-openexr.exr"
-size = 76
-sha256 = "f728a908fce074143e01dedb966deb428812ee3594d2fbe18054191bb351192f"
-media_type = "application/x-rusttable-synthetic"
+size = 84
+sha256 = "4db3d450935fab68a5025102de93442b334b70dd4ece384608aa6c892923d690"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.openexr"
 [[fixtures]]
 id = "corpus.raster.pfm"
 path = "fixtures/corpus/assets/raster-pfm.pfm"
-size = 72
-sha256 = "e5f74be65f8781a4580dfa3f2a9b5dbd1fce77735c06380bafea63e0abb71d39"
-media_type = "application/x-rusttable-synthetic"
+size = 80
+sha256 = "36a11216fdc8d9e6b4f0170f8f8b54baee68445a291115dd9b5fbad6d5289097"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.pfm"
 [[fixtures]]
 id = "corpus.raster.png.16-alpha"
 path = "fixtures/corpus/assets/raster-png-16-alpha.png"
-size = 78
-sha256 = "f8b64593015ba3c815feb83c494dd2785727f33e91c9b2a792f0bccf7c292843"
-media_type = "application/x-rusttable-synthetic"
+size = 109
+sha256 = "0aefb09ec3e28fc3bcb60470bad9c22322e4e4ada1fd0f34d32e6894b0615557"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "valid-binary"
+format = "png"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
 [[fixtures]]
 id = "corpus.raster.rgbe"
 path = "fixtures/corpus/assets/raster-rgbe.hdr"
-size = 73
-sha256 = "8b449107c82e31d22f42281b1ed75964b3decf173c6048b63f3669e828ea8c22"
-media_type = "application/x-rusttable-synthetic"
+size = 81
+sha256 = "0e7393055658330ee584f04a58659c9c9f239c6815c0830b68e6b61d7010c310"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.rgbe"
 [[fixtures]]
 id = "corpus.raster.tiff.strip-float"
 path = "fixtures/corpus/assets/raster-tiff-strip-float.tiff"
-size = 86
-sha256 = "250b852a14da06973ab41a4a3ab500f377c5d9c63c4072d3f5741ee1a8ade8d7"
-media_type = "application/x-rusttable-synthetic"
+size = 94
+sha256 = "2bce10a30cea2e62ecb723cef7c6b859fe5e51f6974ecb784f7e03d3f17f62fc"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.tiff.strip-float"
 [[fixtures]]
 id = "corpus.raster.tiff.tile-float"
 path = "fixtures/corpus/assets/raster-tiff-tile-float.tiff"
-size = 85
-sha256 = "caf795318e19641edda89614d630538b7f7527cd42d0fe4ecfefeb2a0bf672a3"
-media_type = "application/x-rusttable-synthetic"
+size = 93
+sha256 = "edb2608b145c426888326f860c0939c5984786e68976536732d8eeb7bbb346f1"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.tiff.tile-float"
 [[fixtures]]
 id = "corpus.raster.tiff.tile-int"
 path = "fixtures/corpus/assets/raster-tiff-tile-int.tiff"
-size = 87
-sha256 = "7ee866263afab8fcb3a3f1039e4f30283b9e6cec0d6ff4e04e1ced47ec25697f"
-media_type = "application/x-rusttable-synthetic"
+size = 91
+sha256 = "40a3dcbcc4a3300d4b6d6230346acbd87c9b10bfc904e36d42848244a72bcd5d"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.tiff.tile-int"
 [[fixtures]]
 id = "corpus.raster.webp"
 path = "fixtures/corpus/assets/raster-webp.webp"
-size = 71
-sha256 = "4cc58fb08364ba233be88368aa5cd36d5167bae62dbb1bb71bb858f162d3a3e8"
-media_type = "application/x-rusttable-synthetic"
+size = 82
+sha256 = "c6ba38691cceceecd7fb1a68689cb0e6bacff19c9a1dec81951f1cfc3abfea75"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#66-#79", "#239", "#241-#249"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raster.webp"
 [[fixtures]]
 id = "corpus.raw.bayer.12-2row"
 path = "fixtures/corpus/assets/raw-bayer-12-2row.dng"
-size = 86
-sha256 = "e823ed1cdfed609f4e13d51d20d1e74ebd6f285fdf1773a5cd8eaadbd6c803b2"
-media_type = "application/x-rusttable-synthetic"
+size = 87
+sha256 = "a6421b2747ca2e5fba035a8e0f9a111b0d2fa1f72873432f8d17ca5d6fb85ae7"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.bayer.12-2row"
 [[fixtures]]
 id = "corpus.raw.bayer.14-compressed"
 path = "fixtures/corpus/assets/raw-bayer-14-compressed.dng"
-size = 88
-sha256 = "984bcfc6cc0704818ce6f54bfdb3d7fc7b6c48ddbb0351955caa36a7b5adf813"
-media_type = "application/x-rusttable-synthetic"
+size = 93
+sha256 = "5c136fae4994463988e65890935437de1d7c3049ac38b94c9576ee8b5236428b"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.bayer.14-compressed"
 [[fixtures]]
 id = "corpus.raw.bayer.14-4row"
 path = "fixtures/corpus/assets/raw-bayer-14-4row.dng"
-size = 86
-sha256 = "25998d4ad5ce5a09b9fcd57e463afd5e487633ed55b01e69e94a0a18cd072d9d"
-media_type = "application/x-rusttable-synthetic"
+size = 87
+sha256 = "b941f7e4dd85d1278ac809e69484eec8988a17fc214edd3482a19c6f83f781e1"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.bayer.14-4row"
 [[fixtures]]
 id = "corpus.raw.canon.cr2"
 path = "fixtures/corpus/assets/raw-bayer-16-canon.cr2"
-size = 80
-sha256 = "117266c87f2585598e4e825e4e6ddb6ffaaeb124bf858449ae4912e683c65ad6"
-media_type = "application/x-rusttable-synthetic"
+size = 88
+sha256 = "64b8d8798da3589a234a35d5de861545b9194b14731b498ab6ab6c787c58e350"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.canon.cr2"
 [[fixtures]]
 id = "corpus.raw.nikon.nef"
 path = "fixtures/corpus/assets/raw-nikon.nef"
-size = 80
-sha256 = "fd058c2ce83412346f2b925ed4cc21e34c415d471d6646d55a4161baad8cc4cb"
-media_type = "application/x-rusttable-synthetic"
+size = 79
+sha256 = "dbc870590fa1168854e601254c22f817483d913e68178f630e80119aeafe8b95"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.nikon.nef"
 [[fixtures]]
 id = "corpus.raw.olympus.orf"
 path = "fixtures/corpus/assets/raw-olympus.orf"
-size = 82
-sha256 = "265ddbffcb7d1e0eca0c9faff74331ab5931f878fe98594910b05972e3633669"
-media_type = "application/x-rusttable-synthetic"
+size = 81
+sha256 = "b5157c8365801eed5f2b81b80acd36d2d6c3bbebae29bb05cf462501922f7427"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.olympus.orf"
 [[fixtures]]
 id = "corpus.raw.panasonic.rw2"
 path = "fixtures/corpus/assets/raw-panasonic.rw2"
-size = 84
-sha256 = "28fb138cf4295f8e365f3f367f43190004d67258f65f635a1ff810c9fe476909"
-media_type = "application/x-rusttable-synthetic"
+size = 83
+sha256 = "3e8d7c5ac39ad5154adfbb066e75d592e506b03ccb9f3025f9af44a82ff24115"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.panasonic.rw2"
 [[fixtures]]
 id = "corpus.raw.sony.arw"
 path = "fixtures/corpus/assets/raw-sony.arw"
-size = 79
-sha256 = "785ab5e67fd17b89a6f1d51221886ce1adeea6d618f251b843b326ca11dbb05a"
-media_type = "application/x-rusttable-synthetic"
+size = 78
+sha256 = "0cbc124edeb9db9ba3fa4ef0271615dfb29b2683e58f7ef10c4697f88933209d"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.sony.arw"
 [[fixtures]]
 id = "corpus.raw.xtrans.compressed"
 path = "fixtures/corpus/assets/raw-xtrans-compressed.raf"
-size = 93
-sha256 = "d0227f51f2952d4aa2740483937e62c43ba2779ff21f0adba504ed29c799f0ad"
-media_type = "application/x-rusttable-synthetic"
+size = 91
+sha256 = "e4fd115adbd9f1f826fba9216f1e49c165858c540feeea494452235b45938b95"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
-
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.xtrans.compressed"
 [[fixtures]]
 id = "corpus.raw.xtrans.uncompressed"
 path = "fixtures/corpus/assets/raw-xtrans-uncompressed.raf"
-size = 95
-sha256 = "0a5b9bd2088999a4f68562d6c7e2375ff6ab76a2d51345de2c02fa90340eddea"
-media_type = "application/x-rusttable-synthetic"
+size = 93
+sha256 = "7a1c674580e6766dd46426e106ef810b98ca3f8f5e47882b443fdfff0fdfd8ff"
+media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-testkit"]
 consuming_issue_ranges = ["#233-#235", "#302"]
+artifact_class = "malformed-binary"
+format = "png"
+source = "deterministic-mutation-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-testkit::qualification"
+seed_fixture = "corpus.raster.png.16-alpha"
+mutation = "deterministic malformed corpus.raw.xtrans.uncompressed"
