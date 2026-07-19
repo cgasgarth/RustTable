@@ -1,5 +1,6 @@
 mod bench;
 mod ci;
+mod files;
 mod fixtures;
 mod github;
 mod parity;
@@ -22,7 +23,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Parity { command } => parity::run(&root, command),
         Command::Fixtures { command } => fixtures::run(&root, command),
         Command::Bench { command } => bench::run(&root, command, &runner),
-        Command::Repo { command } => repo::run(&root, command),
+        Command::Repo { command } => repo::run(&root, command, &runner),
         Command::Reference { command } => reference::run(&root, command, &runner),
         Command::Ci { command } => ci::run(&root, command, &runner),
         Command::Github { command } => github::run(&root, command, &runner),

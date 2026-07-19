@@ -15,4 +15,3 @@ while IFS= read -r file; do
 done < <(rg --files -g '*.rs' -g '!target/**')
 
 exit "$status"
-

@@ -1,1 +1,74 @@
-/CMakeLists.txt export-subst
+# RustTable-owned files use one portable text representation.  The retained
+# darktable reference tree is intentionally outside these path-scoped rules.
+/.gitattributes text eol=lf
+/*.md text eol=lf
+/*.toml text eol=lf
+/*.yaml text eol=lf
+/*.yml text eol=lf
+/*.json text eol=lf
+/*.lock text eol=lf
+/*.mailmap text eol=lf
+/AUTHORS text eol=lf
+/LICENSE text eol=lf
+/crates/rusttable-*/** text eol=lf
+/crates/xtask/** text eol=lf
+/architecture/** text eol=lf
+/quality/** text eol=lf
+/scripts/** text eol=lf
+/shaders/** text eol=lf
+/fixtures/** text eol=lf
+
+# Binary fixtures are never decoded or normalized as text.
+/crates/rusttable-*/**/*.arw binary
+/crates/rusttable-*/**/*.avif binary
+/crates/rusttable-*/**/*.cr2 binary
+/crates/rusttable-*/**/*.db binary
+/crates/rusttable-*/**/*.dng binary
+/crates/rusttable-*/**/*.dt binary
+/crates/rusttable-*/**/*.exr binary
+/crates/rusttable-*/**/*.gz binary
+/crates/rusttable-*/**/*.hdr binary
+/crates/rusttable-*/**/*.heif binary
+/crates/rusttable-*/**/*.icc binary
+/crates/rusttable-*/**/*.jp2 binary
+/crates/rusttable-*/**/*.jpg binary
+/crates/rusttable-*/**/*.jxl binary
+/crates/rusttable-*/**/*.nef binary
+/crates/rusttable-*/**/*.orf binary
+/crates/rusttable-*/**/*.pfm binary
+/crates/rusttable-*/**/*.png binary
+/crates/rusttable-*/**/*.raf binary
+/crates/rusttable-*/**/*.raw binary
+/crates/rusttable-*/**/*.rw2 binary
+/crates/rusttable-*/**/*.tiff binary
+/crates/rusttable-*/**/*.webp binary
+/crates/rusttable-*/**/*.zip binary
+/fixtures/**/*.arw binary
+/fixtures/**/*.avif binary
+/fixtures/**/*.cr2 binary
+/fixtures/**/*.db binary
+/fixtures/**/*.dng binary
+/fixtures/**/*.dt binary
+/fixtures/**/*.exr binary
+/fixtures/**/*.gz binary
+/fixtures/**/*.hdr binary
+/fixtures/**/*.heif binary
+/fixtures/**/*.icc binary
+/fixtures/**/*.jp2 binary
+/fixtures/**/*.jpg binary
+/fixtures/**/*.jxl binary
+/fixtures/**/*.nef binary
+/fixtures/**/*.orf binary
+/fixtures/**/*.pfm binary
+/fixtures/**/*.png binary
+/fixtures/**/*.raf binary
+/fixtures/**/*.raw binary
+/fixtures/**/*.rw2 binary
+/fixtures/**/*.tiff binary
+/fixtures/**/*.webp binary
+/fixtures/**/*.zip binary
+
+# Generated RustTable artifacts remain visible but are marked for tooling.
+/Cargo.lock linguist-generated=true
+/architecture/darktable-capabilities.toml linguist-generated=true
+/architecture/darktable-operations.toml linguist-generated=true

@@ -239,6 +239,19 @@ platforms = ["all"]
 severity = "error"
 
 [[checks]]
+id = "repository-files"
+label = "repository-files"
+program = "cargo"
+args = ["xtask", "repo", "verify-files"]
+owner = "repository"
+surfaces = ["precommit", "prepush", "pull_request", "main"]
+parallel_group = "repository"
+timeout_seconds = 5
+network = "none"
+platforms = ["all"]
+severity = "error"
+
+[[checks]]
 id = "workspace-rust-version"
 label = "workspace-rust-version"
 program = "bun"

@@ -1,21 +1,18 @@
 use std::fs;
 
-use super::{Result, report};
+use super::{Result, files, report};
 use crate::cli::RepoCommand;
+use crate::process::ProcessRunner;
 use crate::root::RepositoryRoot;
 
-pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand) -> Result {
+pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand, runner: &ProcessRunner) -> Result {
     match command {
         RepoCommand::Dag => Ok(report(
             root,
             "repo.verify-dag",
             serde_json::json!({ "placeholder": true, "message": "dependency DAG policy pending its issue" }),
         )),
-        RepoCommand::Files => Ok(report(
-            root,
-            "repo.verify-files",
-            serde_json::json!({ "placeholder": true, "message": "repository file policy pending its issue" }),
-        )),
+        RepoCommand::Files => files::run(root, runner),
         RepoCommand::Workflows => verify_workflows(root),
     }
 }
