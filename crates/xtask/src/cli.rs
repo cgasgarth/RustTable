@@ -61,6 +61,10 @@ pub enum Command {
         #[command(subcommand)]
         command: FoundationCommand,
     },
+    Coverage {
+        #[command(subcommand)]
+        command: CoverageCommand,
+    },
     #[command(name = "extension-conformance")]
     ExtensionConformance(ExtensionConformanceArgs),
     #[command(name = "template-matrix")]
@@ -276,7 +280,14 @@ pub enum CiCommand {
         #[arg(long)]
         group: Option<String>,
     },
-    Main,
+    Main {
+        /// Omit a merge-only parallel group run by a dedicated merge job.
+        #[arg(long = "skip-group")]
+        skip_groups: Vec<String>,
+        /// Restrict main validation to one independent contract group.
+        #[arg(long)]
+        group: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -370,6 +381,41 @@ pub enum EcosystemCommand {
 #[derive(Debug, Subcommand)]
 pub enum FoundationCommand {
     Verify(FoundationVerifyArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CoverageCommand {
+    Run(CoverageRunArgs),
+    Verify(CoverageVerifyArgs),
+    Summarize(CoverageSummarizeArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CoverageRunArgs {
+    #[arg(long, default_value = "target/coverage")]
+    pub output_dir: PathBuf,
+    #[arg(long, default_value = "quality/coverage.toml")]
+    pub policy: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct CoverageVerifyArgs {
+    #[arg(long, default_value = "target/coverage/coverage.json")]
+    pub report: PathBuf,
+    #[arg(long, default_value = "target/coverage/coverage.lcov")]
+    pub lcov: PathBuf,
+    #[arg(long, default_value = "quality/coverage.toml")]
+    pub policy: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct CoverageSummarizeArgs {
+    #[arg(long, default_value = "target/coverage/coverage.lcov")]
+    pub lcov: PathBuf,
+    #[arg(long, default_value = "target/coverage/coverage.json")]
+    pub output: PathBuf,
+    #[arg(long, default_value = "quality/coverage.toml")]
+    pub policy: PathBuf,
 }
 
 #[derive(Debug, Args)]
