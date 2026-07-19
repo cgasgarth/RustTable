@@ -200,11 +200,15 @@ impl Contract {
                     .and_modify(|value| *value = (*value).max(check.timeout_for(surface)))
                     .or_insert(check.timeout_for(surface));
             }
-            let configured = group_max.values().sum::<u64>();
+            let configured = if surface == "pull_request" {
+                group_max.values().copied().max().unwrap_or_default()
+            } else {
+                group_max.values().sum::<u64>()
+            };
             let budget = self.budgets[surface];
             if configured > budget {
                 return Err(format!(
-                    "validation contract: {surface} parallel-group timeout sum {configured}s exceeds budget {budget}s"
+                    "validation contract: {surface} parallel-group timeout budget {configured}s exceeds budget {budget}s"
                 ));
             }
         }

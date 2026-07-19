@@ -9,6 +9,7 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "BSL-1.0",
+    "CC0-1.0",
     "GPL-2.0-only",
     "GPL-3.0-or-later",
     "ISC",
@@ -39,4 +40,8 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+allow-git = [
+    "https://github.com/iced-rs/cryoglyph.git",
+    "https://github.com/iced-rs/iced.git",
+    "https://github.com/iced-rs/winit.git",
+]
