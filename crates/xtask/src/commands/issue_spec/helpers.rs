@@ -138,61 +138,6 @@ pub(super) fn first_issue_reference(value: &str) -> Option<u64> {
     parsed.references.first().map(|reference| reference.issue)
 }
 
-pub(super) fn parse_capabilities(content: &str) -> Vec<CapabilityMetadata> {
-    let mut records = Vec::new();
-    let mut current: Option<CapabilityMetadata> = None;
-    for (index, raw_line) in normalize_text(content).lines().enumerate() {
-        let line = raw_line
-            .trim()
-            .trim_start_matches(['-', '*'])
-            .trim()
-            .trim_matches('`');
-        if line.is_empty() {
-            continue;
-        }
-        let (key, value) = line.split_once(':').map_or(
-            ("name", line),
-            |(key, value)| (key.trim(), value.trim().trim_matches('`')),
-        );
-        match key.to_ascii_lowercase().as_str() {
-            "name" | "id" | "capability" | "capability id" => {
-                if let Some(record) = current.take() {
-                    records.push(record);
-                }
-                current = Some(CapabilityMetadata {
-                    name: value.to_owned(),
-                    role: CapabilityRole::Unknown,
-                    owner_issue: None,
-                    line: index + 1,
-                });
-            }
-            "role" => {
-                if let Some(record) = current.as_mut() {
-                    record.role = parse_capability_role(value);
-                }
-            }
-            "owner" | "owner issue" | "owner_issue" => {
-                if let Some(record) = current.as_mut() {
-                    record.owner_issue = first_issue_reference(value);
-                }
-            }
-            _ if line.to_ascii_lowercase().starts_with("owns ") => {
-                if let Some(record) = current.as_mut() {
-                    record.role = CapabilityRole::Owner;
-                }
-            }
-            _ => {}
-        }
-    }
-    if let Some(record) = current {
-        records.push(record);
-    }
-    records
-        .into_iter()
-        .filter(|record| !record.name.is_empty())
-        .collect()
-}
-
 pub(super) fn has_named_value(text: &str, term: &str) -> bool {
     text.split(term)
         .skip(1)
