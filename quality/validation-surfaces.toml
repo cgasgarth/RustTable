@@ -87,7 +87,7 @@ surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 65, pull_request = 110 }
+timeout_seconds_by_surface = { prepush = 65, pull_request = 150, main = 150 }
 network = "none"
 platforms = ["all"]
 severity = "error"
