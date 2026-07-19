@@ -241,7 +241,7 @@ pub fn normalize(
     if let TransferFunction::Gamma(gamma) = input.transfer
         && (!gamma.is_finite() || gamma <= 0.0 || gamma > 32.0)
     {
-        return Err(DiffError::InvalidImage(
+        return Err(DiffError::InvalidTransfer(
             "gamma must be finite, positive, and at most 32".to_owned(),
         ));
     }
@@ -280,7 +280,7 @@ pub fn normalize(
                 _ => input.pixels[offset + 3],
             };
             if !alpha.is_finite() || !(0.0..=1.0).contains(&alpha) {
-                return Err(DiffError::InvalidImage(
+                return Err(DiffError::NonFiniteInput(
                     "alpha must be finite and within [0, 1]".to_owned(),
                 ));
             }
@@ -290,7 +290,7 @@ pub fn normalize(
                 input.pixels[offset + 2],
             ];
             if rgb.iter().any(|value| !value.is_finite()) {
-                return Err(DiffError::InvalidImage(
+                return Err(DiffError::NonFiniteInput(
                     "RGB samples must be finite".to_owned(),
                 ));
             }
@@ -312,7 +312,7 @@ pub fn normalize(
                     .ok_or_else(converter_error)?;
             }
             if rgb.iter().any(|value| !value.is_finite()) {
-                return Err(DiffError::InvalidImage(
+                return Err(DiffError::NonFiniteInput(
                     "normalized RGB samples must be finite".to_owned(),
                 ));
             }
@@ -457,6 +457,8 @@ pub struct DiffOutlier {
 pub enum DiffError {
     InvalidPolicy(String),
     InvalidImage(String),
+    InvalidTransfer(String),
+    NonFiniteInput(String),
     DimensionMismatch {
         source: (u32, u32),
         reference: (u32, u32),
@@ -481,6 +483,8 @@ impl std::fmt::Display for DiffError {
         match self {
             Self::InvalidPolicy(message) => write!(formatter, "invalid diff policy: {message}"),
             Self::InvalidImage(message) => write!(formatter, "invalid image: {message}"),
+            Self::InvalidTransfer(message) => write!(formatter, "invalid transfer: {message}"),
+            Self::NonFiniteInput(message) => write!(formatter, "non-finite input: {message}"),
             Self::DimensionMismatch { source, reference } => {
                 write!(formatter, "dimension mismatch: {source:?} vs {reference:?}")
             }

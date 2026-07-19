@@ -36,6 +36,9 @@ fn pointwise_reports_one_pixel_and_bounded_artifacts() {
     assert_eq!(receipt.outliers[0].x, 1);
     assert_eq!(receipt.artifacts[0].kind, ArtifactKind::HeatmapRgba8);
     assert_eq!(receipt.artifacts[1].kind, ArtifactKind::BlinkRgba32);
+    let stable = receipt.stable_json().expect("descriptor-only receipt");
+    assert!(!stable.contains("\"bytes\""));
+    assert!(stable.len() < 4 * 1024);
     assert_eq!(receipt.artifact_payloads()[0].bytes.len(), 2 * 4);
     assert!(receipt.artifact_payloads()[0].validate().is_ok());
     assert!(receipt.artifact_payloads()[1].validate().is_ok());
@@ -244,13 +247,34 @@ fn alpha_weight_is_applied_once_and_reports_raw_alpha_metrics() {
 }
 
 #[test]
+fn alpha_weight_rmse_is_quadratic_for_all_supported_weights() {
+    let source = canonical(1, 1, vec![0.0, 0.0, 0.0, 0.0]);
+    let reference = canonical(1, 1, vec![0.0, 0.0, 0.0, 1.0]);
+    for weight in [0.0, 0.25, 0.5, 1.0, 2.0, 10.0] {
+        let mut policy = DiffPolicy::for_class(ToleranceClass::Pointwise);
+        policy.alpha_weight = weight;
+        let receipt = compare(&source, &reference, &policy).expect("weighted comparison");
+        let expected_rmse = weight / (3.0 + weight * weight).sqrt();
+        assert!((receipt.metrics.rmse - expected_rmse).abs() < 1.0e-6);
+        assert!((receipt.metrics.weighted_maximum_absolute_error - weight).abs() < 1.0e-6);
+        assert!((receipt.metrics.maximum_alpha_absolute_error - 1.0).abs() < 1.0e-6);
+    }
+}
+
+#[test]
 fn normalization_rejects_invalid_gamma_and_nonfinite_samples() {
     let mut input = ImageInput::rgba(1, 1, vec![0.2, 0.3, 0.4, 1.0]);
     input.transfer = TransferFunction::Gamma(0.0);
-    assert!(normalize(&input, CanonicalProfile::Srgb, None).is_err());
+    assert!(matches!(
+        normalize(&input, CanonicalProfile::Srgb, None),
+        Err(rusttable_testkit::image_diff::DiffError::InvalidTransfer(_))
+    ));
     input.transfer = TransferFunction::Linear;
     input.pixels[0] = f32::NAN;
-    assert!(normalize(&input, CanonicalProfile::Srgb, None).is_err());
+    assert!(matches!(
+        normalize(&input, CanonicalProfile::Srgb, None),
+        Err(rusttable_testkit::image_diff::DiffError::NonFiniteInput(_))
+    ));
 }
 
 #[test]
