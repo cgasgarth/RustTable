@@ -341,7 +341,7 @@ fn inspect_path(path: &str, policy: &Policy) -> Vec<Violation> {
     if !policy
         .allowed_filenames
         .iter()
-        .any(|name| path.ends_with(name))
+        .any(|name| file_name(path) == Some(name.as_str()))
         && !policy
             .allowed_extensions
             .iter()
@@ -570,7 +570,12 @@ fn collision_violations(
 ) -> Vec<Violation> {
     paths
         .values()
-        .filter(|paths| paths.len() > 1)
+        .filter_map(|paths| {
+            let mut unique = paths.clone();
+            unique.sort();
+            unique.dedup();
+            (unique.len() > 1).then_some(unique)
+        })
         .flat_map(|paths| {
             let detail = format!("collides with [{}]", paths.join(", "));
             paths
@@ -582,9 +587,7 @@ fn collision_violations(
 }
 
 fn normalized_path(path: &str) -> String {
-    path.nfc()
-        .map(|(character, _)| character)
-        .collect::<String>()
+    path.nfc().to_string()
 }
 
 fn is_governed(path: &str, roots: &[String]) -> bool {
@@ -611,9 +614,13 @@ fn is_binary(path: &str, policy: &Policy) -> bool {
 }
 
 fn file_extension(path: &str) -> Option<&str> {
-    let name = path.rsplit('/').next()?;
+    let name = file_name(path)?;
     let (stem, extension) = name.rsplit_once('.')?;
     (!stem.is_empty() && !extension.is_empty()).then_some(extension)
+}
+
+fn file_name(path: &str) -> Option<&str> {
+    path.rsplit('/').next()
 }
 
 fn is_reserved_windows_name(component: &str, policy: &Policy) -> bool {
@@ -717,6 +724,11 @@ mod tests {
                 .iter()
                 .any(|violation| violation.rule == "trailing-space-dot")
         );
+        assert!(
+            inspect_path("fixtures/notLICENSE", &policy)
+                .iter()
+                .any(|violation| violation.rule == "extension")
+        );
         assert!(manifest_escapes_repository(
             "crates/rusttable-core/Cargo.toml",
             "../../../outside"
@@ -748,7 +760,7 @@ mod tests {
         );
         let violations = collision_violations(&normalized, "unicode-normalization-collision");
         assert_eq!(violations.len(), 2);
-        assert_eq!(violations[0].path, composed);
+        assert_eq!(violations[0].path, decomposed);
         assert_eq!(violations[0].rule, "unicode-normalization-collision");
         let mut case = std::collections::BTreeMap::new();
         case.insert(
@@ -756,6 +768,14 @@ mod tests {
             vec![
                 "fixtures/README.md".to_owned(),
                 "fixtures/readme.md".to_owned(),
+            ],
+        );
+        assert_eq!(collision_violations(&case, "case-collision").len(), 2);
+        case.insert(
+            "fixtures/duplicate.md".to_owned(),
+            vec![
+                "fixtures/duplicate.md".to_owned(),
+                "fixtures/duplicate.md".to_owned(),
             ],
         );
         assert_eq!(collision_violations(&case, "case-collision").len(), 2);
