@@ -61,6 +61,7 @@ pub enum Command {
     TemplateMatrix(TemplateMatrixArgs),
     #[command(name = "ui-shell")]
     UiShell(UiShellArgs),
+}
 
 #[derive(Debug, Args)]
 pub struct UiShellArgs {
