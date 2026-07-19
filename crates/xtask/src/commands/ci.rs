@@ -757,6 +757,13 @@ mod tests {
             .find(|check| check.id == "rust-test")
             .expect("library test");
         for surface in ["prepush", "pull_request"] {
+            if surface == "pull_request" {
+                assert!(!rust_check.on(surface));
+                assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
+                assert_eq!(rust_test.timeout_for(surface), 75);
+                assert!(rust_test.prerequisites_for(surface).is_empty());
+                continue;
+            }
             assert_eq!(rust_check.parallel_group_for(surface), "rust-03-check");
             assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
             assert_eq!(rust_check.timeout_for(surface), 25);

@@ -10,7 +10,7 @@ label = "diff"
 program = "git"
 args = ["diff", "--check"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 timeout_seconds = 3
 network = "none"
@@ -49,12 +49,12 @@ label = "rust-check"
 program = "cargo"
 args = ["check", "--workspace", "--lib", "--all-features", "--locked"]
 owner = "workspace"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "rust"
-prerequisites_by_surface = { prepush = ["rust-clippy"], pull_request = ["rust-test"] }
-parallel_group_by_surface = { prepush = "rust-03-check", pull_request = "rust-03-check" }
+prerequisites_by_surface = { prepush = ["rust-clippy"] }
+parallel_group_by_surface = { prepush = "rust-03-check" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 25, pull_request = 25 }
+timeout_seconds_by_surface = { prepush = 25 }
 network = "none"
 platforms = ["all"]
 severity = "error"
