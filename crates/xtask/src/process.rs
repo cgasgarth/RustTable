@@ -230,6 +230,16 @@ impl ProcessRequest {
             EnvironmentProfile::RustTool => {
                 environment.insert("CARGO_TERM_COLOR".to_owned(), "never".to_owned());
                 environment.insert("CARGO_NET_OFFLINE".to_owned(), "true".to_owned());
+                for key in [
+                    "CARGO_BUILD_JOBS",
+                    "CARGO_INCREMENTAL",
+                    "CARGO_PROFILE_DEV_DEBUG",
+                    "CARGO_PROFILE_TEST_DEBUG",
+                ] {
+                    if let Ok(value) = std::env::var(key) {
+                        environment.insert(key.to_owned(), value);
+                    }
+                }
             }
             EnvironmentProfile::GitTool => {
                 environment.insert("GIT_CONFIG_NOSYSTEM".to_owned(), "1".to_owned());
