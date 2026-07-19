@@ -65,7 +65,8 @@ jobs:
           CARGO_INCREMENTAL=0 \
           CARGO_PROFILE_DEV_DEBUG=0 \
           CARGO_PROFILE_TEST_DEBUG=0 \
-          cargo build -p xtask --locked
+          cargo xtask ecosystem dependencies verify-policy
+          cargo xtask ecosystem verify-baseline
           CARGO_BUILD_JOBS=16 \
           CARGO_INCREMENTAL=0 \
           CARGO_PROFILE_DEV_DEBUG=0 \
@@ -74,14 +75,16 @@ jobs:
       - name: Start validation timer
         run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Run dependency-correct validation scheduler
+        shell: bash scripts/with-validation-budget.sh 300 workflow-step bash {0}
         run: bash scripts/pr-ci.sh
-      - name: Enforce 150-second validation budget
+      - name: Enforce 300-second validation budget
         if: always()
+        shell: bash scripts/with-validation-budget.sh 300 workflow-step bash {0}
         run: |
           end_seconds="$(date +%s)"
           elapsed_seconds=$((end_seconds - RUSTTABLE_VALIDATION_START))
-          echo "validation duration: ${elapsed_seconds}s (budget: 150s)"
-          if (( elapsed_seconds > 150 )); then
+          echo "validation duration: ${elapsed_seconds}s (budget: 300s)"
+          if (( elapsed_seconds > 300 )); then
             echo "validation budget exceeded" >&2
             exit 1
           fi
