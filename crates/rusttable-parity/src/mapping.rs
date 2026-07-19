@@ -56,13 +56,3 @@ pub(crate) fn ownership_for<'a>(
         .iter()
         .filter(move |record| record.capability_id == id)
 }
-
-pub(crate) fn iop_issue(name: &str) -> Vec<u64> {
-    let index: IssueIndex = toml::from_str(include_str!(
-        "../../../architecture/darktable-issue-index.toml"
-    ))
-    .expect("generated issue index must parse");
-    ownership_for(&index, &format!("iop.{name}"))
-        .map(|record| record.issue_number)
-        .collect()
-}
