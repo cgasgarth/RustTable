@@ -11,6 +11,7 @@ run_with_budget() {
   local start_seconds="$SECONDS"
   local command_pid
   local elapsed_seconds
+  local poll_interval_seconds=0.1
 
   if [[ ! "$limit" =~ ^[0-9]+$ ]]; then
     printf 'validation budget must be a non-negative integer: %s\n' "$limit" >&2
@@ -35,7 +36,7 @@ run_with_budget() {
       printf 'validation budget exceeded\n' >&2
       return 124
     fi
-    sleep 1
+    sleep "$poll_interval_seconds"
   done
 
   local command_status=0
