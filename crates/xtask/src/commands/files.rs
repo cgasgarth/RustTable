@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 use std::fmt::Write as _;
 use std::fs;
 use std::time::Duration;
@@ -8,7 +7,7 @@ use serde::Deserialize;
 use unicode_normalization::UnicodeNormalization;
 
 use super::{Result, report};
-use crate::process::{ProcessLimits, ProcessRequest, ProcessRunner};
+use crate::process::{EnvironmentProfile, ProcessLimits, ProcessRequest, ProcessRunner};
 use crate::root::RepositoryRoot;
 
 const POLICY_PATH: &str = "quality/repository-files.toml";
@@ -146,8 +145,8 @@ impl Policy {
 
 fn tracked_entries(root: &RepositoryRoot, runner: &ProcessRunner) -> Result<Vec<IndexEntry>> {
     let request = ProcessRequest::new("git", ["ls-files", "--stage", "-z"])
+        .profile(EnvironmentProfile::GitTool)
         .current_dir(root.path())
-        .environment(env::vars().collect())
         .limits(ProcessLimits {
             max_stdout_bytes: INDEX_OUTPUT_LIMIT,
             max_stderr_bytes: 64 * 1024,

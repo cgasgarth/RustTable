@@ -17,6 +17,7 @@ serde_json.workspace = true
 sha2.workspace = true
 toml.workspace = true
 unicode-normalization.workspace = true
+process-wrap = { version = "=9.1.0", default-features = false, features = ["std", "process-session", "job-object", "creation-flags", "kill-on-drop"] }
 
 [lints]
 workspace = true

@@ -2,7 +2,7 @@ use std::fs;
 
 use super::{Result, report};
 use crate::cli::{BenchCommand, BenchReceiptArgs};
-use crate::process::{CommandReceipt, ProcessRequest, ProcessRunner};
+use crate::process::{CommandReceipt, EnvironmentProfile, ProcessRequest, ProcessRunner};
 use crate::root::RepositoryRoot;
 
 pub(super) fn run(root: &RepositoryRoot, command: &BenchCommand, runner: &ProcessRunner) -> Result {
@@ -20,7 +20,11 @@ pub(super) fn run(root: &RepositoryRoot, command: &BenchCommand, runner: &Proces
                 args.extend(["--", "--check"]);
             }
             let result = runner
-                .run(ProcessRequest::new("cargo", args).current_dir(root.path()))
+                .run(
+                    ProcessRequest::new("cargo", args)
+                        .profile(EnvironmentProfile::RustTool)
+                        .current_dir(root.path()),
+                )
                 .map_err(|error| error.to_string())?;
             if let Some(path) = &arguments.receipt {
                 let receipt_path = root.join(path);

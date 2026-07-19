@@ -276,6 +276,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 source_packages = ["rusttable-catalog-store"]
 
 [[external_dependencies]]
+package = "process-wrap"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-testkit", "xtask"]
+
+[[external_dependencies]]
 package = "redb"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 source_packages = ["rusttable-catalog-store"]

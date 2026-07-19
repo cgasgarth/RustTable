@@ -246,7 +246,7 @@ export const installCanonicalComputerUseApp = async ({
   try {
     await run({ args: [sourcePath, stagingPath], command: 'ditto', label: 'stage computer-use app' });
     await assertCompleteBundle(stagingPath, readIdentifier, readManifestValue);
-    await run({ allowedExitCodes: [0, 1], args: ['-x', 'RustTable'], command: 'pkill', label: 'quit RustTable' });
+    await run({ allowedExitCodes: [0, 1], args: ['-e', 'tell application "RustTable" to quit'], command: 'osascript', label: 'quit RustTable' });
     if (await pathExists(installPath)) {
       await assertCompleteBundle(installPath, readIdentifier, readManifestValue);
       await unregisterBundle(installPath, run);

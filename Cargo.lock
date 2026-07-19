@@ -2250,6 +2250,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags 2.13.1",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "8.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2805,6 +2817,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "process-wrap"
+version = "9.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e842efad9119158434d193c6682e2ebee4b44d6ad801d7b349623b3f57cdf55"
+dependencies = [
+ "indexmap",
+ "nix",
+ "windows",
+]
+
+[[package]]
 name = "profiling"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3205,6 +3228,7 @@ name = "rusttable-testkit"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "process-wrap",
  "serde",
  "serde_json",
  "sha2",
@@ -4984,6 +5008,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "process-wrap",
  "rusttable-core",
  "rusttable-parity",
  "rusttable-scripting",

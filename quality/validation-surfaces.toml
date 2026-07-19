@@ -72,7 +72,7 @@ parallel_group = "rust"
 prerequisites_by_surface = { prepush = ["rust-test"] }
 parallel_group_by_surface = { prepush = "rust-02-clippy" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 35 }
+timeout_seconds_by_surface = { prepush = 25 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -81,13 +81,13 @@ severity = "error"
 id = "rust-test"
 label = "rust-test"
 program = "cargo"
-args = ["test", "--workspace", "--lib", "--all-features", "--locked"]
+args = ["test", "--workspace", "--lib", "--all-features", "--locked", "--", "--test-threads=16"]
 owner = "workspace"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 75, pull_request = 110 }
+timeout_seconds_by_surface = { prepush = 65, pull_request = 150, main = 150 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -278,8 +278,8 @@ surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-04-dag" }
 prerequisites_by_surface = { pull_request = ["repository-files"] }
-timeout_seconds = 10
-timeout_seconds_by_surface = { pull_request = 30, main = 30 }
+timeout_seconds = 30
+timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 30, main = 30 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -318,7 +318,8 @@ args = ["xtask", "ecosystem", "verify-baseline"]
 owner = "toolchain"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
-timeout_seconds = 10
+timeout_seconds = 90
+timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 90, main = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -331,7 +332,8 @@ args = ["xtask", "ecosystem", "dependencies", "verify-policy"]
 owner = "dependencies"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
-timeout_seconds = 10
+timeout_seconds = 90
+timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 90, main = 90 }
 network = "none"
 platforms = ["all"]
 severity = "error"

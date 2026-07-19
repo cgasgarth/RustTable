@@ -181,11 +181,24 @@ impl DurableImageOutput for FileImageOutput {
         if fs::remove_file(&temporary).is_err() {
             return Err(DurableImageOutputError::PublishedTemporaryCleanupFailure { receipt });
         }
-        if directory.sync_all().is_err() {
+        if sync_directory(&directory).is_err() {
             return Err(DurableImageOutputError::PublishedDirectorySyncFailure { receipt });
         }
         Ok(DurableOutputReceipt::new(receipt))
     }
+}
+
+#[cfg(not(windows))]
+fn sync_directory(directory: &File) -> io::Result<()> {
+    directory.sync_all()
+}
+
+#[cfg(windows)]
+fn sync_directory(_directory: &File) -> io::Result<()> {
+    // Windows does not support opening a directory as a synchronizable file.
+    // The temporary file is flushed before publication; the directory entry is
+    // durable according to the platform's rename/link semantics.
+    Ok(())
 }
 
 fn validate_destination(destination: &Path) -> Result<(), ImageOutputError> {
