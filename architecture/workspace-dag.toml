@@ -639,7 +639,7 @@ source_packages = ["rusttable-parity", "rusttable-scripting", "rusttable-testkit
 [[external_dependencies]]
 package = "sha2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-source_packages = ["rusttable-core", "rusttable-export", "rusttable-import", "rusttable-parity", "rusttable-scripting", "rusttable-testkit", "xtask"]
+source_packages = ["rusttable-core", "rusttable-export", "rusttable-image-io", "rusttable-import", "rusttable-parity", "rusttable-scripting", "rusttable-testkit", "xtask"]
 
 [[external_dependencies]]
 package = "tokio"
