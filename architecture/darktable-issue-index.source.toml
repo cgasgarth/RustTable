@@ -1,0 +1,55 @@
+# Reviewed source snapshot for capability ownership reconciliation; generated from
+# the complete GitHub child-issue snapshot and intentionally records the known
+# duplicate audit entries used by the deterministic plan fixtures.
+schema_version = 1
+repository = "cgasgarth/RustTable"
+parent_issue = 158
+issue_body_contract_version = 1
+
+[[issue]]
+number = 367
+canonical_owner = true
+capability_ids = ["iop.overlay"]
+operation_identity = "overlay"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+body_completeness = "complete"
+
+[[issue]]
+number = 375
+canonical_owner = true
+capability_ids = ["iop.invert"]
+operation_identity = "invert"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+body_completeness = "complete"
+
+[[issue]]
+number = 380
+canonical_owner = true
+capability_ids = ["iop.clipping"]
+operation_identity = "clipping"
+milestone = "Processing Pipeline & Color"
+priority = "P2"
+body_completeness = "complete"
+
+[[issue]]
+number = 471
+canonical_owner = false
+superseded_by = 380
+capability_ids = ["iop.clipping"]
+body_completeness = "audit-only"
+
+[[issue]]
+number = 472
+canonical_owner = false
+superseded_by = 367
+capability_ids = ["iop.overlay"]
+body_completeness = "audit-only"
+
+[[issue]]
+number = 474
+canonical_owner = false
+superseded_by = 375
+capability_ids = ["iop.invert"]
+body_completeness = "audit-only"

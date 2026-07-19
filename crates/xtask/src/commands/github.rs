@@ -11,11 +11,11 @@ use crate::process::{
 };
 use crate::root::RepositoryRoot;
 
-const TARGET_REPOSITORY: &str = "cgasgarth/RustTable";
+pub(super) const TARGET_REPOSITORY: &str = "cgasgarth/RustTable";
 const COMMIT_PAGE_SIZE: usize = 100;
 const MAX_COMMIT_PAGES: u32 = 20;
 const MAX_ISSUE_PAGES: u32 = 20;
-const ISSUE_PAGE_SIZE: usize = 25;
+const ISSUE_PAGE_SIZE: usize = 100;
 const PRIORITY_LABELS: [&str; 5] = [
     "priority: P0",
     "priority: P1",
@@ -23,12 +23,12 @@ const PRIORITY_LABELS: [&str; 5] = [
     "priority: P3",
     "priority: P4",
 ];
+pub(super) const ISSUE_SPEC_PARENT: u64 = 158;
 const CLOSING_KEYWORDS: [&str; 9] = [
     "close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved",
 ];
 
 type Result<T = crate::output::Report, E = String> = std::result::Result<T, E>;
-
 pub(super) fn run(
     root: &RepositoryRoot,
     command: &GithubCommand,
@@ -39,7 +39,6 @@ pub(super) fn run(
         GithubCommand::VerifyQueue(arguments) => verify_queue(root, arguments, runner),
     }
 }
-
 fn verify_pr_contract(
     root: &RepositoryRoot,
     arguments: &VerifyPrContractArgs,
@@ -68,7 +67,6 @@ fn verify_pr_contract(
         }),
     ))
 }
-
 fn verify_queue(
     root: &RepositoryRoot,
     arguments: &VerifyQueueArgs,
@@ -85,7 +83,6 @@ fn verify_queue(
         serde_json::to_value(receipt).map_err(|error| format!("queue receipt: {error}"))?,
     ))
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PullRequestEvent {
     repository: String,
@@ -95,7 +92,6 @@ struct PullRequestEvent {
     branch: String,
     base_repository: String,
 }
-
 impl PullRequestEvent {
     fn parse(source: &str) -> Result<Self, String> {
         let value: Value = serde_json::from_str(source)
@@ -124,20 +120,18 @@ impl PullRequestEvent {
         })
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct IssueSnapshot {
-    number: u64,
-    state: String,
-    state_reason: Option<String>,
-    title: String,
-    body: String,
-    repository: String,
-    milestone: Option<u64>,
-    is_pull_request: bool,
-    labels: Vec<String>,
+pub(super) struct IssueSnapshot {
+    pub(super) number: u64,
+    pub(super) state: String,
+    pub(super) state_reason: Option<String>,
+    pub(super) title: String,
+    pub(super) body: String,
+    pub(super) repository: String,
+    pub(super) milestone: Option<u64>,
+    pub(super) is_pull_request: bool,
+    pub(super) labels: Vec<String>,
 }
-
 impl IssueSnapshot {
     fn parse(value: &Value) -> Result<Self, String> {
         let number = required_u64(value, &["number"], "issue.number")?;
@@ -176,7 +170,6 @@ impl IssueSnapshot {
         })
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ContractReceipt {
     issue_number: u64,
@@ -184,7 +177,6 @@ struct ContractReceipt {
     priority: String,
     commit_pages: usize,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 struct QueueEntry {
     issue: u64,
@@ -196,7 +188,6 @@ struct QueueEntry {
     selected: bool,
     blocking_reason: Option<String>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 struct QueueReceipt {
     repository: String,
@@ -204,20 +195,21 @@ struct QueueReceipt {
     selected_issue: Option<u64>,
     issues: Vec<QueueEntry>,
 }
-
 struct ParsedQueueIssue {
     issue: IssueSnapshot,
     title: String,
     priority: String,
     depends_on: Vec<u64>,
 }
-
-trait ReadApi {
+pub(super) trait ReadApi {
     fn issue(&self, repository: &str, number: u64) -> Result<IssueSnapshot, String>;
     fn issues(&self, repository: &str) -> Result<Vec<IssueSnapshot>, String>;
     fn commit_pages(&self, repository: &str, number: u64) -> Result<Vec<Vec<String>>, String>;
 }
-
+pub(super) trait WriteApi {
+    fn update_issue(&self, repository: &str, number: u64, payload: Value) -> Result<(), String>;
+    fn create_issue(&self, repository: &str, payload: Value) -> Result<(), String>;
+}
 #[allow(clippy::too_many_lines)]
 fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
     let issues = api.issues(TARGET_REPOSITORY)?;
@@ -268,7 +260,6 @@ fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
         issues: entries,
     })
 }
-
 fn parse_queue_issues<'a, I>(
     issues: I,
     by_number: &std::collections::BTreeMap<u64, IssueSnapshot>,
@@ -311,7 +302,6 @@ where
     }
     Ok(parsed)
 }
-
 fn build_queue_entries(
     parsed: &[ParsedQueueIssue],
     readiness: &std::collections::BTreeMap<u64, Vec<String>>,
@@ -352,7 +342,6 @@ fn build_queue_entries(
     });
     entries
 }
-
 fn verify_contract(event: &PullRequestEvent, api: &dyn ReadApi) -> Result<ContractReceipt, String> {
     if event.repository != TARGET_REPOSITORY || event.base_repository != TARGET_REPOSITORY {
         return Err(format!(
@@ -421,7 +410,6 @@ fn verify_contract(event: &PullRequestEvent, api: &dyn ReadApi) -> Result<Contra
         commit_pages: pages.len(),
     })
 }
-
 fn validate_issue(issue: &IssueSnapshot, expected_number: u64) -> Result<(), String> {
     if issue.number != expected_number {
         return Err(format!(
@@ -462,7 +450,6 @@ fn validate_issue(issue: &IssueSnapshot, expected_number: u64) -> Result<(), Str
     priority_label(issue).map(|_| ())?;
     Ok(())
 }
-
 fn validate_sections(body: &str) -> Result<(), String> {
     for section in ["Why", "Implementation", "Validation", "Out of scope"] {
         let marker = format!("## {section}");
@@ -474,7 +461,6 @@ fn validate_sections(body: &str) -> Result<(), String> {
     }
     Ok(())
 }
-
 fn priority_label(issue: &IssueSnapshot) -> Result<&str, String> {
     let priority_labels = issue
         .labels
@@ -489,11 +475,9 @@ fn priority_label(issue: &IssueSnapshot) -> Result<&str, String> {
     }
     Ok(priority_labels[0].as_str())
 }
-
 fn normalize_outcome_title(title: &str) -> String {
     title.split_whitespace().collect::<Vec<_>>().join(" ")
 }
-
 fn numeric_title_prefix(title: &str) -> Option<String> {
     let (prefix, _) = title.trim_start().split_once(']')?;
     let prefix = prefix.strip_prefix('[')?;
@@ -503,18 +487,15 @@ fn numeric_title_prefix(title: &str) -> Option<String> {
             && prefix.as_bytes()[4].is_ascii_uppercase());
     valid.then(|| format!("[{prefix}]"))
 }
-
-fn is_child_issue(issue: &IssueSnapshot) -> bool {
+pub(super) fn is_child_issue(issue: &IssueSnapshot) -> bool {
     issue.body.lines().any(|line| line.trim() == "Parent: #158")
 }
-
 fn priority_rank(priority: &str) -> usize {
     PRIORITY_LABELS
         .iter()
         .position(|label| *label == priority)
         .unwrap_or(PRIORITY_LABELS.len())
 }
-
 fn parse_dependencies(issue: &IssueSnapshot) -> Result<Vec<u64>, String> {
     let mut dependencies = Vec::new();
     for line in issue.body.lines() {
@@ -621,7 +602,7 @@ fn completed_replacement(
         })
 }
 
-fn issue_numbers_in_text(text: &str) -> Vec<u64> {
+pub(super) fn issue_numbers_in_text(text: &str) -> Vec<u64> {
     text.split('#')
         .skip(1)
         .filter_map(|part| {
@@ -764,14 +745,14 @@ fn repository_name(value: &Value) -> Option<String> {
         })
 }
 
-struct FixtureApi {
+pub(super) struct FixtureApi {
     issue: IssueSnapshot,
     issues: Vec<IssueSnapshot>,
     commit_pages: Vec<Vec<String>>,
 }
 
 impl FixtureApi {
-    fn read(path: &Path) -> Result<Self, String> {
+    pub(super) fn read(path: &Path) -> Result<Self, String> {
         let source = fs::read_to_string(path)
             .map_err(|error| format!("API fixture {}: {error}", path.display()))?;
         let value: Value = serde_json::from_str(&source)
@@ -833,14 +814,14 @@ impl ReadApi for FixtureApi {
     }
 }
 
-struct GitHubApi<'a> {
+pub(super) struct GitHubApi<'a> {
     runner: &'a ProcessRunner,
     base_url: String,
     token: String,
 }
 
 impl<'a> GitHubApi<'a> {
-    fn from_environment(runner: &'a ProcessRunner) -> Result<Self, String> {
+    pub(super) fn from_environment(runner: &'a ProcessRunner) -> Result<Self, String> {
         let token = std::env::var("GH_TOKEN")
             .or_else(|_| std::env::var("GITHUB_TOKEN"))
             .map_err(|_| "GitHub API infrastructure failure: GH_TOKEN is missing".to_owned())?;
@@ -872,9 +853,15 @@ impl<'a> GitHubApi<'a> {
         )
         .profile(EnvironmentProfile::GitHubApi)
         .network(NetworkPolicy::Read)
-        .secret_arg(7, &self.token)
+        // Keep the complete header as the effective argument while marking
+        // the argument secret for receipts; replacing it with the bare token
+        // would make curl interpret the token as a malformed header.
+        .secret_arg(7, authorization)
         .limits(ProcessLimits {
-            max_stdout_bytes: 512 * 1024,
+            // Child-issue pages include full review bodies; keep the bound
+            // finite but large enough that a valid page cannot be truncated
+            // before JSON parsing.
+            max_stdout_bytes: 4 * 1024 * 1024,
             max_stderr_bytes: 16 * 1024,
             timeout: Duration::from_secs(20),
         });
@@ -888,6 +875,67 @@ impl<'a> GitHubApi<'a> {
         serde_json::from_slice(&result.stdout).map_err(|_| {
             "GitHub API infrastructure failure: response was not valid JSON".to_owned()
         })
+    }
+
+    fn mutate_json(&self, method: &str, path: &str, payload: &Value) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url.trim_end_matches('/'), path);
+        let authorization = format!("Authorization: Bearer {}", self.token);
+        let body = serde_json::to_string(&payload)
+            .map_err(|error| format!("GitHub API request serialization failed: {error}"))?;
+        let request = ProcessRequest::new(
+            "curl",
+            [
+                "--fail-with-body",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--request",
+                method,
+                "--header",
+                "Accept: application/vnd.github+json",
+                "--header",
+                authorization.as_str(),
+                "--header",
+                "Content-Type: application/json",
+                "--data-raw",
+                body.as_str(),
+                url.as_str(),
+            ],
+        )
+        .profile(EnvironmentProfile::GitHubApi)
+        .network(NetworkPolicy::Write)
+        .secret_arg(9, authorization)
+        .limits(ProcessLimits {
+            max_stdout_bytes: 128 * 1024,
+            max_stderr_bytes: 16 * 1024,
+            timeout: Duration::from_secs(20),
+        });
+        let result = self
+            .runner
+            .run(request)
+            .map_err(|_| "GitHub API infrastructure failure: request could not start".to_owned())?;
+        if !result.receipt.success() {
+            return Err("GitHub API infrastructure failure: mutation request failed".to_owned());
+        }
+        serde_json::from_slice(&result.stdout).map_err(|_| {
+            "GitHub API infrastructure failure: mutation response was not valid JSON".to_owned()
+        })
+    }
+}
+
+impl WriteApi for GitHubApi<'_> {
+    fn update_issue(&self, repository: &str, number: u64, payload: Value) -> Result<(), String> {
+        self.mutate_json(
+            "PATCH",
+            &format!("/repos/{repository}/issues/{number}"),
+            &payload,
+        )
+        .map(|_| ())
+    }
+
+    fn create_issue(&self, repository: &str, payload: Value) -> Result<(), String> {
+        self.mutate_json("POST", &format!("/repos/{repository}/issues"), &payload)
+            .map(|_| ())
     }
 }
 

@@ -2,11 +2,16 @@ use std::fs;
 
 use super::{Result, report};
 use crate::cli::ParityCommand;
+use crate::process::ProcessRunner;
 use crate::root::RepositoryRoot;
 use rusttable_parity::scan_darktable_with_identity;
 use rusttable_testkit::reference::{ReferenceIdentityOverrides, resolve_reference};
 
-pub(super) fn run(root: &RepositoryRoot, command: &ParityCommand) -> Result {
+pub(super) fn run(
+    root: &RepositoryRoot,
+    command: &ParityCommand,
+    runner: &ProcessRunner,
+) -> Result {
     match command {
         ParityCommand::ScanDarktable(arguments) => {
             let overrides = root.join(&arguments.overrides);
@@ -68,6 +73,12 @@ pub(super) fn run(root: &RepositoryRoot, command: &ParityCommand) -> Result {
                     "operations": operations.operations.len(),
                 }),
             ))
+        }
+        ParityCommand::PlanIssueReconciliation(arguments) => {
+            super::github_reconciliation::plan_issue_reconciliation(root, arguments, runner)
+        }
+        ParityCommand::ApplyIssueReconciliation(arguments) => {
+            super::github_reconciliation::apply_issue_reconciliation(root, arguments, runner)
         }
     }
 }

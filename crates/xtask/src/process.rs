@@ -83,6 +83,7 @@ pub enum NetworkPolicy {
     #[default]
     None,
     Read,
+    Write,
 }
 
 impl NetworkPolicy {
@@ -90,6 +91,7 @@ impl NetworkPolicy {
         match self {
             Self::None => "none",
             Self::Read => "read",
+            Self::Write => "write",
         }
     }
 }

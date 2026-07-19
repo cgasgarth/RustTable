@@ -1581,9 +1581,9 @@ behavioral_evidence = ["parity:iop.clipping"]
 acceptance_test_id = "capability.iop.clipping"
 
 [[capabilities.ownership]]
-issue_number = 471
+issue_number = 380
 role = "implementation"
-milestone = "Foundation & Developer Workflow"
+milestone = "Processing Pipeline & Color"
 priority = "P2"
 
 [[capabilities]]
@@ -2173,9 +2173,9 @@ behavioral_evidence = ["parity:iop.invert"]
 acceptance_test_id = "capability.iop.invert"
 
 [[capabilities.ownership]]
-issue_number = 474
+issue_number = 375
 role = "implementation"
-milestone = "Foundation & Developer Workflow"
+milestone = "Processing Pipeline & Color"
 priority = "P2"
 
 [[capabilities]]
@@ -2365,9 +2365,9 @@ behavioral_evidence = ["parity:iop.overlay"]
 acceptance_test_id = "capability.iop.overlay"
 
 [[capabilities.ownership]]
-issue_number = 472
+issue_number = 367
 role = "implementation"
-milestone = "Foundation & Developer Workflow"
+milestone = "Processing Pipeline & Color"
 priority = "P2"
 
 [[capabilities]]
@@ -5064,8 +5064,8 @@ unsupported = 0
 [[summary]]
 priority = "P2"
 milestone = "Foundation & Developer Workflow"
-capability_count = 35
-required = 7
+capability_count = 32
+required = 4
 redesigned = 28
 unsupported = 0
 
@@ -5080,8 +5080,8 @@ unsupported = 0
 [[summary]]
 priority = "P2"
 milestone = "Processing Pipeline & Color"
-capability_count = 145
-required = 100
+capability_count = 148
+required = 103
 redesigned = 45
 unsupported = 0
 
