@@ -123,8 +123,10 @@ copy_path() {
   printf 'agent worktree: copied untracked %s\n' "$relative"
 }
 
-for relative in "${includes[@]}"; do
-  copy_path "$relative"
-done
+if ((${#includes[@]} > 0)); then
+  for relative in "${includes[@]}"; do
+    copy_path "$relative"
+  done
+fi
 
 printf 'agent worktree: ready %s\n' "$target"

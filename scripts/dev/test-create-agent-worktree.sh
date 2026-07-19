@@ -19,6 +19,11 @@ git -C "$fixture" remote add origin "$fixture"
 printf '%s\n' local >"$fixture/source/needed.txt"
 
 worktrees="$fixture/worktrees"
+(cd "$fixture" && bash scripts/dev/create-agent-worktree.sh --issue 98 --worktrees "$worktrees" >/dev/null)
+empty_target="$worktrees/issue-98"
+[[ "$(git -C "$empty_target" branch --show-current)" == codex/issue-98-agent ]]
+[[ ! -e "$empty_target/source/needed.txt" ]]
+
 (cd "$fixture" && bash scripts/dev/create-agent-worktree.sh --issue 99 --worktrees "$worktrees" --include source/needed.txt >/dev/null)
 target="$worktrees/issue-99"
 [[ "$(git -C "$target" branch --show-current)" == codex/issue-99-agent ]]
