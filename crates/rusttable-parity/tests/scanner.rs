@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusttable_parity::{
-    ScanError, parse_manifest, render_manifest, scan_darktable_with_overrides, validate_manifest,
+    ScanError, parse_manifest, render_manifest, render_receipt, scan_darktable_with_issue_index,
+    scan_darktable_with_overrides, validate_manifest,
 };
 
 static NEXT_FIXTURE: AtomicUsize = AtomicUsize::new(0);
@@ -36,12 +37,30 @@ fn discovers_all_reference_surfaces_and_is_byte_deterministic() {
             "{id}"
         );
     }
-    assert!(
-        first
-            .summary
-            .iter()
-            .any(|group| group.phase == "processing")
+    assert!(first.summary.iter().any(|group| group.priority == "P2"));
+}
+
+#[test]
+fn inventory_receipt_is_deterministic_and_reports_zero_failures() {
+    let fixture = Fixture::new();
+    let manifest = scan_darktable_with_overrides(&fixture.root, Fixture::overrides()).unwrap();
+    let first = render_receipt(&manifest).unwrap();
+    let second = render_receipt(&manifest).unwrap();
+    assert_eq!(first, second);
+    let receipt: toml::Value = toml::from_str(&first).unwrap();
+    assert_eq!(
+        receipt["unmapped_capabilities"].as_array().unwrap().len(),
+        0
     );
+    assert_eq!(receipt["stale_issue_numbers"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        receipt["evidence_incomplete_capabilities"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(receipt["capability_count"].as_integer(), Some(9));
 }
 
 #[test]
@@ -93,31 +112,29 @@ fn unregistered_opencl_programs_fail_closed() {
 #[test]
 fn invalid_status_and_zero_issue_number_are_rejected() {
     let fixture = Fixture::new();
-    let invalid_status = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"deferred\"\nissue_numbers = [160]\nreason = \"test\"\n";
+    let invalid_status = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"deferred\"\nbehavioral_evidence = [\"unit\"]\nacceptance_test_id = \"test\"\nreason = \"test\"\n";
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, invalid_status),
         Err(ScanError::InvalidStatus { value, .. }) if value == "deferred"
     ));
 
-    let invalid = invalid_status
-        .replace("deferred", "required")
-        .replace("160", "0");
+    let invalid = invalid_status.replace("deferred", "required");
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, &invalid),
-        Err(ScanError::InvalidIssueNumber { number, .. }) if number == 0
+        Err(ScanError::MissingOwnership { id }) if id == "domain.extra"
     ));
 }
 
 #[test]
 fn duplicate_ids_and_masking_overrides_are_rejected() {
     let fixture = Fixture::new();
-    let duplicate = "[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_numbers = [160]\nreason = \"one\"\n[[override]]\nid = \"domain.extra\"\nreference_path = \"src/common/collection.c\"\nstatus = \"required\"\nissue_numbers = [160]\nreason = \"two\"\n";
+    let duplicate = "[[override]]\nid = \"domain.catalog-library\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nbehavioral_evidence = [\"unit\"]\nacceptance_test_id = \"test\"\nreason = \"one\"\n[[override]]\nid = \"domain.catalog-library\"\nreference_path = \"src/common/collection.c\"\nstatus = \"required\"\nbehavioral_evidence = [\"unit\"]\nacceptance_test_id = \"test\"\nreason = \"two\"\n";
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, duplicate),
-        Err(ScanError::DuplicateCapabilityId { id }) if id == "domain.extra"
+        Err(ScanError::DuplicateCapabilityId { id }) if id == "domain.catalog-library"
     ));
 
-    let masking = "[[override]]\nid = \"iop.rawprepare\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_numbers = [160]\nreason = \"mask\"\n";
+    let masking = "[[override]]\nid = \"iop.rawprepare\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nbehavioral_evidence = [\"unit\"]\nacceptance_test_id = \"test\"\nreason = \"mask\"\n";
     assert!(matches!(
         scan_darktable_with_overrides(&fixture.root, masking),
         Err(ScanError::MaskingOverride { id }) if id == "iop.rawprepare"
@@ -126,11 +143,102 @@ fn duplicate_ids_and_masking_overrides_are_rejected() {
 
 #[test]
 fn manifest_validation_rejects_unknown_status_after_toml_parse() {
-    let manifest = "schema_version = 1\nsource_commit = \"fixture\"\n\n[[capabilities]]\nid = \"iop.rawprepare\"\nreference_path = \"src/iop/rawprepare.c\"\nreference_symbol = \"rawprepare\"\ncategory = \"darkroom\"\nstatus = \"unknown\"\nissue_numbers = [160]\ntest_evidence = [\"unit\"]\n";
+    let manifest = "schema_version = 2\nsource_commit = \"fixture\"\n\n[[capabilities]]\nid = \"iop.rawprepare\"\nreference_path = \"src/iop/rawprepare.c\"\nreference_symbol = \"rawprepare\"\ncategory = \"darkroom\"\nstatus = \"unknown\"\nstructural_evidence = [\"reference-scan:iop\"]\nbehavioral_evidence = [\"unit\"]\nacceptance_test_id = \"test\"\n[[capabilities.ownership]]\nissue_number = 302\nrole = \"implementation\"\nmilestone = \"Processing Pipeline & Color\"\npriority = \"P2\"\n";
     let parsed = parse_manifest(manifest).unwrap();
     assert!(matches!(
         validate_manifest(&parsed),
         Err(ScanError::InvalidStatus { value, .. }) if value == "unknown"
+    ));
+}
+
+#[test]
+fn issue_index_rejects_missing_duplicate_stale_and_superseded_ownership() {
+    let fixture = Fixture::new();
+    let index = || include_str!("../../../architecture/darktable-issue-index.toml");
+
+    let missing = index().replacen(
+        "capability_id = \"iop.rawprepare\"\nissue_number = 302\n",
+        "capability_id = \"iop.rawprepare\"\nissue_number = 395\n",
+        1,
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &missing),
+        Err(ScanError::StaleIssue {
+            issue_number: 395,
+            ..
+        })
+    ));
+
+    let duplicate = format!(
+        "{}\n[[ownership]]\ncapability_id = \"iop.rawprepare\"\nissue_number = 302\nrole = \"implementation\"\ncategory = \"darkroom\"\nstatus = \"required\"\nstructural_evidence = [\"reference-scan:iop\"]\nbehavioral_evidence = [\"parity:iop.rawprepare\"]\nacceptance_test_id = \"capability.iop.rawprepare\"\n",
+        index()
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &duplicate),
+        Err(ScanError::DuplicateOwnership { id, issue_number: 302, .. }) if id == "iop.rawprepare"
+    ));
+
+    let stale = index().replacen(
+        "title = \"Implement the rawprepare operation for sensor normalization\"",
+        "title = \"[0302] Implement the rawprepare operation for sensor normalization\"",
+        1,
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &stale),
+        Err(ScanError::StaleIssue {
+            issue_number: 302,
+            ..
+        })
+    ));
+
+    let superseded = index().replacen(
+        "state = \"open\"\nmilestone = \"Processing Pipeline & Color\"\npriority = \"P2\"\nparent_issue = 158\ncapability_ids = [\"iop.rawprepare\"]",
+        "state = \"closed\"\nstate_reason = \"not_planned\"\nmilestone = \"Processing Pipeline & Color\"\npriority = \"P2\"\nparent_issue = 158\ncapability_ids = [\"iop.rawprepare\"]",
+        1,
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &superseded),
+        Err(ScanError::StaleIssue {
+            issue_number: 302,
+            ..
+        })
+    ));
+
+    let duplicate_issue = format!(
+        "{}\n[[issues]]\nnumber = 302\ntitle = \"Implement the rawprepare operation for sensor normalization\"\nstate = \"open\"\nmilestone = \"Processing Pipeline & Color\"\npriority = \"P2\"\nparent_issue = 158\ncapability_ids = [\"iop.rawprepare\"]\n",
+        index()
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &duplicate_issue),
+        Err(ScanError::InvalidIssueIndex { message }) if message.contains("duplicate issue metadata")
+    ));
+}
+
+#[test]
+fn issue_index_rejects_structural_only_behavioral_evidence_and_unknown_capability() {
+    let fixture = Fixture::new();
+    let index = include_str!("../../../architecture/darktable-issue-index.toml");
+    let structural_only = index.replacen(
+        "behavioral_evidence = [\"parity:iop.rawprepare\"]",
+        "behavioral_evidence = [\"reference-scan:iop\"]",
+        1,
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &structural_only),
+        Err(ScanError::InvalidIssueIndex { message }) if message.contains("structural evidence")
+    ));
+
+    let unknown = index.replacen(
+        "capability_ids = [\"iop.rawprepare\"]",
+        "capability_ids = [\"iop.rawprepare\", \"iop.unknown\"]",
+        1,
+    );
+    let unknown = format!(
+        "{unknown}\n[[ownership]]\ncapability_id = \"iop.unknown\"\nissue_number = 302\nrole = \"implementation\"\ncategory = \"darkroom\"\nstatus = \"required\"\nstructural_evidence = [\"reference-scan:iop\"]\nbehavioral_evidence = [\"parity:iop.unknown\"]\nacceptance_test_id = \"capability.iop.unknown\"\n"
+    );
+    assert!(matches!(
+        scan_darktable_with_issue_index(&fixture.root, Fixture::overrides(), &unknown),
+        Err(ScanError::UnknownIssueCapability { id }) if id == "iop.unknown"
     ));
 }
 
@@ -220,7 +328,7 @@ impl Fixture {
     }
 
     fn overrides() -> &'static str {
-        "[[override]]\nid = \"domain.catalog\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nissue_numbers = [213]\ntest_evidence = [\"fixture\"]\nreason = \"cross-cutting\"\n"
+        "[[override]]\nid = \"domain.catalog-library\"\nreference_path = \"src/common/darktable.c\"\nstatus = \"required\"\nbehavioral_evidence = [\"fixture\"]\nacceptance_test_id = \"fixture.domain.catalog-library\"\nreason = \"cross-cutting\"\n"
     }
 }
 

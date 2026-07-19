@@ -1,498 +1,68 @@
-use crate::model::Discovered;
+use crate::model::{Discovered, IssueIndex, IssueOwnership};
 
-pub(crate) fn map_discovered(kind: &str, name: &str, path: &str) -> Option<Discovered> {
-    let (category, status, issue_numbers, redesign_note) = match kind {
-        "iop" if IOPS.contains(&name) => (
-            "darkroom",
-            "required",
-            iop_issue(name),
-            None,
-        ),
-        "lib" if LIBS.contains(&name) => (lib_category(name), "required", vec![213], None),
-        "view" if VIEWS.contains(&name) => (view_category(name), "required", view_issue(name), None),
-        "format" if FORMATS.contains(&name) => {
-            ("RAW/raster I/O", "required", format_issue(name), None)
-        }
-        "storage" if STORAGES.contains(&name) => (
-            "export/storage",
-            "required",
-            storage_issue(name),
-            None,
-        ),
-        "lua" if LUA_APIS.contains(&name) => (
-            "scripting",
-            "redesigned",
-            vec![191],
-            Some("RustTable exposes the Lua-compatible boundary through a versioned host.".to_owned()),
-        ),
-        "build-option" if BUILD_OPTIONS.contains(&name) => (
-            "packaging",
-            "redesigned",
-            vec![170],
-            Some("RustTable records the option as a Rust-owned platform or feature policy.".to_owned()),
-        ),
-        "opencl" if OPENCL_PROGRAMS.contains(&name) => (
-            "darkroom",
-            "redesigned",
-            vec![292],
-            Some("OpenCL kernels are reference evidence; RustTable uses the reviewed WGPU registry and CPU fallback.".to_owned()),
-        ),
-        _ => return None,
-    };
+pub(crate) fn map_discovered(
+    index: &IssueIndex,
+    kind: &str,
+    name: &str,
+    path: &str,
+) -> Option<Discovered> {
+    let id = format!("{kind}.{name}");
+    let records = index
+        .ownership
+        .iter()
+        .filter(|record| record.capability_id == id)
+        .collect::<Vec<_>>();
+    if records.is_empty() {
+        return None;
+    }
+    let first = records[0];
+    let ownership = records
+        .iter()
+        .map(|record| IssueOwnership {
+            issue_number: record.issue_number,
+            role: record.role.clone(),
+            milestone: issue(index, record.issue_number).milestone.clone(),
+            priority: issue(index, record.issue_number).priority.clone(),
+        })
+        .collect();
     Some(Discovered {
-        id: format!("{kind}.{name}"),
+        id,
         reference_path: path.to_owned(),
         reference_symbol: name.to_owned(),
-        category,
-        status,
-        issue_numbers,
-        test_evidence: vec![format!("reference-scan:{kind}")],
-        redesign_note,
+        category: first.category.clone(),
+        status: first.status.clone(),
+        ownership,
+        structural_evidence: first.structural_evidence.clone(),
+        behavioral_evidence: first.behavioral_evidence.clone(),
+        acceptance_test_id: first.acceptance_test_id.clone(),
+        redesign_note: first.redesign_note.clone(),
     })
 }
 
-fn lib_category(name: &str) -> &'static str {
-    if ["camera", "live_view"].contains(&name) {
-        "camera/tethering"
-    } else if ["location", "map_settings", "map_locations", "geotagging"].contains(&name) {
-        "map/geotagging"
-    } else if name == "print_settings" {
-        "printing"
-    } else if ["export", "export_metadata"].contains(&name) {
-        "export/storage"
-    } else {
-        "catalog/library"
-    }
+fn issue(index: &IssueIndex, number: u64) -> &crate::model::IssueRecord {
+    index
+        .issues
+        .iter()
+        .find(|record| record.number == number)
+        .expect("validated issue index must contain every ownership issue")
 }
 
-fn view_category(name: &str) -> &'static str {
-    match name {
-        "map" => "map/geotagging",
-        "print" => "printing",
-        "tethering" => "camera/tethering",
-        "darkroom" => "darkroom",
-        _ => "catalog/library",
-    }
-}
-
-fn view_issue(name: &str) -> Vec<u64> {
-    match name {
-        "map" => vec![216],
-        "print" | "tethering" => vec![191],
-        _ => vec![213],
-    }
-}
-
-fn format_issue(name: &str) -> Vec<u64> {
-    match name {
-        "copy" => vec![399],
-        "jpeg" => vec![225, 400],
-        "png" => vec![226, 401],
-        "tiff" => vec![227, 402],
-        "exr" => vec![228, 409],
-        "jxl_format" => vec![229, 404],
-        "webp" => vec![230, 406],
-        "avif_format" => vec![231, 407],
-        "heif_format" => vec![231, 408],
-        "j2k" => vec![232, 410],
-        "xcf" | "gimp_xcf" => vec![239, 412],
-        "pdf" => vec![411],
-        "ppm" | "pfm" => vec![232, 403],
-        _ => vec![395],
-    }
-}
-
-fn storage_issue(name: &str) -> Vec<u64> {
-    match name {
-        "disk" => vec![415],
-        "email" => vec![416],
-        "gallery" | "piwigo" => vec![417],
-        "latex" => vec![418],
-        _ => vec![395],
-    }
+pub(crate) fn ownership_for<'a>(
+    index: &'a IssueIndex,
+    id: &str,
+) -> impl Iterator<Item = &'a crate::model::OwnershipRecord> {
+    index
+        .ownership
+        .iter()
+        .filter(move |record| record.capability_id == id)
 }
 
 pub(crate) fn iop_issue(name: &str) -> Vec<u64> {
-    let issue = match name {
-        "rawprepare" => 302,
-        "demosaic" => 303,
-        "temperature" => 304,
-        "cacorrect" | "cacorrectrgb" => 305,
-        "hotpixels" => 306,
-        "denoiseprofile" => 307,
-        "rawdenoise" => 308,
-        "nlmeans" => 309,
-        "hazeremoval" => 310,
-        "atrous" => 311,
-        "equalizer" => 312,
-        "sharpen" => 313,
-        "highpass" => 314,
-        "lowpass" => 315,
-        "bilat" => 316,
-        "bilateral" => 317,
-        "blurs" => 318,
-        "diffuse" => 319,
-        "exposure" => 320,
-        "basicadj" => 321,
-        "lowlight" => 322,
-        "profile_gamma" => 323,
-        "gamma" => 324,
-        "rgblevels" => 325,
-        "levels" => 326,
-        "toneequal" => 327,
-        "filmicrgb" => 328,
-        "filmic" => 329,
-        "basecurve" => 330,
-        "rgbcurve" => 331,
-        "tonecurve" => 332,
-        "zonesystem" => 333,
-        "tonemap" => 334,
-        "globaltonemap" => 335,
-        "sigmoid" => 336,
-        "agx" => 337,
-        "negadoctor" => 338,
-        "splittoning" => 339,
-        "monochrome" => 340,
-        "vibrance" => 341,
-        "velvia" => 342,
-        "colorequal" => 343,
-        "colorcontrast" => 344,
-        "colorbalancergb" => 345,
-        "colorbalance" => 346,
-        "colisa" => 347,
-        "colorout" => 348,
-        "colorin" => 349,
-        "primaries" => 350,
-        "colorcorrection" => 351,
-        "channelmixerrgb" => 352,
-        "channelmixer" => 353,
-        "lut3d" => 354,
-        "colormapping" => 355,
-        "colortransfer" => 356,
-        "colorize" => 357,
-        "colorchecker" => 358,
-        "colorharmonizer" => 359,
-        "colorzones" => 360,
-        "highlights" => 363,
-        "colorreconstruct" => 364,
-        "rawoverexposed" => 365,
-        "overexposed" => 366,
-        "rasterfile" => 367,
-        "vignette" => 368,
-        "graduatednd" => 369,
-        "grain" => 370,
-        "bloom" => 371,
-        "soften" => 372,
-        "shadhi" => 373,
-        "relight" => 374,
-        "dither" => 376,
-        "borders" => 377,
-        "watermark" => 378,
-        "crop" => 381,
-        "flip" => 382,
-        "rotatepixels" => 383,
-        "scalepixels" => 384,
-        "finalscale" => 385,
-        "enlargecanvas" => 386,
-        "ashift" => 387,
-        "lens" => 388,
-        "liquify" => 389,
-        "spots" => 391,
-        "retouch" => 392,
-        "mask_manager" => 393,
-        _ => 395,
-    };
-    vec![issue]
+    let index: IssueIndex = toml::from_str(include_str!(
+        "../../../architecture/darktable-issue-index.toml"
+    ))
+    .expect("generated issue index must parse");
+    ownership_for(&index, &format!("iop.{name}"))
+        .map(|record| record.issue_number)
+        .collect()
 }
-
-const IOPS: &[&str] = &[
-    "colorharmonizer",
-    "rawprepare",
-    "soften",
-    "bloom",
-    "highpass",
-    "lowpass",
-    "shadhi",
-    "colorreconstruct",
-    "tonemap",
-    "tonecurve",
-    "colisa",
-    "gamma",
-    "temperature",
-    "colorcorrection",
-    "basicadj",
-    "exposure",
-    "equalizer",
-    "rgbcurve",
-    "colorbalance",
-    "colorin",
-    "colorout",
-    "colorchecker",
-    "clipping",
-    "enlargecanvas",
-    "crop",
-    "sharpen",
-    "dither",
-    "monochrome",
-    "basecurve",
-    "colorzones",
-    "highlights",
-    "overlay",
-    "rawoverexposed",
-    "velvia",
-    "vignette",
-    "splittoning",
-    "grain",
-    "clahe",
-    "bilateral",
-    "profile_gamma",
-    "colortransfer",
-    "colormapping",
-    "channelmixer",
-    "graduatednd",
-    "relight",
-    "zonesystem",
-    "demosaic",
-    "rotatepixels",
-    "scalepixels",
-    "atrous",
-    "cacorrect",
-    "overexposed",
-    "hotpixels",
-    "lowlight",
-    "spots",
-    "retouch",
-    "liquify",
-    "rawdenoise",
-    "borders",
-    "nlmeans",
-    "colorcontrast",
-    "levels",
-    "rgblevels",
-    "colorize",
-    "invert",
-    "vibrance",
-    "flip",
-    "finalscale",
-    "globaltonemap",
-    "bilat",
-    "denoiseprofile",
-    "defringe",
-    "ashift",
-    "hazeremoval",
-    "filmic",
-    "mask_manager",
-    "lut3d",
-    "toneequal",
-    "filmicrgb",
-    "negadoctor",
-    "channelmixerrgb",
-    "censorize",
-    "colorbalancergb",
-    "cacorrectrgb",
-    "diffuse",
-    "blurs",
-    "sigmoid",
-    "agx",
-    "primaries",
-    "colorequal",
-    "rasterfile",
-    "watermark",
-    "lens",
-];
-
-const LIBS: &[&str] = &[
-    "import",
-    "export",
-    "copy_history",
-    "styles",
-    "tagging",
-    "image",
-    "select",
-    "collect",
-    "recentcollect",
-    "filtering",
-    "metadata",
-    "metadata_view",
-    "navigation",
-    "histogram",
-    "history",
-    "snapshots",
-    "modulegroups",
-    "backgroundjobs",
-    "colorpicker",
-    "masks",
-    "session",
-    "duplicate",
-    "ioporder",
-    "viewswitcher",
-    "darktable_label",
-    "colorlabels",
-    "ratings",
-    "filter",
-    "lighttable_mode",
-    "view_toolbox",
-    "module_toolbox",
-    "filmstrip",
-    "hinter",
-    "global_toolbox",
-    "timeline",
-    "image_infos",
-    "log_history",
-    "midi",
-    "gamepad",
-    "camera",
-    "live_view",
-    "location",
-    "map_settings",
-    "map_locations",
-    "geotagging",
-    "print_settings",
-    "neural_restore",
-];
-
-const VIEWS: &[&str] = &[
-    "darkroom",
-    "lighttable",
-    "slideshow",
-    "map",
-    "tethering",
-    "print",
-];
-const FORMATS: &[&str] = &[
-    "copy",
-    "jpeg",
-    "pdf",
-    "png",
-    "ppm",
-    "pfm",
-    "tiff",
-    "jxl_format",
-    "heif_format",
-    "webp",
-    "exr",
-    "j2k",
-    "avif_format",
-    "gimp_xcf",
-];
-const STORAGES: &[&str] = &["disk", "email", "gallery", "latex", "piwigo"];
-const LUA_APIS: &[&str] = &[
-    "early_types",
-    "early_events",
-    "early_modules",
-    "early_format",
-    "early_storage",
-    "early_lib",
-    "early_view",
-    "glist",
-    "image",
-    "styles",
-    "print",
-    "configuration",
-    "preferences",
-    "database",
-    "gui",
-    "luastorages",
-    "tags",
-    "film",
-    "call",
-    "view",
-    "events",
-    "init",
-    "widget",
-    "lualib",
-    "gettext",
-    "guides",
-    "cairo",
-    "password",
-    "util",
-    "metadata",
-    "ai",
-];
-const BUILD_OPTIONS: &[&str] = &[
-    "USE_CAMERA_SUPPORT",
-    "USE_COLORD",
-    "USE_MAP",
-    "USE_LUA",
-    "DONT_USE_INTERNAL_LUA",
-    "USE_KWALLET",
-    "USE_LIBSECRET",
-    "USE_UNITY",
-    "USE_OPENMP",
-    "USE_OPENCL",
-    "USE_GRAPHICSMAGICK",
-    "USE_IMAGEMAGICK",
-    "USE_DARKTABLE_PROFILING",
-    "CUSTOM_CFLAGS",
-    "BINARY_PACKAGE_BUILD",
-    "USE_XMLLINT",
-    "USE_PORTMIDI",
-    "USE_OPENJPEG",
-    "USE_JXL",
-    "USE_WEBP",
-    "USE_AVIF",
-    "USE_HEIF",
-    "USE_XCF",
-    "USE_ISOBMFF",
-    "USE_LIBRAW",
-    "USE_AI",
-    "DONT_USE_INTERNAL_LIBRAW",
-    "BUILD_CMSTEST",
-    "USE_OPENEXR",
-    "BUILD_PRINT",
-    "BUILD_RS_IDENTIFY",
-    "VALIDATE_APPDATA_FILE",
-    "BUILD_MSYS2_INSTALL",
-    "BUILD_NOISE_TOOLS",
-    "BUILD_CURVE_TOOLS",
-    "USE_GMIC",
-    "USE_ICU",
-    "FORCE_COLORED_OUTPUT",
-    "USE_SDL2",
-    "TESTBUILD_OPENCL_PROGRAMS",
-    "USE_MAC_INTEGRATION",
-];
-const OPENCL_PROGRAMS: &[&str] = &[
-    "demosaic_ppg",
-    "atrous",
-    "basic",
-    "blendop",
-    "highpass",
-    "nlmeans",
-    "gaussian",
-    "sharpen",
-    "extended",
-    "soften",
-    "bilateral",
-    "denoiseprofile",
-    "bloom",
-    "colorreconstruction",
-    "demosaic_other",
-    "demosaic_vng",
-    "demosaic_markesteijn",
-    "liquify",
-    "basecurve",
-    "locallaplacian",
-    "dwt",
-    "retouch",
-    "filmic",
-    "colorspaces",
-    "basicadj",
-    "rgbcurve",
-    "guided_filter",
-    "hazeremoval",
-    "lut3d",
-    "rgblevels",
-    "negadoctor",
-    "demosaic_rcd",
-    "channelmixer",
-    "diffuse",
-    "blurs",
-    "bspline",
-    "sigmoid",
-    "colorequal",
-    "capture",
-    "agx",
-    "colorharmonizer",
-    "overlay",
-];
