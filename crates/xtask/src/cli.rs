@@ -186,6 +186,12 @@ pub struct DagArgs {
 pub enum ReferenceCommand {
     Probe(ReferenceArgs),
     Render(ReferenceArgs),
+    #[command(name = "provision")]
+    Provision(ReferenceProvisionArgs),
+    #[command(name = "verify-bundle")]
+    VerifyBundle(ReferenceArgs),
+    #[command(name = "run-qualification")]
+    RunQualification(ReferenceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -210,6 +216,42 @@ pub struct ReferenceArgs {
     pub height: u32,
     #[arg(long, default_value_t = false)]
     pub gpu: bool,
+    #[arg(long, default_value_t = false)]
+    pub cpu: bool,
+    #[arg(long, default_value_t = 1)]
+    pub repeat: u32,
+}
+
+#[derive(Debug, Args)]
+pub struct ReferenceProvisionArgs {
+    #[arg(long, default_value = "fixtures/reference/darktable.toml")]
+    pub identity: PathBuf,
+    #[arg(long)]
+    pub source: PathBuf,
+    #[arg(long)]
+    pub executable: PathBuf,
+    #[arg(long)]
+    pub data_dir: PathBuf,
+    #[arg(long)]
+    pub source_alias: Option<PathBuf>,
+    #[arg(long)]
+    pub executable_alias: Option<PathBuf>,
+    #[arg(long)]
+    pub data_alias: Option<PathBuf>,
+    #[arg(long, default_value = "5.7.0")]
+    pub version: String,
+    #[arg(long, default_value = "cfe57f3bbf5269bfacf31e832267279caa6938ad")]
+    pub commit: String,
+    #[arg(long)]
+    pub build_options_hash: String,
+    #[arg(long)]
+    pub compiler: String,
+    #[arg(long)]
+    pub native_library_identity: String,
+    #[arg(long, default_value = "x86_64-unknown-linux-gnu")]
+    pub target: String,
+    #[arg(long, default_value = "x86_64")]
+    pub architecture: String,
 }
 
 #[derive(Debug, Subcommand)]
