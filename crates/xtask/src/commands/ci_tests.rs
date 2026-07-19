@@ -24,11 +24,7 @@ fn check(id: &str, group: &str) -> Check {
 
 fn contract(checks: Vec<Check>) -> Contract {
     Contract {
-        budgets: BTreeMap::from([
-            ("prepush".to_owned(), 170),
-            ("pull_request".to_owned(), 150),
-            ("main".to_owned(), 2_700),
-        ]),
+        budgets: BTreeMap::from([("prepush".to_owned(), 170), ("main".to_owned(), 2_700)]),
         checks,
     }
 }
@@ -161,14 +157,6 @@ fn rejects_surface_prerequisite_that_runs_after_dependent() {
 }
 
 #[test]
-fn rejects_pull_request_checks_that_drift_from_main() {
-    let mut item = check("pr", "pr");
-    item.surfaces = vec!["pull_request".to_owned()];
-    let error = contract(vec![item]).validate().expect_err("surface drift");
-    assert!(error.contains("drifts from main"));
-}
-
-#[test]
 fn rejects_merge_only_checks_on_a_fast_surface() {
     let mut item = check("merge-only", "main");
     item.merge_only = true;
@@ -187,7 +175,6 @@ fn checked_in_contract_keeps_local_coverage_and_merge_only_exhaustiveness() {
     contract.validate().expect("valid validation contract");
     assert!(!contract.budgets.contains_key("precommit"));
     assert_eq!(contract.budgets["prepush"], 150);
-    assert_eq!(contract.budgets["pull_request"], 150);
 
     for id in [
         "fmt",
@@ -220,22 +207,15 @@ fn checked_in_contract_keeps_local_coverage_and_merge_only_exhaustiveness() {
         .iter()
         .find(|check| check.id == "rust-test")
         .expect("library test");
-    for surface in ["prepush", "pull_request"] {
-        if surface == "pull_request" {
-            assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-            assert!(rust_test.prerequisites_for(surface).is_empty());
-            continue;
-        }
-        assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
-        assert!(rust_test.prerequisites_for(surface).is_empty());
-    }
+    let surface = "prepush";
+    assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
+    assert!(rust_test.prerequisites_for(surface).is_empty());
     let library_lint = contract
         .checks
         .iter()
         .find(|check| check.id == "rust-clippy")
         .expect("library lint");
     assert!(library_lint.on("prepush"));
-    assert!(!library_lint.on("pull_request"));
     assert_eq!(library_lint.parallel_group_for("prepush"), "rust-02-clippy");
     assert_eq!(library_lint.prerequisites_for("prepush"), vec!["rust-test"]);
     for item in std::iter::once(rust_build_all).chain(
@@ -412,14 +392,13 @@ fn selected_group_receipt_omits_other_parallel_groups() {
     let runner = ProcessRunner::new();
     let root = RepositoryRoot::discover(&runner).expect("repository root");
     let mut rust_check = check("rust", "rust");
-    rust_check.surfaces = vec!["pull_request".to_owned()];
+    rust_check.surfaces = vec!["prepush".to_owned()];
     let mut repository_check = check("repository", "repository");
-    repository_check.surfaces = vec!["pull_request".to_owned()];
+    repository_check.surfaces = vec!["prepush".to_owned()];
     let contract = contract(vec![rust_check, repository_check]);
 
-    let receipt =
-        execute_surface_for_group(&root, &contract, "pull_request", Some("rust"), &runner)
-            .expect("selected group succeeds");
+    let receipt = execute_surface_for_group(&root, &contract, "prepush", Some("rust"), &runner)
+        .expect("selected group succeeds");
 
     assert_eq!(receipt.group.as_deref(), Some("rust"));
     assert_eq!(
@@ -441,18 +420,17 @@ fn selected_group_rejects_unmet_prerequisites() {
     let runner = ProcessRunner::new();
     let root = RepositoryRoot::discover(&runner).expect("repository root");
     let mut dependent = check("dependent", "dependent");
-    dependent.surfaces = vec!["pull_request".to_owned()];
+    dependent.surfaces = vec!["prepush".to_owned()];
     dependent.prerequisites = vec!["prerequisite".to_owned()];
     let mut prerequisite = check("prerequisite", "prerequisite");
-    prerequisite.surfaces = vec!["pull_request".to_owned()];
+    prerequisite.surfaces = vec!["prepush".to_owned()];
     let contract = Contract {
-        budgets: BTreeMap::from([(String::from("pull_request"), 150)]),
+        budgets: BTreeMap::from([(String::from("prepush"), 150)]),
         checks: vec![dependent, prerequisite],
     };
 
-    let error =
-        execute_surface_for_group(&root, &contract, "pull_request", Some("dependent"), &runner)
-            .expect_err("selected group with prerequisite");
+    let error = execute_surface_for_group(&root, &contract, "prepush", Some("dependent"), &runner)
+        .expect_err("selected group with prerequisite");
     assert!(error.contains("unmet prerequisite prerequisite"));
 }
 
@@ -481,25 +459,24 @@ fn omits_checks_for_other_platforms_before_execution() {
 #[test]
 fn workspace_dag_receipt_contract_has_deterministic_artifacts() {
     let item = check("workspace-dag", "repository");
-    let (args, artifacts, process_artifacts) =
-        ci_support::check_process_contract(&item, "pull_request");
+    let (args, artifacts, process_artifacts) = ci_support::check_process_contract(&item, "prepush");
     assert!(args.ends_with(&[
         "--artifact".to_owned(),
-        "target/validation/workspace-dag/pull_request.json".to_owned(),
+        "target/validation/workspace-dag/prepush.json".to_owned(),
     ]));
     assert_eq!(
         artifacts,
         vec![
-            "target/validation/workspace-dag/pull_request.json".to_owned(),
-            "target/validation/workspace-dag/pull_request.stdout.log".to_owned(),
-            "target/validation/workspace-dag/pull_request.stderr.log".to_owned(),
+            "target/validation/workspace-dag/prepush.json".to_owned(),
+            "target/validation/workspace-dag/prepush.stdout.log".to_owned(),
+            "target/validation/workspace-dag/prepush.stderr.log".to_owned(),
         ]
     );
     assert_eq!(
         process_artifacts,
         Some((
-            "target/validation/workspace-dag/pull_request.stdout.log".to_owned(),
-            "target/validation/workspace-dag/pull_request.stderr.log".to_owned(),
+            "target/validation/workspace-dag/prepush.stdout.log".to_owned(),
+            "target/validation/workspace-dag/prepush.stderr.log".to_owned(),
         ))
     );
 }

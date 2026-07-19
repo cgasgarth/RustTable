@@ -1,6 +1,5 @@
 [budgets]
 prepush = 150
-pull_request = 150
 main = 2700
 
 [[checks]]
@@ -21,9 +20,8 @@ label = "fmt"
 program = "cargo"
 args = ["fmt", "--all", "--", "--check"]
 owner = "workspace"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "rust"
-parallel_group_by_surface = { pull_request = "rust-01-test" }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -34,9 +32,8 @@ label = "metadata"
 program = "cargo"
 args = ["metadata", "--locked", "--no-deps", "--format-version", "1"]
 owner = "workspace"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "rust"
-parallel_group_by_surface = { pull_request = "rust-01-test" }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -75,10 +72,10 @@ label = "rust-test"
 program = "cargo"
 args = ["test", "--workspace", "--lib", "--all-features", "--locked", "--", "--test-threads=16"]
 owner = "workspace"
-surfaces = ["prepush", "pull_request", "main"]
+surfaces = ["prepush", "main"]
 parallel_group = "rust"
 resources = ["cargo-target-dir"]
-parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
+parallel_group_by_surface = { prepush = "rust-01-test" }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -176,10 +173,9 @@ label = "native-boundaries"
 program = "cargo"
 args = ["xtask", "repo", "verify-native-boundaries"]
 owner = "architecture"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 resources = ["cargo-target-dir"]
-parallel_group_by_surface = { pull_request = "rust-02-boundaries" }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -234,24 +230,12 @@ platforms = ["all"]
 severity = "error"
 
 [[checks]]
-id = "pr-ci-fixtures"
-label = "pr-ci-fixtures"
-program = "bash"
-args = ["scripts/test-pr-ci.sh"]
-owner = "repository"
-surfaces = ["precommit"]
-parallel_group = "repository"
-network = "none"
-platforms = ["all"]
-severity = "error"
-
-[[checks]]
 id = "source"
 label = "source"
 program = "bash"
 args = ["scripts/check-source-policy.sh"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 network = "none"
 platforms = ["all"]
@@ -263,11 +247,9 @@ label = "workflow-policy"
 program = "cargo"
 args = ["xtask", "repo", "verify-workflows"]
 owner = "xtask"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 resources = ["cargo-target-dir"]
-parallel_group_by_surface = { pull_request = "rust-02-workflow" }
-prerequisites_by_surface = { pull_request = ["rust-test"] }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -278,11 +260,9 @@ label = "repository-files"
 program = "cargo"
 args = ["xtask", "repo", "verify-files"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 resources = ["cargo-target-dir"]
-parallel_group_by_surface = { pull_request = "rust-03-files" }
-prerequisites_by_surface = { pull_request = ["workflow-policy"] }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -293,11 +273,9 @@ label = "workspace-dag"
 program = "cargo"
 args = ["xtask", "repo", "verify-dag"]
 owner = "architecture"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 resources = ["cargo-target-dir"]
-parallel_group_by_surface = { pull_request = "rust-04-dag" }
-prerequisites_by_surface = { pull_request = ["repository-files"] }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -308,7 +286,7 @@ label = "workspace-rust-version"
 program = "bun"
 args = ["scripts/workspace-rust-version.ts"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 network = "none"
 platforms = ["all"]
@@ -320,7 +298,7 @@ label = "workspace-layout"
 program = "bash"
 args = ["scripts/check-workspace-layout.sh"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 network = "none"
 platforms = ["all"]
@@ -332,7 +310,7 @@ label = "ecosystem-baseline"
 program = "cargo"
 args = ["xtask", "ecosystem", "verify-baseline"]
 owner = "toolchain"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 resources = ["cargo-target-dir"]
 network = "none"
@@ -345,7 +323,7 @@ label = "dependency-policy"
 program = "cargo"
 args = ["xtask", "ecosystem", "dependencies", "verify-policy"]
 owner = "dependencies"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 resources = ["cargo-target-dir"]
 network = "none"
@@ -358,7 +336,7 @@ label = "compiler-baseline-surfaces"
 program = "bash"
 args = ["scripts/check-compiler-baseline-surfaces.sh"]
 owner = "toolchain"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 network = "none"
 platforms = ["all"]
@@ -370,7 +348,7 @@ label = "cache-workflow-policy"
 program = "bun"
 args = ["scripts/github/cache-workflow-policy.ts"]
 owner = "repository"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 network = "none"
 platforms = ["all"]
@@ -382,7 +360,7 @@ label = "computer-use"
 program = "bun"
 args = ["test", "scripts/dev/computer-use-app-install.test.ts", "scripts/dev/rusttable-app-bundle.test.ts"]
 owner = "desktop"
-surfaces = ["precommit", "prepush", "pull_request", "main"]
+surfaces = ["precommit", "prepush", "main"]
 parallel_group = "repository"
 network = "none"
 platforms = ["macos"]

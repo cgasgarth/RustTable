@@ -18,7 +18,6 @@
     "test:platform-support": "bun test scripts/platform-support.test.ts",
     "check:platform-support": "bun scripts/platform-support.ts --json",
     "check:workspace-layout": "bash scripts/check-workspace-layout.sh",
-    "test:pr-ci": "bash scripts/test-pr-ci.sh",
     "test:cache-workflow-policy": "bun test scripts/github/cache-workflow-policy.test.ts",
     "check:cache-workflow-policy": "bun scripts/github/cache-workflow-policy.ts",
     "test:pr-branch-freshness": "bun test scripts/github/update-open-pr-branches.test.ts",

@@ -415,11 +415,6 @@ pub struct ReferenceProvisionArgs {
 pub enum CiCommand {
     Precommit,
     Prepush,
-    Pr {
-        /// Restrict pull-request validation to one independent contract group.
-        #[arg(long)]
-        group: Option<String>,
-    },
     Main {
         /// Omit a merge-only parallel group run by a dedicated merge job.
         #[arg(long = "skip-group")]

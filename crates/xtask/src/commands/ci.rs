@@ -16,8 +16,8 @@ use serde::Serialize;
 #[path = "ci_support.rs"]
 mod ci_support;
 
-const FAST_SURFACES: [&str; 3] = ["precommit", "prepush", "pull_request"];
-const SUPPORTED_SURFACES: [&str; 4] = ["precommit", "prepush", "pull_request", "main"];
+const FAST_SURFACES: [&str; 2] = ["precommit", "prepush"];
+const SUPPORTED_SURFACES: [&str; 3] = ["precommit", "prepush", "main"];
 
 pub(super) fn run(root: &RepositoryRoot, command: &CiCommand, runner: &ProcessRunner) -> Result {
     let surface = command.surface();
@@ -45,14 +45,13 @@ impl CiCommand {
         match self {
             Self::Precommit => "precommit",
             Self::Prepush => "prepush",
-            Self::Pr { .. } => "pull_request",
             Self::Main { .. } => "main",
         }
     }
 
     fn group(&self) -> Option<&str> {
         match self {
-            Self::Pr { group } | Self::Main { group, .. } => group.as_deref(),
+            Self::Main { group, .. } => group.as_deref(),
             Self::Precommit | Self::Prepush => None,
         }
     }
@@ -60,7 +59,7 @@ impl CiCommand {
     fn skip_groups(&self) -> &[String] {
         match self {
             Self::Main { skip_groups, .. } => skip_groups,
-            Self::Precommit | Self::Prepush | Self::Pr { .. } => &[],
+            Self::Precommit | Self::Prepush => &[],
         }
     }
 }
@@ -135,7 +134,7 @@ impl Contract {
         }
         self.validate_prerequisites(&ids)?;
         self.validate_commands()?;
-        self.validate_surface_drift()
+        Ok(())
     }
 
     fn validate_prerequisites(&self, ids: &BTreeSet<String>) -> Result<()> {
@@ -217,18 +216,6 @@ impl Contract {
                         check.id, other.id
                     ));
                 }
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_surface_drift(&self) -> Result<()> {
-        for check in &self.checks {
-            if check.on("pull_request") && !check.on("main") {
-                return Err(format!(
-                    "validation contract: pull_request check {} drifts from main",
-                    check.id
-                ));
             }
         }
         Ok(())
@@ -405,12 +392,6 @@ impl Check {
                     self.id
                 ));
             }
-            if surface == "pull_request" && self.merge_only {
-                return Err(format!(
-                    "validation contract: merge-only check {} is assigned to pull_request",
-                    self.id
-                ));
-            }
             if surface != "main" && self.merge_only {
                 return Err(format!(
                     "validation contract: merge-only check {} is assigned to {surface}",
@@ -463,7 +444,6 @@ impl Check {
         command.contains("cargo xtask ci")
             || command.contains("scripts/precommit-fast.sh")
             || command.contains("scripts/prepush-fast.sh")
-            || command.contains("scripts/pr-ci.sh")
             || command.contains("scripts/main-ci.sh")
     }
 }

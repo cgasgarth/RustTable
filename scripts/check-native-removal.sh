@@ -49,10 +49,8 @@ while IFS= read -r path; do
 done < <(git -C "$root" ls-files)
 
 entry_points=(
-  .github/workflows/rust-pr.yml
   .github/workflows/rust-main.yml
   scripts/main-ci.sh
-  scripts/pr-ci.sh
   scripts/precommit-fast.sh
   scripts/prepush-fast.sh
   .githooks/pre-commit

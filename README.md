@@ -30,11 +30,12 @@ Run the fast checks before publishing work:
 ```sh
 bash scripts/precommit-fast.sh  # full local build/lint/test gate; intentionally uncapped
 bash scripts/prepush-fast.sh    # <= 150 seconds
-bash scripts/pr-ci.sh           # PR-equivalent, <= 150 seconds in GHA
 bash scripts/main-ci.sh          # merge-to-main validation
 ```
 
-PR validation stays focused and fast. Coverage, offline closure, packaging, and other exhaustive checks belong to merge-to-main validation.
+Pre-commit is the complete local merge-readiness gate. GitHub Actions runs from pushes to
+`main`, repeating that gate and adding coverage, offline closure, packaging, platform,
+security, provenance, and compiler-channel validation.
 
 ## Application
 
@@ -54,7 +55,7 @@ bun run install:computer-use
 
 ## Contribution workflow
 
-Use one GitHub issue, one dedicated worktree, and one pull request per change. Work on a feature branch, pass the local gates, open a PR against `main`, and squash-merge only after hosted validation passes. Do not commit directly to `main`; repository policy and detailed migration guidance live in [TASK.md](TASK.md) and [AGENTS.md](AGENTS.md).
+Use one GitHub issue, one dedicated worktree, and one pull request per change. Work on a feature branch, pass the local gates, open a PR against `main`, and squash-merge only after review and the local gate pass. Do not commit directly to `main`; repository policy and detailed migration guidance live in [TASK.md](TASK.md) and [AGENTS.md](AGENTS.md).
 
 ## Reference
 

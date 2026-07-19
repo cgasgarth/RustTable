@@ -19,7 +19,7 @@ if [[ ! -d "$repository_root" ]]; then
 fi
 
 status=0
-for workflow in .github/workflows/rust-pr.yml .github/workflows/rust-main.yml; do
+for workflow in .github/workflows/rust-main.yml; do
   workflow_path="$repository_root/$workflow"
   if [[ ! -f "$workflow_path" ]]; then
     printf 'bun policy: required workflow is missing: %s\n' "$workflow" >&2

@@ -22,7 +22,7 @@ const repositoryFixture = (): Record<string, unknown> => ({
 });
 
 const protectionFixture = (): Record<string, unknown> => ({
-  required_status_checks: { strict: true, checks: [{ context: 'rust-pr / validate', app_id: -1 }] },
+  required_status_checks: { strict: true, checks: [] },
   enforce_admins: { enabled: true },
   required_pull_request_reviews: {
     required_approving_review_count: 0,
@@ -75,7 +75,7 @@ describe('repository policy normalization', () => {
 
   test.each([
     ['status context', (value: Record<string, unknown>) => { value.required_status_checks = { strict: true, checks: [{ context: 'wrong' }] }; }],
-    ['non-strict status checks', (value: Record<string, unknown>) => { value.required_status_checks = { strict: false, checks: [{ context: 'rust-pr / validate' }] }; }],
+    ['non-strict status checks', (value: Record<string, unknown>) => { value.required_status_checks = { strict: false, checks: [] }; }],
     ['administrator enforcement', (value: Record<string, unknown>) => { value.enforce_admins = { enabled: false }; }],
     ['conversation resolution', (value: Record<string, unknown>) => { value.required_conversation_resolution = { enabled: false }; }],
     ['linear history', (value: Record<string, unknown>) => { value.required_linear_history = false; }],
@@ -143,7 +143,7 @@ describe('repository policy transport and apply', () => {
       default_branch: 'main', allow_squash_merge: true, allow_merge_commit: false, allow_rebase_merge: false,
     });
     const protectionBody = JSON.parse(calls[1]?.request.body ?? '{}') as Record<string, any>;
-    expect(protectionBody.required_status_checks).toEqual({ strict: true, contexts: ['rust-pr / validate'] });
+    expect(protectionBody.required_status_checks).toEqual({ strict: true, contexts: [] });
     expect(protectionBody.required_pull_request_reviews.bypass_pull_request_allowances).toBeUndefined();
   });
 
