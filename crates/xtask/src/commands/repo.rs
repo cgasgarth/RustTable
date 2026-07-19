@@ -7,7 +7,7 @@ use crate::root::RepositoryRoot;
 
 pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand, runner: &ProcessRunner) -> Result {
     match command {
-        RepoCommand::Dag => super::dag::run(root, runner),
+        RepoCommand::Dag(arguments) => super::dag::run(root, runner, arguments.artifact.as_deref()),
         RepoCommand::Files => files::run(root, runner),
         RepoCommand::Workflows => verify_workflows(root),
     }
