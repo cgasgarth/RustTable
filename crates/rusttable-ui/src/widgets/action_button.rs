@@ -1,8 +1,6 @@
-use iced::advanced::{
-    Clipboard, Layout, Renderer as _, Shell, Widget, layout, mouse, renderer, widget,
-};
+use iced::advanced::{Layout, Renderer as _, Shell, Widget, layout, mouse, renderer, widget};
 use iced::keyboard::{self, Key, Modifiers, key::Named};
-use iced::{Background, Color, Element, Event, Length, Rectangle, Shadow, Size};
+use iced::{Background, Color, Element, Event, Length, Rectangle, Shadow, Shrink, Size};
 
 use crate::input::{InputIntent, UiMessage};
 use crate::theme;
@@ -25,8 +23,8 @@ impl<'a> ActionButton<'a> {
             inner: iced::widget::button(content).on_press(action).into(),
             action,
             focused,
-            width: Length::Shrink,
-            height: Length::Shrink,
+            width: Shrink,
+            height: Shrink,
         }
     }
 
@@ -74,10 +72,6 @@ impl Widget<UiMessage, iced::Theme, iced::Renderer> for ActionButton<'_> {
             width: self.width,
             height: self.height,
         }
-    }
-
-    fn size_hint(&self) -> Size<Length> {
-        self.size()
     }
 
     fn layout(
@@ -133,12 +127,8 @@ impl Widget<UiMessage, iced::Theme, iced::Renderer> for ActionButton<'_> {
         widget::tree::State::None
     }
 
-    fn children(&self) -> Vec<widget::Tree> {
-        vec![widget::Tree::new(self.inner.as_widget())]
-    }
-
-    fn diff(&self, tree: &mut widget::Tree) {
-        tree.diff_children(std::slice::from_ref(&self.inner));
+    fn diff(&mut self, tree: &mut widget::Tree) {
+        tree.diff_children(std::slice::from_mut(&mut self.inner));
     }
 
     fn operate(
@@ -163,7 +153,6 @@ impl Widget<UiMessage, iced::Theme, iced::Renderer> for ActionButton<'_> {
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         renderer: &iced::Renderer,
-        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, UiMessage>,
         viewport: &Rectangle,
     ) {
@@ -173,7 +162,6 @@ impl Widget<UiMessage, iced::Theme, iced::Renderer> for ActionButton<'_> {
             layout.children().next().unwrap(),
             cursor,
             renderer,
-            clipboard,
             shell,
             viewport,
         );
