@@ -51,7 +51,7 @@ fn load_contract(root: &RepositoryRoot) -> Result<Contract> {
     let path = root.join(CONTRACT_PATH);
     let source = fs::read_to_string(&path)
         .map_err(|error| format!("{CONTRACT_PATH}: cannot read contract: {error}"))?;
-    toml::from_str(&source).map_err(|error| format!("{CONTRACT_PATH}: invalid TOML: {error}"))
+    Contract::parse(&source)
 }
 
 fn load_platform_contract(root: &RepositoryRoot) -> Result<PlatformContract> {

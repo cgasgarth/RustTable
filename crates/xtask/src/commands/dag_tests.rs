@@ -9,6 +9,7 @@ fn package(name: &str, role: &str) -> DeclaredPackage {
         name: name.to_owned(),
         manifest: format!("crates/{name}/Cargo.toml"),
         role: role.to_owned(),
+        integration_owner: name.to_owned(),
         features: Vec::new(),
         feature_sets: Vec::new(),
     }
@@ -22,17 +23,32 @@ fn edge(from: &str, to: &str, kind: &str) -> DeclaredEdge {
         target: None,
         contexts: Vec::new(),
         required: true,
+        tooling_only: false,
     }
 }
 
 fn contract(packages: Vec<DeclaredPackage>, edges: Vec<DeclaredEdge>) -> Contract {
     Contract {
-        schema_version: 1,
+        schema_version: 3,
         composition_root: "app".to_owned(),
         tooling_packages: vec!["testkit".to_owned()],
         packages,
         edges,
         external_dependencies: Vec::new(),
+    }
+}
+
+fn contract_fixture(name: &str) -> &'static str {
+    match name {
+        "duplicate-package" => {
+            include_str!("../../tests/fixtures/dag/contract-duplicate-package.toml")
+        }
+        "unknown-edge" => include_str!("../../tests/fixtures/dag/contract-unknown-edge.toml"),
+        "cycle" => include_str!("../../tests/fixtures/dag/contract-cycle.toml"),
+        "forbidden-product-edges" => {
+            include_str!("../../tests/fixtures/dag/contract-forbidden-product-edges.toml")
+        }
+        _ => panic!("unknown contract fixture {name}"),
     }
 }
 
@@ -368,6 +384,22 @@ fn windows_target_predicates_are_applied_to_windows_contexts() {
         report.discovered_edges[0].platform,
         "x86_64-pc-windows-msvc"
     );
+}
+
+#[test]
+fn contract_parser_rejects_invalid_fixtures_deterministically() {
+    for (fixture, expected) in [
+        ("duplicate-package", "package names must be unique"),
+        ("unknown-edge", "references an undeclared package"),
+        ("cycle", "dependency graph contains a cycle"),
+        (
+            "forbidden-product-edges",
+            "product package core cannot depend on",
+        ),
+    ] {
+        let error = Contract::parse(contract_fixture(fixture)).expect_err(fixture);
+        assert!(error.contains(expected), "{fixture}: {error}");
+    }
 }
 
 #[test]

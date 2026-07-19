@@ -6,7 +6,9 @@ use std::sync::atomic::AtomicBool;
 
 use serde::Deserialize;
 
-use crate::process::{EnvironmentProfile, ProcessError, ProcessRequest, ProcessRunner};
+use crate::process::{
+    EnvironmentProfile, ProcessError, ProcessLimits, ProcessRequest, ProcessRunner,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepositoryRoot(PathBuf);
@@ -21,6 +23,11 @@ impl RepositoryRoot {
             ProcessRequest::new("cargo", ["metadata", "--no-deps", "--format-version", "1"])
                 .profile(EnvironmentProfile::RustTool)
                 .current_dir(current)
+                .limits(ProcessLimits {
+                    max_stdout_bytes: 4 * 1024 * 1024,
+                    max_stderr_bytes: 256 * 1024,
+                    timeout: std::time::Duration::from_secs(4),
+                })
                 .cancellation(Arc::new(AtomicBool::new(false)));
         let result = runner.run(request).map_err(RootError::MetadataProcess)?;
         if !result.receipt.success() {

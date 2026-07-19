@@ -1,0 +1,49 @@
+schema_version = 3
+composition_root = "app"
+tooling_packages = ["testkit", "xtask"]
+
+[[packages]]
+name = "app"
+manifest = "crates/app/Cargo.toml"
+role = "composition-root"
+integration_owner = "app"
+
+[[packages]]
+name = "core"
+manifest = "crates/core/Cargo.toml"
+role = "product"
+integration_owner = "core"
+
+[[packages]]
+name = "ui"
+manifest = "crates/ui/Cargo.toml"
+role = "product"
+integration_owner = "ui"
+
+[[packages]]
+name = "testkit"
+manifest = "crates/testkit/Cargo.toml"
+role = "tooling"
+integration_owner = "testkit"
+
+[[packages]]
+name = "xtask"
+manifest = "crates/xtask/Cargo.toml"
+role = "tooling"
+integration_owner = "xtask"
+
+[[edges]]
+from = "core"
+to = "app"
+
+[[edges]]
+from = "core"
+to = "ui"
+
+[[edges]]
+from = "core"
+to = "testkit"
+
+[[edges]]
+from = "core"
+to = "xtask"
