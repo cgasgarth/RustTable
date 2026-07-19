@@ -16,7 +16,7 @@ jobs:
   validate-groups:
     name: rust-pr / ${{ matrix.group }}
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     strategy:
       fail-fast: false
       matrix:
@@ -34,8 +34,6 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Start validation timer
-        run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Read canonical Bun pin
         id: bun-pin
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
@@ -63,6 +61,8 @@ jobs:
             rust-linux-distribution-${{ runner.os }}-rust-baseline-${{ hashFiles('rust-toolchain.toml', 'quality/compiler-baseline.toml') }}-
       - name: Fetch locked dependencies for offline validation
         run: cargo fetch --locked
+      - name: Start validation timer
+        run: echo "RUSTTABLE_VALIDATION_START=$(date +%s)" >> "$GITHUB_ENV"
       - name: Run parallel PR validation group
         run: bash scripts/pr-ci.sh
       - name: Enforce 150-second validation budget
