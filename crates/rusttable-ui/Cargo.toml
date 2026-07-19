@@ -7,7 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-iced = { version = "0.14.0", default-features = false, features = ["advanced", "thread-pool", "tiny-skia", "x11"] }
+iced = { version = "0.14.0", default-features = false, features = ["advanced", "sipper", "thread-pool", "tiny-skia", "wgpu", "x11"] }
 rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
 
 [dev-dependencies]

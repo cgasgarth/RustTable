@@ -59,6 +59,17 @@ pub enum Command {
     },
     #[command(name = "template-matrix")]
     TemplateMatrix(TemplateMatrixArgs),
+    #[command(name = "ui-shell")]
+    UiShell(UiShellArgs),
+
+#[derive(Debug, Args)]
+pub struct UiShellArgs {
+    #[arg(long, default_value = "all")]
+    pub presets: String,
+    #[arg(long)]
+    pub verify_a11y: bool,
+    #[arg(long)]
+    pub verify_window_lifecycle: bool,
 }
 
 #[derive(Debug, Subcommand)]

@@ -1,0 +1,11 @@
+version = 1
+max_handwritten_lines = 1000
+allowed_dependencies = ["iced", "rusttable-core"]
+forbidden_dependencies = [
+    "rusttable-catalog",
+    "rusttable-catalog-store",
+    "rusttable-processing",
+    "rusttable-image-io",
+    "rusttable-metadata",
+    "redb",
+]

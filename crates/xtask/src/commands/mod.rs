@@ -10,6 +10,7 @@ mod parity;
 mod reference;
 mod repo;
 mod template_matrix;
+mod ui_shell;
 
 use std::fmt;
 
@@ -36,6 +37,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
         Command::TemplateMatrix(args) => template_matrix::run(&root, args),
+        Command::UiShell(args) => ui_shell::run(&root, args),
     }
     .map_err(CommandError::Surface)
 }
