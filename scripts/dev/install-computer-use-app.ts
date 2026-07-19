@@ -1,4 +1,4 @@
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   type CommandRequest,
@@ -12,10 +12,12 @@ import {
   parseLaunchServicesRegistrations,
   pathExists,
   readBundleIdentifier,
-  unregisterMissingRepositoryBundles,
+  unregisterRepositoryBundles,
 } from './computer-use-app-install';
 import {
   createRustTableBundle,
+  RUSTTABLE_BUNDLE_IDENTITY,
+  RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
   resolveRustTableVersion,
   validateBundle,
 } from './rusttable-app-bundle';
@@ -23,12 +25,15 @@ import {
 const releaseBundlePath = (root: string): string =>
   join(root, 'target/release/bundle/macos/RustTable.app');
 
+const computerUseBundlePath = (root: string): string =>
+  join(root, 'target/release/bundle/macos/rusttable - latest.app');
+
 const help = `Usage: bun run install:computer-use [options]
 
-Build, install, and register RustTable.app for Computer Use.
+Build, install, and register rusttable - latest.app for Computer Use.
 
 Options:
-  --app-path PATH  Install into PATH (default: ~/Applications/RustTable.app)
+  The canonical install path is ~/Applications/rusttable - latest.app.
   --compact        Reduce build output
   --no-build       Use the existing release bundle
   --no-install     Build/validate without changing the canonical install
@@ -57,8 +62,23 @@ const writeAppBundle = async (root: string, run: CommandRunner): Promise<string>
     executablePath: join(root, 'target/release/rusttable-app'),
     licensePath: join(root, 'LICENSE'),
     version,
+    identity: RUSTTABLE_BUNDLE_IDENTITY,
   });
   await validateBundle(appPath, join(root, 'LICENSE'));
+  return appPath;
+};
+
+const writeComputerUseBundle = async (root: string, run: CommandRunner): Promise<string> => {
+  const appPath = computerUseBundlePath(root);
+  const version = await resolveRustTableVersion(root, run);
+  await createRustTableBundle({
+    appPath,
+    executablePath: join(root, 'target/release/rusttable-app'),
+    licensePath: join(root, 'LICENSE'),
+    version,
+    identity: RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
+  });
+  await validateBundle(appPath, join(root, 'LICENSE'), RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY);
   return appPath;
 };
 
@@ -95,10 +115,11 @@ const main = async (): Promise<void> => {
   await readBundleIdentifier(bundlePath);
 
   if (options.shouldInstall) {
+    const sourcePath = await writeComputerUseBundle(root, runCommand);
     await installCanonicalComputerUseApp({
       installPath: options.installPath,
       run: runCommand,
-      sourcePath: bundlePath,
+      sourcePath,
       transactionId: randomUUID(),
     });
     const worktreeResult = await runCommand({
@@ -108,9 +129,12 @@ const main = async (): Promise<void> => {
     });
     const worktreePaths = parseGitWorktreePaths(worktreeResult.stdout);
     const bundlePaths = await discoverRepositoryAppBundles(worktreePaths);
+    const legacyInstallPath = join(dirname(options.installPath), 'RustTable.app');
     const removed = await cleanupRepositoryAppBundles({
-      bundlePaths,
-      keepPaths: [bundlePath, options.installPath],
+      bundlePaths: [...bundlePaths, legacyInstallPath],
+      keepPaths: [sourcePath, options.installPath],
+      repositoryPaths: [legacyInstallPath],
+      worktreePaths,
       run: runCommand,
     });
     const registrations = await runCommand({
@@ -120,10 +144,15 @@ const main = async (): Promise<void> => {
     });
     const stalePaths = findStaleRepositoryRegistrationPaths({
       canonicalPath: options.installPath,
+      legacyPaths: [legacyInstallPath],
       registrations: parseLaunchServicesRegistrations(registrations.stdout),
       worktreePaths,
     });
-    const unregistered = await unregisterMissingRepositoryBundles({ paths: stalePaths, run: runCommand });
+    const removedPaths = new Set(removed);
+    const unregistered = await unregisterRepositoryBundles({
+      paths: stalePaths.filter((path) => !removedPaths.has(path)),
+      run: runCommand,
+    });
     process.stdout.write(`Installed ${options.installPath}; cleaned ${removed.length} bundle(s), unregistered ${unregistered.length} stale path(s).\n`);
   }
 

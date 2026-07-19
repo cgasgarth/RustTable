@@ -3,6 +3,26 @@ import { join, resolve } from 'node:path';
 
 export const RUSTTABLE_BUNDLE_IDENTIFIER = 'com.cgasgarth.rusttable';
 export const RUSTTABLE_BUNDLE_NAME = 'RustTable';
+export const RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER = 'com.cgasgarth.rusttable.latest';
+export const RUSTTABLE_COMPUTER_USE_BUNDLE_NAME = 'rusttable - latest';
+
+export interface RustTableBundleIdentity {
+  bundleIdentifier: string;
+  bundleName: string;
+  displayName: string;
+}
+
+export const RUSTTABLE_BUNDLE_IDENTITY: RustTableBundleIdentity = {
+  bundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER,
+  bundleName: RUSTTABLE_BUNDLE_NAME,
+  displayName: RUSTTABLE_BUNDLE_NAME,
+};
+
+export const RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY: RustTableBundleIdentity = {
+  bundleIdentifier: RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+  bundleName: RUSTTABLE_COMPUTER_USE_BUNDLE_NAME,
+  displayName: RUSTTABLE_COMPUTER_USE_BUNDLE_NAME,
+};
 
 const REQUIRED_KEYS = [
   'CFBundleDisplayName',
@@ -34,11 +54,11 @@ export type MetadataCommandRunner = (
   request: MetadataCommandRequest,
 ) => Promise<MetadataCommandResult>;
 
-const expectedManifest = (version: string): BundleManifest => ({
-  CFBundleDisplayName: RUSTTABLE_BUNDLE_NAME,
+const expectedManifest = (version: string, identity: RustTableBundleIdentity): BundleManifest => ({
+  CFBundleDisplayName: identity.displayName,
   CFBundleExecutable: RUSTTABLE_BUNDLE_NAME,
-  CFBundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER,
-  CFBundleName: RUSTTABLE_BUNDLE_NAME,
+  CFBundleIdentifier: identity.bundleIdentifier,
+  CFBundleName: identity.bundleName,
   CFBundlePackageType: 'APPL',
   CFBundleShortVersionString: version,
   CFBundleVersion: version,
@@ -122,14 +142,21 @@ const parseStringPairs = (plist: string): Map<string, string> => {
   return values;
 };
 
-export const parseBundleManifest = (plist: string): BundleManifest => {
+export const parseBundleManifest = (
+  plist: string,
+  identity?: RustTableBundleIdentity,
+): BundleManifest => {
   const values = parseStringPairs(plist);
   if (values.size !== REQUIRED_KEYS.length) throw new Error('Bundle Info.plist has missing or unexpected keys.');
   for (const key of values.keys()) {
     if (!(REQUIRED_KEYS as readonly string[]).includes(key)) throw new Error(`Bundle Info.plist has unexpected key ${key}.`);
   }
   const manifest = Object.fromEntries(REQUIRED_KEYS.map((key) => [key, values.get(key)])) as BundleManifest;
-  const expected = expectedManifest(manifest.CFBundleShortVersionString);
+  const knownIdentity = identity ?? [RUSTTABLE_BUNDLE_IDENTITY, RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY].find(
+    (candidate) => candidate.bundleIdentifier === manifest.CFBundleIdentifier,
+  );
+  if (knownIdentity === undefined) throw new Error('Bundle Info.plist has an unexpected bundle identifier.');
+  const expected = expectedManifest(manifest.CFBundleShortVersionString, knownIdentity);
   for (const key of REQUIRED_KEYS) {
     if (manifest[key] !== expected[key]) throw new Error(`Bundle Info.plist has unexpected ${key}.`);
   }
@@ -174,8 +201,12 @@ const bytesEqual = (left: Uint8Array, right: Uint8Array): boolean =>
 export const validateBundle = async (
   bundlePath: string,
   rootLicensePath?: string,
+  identity?: RustTableBundleIdentity,
 ): Promise<BundleManifest> => {
-  const manifest = await readBundleManifest(bundlePath);
+  const manifest = await parseBundleManifest(
+    await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8'),
+    identity,
+  );
   const actualPayload = new Set(await listPayload(bundlePath));
   if (actualPayload.size !== expectedPayload.size || [...expectedPayload].some((path) => !actualPayload.has(path))) {
     throw new Error('RustTable.app contains an unexpected or missing payload entry.');
@@ -199,13 +230,15 @@ export const createRustTableBundle = async ({
   executablePath,
   licensePath,
   version,
+  identity = RUSTTABLE_BUNDLE_IDENTITY,
 }: {
   appPath: string;
   executablePath: string;
   licensePath: string;
   version: string;
+  identity?: RustTableBundleIdentity;
 }): Promise<string> => {
-  const manifest = expectedManifest(assertVersion(version));
+  const manifest = expectedManifest(assertVersion(version), identity);
   await rm(appPath, { force: true, recursive: true });
   await mkdir(join(appPath, 'Contents/MacOS'), { recursive: true });
   await mkdir(join(appPath, 'Contents/Resources'), { recursive: true });
