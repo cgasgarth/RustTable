@@ -8,7 +8,7 @@ use crate::root::RepositoryRoot;
 pub(super) fn run(root: &RepositoryRoot, command: &RepoCommand, runner: &ProcessRunner) -> Result {
     match command {
         RepoCommand::Dag(arguments) => super::dag::run(root, runner, arguments.artifact.as_deref()),
-        RepoCommand::Files => files::run(root, runner),
+        RepoCommand::Files(arguments) => files::run(root, arguments, runner),
         RepoCommand::Workflows => verify_workflows(root),
         RepoCommand::NativeBoundaries(arguments) => {
             super::native_boundaries::run(root, runner, arguments.receipt.as_deref())

@@ -1,17 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
-use std::time::Duration;
 
+use icu_casemap::CaseMapper;
 use serde::Deserialize;
 use unicode_normalization::UnicodeNormalization;
 
+use super::file_source::{self, BlobData, EntryKind, SourceEntry, SourceKind};
 use super::{Result, report};
-use crate::process::{EnvironmentProfile, ProcessLimits, ProcessRequest, ProcessRunner};
+use crate::cli::{FilePolicyArgs, FileSource};
+use crate::process::ProcessRunner;
 use crate::root::RepositoryRoot;
 
 const POLICY_PATH: &str = "quality/repository-files.toml";
-const INDEX_OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
+const ATTRIBUTES_PATH: &str = ".gitattributes";
 
 #[derive(Debug, Deserialize)]
 struct Policy {
@@ -31,13 +33,35 @@ struct Policy {
     executable_paths: Vec<String>,
     manifest_extensions: Vec<String>,
     reserved_windows_names: Vec<String>,
+    max_path_bytes: usize,
+    max_path_utf16: usize,
+    max_component_bytes: usize,
+    max_component_utf16: usize,
+    attributes_rules: Vec<String>,
+    artifact_classes: Vec<ArtifactClass>,
+    magic_signatures: Vec<MagicSignature>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct IndexEntry {
-    mode: u32,
-    path: String,
-    valid_utf8: bool,
+#[derive(Debug, Deserialize)]
+struct ArtifactClass {
+    id: String,
+    kind: String,
+    #[serde(default)]
+    extensions: Vec<String>,
+    #[serde(default)]
+    filenames: Vec<String>,
+    #[serde(default)]
+    paths: Vec<String>,
+    max_size_bytes: usize,
+    #[serde(default)]
+    empty_allowed: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct MagicSignature {
+    extension: String,
+    offset: usize,
+    bytes: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -63,11 +87,31 @@ impl std::fmt::Display for Violation {
     }
 }
 
-pub(super) fn run(root: &RepositoryRoot, runner: &ProcessRunner) -> Result {
+pub(super) fn run(
+    root: &RepositoryRoot,
+    arguments: &FilePolicyArgs,
+    runner: &ProcessRunner,
+) -> Result {
     let policy = Policy::load(root)?;
     policy.validate()?;
-    let entries = tracked_entries(root, runner)?;
-    let violations = inspect_repository(root, &policy, &entries);
+    let requested_source = match arguments.source {
+        FileSource::Auto => "auto",
+        FileSource::Index => "index",
+        FileSource::Tree => "tree",
+        FileSource::Worktree => "worktree",
+    };
+    let source = file_source::resolve_source(
+        requested_source,
+        std::env::var_os("CI").is_some() || std::env::var_os("GITHUB_ACTIONS").is_some(),
+    )?;
+    let entries = file_source::read_entries(root, runner, source, &arguments.treeish)?;
+    let contents = match source {
+        SourceKind::Worktree => BTreeMap::new(),
+        SourceKind::Index | SourceKind::Tree => {
+            file_source::read_blob_contents(root, runner, &entries)?
+        }
+    };
+    let violations = inspect_repository(root, &policy, source, &entries, &contents);
     if !violations.is_empty() {
         let mut message = format!("repo.verify-files: {} violation(s)", violations.len());
         for violation in violations {
@@ -95,6 +139,10 @@ pub(super) fn run(root: &RepositoryRoot, runner: &ProcessRunner) -> Result {
             "binary_files": binary,
             "case_collision_policy": policy.case_mode.clone(),
             "unicode_normalization": policy.unicode_normalization.clone(),
+            "unicode_case_folding": "icu4x-2.2.0",
+            "unicode_version": "16.0",
+            "source": source.label(),
+            "treeish": (source == SourceKind::Tree).then_some(arguments.treeish.clone()),
         }),
     ))
 }
@@ -139,75 +187,43 @@ impl Policy {
                 "{POLICY_PATH}: executable_paths contains duplicates"
             ));
         }
+        if self.max_path_bytes == 0
+            || self.max_path_utf16 == 0
+            || self.max_component_bytes == 0
+            || self.max_component_utf16 == 0
+        {
+            return Err(format!(
+                "{POLICY_PATH}: Windows path limits must be positive"
+            ));
+        }
+        if self.attributes_rules.is_empty() || self.artifact_classes.is_empty() {
+            return Err(format!(
+                "{POLICY_PATH}: attributes rules and artifact classes must be non-empty"
+            ));
+        }
+        for class in &self.artifact_classes {
+            if !["text", "binary"].contains(&class.kind.as_str())
+                || class.max_size_bytes == 0
+                || (class.extensions.is_empty()
+                    && class.filenames.is_empty()
+                    && class.paths.is_empty())
+            {
+                return Err(format!(
+                    "{POLICY_PATH}: invalid artifact class {}",
+                    class.id
+                ));
+            }
+        }
         Ok(())
     }
-}
-
-fn tracked_entries(root: &RepositoryRoot, runner: &ProcessRunner) -> Result<Vec<IndexEntry>> {
-    let request = ProcessRequest::new("git", ["ls-files", "--stage", "-z"])
-        .profile(EnvironmentProfile::GitTool)
-        .current_dir(root.path())
-        .limits(ProcessLimits {
-            max_stdout_bytes: INDEX_OUTPUT_LIMIT,
-            max_stderr_bytes: 64 * 1024,
-            timeout: Duration::from_secs(5),
-        });
-    let result = runner
-        .run(request)
-        .map_err(|error| format!("git ls-files: {error}"))?;
-    if !result.receipt.success() {
-        return Err(format!(
-            "git ls-files failed ({}): {}",
-            result.receipt.status,
-            String::from_utf8_lossy(&result.stderr).trim()
-        ));
-    }
-    parse_index(&result.stdout)
-}
-
-fn parse_index(output: &[u8]) -> Result<Vec<IndexEntry>> {
-    let mut entries = Vec::new();
-    for record in output
-        .split(|byte| *byte == 0)
-        .filter(|record| !record.is_empty())
-    {
-        let separator = record
-            .iter()
-            .position(|byte| *byte == b'\t')
-            .ok_or_else(|| "git index record has no path separator".to_owned())?;
-        let header = std::str::from_utf8(&record[..separator])
-            .map_err(|_| "git index record has invalid header UTF-8".to_owned())?;
-        let mut fields = header.split_ascii_whitespace();
-        let mode = fields
-            .next()
-            .ok_or_else(|| "git index record has no mode".to_owned())
-            .and_then(|value| {
-                u32::from_str_radix(value, 8)
-                    .map_err(|_| format!("git index record has invalid mode {value}"))
-            })?;
-        if fields.next().is_none() || fields.next().is_none() {
-            return Err("git index record has incomplete object fields".to_owned());
-        }
-        let path_bytes = &record[separator + 1..];
-        let valid_utf8 = std::str::from_utf8(path_bytes).is_ok();
-        let path = match std::str::from_utf8(path_bytes) {
-            Ok(path) => path.to_owned(),
-            Err(_) => format!("<invalid-utf8:{}>", hex(path_bytes)),
-        };
-        entries.push(IndexEntry {
-            mode,
-            path,
-            valid_utf8,
-        });
-    }
-    entries.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(entries)
 }
 
 fn inspect_repository(
     root: &RepositoryRoot,
     policy: &Policy,
-    entries: &[IndexEntry],
+    source: SourceKind,
+    entries: &[SourceEntry],
+    contents: &BTreeMap<String, BlobData>,
 ) -> Vec<Violation> {
     let mut violations = Vec::new();
     let mut nfc_paths = BTreeMap::<String, Vec<String>>::new();
@@ -215,11 +231,6 @@ fn inspect_repository(
     let mut present = BTreeSet::new();
 
     for entry in entries {
-        if !is_governed(&entry.path, &policy.governed_roots) {
-            continue;
-        }
-        present.insert(entry.path.clone());
-        violations.extend(inspect_path(&entry.path, policy));
         if !entry.valid_utf8 {
             violations.push(Violation::new(
                 &entry.path,
@@ -228,55 +239,22 @@ fn inspect_repository(
             ));
             continue;
         }
-        validate_mode(entry, policy, &mut violations);
+        if !is_governed(&entry.path, &policy.governed_roots) {
+            continue;
+        }
+        present.insert(entry.path.clone());
+        violations.extend(inspect_path(&entry.path, policy));
+        validate_entry(entry, policy, &mut violations);
         let nfc = normalized_path(&entry.path);
-        let folded = nfc.chars().flat_map(char::to_lowercase).collect::<String>();
+        let folded = CaseMapper::new().fold_string(&nfc).into_owned();
         nfc_paths.entry(nfc).or_default().push(entry.path.clone());
         folded_paths
             .entry(folded)
             .or_default()
             .push(entry.path.clone());
-
-        let full_path = root.join(&entry.path);
-        let metadata = match fs::symlink_metadata(&full_path) {
-            Ok(metadata) => metadata,
-            Err(error) => {
-                violations.push(Violation::new(
-                    &entry.path,
-                    "missing-file",
-                    format!("tracked file cannot be inspected: {error}"),
-                ));
-                continue;
-            }
-        };
-        if metadata.file_type().is_symlink() {
-            violations.push(Violation::new(
-                &entry.path,
-                "symlink",
-                "symlinks are not allowed in governed roots",
-            ));
-            continue;
-        }
-        if !metadata.is_file() {
-            violations.push(Violation::new(
-                &entry.path,
-                "not-regular-file",
-                "tracked governed entry is not a regular file",
-            ));
-            continue;
-        }
-        let bytes = match fs::read(&full_path) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                violations.push(Violation::new(
-                    &entry.path,
-                    "read-file",
-                    format!("cannot read tracked file: {error}"),
-                ));
-                continue;
-            }
-        };
-        violations.extend(inspect_contents(&entry.path, &bytes, policy));
+        violations.extend(inspect_entry_contents(
+            root, source, contents, entry, policy,
+        ));
     }
 
     violations.extend(collision_violations(
@@ -293,18 +271,106 @@ fn inspect_repository(
             ));
         }
     }
+    violations.extend(validate_attributes(root, policy, source, contents));
     violations.sort();
     violations.dedup();
     violations
 }
 
+fn inspect_entry_contents(
+    root: &RepositoryRoot,
+    source: SourceKind,
+    contents: &BTreeMap<String, BlobData>,
+    entry: &SourceEntry,
+    policy: &Policy,
+) -> Vec<Violation> {
+    if entry.stage != 0 {
+        return Vec::new();
+    }
+    let mut violations = Vec::new();
+    let bytes = match source {
+        SourceKind::Worktree => match fs::symlink_metadata(root.join(&entry.path)) {
+            Ok(metadata) if metadata.is_file() => match fs::read(root.join(&entry.path)) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    violations.push(Violation::new(
+                        &entry.path,
+                        "read-file",
+                        format!("cannot read worktree file: {error}"),
+                    ));
+                    return violations;
+                }
+            },
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                violations.push(Violation::new(
+                    &entry.path,
+                    "symlink",
+                    "symlinks are not allowed in governed roots",
+                ));
+                return violations;
+            }
+            Ok(_) => {
+                violations.push(Violation::new(
+                    &entry.path,
+                    "not-regular-file",
+                    "tracked governed entry is not a regular worktree file",
+                ));
+                return violations;
+            }
+            Err(error) => {
+                violations.push(Violation::new(
+                    &entry.path,
+                    "missing-file",
+                    format!("tracked worktree file cannot be inspected: {error}"),
+                ));
+                return violations;
+            }
+        },
+        SourceKind::Index | SourceKind::Tree => match contents.get(&entry.path) {
+            Some(BlobData::Bytes(bytes)) => bytes.clone(),
+            Some(BlobData::TooLarge(size)) => {
+                violations.push(Violation::new(
+                    &entry.path,
+                    "file-size",
+                    format!(
+                        "blob is {size} bytes; bounded reader limit is {}",
+                        file_source::MAX_BLOB_BYTES
+                    ),
+                ));
+                return violations;
+            }
+            None => {
+                violations.push(Violation::new(
+                    &entry.path,
+                    "missing-blob",
+                    "regular governed entry has no readable Git blob",
+                ));
+                return violations;
+            }
+        },
+    };
+    violations.extend(inspect_contents(&entry.path, &bytes, policy));
+    violations
+}
+
 fn inspect_path(path: &str, policy: &Policy) -> Vec<Violation> {
     let mut violations = Vec::new();
-    if path.len() > policy.max_path_length {
+    if path.len() > policy.max_path_bytes || path.len() > policy.max_path_length {
         violations.push(Violation::new(
             path,
-            "path-length",
-            format!("{} bytes exceeds {}", path.len(), policy.max_path_length),
+            "path-byte-length",
+            format!("{} bytes exceeds {}", path.len(), policy.max_path_bytes),
+        ));
+    }
+    let utf16_length = path.encode_utf16().count();
+    if utf16_length > policy.max_path_utf16 {
+        violations.push(Violation::new(
+            path,
+            "path-utf16-length",
+            format!(
+                "{utf16_length} UTF-16 code units exceeds {}",
+                policy.max_path_utf16
+            ),
         ));
     }
     if path.starts_with('/') || path.contains('\\') {
@@ -329,6 +395,37 @@ fn inspect_path(path: &str, policy: &Policy) -> Vec<Violation> {
                 format!("path component {component:?} is not portable on Windows"),
             ));
         }
+        if component.len() > policy.max_component_bytes {
+            violations.push(Violation::new(
+                path,
+                "component-byte-length",
+                format!(
+                    "component {component:?} exceeds {} bytes",
+                    policy.max_component_bytes
+                ),
+            ));
+        }
+        let component_utf16 = component.encode_utf16().count();
+        if component_utf16 > policy.max_component_utf16 {
+            violations.push(Violation::new(
+                path,
+                "component-utf16-length",
+                format!(
+                    "component {component:?} exceeds {} UTF-16 code units",
+                    policy.max_component_utf16
+                ),
+            ));
+        }
+        if component
+            .chars()
+            .any(|character| character.is_control() || "<>:\"/\\|?*".contains(character))
+        {
+            violations.push(Violation::new(
+                path,
+                "windows-invalid-character",
+                format!("component {component:?} contains a Windows-invalid character"),
+            ));
+        }
         if is_reserved_windows_name(component, policy) {
             violations.push(Violation::new(
                 path,
@@ -344,7 +441,8 @@ fn inspect_path(path: &str, policy: &Policy) -> Vec<Violation> {
         && !policy
             .allowed_extensions
             .iter()
-            .any(|extension| file_extension(path).is_some_and(|value| value == *extension))
+            .any(|extension| file_extension(path).is_some_and(|value| value == extension))
+        && artifact_class(path, policy).is_none()
     {
         violations.push(Violation::new(
             path,
@@ -355,7 +453,36 @@ fn inspect_path(path: &str, policy: &Policy) -> Vec<Violation> {
     violations
 }
 
-fn validate_mode(entry: &IndexEntry, policy: &Policy, violations: &mut Vec<Violation>) {
+fn validate_entry(entry: &SourceEntry, policy: &Policy, violations: &mut Vec<Violation>) {
+    match entry.kind {
+        EntryKind::Symlink => violations.push(Violation::new(
+            &entry.path,
+            "symlink",
+            "Git entry is a symlink; governed paths require regular blobs",
+        )),
+        EntryKind::Submodule => violations.push(Violation::new(
+            &entry.path,
+            "submodule",
+            "Git entry is a submodule; governed paths require regular blobs",
+        )),
+        EntryKind::Unsupported => violations.push(Violation::new(
+            &entry.path,
+            "unsupported-mode",
+            format!("Git entry mode {:o} is unsupported", entry.mode),
+        )),
+        EntryKind::Regular => {}
+    }
+    if entry.stage != 0 {
+        violations.push(Violation::new(
+            &entry.path,
+            "unmerged-index-entry",
+            format!("index stage {} is not stage zero", entry.stage),
+        ));
+    }
+    validate_mode(entry, policy, violations);
+}
+
+fn validate_mode(entry: &SourceEntry, policy: &Policy, violations: &mut Vec<Violation>) {
     let executable = policy
         .executable_paths
         .iter()
@@ -382,6 +509,17 @@ fn inspect_text(path: &str, bytes: &[u8]) -> Vec<Violation> {
             path,
             "crlf",
             "CRLF line ending found; use LF",
+        ));
+    }
+    if bytes
+        .iter()
+        .enumerate()
+        .any(|(index, byte)| *byte == b'\r' && bytes.get(index + 1) != Some(&b'\n'))
+    {
+        violations.push(Violation::new(
+            path,
+            "lone-cr",
+            "lone CR line ending found; use LF",
         ));
     }
     if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
@@ -423,20 +561,140 @@ fn inspect_text(path: &str, bytes: &[u8]) -> Vec<Violation> {
 }
 
 fn inspect_contents(path: &str, bytes: &[u8], policy: &Policy) -> Vec<Violation> {
-    if is_binary(path, policy) {
-        return Vec::new();
+    let class = artifact_class(path, policy);
+    let mut violations = Vec::new();
+    if let Some(class) = class {
+        if bytes.len() > class.max_size_bytes {
+            violations.push(Violation::new(
+                path,
+                "file-size",
+                format!(
+                    "{} bytes exceeds {} for class {}",
+                    bytes.len(),
+                    class.max_size_bytes,
+                    class.id
+                ),
+            ));
+        }
+        if class.kind == "binary" {
+            violations.extend(validate_magic(path, bytes, class, policy));
+            return violations;
+        }
+        if bytes.is_empty() && class.empty_allowed {
+            return violations;
+        }
+    } else if is_binary(path, policy) {
+        return violations;
     }
     if bytes.is_empty()
         && policy
             .empty_filenames
             .iter()
-            .any(|name| path.ends_with(name))
+            .any(|name| file_name(path) == Some(name.as_str()))
     {
-        return Vec::new();
+        return violations;
     }
-    let mut violations = inspect_text(path, bytes);
+    violations.extend(inspect_text(path, bytes));
     violations.extend(inspect_manifest_paths(path, bytes, policy));
     violations
+}
+
+fn artifact_class<'a>(path: &str, policy: &'a Policy) -> Option<&'a ArtifactClass> {
+    policy.artifact_classes.iter().find(|class| {
+        class.paths.iter().any(|candidate| candidate == path)
+            || class
+                .filenames
+                .iter()
+                .any(|candidate| file_name(path) == Some(candidate.as_str()))
+            || class
+                .extensions
+                .iter()
+                .any(|candidate| file_extension(path) == Some(candidate.as_str()))
+    })
+}
+
+fn validate_magic(
+    path: &str,
+    bytes: &[u8],
+    class: &ArtifactClass,
+    policy: &Policy,
+) -> Vec<Violation> {
+    if !class.paths.is_empty() {
+        return Vec::new();
+    }
+    let Some(extension) = file_extension(path) else {
+        return Vec::new();
+    };
+    let signatures = policy
+        .magic_signatures
+        .iter()
+        .filter(|signature| signature.extension == extension)
+        .collect::<Vec<_>>();
+    if signatures.is_empty() {
+        return Vec::new();
+    }
+    let matches = signatures.iter().any(|signature| {
+        let Ok(expected) = decode_hex(&signature.bytes) else {
+            return false;
+        };
+        bytes
+            .get(signature.offset..signature.offset.saturating_add(expected.len()))
+            .is_some_and(|actual| actual == expected.as_slice())
+    });
+    if matches {
+        Vec::new()
+    } else {
+        vec![Violation::new(
+            path,
+            "binary-signature",
+            format!("binary class {extension} does not match a registered magic signature"),
+        )]
+    }
+}
+
+fn decode_hex(value: &str) -> std::result::Result<Vec<u8>, ()> {
+    if !value.len().is_multiple_of(2) {
+        return Err(());
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&value[index..index + 2], 16).map_err(|_| ()))
+        .collect()
+}
+
+fn validate_attributes(
+    root: &RepositoryRoot,
+    policy: &Policy,
+    source: SourceKind,
+    contents: &BTreeMap<String, BlobData>,
+) -> Vec<Violation> {
+    let bytes = match source {
+        SourceKind::Worktree => fs::read(root.join(ATTRIBUTES_PATH)).ok(),
+        SourceKind::Index | SourceKind::Tree => match contents.get(ATTRIBUTES_PATH) {
+            Some(BlobData::Bytes(bytes)) => Some(bytes.clone()),
+            _ => None,
+        },
+    };
+    let Some(bytes) = bytes else {
+        return vec![Violation::new(
+            ATTRIBUTES_PATH,
+            "attributes-coverage",
+            format!("{ATTRIBUTES_PATH} is absent from the selected source"),
+        )];
+    };
+    let source = String::from_utf8_lossy(&bytes);
+    policy
+        .attributes_rules
+        .iter()
+        .filter(|required| !source.lines().any(|line| line.trim() == required.as_str()))
+        .map(|required| {
+            Violation::new(
+                ATTRIBUTES_PATH,
+                "attributes-coverage",
+                format!("missing policy rule {required:?}"),
+            )
+        })
+        .collect()
 }
 
 fn inspect_manifest_paths(path: &str, bytes: &[u8], policy: &Policy) -> Vec<Violation> {
@@ -600,10 +858,13 @@ fn is_governed(path: &str, roots: &[String]) -> bool {
 }
 
 fn is_binary(path: &str, policy: &Policy) -> bool {
+    if artifact_class(path, policy).is_some_and(|class| class.kind == "binary") {
+        return true;
+    }
     policy
         .binary_filenames
         .iter()
-        .any(|name| path.ends_with(name))
+        .any(|name| file_name(path) == Some(name.as_str()))
         || file_extension(path).is_some_and(|extension| {
             policy
                 .binary_extensions
@@ -623,190 +884,15 @@ fn file_name(path: &str) -> Option<&str> {
 }
 
 fn is_reserved_windows_name(component: &str, policy: &Policy) -> bool {
-    let stem = component.split('.').next().unwrap_or_default();
+    let trimmed = component.trim_end_matches([' ', '.']);
+    let stem = trimmed.split('.').next().unwrap_or_default();
     policy
         .reserved_windows_names
         .iter()
         .any(|reserved| reserved.eq_ignore_ascii_case(stem))
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().fold(String::new(), |mut output, byte| {
-        write!(output, "{byte:02x}").expect("writing a String cannot fail");
-        output
-    })
-}
-
 #[cfg(test)]
-mod tests {
-    use super::{
-        IndexEntry, Policy, Violation, collision_violations, inspect_manifest_paths, inspect_path,
-        inspect_text, is_binary, manifest_escapes_repository, normalized_path, parse_index,
-        validate_mode,
-    };
-
-    fn policy() -> Policy {
-        Policy {
-            version: 1,
-            max_path_length: 240,
-            case_mode: "reject".to_owned(),
-            unicode_normalization: "nfc".to_owned(),
-            symlinks: "reject".to_owned(),
-            governed_roots: vec!["<root>".to_owned(), "fixtures".to_owned()],
-            allowed_extensions: vec!["md".to_owned(), "raw".to_owned(), "toml".to_owned()],
-            allowed_filenames: vec!["LICENSE".to_owned()],
-            empty_filenames: vec![".gitkeep".to_owned()],
-            binary_extensions: vec!["raw".to_owned()],
-            binary_filenames: Vec::new(),
-            executable_paths: vec!["scripts/run.sh".to_owned()],
-            manifest_extensions: vec!["toml".to_owned()],
-            reserved_windows_names: vec!["CON".to_owned(), "NUL".to_owned()],
-        }
-    }
-
-    #[test]
-    fn synthetic_index_fixture_preserves_modes_and_paths() {
-        let output = b"100644 deadbeef 0\tREADME.md\0\
-100755 deadbeef 0\tscripts/run.sh\0";
-        let entries = parse_index(output).expect("synthetic index parses");
-        assert_eq!(entries[0].mode, 0o100_644);
-        assert_eq!(entries[0].path, "README.md");
-        assert_eq!(entries[1].mode, 0o100_755);
-        assert_eq!(entries[1].path, "scripts/run.sh");
-    }
-
-    #[test]
-    fn executable_mode_drift_is_reported_as_a_stable_rule() {
-        let mut violations = Vec::new();
-        validate_mode(
-            &IndexEntry {
-                mode: 0o100_644,
-                path: "scripts/run.sh".to_owned(),
-                valid_utf8: true,
-            },
-            &policy(),
-            &mut violations,
-        );
-        assert_eq!(violations[0].path, "scripts/run.sh");
-        assert_eq!(violations[0].rule, "executable-bit");
-    }
-
-    #[test]
-    fn text_fixture_rules_cover_crlf_bom_invalid_utf8_nul_and_newlines() {
-        let violations = inspect_text("fixture.md", b"\xef\xbb\xbfbad\r\n\xff\0\n\n");
-        let rules = violations
-            .iter()
-            .map(|violation| violation.rule.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            rules,
-            ["crlf", "bom", "nul", "invalid-utf8", "extra-final-newline"]
-        );
-    }
-
-    #[test]
-    fn binary_fixture_is_not_decoded_as_text() {
-        let policy = policy();
-        assert!(is_binary("fixtures/picture.raw", &policy));
-        assert!(super::inspect_contents("picture.raw", &[0, 0xff, 0], &policy).is_empty());
-    }
-
-    #[test]
-    fn path_fixtures_cover_windows_portability_and_manifest_escape() {
-        let policy = policy();
-        let violations = inspect_path("fixtures/CON.txt", &policy);
-        assert!(violations.iter().any(|violation| {
-            violation.path == "fixtures/CON.txt" && violation.rule == "windows-reserved-name"
-        }));
-        assert!(
-            inspect_path("fixtures/name. ", &policy)
-                .iter()
-                .any(|violation| violation.rule == "trailing-space-dot")
-        );
-        assert!(
-            inspect_path("fixtures/notLICENSE", &policy)
-                .iter()
-                .any(|violation| violation.rule == "extension")
-        );
-        assert!(manifest_escapes_repository(
-            "crates/rusttable-core/Cargo.toml",
-            "../../../outside"
-        ));
-        assert!(!manifest_escapes_repository(
-            "crates/rusttable-core/Cargo.toml",
-            "../rusttable-image"
-        ));
-        let violations = inspect_manifest_paths(
-            "fixtures/manifest.toml",
-            b"path = \"../../outside\"\n",
-            &Policy {
-                manifest_extensions: vec!["toml".to_owned()],
-                ..policy
-            },
-        );
-        assert_eq!(violations[0].rule, "manifest-path-traversal");
-    }
-
-    #[test]
-    fn case_and_unicode_normalization_collisions_are_deterministic() {
-        let composed = "fixtures/Caf\u{e9}.toml".to_owned();
-        let decomposed = "fixtures/Cafe\u{301}.toml".to_owned();
-        assert_eq!(normalized_path(&composed), normalized_path(&decomposed));
-        let mut normalized = std::collections::BTreeMap::new();
-        normalized.insert(
-            "fixtures/café.toml".to_owned(),
-            vec![composed.clone(), decomposed.clone()],
-        );
-        let violations = collision_violations(&normalized, "unicode-normalization-collision");
-        assert_eq!(violations.len(), 2);
-        assert_eq!(violations[0].path, decomposed);
-        assert_eq!(violations[0].rule, "unicode-normalization-collision");
-        let mut case = std::collections::BTreeMap::new();
-        case.insert(
-            "fixtures/readme.md".to_owned(),
-            vec![
-                "fixtures/README.md".to_owned(),
-                "fixtures/readme.md".to_owned(),
-            ],
-        );
-        assert_eq!(collision_violations(&case, "case-collision").len(), 2);
-        case.insert(
-            "fixtures/duplicate.md".to_owned(),
-            vec![
-                "fixtures/duplicate.md".to_owned(),
-                "fixtures/duplicate.md".to_owned(),
-            ],
-        );
-        assert_eq!(collision_violations(&case, "case-collision").len(), 2);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn symlink_fixture_is_inspected_without_following_the_target() {
-        use std::os::unix::fs::symlink;
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let directory = std::env::temp_dir().join(format!(
-            "rusttable-file-policy-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock")
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&directory).expect("fixture directory");
-        std::fs::write(directory.join("target.md"), b"target\n").expect("target");
-        symlink("target.md", directory.join("link.md")).expect("symlink");
-        let metadata = std::fs::symlink_metadata(directory.join("link.md")).expect("metadata");
-        assert!(metadata.file_type().is_symlink());
-        std::fs::remove_dir_all(directory).expect("cleanup");
-    }
-
-    #[test]
-    fn violation_display_contains_exact_path_and_rule() {
-        let violation = Violation::new("fixtures/a.md", "bom", "UTF-8 BOM is not allowed");
-        assert_eq!(
-            violation.to_string(),
-            "fixtures/a.md: bom: UTF-8 BOM is not allowed"
-        );
-    }
-}
+#[cfg(test)]
+#[path = "files_tests.rs"]
+mod tests;
