@@ -36,10 +36,12 @@ fn pointwise_reports_one_pixel_and_bounded_artifacts() {
     assert_eq!(receipt.outliers[0].x, 1);
     assert_eq!(receipt.artifacts[0].kind, ArtifactKind::HeatmapRgba8);
     assert_eq!(receipt.artifacts[1].kind, ArtifactKind::BlinkRgba32);
-    assert_eq!(receipt.artifacts[0].bytes.len(), 2 * 4);
-    assert!(receipt.artifacts[0].validate().is_ok());
-    assert!(receipt.artifacts[1].validate().is_ok());
-    let planes = receipt.artifacts[1].blink_planes().expect("blink planes");
+    assert_eq!(receipt.artifact_payloads()[0].bytes.len(), 2 * 4);
+    assert!(receipt.artifact_payloads()[0].validate().is_ok());
+    assert!(receipt.artifact_payloads()[1].validate().is_ok());
+    let planes = receipt.artifact_payloads()[1]
+        .blink_planes()
+        .expect("blink planes");
     assert_eq!(planes.source.len(), source.pixels.len());
     assert_eq!(planes.reference.len(), source.pixels.len());
 }
@@ -104,7 +106,7 @@ fn built_in_policies_round_trip_and_schema_v1_is_rejected() {
     )
     .expect("receipt");
     let mut old = receipt.stable_json().expect("receipt JSON");
-    old = old.replacen("\"schema_version\":2", "\"schema_version\":1", 1);
+    old = old.replacen("\"schema_version\":3", "\"schema_version\":2", 1);
     assert!(rusttable_testkit::image_diff::DiffReceipt::from_json(&old).is_err());
 }
 
@@ -124,6 +126,7 @@ fn normalization_keeps_alpha_linear_and_unpremultiplies_rgb_only() {
         alpha: AlphaMode::Premultiplied,
         profile: CanonicalProfile::Srgb,
         transfer: TransferFunction::Srgb,
+        unpremultiply_epsilon: 1.0e-8,
         pixels: vec![0.25, 0.125, 0.0, 0.5, 0.7, 0.8, 0.9, 0.0],
     };
     let normalized = normalize(&input, CanonicalProfile::Srgb, None).expect("normalize");
@@ -166,6 +169,7 @@ fn comparison_rejects_noncanonical_or_mismatched_profiles() {
         alpha: AlphaMode::Straight,
         profile: CanonicalProfile::DisplayP3,
         transfer: TransferFunction::Linear,
+        unpremultiply_epsilon: 1.0e-8,
         pixels: vec![0.2, 0.3, 0.4, 1.0],
     };
     assert!(normalize(&input, CanonicalProfile::Srgb, None).is_err());
@@ -223,6 +227,41 @@ fn alpha_is_compared_as_linear_coverage_and_infinities_are_explicit() {
     policy.allow_matching_infinities = true;
     let accepted = compare(&infinity, &infinity, &policy).expect("permitted infinity receipt");
     assert!(accepted.passed);
+}
+
+#[test]
+fn alpha_weight_is_applied_once_and_reports_raw_alpha_metrics() {
+    let source = canonical(1, 1, vec![0.0, 0.0, 0.0, 0.0]);
+    let reference = canonical(1, 1, vec![0.0, 0.0, 0.0, 1.0]);
+    let mut policy = DiffPolicy::for_class(ToleranceClass::Pointwise);
+    policy.alpha_weight = 2.0;
+    let receipt = compare(&source, &reference, &policy).expect("weighted comparison");
+    assert!(receipt.metrics.maximum_rgb_absolute_error.abs() < f32::EPSILON);
+    assert!((receipt.metrics.maximum_alpha_absolute_error - 1.0).abs() < f32::EPSILON);
+    assert!((receipt.metrics.weighted_maximum_absolute_error - 2.0).abs() < f32::EPSILON);
+    assert!((receipt.metrics.alpha_rmse - 1.0).abs() < 1.0e-6);
+    assert!((receipt.metrics.rmse - (4.0_f32 / 7.0).sqrt()).abs() < 1.0e-6);
+}
+
+#[test]
+fn normalization_rejects_invalid_gamma_and_nonfinite_samples() {
+    let mut input = ImageInput::rgba(1, 1, vec![0.2, 0.3, 0.4, 1.0]);
+    input.transfer = TransferFunction::Gamma(0.0);
+    assert!(normalize(&input, CanonicalProfile::Srgb, None).is_err());
+    input.transfer = TransferFunction::Linear;
+    input.pixels[0] = f32::NAN;
+    assert!(normalize(&input, CanonicalProfile::Srgb, None).is_err());
+}
+
+#[test]
+fn artifact_budget_fails_before_evidence_allocation() {
+    let image = ImageBuffer::rgba(2, 1, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]);
+    let mut policy = DiffPolicy::for_class(ToleranceClass::Pointwise);
+    policy.include_heatmap = true;
+    policy.include_blink = true;
+    policy.artifact_budget_bytes = 1;
+    let error = compare(&image, &image, &policy).expect_err("artifact budget");
+    assert!(error.to_string().contains("artifact"));
 }
 
 #[test]

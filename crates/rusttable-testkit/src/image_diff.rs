@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
+use std::fmt::Write;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[path = "image_diff_artifacts.rs"]
 mod artifacts;
@@ -9,10 +11,15 @@ mod color;
 use artifacts::make_artifacts;
 pub use color::ciede2000;
 use color::{converter_error, delta_e_2000};
+#[path = "image_diff_receipt.rs"]
+mod image_diff_receipt;
+pub use image_diff_receipt::DiffReceipt;
 
-pub const DIFF_SCHEMA_VERSION: u32 = 2;
+pub const DIFF_SCHEMA_VERSION: u32 = 3;
 pub const MAX_OUTLIERS: usize = 32;
+pub const MAX_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_NEIGHBORHOOD_RADIUS: u32 = 8;
+const DEFAULT_UNPREMULTIPLY_EPSILON: f32 = 1.0e-8;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ToleranceClass {
@@ -86,7 +93,13 @@ pub struct ImageInput {
     pub alpha: AlphaMode,
     pub profile: CanonicalProfile,
     pub transfer: TransferFunction,
+    #[serde(default = "default_unpremultiply_epsilon")]
+    pub unpremultiply_epsilon: f32,
     pub pixels: Vec<f32>,
+}
+
+const fn default_unpremultiply_epsilon() -> f32 {
+    DEFAULT_UNPREMULTIPLY_EPSILON
 }
 
 impl ImageInput {
@@ -104,6 +117,7 @@ impl ImageInput {
             alpha: AlphaMode::Straight,
             profile: CanonicalProfile::Srgb,
             transfer: TransferFunction::Linear,
+            unpremultiply_epsilon: DEFAULT_UNPREMULTIPLY_EPSILON,
             pixels,
         }
     }
@@ -196,6 +210,7 @@ impl ImageBuffer {
 ///
 /// Returns a typed error for invalid dimensions, layout, channel count, or an
 /// undeclared profile conversion.
+#[allow(clippy::too_many_lines)]
 pub fn normalize(
     input: &ImageInput,
     target: CanonicalProfile,
@@ -211,6 +226,21 @@ pub fn normalize(
             source: input.channels,
             reference: 4,
         });
+    }
+    if !input.unpremultiply_epsilon.is_finite()
+        || input.unpremultiply_epsilon <= 0.0
+        || input.unpremultiply_epsilon > 1.0
+    {
+        return Err(DiffError::InvalidImage(
+            "unpremultiply epsilon must be finite, positive, and at most one".to_owned(),
+        ));
+    }
+    if let TransferFunction::Gamma(gamma) = input.transfer
+        && (!gamma.is_finite() || gamma <= 0.0 || gamma > 32.0)
+    {
+        return Err(DiffError::InvalidImage(
+            "gamma must be finite, positive, and at most 32".to_owned(),
+        ));
     }
     let row_len = usize::try_from(input.width)
         .ok()
@@ -246,15 +276,25 @@ pub fn normalize(
                 AlphaMode::Opaque => 1.0,
                 _ => input.pixels[offset + 3],
             };
+            if !alpha.is_finite() || !(0.0..=1.0).contains(&alpha) {
+                return Err(DiffError::InvalidImage(
+                    "alpha must be finite and within [0, 1]".to_owned(),
+                ));
+            }
             let mut rgb = [
                 input.pixels[offset],
                 input.pixels[offset + 1],
                 input.pixels[offset + 2],
             ];
+            if rgb.iter().any(|value| !value.is_finite()) {
+                return Err(DiffError::InvalidImage(
+                    "RGB samples must be finite".to_owned(),
+                ));
+            }
             if input.alpha == AlphaMode::Premultiplied {
-                if alpha == 0.0 {
+                if alpha <= input.unpremultiply_epsilon {
                     rgb = [0.0; 3];
-                } else if alpha > 0.0 {
+                } else {
                     for channel in &mut rgb {
                         *channel /= alpha;
                     }
@@ -267,6 +307,11 @@ pub fn normalize(
                 rgb = converter
                     .and_then(|converter| converter.convert(input.profile, target, rgb))
                     .ok_or_else(converter_error)?;
+            }
+            if rgb.iter().any(|value| !value.is_finite()) {
+                return Err(DiffError::InvalidImage(
+                    "normalized RGB samples must be finite".to_owned(),
+                ));
             }
             pixels.extend_from_slice(&rgb);
             pixels.push(alpha);
@@ -296,6 +341,7 @@ pub struct DiffPolicy {
     pub allow_matching_infinities: bool,
     pub include_heatmap: bool,
     pub include_blink: bool,
+    pub artifact_budget_bytes: usize,
 }
 
 impl DiffPolicy {
@@ -323,6 +369,7 @@ impl DiffPolicy {
             allow_matching_infinities: false,
             include_heatmap: false,
             include_blink: false,
+            artifact_budget_bytes: MAX_ARTIFACT_BYTES,
         }
     }
 
@@ -366,6 +413,11 @@ impl DiffPolicy {
                 "report bound exceeds policy limit".to_owned(),
             ));
         }
+        if self.artifact_budget_bytes == 0 || self.artifact_budget_bytes > MAX_ARTIFACT_BYTES {
+            return Err(DiffError::InvalidPolicy(
+                "artifact budget exceeds the policy limit".to_owned(),
+            ));
+        }
         Ok(())
     }
 }
@@ -373,7 +425,12 @@ impl DiffPolicy {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DiffMetrics {
     pub maximum_absolute_error: f32,
+    pub maximum_rgb_absolute_error: f32,
+    pub maximum_alpha_absolute_error: f32,
+    pub weighted_maximum_absolute_error: f32,
     pub maximum_relative_error: f32,
+    pub rgb_rmse: f32,
+    pub alpha_rmse: f32,
     pub rmse: f32,
     pub psnr: Option<f32>,
     pub maximum_delta_e: f32,
@@ -394,12 +451,27 @@ pub struct DiffOutlier {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct DiffArtifact {
+pub struct DiffArtifactPayload {
     pub schema_version: u32,
     pub kind: ArtifactKind,
     pub width: u32,
     pub height: u32,
     pub bytes: Vec<u8>,
+}
+
+pub type DiffArtifact = DiffArtifactPayload;
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DiffArtifactDescriptor {
+    pub schema_version: u32,
+    pub kind: ArtifactKind,
+    pub width: u32,
+    pub height: u32,
+    pub media_type: String,
+    pub byte_size: usize,
+    pub sha256: String,
+    pub artifact_id: String,
+    pub path_alias: String,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -414,7 +486,7 @@ pub struct BlinkPlanes {
     pub reference: Vec<f32>,
 }
 
-impl DiffArtifact {
+impl DiffArtifactPayload {
     /// Validates the versioned artifact envelope and exact byte length.
     ///
     /// # Errors
@@ -434,57 +506,46 @@ impl DiffArtifact {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct DiffReceipt {
-    pub schema_version: u32,
-    pub policy: DiffPolicy,
-    pub metrics: DiffMetrics,
-    pub outliers: Vec<DiffOutlier>,
-    pub artifacts: Vec<DiffArtifact>,
-    pub passed: bool,
-}
-
-impl DiffReceipt {
-    /// Serializes a validated receipt without embedding an unbounded image dump.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the receipt or one of its artifacts is invalid or cannot serialize.
-    pub fn stable_json(&self) -> Result<String, DiffError> {
-        self.validate()?;
-        serde_json::to_string(self).map_err(|error| DiffError::Serialization(error.to_string()))
+impl DiffArtifactDescriptor {
+    fn from_payload(payload: &DiffArtifactPayload) -> Self {
+        let digest = Sha256::digest(&payload.bytes);
+        let mut sha256 = String::with_capacity(64);
+        for byte in digest {
+            write!(&mut sha256, "{byte:02x}").expect("writing to a string cannot fail");
+        }
+        Self {
+            schema_version: payload.schema_version,
+            kind: payload.kind,
+            width: payload.width,
+            height: payload.height,
+            media_type: match payload.kind {
+                ArtifactKind::HeatmapRgba8 => "image/png".to_owned(),
+                ArtifactKind::BlinkRgba32 => "application/x-rusttable-blink+binary".to_owned(),
+            },
+            byte_size: payload.bytes.len(),
+            sha256: sha256.clone(),
+            artifact_id: format!("sha256:{sha256}"),
+            path_alias: format!(
+                "artifacts/{:?}-{}x{}",
+                payload.kind, payload.width, payload.height
+            ),
+        }
     }
 
-    /// Decodes only the current receipt schema; old receipts fail closed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for malformed JSON, an old schema, or invalid artifacts.
-    pub fn from_json(json: &str) -> Result<Self, DiffError> {
-        let receipt: Self = serde_json::from_str(json)
-            .map_err(|error| DiffError::Serialization(error.to_string()))?;
-        receipt.validate()?;
-        Ok(receipt)
-    }
-
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the receipt schema, policy, or bounded artifacts are invalid.
-    pub fn validate(&self) -> Result<(), DiffError> {
-        if self.schema_version != DIFF_SCHEMA_VERSION {
+    fn validate(&self) -> Result<(), DiffError> {
+        if self.schema_version != DIFF_SCHEMA_VERSION
+            || self.byte_size > MAX_ARTIFACT_BYTES
+            || self.sha256.len() != 64
+            || !self
+                .sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+            || self.artifact_id != format!("sha256:{}", self.sha256)
+            || self.path_alias.is_empty()
+        {
             return Err(DiffError::InvalidReceipt(
-                "receipt schema is not current".to_owned(),
+                "invalid artifact descriptor".to_owned(),
             ));
-        }
-        self.policy.validate()?;
-        if self.outliers.len() > MAX_OUTLIERS {
-            return Err(DiffError::InvalidReceipt(
-                "receipt retains more than the bounded outlier limit".to_owned(),
-            ));
-        }
-        for artifact in &self.artifacts {
-            artifact.validate()?;
         }
         Ok(())
     }
@@ -597,7 +658,11 @@ pub fn compare(
     }
     metrics.finish(pixel_count, policy.psnr_peak);
     let metrics = metrics.into_metrics();
-    let artifacts = make_artifacts(source, reference, policy, &severities)?;
+    let artifact_payloads = make_artifacts(source, reference, policy, &severities)?;
+    let artifacts = artifact_payloads
+        .iter()
+        .map(DiffArtifactDescriptor::from_payload)
+        .collect();
     let passed = metrics.maximum_absolute_error <= policy.max_absolute_error
         && metrics.maximum_relative_error <= policy.max_relative_error
         && metrics.rmse <= policy.max_rmse
@@ -611,6 +676,7 @@ pub fn compare(
         metrics,
         outliers: retained.finish(),
         artifacts,
+        artifact_payloads,
         passed,
     };
     receipt.validate()?;
@@ -711,8 +777,13 @@ fn compare_outlier(left: &ScoredOutlier, right: &ScoredOutlier) -> Ordering {
 #[derive(Default)]
 struct MetricsAccumulator {
     maximum_absolute_error: f32,
+    maximum_rgb_absolute_error: f32,
+    maximum_alpha_absolute_error: f32,
     maximum_relative_error: f32,
+    rgb_squared_error: f64,
+    alpha_squared_error: f64,
     squared_error: f64,
+    pixel_count: usize,
     maximum_delta_e: f32,
     changed_pixel_count: usize,
     outlier_count: usize,
@@ -731,7 +802,15 @@ impl MetricsAccumulator {
 
     fn observe(&mut self, observation: &Observation) {
         let maximum = observation.errors.iter().copied().fold(0.0, f32::max);
+        let rgb_maximum = observation.raw_errors[..3]
+            .iter()
+            .copied()
+            .fold(0.0, f32::max);
         self.maximum_absolute_error = self.maximum_absolute_error.max(maximum);
+        self.maximum_rgb_absolute_error = self.maximum_rgb_absolute_error.max(rgb_maximum);
+        self.maximum_alpha_absolute_error = self
+            .maximum_alpha_absolute_error
+            .max(observation.raw_errors[3]);
         self.maximum_delta_e = self.maximum_delta_e.max(observation.delta_e);
         self.maximum_relative_error = self.maximum_relative_error.max(observation.relative_error);
         if observation.invalid || maximum > 0.0 {
@@ -740,19 +819,20 @@ impl MetricsAccumulator {
         if observation.invalid {
             self.nonfinite_mismatch_count += 1;
         }
-        for (channel, error) in observation.errors.iter().enumerate() {
-            let weight = if channel == 3 {
-                self.alpha_weight * self.alpha_weight
-            } else {
-                1.0
-            };
-            self.squared_error += f64::from(*error) * f64::from(*error) * f64::from(weight);
+        for error in &observation.raw_errors[..3] {
+            self.rgb_squared_error += f64::from(*error) * f64::from(*error);
+        }
+        self.alpha_squared_error +=
+            f64::from(observation.raw_errors[3]) * f64::from(observation.raw_errors[3]);
+        for error in &observation.errors {
+            self.squared_error += f64::from(*error) * f64::from(*error);
         }
     }
 
     #[allow(clippy::cast_precision_loss)]
     #[allow(clippy::cast_possible_truncation)]
     fn finish(&mut self, pixels: usize, peak: Option<f32>) {
+        self.pixel_count = pixels;
         let channel_weight = 3.0 + self.alpha_weight * self.alpha_weight;
         self.squared_error /= pixels.max(1) as f64 * f64::from(channel_weight);
         self.psnr = peak.and_then(|peak| {
@@ -764,10 +844,19 @@ impl MetricsAccumulator {
     }
 
     #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_precision_loss)]
     fn into_metrics(self) -> DiffMetrics {
+        let pixels = self.pixel_count.max(1) as f64;
+        let rgb_rmse = (self.rgb_squared_error / (pixels * 3.0)).sqrt() as f32;
+        let alpha_rmse = (self.alpha_squared_error / pixels).sqrt() as f32;
         DiffMetrics {
             maximum_absolute_error: self.maximum_absolute_error,
+            maximum_rgb_absolute_error: self.maximum_rgb_absolute_error,
+            maximum_alpha_absolute_error: self.maximum_alpha_absolute_error,
+            weighted_maximum_absolute_error: self.maximum_absolute_error,
             maximum_relative_error: self.maximum_relative_error,
+            rgb_rmse,
+            alpha_rmse,
             rmse: self.squared_error.sqrt() as f32,
             psnr: self.psnr,
             maximum_delta_e: self.maximum_delta_e,
@@ -781,6 +870,7 @@ impl MetricsAccumulator {
 #[derive(Clone, Copy)]
 struct Observation {
     errors: [f32; 4],
+    raw_errors: [f32; 4],
     relative_error: f32,
     delta_e: f32,
     invalid: bool,
@@ -801,6 +891,9 @@ fn symmetric_neighborhood_match(
     Observation {
         errors: std::array::from_fn(|channel| {
             source_to_reference.errors[channel].max(reference_to_source.errors[channel])
+        }),
+        raw_errors: std::array::from_fn(|channel| {
+            source_to_reference.raw_errors[channel].max(reference_to_source.raw_errors[channel])
         }),
         relative_error: source_to_reference
             .relative_error
@@ -852,10 +945,12 @@ fn observe_pair(
     profile: CanonicalProfile,
     policy: &DiffPolicy,
 ) -> Observation {
+    let mut raw_errors = [0.0; 4];
     let mut errors = [0.0; 4];
     let mut invalid = false;
     for channel in 0..4 {
         let (error, valid) = scalar_error(source[channel], reference[channel], policy);
+        raw_errors[channel] = error;
         errors[channel] = if channel == 3 {
             error * policy.alpha_weight
         } else {
@@ -903,6 +998,7 @@ fn observe_pair(
     };
     Observation {
         errors,
+        raw_errors,
         relative_error,
         delta_e,
         invalid,

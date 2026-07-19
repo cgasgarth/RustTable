@@ -1,15 +1,20 @@
 use super::{
-    ArtifactKind, BlinkPlanes, DIFF_SCHEMA_VERSION, DiffArtifact, DiffError, DiffPolicy,
-    ImageBuffer,
+    ArtifactKind, BlinkPlanes, DIFF_SCHEMA_VERSION, DiffArtifactPayload, DiffError, DiffPolicy,
+    ImageBuffer, MAX_ARTIFACT_BYTES,
 };
 
 const BLINK_MAGIC: &[u8; 8] = b"RTBLKBLK";
 const BLINK_SCHEMA_VERSION: u32 = 1;
 
-pub(super) fn validate(artifact: &DiffArtifact) -> Result<(), DiffError> {
+pub(super) fn validate(artifact: &DiffArtifactPayload) -> Result<(), DiffError> {
     if artifact.schema_version != DIFF_SCHEMA_VERSION {
         return Err(DiffError::Artifact(
             "unsupported artifact schema version".to_owned(),
+        ));
+    }
+    if artifact.bytes.len() > MAX_ARTIFACT_BYTES {
+        return Err(DiffError::Artifact(
+            "artifact exceeds evidence budget".to_owned(),
         ));
     }
     let pixels = super::checked_pixel_count(artifact.width, artifact.height)?;
@@ -31,7 +36,7 @@ pub(super) fn validate(artifact: &DiffArtifact) -> Result<(), DiffError> {
     Ok(())
 }
 
-pub(super) fn blink_planes(artifact: &DiffArtifact) -> Result<BlinkPlanes, DiffError> {
+pub(super) fn blink_planes(artifact: &DiffArtifactPayload) -> Result<BlinkPlanes, DiffError> {
     if artifact.kind != ArtifactKind::BlinkRgba32 {
         return Err(DiffError::Artifact(
             "artifact is not a blink plane".to_owned(),
@@ -83,19 +88,45 @@ pub(super) fn make_artifacts(
     reference: &ImageBuffer,
     policy: &DiffPolicy,
     severities: &[f32],
-) -> Result<Vec<DiffArtifact>, DiffError> {
+) -> Result<Vec<DiffArtifactPayload>, DiffError> {
     let pixel_count = source.pixel_count()?;
     if policy.include_heatmap && severities.len() != pixel_count {
         return Err(DiffError::Artifact(
             "severity plane length mismatch".to_owned(),
         ));
     }
+    let heatmap_bytes = if policy.include_heatmap {
+        pixel_count
+            .checked_mul(4)
+            .ok_or_else(|| DiffError::Artifact("heatmap allocation overflow".to_owned()))?
+    } else {
+        0
+    };
+    let blink_bytes = if policy.include_blink {
+        let plane_len = source
+            .pixels
+            .len()
+            .checked_mul(4)
+            .ok_or_else(|| DiffError::Artifact("blink allocation overflow".to_owned()))?;
+        BLINK_MAGIC
+            .len()
+            .checked_add(4 + 4 + 4 + 8 + 8)
+            .and_then(|header| header.checked_add(plane_len.checked_mul(2)?))
+            .ok_or_else(|| DiffError::Artifact("blink allocation overflow".to_owned()))?
+    } else {
+        0
+    };
+    let total_bytes = heatmap_bytes
+        .checked_add(blink_bytes)
+        .ok_or_else(|| DiffError::Artifact("artifact budget overflow".to_owned()))?;
+    if total_bytes > policy.artifact_budget_bytes || total_bytes > MAX_ARTIFACT_BYTES {
+        return Err(DiffError::Artifact(
+            "requested evidence exceeds the artifact budget".to_owned(),
+        ));
+    }
     let mut artifacts = Vec::new();
     if policy.include_heatmap {
-        let capacity = pixel_count
-            .checked_mul(4)
-            .ok_or_else(|| DiffError::Artifact("heatmap allocation overflow".to_owned()))?;
-        let mut bytes = Vec::with_capacity(capacity);
+        let mut bytes = Vec::with_capacity(heatmap_bytes);
         for severity in severities {
             let value = if severity.is_finite() {
                 severity_to_byte(*severity)
@@ -104,7 +135,7 @@ pub(super) fn make_artifacts(
             };
             bytes.extend_from_slice(&[value, 0, 0, 255]);
         }
-        artifacts.push(DiffArtifact {
+        artifacts.push(DiffArtifactPayload {
             schema_version: DIFF_SCHEMA_VERSION,
             kind: ArtifactKind::HeatmapRgba8,
             width: source.width,
@@ -132,7 +163,7 @@ pub(super) fn make_artifacts(
         bytes.extend_from_slice(&(plane_len as u64).to_le_bytes());
         encode_f32_plane(&mut bytes, &source.pixels);
         encode_f32_plane(&mut bytes, &reference.pixels);
-        artifacts.push(DiffArtifact {
+        artifacts.push(DiffArtifactPayload {
             schema_version: DIFF_SCHEMA_VERSION,
             kind: ArtifactKind::BlinkRgba32,
             width: source.width,
