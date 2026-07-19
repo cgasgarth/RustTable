@@ -71,17 +71,21 @@ mod tests {
         let started = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
         let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(9);
         assert!(modified.duration_since(started).is_err());
-        assert!(started
-            .duration_since(modified)
-            .is_ok_and(|age| age <= Duration::from_secs(2)));
+        assert!(
+            started
+                .duration_since(modified)
+                .is_ok_and(|age| age <= Duration::from_secs(2))
+        );
     }
 
     #[test]
     fn rejects_stale_artifacts_beyond_clock_skew() {
         let started = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
         let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(7);
-        assert!(started
-            .duration_since(modified)
-            .is_ok_and(|age| age > Duration::from_secs(2)));
+        assert!(
+            started
+                .duration_since(modified)
+                .is_ok_and(|age| age > Duration::from_secs(2))
+        );
     }
 }
