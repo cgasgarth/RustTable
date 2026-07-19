@@ -227,44 +227,12 @@ fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
             return Err("queue: duplicate issue number in API response".to_owned());
         }
     }
-    let children = by_number
-        .values()
-        .filter(|issue| issue.state == "open" && !issue.is_pull_request && is_child_issue(issue))
-        .cloned()
-        .collect::<Vec<_>>();
-    let mut normalized_titles = std::collections::BTreeMap::<String, u64>::new();
-    let mut parsed = Vec::with_capacity(children.len());
-    for issue in children {
-        let priority = priority_label(&issue)?.to_owned();
-        if let Some(prefix) = numeric_title_prefix(&issue.title) {
-            return Err(format!(
-                "issue #{}: numeric title prefix {prefix} is prohibited",
-                issue.number
-            ));
-        }
-        let title = normalize_outcome_title(&issue.title);
-        if let Some(previous) = normalized_titles.insert(title.to_ascii_lowercase(), issue.number) {
-            return Err(format!(
-                "queue: duplicate active outcome title between #{} and #{}",
-                previous, issue.number
-            ));
-        }
-        let depends_on = parse_dependencies(&issue)?;
-        for dependency in &depends_on {
-            if !by_number.contains_key(dependency) {
-                return Err(format!(
-                    "issue #{}: dependency #{} is outside the repository",
-                    issue.number, dependency
-                ));
-            }
-        }
-        parsed.push(ParsedQueueIssue {
-            issue,
-            title,
-            priority,
-            depends_on,
-        });
-    }
+    let parsed = parse_queue_issues(
+        by_number.values().filter(|issue| {
+            issue.state == "open" && !issue.is_pull_request && is_child_issue(issue)
+        }),
+        &by_number,
+    )?;
     detect_dependency_cycles(&parsed, &by_number)?;
     let readiness = parsed
         .iter()
@@ -289,8 +257,66 @@ fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
         .filter(|item| item.priority == "priority: P0" && readiness[&item.issue.number].is_empty())
         .map(|item| item.issue.number)
         .min();
+    let entries = build_queue_entries(&parsed, &readiness, selected_issue, ready_p0);
+    Ok(QueueReceipt {
+        repository: TARGET_REPOSITORY.to_owned(),
+        parent_issue: 158,
+        selected_issue,
+        issues: entries,
+    })
+}
+
+fn parse_queue_issues<'a, I>(
+    issues: I,
+    by_number: &std::collections::BTreeMap<u64, IssueSnapshot>,
+) -> Result<Vec<ParsedQueueIssue>, String>
+where
+    I: IntoIterator<Item = &'a IssueSnapshot>,
+{
+    let mut normalized_titles = std::collections::BTreeMap::<String, u64>::new();
+    let mut parsed = Vec::new();
+    for issue in issues {
+        let priority = priority_label(issue)?.to_owned();
+        if let Some(prefix) = numeric_title_prefix(&issue.title) {
+            return Err(format!(
+                "issue #{}: numeric title prefix {prefix} is prohibited",
+                issue.number
+            ));
+        }
+        let title = normalize_outcome_title(&issue.title);
+        if let Some(previous) = normalized_titles.insert(title.to_ascii_lowercase(), issue.number) {
+            return Err(format!(
+                "queue: duplicate active outcome title between #{} and #{}",
+                previous, issue.number
+            ));
+        }
+        let depends_on = parse_dependencies(issue)?;
+        for dependency in &depends_on {
+            if !by_number.contains_key(dependency) {
+                return Err(format!(
+                    "issue #{}: dependency #{} is outside the repository",
+                    issue.number, dependency
+                ));
+            }
+        }
+        parsed.push(ParsedQueueIssue {
+            issue: issue.clone(),
+            title,
+            priority,
+            depends_on,
+        });
+    }
+    Ok(parsed)
+}
+
+fn build_queue_entries(
+    parsed: &[ParsedQueueIssue],
+    readiness: &std::collections::BTreeMap<u64, Vec<String>>,
+    selected_issue: Option<u64>,
+    ready_p0: Option<u64>,
+) -> Vec<QueueEntry> {
     let mut entries = parsed
-        .into_iter()
+        .iter()
         .map(|item| {
             let blockers = &readiness[&item.issue.number];
             let ready = blockers.is_empty();
@@ -306,10 +332,10 @@ fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
             };
             QueueEntry {
                 issue: item.issue.number,
-                title: item.title,
+                title: item.title.clone(),
                 milestone: item.issue.milestone,
-                priority: item.priority,
-                depends_on: item.depends_on,
+                priority: item.priority.clone(),
+                depends_on: item.depends_on.clone(),
                 ready,
                 selected,
                 blocking_reason,
@@ -321,12 +347,7 @@ fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
             .cmp(&priority_rank(&right.priority))
             .then_with(|| left.issue.cmp(&right.issue))
     });
-    Ok(QueueReceipt {
-        repository: TARGET_REPOSITORY.to_owned(),
-        parent_issue: 158,
-        selected_issue,
-        issues: entries,
-    })
+    entries
 }
 
 fn verify_contract(event: &PullRequestEvent, api: &dyn ReadApi) -> Result<ContractReceipt, String> {

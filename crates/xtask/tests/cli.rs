@@ -79,7 +79,20 @@ fn workspace_dag_emits_a_clean_stable_receipt() {
     );
     assert_eq!(
         value["data"]["feature_contexts"].as_array().map(Vec::len),
-        Some(5)
+        Some(24)
+    );
+    assert_eq!(
+        value["data"]["platforms"]
+            .as_array()
+            .expect("platform receipt")
+            .iter()
+            .map(|target| target["triple"].as_str().expect("target triple"))
+            .collect::<Vec<_>>(),
+        vec![
+            "x86_64-unknown-linux-gnu",
+            "aarch64-apple-darwin",
+            "x86_64-pc-windows-msvc"
+        ]
     );
 }
 

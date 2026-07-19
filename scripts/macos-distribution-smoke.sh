@@ -15,6 +15,10 @@ for tool in "${required_tools[@]}"; do
 done
 
 root="$(git rev-parse --show-toplevel)"
+bun scripts/platform-support.ts --target-os macos --target-architecture aarch64 >/dev/null || {
+  printf 'macOS distribution target is absent from platform contract\n' >&2
+  exit 1
+}
 distribution_directory="$root/target/distribution"
 bundle="$root/target/release/bundle/macos/RustTable.app"
 executable="$bundle/Contents/MacOS/RustTable"

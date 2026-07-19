@@ -13,6 +13,8 @@
     "test:workspace-rust-version": "bun test scripts/workspace-rust-version.test.ts",
     "check:workspace-rust-version": "bun scripts/workspace-rust-version.ts",
     "test:workspace-layout": "bun test scripts/workspace-layout.test.ts",
+    "test:platform-support": "bun test scripts/platform-support.test.ts",
+    "check:platform-support": "bun scripts/platform-support.ts --json",
     "check:workspace-layout": "bash scripts/check-workspace-layout.sh",
     "test:pr-ci": "bash scripts/test-pr-ci.sh",
     "test:cache-workflow-policy": "bun test scripts/github/cache-workflow-policy.test.ts",

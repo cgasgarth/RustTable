@@ -7,10 +7,12 @@ trap 'rm -rf "$temporary_directory"' EXIT
 
 fixture="$temporary_directory/fixture"
 fake_tools="$temporary_directory/tools"
-mkdir -p "$fixture/scripts" "$fixture/crates/rusttable-app" "$fake_tools"
+mkdir -p "$fixture/scripts" "$fixture/architecture" "$fixture/crates/rusttable-app" "$fake_tools"
 cp "$root_directory/scripts/linux-distribution-smoke.sh" "$fixture/scripts/"
 cp "$root_directory/scripts/linux-artifact-identity.ts" "$fixture/scripts/"
+cp "$root_directory/scripts/platform-support.ts" "$fixture/scripts/"
 cp "$root_directory/scripts/with-validation-budget.sh" "$fixture/scripts/"
+cp "$root_directory/architecture/platform-support.toml" "$fixture/architecture/"
 cp "$root_directory/LICENSE" "$fixture/LICENSE"
 touch "$fixture/crates/rusttable-app/Cargo.toml"
 
@@ -47,6 +49,10 @@ exit 78
 EOF
 cat >"$fake_tools/bun" <<'EOF'
 #!/bin/sh
+if [ "$1" = scripts/platform-support.ts ]; then
+  printf 'x86_64-unknown-linux-gnu\n'
+  exit 0
+fi
 if [ "$1" = -e ]; then
   input="$(cat)"
   case "$input" in

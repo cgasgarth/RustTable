@@ -1,9 +1,8 @@
 # Authoritative local workspace ownership and dependency direction.
 # Keep package names and manifest paths synchronized with Cargo metadata.
-schema_version = 1
+schema_version = 2
 composition_root = "rusttable-app"
 tooling_packages = ["rusttable-parity", "rusttable-testkit", "xtask"]
-target_platforms = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 
 [[packages]]
 name = "rusttable-app"
@@ -74,6 +73,8 @@ role = "product"
 name = "rusttable-scripting"
 manifest = "crates/rusttable-scripting/Cargo.toml"
 role = "product"
+features = ["lua54-vendored", "lua54-system"]
+feature_sets = [["lua54-vendored", "lua54-system"]]
 
 [[packages]]
 name = "rusttable-testkit"
@@ -95,155 +96,207 @@ role = "tooling"
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-catalog"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-catalog-store"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-diagnostics"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-ui"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-scripting"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog-store"
 to = "rusttable-catalog"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog-store"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog-store"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-image-io"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-image-io"
 to = "rusttable-metadata"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-catalog"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-metadata"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-catalog-store"
 kind = "dev"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-metadata"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-metadata"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-processing"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-render"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-render"
 to = "rusttable-image"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-render"
 to = "rusttable-processing"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-ui"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-export"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "xtask"
 to = "rusttable-parity"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "xtask"
 to = "rusttable-testkit"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "xtask"
 to = "rusttable-scripting"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "xtask"
 to = "rusttable-core"
-contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
+
+# Direct third-party ownership is explicit. The source is deliberately exact so
+# a registry/git/path provenance change requires an architecture review.
+[[external_dependencies]]
+package = "clap"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["xtask"]
+
+[[external_dependencies]]
+package = "directories"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-app", "rusttable-diagnostics"]
+
+[[external_dependencies]]
+package = "futures"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-scripting"]
+
+[[external_dependencies]]
+package = "flate2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-testkit"]
+
+[[external_dependencies]]
+package = "iced"
+source = "git+https://github.com/iced-rs/iced.git?rev=56b706fcd35aa881baede77a696bbb842773fdc6#56b706fcd35aa881baede77a696bbb842773fdc6"
+source_packages = ["rusttable-app", "rusttable-ui"]
+
+[[external_dependencies]]
+package = "iced_test"
+source = "git+https://github.com/iced-rs/iced.git?rev=56b706fcd35aa881baede77a696bbb842773fdc6#56b706fcd35aa881baede77a696bbb842773fdc6"
+source_packages = ["rusttable-app", "rusttable-ui"]
+kinds = ["dev"]
+
+[[external_dependencies]]
+package = "image"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-image-io"]
+
+[[external_dependencies]]
+package = "kamadak-exif"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-metadata"]
+
+[[external_dependencies]]
+package = "mlua"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-scripting"]
+
+[[external_dependencies]]
+package = "postcard"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-catalog-store"]
+
+[[external_dependencies]]
+package = "redb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-catalog-store"]
+
+[[external_dependencies]]
+package = "serde"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-catalog-store", "rusttable-parity", "rusttable-scripting", "rusttable-testkit", "xtask"]
+
+[[external_dependencies]]
+package = "serde_json"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-scripting", "rusttable-testkit", "xtask"]
+
+[[external_dependencies]]
+package = "sha2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-core", "rusttable-export", "rusttable-import", "rusttable-parity", "rusttable-scripting", "rusttable-testkit", "xtask"]
+
+[[external_dependencies]]
+package = "toml"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-parity", "rusttable-testkit", "xtask"]
+
+[[external_dependencies]]
+package = "unicode-normalization-alignments"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+source_packages = ["rusttable-core", "xtask"]
