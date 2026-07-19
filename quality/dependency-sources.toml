@@ -1,0 +1,13 @@
+# Human-reviewed dependency provenance policy. Dependency updates must regenerate this receipt.
+schema = "rusttable.dependency-sources.v1"
+default_registry = "crates.io"
+lockfile = "Cargo.lock"
+exact_workspace_versions = true
+git_dependencies = "deny-unless-immutable-commit-exception"
+unreviewed_advisories = "deny"
+duplicate_minor_patch_lines = "deny"
+
+[exceptions]
+git = []
+duplicate_versions = []
+advisories = []

@@ -31,9 +31,9 @@ jobs:
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --no-self-update
-          rustup default 1.95.0
-          test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
+          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
+          rustup default beta-2026-07-17
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "beta-2026-07-17-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
@@ -47,7 +47,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-main-Linux-rust-1.95.0-${{ hashFiles('Cargo.lock', 'package.json') }}
+          key: rust-main-Linux-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
       - name: Run Linux full validation
         run: bash scripts/main-ci.sh
       - name: Verify workflow inventory
@@ -74,10 +74,10 @@ jobs:
           persist-credentials: false
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --no-self-update
-          rustup default 1.95.0
+          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
+          rustup default beta-2026-07-17
           active_toolchain="$(rustup show active-toolchain | awk '{print $1}')"
-          [[ "$active_toolchain" == 1.95.0-* ]]
+          [[ "$active_toolchain" == beta-2026-07-17-* ]]
       - name: Restore portable Cargo cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
@@ -85,7 +85,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-main-${{ matrix.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock') }}
+          key: rust-main-${{ matrix.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock') }}
       - name: Run portable workspace tests
         run: cargo test --workspace --all-targets --all-features --locked
 
@@ -107,9 +107,9 @@ jobs:
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --no-self-update
-          rustup default 1.95.0
-          test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
+          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
+          rustup default beta-2026-07-17
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "beta-2026-07-17-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
@@ -126,7 +126,7 @@ jobs:
             ~/.cargo/bin/cargo-deny
             ~/.cargo/advisory-dbs
             target
-          key: rust-security-Linux-rust-1.95.0-audit-0.22.2-deny-0.19.8-${{ hashFiles('Cargo.lock', 'package.json') }}
+          key: rust-security-Linux-rust-beta-2026-07-17-audit-0.22.2-deny-0.19.8-${{ hashFiles('Cargo.lock', 'package.json') }}
       - name: Install exact security tools
         run: |
           cargo install cargo-audit --version 0.22.2 --locked --force
@@ -158,9 +158,9 @@ jobs:
           persist-credentials: false
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --no-self-update
-          rustup default 1.95.0
-          test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
+          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
+          rustup default beta-2026-07-17
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "beta-2026-07-17-x86_64-unknown-linux-gnu"
       - name: Restore benchmark cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
@@ -168,7 +168,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-performance-Linux-rust-1.95.0-${{ hashFiles('Cargo.lock') }}
+          key: rust-performance-Linux-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock') }}
       - name: Run performance budgets
         run: bash scripts/performance-budgets.sh
       - name: Upload performance evidence
@@ -197,10 +197,10 @@ jobs:
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --no-self-update
-          rustup default 1.95.0
+          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
+          rustup default beta-2026-07-17
           active_toolchain="$(rustup show active-toolchain | awk '{print $1}')"
-          [[ "$active_toolchain" == 1.95.0-* ]]
+          [[ "$active_toolchain" == beta-2026-07-17-* ]]
       - name: Set up exact Bun toolchain
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
@@ -214,7 +214,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-distribution-${{ runner.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock', 'package.json') }}
+          key: rust-distribution-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
       - name: Run bounded distribution smoke
         run: bash scripts/with-validation-budget.sh 600 macos-distribution-smoke bash scripts/macos-distribution-smoke.sh
       - name: Upload distribution evidence
@@ -243,9 +243,9 @@ jobs:
         run: bash scripts/bun-pin.sh "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"
       - name: Set up exact Rust toolchain
         run: |
-          rustup toolchain install 1.95.0 --profile minimal --no-self-update
-          rustup default 1.95.0
-          test "$(rustup show active-toolchain | awk '{print $1}')" = "1.95.0-x86_64-unknown-linux-gnu"
+          rustup toolchain install beta-2026-07-17 --profile minimal --no-self-update
+          rustup default beta-2026-07-17
+          test "$(rustup show active-toolchain | awk '{print $1}')" = "beta-2026-07-17-x86_64-unknown-linux-gnu"
       - name: Set up exact Bun toolchain
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with:
@@ -259,7 +259,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-linux-distribution-${{ runner.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock', 'package.json') }}
+          key: rust-linux-distribution-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
       - name: Run bounded Linux distribution smoke
         run: bash scripts/with-validation-budget.sh 600 linux-distribution-smoke bash scripts/linux-distribution-smoke.sh
       - name: Upload Linux distribution evidence

@@ -24,7 +24,7 @@ export type MacosArtifactIdentityInput = {
 };
 
 const versionPattern = /^(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){0,2}$/;
-const stableReleasePattern = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+const acceptedReleasePattern = /^[0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[0-9]+)?$/;
 
 const field = (output: string, name: string): string => {
   const values = output
@@ -41,7 +41,7 @@ const field = (output: string, name: string): string => {
 
 export const parseRustcVersion = (output: string): { release: string; host: MacosHost } => {
   const release = field(output, 'release');
-  if (!stableReleasePattern.test(release)) throw new Error(`rustc release is not stable: ${release}`);
+  if (!acceptedReleasePattern.test(release)) throw new Error(`rustc release is not an accepted stable/beta release: ${release}`);
   const host = field(output, 'host');
   if (host !== 'aarch64-apple-darwin' && host !== 'x86_64-apple-darwin') {
     throw new Error(`unexpected rustc host: ${host}`);

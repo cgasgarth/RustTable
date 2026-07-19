@@ -76,7 +76,14 @@ fn jpeg_decodes_to_opaque_rgba8() {
     assert_eq!(image.layout(), PixelLayout::Rgba8StraightAlpha);
     assert_eq!(image.color_encoding(), ColorEncoding::Unspecified);
     assert_eq!(image.pixels().len(), 8);
-    assert!(image.pixels().chunks_exact(4).all(|pixel| pixel[3] == 255));
+    assert!(
+        image
+            .pixels()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| pixel[3] == 255)
+    );
 }
 
 #[test]

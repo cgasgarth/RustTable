@@ -30,7 +30,9 @@ fn preserves_all_straight_alpha_codes() {
         output
             .image()
             .pixels()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|pixel| pixel[3])
             .collect::<Vec<_>>(),
         alpha

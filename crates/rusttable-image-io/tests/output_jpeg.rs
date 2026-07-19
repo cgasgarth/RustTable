@@ -33,7 +33,9 @@ fn jpeg_output_is_opaque_and_uses_explicit_quality() {
     assert!(
         decoded
             .pixels()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|pixel| pixel[3] == 255)
     );
     fs::remove_file(destination).unwrap();

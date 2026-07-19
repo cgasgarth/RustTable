@@ -60,7 +60,7 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
         with:
           path: target
-          key: fixture-${{ runner.os }}-rust-1.95.0-${{ hashFiles('Cargo.lock', 'package.json') }}
+          key: fixture-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
       - name: Run Bun command
         run: bun run scripts/example.ts
 EOF
