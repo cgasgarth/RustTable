@@ -803,6 +803,16 @@ mod tests {
             .iter()
             .find(|check| check.id == "rust-test")
             .expect("library test");
+        let workflow_policy = contract
+            .checks
+            .iter()
+            .find(|check| check.id == "workflow-policy")
+            .expect("workflow policy check");
+        assert_eq!(
+            workflow_policy.parallel_group_for("pull_request"),
+            "rust-02-workflow"
+        );
+        assert_eq!(workflow_policy.timeout_for("pull_request"), 20);
         for surface in ["prepush", "pull_request"] {
             if surface == "pull_request" {
                 assert!(!rust_check.on(surface));

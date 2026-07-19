@@ -246,6 +246,7 @@ parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-02-workflow" }
 prerequisites_by_surface = { pull_request = ["rust-test"] }
 timeout_seconds = 5
+timeout_seconds_by_surface = { pull_request = 20 }
 network = "none"
 platforms = ["all"]
 severity = "error"
