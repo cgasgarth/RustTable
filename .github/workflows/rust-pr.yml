@@ -13,10 +13,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: rust-pr / validate
+  validate-groups:
+    name: rust-pr / ${{ matrix.group }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - repository
+          - rust
+          - rust-01-test
+    env:
+      RUSTTABLE_CI_GROUP: ${{ matrix.group }}
     defaults:
       run:
         shell: bash scripts/with-validation-budget.sh 150 workflow-step bash {0}
@@ -52,7 +61,7 @@ jobs:
           key: rust-main-${{ runner.os }}-rust-beta-2026-07-17-${{ hashFiles('Cargo.lock', 'package.json') }}
           restore-keys: |
             rust-main-${{ runner.os }}-rust-beta-2026-07-17-
-      - name: Run repository PR validation
+      - name: Run parallel PR validation group
         run: bash scripts/pr-ci.sh
       - name: Enforce 150-second validation budget
         if: always()
@@ -62,5 +71,20 @@ jobs:
           echo "validation duration: ${elapsed_seconds}s (budget: 150s)"
           if (( elapsed_seconds > 150 )); then
             echo "validation budget exceeded" >&2
+            exit 1
+          fi
+
+  validate:
+    name: rust-pr / validate
+    if: ${{ always() }}
+    needs: validate-groups
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every parallel validation group to pass
+        run: |
+          echo "parallel validation result: ${{ needs.validate-groups.result }}"
+          if [[ "${{ needs.validate-groups.result }}" != success ]]; then
+            echo "one or more parallel PR validation groups failed" >&2
             exit 1
           fi

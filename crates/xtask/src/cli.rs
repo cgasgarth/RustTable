@@ -161,7 +161,11 @@ pub struct ReferenceArgs {
 pub enum CiCommand {
     Precommit,
     Prepush,
-    Pr,
+    Pr {
+        /// Restrict pull-request validation to one independent contract group.
+        #[arg(long)]
+        group: Option<String>,
+    },
     Main,
 }
 

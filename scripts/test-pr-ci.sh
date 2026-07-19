@@ -37,6 +37,9 @@ grep -Fx 'CARGO_BUILD_JOBS=1' "$FAKE_ENV_LOG" >/dev/null
 grep -Fx 'CARGO_PROFILE_DEV_DEBUG=0' "$FAKE_ENV_LOG" >/dev/null
 grep -Fx 'CARGO_PROFILE_TEST_DEBUG=0' "$FAKE_ENV_LOG" >/dev/null
 
+RUSTTABLE_CI_GROUP=repository PATH="$temporary_directory:$PATH" /bin/bash "$root_directory/scripts/pr-ci.sh"
+grep -Fx 'xtask ci pr --group repository' "$FAKE_LOG" >/dev/null
+
 if PATH="$temporary_directory:$PATH" FAKE_FAIL=1 \
   /bin/bash "$root_directory/scripts/pr-ci.sh"; then
   echo 'expected PR validation failure to propagate' >&2

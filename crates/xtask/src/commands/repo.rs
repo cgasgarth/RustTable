@@ -224,6 +224,11 @@ fn validate_jobs(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut Ve
         let job_end = job_starts.get(index + 1).copied().unwrap_or(end);
         let job_name = key_value(lines[*job_start]).map_or("<unknown>", |(key, _)| key);
         let body = &lines[*job_start + 1..job_end];
+        let summary_job = body.iter().any(|line| {
+            indent(line) == 4 && key_value(line).is_some_and(|(key, _)| key == "needs")
+        }) && body
+            .iter()
+            .any(|line| indent(line) == 4 && line.contains("if: ${{ always() }}"));
         let timeout = body.iter().find_map(|line| {
             if indent(line) == 4 && key_value(line).is_some_and(|(key, _)| key == "timeout-minutes")
             {
@@ -249,14 +254,15 @@ fn validate_jobs(name: &str, kind: WorkflowKind, lines: &[&str], errors: &mut Ve
                 "{name}: YAML path jobs.{job_name}.runs-on: runner label is required"
             ));
         }
-        let budget = format!("scripts/with-validation-budget.sh {}", kind.shell_budget());
-        if !body
-            .iter()
-            .any(|line| line.contains("shell:") && line.contains(&budget) && line.contains("{0}"))
-        {
-            errors.push(format!(
-                "{name}: YAML path jobs.{job_name}.defaults.run.shell: must use {budget} ... {{0}}"
-            ));
+        if !summary_job {
+            let budget = format!("scripts/with-validation-budget.sh {}", kind.shell_budget());
+            if !body.iter().any(|line| {
+                line.contains("shell:") && line.contains(&budget) && line.contains("{0}")
+            }) {
+                errors.push(format!(
+                    "{name}: YAML path jobs.{job_name}.defaults.run.shell: must use {budget} ... {{0}}"
+                ));
+            }
         }
     }
 }
@@ -382,6 +388,12 @@ mod tests {
     #[test]
     fn accepts_the_minimal_pr_contract() {
         validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, VALID).expect("valid");
+    }
+
+    #[test]
+    fn accepts_an_always_run_summary_job_without_a_shell_budget() {
+        let valid = "name: RustTable PR\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  validate-groups:\n    runs-on: ubuntu-latest\n    timeout-minutes: 3\n    defaults:\n      run:\n        shell: bash scripts/with-validation-budget.sh 150 workflow-step {0}\n  validate:\n    if: ${{ always() }}\n    needs: validate-groups\n    runs-on: ubuntu-latest\n    timeout-minutes: 1\n";
+        validate_workflow("rust-pr.yml", WorkflowKind::PullRequest, &valid).expect("valid");
     }
 
     #[test]
