@@ -51,6 +51,8 @@ pub enum Command {
         #[command(subcommand)]
         command: GithubCommand,
     },
+    #[command(name = "lua-conformance")]
+    LuaConformance(LuaConformanceArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -145,4 +147,20 @@ pub struct VerifyPrContractArgs {
     pub event: PathBuf,
     #[arg(long)]
     pub api_fixture: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "These flags are the issue's required independent conformance checks."
+)]
+pub struct LuaConformanceArgs {
+    #[arg(long, default_value_t = false)]
+    pub all_fixtures: bool,
+    #[arg(long, default_value_t = false)]
+    pub verify_isolation: bool,
+    #[arg(long, default_value_t = false)]
+    pub verify_limits: bool,
+    #[arg(long, default_value_t = false)]
+    pub verify_events: bool,
 }

@@ -66,6 +66,11 @@ manifest = "crates/rusttable-render/Cargo.toml"
 role = "product"
 
 [[packages]]
+name = "rusttable-scripting"
+manifest = "crates/rusttable-scripting/Cargo.toml"
+role = "product"
+
+[[packages]]
 name = "rusttable-testkit"
 manifest = "crates/rusttable-testkit/Cargo.toml"
 role = "tooling"
@@ -85,135 +90,145 @@ role = "tooling"
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-catalog"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-catalog-store"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-diagnostics"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-app"
 to = "rusttable-ui"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
+
+[[edges]]
+from = "rusttable-app"
+to = "rusttable-scripting"
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog-store"
 to = "rusttable-catalog"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog-store"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-catalog-store"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-image-io"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-image-io"
 to = "rusttable-metadata"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-catalog"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-metadata"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-import"
 to = "rusttable-catalog-store"
 kind = "dev"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-metadata"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-metadata"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-processing"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-render"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-render"
 to = "rusttable-image"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-render"
 to = "rusttable-processing"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "rusttable-ui"
 to = "rusttable-core"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "xtask"
 to = "rusttable-parity"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
 
 [[edges]]
 from = "xtask"
 to = "rusttable-testkit"
-contexts = ["default", "all-features"]
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
+
+[[edges]]
+from = "xtask"
+to = "rusttable-scripting"
+contexts = ["default", "all-features", "no-default-features:rusttable-scripting"]
