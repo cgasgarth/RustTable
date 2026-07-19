@@ -9,6 +9,7 @@ mod lua;
 mod parity;
 mod reference;
 mod repo;
+mod template_matrix;
 
 use std::fmt;
 
@@ -34,6 +35,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Ecosystem { command } => match command {
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
+        Command::TemplateMatrix(args) => template_matrix::run(&root, args),
     }
     .map_err(CommandError::Surface)
 }

@@ -57,6 +57,8 @@ pub enum Command {
         #[command(subcommand)]
         command: EcosystemCommand,
     },
+    #[command(name = "template-matrix")]
+    TemplateMatrix(TemplateMatrixArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -151,6 +153,18 @@ pub struct VerifyPrContractArgs {
     pub event: PathBuf,
     #[arg(long)]
     pub api_fixture: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct TemplateMatrixArgs {
+    #[arg(long)]
+    pub all_builtins: bool,
+    #[arg(long)]
+    pub all_platforms: bool,
+    #[arg(long)]
+    pub verify_privacy: bool,
+    #[arg(long, default_value_t = 1)]
+    pub repeat: usize,
 }
 
 #[derive(Debug, Args)]
