@@ -87,6 +87,8 @@ struct Check {
     parallel_group: String,
     #[serde(default)]
     parallel_group_by_surface: BTreeMap<String, String>,
+    #[serde(default)]
+    resources: Vec<String>,
     timeout_seconds: u64,
     #[serde(default)]
     timeout_seconds_by_surface: BTreeMap<String, u64>,
@@ -345,6 +347,15 @@ impl Check {
                 ));
             }
         }
+        let mut resources = BTreeSet::new();
+        for resource in &self.resources {
+            if resource.is_empty() || !resources.insert(resource) {
+                return Err(format!(
+                    "validation contract: check {} has an empty or duplicate resource",
+                    self.id
+                ));
+            }
+        }
         for surface in self.prerequisites_by_surface.keys() {
             if !SUPPORTED_SURFACES.contains(&surface.as_str()) || !self.on(surface) {
                 return Err(format!(
@@ -472,6 +483,10 @@ impl Check {
             .map_or(self.parallel_group.as_str(), String::as_str)
     }
 
+    fn resources(&self) -> &[String] {
+        &self.resources
+    }
+
     fn prerequisites_for(&self, surface: &str) -> Vec<&str> {
         self.prerequisites
             .iter()
@@ -539,6 +554,13 @@ struct SurfaceReceipt {
     budget_seconds: u64,
     checks: Vec<CheckReceipt>,
     omitted: Vec<OmittedCheck>,
+    resource_waves: Vec<ResourceWaveReceipt>,
+}
+
+#[derive(Debug, Serialize)]
+struct ResourceWaveReceipt {
+    checks: Vec<String>,
+    resources: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -548,6 +570,7 @@ struct CheckReceipt {
     status: String,
     duration_ms: u128,
     severity: String,
+    resources: Vec<String>,
     artifacts: Vec<String>,
     artifact_receipts: Vec<DeclaredArtifactReceipt>,
     detail: Option<String>,
@@ -667,6 +690,7 @@ fn execute_surface_with_scheduler(
         states.insert((*id).to_owned(), CheckState::OmittedPlatform);
     }
     let mut receipts = Vec::new();
+    let mut resource_waves = Vec::new();
     while !pending.is_empty() {
         let mut ready = Vec::new();
         let mut skipped = Vec::new();
@@ -701,6 +725,7 @@ fn execute_surface_with_scheduler(
                 status: "skipped-prerequisite".to_owned(),
                 duration_ms: 0,
                 severity: check.severity.clone(),
+                resources: check.resources.clone(),
                 artifacts: Vec::new(),
                 artifact_receipts: Vec::new(),
                 detail: Some(
@@ -712,46 +737,58 @@ fn execute_surface_with_scheduler(
         if ready.is_empty() {
             continue;
         }
-        let cancellation = Arc::new(AtomicBool::new(false));
-        let results = Mutex::new(Vec::<(String, CheckReceipt)>::new());
-        std::thread::scope(|scope| {
-            for check in ready {
-                let cancellation = Arc::clone(&cancellation);
-                let results = &results;
-                scope.spawn(move || {
-                    let receipt = execute_check(root, check, surface, runner, &cancellation);
-                    results
-                        .lock()
-                        .expect("receipt mutex")
-                        .push((check.id.clone(), receipt));
-                });
+        let mut remaining_ready = ready;
+        while !remaining_ready.is_empty() {
+            let wave = take_resource_compatible_batch(&mut remaining_ready);
+            let mut wave_resources = BTreeSet::new();
+            for check in &wave {
+                wave_resources.extend(check.resources().iter().cloned());
             }
-        });
-        let wave = results
-            .into_inner()
-            .map_err(|_| "receipt mutex poisoned".to_owned())?;
-        for (id, receipt) in wave {
-            pending.remove(id.as_str());
-            let state = match receipt.status.as_str() {
-                "passed" => CheckState::Passed,
-                "warning" => CheckState::Warning,
-                _ => CheckState::Failed,
-            };
-            states.insert(id, state);
-            receipts.push(receipt);
-        }
-        if surface_start.elapsed() > Duration::from_secs(budget_seconds) {
-            return Err(format!(
-                "ci.{surface}: configured budget of {budget_seconds}s exceeded; receipt={}",
-                serde_json::to_string(&receipts).map_err(|error| error.to_string())?
-            ));
-        }
-        if receipts.iter().any(|receipt| receipt.status == "failed") {
-            receipts.sort_by(|left, right| left.id.cmp(&right.id));
-            return Err(format!(
-                "ci.{surface}: validation wave failed; receipt={}",
-                serde_json::to_string(&receipts).map_err(|error| error.to_string())?
-            ));
+            resource_waves.push(ResourceWaveReceipt {
+                checks: wave.iter().map(|check| check.id.clone()).collect(),
+                resources: wave_resources.into_iter().collect(),
+            });
+            let cancellation = Arc::new(AtomicBool::new(false));
+            let results = Mutex::new(Vec::<(String, CheckReceipt)>::new());
+            std::thread::scope(|scope| {
+                for check in wave {
+                    let cancellation = Arc::clone(&cancellation);
+                    let results = &results;
+                    scope.spawn(move || {
+                        let receipt = execute_check(root, check, surface, runner, &cancellation);
+                        results
+                            .lock()
+                            .expect("receipt mutex")
+                            .push((check.id.clone(), receipt));
+                    });
+                }
+            });
+            let wave = results
+                .into_inner()
+                .map_err(|_| "receipt mutex poisoned".to_owned())?;
+            for (id, receipt) in wave {
+                pending.remove(id.as_str());
+                let state = match receipt.status.as_str() {
+                    "passed" => CheckState::Passed,
+                    "warning" => CheckState::Warning,
+                    _ => CheckState::Failed,
+                };
+                states.insert(id, state);
+                receipts.push(receipt);
+            }
+            if surface_start.elapsed() > Duration::from_secs(budget_seconds) {
+                return Err(format!(
+                    "ci.{surface}: configured budget of {budget_seconds}s exceeded; receipt={}",
+                    serde_json::to_string(&receipts).map_err(|error| error.to_string())?
+                ));
+            }
+            if receipts.iter().any(|receipt| receipt.status == "failed") {
+                receipts.sort_by(|left, right| left.id.cmp(&right.id));
+                return Err(format!(
+                    "ci.{surface}: validation wave failed; receipt={}",
+                    serde_json::to_string(&receipts).map_err(|error| error.to_string())?
+                ));
+            }
         }
     }
     receipts.sort_by(|left, right| left.id.cmp(&right.id));
@@ -761,7 +798,28 @@ fn execute_surface_with_scheduler(
         budget_seconds,
         checks: receipts,
         omitted,
+        resource_waves,
     })
+}
+
+fn take_resource_compatible_batch<'a>(ready: &mut Vec<&'a Check>) -> Vec<&'a Check> {
+    let mut locked = BTreeSet::new();
+    let mut batch = Vec::new();
+    let mut deferred = Vec::new();
+    for check in ready.drain(..) {
+        if check
+            .resources()
+            .iter()
+            .all(|resource| !locked.contains(resource))
+        {
+            locked.extend(check.resources().iter().cloned());
+            batch.push(check);
+        } else {
+            deferred.push(check);
+        }
+    }
+    *ready = deferred;
+    batch
 }
 
 #[cfg(test)]
@@ -830,6 +888,7 @@ fn execute_check(
                     status: "passed".to_owned(),
                     duration_ms,
                     severity: check.severity.clone(),
+                    resources: check.resources.clone(),
                     artifacts,
                     artifact_receipts,
                     detail: None,
@@ -848,6 +907,7 @@ fn execute_check(
                         status: status.to_owned(),
                         duration_ms,
                         severity: check.severity.clone(),
+                        resources: check.resources.clone(),
                         artifacts,
                         artifact_receipts: Vec::new(),
                         detail: Some(error),
@@ -869,6 +929,7 @@ fn execute_check(
                 status: status.to_owned(),
                 duration_ms,
                 severity: check.severity.clone(),
+                resources: check.resources.clone(),
                 artifacts,
                 artifact_receipts: Vec::new(),
                 detail: Some(format!(
@@ -891,6 +952,7 @@ fn execute_check(
                 status: status.to_owned(),
                 duration_ms,
                 severity: check.severity.clone(),
+                resources: check.resources.clone(),
                 artifacts,
                 artifact_receipts: Vec::new(),
                 detail: Some(error.to_string()),
@@ -984,6 +1046,7 @@ mod tests {
             surfaces: vec!["precommit".to_owned()],
             parallel_group: group.to_owned(),
             parallel_group_by_surface: BTreeMap::new(),
+            resources: Vec::new(),
             timeout_seconds: timeout,
             timeout_seconds_by_surface: BTreeMap::new(),
             network: "none".to_owned(),
@@ -998,7 +1061,7 @@ mod tests {
     fn contract(checks: Vec<Check>) -> Contract {
         Contract {
             budgets: BTreeMap::from([
-                ("precommit".to_owned(), 30),
+                ("precommit".to_owned(), 60),
                 ("prepush".to_owned(), 170),
                 ("pull_request".to_owned(), 150),
                 ("main".to_owned(), 2_700),
@@ -1029,6 +1092,42 @@ mod tests {
         item.platforms = vec!["solaris".to_owned()];
         let error = contract(vec![item]).validate().expect_err("platform");
         assert!(error.contains("unknown platform solaris"));
+    }
+
+    #[test]
+    fn rejects_duplicate_resources() {
+        let mut item = check("resource", "a", 1);
+        item.resources = vec!["cargo-target-dir".to_owned(), "cargo-target-dir".to_owned()];
+        let error = contract(vec![item])
+            .validate()
+            .expect_err("duplicate resource");
+        assert!(error.contains("duplicate resource"));
+    }
+
+    #[test]
+    fn resource_batch_keeps_unrelated_checks_parallel() {
+        let mut first = check("first", "a", 1);
+        first.resources = vec!["cargo-target-dir".to_owned()];
+        let mut second = check("second", "a", 1);
+        second.resources = vec!["cargo-target-dir".to_owned()];
+        let independent = check("independent", "a", 1);
+        let mut ready = vec![&first, &second, &independent];
+
+        let batch = take_resource_compatible_batch(&mut ready);
+        assert_eq!(
+            batch
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "independent"]
+        );
+        assert_eq!(
+            ready
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["second"]
+        );
     }
 
     #[test]
@@ -1120,7 +1219,7 @@ mod tests {
         let root = RepositoryRoot::discover(&runner).expect("repository root");
         let contract = Contract::load(&root).expect("validation contract");
         contract.validate().expect("valid validation contract");
-        assert_eq!(contract.budgets["precommit"], 30);
+        assert_eq!(contract.budgets["precommit"], 60);
         assert_eq!(contract.budgets["prepush"], 150);
         assert_eq!(contract.budgets["pull_request"], 150);
 
