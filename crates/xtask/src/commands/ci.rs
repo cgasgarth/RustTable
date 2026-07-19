@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -227,7 +228,7 @@ impl Contract {
                     .and_modify(|value| *value = (*value).max(check.timeout_for(surface)))
                     .or_insert(check.timeout_for(surface));
             }
-            let configured = if surface == "pull_request" {
+            let configured = if surface == "precommit" || surface == "pull_request" {
                 group_max.values().copied().max().unwrap_or_default()
             } else {
                 group_max.values().sum::<u64>()
@@ -300,6 +301,7 @@ fn has_cycle(
 }
 
 impl Check {
+    #[allow(clippy::too_many_lines)]
     fn validate(&self, ids: &mut BTreeSet<String>, labels: &mut BTreeSet<String>) -> Result<()> {
         if self.id.is_empty() || !ids.insert(self.id.clone()) {
             return Err(format!(
@@ -569,6 +571,7 @@ impl CheckState {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn execute_surface_with_scheduler(
     root: &RepositoryRoot,
     contract: &Contract,
@@ -661,8 +664,7 @@ fn execute_surface_with_scheduler(
         }
         if ready.is_empty() && skipped.is_empty() {
             return Err(format!(
-                "ci.{surface}: dependency graph made no progress for {:?}",
-                pending
+                "ci.{surface}: dependency graph made no progress for {pending:?}"
             ));
         }
         for check in skipped {
@@ -748,6 +750,7 @@ fn execute_surface_for_group(
     execute_surface_with_scheduler(root, contract, surface, selected_group, runner)
 }
 
+#[allow(clippy::too_many_lines)]
 fn execute_check(
     root: &RepositoryRoot,
     check: &Check,
@@ -929,7 +932,10 @@ fn verify_declared_artifacts(
         receipts.push(DeclaredArtifactReceipt {
             path: relative.clone(),
             size_bytes: metadata.len(),
-            sha256: digest.iter().map(|byte| format!("{byte:02x}")).collect(),
+            sha256: digest.iter().fold(String::new(), |mut output, byte| {
+                let _ = write!(output, "{byte:02x}");
+                output
+            }),
             fresh: true,
         });
     }
@@ -1001,9 +1007,11 @@ mod tests {
 
     #[test]
     fn rejects_sequential_budget_overflow() {
-        let mut first = check("a", "a", 20);
+        let mut first = check("a", "a", 90);
+        first.surfaces = vec!["prepush".to_owned()];
         first.args = vec!["a".to_owned()];
-        let mut second = check("b", "b", 20);
+        let mut second = check("b", "b", 90);
+        second.surfaces = vec!["prepush".to_owned()];
         second.args = vec!["b".to_owned()];
         let error = contract(vec![first, second])
             .validate()
@@ -1083,7 +1091,7 @@ mod tests {
         let contract = Contract::load(&root).expect("validation contract");
         contract.validate().expect("valid validation contract");
         assert_eq!(contract.budgets["precommit"], 30);
-        assert_eq!(contract.budgets["prepush"], 170);
+        assert_eq!(contract.budgets["prepush"], 150);
         assert_eq!(contract.budgets["pull_request"], 150);
 
         for id in [
@@ -1113,7 +1121,7 @@ mod tests {
             .find(|check| check.id == "rust-clippy")
             .expect("library lint");
         assert_eq!(library_lint.timeout_for("precommit"), 20);
-        assert_eq!(library_lint.timeout_for("prepush"), 35);
+        assert_eq!(library_lint.timeout_for("prepush"), 25);
 
         let rust_check = contract
             .checks
@@ -1146,7 +1154,7 @@ mod tests {
             assert_eq!(rust_check.parallel_group_for(surface), "rust-03-check");
             assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
             assert_eq!(rust_check.timeout_for(surface), 25);
-            assert_eq!(rust_test.timeout_for(surface), 75);
+            assert_eq!(rust_test.timeout_for(surface), 65);
             let expected_prerequisites = if surface == "prepush" {
                 vec!["rust-clippy"]
             } else {
@@ -1161,7 +1169,7 @@ mod tests {
         assert!(library_lint.on("prepush"));
         assert!(!library_lint.on("pull_request"));
         assert_eq!(library_lint.parallel_group_for("prepush"), "rust-02-clippy");
-        assert_eq!(library_lint.timeout_for("prepush"), 35);
+        assert_eq!(library_lint.timeout_for("prepush"), 25);
         assert_eq!(library_lint.prerequisites_for("prepush"), vec!["rust-test"]);
         assert_eq!(rust_check.parallel_group_for("precommit"), "rust");
         assert_eq!(library_lint.parallel_group_for("precommit"), "rust");

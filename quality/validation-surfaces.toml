@@ -1,6 +1,6 @@
 [budgets]
 precommit = 30
-prepush = 170
+prepush = 150
 pull_request = 150
 main = 2700
 
@@ -72,7 +72,7 @@ parallel_group = "rust"
 prerequisites_by_surface = { prepush = ["rust-test"] }
 parallel_group_by_surface = { prepush = "rust-02-clippy" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 35 }
+timeout_seconds_by_surface = { prepush = 25 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -87,7 +87,7 @@ surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "rust"
 parallel_group_by_surface = { prepush = "rust-01-test", pull_request = "rust-01-test" }
 timeout_seconds = 20
-timeout_seconds_by_surface = { prepush = 75, pull_request = 110 }
+timeout_seconds_by_surface = { prepush = 65, pull_request = 110 }
 network = "none"
 platforms = ["all"]
 severity = "error"
@@ -278,7 +278,7 @@ surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
 parallel_group_by_surface = { pull_request = "rust-04-dag" }
 prerequisites_by_surface = { pull_request = ["repository-files"] }
-timeout_seconds = 10
+timeout_seconds = 30
 timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 30, main = 30 }
 network = "none"
 platforms = ["all"]
@@ -318,7 +318,7 @@ args = ["xtask", "ecosystem", "verify-baseline"]
 owner = "toolchain"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
-timeout_seconds = 10
+timeout_seconds = 30
 timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 30, main = 30 }
 network = "none"
 platforms = ["all"]
@@ -332,8 +332,8 @@ args = ["xtask", "ecosystem", "dependencies", "verify-policy"]
 owner = "dependencies"
 surfaces = ["precommit", "prepush", "pull_request", "main"]
 parallel_group = "repository"
-timeout_seconds = 10
-timeout_seconds_by_surface = { prepush = 30, pull_request = 30, main = 30 }
+timeout_seconds = 30
+timeout_seconds_by_surface = { precommit = 10, prepush = 30, pull_request = 30, main = 30 }
 network = "none"
 platforms = ["all"]
 severity = "error"
