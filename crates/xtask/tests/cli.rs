@@ -23,9 +23,45 @@ fn help_exposes_the_complete_initial_command_tree() {
         "ci",
         "coverage",
         "ecosystem",
+        "platform",
     ] {
         assert!(help.contains(command), "missing {command} in {help}");
     }
+}
+
+#[test]
+fn platform_verification_emits_complete_runtime_receipt() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "platform",
+            "verify",
+            "--all-targets",
+            "--runtime-current",
+            "--verify-startup-preflight",
+            "--format",
+            "json",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(value["command"], "platform.verify");
+    assert_eq!(value["status"], "ok");
+    assert_eq!(
+        value["data"]["schema"],
+        "rusttable.platform-support-receipt.v1"
+    );
+    assert_eq!(value["data"]["target_count"], 3);
+    assert_eq!(value["data"]["startup_preflight_verified"], true);
 }
 
 #[test]

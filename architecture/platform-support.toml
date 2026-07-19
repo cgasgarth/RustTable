@@ -1,20 +1,48 @@
-# Single source of truth for supported product target triples.
+# Single source of truth for supported product targets, host requirements, and backend policy.
 schema_version = 1
 
 [[targets]]
 triple = "x86_64-unknown-linux-gnu"
 os = "linux"
 architecture = "x86_64"
+minimum_os = "2.35.0"
+libc = "gnu"
+minimum_libc = "2.35.0"
+desktop = true
+headless = true
+window_systems = ["wayland", "x11"]
+backends = ["vulkan", "opengl"]
+cpu_fallback = "required"
 runner = "ubuntu-latest"
+package_target = "x86_64-unknown-linux-gnu"
+support_level = "supported"
 
 [[targets]]
 triple = "aarch64-apple-darwin"
 os = "macos"
 architecture = "aarch64"
+minimum_os = "13.0.0"
+libc = "not-applicable"
+desktop = true
+headless = true
+window_systems = []
+backends = ["metal"]
+cpu_fallback = "required"
 runner = "macos-latest"
+package_target = "aarch64-apple-darwin"
+support_level = "supported"
 
 [[targets]]
 triple = "x86_64-pc-windows-msvc"
 os = "windows"
 architecture = "x86_64"
+minimum_os = "10.0.0-19045"
+libc = "not-applicable"
+desktop = true
+headless = true
+window_systems = []
+backends = ["direct3d12", "vulkan"]
+cpu_fallback = "required"
 runner = "windows-latest"
+package_target = "x86_64-pc-windows-msvc"
+support_level = "supported"

@@ -17,6 +17,7 @@ mod lua;
 mod native_boundaries;
 mod offline_closure;
 mod parity;
+mod platform;
 mod reference;
 mod repo;
 mod template_matrix;
@@ -72,6 +73,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
             EcosystemCommand::Channels { command } => channels::run(&root, command, &runner),
         },
         Command::Foundation { command } => foundation::run(&root, command, &runner),
+        Command::Platform { command } => platform::run(&root, command),
         Command::ExtensionConformance(arguments) => extension_conformance::run(&root, arguments),
         Command::TemplateMatrix(args) => template_matrix::run(&root, args),
         Command::UiShell(args) => ui_shell::run(&root, args),

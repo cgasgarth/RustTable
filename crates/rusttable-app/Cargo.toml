@@ -20,7 +20,7 @@ rusttable-ui = { path = "../rusttable-ui", version = "0.1.0" }
 iced_test.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-iced = { workspace = true, features = ["x11"] }
+iced = { workspace = true, features = ["wayland", "x11"] }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 iced.workspace = true

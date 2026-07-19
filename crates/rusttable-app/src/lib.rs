@@ -6,6 +6,7 @@ mod composition;
 mod extensions;
 mod library;
 mod lifecycle;
+mod platform;
 mod ui_shell;
 
 pub use composition::run;

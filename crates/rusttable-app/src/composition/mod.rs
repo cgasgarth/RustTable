@@ -21,9 +21,13 @@ mod ui_smoke;
 ///
 /// Returns an error if Iced cannot create or run the desktop window.
 pub fn run() -> iced::Result {
+    let preflight = crate::platform::startup_preflight();
     run_with_bootstrap(
         rusttable_diagnostics::install,
         || {
+            if !preflight.is_supported() {
+                return Ok(());
+            }
             iced::daemon(boot, update, daemon_view)
                 .title("RustTable")
                 .theme(|state: &DaemonState, _window| rusttable_ui::tokens::theme(state.ui_theme()))
