@@ -1,0 +1,21 @@
+{
+  "repository": {
+    "full_name": "cgasgarth/RustTable"
+  },
+  "pull_request": {
+    "number": 501,
+    "title": "[0015] Enforce the PR contract",
+    "body": "## Why\nA focused contract.\n\n## Implementation\nPure validation.\n\n## Validation\nTests.\n\n## Out of scope\nAPI writes.\n\nCloses #171",
+    "head": {
+      "ref": "issue-171-pr-contract",
+      "repo": {
+        "full_name": "cgasgarth/RustTable"
+      }
+    },
+    "base": {
+      "repo": {
+        "full_name": "cgasgarth/RustTable"
+      }
+    }
+  }
+}

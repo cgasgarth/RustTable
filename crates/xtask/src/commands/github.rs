@@ -1,0 +1,596 @@
+use std::fs;
+use std::path::Path;
+use std::time::Duration;
+
+use serde_json::Value;
+
+use super::report;
+use crate::cli::{GithubCommand, VerifyPrContractArgs};
+use crate::process::{ProcessLimits, ProcessRequest, ProcessRunner};
+use crate::root::RepositoryRoot;
+
+const TARGET_REPOSITORY: &str = "cgasgarth/RustTable";
+const COMMIT_PAGE_SIZE: usize = 100;
+const MAX_COMMIT_PAGES: u32 = 20;
+const CLOSING_KEYWORDS: [&str; 9] = [
+    "close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved",
+];
+
+type Result<T = crate::output::Report, E = String> = std::result::Result<T, E>;
+
+pub(super) fn run(
+    root: &RepositoryRoot,
+    command: &GithubCommand,
+    runner: &ProcessRunner,
+) -> Result {
+    match command {
+        GithubCommand::VerifyPrContract(arguments) => verify_pr_contract(root, arguments, runner),
+    }
+}
+
+fn verify_pr_contract(
+    root: &RepositoryRoot,
+    arguments: &VerifyPrContractArgs,
+    runner: &ProcessRunner,
+) -> Result {
+    let event_path = root.join(&arguments.event);
+    let event_source = fs::read_to_string(&event_path)
+        .map_err(|error| format!("event payload {}: {error}", event_path.display()))?;
+    let event = PullRequestEvent::parse(&event_source)?;
+    let api: Box<dyn ReadApi> = match &arguments.api_fixture {
+        Some(path) => Box::new(FixtureApi::read(&root.join(path))?),
+        None => Box::new(GitHubApi::from_environment(runner)?),
+    };
+    let receipt = verify_contract(&event, api.as_ref())?;
+    Ok(report(
+        root,
+        "github.verify-pr-contract",
+        serde_json::json!({
+            "repository": event.repository,
+            "pull_request": event.number,
+            "issue": receipt.issue_number,
+            "sequence": receipt.sequence,
+            "branch": event.branch,
+            "commit_pages": receipt.commit_pages,
+        }),
+    ))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PullRequestEvent {
+    repository: String,
+    number: u64,
+    title: String,
+    body: String,
+    branch: String,
+    base_repository: String,
+}
+
+impl PullRequestEvent {
+    fn parse(source: &str) -> Result<Self, String> {
+        let value: Value = serde_json::from_str(source)
+            .map_err(|error| format!("event payload: malformed JSON: {error}"))?;
+        let repository =
+            required_string(&value, &["repository", "full_name"], "repository.full_name")?;
+        let pull_request = value
+            .get("pull_request")
+            .ok_or_else(|| "event payload: pull_request: required object is missing".to_owned())?;
+        let number = required_u64(pull_request, &["number"], "pull_request.number")?;
+        let title = required_string(pull_request, &["title"], "pull_request.title")?;
+        let body = optional_string(pull_request, &["body"]).unwrap_or_default();
+        let branch = required_string(pull_request, &["head", "ref"], "pull_request.head.ref")?;
+        let base_repository = required_string(
+            pull_request,
+            &["base", "repo", "full_name"],
+            "pull_request.base.repo.full_name",
+        )?;
+        Ok(Self {
+            repository,
+            number,
+            title,
+            body,
+            branch,
+            base_repository,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IssueSnapshot {
+    number: u64,
+    state: String,
+    title: String,
+    body: String,
+    repository: String,
+    has_milestone: bool,
+    is_pull_request: bool,
+}
+
+impl IssueSnapshot {
+    fn parse(value: &Value) -> Result<Self, String> {
+        let number = required_u64(value, &["number"], "issue.number")?;
+        let state = required_string(value, &["state"], "issue.state")?;
+        let title = required_string(value, &["title"], "issue.title")?;
+        let body = optional_string(value, &["body"]).unwrap_or_default();
+        let repository = repository_name(value).ok_or_else(|| {
+            "GitHub API issue response: repository identity is missing".to_owned()
+        })?;
+        let has_milestone = value
+            .get("milestone")
+            .is_some_and(|milestone| !milestone.is_null());
+        let is_pull_request = value.get("pull_request").is_some();
+        Ok(Self {
+            number,
+            state,
+            title,
+            body,
+            repository,
+            has_milestone,
+            is_pull_request,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ContractReceipt {
+    issue_number: u64,
+    sequence: String,
+    commit_pages: usize,
+}
+
+trait ReadApi {
+    fn issue(&self, repository: &str, number: u64) -> Result<IssueSnapshot, String>;
+    fn commit_pages(&self, repository: &str, number: u64) -> Result<Vec<Vec<String>>, String>;
+}
+
+fn verify_contract(event: &PullRequestEvent, api: &dyn ReadApi) -> Result<ContractReceipt, String> {
+    if event.repository != TARGET_REPOSITORY || event.base_repository != TARGET_REPOSITORY {
+        return Err(format!(
+            "pull request repository: expected {TARGET_REPOSITORY}, found {} / {}",
+            event.repository, event.base_repository
+        ));
+    }
+    let closing_numbers = event
+        .body
+        .lines()
+        .filter_map(parse_canonical_closing_line)
+        .collect::<Vec<_>>();
+    if closing_numbers.len() != 1 {
+        return Err(format!(
+            "pull request body: expected exactly one Closes #<number> line, found {}",
+            closing_numbers.len()
+        ));
+    }
+    let issue_number = closing_numbers[0];
+    let issue = api.issue(TARGET_REPOSITORY, issue_number)?;
+    validate_issue(&issue, issue_number)?;
+    let sequence = sequence_token(&issue.title).ok_or_else(|| {
+        format!("issue #{issue_number}: title must begin with a four-digit [NNNN] sequence token")
+    })?;
+    if !event.title.starts_with(&sequence) {
+        return Err(format!(
+            "pull request title: must begin with issue sequence {sequence}"
+        ));
+    }
+    if !valid_branch(&event.branch, issue_number) {
+        return Err(format!(
+            "pull request head branch: expected issue-{issue_number}-<slug>, found {}",
+            event.branch
+        ));
+    }
+    validate_sections(&event.body)?;
+    let canonical_line = format!("Closes #{issue_number}");
+    let body_without_canonical = event
+        .body
+        .lines()
+        .filter(|line| line.trim() != canonical_line)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if find_issue_references(&body_without_canonical)
+        .next()
+        .is_some()
+    {
+        return Err(
+            "pull request body: only the canonical Closes line may contain a closing issue reference"
+                .to_owned(),
+        );
+    }
+    let pages = api.commit_pages(TARGET_REPOSITORY, event.number)?;
+    for message in pages.iter().flatten() {
+        if find_issue_references(message).next().is_some() {
+            return Err(
+                "pull request commits: an additional close/fix/resolve issue reference was found"
+                    .to_owned(),
+            );
+        }
+    }
+    Ok(ContractReceipt {
+        issue_number,
+        sequence,
+        commit_pages: pages.len(),
+    })
+}
+
+fn validate_issue(issue: &IssueSnapshot, expected_number: u64) -> Result<(), String> {
+    if issue.number != expected_number {
+        return Err(format!(
+            "issue reference: API returned #{}, requested #{expected_number}",
+            issue.number
+        ));
+    }
+    if issue.repository != TARGET_REPOSITORY {
+        return Err(format!(
+            "issue #{expected_number}: repository must be {TARGET_REPOSITORY}, found {}",
+            issue.repository
+        ));
+    }
+    if issue.is_pull_request {
+        return Err(format!(
+            "issue #{expected_number}: pull requests cannot be the closing item"
+        ));
+    }
+    if issue.state != "open" {
+        return Err(format!(
+            "issue #{expected_number}: state must be open, found {}",
+            issue.state
+        ));
+    }
+    if sequence_token(&issue.title).is_none() {
+        return Err(format!(
+            "issue #{expected_number}: title must begin with a four-digit [NNNN] sequence token"
+        ));
+    }
+    if !issue.has_milestone {
+        return Err(format!("issue #{expected_number}: milestone is required"));
+    }
+    if !issue.body.lines().any(|line| line.trim() == "Parent: #158") {
+        return Err(format!(
+            "issue #{expected_number}: parent reference Parent: #158 is required"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_sections(body: &str) -> Result<(), String> {
+    for section in ["Why", "Implementation", "Validation", "Out of scope"] {
+        let marker = format!("## {section}");
+        if !body.lines().any(|line| line.trim() == marker) {
+            return Err(format!(
+                "pull request body: required section ## {section} is missing"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_canonical_closing_line(line: &str) -> Option<u64> {
+    let suffix = line.trim().strip_prefix("Closes #")?;
+    if suffix.is_empty() || !suffix.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    suffix.parse().ok()
+}
+
+fn sequence_token(title: &str) -> Option<String> {
+    let suffix = title.strip_prefix('[')?;
+    let (digits, _) = suffix.split_once(']')?;
+    (digits.len() == 4 && digits.bytes().all(|byte| byte.is_ascii_digit()))
+        .then(|| format!("[{digits}]"))
+}
+
+fn valid_branch(branch: &str, issue_number: u64) -> bool {
+    let basename = branch.rsplit('/').next().unwrap_or(branch);
+    let prefix = format!("issue-{issue_number}-");
+    let Some(slug) = basename.strip_prefix(&prefix) else {
+        return false;
+    };
+    !slug.is_empty()
+        && slug
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn find_issue_references(text: &str) -> impl Iterator<Item = (String, u64)> + '_ {
+    let tokens = text
+        .split(|character: char| !character.is_ascii_alphanumeric() && character != '#')
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    let mut references = Vec::new();
+    for window in tokens.windows(2) {
+        let keyword = window[0].to_ascii_lowercase();
+        if !CLOSING_KEYWORDS.contains(&keyword.as_str()) {
+            continue;
+        }
+        let issue = window[1].strip_prefix('#').unwrap_or_default();
+        if issue.is_empty() || !issue.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+        if let Ok(number) = issue.parse() {
+            references.push((keyword, number));
+        }
+    }
+    references.into_iter()
+}
+
+fn required_string(value: &Value, path: &[&str], label: &str) -> Result<String, String> {
+    walk(value, path)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| format!("{label}: required non-empty string is missing"))
+}
+
+fn optional_string(value: &Value, path: &[&str]) -> Option<String> {
+    walk(value, path)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn required_u64(value: &Value, path: &[&str], label: &str) -> Result<u64, String> {
+    walk(value, path)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| format!("{label}: required integer is missing"))
+}
+
+fn walk<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter()
+        .try_fold(value, |current, key| current.get(*key))
+}
+
+fn repository_name(value: &Value) -> Option<String> {
+    walk(value, &["repository", "full_name"])
+        .and_then(Value::as_str)
+        .or_else(|| value.get("repository").and_then(Value::as_str))
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            value
+                .get("repository_url")
+                .and_then(Value::as_str)
+                .and_then(|url| url.strip_prefix("https://api.github.com/repos/"))
+                .map(ToOwned::to_owned)
+        })
+}
+
+struct FixtureApi {
+    issue: IssueSnapshot,
+    commit_pages: Vec<Vec<String>>,
+}
+
+impl FixtureApi {
+    fn read(path: &Path) -> Result<Self, String> {
+        let source = fs::read_to_string(path)
+            .map_err(|error| format!("API fixture {}: {error}", path.display()))?;
+        let value: Value = serde_json::from_str(&source)
+            .map_err(|error| format!("API fixture: malformed JSON: {error}"))?;
+        let issue = IssueSnapshot::parse(
+            value
+                .get("issue")
+                .ok_or_else(|| "API fixture: issue object is missing".to_owned())?,
+        )?;
+        let commit_pages = value
+            .get("commit_pages")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "API fixture: commit_pages array is missing".to_owned())?
+            .iter()
+            .map(|page| {
+                page.as_array()
+                    .ok_or_else(|| "API fixture: commit page must be an array".to_owned())?
+                    .iter()
+                    .map(|commit| {
+                        commit
+                            .as_str()
+                            .or_else(|| commit.get("message").and_then(Value::as_str))
+                            .map(ToOwned::to_owned)
+                            .ok_or_else(|| "API fixture: commit message is missing".to_owned())
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            issue,
+            commit_pages,
+        })
+    }
+}
+
+impl ReadApi for FixtureApi {
+    fn issue(&self, _repository: &str, _number: u64) -> Result<IssueSnapshot, String> {
+        Ok(self.issue.clone())
+    }
+
+    fn commit_pages(&self, _repository: &str, _number: u64) -> Result<Vec<Vec<String>>, String> {
+        Ok(self.commit_pages.clone())
+    }
+}
+
+struct GitHubApi<'a> {
+    runner: &'a ProcessRunner,
+    base_url: String,
+    token: String,
+}
+
+impl<'a> GitHubApi<'a> {
+    fn from_environment(runner: &'a ProcessRunner) -> Result<Self, String> {
+        let token = std::env::var("GH_TOKEN")
+            .or_else(|_| std::env::var("GITHUB_TOKEN"))
+            .map_err(|_| "GitHub API infrastructure failure: GH_TOKEN is missing".to_owned())?;
+        let base_url =
+            std::env::var("GITHUB_API_URL").unwrap_or_else(|_| "https://api.github.com".to_owned());
+        Ok(Self {
+            runner,
+            base_url,
+            token,
+        })
+    }
+
+    fn get_json(&self, path: &str) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url.trim_end_matches('/'), path);
+        let authorization = format!("Authorization: Bearer {}", self.token);
+        let request = ProcessRequest::new(
+            "curl",
+            [
+                "--fail-with-body",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--header",
+                "Accept: application/vnd.github+json",
+                "--header",
+                authorization.as_str(),
+                &url,
+            ],
+        )
+        .limits(ProcessLimits {
+            max_stdout_bytes: 512 * 1024,
+            max_stderr_bytes: 16 * 1024,
+            timeout: Duration::from_secs(20),
+        });
+        let result = self
+            .runner
+            .run(request)
+            .map_err(|_| "GitHub API infrastructure failure: request could not start".to_owned())?;
+        if !result.receipt.success() {
+            return Err("GitHub API infrastructure failure: request failed".to_owned());
+        }
+        serde_json::from_slice(&result.stdout).map_err(|_| {
+            "GitHub API infrastructure failure: response was not valid JSON".to_owned()
+        })
+    }
+}
+
+impl ReadApi for GitHubApi<'_> {
+    fn issue(&self, repository: &str, number: u64) -> Result<IssueSnapshot, String> {
+        let value = self.get_json(&format!("/repos/{repository}/issues/{number}"))?;
+        IssueSnapshot::parse(&value)
+    }
+
+    fn commit_pages(&self, repository: &str, number: u64) -> Result<Vec<Vec<String>>, String> {
+        let mut pages = Vec::new();
+        for page in 1..=MAX_COMMIT_PAGES {
+            let value = self.get_json(&format!(
+                "/repos/{repository}/pulls/{number}/commits?per_page={COMMIT_PAGE_SIZE}&page={page}"
+            ))?;
+            let commits = value.as_array().ok_or_else(|| {
+                "GitHub API infrastructure failure: commits response was not an array".to_owned()
+            })?;
+            let messages = commits
+                .iter()
+                .map(|commit| required_string(commit, &["commit", "message"], "commit.message"))
+                .collect::<Result<Vec<_>, _>>()?;
+            let page_len = messages.len();
+            pages.push(messages);
+            if page_len < COMMIT_PAGE_SIZE {
+                return Ok(pages);
+            }
+        }
+        Err("GitHub API infrastructure failure: commit pagination exceeded safety limit".to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockApi {
+        issue: Result<IssueSnapshot, String>,
+        pages: Result<Vec<Vec<String>>, String>,
+    }
+
+    impl ReadApi for MockApi {
+        fn issue(&self, _repository: &str, _number: u64) -> Result<IssueSnapshot, String> {
+            self.issue.clone()
+        }
+
+        fn commit_pages(
+            &self,
+            _repository: &str,
+            _number: u64,
+        ) -> Result<Vec<Vec<String>>, String> {
+            self.pages.clone()
+        }
+    }
+
+    fn event(body: &str) -> PullRequestEvent {
+        PullRequestEvent {
+            repository: TARGET_REPOSITORY.to_owned(),
+            number: 501,
+            title: "[0015] Enforce the PR contract".to_owned(),
+            body: body.to_owned(),
+            branch: "issue-171-pr-contract".to_owned(),
+            base_repository: TARGET_REPOSITORY.to_owned(),
+        }
+    }
+
+    fn issue() -> IssueSnapshot {
+        IssueSnapshot {
+            number: 171,
+            state: "open".to_owned(),
+            title: "[0015] Enforce one numbered open issue per pull request".to_owned(),
+            body: "Parent: #158\nDetails".to_owned(),
+            repository: TARGET_REPOSITORY.to_owned(),
+            has_milestone: true,
+            is_pull_request: false,
+        }
+    }
+
+    fn valid_body() -> &'static str {
+        "## Why\nA focused contract.\n\n## Implementation\nPure validation.\n\n## Validation\nTests.\n\n## Out of scope\nAPI writes.\n\nCloses #171"
+    }
+
+    #[test]
+    fn accepts_a_conforming_fixture() {
+        let api = MockApi {
+            issue: Ok(issue()),
+            pages: Ok(vec![vec!["feat: contract".to_owned()]]),
+        };
+        let receipt = verify_contract(&event(valid_body()), &api).expect("valid contract");
+        assert_eq!(receipt.issue_number, 171);
+        assert_eq!(receipt.sequence, "[0015]");
+    }
+
+    #[test]
+    fn accepts_paginated_commit_results() {
+        let api = MockApi {
+            issue: Ok(issue()),
+            pages: Ok(vec![
+                vec!["feat: first".to_owned()],
+                vec!["test: second".to_owned()],
+            ]),
+        };
+        let receipt = verify_contract(&event(valid_body()), &api).expect("valid pagination");
+        assert_eq!(receipt.commit_pages, 2);
+    }
+
+    #[test]
+    fn rejects_missing_issue_as_an_infrastructure_failure() {
+        let api = MockApi {
+            issue: Err("GitHub API infrastructure failure: issue lookup failed".to_owned()),
+            pages: Ok(Vec::new()),
+        };
+        let error = verify_contract(&event(valid_body()), &api).expect_err("missing issue");
+        assert!(error.contains("infrastructure failure"));
+    }
+
+    #[test]
+    fn rejects_additional_commit_reference() {
+        let api = MockApi {
+            issue: Ok(issue()),
+            pages: Ok(vec![vec!["fixes #99".to_owned()]]),
+        };
+        let error = verify_contract(&event(valid_body()), &api).expect_err("extra reference");
+        assert!(error.contains("additional"));
+    }
+
+    #[test]
+    fn rejects_malformed_body_and_closed_issue() {
+        let api = MockApi {
+            issue: Ok(IssueSnapshot {
+                state: "closed".to_owned(),
+                ..issue()
+            }),
+            pages: Ok(Vec::new()),
+        };
+        let error = verify_contract(&event("Closes #171"), &api).expect_err("invalid body");
+        assert!(error.contains("state") || error.contains("required section"));
+    }
+}

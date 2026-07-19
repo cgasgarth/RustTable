@@ -76,3 +76,33 @@ fn product_crates_do_not_depend_on_repository_tooling() {
         );
     }
 }
+
+#[test]
+fn github_pr_contract_fixture_runs_without_network_access() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "github",
+            "verify-pr-contract",
+            "--event",
+            "crates/xtask/tests/fixtures/github/valid-event.json",
+            "--api-fixture",
+            "crates/xtask/tests/fixtures/github/valid-api.json",
+            "--format",
+            "json",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(value["command"], "github.verify-pr-contract");
+    assert_eq!(value["data"]["issue"], 171);
+}
