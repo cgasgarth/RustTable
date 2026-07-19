@@ -128,6 +128,11 @@ pub struct ReferenceReceipt {
 pub struct ReferenceIdentityReceipt {
     pub version: String,
     pub commit: String,
+    pub executable_hash: String,
+    pub data_bundle_hash: String,
+    pub target_triple: String,
+    pub c_abi_model: String,
+    pub build_option_hash: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

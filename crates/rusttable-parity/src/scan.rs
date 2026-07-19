@@ -86,6 +86,10 @@ pub enum ScanError {
         operation: String,
         reference: String,
     },
+    UnknownOpenclProgram {
+        operation: String,
+        reference: String,
+    },
     Serialization {
         message: String,
     },
@@ -167,6 +171,13 @@ impl Display for ScanError {
                     "unknown OpenCL kernel for {operation}: {reference}"
                 )
             }
+            Self::UnknownOpenclProgram {
+                operation,
+                reference,
+            } => write!(
+                formatter,
+                "unknown OpenCL program for {operation}: {reference}"
+            ),
             Self::Serialization { message } => {
                 write!(formatter, "manifest serialization failed: {message}")
             }

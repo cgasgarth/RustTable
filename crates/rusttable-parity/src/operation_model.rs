@@ -3,9 +3,36 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct OperationManifest {
     pub schema_version: u32,
-    pub source_commit: String,
+    pub reference: ReferenceIdentity,
     pub history: HistoryCompatibility,
     pub operations: Vec<Operation>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ReferenceIdentity {
+    pub source_commit: String,
+    pub build_version: String,
+    pub executable_hash: String,
+    pub data_bundle_hash: String,
+    pub target_triple: String,
+    pub c_abi_model: String,
+    pub build_option_hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Evidence {
+    pub source_commit: String,
+    #[serde(default)]
+    pub source_path: Option<String>,
+    #[serde(default)]
+    pub line_start: Option<u32>,
+    #[serde(default)]
+    pub line_end: Option<u32>,
+    #[serde(default)]
+    pub fixture_id: Option<String>,
+    pub reason: String,
+    pub reviewer: String,
+    pub evidence_hash: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -39,12 +66,23 @@ pub struct Operation {
     pub cpu_implementation: String,
     pub opencl_programs: Vec<String>,
     pub opencl_kernels: Vec<String>,
+    #[serde(default)]
     pub parameter_versions: Vec<ParameterVersion>,
+    #[serde(default)]
     pub migrations: Vec<ParameterMigration>,
     pub preset_sources: Vec<String>,
     pub owning_issue_number: u64,
+    #[serde(default)]
+    pub evidence: Vec<OperationEvidence>,
     #[serde(default = "default_tolerance_class")]
     pub tolerance_class: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct OperationEvidence {
+    pub field: String,
+    #[serde(flatten)]
+    pub evidence: Evidence,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -55,6 +93,7 @@ pub struct ParameterVersion {
     pub decoder: String,
     pub opaque_blocking: bool,
     pub fixture_id: String,
+    pub evidence: Evidence,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -63,6 +102,7 @@ pub struct ParameterMigration {
     pub to_version: u32,
     pub strategy: String,
     pub fixture_id: String,
+    pub evidence: Evidence,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
@@ -110,6 +150,8 @@ pub struct OperationOverride {
     pub preset_sources: Option<Vec<String>>,
     #[serde(default)]
     pub owning_issue_number: Option<u64>,
+    #[serde(default)]
+    pub evidence: Option<Vec<OperationEvidence>>,
     #[serde(default)]
     pub tolerance_class: Option<String>,
 }

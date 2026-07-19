@@ -1,11 +1,13 @@
 use std::env;
 use std::fmt;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::schema::ReferenceIdentityReceipt;
 
@@ -121,6 +123,11 @@ pub struct ReferenceIdentity {
     pub data_dir: PathBuf,
     pub required_flags: Vec<String>,
     pub normalized_log_ruleset: u32,
+    pub executable_hash: String,
+    pub data_bundle_hash: String,
+    pub target_triple: String,
+    pub c_abi_model: String,
+    pub build_option_hash: String,
 }
 
 impl ReferenceIdentity {
@@ -128,6 +135,11 @@ impl ReferenceIdentity {
         ReferenceIdentityReceipt {
             version: self.version.clone(),
             commit: self.commit.clone(),
+            executable_hash: self.executable_hash.clone(),
+            data_bundle_hash: self.data_bundle_hash.clone(),
+            target_triple: self.target_triple.clone(),
+            c_abi_model: self.c_abi_model.clone(),
+            build_option_hash: self.build_option_hash.clone(),
         }
     }
 }
@@ -201,7 +213,101 @@ impl CapabilityProbe {
             data_dir: self.pin.data_dir.clone(),
             required_flags: self.pin.flags(),
             normalized_log_ruleset: self.pin.normalized_log_ruleset,
+            executable_hash: file_hash(&self.executable)?,
+            data_bundle_hash: directory_hash(&self.pin.data_dir)?,
+            target_triple: target_triple().to_owned(),
+            c_abi_model: target_triple().to_owned(),
+            build_option_hash: hash_text("rusttable-reference-build-options-v1"),
         })
+    }
+}
+
+fn file_hash(path: &Path) -> Result<String, ReferenceProbeError> {
+    let bytes = fs::read(path).map_err(|error| ReferenceProbeError::Io {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    Ok(hash_bytes(&bytes))
+}
+
+fn directory_hash(path: &Path) -> Result<String, ReferenceProbeError> {
+    let mut files = Vec::new();
+    collect_files(path, path, &mut files)?;
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut hasher = Sha256::new();
+    for (relative, bytes) in files {
+        hasher.update(relative.as_bytes());
+        hasher.update([0]);
+        hasher.update(bytes);
+        hasher.update([0]);
+    }
+    Ok(format_digest(hasher.finalize()))
+}
+
+fn collect_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<(String, Vec<u8>)>,
+) -> Result<(), ReferenceProbeError> {
+    let entries = fs::read_dir(directory).map_err(|error| ReferenceProbeError::Io {
+        path: directory.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|error| ReferenceProbeError::Io {
+            path: directory.to_path_buf(),
+            message: error.to_string(),
+        })?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(root, &path, files)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
+            let bytes = fs::read(&path).map_err(|error| ReferenceProbeError::Io {
+                path: path.clone(),
+                message: error.to_string(),
+            })?;
+            files.push((relative, bytes));
+        }
+    }
+    Ok(())
+}
+
+fn hash_text(value: &str) -> String {
+    hash_bytes(value.as_bytes())
+}
+
+fn hash_bytes(bytes: &[u8]) -> String {
+    format_digest(Sha256::digest(bytes))
+}
+
+fn format_digest(digest: impl AsRef<[u8]>) -> String {
+    let mut formatted = String::with_capacity(digest.as_ref().len() * 2);
+    for byte in digest.as_ref() {
+        write!(formatted, "{byte:02x}").expect("writing a digest to a String cannot fail");
+    }
+    formatted
+}
+
+const fn target_triple() -> &'static str {
+    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
+    {
+        "aarch64-apple-darwin"
+    }
+    #[cfg(all(target_arch = "x86_64", target_os = "macos"))]
+    {
+        "x86_64-apple-darwin"
+    }
+    #[cfg(not(any(
+        all(target_arch = "aarch64", target_os = "macos"),
+        all(target_arch = "x86_64", target_os = "macos")
+    )))]
+    {
+        "unsupported-target"
     }
 }
 

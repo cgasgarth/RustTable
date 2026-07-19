@@ -11,8 +11,8 @@ mod validate;
 
 pub use model::{Capability, CapabilityReceipt, IssueOwnership, Manifest, Override, SummaryGroup};
 pub use operation_model::{
-    HistoryCompatibility, Operation, OperationManifest, OperationOverride, ParameterMigration,
-    ParameterVersion,
+    Evidence, HistoryCompatibility, Operation, OperationEvidence, OperationManifest,
+    OperationOverride, ParameterMigration, ParameterVersion, ReferenceIdentity,
 };
 pub use operation_scan::{scan_operations, scan_operations_with_overrides};
 pub use operation_validate::{
