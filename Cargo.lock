@@ -2513,6 +2513,7 @@ dependencies = [
 name = "rusttable-parity"
 version = "0.1.0"
 dependencies = [
+ "rusttable-testkit",
  "serde",
  "serde_json",
  "sha2",

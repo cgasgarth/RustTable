@@ -109,8 +109,8 @@ pub type ResourceLimits = ReferenceLimits;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceReceipt {
     pub source_fixture_id: String,
-    pub xmp_path: Option<PathBuf>,
-    pub config_path: Option<PathBuf>,
+    pub xmp_path: Option<String>,
+    pub config_path: Option<String>,
     pub output_format: OutputFormat,
     pub output_profile: ColorProfile,
     pub dimensions: Dimensions,
@@ -133,6 +133,16 @@ pub struct ReferenceIdentityReceipt {
     pub target_triple: String,
     pub c_abi_model: String,
     pub build_option_hash: String,
+    pub executable_sha256: String,
+    pub data_dir_sha256: String,
+    pub opencl_bundle_sha256: String,
+    pub target: String,
+    pub architecture: String,
+    pub build_options_hash: String,
+    pub compiler: String,
+    pub native_library_identity: String,
+    pub cli_name: String,
+    pub cli_reference_hash: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

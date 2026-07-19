@@ -90,6 +90,10 @@ pub enum ScanError {
         operation: String,
         reference: String,
     },
+    ReferenceIdentityMismatch {
+        expected: String,
+        actual: String,
+    },
     Serialization {
         message: String,
     },
@@ -178,6 +182,12 @@ impl Display for ScanError {
                 formatter,
                 "unknown OpenCL program for {operation}: {reference}"
             ),
+            Self::ReferenceIdentityMismatch { expected, actual } => {
+                write!(
+                    formatter,
+                    "reference identity mismatch: expected {expected}, got {actual}"
+                )
+            }
             Self::Serialization { message } => {
                 write!(formatter, "manifest serialization failed: {message}")
             }

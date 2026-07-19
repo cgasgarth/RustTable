@@ -1,5 +1,4 @@
 use std::env;
-use std::fmt;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,6 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::resolution::ReferenceProbeError;
 use super::schema::ReferenceIdentityReceipt;
 
 pub(crate) const DEFAULT_FLAGS: &[&str] = &[
@@ -17,17 +17,13 @@ pub(crate) const DEFAULT_FLAGS: &[&str] = &[
     "--datadir",
     "--library",
     "--disable-opencl",
-    "--width",
-    "--height",
     "--icc-type",
     "--icc",
-    "--out-ext",
 ];
 
 static NEXT_SANDBOX: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReferencePin {
     pub version: String,
     pub commit: String,
@@ -117,10 +113,20 @@ impl ReferencePin {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReferenceIdentity {
+    pub source_dir: PathBuf,
     pub executable: PathBuf,
     pub version: String,
     pub commit: String,
     pub data_dir: PathBuf,
+    pub executable_sha256: String,
+    pub data_dir_sha256: String,
+    pub opencl_bundle_sha256: String,
+    pub target: String,
+    pub architecture: String,
+    pub build_options_hash: String,
+    pub compiler: String,
+    pub native_library_identity: String,
+    pub cli: CliReference,
     pub required_flags: Vec<String>,
     pub normalized_log_ruleset: u32,
     pub executable_hash: String,
@@ -131,7 +137,8 @@ pub struct ReferenceIdentity {
 }
 
 impl ReferenceIdentity {
-    pub(crate) fn receipt(&self) -> ReferenceIdentityReceipt {
+    #[must_use]
+    pub fn receipt(&self) -> ReferenceIdentityReceipt {
         ReferenceIdentityReceipt {
             version: self.version.clone(),
             commit: self.commit.clone(),
@@ -140,8 +147,65 @@ impl ReferenceIdentity {
             target_triple: self.target_triple.clone(),
             c_abi_model: self.c_abi_model.clone(),
             build_option_hash: self.build_option_hash.clone(),
+            executable_sha256: self.executable_sha256.clone(),
+            data_dir_sha256: self.data_dir_sha256.clone(),
+            opencl_bundle_sha256: self.opencl_bundle_sha256.clone(),
+            target: self.target.clone(),
+            architecture: self.architecture.clone(),
+            build_options_hash: self.build_options_hash.clone(),
+            compiler: self.compiler.clone(),
+            native_library_identity: self.native_library_identity.clone(),
+            cli_name: self.cli.name.clone(),
+            cli_reference_hash: self.cli.reference_hash.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CliReference {
+    pub name: String,
+    #[serde(default = "default_version_flag")]
+    pub version_flag: String,
+    #[serde(default = "default_help_flag")]
+    pub help_flag: String,
+    #[serde(default = "default_core_prefix")]
+    pub core_prefix: String,
+    #[serde(default)]
+    pub required_flags: Vec<String>,
+    #[serde(default)]
+    pub core_flags: Vec<String>,
+    pub reference_hash: String,
+}
+
+impl Default for CliReference {
+    fn default() -> Self {
+        Self {
+            name: "darktable-cli".to_owned(),
+            version_flag: default_version_flag(),
+            help_flag: default_help_flag(),
+            core_prefix: default_core_prefix(),
+            required_flags: vec![
+                "--width".to_owned(),
+                "--height".to_owned(),
+                "--core".to_owned(),
+            ],
+            core_flags: Vec::new(),
+            reference_hash: "unversioned".to_owned(),
+        }
+    }
+}
+
+fn default_version_flag() -> String {
+    "--version".to_owned()
+}
+
+fn default_help_flag() -> String {
+    "--help".to_owned()
+}
+
+fn default_core_prefix() -> String {
+    "--core".to_owned()
 }
 
 #[derive(Debug, Clone)]
@@ -207,10 +271,20 @@ impl CapabilityProbe {
             });
         }
         Ok(ReferenceIdentity {
+            source_dir: PathBuf::new(),
             executable,
             version: identity.0,
             commit: identity.1,
             data_dir: self.pin.data_dir.clone(),
+            executable_sha256: String::new(),
+            data_dir_sha256: String::new(),
+            opencl_bundle_sha256: String::new(),
+            target: String::new(),
+            architecture: String::new(),
+            build_options_hash: String::new(),
+            compiler: String::new(),
+            native_library_identity: String::new(),
+            cli: CliReference::default(),
             required_flags: self.pin.flags(),
             normalized_log_ruleset: self.pin.normalized_log_ruleset,
             executable_hash: file_hash(&self.executable)?,
@@ -458,91 +532,3 @@ fn default_path() -> &'static str {
 fn default_log_ruleset() -> u32 {
     1
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ReferenceProbeError {
-    Io {
-        path: PathBuf,
-        message: String,
-    },
-    Pin {
-        message: String,
-    },
-    Executable {
-        path: PathBuf,
-        message: String,
-    },
-    MissingDataDirectory {
-        path: PathBuf,
-    },
-    Spawn {
-        executable: PathBuf,
-        message: String,
-    },
-    ProbeExit {
-        argument: String,
-        code: Option<i32>,
-        stderr: String,
-    },
-    IdentityMismatch {
-        expected_version: String,
-        expected_commit: String,
-        actual: String,
-    },
-    UnsupportedFlag {
-        flag: String,
-    },
-    Isolation {
-        message: String,
-    },
-}
-
-impl fmt::Display for ReferenceProbeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io { path, message } => write!(
-                formatter,
-                "reference probe I/O at {}: {message}",
-                path.display()
-            ),
-            Self::Pin { message } => write!(formatter, "invalid reference pin: {message}"),
-            Self::Executable { path, message } => write!(
-                formatter,
-                "invalid reference executable {}: {message}",
-                path.display()
-            ),
-            Self::MissingDataDirectory { path } => write!(
-                formatter,
-                "reference data directory is missing: {}",
-                path.display()
-            ),
-            Self::Spawn {
-                executable,
-                message,
-            } => write!(
-                formatter,
-                "cannot execute reference {}: {message}",
-                executable.display()
-            ),
-            Self::ProbeExit {
-                argument,
-                code,
-                stderr,
-            } => write!(formatter, "reference {argument} exited {code:?}: {stderr}"),
-            Self::IdentityMismatch {
-                expected_version,
-                expected_commit,
-                actual,
-            } => write!(
-                formatter,
-                "reference identity mismatch; expected {expected_version} {expected_commit}, got {actual}"
-            ),
-            Self::UnsupportedFlag { flag } => {
-                write!(formatter, "reference does not support required flag {flag}")
-            }
-            Self::Isolation { message } => formatter.write_str(message),
-        }
-    }
-}
-
-impl std::error::Error for ReferenceProbeError {}

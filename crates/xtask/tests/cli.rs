@@ -158,3 +158,31 @@ fn github_queue_fixture_emits_a_deterministic_receipt() {
         "depends on open #446"
     );
 }
+
+#[test]
+fn reference_probe_reports_missing_local_assets_as_structured_json() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "reference",
+            "probe",
+            "--identity",
+            "fixtures/reference/darktable.toml",
+            "--format",
+            "json",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("xtask should start");
+    assert!(!output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json error");
+    assert_eq!(value["record"], "xtask.error");
+    assert!(
+        value["data"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("reference source is missing"))
+    );
+}

@@ -81,8 +81,14 @@ pub enum ParityCommand {
 
 #[derive(Debug, Args)]
 pub struct ParityScanArgs {
+    #[arg(long, default_value = "fixtures/reference/darktable.toml")]
+    pub identity: PathBuf,
     #[arg(long)]
-    pub source: PathBuf,
+    pub source: Option<PathBuf>,
+    #[arg(long)]
+    pub executable: Option<PathBuf>,
+    #[arg(long)]
+    pub data_dir: Option<PathBuf>,
     #[arg(long, default_value = "architecture/capability-overrides.toml")]
     pub overrides: PathBuf,
     #[arg(long, default_value = "architecture/darktable-capabilities.toml")]
@@ -153,8 +159,26 @@ pub enum ReferenceCommand {
 
 #[derive(Debug, Args)]
 pub struct ReferenceArgs {
+    #[arg(long, default_value = "fixtures/reference/darktable.toml")]
+    pub identity: PathBuf,
+    #[arg(long)]
+    pub source: Option<PathBuf>,
     #[arg(long)]
     pub executable: Option<PathBuf>,
+    #[arg(long)]
+    pub data_dir: Option<PathBuf>,
+    #[arg(long)]
+    pub input: Option<PathBuf>,
+    #[arg(long)]
+    pub xmp: Option<PathBuf>,
+    #[arg(long, default_value = "reference.fixture")]
+    pub fixture_id: String,
+    #[arg(long, default_value_t = 1)]
+    pub width: u32,
+    #[arg(long, default_value_t = 1)]
+    pub height: u32,
+    #[arg(long, default_value_t = false)]
+    pub gpu: bool,
 }
 
 #[derive(Debug, Subcommand)]

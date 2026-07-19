@@ -216,6 +216,7 @@ trait ReadApi {
     fn commit_pages(&self, repository: &str, number: u64) -> Result<Vec<Vec<String>>, String>;
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_queue_receipt(api: &dyn ReadApi) -> Result<QueueReceipt, String> {
     let issues = api.issues(TARGET_REPOSITORY)?;
     let mut by_number = std::collections::BTreeMap::new();
