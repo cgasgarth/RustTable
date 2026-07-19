@@ -47,6 +47,10 @@ pub enum Command {
         #[command(subcommand)]
         command: CiCommand,
     },
+    Github {
+        #[command(subcommand)]
+        command: GithubCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -127,4 +131,18 @@ pub enum CiCommand {
     Prepush,
     Pr,
     Main,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum GithubCommand {
+    #[command(name = "verify-pr-contract")]
+    VerifyPrContract(VerifyPrContractArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct VerifyPrContractArgs {
+    #[arg(long)]
+    pub event: PathBuf,
+    #[arg(long)]
+    pub api_fixture: Option<PathBuf>,
 }

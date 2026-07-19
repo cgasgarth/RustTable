@@ -1,0 +1,21 @@
+{
+  "issue": {
+    "number": 171,
+    "state": "open",
+    "title": "[0015] Enforce one numbered open issue per pull request",
+    "body": "Parent: #158\n\nIssue contract.",
+    "milestone": {
+      "title": "Foundation & Developer Workflow"
+    },
+    "repository": {
+      "full_name": "cgasgarth/RustTable"
+    }
+  },
+  "commit_pages": [
+    [
+      {
+        "message": "test: exercise the contract"
+      }
+    ]
+  ]
+}

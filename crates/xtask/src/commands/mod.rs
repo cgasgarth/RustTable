@@ -1,6 +1,7 @@
 mod bench;
 mod ci;
 mod fixtures;
+mod github;
 mod parity;
 mod reference;
 mod repo;
@@ -24,6 +25,7 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
         Command::Repo { command } => repo::run(&root, command),
         Command::Reference { command } => reference::run(&root, command, &runner),
         Command::Ci { command } => ci::run(&root, command, &runner),
+        Command::Github { command } => github::run(&root, command, &runner),
     }
     .map_err(CommandError::Surface)
 }

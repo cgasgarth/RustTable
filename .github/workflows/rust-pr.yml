@@ -54,6 +54,12 @@ jobs:
             rust-main-${{ runner.os }}-rust-1.95.0-
       - name: Verify workflow inventory
         run: cargo xtask repo verify-workflows
+      - name: Verify pull request contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: cargo xtask github verify-pr-contract --event "$GITHUB_EVENT_PATH"
       - name: Run repository PR validation
         run: bash scripts/pr-ci.sh
       - name: Enforce 150-second validation budget
