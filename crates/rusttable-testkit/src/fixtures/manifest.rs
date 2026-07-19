@@ -21,6 +21,16 @@ pub enum PrivacyClass {
     External,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ArtifactClass {
+    Descriptor,
+    ValidBinary,
+    MalformedBinary,
+    ExternalRequired,
+    ExternalOptional,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct FixtureManifest {
@@ -72,6 +82,15 @@ pub struct FixtureEntry {
     pub consumers: Vec<String>,
     #[serde(default)]
     pub consuming_issue_ranges: Vec<String>,
+    pub artifact_class: ArtifactClass,
+    pub format: String,
+    pub source: String,
+    pub generator: String,
+    pub parser: String,
+    #[serde(default)]
+    pub seed_fixture: Option<String>,
+    #[serde(default)]
+    pub mutation: Option<String>,
     #[serde(default)]
     pub expected: FixtureExpectation,
     #[serde(default)]
@@ -150,7 +169,6 @@ impl FixtureManifest {
             if !roots.iter().any(|root| path.starts_with(root)) {
                 return Err(ManifestError::OutsideGovernedRoot { path });
             }
-            paths.push(path);
             if entry.size > self.limits.max_file_bytes {
                 return Err(ManifestError::EntrySizeLimit {
                     id: entry.id.clone(),
@@ -159,6 +177,8 @@ impl FixtureManifest {
                 });
             }
             validate_checksum(&entry.id, &entry.sha256)?;
+            validate_artifact(entry, &path)?;
+            paths.push(path);
             if entry.media_type.trim().is_empty() {
                 return Err(ManifestError::MissingMediaType {
                     id: entry.id.clone(),
@@ -178,6 +198,22 @@ impl FixtureManifest {
             }
             if let Some(checksum) = &entry.expected.output_sha256 {
                 validate_checksum(&entry.id, checksum)?;
+            }
+        }
+        for entry in &self.fixtures {
+            if let Some(seed) = &entry.seed_fixture {
+                let Some(seed_entry) = self.fixture(seed) else {
+                    return Err(ManifestError::UnknownSeed {
+                        id: entry.id.clone(),
+                        seed: seed.clone(),
+                    });
+                };
+                if seed_entry.artifact_class != ArtifactClass::ValidBinary {
+                    return Err(ManifestError::InvalidSeed {
+                        id: entry.id.clone(),
+                        seed: seed.clone(),
+                    });
+                }
             }
         }
         Ok(())
@@ -267,6 +303,62 @@ fn validate_checksum(id: &str, checksum: &str) -> Result<(), ManifestError> {
     Ok(())
 }
 
+fn validate_artifact(entry: &FixtureEntry, path: &Path) -> Result<(), ManifestError> {
+    if entry.format.trim().is_empty()
+        || entry.source.trim().is_empty()
+        || entry.generator.trim().is_empty()
+        || entry.parser.trim().is_empty()
+    {
+        return Err(ManifestError::MissingArtifactProvenance {
+            id: entry.id.clone(),
+        });
+    }
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    match entry.artifact_class {
+        ArtifactClass::Descriptor => {
+            if !matches!(extension, "fixture" | "json" | "toml") {
+                return Err(ManifestError::DescriptorProductionExtension {
+                    id: entry.id.clone(),
+                    extension: extension.to_owned(),
+                });
+            }
+            if entry.seed_fixture.is_some() || entry.mutation.is_some() {
+                return Err(ManifestError::DescriptorMutation {
+                    id: entry.id.clone(),
+                });
+            }
+        }
+        ArtifactClass::ValidBinary => {
+            if entry.size == 0 || entry.seed_fixture.is_some() || entry.mutation.is_some() {
+                return Err(ManifestError::InvalidValidBinary {
+                    id: entry.id.clone(),
+                });
+            }
+        }
+        ArtifactClass::MalformedBinary => {
+            if entry.size == 0
+                || entry.seed_fixture.as_deref().unwrap_or_default().is_empty()
+                || entry.mutation.as_deref().unwrap_or_default().is_empty()
+            {
+                return Err(ManifestError::MissingMutationRecipe {
+                    id: entry.id.clone(),
+                });
+            }
+        }
+        ArtifactClass::ExternalRequired | ArtifactClass::ExternalOptional => {
+            if entry.privacy != PrivacyClass::External {
+                return Err(ManifestError::ExternalPrivacyMismatch {
+                    id: entry.id.clone(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_limits(limits: FixtureManifestLimits) -> Result<(), ManifestError> {
     if limits.max_file_bytes == 0
         || limits.max_total_bytes == 0
@@ -318,6 +410,14 @@ pub enum ManifestError {
     PathTraversal { path: String },
     Io { path: PathBuf, message: String },
     SymlinkEscape { id: String },
+    MissingArtifactProvenance { id: String },
+    DescriptorProductionExtension { id: String, extension: String },
+    DescriptorMutation { id: String },
+    InvalidValidBinary { id: String },
+    MissingMutationRecipe { id: String },
+    ExternalPrivacyMismatch { id: String },
+    UnknownSeed { id: String, seed: String },
+    InvalidSeed { id: String, seed: String },
 }
 
 impl fmt::Display for ManifestError {
@@ -371,6 +471,46 @@ impl fmt::Display for ManifestError {
             Self::SymlinkEscape { id } => write!(
                 formatter,
                 "fixture {id} resolves outside the repository root"
+            ),
+            Self::MissingArtifactProvenance { id } => write!(
+                formatter,
+                "fixture {id} must declare format, source, generator, and parser provenance"
+            ),
+            Self::DescriptorProductionExtension { id, extension } => write!(
+                formatter,
+                "descriptor fixture {id} cannot use production extension .{extension}"
+            ),
+            Self::DescriptorMutation { id } => {
+                write!(
+                    formatter,
+                    "descriptor fixture {id} cannot declare a binary mutation"
+                )
+            }
+            Self::InvalidValidBinary { id } => {
+                write!(
+                    formatter,
+                    "valid-binary fixture {id} has an invalid seed or size"
+                )
+            }
+            Self::MissingMutationRecipe { id } => {
+                write!(
+                    formatter,
+                    "malformed-binary fixture {id} needs a seed and mutation"
+                )
+            }
+            Self::ExternalPrivacyMismatch { id } => write!(
+                formatter,
+                "external fixture {id} must use the external privacy class"
+            ),
+            Self::UnknownSeed { id, seed } => {
+                write!(
+                    formatter,
+                    "fixture {id} references unknown seed fixture {seed}"
+                )
+            }
+            Self::InvalidSeed { id, seed } => write!(
+                formatter,
+                "malformed fixture {id} must derive from valid-binary seed {seed}"
             ),
         }
     }

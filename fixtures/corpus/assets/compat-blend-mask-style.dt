@@ -1,2 +1,2 @@
-RUSTTABLE-SYNTHETIC
-class=compatibility;features=blend,masks,styles,presets
+<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:darktable="http://darktable.sf.net/" darktable:xmp_version="4" darktable:history_end="1"><darktable:history><rdf:Seq><rdf:li darktable:num="0" darktable:operation="temperature" darktable:enabled="1" /><rdf:li darktable:num="1" darktable:operation="colorin" darktable:enabled="1" /><rdf:li darktable:num="0" darktable:operation="flip" darktable:enabled="0" /></rdf:Seq></darktable:history></rdf:Description></rdf:RDF></x:xmpmeta>

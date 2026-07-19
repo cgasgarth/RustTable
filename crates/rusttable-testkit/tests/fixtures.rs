@@ -52,6 +52,11 @@ sha256 = "{checksum}"
 media_type = "application/octet-stream"
 compression = "none"
 privacy = "synthetic"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = ["test"]
 "#
     ))
@@ -95,6 +100,11 @@ size = 1
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 media_type = "application/octet-stream"
 privacy = "synthetic"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = []
 "#,
     );
@@ -144,6 +154,11 @@ size = 17
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 media_type = "application/octet-stream"
 privacy = "synthetic"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = []
 "#,
         ),
@@ -165,6 +180,11 @@ size = 4
 sha256 = "{checksum}"
 media_type = "application/octet-stream"
 privacy = "synthetic"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = []
 [[fixtures]]
 id = "second"
@@ -173,6 +193,11 @@ size = 4
 sha256 = "{checksum}"
 media_type = "application/octet-stream"
 privacy = "synthetic"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = []
 "#
     ))
@@ -231,6 +256,11 @@ size = {}
 sha256 = "{checksum}"
 media_type = "image/jpeg"
 privacy = "scrubbed"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = []
 "#,
         bytes.len()
@@ -280,6 +310,11 @@ sha256 = "{checksum}"
 media_type = "application/octet-stream"
 compression = "gzip"
 privacy = "synthetic"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = []
 "#,
         compressed.len()
@@ -366,6 +401,11 @@ sha256 = "{checksum}"
 media_type = "application/octet-stream"
 compression = "none"
 privacy = "external"
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-test"
+parser = "rusttable-testkit"
 consumers = ["integration"]
 "#,
         bytes.len()

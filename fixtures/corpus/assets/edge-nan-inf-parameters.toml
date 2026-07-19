@@ -1,2 +1,3 @@
-RUSTTABLE-SYNTHETIC
-class=edge;kind=nan-inf-parameters;status=reject
+# deterministic non-finite parameter mutation
+value = "NaN"
+limit = "Inf"
