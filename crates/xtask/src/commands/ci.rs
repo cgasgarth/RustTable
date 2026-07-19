@@ -756,26 +756,17 @@ mod tests {
             .iter()
             .find(|check| check.id == "rust-test")
             .expect("library test");
-        assert_eq!(
-            rust_check.parallel_group_for("pull_request"),
-            "rust-01-check"
-        );
-        assert_eq!(
-            library_lint.parallel_group_for("pull_request"),
-            "rust-02-clippy"
-        );
-        assert_eq!(rust_test.parallel_group_for("pull_request"), "rust-03-test");
-        assert_eq!(rust_check.timeout_for("pull_request"), 60);
-        assert_eq!(library_lint.timeout_for("pull_request"), 20);
-        assert_eq!(rust_test.timeout_for("pull_request"), 55);
-        assert_eq!(
-            library_lint.prerequisites_for("pull_request"),
-            vec!["rust-check"]
-        );
-        assert_eq!(
-            rust_test.prerequisites_for("pull_request"),
-            vec!["rust-clippy"]
-        );
+        for surface in ["prepush", "pull_request"] {
+            assert_eq!(rust_check.parallel_group_for(surface), "rust-03-check");
+            assert_eq!(library_lint.parallel_group_for(surface), "rust-02-clippy");
+            assert_eq!(rust_test.parallel_group_for(surface), "rust-01-test");
+            assert_eq!(rust_check.timeout_for(surface), 55);
+            assert_eq!(library_lint.timeout_for(surface), 20);
+            assert_eq!(rust_test.timeout_for(surface), 60);
+            assert_eq!(library_lint.prerequisites_for(surface), vec!["rust-test"]);
+            assert_eq!(rust_check.prerequisites_for(surface), vec!["rust-clippy"]);
+            assert!(rust_test.prerequisites_for(surface).is_empty());
+        }
         assert_eq!(rust_check.parallel_group_for("precommit"), "rust");
         assert_eq!(library_lint.parallel_group_for("precommit"), "rust");
 
