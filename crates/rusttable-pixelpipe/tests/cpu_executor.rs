@@ -3,9 +3,9 @@ use rusttable_core::{
     ParameterValue, PhotoId, Revision,
 };
 use rusttable_pixelpipe::{
-    CpuImplementation, CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeRequest,
-    RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError,
-    RgbaF32Pixel,
+    CpuImplementation, CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
+    CpuPixelpipeRequest, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
+    RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
 
@@ -63,7 +63,7 @@ fn executes_registered_operations_in_authored_order_and_preserves_alpha() {
             &[("red", 0.5), ("green", 1.5), ("blue", 2.0)],
         ),
     ]);
-    let request = CpuPixelpipeRequest::new(image(), graph);
+    let request = CpuPixelpipeRequest::new(image(), graph, CpuPixelpipeOutputMode::FullExport);
 
     let result = CpuPixelpipeExecutor
         .execute(&request)
@@ -98,7 +98,7 @@ fn receipt_is_deterministic_and_records_scalar_cpu_provenance() {
         "rusttable.linear_offset",
         &[("value", 0.05)],
     )]);
-    let request = CpuPixelpipeRequest::new(image(), graph);
+    let request = CpuPixelpipeRequest::new(image(), graph, CpuPixelpipeOutputMode::FullExport);
 
     let first = CpuPixelpipeExecutor
         .execute(&request)
@@ -142,12 +142,64 @@ fn rejects_linear_input_until_a_linear_request_mode_exists() {
     );
     let input = RgbaF32Image::new(descriptor, vec![RgbaF32Pixel::new(1.5, 0.0, 0.0, 1.0)])
         .expect("linear extended range is valid");
-    let request = CpuPixelpipeRequest::new(input, graph(Vec::new()));
+    let request =
+        CpuPixelpipeRequest::new(input, graph(Vec::new()), CpuPixelpipeOutputMode::FullExport);
 
     assert_eq!(
         CpuPixelpipeExecutor.execute(&request),
         Err(CpuPixelpipeError::UnsupportedInputEncoding {
             actual: RgbaF32ColorEncoding::LinearSrgbD65,
         })
+    );
+}
+
+#[test]
+fn output_modes_have_known_linear_and_srgb_boundaries_with_identical_alpha() {
+    let input = image();
+    let graph = graph(Vec::new());
+    let full = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            input.clone(),
+            graph.clone(),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("full export succeeds");
+    let preview = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            input,
+            graph,
+            CpuPixelpipeOutputMode::Preview,
+        ))
+        .expect("preview succeeds");
+
+    assert_eq!(
+        full.image().descriptor().color_encoding(),
+        RgbaF32ColorEncoding::LinearSrgbD65
+    );
+    assert_eq!(
+        preview.image().descriptor().color_encoding(),
+        RgbaF32ColorEncoding::SrgbD65
+    );
+    let full_pixel = full.image().pixels()[0];
+    assert!((full_pixel.red() - 0.214_041_14).abs() < 0.000_001);
+    assert!((full_pixel.green() - 0.050_876_09).abs() < 0.000_001);
+    assert!((full_pixel.blue() - 0.522_521_56).abs() < 0.000_001);
+    let preview_pixel = preview.image().pixels()[0];
+    assert!((preview_pixel.red() - 0.5).abs() < 0.000_001);
+    assert!((preview_pixel.green() - 0.25).abs() < 0.000_001);
+    assert!((preview_pixel.blue() - 0.75).abs() < 0.000_001);
+    assert!((full_pixel.alpha() - 0.4).abs() < f32::EPSILON);
+    assert!((preview_pixel.alpha() - 0.4).abs() < f32::EPSILON);
+    assert_eq!(
+        full.receipt().output_mode(),
+        CpuPixelpipeOutputMode::FullExport
+    );
+    assert_eq!(
+        preview.receipt().output_mode(),
+        CpuPixelpipeOutputMode::Preview
+    );
+    assert_ne!(
+        full.receipt().output_identity(),
+        preview.receipt().output_identity()
     );
 }

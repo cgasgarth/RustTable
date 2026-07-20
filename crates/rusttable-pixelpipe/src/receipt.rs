@@ -2,7 +2,7 @@ use sha2::{Digest, Sha256};
 
 use rusttable_core::OperationId;
 
-use crate::RgbaF32Descriptor;
+use crate::{CpuPixelpipeOutputMode, RgbaF32Descriptor};
 
 /// Identifies the deterministic CPU implementation that produced a result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,6 +74,7 @@ pub struct CpuPipelineReceipt {
     output_descriptor: RgbaF32Descriptor,
     input_identity: PixelIdentity,
     output_identity: PixelIdentity,
+    output_mode: CpuPixelpipeOutputMode,
     nodes: Vec<CpuNodeReceipt>,
 }
 
@@ -84,6 +85,7 @@ impl CpuPipelineReceipt {
         output_descriptor: RgbaF32Descriptor,
         input_identity: PixelIdentity,
         output_identity: PixelIdentity,
+        output_mode: CpuPixelpipeOutputMode,
         nodes: Vec<CpuNodeReceipt>,
     ) -> Self {
         Self {
@@ -92,6 +94,7 @@ impl CpuPipelineReceipt {
             output_descriptor,
             input_identity,
             output_identity,
+            output_mode,
             nodes,
         }
     }
@@ -119,6 +122,11 @@ impl CpuPipelineReceipt {
     #[must_use]
     pub const fn output_identity(&self) -> PixelIdentity {
         self.output_identity
+    }
+
+    #[must_use]
+    pub const fn output_mode(&self) -> CpuPixelpipeOutputMode {
+        self.output_mode
     }
 
     #[must_use]
