@@ -36,6 +36,19 @@ fn supported_input_formats_have_stable_jpeg_png_tiff_order() {
 }
 
 #[test]
+fn decoder_extensions_are_case_insensitive_and_canonical() {
+    assert_eq!(InputFormat::from_extension("JPG"), Some(InputFormat::Jpeg));
+    assert_eq!(
+        InputFormat::from_extension(".jpeg"),
+        Some(InputFormat::Jpeg)
+    );
+    assert_eq!(InputFormat::from_extension("png"), Some(InputFormat::Png));
+    assert_eq!(InputFormat::from_extension("TIF"), Some(InputFormat::Tiff));
+    assert_eq!(InputFormat::from_extension("raw"), None);
+    assert_eq!(InputFormat::Jpeg.extensions(), &["jpg", "jpeg"]);
+}
+
+#[test]
 fn limits_require_nonzero_representable_bounds_and_keep_caps_independent() {
     assert_eq!(
         DecodeLimits::new(0, 2, 2, 4, 16),

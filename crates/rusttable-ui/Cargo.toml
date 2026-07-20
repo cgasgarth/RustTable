@@ -11,6 +11,8 @@ gtk4.workspace = true
 rusttable-core.workspace = true
 rusttable-input.workspace = true
 rusttable-processing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -4,7 +4,7 @@ fn main() {
         println!("RustTable {}", env!("CARGO_PKG_VERSION"));
         return;
     }
-    if !arguments.is_empty() {
+    if arguments.iter().any(|argument| argument.starts_with('-')) {
         eprintln!("unsupported arguments: {}", arguments.join(" "));
         std::process::exit(2);
     }
