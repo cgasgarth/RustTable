@@ -3,6 +3,7 @@ mod catalog_preview;
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
 
 use crate::gtk_controller::GtkCatalogController;
+use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewState};
 use crate::lifecycle::run_with_bootstrap;
 use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual};
 use std::cell::RefCell;
@@ -54,8 +55,13 @@ pub fn run() -> Result<(), DesktopRunError> {
                     shell.set_photo_workspace(workspace);
                 }
                 let selection_controller = Rc::clone(&catalog_controller);
+                let preview_shell = shell.clone();
                 shell.set_photo_selected_handler(move |photo_id| {
-                    let _ = selection_controller.borrow_mut().select_photo(photo_id);
+                    if !selection_controller.borrow_mut().select_photo(photo_id) {
+                        return;
+                    }
+                    let catalog = selection_controller.borrow();
+                    install_selected_preview(&preview_shell, &catalog);
                 });
                 shell.present();
             });
@@ -70,4 +76,33 @@ pub fn run() -> Result<(), DesktopRunError> {
         },
         |warning| eprintln!("{warning}"),
     )
+}
+
+fn install_selected_preview(shell: &rusttable_ui::GtkShell, catalog: &GtkCatalogController) {
+    let preview = GtkPreviewController::new().render_selected(catalog);
+    let GtkPreviewState::Ready(preview) = preview else {
+        shell.darkroom_preview().clear_texture();
+        return;
+    };
+
+    let Ok(dimensions) = rusttable_ui::PreviewDimensions::new(
+        preview.dimensions().width(),
+        preview.dimensions().height(),
+    ) else {
+        shell.darkroom_preview().clear_texture();
+        return;
+    };
+    let Ok(status) = rusttable_ui::PresentationText::new("rendered") else {
+        shell.darkroom_preview().clear_texture();
+        return;
+    };
+    let Ok(metadata) =
+        rusttable_ui::Rgba8PreviewMetadata::new(dimensions, status, preview.pixels().to_vec())
+    else {
+        shell.darkroom_preview().clear_texture();
+        return;
+    };
+    if shell.darkroom_preview().set_rgba8(&metadata).is_err() {
+        shell.darkroom_preview().clear_texture();
+    }
 }
