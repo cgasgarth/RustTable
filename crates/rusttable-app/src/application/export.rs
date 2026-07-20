@@ -151,14 +151,15 @@ impl ExportRequest {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ExportCancellation(Arc<AtomicBool>);
 
+impl PartialEq for ExportCancellation {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ExportCancellation {}
+
 impl ExportCancellation {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the Iced export progress control requests cancellation"
-        )
-    )]
     pub(crate) fn cancel(&self) {
         self.0.store(true, Ordering::Release);
     }
@@ -203,7 +204,7 @@ pub(crate) struct ExportStatus {
 
 impl ExportStatus {
     #[must_use]
-    fn at(stage: ExportStage) -> Self {
+    pub(crate) fn at(stage: ExportStage) -> Self {
         Self {
             stage,
             text: stage.label().to_owned(),
@@ -223,10 +224,6 @@ impl ExportStatus {
     }
 
     #[must_use]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the Iced progress view reads status text")
-    )]
     pub(crate) fn text(&self) -> &str {
         &self.text
     }
@@ -243,13 +240,6 @@ pub(crate) enum ExportTaskResult {
 /// The application retains the handle when it adds the export progress UI;
 /// callers that only need the existing one-shot action can consume the task.
 #[derive(Debug)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the Iced progress view retains this cancellation handle"
-    )
-)]
 pub(crate) struct ExportTask {
     cancellation: ExportCancellation,
     task: Task<Message>,
@@ -257,10 +247,6 @@ pub(crate) struct ExportTask {
 
 impl ExportTask {
     #[must_use]
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the Iced progress view requests cancellation")
-    )]
     pub(crate) fn cancellation(&self) -> ExportCancellation {
         self.cancellation.clone()
     }
@@ -287,22 +273,6 @@ pub(super) fn pick_destination(photo_id: PhotoId) -> Task<Message> {
     )
 }
 
-pub(super) fn start(
-    catalog_path: PathBuf,
-    source_root: PathBuf,
-    photo_id: PhotoId,
-    destination: PathBuf,
-) -> Task<Message> {
-    start_request(ExportRequest::new(
-        catalog_path,
-        source_root,
-        photo_id,
-        destination,
-        ExportSettings::original(),
-    ))
-    .into_task()
-}
-
 /// Starts one immutable export request on Iced's task executor.
 ///
 /// The caller can retain [`ExportTask::cancellation`] and request cooperative
@@ -314,12 +284,31 @@ pub(crate) fn start_request(request: ExportRequest) -> ExportTask {
     let cancellation = ExportCancellation::default();
     let task_cancellation = cancellation.clone();
     let photo_id = request.photo_id();
-    let task = Task::perform(
-        async move {
-            let mut ignored_status = |_| {};
-            ExportTaskResult::from(run(&request, &task_cancellation, &mut ignored_status))
+    let sipper = iced::task::sipper(move |sender| async move {
+        let (finished, receiver) = iced::futures::channel::oneshot::channel();
+        std::thread::spawn(move || {
+            let sender = std::sync::Mutex::new(sender);
+            let mut report_status = |status| {
+                let mut sender = sender
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                iced::futures::executor::block_on(sender.send(status));
+            };
+            let result =
+                ExportTaskResult::from(run(&request, &task_cancellation, &mut report_status));
+            let _ = finished.send(result);
+        });
+        receiver.await.ok()
+    });
+    let task = Task::sip(
+        sipper,
+        move |status| Message::ExportStatus { photo_id, status },
+        move |result| Message::ExportFinished {
+            photo_id,
+            result: result.unwrap_or_else(|| {
+                ExportTaskResult::Failed("Export task ended before reporting a result.".to_owned())
+            }),
         },
-        move |result| Message::ExportFinished { photo_id, result },
     );
     ExportTask { cancellation, task }
 }
@@ -443,12 +432,18 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    use super::super::{ActiveExport, Message, Shell, update};
     use super::{
-        ExportCancellation, ExportRequest, ExportSettings, ExportSize, ExportStage,
-        png_destination, run, start_request,
+        ExportCancellation, ExportRequest, ExportSettings, ExportSize, ExportStage, ExportStatus,
+        ExportTaskResult, png_destination, run, start_request,
     };
+    use crate::library::{LibraryFailureKind, LibraryLoadRequestId};
     use rusttable_core::PhotoId;
     use rusttable_export::CollisionPolicy;
+    use rusttable_ui::{
+        NavigationIntent, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
+        PresentationText, UiState,
+    };
 
     static TEST_DIRECTORY_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -471,6 +466,69 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn active_photo_shell() -> (Shell, PhotoId) {
+        let photo_id = PhotoId::new(1).expect("test photo ID is non-zero");
+        let workspace = PhotoWorkspaceViewModel::new(
+            vec![PhotoCardViewModel::new(
+                photo_id,
+                PresentationText::new("Test photo").expect("test title is valid"),
+                None,
+            )],
+            vec![PhotoDetailViewModel::new(
+                photo_id,
+                PresentationText::new("Test photo").expect("test title is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut shell = Shell::with_photo_workspace(workspace);
+        let _ = update(
+            &mut shell,
+            Message::Navigate(NavigationIntent::ShowPhoto(photo_id)),
+        );
+        (shell, photo_id)
+    }
+
+    #[test]
+    fn default_shell_shows_the_sidebar() {
+        assert_eq!(
+            Shell::default(),
+            Shell {
+                ui: UiState::default(),
+                active_load_request_id: LibraryLoadRequestId::first(),
+                load_in_flight: false,
+                catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
+                source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
+                preview_generation: 0,
+                active_preview: None,
+                import_paths: Vec::new(),
+                import_cancellation: None,
+                active_export: None,
+                pending_import_selection: None,
+                basic_edit: None,
+            }
+        );
+    }
+
+    #[test]
+    fn toggle_sidebar_hides_it() {
+        let mut shell = Shell::default();
+
+        let _ = update(&mut shell, Message::ToggleSidebar);
+
+        assert!(!shell.ui_state().sidebar_visible());
+    }
+
+    #[test]
+    fn toggling_sidebar_twice_restores_it() {
+        let mut shell = Shell::default();
+
+        let _ = update(&mut shell, Message::ToggleSidebar);
+        let _ = update(&mut shell, Message::ToggleSidebar);
+
+        assert!(shell.ui_state().sidebar_visible());
     }
 
     #[test]
@@ -591,6 +649,86 @@ mod tests {
                 ExportStage::Publishing,
                 ExportStage::Completed,
             ]
+        );
+    }
+
+    #[test]
+    fn status_events_are_scoped_to_the_active_export() {
+        let (mut shell, photo_id) = active_photo_shell();
+        let other_photo_id = PhotoId::new(2).expect("test photo ID is non-zero");
+        shell.active_export = Some(ActiveExport {
+            photo_id,
+            cancellation: ExportCancellation::default(),
+        });
+
+        let _ = update(
+            &mut shell,
+            Message::ExportStatus {
+                photo_id: other_photo_id,
+                status: ExportStatus::at(ExportStage::Rendering),
+            },
+        );
+        assert!(shell.ui_state().export_status(photo_id).is_none());
+
+        let _ = update(
+            &mut shell,
+            Message::ExportStatus {
+                photo_id,
+                status: ExportStatus::at(ExportStage::Rendering),
+            },
+        );
+        assert_eq!(
+            shell
+                .ui_state()
+                .export_status(photo_id)
+                .map(PresentationText::as_str),
+            Some("Rendering selected edit…")
+        );
+
+        let _ = update(
+            &mut shell,
+            Message::ExportFinished {
+                photo_id,
+                result: ExportTaskResult::Completed("Saved copy.png".to_owned()),
+            },
+        );
+        assert!(shell.active_export.is_none());
+
+        let _ = update(
+            &mut shell,
+            Message::ExportStatus {
+                photo_id,
+                status: ExportStatus::at(ExportStage::Failed),
+            },
+        );
+        assert_eq!(
+            shell
+                .ui_state()
+                .export_status(photo_id)
+                .map(PresentationText::as_str),
+            Some("Saved copy.png")
+        );
+    }
+
+    #[test]
+    fn cancellation_is_retained_until_the_active_export_finishes() {
+        let (mut shell, photo_id) = active_photo_shell();
+        let cancellation = ExportCancellation::default();
+        shell.active_export = Some(ActiveExport {
+            photo_id,
+            cancellation: cancellation.clone(),
+        });
+
+        let _ = update(&mut shell, Message::CancelExport(photo_id));
+
+        assert!(cancellation.is_cancelled());
+        assert!(shell.active_export.is_some());
+        assert_eq!(
+            shell
+                .ui_state()
+                .export_status(photo_id)
+                .map(PresentationText::as_str),
+            Some("Cancelling export…")
         );
     }
 }
