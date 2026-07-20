@@ -223,6 +223,80 @@ pub const LIGHTTABLE_TOOLBAR: LighttableToolbarSpec = LighttableToolbarSpec {
     row_count: 1,
 };
 
+/// One disclosure module in Darktable's lighttable right-center rail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LighttableModuleSpec {
+    /// Stable GTK widget name used by controller and smoke-test lookup.
+    pub widget_name: &'static str,
+    /// Visible module title from the Darktable lighttable.
+    pub title: &'static str,
+}
+
+/// Direct lighttable rail order from Darktable's right-center container.
+///
+/// `modulegroups.c` is intentionally absent: Darktable exposes that selector
+/// only in darkroom. Export is listed once because its GTK controller owns its
+/// own disclosure widget.
+pub const LIGHTTABLE_RIGHT_MODULES: [LighttableModuleSpec; 9] = [
+    LighttableModuleSpec {
+        widget_name: "selection",
+        title: "selection",
+    },
+    LighttableModuleSpec {
+        widget_name: "actions-on-selection",
+        title: "actions on selection",
+    },
+    LighttableModuleSpec {
+        widget_name: "history-stack",
+        title: "history stack",
+    },
+    LighttableModuleSpec {
+        widget_name: "styles",
+        title: "styles",
+    },
+    LighttableModuleSpec {
+        widget_name: "metadata-editor",
+        title: "metadata editor",
+    },
+    LighttableModuleSpec {
+        widget_name: "tagging",
+        title: "tagging",
+    },
+    LighttableModuleSpec {
+        widget_name: "geotagging",
+        title: "geotagging",
+    },
+    LighttableModuleSpec {
+        widget_name: "neural-restore",
+        title: "neural restore",
+    },
+    LighttableModuleSpec {
+        widget_name: "export",
+        title: "export",
+    },
+];
+
+/// Row and column counts that prevent duplicate lighttable chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LighttableCompositionSpec {
+    /// Collection toolbar rows above the canvas.
+    pub top_toolbar_rows: u8,
+    /// Footer toolbar rows between canvas and filmstrip.
+    pub footer_toolbar_rows: u8,
+    /// Toolbars embedded inside the filmstrip itself.
+    pub filmstrip_toolbar_rows: u8,
+    /// Columns in Darktable's empty-collection guidance.
+    pub empty_state_columns: u8,
+}
+
+/// Darktable lighttable composition rendered by the GTK shell.
+pub const LIGHTTABLE_COMPOSITION: LighttableCompositionSpec = LighttableCompositionSpec {
+    top_toolbar_rows: 1,
+    footer_toolbar_rows: 1,
+    filmstrip_toolbar_rows: 0,
+    empty_state_columns: 2,
+};
+
 /// Bottom filmstrip height constraints from Darktable's GTK configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FilmstripHeights {
@@ -440,8 +514,8 @@ pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
 mod tests {
     use super::{
         ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DesktopRegion,
-        LAYOUT_METRICS, LIGHTTABLE_TOOLBAR, PANEL_SLOTS, PanelRole, PanelSlot, TOP_BAR_SECTIONS,
-        ViewMode,
+        LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
+        PANEL_SLOTS, PanelRole, PanelSlot, TOP_BAR_SECTIONS, ViewMode,
     };
 
     #[test]
@@ -524,6 +598,44 @@ mod tests {
             "lighttable-filter-entry"
         );
         assert_eq!(LIGHTTABLE_TOOLBAR.row_count, 1);
+    }
+
+    #[test]
+    fn lighttable_right_rail_is_direct_ordered_and_has_one_export() {
+        assert_eq!(
+            LIGHTTABLE_RIGHT_MODULES.map(|module| module.widget_name),
+            [
+                "selection",
+                "actions-on-selection",
+                "history-stack",
+                "styles",
+                "metadata-editor",
+                "tagging",
+                "geotagging",
+                "neural-restore",
+                "export",
+            ]
+        );
+        assert_eq!(
+            LIGHTTABLE_RIGHT_MODULES
+                .iter()
+                .filter(|module| module.widget_name == "export")
+                .count(),
+            1
+        );
+        assert!(
+            LIGHTTABLE_RIGHT_MODULES
+                .iter()
+                .all(|module| module.widget_name != "module-groups")
+        );
+    }
+
+    #[test]
+    fn lighttable_has_one_top_one_footer_and_a_plain_filmstrip() {
+        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_rows, 1);
+        assert_eq!(LIGHTTABLE_COMPOSITION.footer_toolbar_rows, 1);
+        assert_eq!(LIGHTTABLE_COMPOSITION.filmstrip_toolbar_rows, 0);
+        assert_eq!(LIGHTTABLE_COMPOSITION.empty_state_columns, 2);
     }
 
     #[test]
