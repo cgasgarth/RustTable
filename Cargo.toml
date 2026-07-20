@@ -99,6 +99,7 @@ toml = "=0.9.12"
 unicode-normalization = { package = "unicode-normalization-alignments", version = "=0.1.12" }
 wasmtime = { version = "=46.0.1", default-features = false, features = ["async", "component-model", "component-model-async", "cranelift", "runtime", "wat"] }
 wasmtime-wasi = { version = "=46.0.1", default-features = false, features = ["p2"] }
+wgpu = { version = "=30.0.0", default-features = false, features = ["dx12", "gles", "metal", "vulkan", "wgsl"] }
 xtask = { path = "crates/xtask", version = "=0.1.0" }
 
 [workspace.lints.rust]

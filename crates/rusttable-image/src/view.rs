@@ -1,6 +1,7 @@
 use std::fmt;
 
-use crate::{ColorEncoding, ColorProfileRef, ImageDimensions, PixelFormat, Roi, StorageLayout};
+use crate::{ColorEncoding, ImageDimensions, PixelFormat, Roi, StorageLayout};
+use rusttable_color::ProfileId;
 
 /// One checked plane's row layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -50,7 +51,7 @@ pub struct ImageDescriptor {
     dimensions: ImageDimensions,
     format: PixelFormat,
     color_encoding: ColorEncoding,
-    profile: Option<ColorProfileRef>,
+    profile: Option<ProfileId>,
     orientation: crate::Orientation,
     planes: Vec<PlaneDescriptor>,
 }
@@ -102,7 +103,7 @@ impl ImageDescriptor {
         dimensions: ImageDimensions,
         format: PixelFormat,
         color_encoding: ColorEncoding,
-        profile: Option<ColorProfileRef>,
+        profile: Option<ProfileId>,
         orientation: crate::Orientation,
         row_strides: &[usize],
     ) -> Result<Self, ImageDescriptorError> {
@@ -169,7 +170,7 @@ impl ImageDescriptor {
     }
 
     #[must_use]
-    pub fn profile(&self) -> Option<&ColorProfileRef> {
+    pub fn profile(&self) -> Option<&ProfileId> {
         self.profile.as_ref()
     }
 

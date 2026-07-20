@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 rusttable-core.workspace = true
+rusttable-color.workspace = true
 
 [[bench]]
 name = "performance_budgets"

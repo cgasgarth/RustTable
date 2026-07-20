@@ -1,27 +1,10 @@
-use sha2::{Digest, Sha256};
+use rusttable_color::{Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion};
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
 pub const MAX_PROFILE_BYTES: usize = 64 * 1024 * 1024;
 pub const MIN_PROFILE_BYTES: usize = 128;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DisplayProfileId([u8; 32]);
-
-impl DisplayProfileId {
-    #[must_use]
-    pub const fn bytes(self) -> [u8; 32] {
-        self.0
-    }
-}
-
-impl fmt::Display for DisplayProfileId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(formatter, "{byte:02x}")?;
-        }
-        Ok(())
-    }
-}
+pub type DisplayProfileId = ProfileId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProfileMetadata {
@@ -78,7 +61,14 @@ impl ManagedProfileStore {
     /// Returns a typed error for oversized, truncated, malformed, or unsupported ICC data.
     pub fn insert(&mut self, bytes: &[u8]) -> Result<StoredProfile, IccProfileError> {
         let metadata = validate_icc(bytes)?;
-        let id = DisplayProfileId(Sha256::digest(bytes).into());
+        let id = ProfileId::from_content(
+            bytes,
+            ProfileClass::Display,
+            ProfileModel::Unknown,
+            Pcs::XyzD50,
+            ProfileParserVersion::new(1).map_err(|_| IccProfileError::InvalidHeader)?,
+        )
+        .map_err(|_| IccProfileError::InvalidHeader)?;
         let profile = self.profiles.entry(id).or_insert_with(|| StoredProfile {
             id,
             metadata,

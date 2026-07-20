@@ -1,4 +1,6 @@
 use std::fmt;
+
+pub use rusttable_color::ColorEncoding;
 use std::num::NonZeroU32;
 
 use crate::{ImageDescriptor, Orientation, OwnedImage, PixelFormat};
@@ -90,14 +92,6 @@ impl std::error::Error for DecodedImageError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelLayout {
     Rgba8StraightAlpha,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorEncoding {
-    Unspecified,
-    Srgb,
-    DisplayP3,
-    LinearSrgb,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

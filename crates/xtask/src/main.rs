@@ -3,10 +3,13 @@
 mod bench;
 mod check;
 mod codegen;
+mod color;
 mod configuration;
 mod dist;
 mod fixtures;
 mod foundation;
+mod gpu;
+mod migration;
 mod reference;
 
 use std::path::{Path, PathBuf};
@@ -33,6 +36,11 @@ struct Cli {
 enum Task {
     /// Run the complete local merge-readiness gate.
     Check,
+    /// Validate color-space and transform contracts.
+    Color {
+        #[command(subcommand)]
+        command: color::ColorCommand,
+    },
     /// Generate product compatibility data.
     Codegen {
         #[command(subcommand)]
@@ -47,6 +55,11 @@ enum Task {
     Foundation {
         #[command(subcommand)]
         command: foundation::FoundationCommand,
+    },
+    /// Qualify the WGPU device and CPU fallback service.
+    Gpu {
+        #[command(subcommand)]
+        command: gpu::GpuCommand,
     },
     /// Provision or exercise the pinned darktable reference.
     Reference {
@@ -65,6 +78,11 @@ enum Task {
         #[command(subcommand)]
         command: configuration::ConfigurationCommand,
     },
+    /// Verify issue-owned migration source accounting.
+    Migration {
+        #[command(subcommand)]
+        command: migration::MigrationCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -72,13 +90,16 @@ fn main() -> ExitCode {
     let root = repository_root();
     let result = match cli.command {
         Task::Check => check::run(&root),
+        Task::Color { command } => color::run(&root, &command),
         Task::Codegen { command } => codegen::run(&root, command),
         Task::Fixtures { command } => fixtures::run(&root, command),
         Task::Foundation { command } => foundation::run(&root, command),
+        Task::Gpu { command } => gpu::run(&root, command),
         Task::Reference { command } => reference::run(&root, *command),
         Task::Bench { command } => bench::run(&root, command),
         Task::Dist => dist::run(&root),
         Task::Configuration { command } => configuration::run(&root, command),
+        Task::Migration { command } => migration::run(&root, command),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -119,24 +140,20 @@ mod tests {
         let help = Cli::command().render_long_help().to_string();
         for command in [
             "check",
+            "color",
             "codegen",
             "fixtures",
             "foundation",
+            "gpu",
             "reference",
             "bench",
             "dist",
             "configuration",
+            "migration",
         ] {
             assert!(help.contains(command), "missing {command}");
         }
-        for retired in [
-            "github",
-            "ecosystem",
-            "migration",
-            "parity",
-            "scheduler",
-            "coverage",
-        ] {
+        for retired in ["github", "ecosystem", "parity", "scheduler", "coverage"] {
             assert!(
                 !help.contains(retired),
                 "retired command {retired} survived"

@@ -14,6 +14,7 @@ rusttable-catalog-store.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
+rusttable-color.workspace = true
 rusttable-import.workspace = true
 rusttable-metadata.workspace = true
 rusttable-parity.workspace = true

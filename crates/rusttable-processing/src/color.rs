@@ -1,6 +1,10 @@
 use std::fmt;
 
 use crate::{FiniteF32, FiniteF32Error};
+pub use rusttable_color::ColorEncoding;
+
+pub type SourceColorSpace = ColorEncoding;
+pub type WorkingColorSpace = ColorEncoding;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RasterDimensions {
@@ -195,17 +199,6 @@ impl LinearRgb {
             RgbChannel::Blue => self.blue,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SourceColorSpace {
-    Srgb,
-    DisplayP3,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WorkingColorSpace {
-    LinearSrgb,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
