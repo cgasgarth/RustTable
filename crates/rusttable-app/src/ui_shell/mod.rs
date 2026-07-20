@@ -113,7 +113,21 @@ pub(crate) fn subscription(state: &DaemonState) -> Subscription<Message> {
         empty_service_stream,
     )
     .map(map_ui_message);
-    Subscription::batch([shell, service])
+    let drops = iced::event::listen_with(file_drop_event);
+    Subscription::batch([shell, service, drops])
+}
+
+fn file_drop_event(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    match event {
+        iced::Event::Window(iced::window::Event::FileDropped(path)) => {
+            Some(Message::Library(LibraryMessage::FilesDropped(vec![path])))
+        }
+        _ => None,
+    }
 }
 
 fn map_ui_message(message: UiMessage) -> Message {

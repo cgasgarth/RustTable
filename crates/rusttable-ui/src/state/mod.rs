@@ -10,6 +10,7 @@ pub struct UiState {
     navigation: NavigationState,
     library_state: LibraryState,
     input: InputState,
+    import_panel: crate::ImportPanelViewModel,
 }
 
 impl Default for UiState {
@@ -19,6 +20,7 @@ impl Default for UiState {
             navigation: NavigationState::default(),
             library_state: LibraryState::default(),
             input: InputState::default(),
+            import_panel: crate::ImportPanelViewModel::default(),
         }
     }
 }
@@ -67,10 +69,36 @@ impl UiState {
     }
 
     #[must_use]
+    pub const fn import_panel(&self) -> &crate::ImportPanelViewModel {
+        &self.import_panel
+    }
+
+    pub fn set_import_panel(&mut self, panel: crate::ImportPanelViewModel) {
+        self.import_panel = panel;
+        self.reconcile_input();
+    }
+
+    pub fn update_import_row(&mut self, item_id: u64, state: crate::ImportRowState) {
+        self.import_panel.update_state(item_id, state);
+        self.reconcile_input();
+    }
+
+    #[must_use]
     pub fn handle(&mut self, message: UiMessage) -> UiEffect {
         match message {
             UiMessage::ToggleSidebar => {
                 self.sidebar_visible = !self.sidebar_visible;
+            }
+            UiMessage::ImportFiles => return UiEffect::ImportFiles,
+            UiMessage::CancelImport => return UiEffect::CancelImport,
+            UiMessage::RetryImport(item_id) => return UiEffect::RetryImport(item_id),
+            UiMessage::RemoveImportResult(item_id) => {
+                self.import_panel.remove(item_id);
+            }
+            UiMessage::CloseImportPanel => {
+                if !self.import_panel.active() {
+                    self.import_panel = crate::ImportPanelViewModel::default();
+                }
             }
             UiMessage::Navigate(intent) => {
                 let _ = self.navigation.apply(intent);
@@ -78,11 +106,12 @@ impl UiState {
             }
             UiMessage::RetryLibrary => return UiEffect::RetryLibrary,
             UiMessage::Input(intent) => {
-                let effect = self.input.apply(
+                let effect = self.input.apply_with_import_panel(
                     intent,
                     self.sidebar_visible,
                     self.route(),
                     &self.library_state,
+                    &self.import_panel,
                 );
                 match effect {
                     InputEffect::None => {}
@@ -91,6 +120,17 @@ impl UiState {
                         let _ = self.navigation.apply(navigation);
                     }
                     InputEffect::RetryLibrary => return UiEffect::RetryLibrary,
+                    InputEffect::ImportFiles => return UiEffect::ImportFiles,
+                    InputEffect::CancelImport => return UiEffect::CancelImport,
+                    InputEffect::RetryImport(item_id) => return UiEffect::RetryImport(item_id),
+                    InputEffect::RemoveImportResult(item_id) => {
+                        self.import_panel.remove(item_id);
+                    }
+                    InputEffect::CloseImportPanel => {
+                        if !self.import_panel.active() {
+                            self.import_panel = crate::ImportPanelViewModel::default();
+                        }
+                    }
                 }
             }
         }
@@ -99,8 +139,12 @@ impl UiState {
     }
 
     fn reconcile_input(&mut self) {
-        self.input
-            .reconcile(self.sidebar_visible, self.route(), &self.library_state);
+        self.input.reconcile_with_import_panel(
+            self.sidebar_visible,
+            self.route(),
+            &self.library_state,
+            &self.import_panel,
+        );
     }
 
     #[must_use]
@@ -109,6 +153,11 @@ impl UiState {
             FocusTarget::PhotoCard(photo_id) => Some(photo_id),
             FocusTarget::SidebarToggle
             | FocusTarget::Library
+            | FocusTarget::ImportFiles
+            | FocusTarget::CancelImport
+            | FocusTarget::RetryImport(_)
+            | FocusTarget::RemoveImportResult(_)
+            | FocusTarget::CloseImportPanel
             | FocusTarget::RetryLibrary
             | FocusTarget::BackToLibrary => None,
         }
@@ -119,6 +168,9 @@ impl UiState {
 pub enum UiEffect {
     None,
     RetryLibrary,
+    ImportFiles,
+    CancelImport,
+    RetryImport(u64),
 }
 
 #[cfg(test)]

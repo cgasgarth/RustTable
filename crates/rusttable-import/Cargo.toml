@@ -15,6 +15,7 @@ sha2.workspace = true
 
 [dev-dependencies]
 rusttable-catalog-store.workspace = true
+rusttable-image-io.workspace = true
 
 [lints]
 workspace = true

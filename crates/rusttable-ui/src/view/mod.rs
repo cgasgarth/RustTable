@@ -72,7 +72,7 @@ pub fn view(state: &UiState) -> Element<'_, UiMessage> {
 }
 
 fn library_content(state: &UiState) -> Element<'_, UiMessage> {
-    match state.library_state() {
+    let library = match state.library_state() {
         LibraryState::Loading => column![text("Library"), text("Loading library")].into(),
         LibraryState::Empty => column![text("Library"), text("No photos in this catalog")].into(),
         LibraryState::Ready(workspace) => ready_library_content(state, workspace),
@@ -90,7 +90,68 @@ fn library_content(state: &UiState) -> Element<'_, UiMessage> {
             ]
             .into()
         }
+    };
+    let mut content = column![
+        action_button(
+            text("Import files…"),
+            UiMessage::ImportFiles,
+            state.is_focused(FocusTarget::ImportFiles),
+        ),
+        text("Drop PNG, JPEG, or TIFF files here"),
+        library,
+    ]
+    .spacing(REGION_SPACING);
+    if state.import_panel().is_visible() {
+        content = content.push(import_panel(state));
     }
+    content.into()
+}
+
+fn import_panel(state: &UiState) -> Element<'_, UiMessage> {
+    let panel = state.import_panel();
+    let rows = panel.rows().map(|item| {
+        let mut row = row![text(format!(
+            "{} — {}",
+            item.alias().as_str(),
+            item.state().label()
+        ))]
+        .spacing(REGION_SPACING);
+        if item.state().can_retry() {
+            row = row.push(action_button(
+                text(format!("Retry {}", item.alias().as_str())),
+                UiMessage::RetryImport(item.item_id()),
+                state.is_focused(FocusTarget::RetryImport(item.item_id())),
+            ));
+        }
+        if !panel.active() {
+            row = row.push(action_button(
+                text(format!("Remove {}", item.alias().as_str())),
+                UiMessage::RemoveImportResult(item.item_id()),
+                state.is_focused(FocusTarget::RemoveImportResult(item.item_id())),
+            ));
+        }
+        row.into()
+    });
+    let action = if panel.active() {
+        action_button(
+            text("Cancel import"),
+            UiMessage::CancelImport,
+            state.is_focused(FocusTarget::CancelImport),
+        )
+    } else {
+        action_button(
+            text("Close import results"),
+            UiMessage::CloseImportPanel,
+            state.is_focused(FocusTarget::CloseImportPanel),
+        )
+    };
+    column![
+        text("Import progress"),
+        column(rows).spacing(REGION_SPACING),
+        action
+    ]
+    .spacing(REGION_SPACING)
+    .into()
 }
 
 fn ready_library_content<'a>(
@@ -243,6 +304,7 @@ mod tests {
         PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewFailure, SelectedPreviewState,
     };
     use crate::state::UiState;
+    use crate::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 
     fn text(value: &str) -> PresentationText {
         PresentationText::new(value).expect("test text is valid")
@@ -407,6 +469,31 @@ mod tests {
             simulator.find("Preview")?;
             simulator.find(expected)?;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn raster_import_panel_exposes_progress_retry_remove_and_close_actions()
+    -> Result<(), iced_test::Error> {
+        let mut state = UiState::default();
+        state.set_import_panel(ImportPanelViewModel::new(
+            vec![ImportRowViewModel::new(
+                1,
+                text("photo.png"),
+                ImportRowState::Failed,
+            )],
+            false,
+        ));
+        let mut simulator =
+            Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&state));
+
+        simulator.find("Import files…")?;
+        simulator.find("Drop PNG, JPEG, or TIFF files here")?;
+        simulator.find("Import progress")?;
+        simulator.find("photo.png — Import failed")?;
+        simulator.find("Retry photo.png")?;
+        simulator.find("Remove photo.png")?;
+        simulator.find("Close import results")?;
         Ok(())
     }
 }

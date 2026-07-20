@@ -30,11 +30,31 @@ impl PreviewService {
         let input = FileImageInput::new(self.limits)
             .decode_path(source)
             .map_err(PreviewError::Decode)?;
+        self.render_decoded(&input, edit)
+    }
+
+    /// Decodes immutable snapshot bytes and renders the exact edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed decode or CPU-render failure.
+    pub fn render_bytes(&self, source: &[u8], edit: &Edit) -> Result<RenderOutput, PreviewError> {
+        let input = FileImageInput::new(self.limits)
+            .decode_bytes(source)
+            .map_err(PreviewError::Decode)?;
+        self.render_decoded(&input, edit)
+    }
+
+    fn render_decoded(
+        &self,
+        input: &rusttable_image::DecodedImage,
+        edit: &Edit,
+    ) -> Result<RenderOutput, PreviewError> {
         let plan =
             RenderPlan::for_source(input.dimensions(), RenderTarget::PreviewFit(self.bounds));
         render_edit_with_plan(
             edit,
-            &input,
+            input,
             SourceColorPolicy::AssumeSrgbWhenUnspecified,
             plan,
         )

@@ -47,6 +47,7 @@ mlua = { version = "=0.11.4", default-features = false, features = ["async", "se
 postcard = { version = "=1.1.3", features = ["alloc"] }
 process-wrap = { version = "=9.1.0", default-features = false, features = ["std", "process-session", "job-object", "creation-flags", "kill-on-drop"] }
 redb = "=4.1.0"
+rfd = "=0.17.2"
 rusttable-app = { path = "crates/rusttable-app", version = "=0.1.0" }
 rusttable-camera = { path = "crates/rusttable-camera", version = "=0.1.0" }
 rusttable-catalog = { path = "crates/rusttable-catalog", version = "=0.1.0" }

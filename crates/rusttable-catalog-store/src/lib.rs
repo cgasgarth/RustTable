@@ -5,10 +5,11 @@ mod catalog_repository;
 mod codec;
 mod edit_codec;
 mod edit_repository;
+mod import_details_codec;
 mod repository;
 mod schema;
 
-pub use catalog_repository::RedbCatalogRepository;
+pub use catalog_repository::{AtomicCatalogStoreError, RedbCatalogRepository};
 pub use edit_repository::RedbEditRepository;
 pub use repository::RedbImportRepository;
 pub use schema::CURRENT_SCHEMA_VERSION;
