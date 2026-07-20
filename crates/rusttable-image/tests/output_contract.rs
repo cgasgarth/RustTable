@@ -28,6 +28,8 @@ fn output_formats_are_stable_and_options_are_closed() {
             OutputFormat::Avif,
             OutputFormat::Heif,
             OutputFormat::Heic,
+            OutputFormat::Jpeg2000,
+            OutputFormat::Jp2,
         ]
     );
     assert_eq!(OutputOptions::Png.format(), OutputFormat::Png);

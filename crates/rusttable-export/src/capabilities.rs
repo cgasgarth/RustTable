@@ -65,6 +65,8 @@ impl EncoderCapabilityDescriptor {
             OutputFormat::Avif,
             OutputFormat::Heif,
             OutputFormat::Heic,
+            OutputFormat::Jpeg2000,
+            OutputFormat::Jp2,
         ]);
         self
     }
@@ -388,5 +390,7 @@ pub(crate) fn format_id(format: OutputFormat) -> &'static str {
         OutputFormat::Avif => "avif",
         OutputFormat::Heif => "heif",
         OutputFormat::Heic => "heic",
+        OutputFormat::Jpeg2000 => "j2k",
+        OutputFormat::Jp2 => "jp2",
     }
 }

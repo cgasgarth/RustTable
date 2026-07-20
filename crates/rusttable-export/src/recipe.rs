@@ -965,6 +965,8 @@ pub(crate) fn format_from_encoder(value: &str) -> Option<OutputFormat> {
         "avif" => Some(OutputFormat::Avif),
         "heif" => Some(OutputFormat::Heif),
         "heic" => Some(OutputFormat::Heic),
+        "j2k" | "j2c" => Some(OutputFormat::Jpeg2000),
+        "jp2" => Some(OutputFormat::Jp2),
         _ => None,
     }
 }

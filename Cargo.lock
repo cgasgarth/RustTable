@@ -901,6 +901,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dicom-toolkit-jpeg2000"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f51888e27b226aeb853c5d1a839504c5f9afa995fad3c5ac9d55f15b19a972d"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3485,7 +3491,9 @@ dependencies = [
  "rusttable-image",
  "rusttable-image-io",
  "rusttable-import",
+ "rusttable-jpeg2000-native",
  "rusttable-jxl-native",
+ "rusttable-metadata",
  "rusttable-pixelpipe",
  "rusttable-render",
  "rusttable-webp-native",
@@ -3571,6 +3579,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-jpeg2000-native"
+version = "0.1.0"
+dependencies = [
+ "dicom-toolkit-jpeg2000",
+]
+
+[[package]]
 name = "rusttable-jxl-native"
 version = "0.1.0"
 dependencies = [
@@ -3588,6 +3603,8 @@ dependencies = [
  "kamadak-exif",
  "rusttable-core",
  "rusttable-image",
+ "sha2",
+ "unicode-normalization-alignments",
 ]
 
 [[package]]

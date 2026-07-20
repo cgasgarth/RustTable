@@ -16,9 +16,11 @@ pub enum OutputFormat {
     Avif,
     Heif,
     Heic,
+    Jpeg2000,
+    Jp2,
 }
 
-pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 8] = [
+pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 10] = [
     OutputFormat::Png,
     OutputFormat::Jpeg,
     OutputFormat::JpegXl,
@@ -27,6 +29,8 @@ pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 8] = [
     OutputFormat::Avif,
     OutputFormat::Heif,
     OutputFormat::Heic,
+    OutputFormat::Jpeg2000,
+    OutputFormat::Jp2,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

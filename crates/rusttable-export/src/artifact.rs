@@ -1,4 +1,5 @@
 use rusttable_image::{ImageView, OwnedImage};
+use rusttable_metadata::{FormatViewKind, MetadataPacket};
 
 /// The canonical image and metadata pair handed to export encoders.
 #[derive(Debug)]
@@ -43,6 +44,7 @@ pub struct ExportMetadata {
     iptc: Option<Vec<u8>>,
     density: Option<Density>,
     text: Vec<MetadataText>,
+    packet: Option<MetadataPacket>,
 }
 
 impl ExportMetadata {
@@ -83,6 +85,39 @@ impl ExportMetadata {
             value: value.into(),
         });
         self
+    }
+
+    #[must_use]
+    pub fn from_packet(packet: MetadataPacket) -> Self {
+        let exif = packet
+            .view_bytes(FormatViewKind::Exif)
+            .map(ToOwned::to_owned);
+        let xmp = packet
+            .view_bytes(FormatViewKind::Xmp)
+            .map(ToOwned::to_owned);
+        let iptc = packet
+            .view_bytes(FormatViewKind::IptcIim)
+            .map(ToOwned::to_owned);
+        Self {
+            icc_profile: None,
+            exif,
+            xmp,
+            iptc,
+            density: None,
+            text: Vec::new(),
+            packet: Some(packet),
+        }
+    }
+
+    #[must_use]
+    pub fn with_packet(mut self, packet: MetadataPacket) -> Self {
+        self = Self::from_packet(packet);
+        self
+    }
+
+    #[must_use]
+    pub fn packet(&self) -> Option<&MetadataPacket> {
+        self.packet.as_ref()
     }
 
     #[must_use]
