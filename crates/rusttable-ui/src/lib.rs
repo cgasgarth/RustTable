@@ -15,7 +15,8 @@ pub mod widgets;
 
 pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use input::{
-    ExportIntent, ExportSize, FocusTarget, InputEffect, InputIntent, InputState, UiMessage,
+    CustomExportSizeAdjustment, ExportIntent, ExportPixelSize, ExportPixelSizeError, ExportSize,
+    FocusTarget, InputEffect, InputIntent, InputState, UiMessage,
 };
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
 pub use navigation::{NavigationIntent, NavigationState, WorkspaceRoute};
@@ -26,4 +27,4 @@ pub use presentation::{
     SelectedPreviewFailure, SelectedPreviewState,
 };
 pub use shell::{AppUiState, WindowKey, WindowRole};
-pub use state::{UiEffect, UiState};
+pub use state::{CustomExportSizeState, CustomExportSizeValidation, UiEffect, UiState};

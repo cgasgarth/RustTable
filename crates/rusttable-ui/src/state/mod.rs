@@ -1,8 +1,8 @@
 use rusttable_core::PhotoId;
 
 use crate::input::{
-    BasicEditIntent, ExportIntent, ExportSize, FocusTarget, InputEffect, InputIntent, InputState,
-    UiMessage,
+    BasicEditIntent, CustomExportSizeAdjustment, ExportIntent, ExportPixelSize, ExportSize,
+    FocusTarget, InputEffect, InputIntent, InputState, UiMessage,
 };
 use crate::{LibraryState, NavigationState, WorkspaceRoute};
 
@@ -16,6 +16,7 @@ pub struct UiState {
     basic_edit: Option<crate::presentation::BasicEditInspectorViewModel>,
     export_status: Option<(PhotoId, crate::PresentationText)>,
     export_size: ExportSize,
+    custom_export_size: CustomExportSizeState,
     export_cancellation_requested: Option<PhotoId>,
 }
 
@@ -30,6 +31,7 @@ impl Default for UiState {
             basic_edit: None,
             export_status: None,
             export_size: ExportSize::Original,
+            custom_export_size: CustomExportSizeState::default(),
             export_cancellation_requested: None,
         }
     }
@@ -106,6 +108,12 @@ impl UiState {
     #[must_use]
     pub const fn export_size(&self) -> ExportSize {
         self.export_size
+    }
+
+    /// Returns the UI-owned custom-size value and its bounded presentation state.
+    #[must_use]
+    pub const fn custom_export_size(&self) -> CustomExportSizeState {
+        self.custom_export_size
     }
 
     /// Reports whether the save surface is waiting for its active task to finish.
@@ -275,6 +283,18 @@ impl UiState {
                     InputEffect::ExportSize(photo_id, size) => {
                         let _ = self.select_export_size(photo_id, size);
                     }
+                    InputEffect::DecreaseCustomExportSize(photo_id) => {
+                        let _ = self.adjust_custom_export_size(
+                            photo_id,
+                            CustomExportSizeAdjustment::Decrease,
+                        );
+                    }
+                    InputEffect::IncreaseCustomExportSize(photo_id) => {
+                        let _ = self.adjust_custom_export_size(
+                            photo_id,
+                            CustomExportSizeAdjustment::Increase,
+                        );
+                    }
                     InputEffect::StartRenderedCopy(photo_id) => {
                         return self.start_export(photo_id);
                     }
@@ -327,6 +347,10 @@ impl UiState {
                 let _ = self.select_export_size(photo_id, size);
                 UiEffect::None
             }
+            ExportIntent::AdjustCustomSize(adjustment) => {
+                let _ = self.adjust_custom_export_size(photo_id, adjustment);
+                UiEffect::None
+            }
             ExportIntent::Start => self.start_export(photo_id),
             ExportIntent::Cancel => {
                 self.request_export_cancellation(photo_id);
@@ -339,7 +363,23 @@ impl UiState {
         if !self.selected_photo_detail(photo_id) || self.export_in_progress(photo_id) {
             return false;
         }
+        if let ExportSize::Custom(size) = size {
+            self.custom_export_size.select(size);
+        }
         self.export_size = size;
+        true
+    }
+
+    fn adjust_custom_export_size(
+        &mut self,
+        photo_id: PhotoId,
+        adjustment: CustomExportSizeAdjustment,
+    ) -> bool {
+        if !self.selected_photo_detail(photo_id) || self.export_in_progress(photo_id) {
+            return false;
+        }
+        self.custom_export_size.adjust(adjustment);
+        self.export_size = ExportSize::Custom(self.custom_export_size.value());
         true
     }
 
@@ -430,6 +470,8 @@ impl UiState {
             | FocusTarget::CloseImportPanel
             | FocusTarget::SaveRenderedCopy(_)
             | FocusTarget::ExportSize(_, _)
+            | FocusTarget::DecreaseCustomExportSize(_)
+            | FocusTarget::IncreaseCustomExportSize(_)
             | FocusTarget::StartRenderedCopy(_)
             | FocusTarget::CancelRenderedCopy(_)
             | FocusTarget::RetryLibrary
@@ -438,6 +480,85 @@ impl UiState {
             | FocusTarget::BackToLibrary => None,
         }
     }
+}
+
+/// Presentation state for the bounded custom PNG maximum edge control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CustomExportSizeState {
+    value: ExportPixelSize,
+    validation: CustomExportSizeValidation,
+}
+
+impl Default for CustomExportSizeState {
+    fn default() -> Self {
+        Self {
+            value: ExportPixelSize::DEFAULT,
+            validation: CustomExportSizeValidation::Valid,
+        }
+    }
+}
+
+impl CustomExportSizeState {
+    #[must_use]
+    pub const fn value(self) -> ExportPixelSize {
+        self.value
+    }
+
+    #[must_use]
+    pub const fn validation(self) -> CustomExportSizeValidation {
+        self.validation
+    }
+
+    #[must_use]
+    pub fn status_label(self) -> String {
+        match self.validation {
+            CustomExportSizeValidation::Valid => format!(
+                "Custom size: {} px ({}–{} px)",
+                self.value.value(),
+                ExportPixelSize::MINIMUM,
+                ExportPixelSize::MAXIMUM,
+            ),
+            CustomExportSizeValidation::MinimumReached => {
+                format!("Minimum custom size is {} px", ExportPixelSize::MINIMUM)
+            }
+            CustomExportSizeValidation::MaximumReached => {
+                format!("Maximum custom size is {} px", ExportPixelSize::MAXIMUM)
+            }
+        }
+    }
+
+    fn select(&mut self, value: ExportPixelSize) {
+        self.value = value;
+        self.validation = CustomExportSizeValidation::Valid;
+    }
+
+    fn adjust(&mut self, adjustment: CustomExportSizeAdjustment) {
+        let next = match adjustment {
+            CustomExportSizeAdjustment::Decrease => self.value.decrease(),
+            CustomExportSizeAdjustment::Increase => self.value.increase(),
+        };
+        match next {
+            Some(value) => self.select(value),
+            None => {
+                self.validation = match adjustment {
+                    CustomExportSizeAdjustment::Decrease => {
+                        CustomExportSizeValidation::MinimumReached
+                    }
+                    CustomExportSizeAdjustment::Increase => {
+                        CustomExportSizeValidation::MaximumReached
+                    }
+                };
+            }
+        }
+    }
+}
+
+/// Reports a rejected boundary adjustment without creating an invalid export request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CustomExportSizeValidation {
+    Valid,
+    MinimumReached,
+    MaximumReached,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -611,6 +732,91 @@ mod tests {
                 .map(crate::PresentationText::as_str),
             Some("Cancelling PNG export…")
         );
+    }
+
+    #[test]
+    fn custom_export_size_stays_typed_valid_and_locked_while_exporting() {
+        let photo_id = rusttable_core::PhotoId::new(1).expect("test photo ID is non-zero");
+        let workspace = crate::PhotoWorkspaceViewModel::new(
+            vec![crate::PhotoCardViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                None,
+            )],
+            vec![crate::PhotoDetailViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut state = UiState::with_photo_workspace(workspace);
+        let _ = state.handle(UiMessage::Navigate(crate::NavigationIntent::ShowPhoto(
+            photo_id,
+        )));
+
+        assert_eq!(
+            state.custom_export_size().value(),
+            crate::ExportPixelSize::DEFAULT
+        );
+        let _ = state.handle(UiMessage::Input(InputIntent::Export(
+            crate::ExportIntent::AdjustCustomSize(crate::CustomExportSizeAdjustment::Decrease),
+        )));
+        let adjusted = crate::ExportPixelSize::new(2_047).expect("adjusted size is valid");
+        assert_eq!(state.custom_export_size().value(), adjusted);
+        assert_eq!(state.export_size(), crate::ExportSize::Custom(adjusted));
+        assert_eq!(
+            state.custom_export_size().validation(),
+            crate::CustomExportSizeValidation::Valid
+        );
+
+        let minimum = crate::ExportPixelSize::new(crate::ExportPixelSize::MINIMUM)
+            .expect("minimum size is valid");
+        let _ = state.handle(UiMessage::Input(InputIntent::Export(
+            crate::ExportIntent::SelectSize(crate::ExportSize::Custom(minimum)),
+        )));
+        let _ = state.handle(UiMessage::Input(InputIntent::Export(
+            crate::ExportIntent::AdjustCustomSize(crate::CustomExportSizeAdjustment::Decrease),
+        )));
+        assert_eq!(state.custom_export_size().value(), minimum);
+        assert_eq!(
+            state.custom_export_size().validation(),
+            crate::CustomExportSizeValidation::MinimumReached
+        );
+        assert_eq!(
+            state.custom_export_size().status_label(),
+            "Minimum custom size is 1 px"
+        );
+
+        let maximum = crate::ExportPixelSize::new(crate::ExportPixelSize::MAXIMUM)
+            .expect("maximum size is valid");
+        let _ = state.handle(UiMessage::Input(InputIntent::Export(
+            crate::ExportIntent::SelectSize(crate::ExportSize::Custom(maximum)),
+        )));
+        let _ = state.handle(UiMessage::Input(InputIntent::Export(
+            crate::ExportIntent::AdjustCustomSize(crate::CustomExportSizeAdjustment::Increase),
+        )));
+        assert_eq!(state.custom_export_size().value(), maximum);
+        assert_eq!(
+            state.custom_export_size().validation(),
+            crate::CustomExportSizeValidation::MaximumReached
+        );
+        assert_eq!(
+            state.custom_export_size().status_label(),
+            "Maximum custom size is 16384 px"
+        );
+
+        assert_eq!(
+            state.handle(UiMessage::Input(InputIntent::Export(
+                crate::ExportIntent::Start,
+            ))),
+            UiEffect::SaveRenderedCopy(photo_id)
+        );
+        let _ = state.handle(UiMessage::Input(InputIntent::Export(
+            crate::ExportIntent::AdjustCustomSize(crate::CustomExportSizeAdjustment::Increase),
+        )));
+        assert_eq!(state.custom_export_size().value(), maximum);
+        assert_eq!(state.export_size(), crate::ExportSize::Custom(maximum));
     }
 
     #[test]
