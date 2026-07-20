@@ -77,7 +77,7 @@ done
 if [[ -z "$worktrees" ]]; then
   case "$source_root" in
     */worktrees/*) worktrees="${source_root%%/worktrees/*}/worktrees" ;;
-    *) worktrees="$source_root/worktrees" ;;
+    *) worktrees="$(dirname "$source_root")/worktrees" ;;
   esac
 fi
 worktrees="$(cd "$(dirname "$worktrees")" && pwd)/$(basename "$worktrees")"
