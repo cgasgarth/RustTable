@@ -5,7 +5,7 @@
 //! deliberately uses GTK widgets directly instead of a framework adapter.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use crate::display_profile::DisplayProfileBanner;
@@ -14,12 +14,13 @@ use rusttable_core::PhotoId;
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use super::lighttable::empty_collection_state;
+use super::thumbnail::{ThumbnailPair, ThumbnailSurface};
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
+    DARKTABLE_DESKTOP_SPEC, DarkroomView, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
     LIGHTTABLE_RIGHT_MODULES, LibraryBrowserModel, LighttableContentState, ModuleControlKind,
-    ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, ThemeRole,
-    WorkspaceRole, apply_theme_role,
+    ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, THUMBNAIL_METRICS,
+    ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use super::{header::HeaderChrome, left_panel::LeftPanel};
 use crate::input_mapping::InputMappingEditor;
@@ -47,6 +48,7 @@ pub struct GtkShell {
     display_profile_banner: DisplayProfileBanner,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
+    photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
 }
 
 impl GtkShell {
@@ -86,8 +88,11 @@ impl GtkShell {
             .build();
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
-        let (workspace, lighttable, lighttable_empty_state, darkroom_preview) =
-            workspace_stack(layout.initial_workspace(), &initial_i18n);
+        let panel_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
+        let darkroom = DarkroomView::new(panel_width);
+        let darkroom_preview = darkroom.preview().clone();
+        let (workspace, lighttable, lighttable_empty_state) =
+            workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
         let input_mapping_editor = InputMappingEditor::new(application);
         let display_profile_banner = DisplayProfileBanner::new();
         let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
@@ -98,41 +103,23 @@ impl GtkShell {
         let collection_controls = CollectionControls::with_i18n(
             I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
         );
-        let left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
-        let (right_panel, right_modules, export_panel) = right_panel();
-        let center = central_workspace(&workspace, &initial_i18n);
-        let layout_metrics = DARKTABLE_DESKTOP_SPEC.layout;
-        let split = gtk4::Paned::builder()
-            .orientation(gtk4::Orientation::Horizontal)
-            .start_child(left_panel.widget())
-            .end_child(&center)
-            .resize_start_child(false)
-            .shrink_start_child(true)
-            .position(i32::from(layout_metrics.side_panel_widths.preferred_px))
-            .build();
-        split.connect_map({
-            let preferred_width = i32::from(layout_metrics.side_panel_widths.preferred_px);
-            move |paned| paned.set_position(preferred_width)
-        });
-        let workspace_with_right_panel = gtk4::Paned::builder()
-            .orientation(gtk4::Orientation::Horizontal)
-            .start_child(&split)
-            .end_child(&right_panel)
-            .resize_end_child(false)
-            .shrink_end_child(true)
-            .position(i32::from(layout_metrics.preferred_right_panel_position_px(
-                layout_metrics.window_width_px,
-            )))
-            .build();
-        let filmstrip = filmstrip(&initial_i18n);
-        let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-        let outer_border = i32::from(layout_metrics.outer_border_px);
-        content.set_margin_top(outer_border);
-        content.set_margin_bottom(outer_border);
-        content.set_margin_start(outer_border);
-        content.set_margin_end(outer_border);
-        content.append(&workspace_with_right_panel);
-        content.append(&filmstrip.0);
+        let lighttable_left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
+        let (lighttable_right_panel, export_panel) = right_panel();
+        let left_panel = mode_panel_stack(
+            "left-panel-stack",
+            lighttable_left_panel.widget(),
+            darkroom.left_panel(),
+            layout.initial_workspace(),
+        );
+        let right_panel = mode_panel_stack(
+            "right-panel-stack",
+            &lighttable_right_panel,
+            darkroom.right_panel(),
+            layout.initial_workspace(),
+        );
+        synchronize_panel_stacks(&workspace, &left_panel, &right_panel);
+        let (content, filmstrip) =
+            desktop_body(&workspace, &left_panel, &right_panel, &initial_i18n);
 
         let shell = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         apply_theme_role(&shell, ThemeRole::Shell);
@@ -148,12 +135,12 @@ impl GtkShell {
             lighttable_empty_state,
             darkroom_preview,
             export_panel,
-            filmstrip: filmstrip.1,
-            left_modules: left_panel.modules().clone(),
-            right_modules,
+            filmstrip,
+            left_modules: darkroom.left_modules().clone(),
+            right_modules: darkroom.right_modules().clone(),
             import_buttons: vec![
                 header.import_button().clone(),
-                left_panel.import_button().clone(),
+                lighttable_left_panel.import_button().clone(),
             ],
             collection_controls,
             input_mapping_editor,
@@ -161,6 +148,7 @@ impl GtkShell {
             display_profile_banner,
             lighttable_workspace: Rc::new(RefCell::new(None)),
             photo_selected: Rc::new(RefCell::new(None)),
+            photo_tiles: Rc::new(RefCell::new(BTreeMap::new())),
         }
     }
 
@@ -328,6 +316,30 @@ impl GtkShell {
         self.set_lighttable_workspace(view_model);
     }
 
+    /// Installs a background-rendered thumbnail into the synchronized grid and filmstrip tiles.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed texture error when validated dimensions exceed GTK's representation.
+    pub fn set_photo_thumbnail(
+        &self,
+        photo_id: PhotoId,
+        metadata: &crate::presentation::Rgba8PreviewMetadata,
+    ) -> Result<(), super::PhotoPreviewTextureError> {
+        let tiles = self.photo_tiles.borrow();
+        let Some(tile) = tiles.get(&photo_id) else {
+            return Ok(());
+        };
+        tile.thumbnails.set_rgba8(metadata)
+    }
+
+    /// Projects a bounded background-rendering failure onto both thumbnail surfaces.
+    pub fn set_photo_thumbnail_failed(&self, photo_id: PhotoId) {
+        if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
+            tile.thumbnails.set_failed();
+        }
+    }
+
     /// Updates the darkroom image detail and its controller-owned module panels.
     ///
     /// This surface deliberately accepts only `rusttable-ui` presentation
@@ -353,6 +365,7 @@ impl GtkShell {
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
             export_panel: self.export_panel.clone(),
+            photo_tiles: Rc::clone(&self.photo_tiles),
         }
     }
 }
@@ -389,6 +402,23 @@ struct WorkspaceRenderHandle {
     workspace: gtk4::Stack,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     export_panel: ExportPanel,
+    photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
+}
+
+#[derive(Clone)]
+struct PhotoTilePair {
+    thumbnails: ThumbnailPair,
+    lighttable_button: gtk4::Button,
+    filmstrip_button: gtk4::Button,
+}
+
+#[derive(Clone)]
+struct PhotoSelectionContext {
+    darkroom_preview: PhotoPreview,
+    workspace: gtk4::Stack,
+    photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
+    export_panel: ExportPanel,
+    photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
 }
 
 impl WorkspaceRenderHandle {
@@ -399,8 +429,16 @@ impl WorkspaceRenderHandle {
     ) {
         clear_children(&self.lighttable);
         clear_children(&self.filmstrip);
+        self.photo_tiles.borrow_mut().clear();
         let browser = LibraryBrowserModel::from_workspace(view_model);
         let mut rendered_photos = 0;
+        let selection = PhotoSelectionContext {
+            darkroom_preview: self.darkroom_preview.clone(),
+            workspace: self.workspace.clone(),
+            photo_selected: Rc::clone(&self.photo_selected),
+            export_panel: self.export_panel.clone(),
+            photo_tiles: Rc::clone(&self.photo_tiles),
+        };
 
         for photo in browser.photos() {
             if matching_photo_ids.is_some_and(|ids| !ids.contains(&photo.id())) {
@@ -410,28 +448,25 @@ impl WorkspaceRenderHandle {
                 continue;
             };
             let detail = detail.clone();
-            let card = lighttable_card(photo.id(), photo.title(), photo.secondary());
-            let filmstrip_item = filmstrip_item(photo.id(), photo.title());
-            connect_photo_selection(
-                &card,
+            let (card, card_thumbnail) = lighttable_card(
                 photo.id(),
-                detail.clone(),
-                &self.darkroom_preview,
-                &self.workspace,
-                &self.photo_selected,
-                &self.export_panel,
+                photo.title(),
+                photo.secondary(),
+                photo.indicators(),
             );
-            connect_photo_selection(
-                &filmstrip_item,
-                photo.id(),
-                detail,
-                &self.darkroom_preview,
-                &self.workspace,
-                &self.photo_selected,
-                &self.export_panel,
-            );
+            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo.id(), photo.title());
+            connect_photo_selection(&card, photo.id(), detail.clone(), &selection);
+            connect_photo_selection(&filmstrip_item, photo.id(), detail, &selection);
             self.lighttable.insert(&card, -1);
             self.filmstrip.insert(&filmstrip_item, -1);
+            self.photo_tiles.borrow_mut().insert(
+                photo.id(),
+                PhotoTilePair {
+                    thumbnails: ThumbnailPair::new(card_thumbnail, filmstrip_thumbnail),
+                    lighttable_button: card,
+                    filmstrip_button: filmstrip_item,
+                },
+            );
             rendered_photos += 1;
         }
         self.lighttable_empty_state.set_visible_child_name(
@@ -444,17 +479,24 @@ fn connect_photo_selection(
     button: &gtk4::Button,
     photo_id: PhotoId,
     detail: PhotoDetailViewModel,
-    photo_preview: &PhotoPreview,
-    workspace: &gtk4::Stack,
-    photo_selected: &Rc<RefCell<Option<PhotoSelectedHandler>>>,
-    export_panel: &ExportPanel,
+    context: &PhotoSelectionContext,
 ) {
-    let photo_preview = photo_preview.clone();
-    let workspace = workspace.clone();
-    let handler = Rc::clone(photo_selected);
-    let export_panel = export_panel.clone();
+    let photo_preview = context.darkroom_preview.clone();
+    let workspace = context.workspace.clone();
+    let handler = Rc::clone(&context.photo_selected);
+    let export_panel = context.export_panel.clone();
     let selected_button = button.clone();
+    let photo_tiles = Rc::clone(&context.photo_tiles);
     button.connect_clicked(move |_| {
+        for (id, pair) in photo_tiles.borrow().iter() {
+            for button in [&pair.lighttable_button, &pair.filmstrip_button] {
+                if *id == photo_id {
+                    button.add_css_class(ThemeRole::SelectedPhoto.class_name());
+                } else {
+                    button.remove_css_class(ThemeRole::SelectedPhoto.class_name());
+                }
+            }
+        }
         selected_button.add_css_class(ThemeRole::SelectedPhoto.class_name());
         export_panel.set_selected(true);
         show_photo_detail(&photo_preview, &detail);
@@ -465,7 +507,7 @@ fn connect_photo_selection(
     });
 }
 
-fn right_panel() -> (gtk4::Box, gtk4::Box, ExportPanel) {
+fn right_panel() -> (gtk4::Box, ExportPanel) {
     let panel = panel_column(
         ShellRegion::RightPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
@@ -482,38 +524,97 @@ fn right_panel() -> (gtk4::Box, gtk4::Box, ExportPanel) {
     search.set_widget_name("right-module-search");
     bottom.append(&search);
     append_panel_slots(&panel, &panel_slot(PanelSlot::RightTop), &center, &bottom);
-    (panel, center, export_panel)
+    (panel, export_panel)
 }
 
-fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
+fn mode_panel_stack(
+    id: &str,
+    lighttable: &impl IsA<gtk4::Widget>,
+    darkroom: &impl IsA<gtk4::Widget>,
+    initial: WorkspaceRole,
+) -> gtk4::Stack {
+    let stack = gtk4::Stack::new();
+    stack.set_widget_name(id);
+    stack.set_transition_type(gtk4::StackTransitionType::None);
+    stack.add_named(lighttable, Some(WorkspaceRole::Lighttable.stack_name()));
+    stack.add_named(darkroom, Some(WorkspaceRole::Darkroom.stack_name()));
+    stack.set_visible_child_name(initial.stack_name());
+    stack
+}
+
+fn synchronize_panel_stacks(
+    workspace: &gtk4::Stack,
+    left_panel: &gtk4::Stack,
+    right_panel: &gtk4::Stack,
+) {
+    let left_panel = left_panel.clone();
+    let right_panel = right_panel.clone();
+    workspace.connect_visible_child_name_notify(move |workspace| {
+        let Some(name) = workspace.visible_child_name() else {
+            return;
+        };
+        left_panel.set_visible_child_name(&name);
+        right_panel.set_visible_child_name(&name);
+    });
+}
+
+fn desktop_body(
+    workspace: &gtk4::Stack,
+    left_panel: &gtk4::Stack,
+    right_panel: &gtk4::Stack,
+    i18n: &I18n,
+) -> (gtk4::Box, gtk4::FlowBox) {
+    let layout = DARKTABLE_DESKTOP_SPEC.layout;
+    let center = central_workspace(workspace);
+    let split = gtk4::Paned::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .start_child(left_panel)
+        .end_child(&center)
+        .resize_start_child(false)
+        .shrink_start_child(true)
+        .position(i32::from(layout.side_panel_widths.preferred_px))
+        .build();
+    split.connect_map({
+        let preferred_width = i32::from(layout.side_panel_widths.preferred_px);
+        move |paned| paned.set_position(preferred_width)
+    });
+    let workspace_with_right_panel = gtk4::Paned::builder()
+        .orientation(gtk4::Orientation::Horizontal)
+        .start_child(&split)
+        .end_child(right_panel)
+        .resize_end_child(false)
+        .shrink_end_child(true)
+        .position(i32::from(
+            layout.preferred_right_panel_position_px(layout.window_width_px),
+        ))
+        .build();
+    let (filmstrip_root, filmstrip) = filmstrip(i18n);
+    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    let outer_border = i32::from(layout.outer_border_px);
+    content.set_margin_top(outer_border);
+    content.set_margin_bottom(outer_border);
+    content.set_margin_start(outer_border);
+    content.set_margin_end(outer_border);
+    content.append(&workspace_with_right_panel);
+    content.append(&filmstrip_root);
+    (content, filmstrip)
+}
+
+fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
     let center = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     center.set_hexpand(true);
     center.set_vexpand(true);
     center.set_widget_name("workspace");
     apply_theme_role(&center, ThemeRole::Workspace);
-    let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
-    apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
-    bottom_tools.add_css_class("dt_lighttable_footer");
-    for message_id in [
-        MessageId::WorkspaceFit,
-        MessageId::WorkspaceBeforeAfter,
-        MessageId::WorkspaceSoftProof,
-    ] {
-        bottom_tools.append(&gtk4::Button::with_label(
-            &i18n.text(message_id, &MessageArgs::new()),
-        ));
-    }
-    bottom_tools.insert_child_after(&gtk4::Button::with_label("100%"), None::<&gtk4::Widget>);
     center.append(workspace);
-    center.append(&bottom_tools);
     center
 }
 
 fn workspace_stack(
     initial_workspace: WorkspaceRole,
     i18n: &I18n,
-) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Stack, PhotoPreview) {
+    darkroom_page: &gtk4::Box,
+) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Stack) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -550,16 +651,7 @@ fn workspace_stack(
     lighttable_canvas.add_named(&empty_state, Some("empty"));
     lighttable_canvas.set_visible_child_name("empty");
     lighttable_page.append(&lighttable_canvas);
-
-    let darkroom_preview = PhotoPreview::new();
-    let darkroom_page = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-    darkroom_page.set_margin_top(16);
-    darkroom_page.set_margin_bottom(16);
-    darkroom_page.set_margin_start(16);
-    darkroom_page.set_margin_end(16);
-    apply_theme_role(&darkroom_page, ThemeRole::Darkroom);
-    darkroom_page.append(&panel_heading(i18n, MessageId::WorkspaceDarkroom));
-    darkroom_page.append(darkroom_preview.widget());
+    lighttable_page.append(&lighttable_footer(i18n));
 
     workspace.add_titled(
         &lighttable_page,
@@ -567,12 +659,30 @@ fn workspace_stack(
         &i18n.text(MessageId::WorkspaceLighttable, &MessageArgs::new()),
     );
     workspace.add_titled(
-        &darkroom_page,
+        darkroom_page,
         Some(WorkspaceRole::Darkroom.stack_name()),
         &i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()),
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
-    (workspace, lighttable, lighttable_canvas, darkroom_preview)
+    (workspace, lighttable, lighttable_canvas)
+}
+
+fn lighttable_footer(i18n: &I18n) -> gtk4::Box {
+    let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
+    apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
+    bottom_tools.add_css_class("dt_lighttable_footer");
+    for message_id in [
+        MessageId::WorkspaceFit,
+        MessageId::WorkspaceBeforeAfter,
+        MessageId::WorkspaceSoftProof,
+    ] {
+        bottom_tools.append(&gtk4::Button::with_label(
+            &i18n.text(message_id, &MessageArgs::new()),
+        ));
+    }
+    bottom_tools.insert_child_after(&gtk4::Button::with_label("100%"), None::<&gtk4::Widget>);
+    bottom_tools
 }
 
 fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
@@ -669,53 +779,90 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
     expander
 }
 
-fn lighttable_card(photo_id: PhotoId, title: &str, secondary: Option<&str>) -> gtk4::Button {
+fn lighttable_card(
+    photo_id: PhotoId,
+    title: &str,
+    secondary: Option<&str>,
+    indicators: crate::presentation::ThumbnailIndicators,
+) -> (gtk4::Button, ThumbnailSurface) {
     let card = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     card.set_margin_top(4);
     card.set_margin_bottom(4);
     card.set_margin_start(4);
     card.set_margin_end(4);
-    let image_placeholder = gtk4::Label::new(Some("RAW"));
-    image_placeholder.set_widget_name("photo-thumbnail");
-    apply_theme_role(&image_placeholder, ThemeRole::ThumbnailImage);
-    image_placeholder.set_halign(gtk4::Align::Fill);
-    image_placeholder.set_valign(gtk4::Align::Fill);
-    card.append(&image_placeholder);
+    let thumbnail = ThumbnailSurface::new(
+        &format!("photo-thumbnail-{photo_id}"),
+        &format!("Thumbnail for {title}"),
+        i32::from(THUMBNAIL_METRICS.grid_width_px),
+        i32::from(THUMBNAIL_METRICS.grid_height_px),
+    );
+    apply_theme_role(thumbnail.widget(), ThemeRole::ThumbnailImage);
+    let thumbnail_overlay = gtk4::Overlay::new();
+    thumbnail_overlay.set_child(Some(thumbnail.widget()));
+    let badges = thumbnail_badges(indicators);
+    badges.set_halign(gtk4::Align::End);
+    badges.set_valign(gtk4::Align::Start);
+    thumbnail_overlay.add_overlay(&badges);
+    card.append(&thumbnail_overlay);
     let title_label = gtk4::Label::new(Some(title));
     title_label.set_halign(gtk4::Align::Start);
-    title_label.set_wrap(true);
+    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    title_label.set_max_width_chars(22);
+    title_label.set_single_line_mode(true);
     card.append(&title_label);
     if let Some(secondary) = secondary {
         let secondary_label = gtk4::Label::new(Some(secondary));
         secondary_label.set_halign(gtk4::Align::Start);
         secondary_label.add_css_class("dim-label");
-        secondary_label.set_wrap(true);
+        secondary_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+        secondary_label.set_max_width_chars(22);
+        secondary_label.set_single_line_mode(true);
         card.append(&secondary_label);
     }
     let button = gtk4::Button::new();
     button.set_widget_name(&format!("photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
     button.set_child(Some(&card));
-    button
+    button.set_tooltip_text(Some(title));
+    (button, thumbnail)
 }
 
-fn filmstrip_item(photo_id: PhotoId, title: &str) -> gtk4::Button {
-    let button = gtk4::Button::with_label(title);
+fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk4::Box {
+    let badges = gtk4::Box::new(gtk4::Orientation::Horizontal, 2);
+    badges.set_widget_name("thumbnail-indicators");
+    badges.add_css_class("dt_thumbnail_indicators");
+    for (visible, text, name) in [
+        (indicators.grouped, "G", "grouped photo"),
+        (indicators.local_copy, "C", "local copy"),
+        (indicators.altered, "●", "altered edit"),
+    ] {
+        if visible {
+            let badge = gtk4::Label::new(Some(text));
+            badge.set_tooltip_text(Some(name));
+            badges.append(&badge);
+        }
+    }
+    badges
+}
+
+fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSurface) {
+    let thumbnail = ThumbnailSurface::new(
+        &format!("filmstrip-thumbnail-{photo_id}"),
+        &format!("Filmstrip thumbnail for {title}"),
+        i32::from(THUMBNAIL_METRICS.filmstrip_width_px),
+        i32::from(THUMBNAIL_METRICS.filmstrip_height_px),
+    );
+    let button = gtk4::Button::new();
     button.set_widget_name(&format!("filmstrip-photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
-    button
+    button.add_css_class("dt_filmstrip_item");
+    button.set_tooltip_text(Some(title));
+    button.set_child(Some(thumbnail.widget()));
+    (button, thumbnail)
 }
 
 fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {
     preview.set_detail(detail);
-}
-
-fn panel_heading(i18n: &I18n, message_id: MessageId) -> gtk4::Label {
-    let label = gtk4::Label::new(Some(&i18n.text(message_id, &MessageArgs::new())));
-    label.set_halign(gtk4::Align::Start);
-    label.add_css_class("title-3");
-    label.add_css_class("dt_section_label");
-    label
 }
 
 fn clear_children(container: &impl IsA<gtk4::Widget>) {

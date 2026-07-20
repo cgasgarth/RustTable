@@ -15,6 +15,7 @@ use crate::gtk_export::{
     ExportSettings, ExportSizeSelection, ExportStage, ExportStatus, run_with_progress,
 };
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
+use crate::gtk_thumbnail_controller::{GtkThumbnailController, default_thumbnail_cache_root};
 use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
     MacApplicationBridge, MacApplicationCommand, MacOpenRequest, MacTerminationDecision,
@@ -202,6 +203,7 @@ fn activate_application(
     if let Some(controller) = active_collection.borrow().as_ref() {
         shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
     }
+    start_workspace_thumbnails(&shell, &catalog_controller.borrow());
     let collection_for_actions = Rc::clone(active_collection);
     shell.connect_collection_action(move |action| {
         let mut controller = collection_for_actions.borrow_mut();
@@ -497,6 +499,79 @@ fn refresh_catalog_shell(
     if let Some(collection) = active_collection.borrow().as_ref() {
         shell.set_collection_filter_state(&collection_filter_state(&collection.snapshot()));
     }
+    drop(controller);
+    start_workspace_thumbnails(shell, &catalog.borrow());
+}
+
+enum ThumbnailWorkerMessage {
+    Ready(crate::gtk_thumbnail_controller::GtkThumbnail),
+    Failed(rusttable_core::PhotoId),
+    Finished,
+}
+
+fn start_workspace_thumbnails(shell: &rusttable_ui::GtkShell, catalog: &GtkCatalogController) {
+    let crate::gtk_controller::GtkCatalogState::Ready(ready) = catalog.state() else {
+        return;
+    };
+    let catalog_path = ready.location().catalog_path().to_path_buf();
+    let source_root = ready.location().source_root().to_path_buf();
+    let photo_ids = ready
+        .workspace()
+        .cards()
+        .map(rusttable_ui::PhotoCardViewModel::id)
+        .collect::<Vec<_>>();
+    let (sender, receiver) = mpsc::channel();
+    let worker = thread::Builder::new()
+        .name("rusttable-thumbnails".to_owned())
+        .spawn(move || {
+            let Ok(mut controller) = GtkThumbnailController::open(
+                catalog_path,
+                source_root,
+                default_thumbnail_cache_root(),
+            ) else {
+                for photo_id in photo_ids {
+                    let _ = sender.send(ThumbnailWorkerMessage::Failed(photo_id));
+                }
+                let _ = sender.send(ThumbnailWorkerMessage::Finished);
+                return;
+            };
+            for photo_id in photo_ids {
+                let message = controller.render(photo_id).map_or_else(
+                    |_| ThumbnailWorkerMessage::Failed(photo_id),
+                    ThumbnailWorkerMessage::Ready,
+                );
+                if sender.send(message).is_err() {
+                    return;
+                }
+            }
+            let _ = sender.send(ThumbnailWorkerMessage::Finished);
+        });
+    if worker.is_err() {
+        return;
+    }
+
+    let shell = shell.clone();
+    glib::timeout_add_local(Duration::from_millis(16), move || {
+        loop {
+            match receiver.try_recv() {
+                Ok(ThumbnailWorkerMessage::Ready(thumbnail)) => {
+                    if shell
+                        .set_photo_thumbnail(thumbnail.photo_id(), thumbnail.metadata())
+                        .is_err()
+                    {
+                        shell.set_photo_thumbnail_failed(thumbnail.photo_id());
+                    }
+                }
+                Ok(ThumbnailWorkerMessage::Failed(photo_id)) => {
+                    shell.set_photo_thumbnail_failed(photo_id);
+                }
+                Ok(ThumbnailWorkerMessage::Finished) | Err(TryRecvError::Disconnected) => {
+                    return ControlFlow::Break;
+                }
+                Err(TryRecvError::Empty) => return ControlFlow::Continue,
+            }
+        }
+    });
 }
 
 #[derive(Debug, Default)]

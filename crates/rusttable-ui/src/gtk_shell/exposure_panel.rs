@@ -3,12 +3,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_processing::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
     EXPOSURE_EV_MAXIMUM, EXPOSURE_EV_MINIMUM, EXPOSURE_EV_SOFT_MAXIMUM, EXPOSURE_EV_SOFT_MINIMUM,
     ExposureAction, ExposureActionError, ExposureMode, ExposureModuleState,
 };
+
+use super::{ThemeRole, apply_theme_role};
 
 type ExposureActionHandler = Box<dyn Fn(ExposureAction)>;
 
@@ -91,6 +94,24 @@ impl ExposurePanel {
             .child(&content)
             .build();
         expander.set_widget_name("exposure");
+        apply_theme_role(&expander, ThemeRole::Module);
+        expander.set_accessible_role(gtk4::AccessibleRole::Group);
+        expander.update_property(&[Property::Label("Exposure processing module")]);
+        identify(&enabled, "exposure-enabled", "Enable exposure module");
+        identify(&mode, "exposure-mode", "Exposure mode");
+        identify(&exposure, "exposure-ev", "Exposure correction in EV");
+        identify(&black, "exposure-black", "Exposure black level");
+        identify(
+            &compensate_exposure_bias,
+            "exposure-bias-compensation",
+            "Compensate camera exposure bias",
+        );
+        identify(
+            &compensate_highlight_preservation,
+            "exposure-highlight-compensation",
+            "Compensate highlight preservation",
+        );
+        identify(&reset, "exposure-reset", "Reset exposure module");
 
         let panel = Self {
             expander,
@@ -243,6 +264,7 @@ fn sync_controls(state: &Rc<RefCell<ExposureModuleState>>, controls: &ControlSet
 
 fn append_switch_row(container: &gtk4::Box, label: &str, control: &gtk4::Switch) {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    row.add_css_class("dt_module_row");
     let text = gtk4::Label::new(Some(label));
     text.set_halign(gtk4::Align::Start);
     text.set_hexpand(true);
@@ -253,6 +275,7 @@ fn append_switch_row(container: &gtk4::Box, label: &str, control: &gtk4::Switch)
 
 fn append_dropdown_row(container: &gtk4::Box, label: &str, control: &gtk4::DropDown) {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    row.add_css_class("dt_module_row");
     let text = gtk4::Label::new(Some(label));
     text.set_halign(gtk4::Align::Start);
     text.set_hexpand(true);
@@ -263,6 +286,7 @@ fn append_dropdown_row(container: &gtk4::Box, label: &str, control: &gtk4::DropD
 
 fn append_scale_row(container: &gtk4::Box, label: &str, control: &gtk4::Scale, unit: &str) {
     let row = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    row.add_css_class("dt_module_row");
     let heading_text = if unit.is_empty() {
         label.to_owned()
     } else {
@@ -273,6 +297,15 @@ fn append_scale_row(container: &gtk4::Box, label: &str, control: &gtk4::Scale, u
     row.append(&heading);
     row.append(control);
     container.append(&row);
+}
+
+fn identify(
+    widget: &(impl IsA<gtk4::Widget> + IsA<gtk4::Accessible>),
+    id: &str,
+    accessible_name: &str,
+) {
+    widget.set_widget_name(id);
+    widget.update_property(&[Property::Label(accessible_name)]);
 }
 
 fn connect_switch_action<F>(

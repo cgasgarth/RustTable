@@ -297,6 +297,22 @@ pub const LIGHTTABLE_COMPOSITION: LighttableCompositionSpec = LighttableComposit
     empty_state_columns: 2,
 };
 
+/// Pixel bounds for the initial Darktable grid and filmstrip thumbnail surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThumbnailMetrics {
+    pub grid_width_px: u16,
+    pub grid_height_px: u16,
+    pub filmstrip_width_px: u16,
+    pub filmstrip_height_px: u16,
+}
+
+pub const THUMBNAIL_METRICS: ThumbnailMetrics = ThumbnailMetrics {
+    grid_width_px: 156,
+    grid_height_px: 104,
+    filmstrip_width_px: 92,
+    filmstrip_height_px: 72,
+};
+
 /// Bottom filmstrip height constraints from Darktable's GTK configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FilmstripHeights {
@@ -449,8 +465,8 @@ pub const PANEL_SLOTS: [PanelSlot; 6] = [
 
 /// Darktable's fixed desktop metrics and resize constraints.
 pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
-    window_width_px: 1224,
-    window_height_px: 768,
+    window_width_px: 900,
+    window_height_px: 500,
     outer_border_px: 10,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
@@ -459,12 +475,12 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     center_minimum_width_px: 650,
     side_panel_widths: SidePanelWidths {
         minimum_px: 150,
-        preferred_px: 154,
+        preferred_px: 150,
         maximum_px: 1_500,
     },
     filmstrip_heights: FilmstripHeights {
         minimum_px: 64,
-        preferred_px: 104,
+        preferred_px: 120,
         maximum_px: 400,
     },
 };
@@ -515,7 +531,7 @@ mod tests {
     use super::{
         ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DesktopRegion,
         LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
-        PANEL_SLOTS, PanelRole, PanelSlot, TOP_BAR_SECTIONS, ViewMode,
+        PANEL_SLOTS, PanelRole, PanelSlot, THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ViewMode,
     };
 
     #[test]
@@ -564,22 +580,24 @@ mod tests {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 154);
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 150);
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
         assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
-        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 104);
+        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
     }
 
     #[test]
     fn baseline_rail_geometry_leaves_a_stable_center_column() {
+        assert_eq!(LAYOUT_METRICS.window_width_px, 900);
+        assert_eq!(LAYOUT_METRICS.window_height_px, 500);
         assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_204);
-        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 896);
+        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 904);
         assert_eq!(
             LAYOUT_METRICS.preferred_right_panel_position_px(1_224),
-            1_050
+            1_054
         );
         assert!(
             LAYOUT_METRICS.preferred_center_width_px(1_224)
@@ -636,6 +654,14 @@ mod tests {
         assert_eq!(LIGHTTABLE_COMPOSITION.footer_toolbar_rows, 1);
         assert_eq!(LIGHTTABLE_COMPOSITION.filmstrip_toolbar_rows, 0);
         assert_eq!(LIGHTTABLE_COMPOSITION.empty_state_columns, 2);
+    }
+
+    #[test]
+    fn thumbnail_bounds_keep_grid_and_filmstrip_visually_distinct() {
+        assert_eq!(THUMBNAIL_METRICS.grid_width_px, 156);
+        assert_eq!(THUMBNAIL_METRICS.grid_height_px, 104);
+        assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 92);
+        assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 72);
     }
 
     #[test]
