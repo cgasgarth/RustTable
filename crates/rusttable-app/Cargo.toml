@@ -8,13 +8,13 @@ version.workspace = true
 
 [dependencies]
 directories.workspace = true
-rusttable-catalog = { path = "../rusttable-catalog", version = "0.1.0" }
-rusttable-catalog-store = { path = "../rusttable-catalog-store", version = "0.1.0" }
-rusttable-diagnostics = { path = "../rusttable-diagnostics", version = "0.1.0" }
-rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
-rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
-rusttable-scripting = { path = "../rusttable-scripting", version = "0.1.0" }
-rusttable-ui = { path = "../rusttable-ui", version = "0.1.0" }
+rusttable-catalog.workspace = true
+rusttable-catalog-store.workspace = true
+rusttable-diagnostics.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+rusttable-scripting.workspace = true
+rusttable-ui.workspace = true
 
 [dev-dependencies]
 iced_test.workspace = true

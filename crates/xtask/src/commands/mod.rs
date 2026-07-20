@@ -26,7 +26,7 @@ mod ui_shell;
 
 use std::fmt;
 
-use crate::cli::{Cli, Command, DependencyCommand, EcosystemCommand};
+use crate::cli::{Cli, Command, DependenciesCommand, DependencyCommand, EcosystemCommand};
 use crate::output::Report;
 use crate::process::{ProcessError, ProcessRunner};
 use crate::root::{RepositoryRoot, RootError};
@@ -54,6 +54,11 @@ pub fn run(cli: &Cli) -> std::result::Result<Report, CommandError> {
             _ => github::run(&root, command, &runner),
         },
         Command::LuaConformance(arguments) => lua::run(&root, arguments),
+        Command::Dependencies { command } => match command {
+            DependenciesCommand::Verify(arguments) => {
+                dependencies::verify(&root, &runner, arguments.offline)
+            }
+        },
         Command::Ecosystem { command } => match command {
             EcosystemCommand::VerifyBaseline(arguments) => {
                 ecosystem::verify_baseline(&root, arguments, &runner)

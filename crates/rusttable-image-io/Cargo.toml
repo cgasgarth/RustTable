@@ -8,8 +8,8 @@ version.workspace = true
 
 [dependencies]
 image.workspace = true
-rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
-rusttable-metadata = { path = "../rusttable-metadata", version = "0.1.0" }
+rusttable-image.workspace = true
+rusttable-metadata.workspace = true
 
 [lints]
 workspace = true

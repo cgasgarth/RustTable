@@ -7,11 +7,14 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-rusttable-catalog = { path = "../rusttable-catalog", version = "0.1.0" }
-rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
-rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
-rusttable-metadata = { path = "../rusttable-metadata", version = "0.1.0" }
+rusttable-catalog.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+rusttable-metadata.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
-rusttable-catalog-store = { path = "../rusttable-catalog-store", version = "0.1.0" }
+rusttable-catalog-store.workspace = true
+
+[lints]
+workspace = true

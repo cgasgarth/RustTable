@@ -7,9 +7,9 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
-rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
-rusttable-processing = { path = "../rusttable-processing", version = "0.1.0" }
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+rusttable-processing.workspace = true
 
 [lints]
 workspace = true

@@ -9,9 +9,9 @@ version.workspace = true
 [dependencies]
 postcard.workspace = true
 redb.workspace = true
-rusttable-catalog = { path = "../rusttable-catalog", version = "0.1.0" }
-rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
-rusttable-image = { path = "../rusttable-image", version = "0.1.0" }
+rusttable-catalog.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
 serde.workspace = true
 
 [lints]
