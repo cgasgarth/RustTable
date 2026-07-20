@@ -29,7 +29,7 @@ Run the fast checks before publishing work:
 
 ```sh
 bash scripts/precommit-fast.sh  # full local build/lint/test gate; intentionally uncapped
-bash scripts/prepush-fast.sh    # <= 150 seconds
+bash scripts/prepush-fast.sh    # complete local merge-readiness gate; intentionally uncapped
 bash scripts/main-ci.sh          # merge-to-main validation
 ```
 
@@ -59,4 +59,4 @@ Use one GitHub issue, one dedicated worktree, and one pull request per change. W
 
 ## Reference
 
-The original [darktable project](https://github.com/darktable-org/darktable) remains available in the local reference clone at `/Users/cgas/Documents/RustTable/upstream` for historical context and behavioral comparison. RustTable's active source is the workspace described by [Cargo.toml](Cargo.toml), with the iced application in [crates/rusttable-app](crates/rusttable-app).
+The original [darktable project](https://github.com/darktable-org/darktable) remains available in the local reference clone at `/Users/cgas/Documents/RustTable/Darktable` for historical context and behavioral comparison. RustTable's active source is the workspace described by [Cargo.toml](Cargo.toml), with the iced application in [crates/rusttable-app](crates/rusttable-app).

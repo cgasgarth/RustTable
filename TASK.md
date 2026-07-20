@@ -24,7 +24,7 @@ Rewrite darktable completely in Rust, using iced for the UI, while preserving th
 ## Validation policy
 
 - Pre-commit: complete local merge-readiness checks; no elapsed-time cap.
-- Pre-push: no more than 150 seconds.
+- Pre-push: complete local merge-readiness checks; no elapsed-time cap.
 - Pull-request GitHub Actions: none.
 - Pushes to `main`: rerun the complete gate and all exhaustive or heavyweight validation.
 
