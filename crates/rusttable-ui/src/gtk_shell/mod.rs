@@ -8,6 +8,8 @@ mod collection_controls;
 mod darktable_spec;
 mod export_panel;
 mod exposure_panel;
+mod header;
+mod left_panel;
 mod lighttable;
 mod model;
 mod photo_preview;

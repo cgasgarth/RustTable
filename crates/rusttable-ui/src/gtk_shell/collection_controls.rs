@@ -130,8 +130,9 @@ impl CollectionControls {
         let locale = Rc::new(RefCell::new(i18n));
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         root.set_widget_name("collection-controls");
+        root.set_width_request(0);
 
-        let rule_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+        let rule_row = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
         rule_row.set_widget_name("collection-rule");
 
         let property_model = gtk4::StringList::new(&[]);
@@ -149,26 +150,34 @@ impl CollectionControls {
             gtk4::DropDown::new(Some(property_model.clone()), None::<&gtk4::Expression>);
         property_dropdown.set_widget_name("collection-property");
         property_dropdown.set_selected(CollectionProperty::default().index());
+        property_dropdown.set_hexpand(true);
+        property_dropdown.set_width_request(0);
 
         let search_entry = gtk4::SearchEntry::new();
         search_entry.set_widget_name("collection-search");
         search_entry.set_hexpand(true);
+        search_entry.set_width_chars(1);
+        search_entry.set_max_width_chars(9);
         search_entry.set_placeholder_text(Some(
             &locale
                 .borrow()
                 .text(MessageId::CollectionSearch, &MessageArgs::new()),
         ));
 
-        let clear_button = gtk4::Button::with_label(
+        let clear_button = gtk4::Button::with_label("×");
+        clear_button.set_widget_name("collection-clear");
+        clear_button.set_tooltip_text(Some(
             &locale
                 .borrow()
                 .text(MessageId::CollectionClear, &MessageArgs::new()),
-        );
-        clear_button.set_widget_name("collection-clear");
+        ));
 
         rule_row.append(&property_dropdown);
-        rule_row.append(&search_entry);
-        rule_row.append(&clear_button);
+        let search_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+        search_row.set_widget_name("collection-search-row");
+        search_row.append(&search_entry);
+        search_row.append(&clear_button);
+        rule_row.append(&search_row);
 
         let result_count = gtk4::Label::new(Some(&locale.borrow().text(
             MessageId::CollectionResults,
@@ -234,8 +243,9 @@ impl CollectionControls {
         self.search_entry.set_placeholder_text(Some(
             &i18n.text(MessageId::CollectionSearch, &MessageArgs::new()),
         ));
-        self.clear_button
-            .set_label(&i18n.text(MessageId::CollectionClear, &MessageArgs::new()));
+        self.clear_button.set_tooltip_text(Some(
+            &i18n.text(MessageId::CollectionClear, &MessageArgs::new()),
+        ));
         self.set_state(&self.state.borrow().clone());
     }
 
