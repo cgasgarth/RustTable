@@ -9,8 +9,8 @@ use rusttable_core::{
 use rusttable_processing::descriptor::{exposure_descriptor, rgb_gain_descriptor};
 use rusttable_processing::operation_stack::{OperationStackSnapshot, OperationStackTemplate};
 use rusttable_processing::{
-    FiniteF32, LinearRgb, OperationClassification, PipelineStepIndex, RegistryClosure,
-    RegistryClosureEntry, builtin_registry,
+    FiniteF32, LinearRgb, OperationClassification, PipelineStepIndex, RasterDimensions,
+    RegistryClosure, RegistryClosureEntry, builtin_registry,
 };
 use serde::Serialize;
 
@@ -317,7 +317,12 @@ fn execute_builtin_smoke() -> Result {
         let finite = FiniteF32::new(0.25).expect("finite pixel");
         let mut pixels = [LinearRgb::new(finite, finite, finite)];
         prepared
-            .execute(PipelineStepIndex::new(index), &mut pixels, 0)
+            .execute(
+                PipelineStepIndex::new(index),
+                &mut pixels,
+                RasterDimensions::new(1, 1).expect("smoke dimensions"),
+                0,
+            )
             .map_err(|error| format!("operation registry: executor failed: {error}"))?;
     }
     Ok(())

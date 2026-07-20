@@ -134,6 +134,19 @@ impl CpuPixelpipeExecutor {
         tile_plan: CpuTilePlan,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
+        if request.graph().nodes().any(|node| {
+            matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::Highlights { .. }
+                    | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+            )
+        }) {
+            // Both Darktable operations freeze full-image evidence before
+            // replacement. Running them independently per tile changes their
+            // result, so the legal tiled contract is a full-frame analysis
+            // followed by one publication.
+            return self.execute(request);
+        }
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -174,6 +187,24 @@ impl CpuPixelpipeExecutor {
         scope: &CancellationScope,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
+        if request.graph().nodes().any(|node| {
+            matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::Highlights { .. }
+                    | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+            )
+        }) {
+            scope
+                .child(CancellationStage::Tile)
+                .check()
+                .map_err(CpuPixelpipeError::Cancelled)?;
+            let result = self.execute(request)?;
+            scope
+                .child(CancellationStage::Publication)
+                .check()
+                .map_err(CpuPixelpipeError::Cancelled)?;
+            return Ok(result);
+        }
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
