@@ -4,6 +4,7 @@
 //! initializing a display server. `GtkShell` is the runtime adapter that maps
 //! those stable roles to GTK widgets.
 
+mod ai_surfaces;
 mod collection_controls;
 mod darkroom;
 mod darktable_spec;

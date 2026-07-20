@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "GTK4 UI components and presentation models for `RustTable`."]
 
+pub mod ai_models;
 pub mod collection;
 pub mod display_profile;
 pub mod external_editor;
@@ -9,9 +10,16 @@ pub mod import;
 pub mod input;
 pub mod input_mapping;
 pub mod library;
+pub mod neural_restore;
 pub mod presentation;
 pub mod viewport_presentation;
 
+pub use ai_models::{
+    AI_MODELS_FOCUS_ORDER, AiModelsAction, AiModelsController, AiModelsControllerError,
+    AiModelsFailure, AiModelsPanel, AiModelsServiceError, AiModelsServicePort, AiModelsSnapshot,
+    AiModelsViewModel, AiProvider, AiProviderPolicy, AiTask, InstallSummary, InstalledModel,
+    ModelHash, ModelServiceState, ProviderCapability, QualificationJob,
+};
 pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use external_editor::{
@@ -38,6 +46,14 @@ pub use input_mapping::{
     MappingProfile, MappingSnapshot, ResetScope, SoftTakeover,
 };
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
+pub use neural_restore::{
+    ComparisonMode, NEURAL_RESTORE_FOCUS_ORDER, NeuralRestoreAction, NeuralRestoreController,
+    NeuralRestoreControllerError, NeuralRestorePanel, NeuralRestorePreviewPort,
+    NeuralRestoreSnapshot, NeuralRestoreViewModel, PhotoSelection, PhotoSourceKind,
+    PreviewArtifact, PreviewCache, PreviewCacheKey, PreviewEligibility, PreviewFailure,
+    PreviewFrame, PreviewFrameError, PreviewRequest, PreviewServiceError, PreviewStage,
+    PreviewStatus, RestoreSettings, RestoreTask, Roi, ViewportState,
+};
 pub use presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,

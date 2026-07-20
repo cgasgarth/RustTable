@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "The GTK4 application composition root for `RustTable`."]
 
+mod ai_services;
 mod composition;
 mod configuration;
 mod extensions;

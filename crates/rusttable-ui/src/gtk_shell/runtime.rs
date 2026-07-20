@@ -24,8 +24,10 @@ use super::{
     apply_theme_role,
 };
 use super::{header::HeaderChrome, left_panel::LeftPanel};
+use crate::ai_models::AiModelsPanel;
 use crate::external_editor::{ExternalEditorAction, ExternalEditorPanel, ExternalEditorViewModel};
 use crate::input_mapping::InputMappingEditor;
+use crate::neural_restore::NeuralRestorePanel;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus};
 
@@ -49,6 +51,8 @@ pub struct GtkShell {
     collection_controls: CollectionControls,
     lighttable_toolbar: LighttableToolbar,
     input_mapping_editor: InputMappingEditor,
+    pub(super) ai_models_panel: AiModelsPanel,
+    pub(super) neural_restore_panel: NeuralRestorePanel,
     i18n: Rc<RefCell<I18n>>,
     display_profile_banner: DisplayProfileBanner,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
@@ -99,18 +103,25 @@ impl GtkShell {
         let (workspace, lighttable, lighttable_empty_state) =
             workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
         let input_mapping_editor = InputMappingEditor::new(application);
+        let ai_models_panel = AiModelsPanel::new();
         let display_profile_banner = DisplayProfileBanner::new();
         let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
         let lighttable_toolbar = header.lighttable_toolbar().clone();
         header.preferences_button().connect_clicked({
             let editor = input_mapping_editor.clone();
-            move |_| editor.present()
+            let ai_models = ai_models_panel.clone();
+            let window = window.clone();
+            move |_| {
+                editor.present();
+                ai_models.present(&window);
+            }
         });
         let collection_controls = CollectionControls::with_i18n(
             I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
         );
         let lighttable_left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
-        let (lighttable_right_panel, export_panel, external_editor_panel) = right_panel();
+        let (lighttable_right_panel, export_panel, external_editor_panel, neural_restore_panel) =
+            right_panel();
         let left_panel = mode_panel_stack(
             "left-panel-stack",
             lighttable_left_panel.widget(),
@@ -152,6 +163,8 @@ impl GtkShell {
             collection_controls,
             lighttable_toolbar,
             input_mapping_editor,
+            ai_models_panel,
+            neural_restore_panel,
             i18n: Rc::clone(&i18n),
             display_profile_banner,
             lighttable_workspace: Rc::new(RefCell::new(None)),
@@ -587,7 +600,12 @@ fn connect_photo_selection(
     });
 }
 
-fn right_panel() -> (gtk4::Box, ExportPanel, ExternalEditorPanel) {
+fn right_panel() -> (
+    gtk4::Box,
+    ExportPanel,
+    ExternalEditorPanel,
+    NeuralRestorePanel,
+) {
     let panel = panel_column(
         ShellRegion::RightPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
@@ -595,18 +613,25 @@ fn right_panel() -> (gtk4::Box, ExportPanel, ExternalEditorPanel) {
     apply_theme_role(&panel, ThemeRole::Panel);
     let export_panel = ExportPanel::new();
     let external_editor_panel = ExternalEditorPanel::new();
+    let neural_restore_panel = NeuralRestorePanel::new();
     let center = panel_slot(PanelSlot::RightCenter);
     for module in &LIGHTTABLE_RIGHT_MODULES[..LIGHTTABLE_RIGHT_MODULES.len() - 1] {
         center.append(&module_group(module.widget_name, module.title, false));
     }
     center.append(export_panel.widget());
     center.append(external_editor_panel.widget());
+    center.append(neural_restore_panel.widget());
     let bottom = panel_slot(PanelSlot::RightBottom);
     let search = gtk4::SearchEntry::new();
     search.set_widget_name("right-module-search");
     bottom.append(&search);
     append_panel_slots(&panel, &panel_slot(PanelSlot::RightTop), &center, &bottom);
-    (panel, export_panel, external_editor_panel)
+    (
+        panel,
+        export_panel,
+        external_editor_panel,
+        neural_restore_panel,
+    )
 }
 
 fn mode_panel_stack(
