@@ -1,3 +1,4 @@
+mod ai_ui;
 mod catalog_preview;
 mod catalog_preview_smoke;
 mod collection_bridge;
@@ -43,11 +44,13 @@ use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+use ai_ui::install_ai_ui_bridges;
 use collection_bridge::{
     apply_collection_action, apply_lighttable_toolbar_action, collection_filter_state,
     empty_collection_filter_state,
 };
 use preview_lifecycle::{PreviewLifecycle, PreviewSelectionToken};
+use rusttable_ui::{NeuralRestoreAction, PhotoSelection, PhotoSourceKind};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +161,7 @@ fn connect_application_signals(
     });
 }
 
+#[allow(clippy::too_many_lines)]
 fn activate_application(
     application: &gtk4::Application,
     active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
@@ -196,6 +200,9 @@ fn activate_application(
             .set_snapshot(snapshot.as_ref());
     }
     install_action_input(&shell);
+    let neural_controller = install_ai_ui_bridges(&shell);
+    let neural_for_selection = Rc::clone(&neural_controller);
+    let neural_selection_shell = shell.clone();
     let export_panel = shell.export_panel().clone();
     let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
     let workspace = catalog_controller.borrow().state().workspace().cloned();
@@ -254,6 +261,14 @@ fn activate_application(
         }
         export_selection_lifecycle.borrow_mut().invalidate();
         export_selection.set_selected(true);
+        let mut neural = neural_for_selection.borrow_mut();
+        let _ = neural.dispatch(NeuralRestoreAction::SetSelection(PhotoSelection::single(
+            photo_id,
+            PhotoSourceKind::Raster,
+            true,
+            0,
+        )));
+        neural_selection_shell.set_neural_restore_state(neural.state());
         let catalog = selection_controller.borrow().clone();
         start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
     });
