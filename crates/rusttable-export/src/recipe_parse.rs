@@ -151,6 +151,10 @@ fn parse_collision(value: &str) -> Result<crate::CollisionPolicy, RecipeError> {
     match value {
         "create_new" => Ok(crate::CollisionPolicy::CreateNew),
         "replace_existing" => Ok(crate::CollisionPolicy::ReplaceExisting),
+        "fail" => Ok(crate::CollisionPolicy::Fail),
+        "skip_if_same" => Ok(crate::CollisionPolicy::SkipIfSame),
+        "unique_suffix" => Ok(crate::CollisionPolicy::UniqueSuffix),
+        "version_revision" => Ok(crate::CollisionPolicy::VersionRevision),
         _ => Err(RecipeError::UnsupportedValue { field: "collision" }),
     }
 }

@@ -30,6 +30,7 @@ fn output_formats_are_stable_and_options_are_closed() {
             OutputFormat::Heic,
             OutputFormat::Jpeg2000,
             OutputFormat::Jp2,
+            OutputFormat::OpenExr,
         ]
     );
     assert_eq!(OutputOptions::Png.format(), OutputFormat::Png);
