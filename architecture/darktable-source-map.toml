@@ -16795,22 +16795,6 @@ dependencies = []
 anchors = []
 
 [[issues]]
-number = 445
-title = "[0303] Keep pre-push validation within 150 seconds"
-state = "closed"
-priority = "invalid"
-body_hash = "1d9368ee12cb290ef194a64675d5136b6234b17cca2532eafda4d7d03f3177f7"
-source_anchor_hash = ""
-source_status = "blocked-needs-reviewed-source-block"
-class = "source-owned"
-preserve = ["Named upstream responsibilities and behavior parity"]
-redesign = ["Rust-owned typed contracts and machine-readable ownership"]
-excluded = ["Copying or compiling upstream C/C++/OpenCL implementation"]
-rust_targets = ["issue-specific Rust owner from issue body"]
-dependencies = []
-anchors = []
-
-[[issues]]
 number = 446
 title = "Migrate backlog governance to priority labels and dependency links"
 state = "closed"
@@ -17019,44 +17003,12 @@ dependencies = [
 anchors = []
 
 [[issues]]
-number = 457
-title = "Build the Iced 0.15-dev application shell and multi-window runtime"
-state = "closed"
-priority = "priority: P3"
-body_hash = "9814b89609781a249e70965ca4577847a4578b2d38a9f59445e6aeec36c835c1"
-source_anchor_hash = ""
-source_status = "blocked-needs-reviewed-source-block"
-class = "source-owned"
-preserve = ["Named upstream responsibilities and behavior parity"]
-redesign = ["Rust-owned typed contracts and machine-readable ownership"]
-excluded = ["Copying or compiling upstream C/C++/OpenCL implementation"]
-rust_targets = ["issue-specific Rust owner from issue body"]
-dependencies = []
-anchors = []
-
-[[issues]]
 number = 458
 title = "Document notification-driven subagent orchestration"
 state = "closed"
 priority = "priority: P4"
 milestone = "Foundation & Developer Workflow"
 body_hash = "e44c24a3720e6554934dbfa47000e524d41c1af2e511190db34941589f553043"
-source_anchor_hash = ""
-source_status = "blocked-needs-reviewed-source-block"
-class = "source-owned"
-preserve = ["Named upstream responsibilities and behavior parity"]
-redesign = ["Rust-owned typed contracts and machine-readable ownership"]
-excluded = ["Copying or compiling upstream C/C++/OpenCL implementation"]
-rust_targets = ["issue-specific Rust owner from issue body"]
-dependencies = []
-anchors = []
-
-[[issues]]
-number = 459
-title = "[0302] Implement bounded Lua 5.4 compatibility host with mlua"
-state = "closed"
-priority = "invalid"
-body_hash = "511480445d5c8dcaf6c6be644a114b88bda3adc3e810725d4deb551fb584f5df"
 source_anchor_hash = ""
 source_status = "blocked-needs-reviewed-source-block"
 class = "source-owned"
@@ -18616,7 +18568,7 @@ anchors = []
 [[issues]]
 number = 555
 title = "Make every migration issue source-anchored to the pinned darktable tree"
-state = "open"
+state = "closed"
 priority = "priority: P0"
 milestone = "Foundation & Developer Workflow"
 body_hash = "bb4cbbed5a8cd687d4f515418702dee1802f21fd65446e13b3dc484210c22e49"
@@ -18823,7 +18775,7 @@ name = "void"
 [[issues]]
 number = 558
 title = "Make full-workspace reference-runner validation deterministic"
-state = "open"
+state = "closed"
 priority = "priority: P0"
 milestone = "Quality, Performance & Release"
 body_hash = "f0ed3f05ab1aad69d99dd1fd6d18acd47a098723677bd40bec6b12afa5bfcb2b"
@@ -18887,7 +18839,7 @@ name = "void"
 [[issues]]
 number = 560
 title = "Move pull-request validation entirely into local pre-commit"
-state = "open"
+state = "closed"
 priority = "priority: P0"
 milestone = "Foundation & Developer Workflow"
 body_hash = "f75b010cf34493ea0ec07ba02c2c5c99808e0776acb96c8e5fb7bc18dde1e311"
@@ -18963,7 +18915,7 @@ name = "add_subdirectory"
 [[issues]]
 number = 561
 title = "Centralize workspace dependencies and enforce Cargo manifest policy"
-state = "open"
+state = "closed"
 priority = "priority: P0"
 milestone = "Foundation & Developer Workflow"
 body_hash = "8acf03e0ce9773f5b61fc279b8669d3f7593a064f76c4f0b2524f2cfb0d11f49"
