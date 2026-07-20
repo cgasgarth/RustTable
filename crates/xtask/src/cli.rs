@@ -57,6 +57,10 @@ pub enum Command {
         #[command(subcommand)]
         command: EcosystemCommand,
     },
+    Dependencies {
+        #[command(subcommand)]
+        command: DependenciesCommand,
+    },
     Foundation {
         #[command(subcommand)]
         command: FoundationCommand,
@@ -610,6 +614,17 @@ pub enum DependencyCommand {
     VendorClosure(OfflineClosureArgs),
     #[command(name = "verify-offline")]
     VerifyOffline(OfflineClosureArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DependenciesCommand {
+    Verify(DependencyVerifyArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct DependencyVerifyArgs {
+    #[arg(long)]
+    pub offline: bool,
 }
 
 #[derive(Debug, Args)]

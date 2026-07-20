@@ -7,7 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-rusttable-core = { path = "../rusttable-core", version = "0.1.0" }
+rusttable-core.workspace = true
 
 [dev-dependencies]
 iced_test.workspace = true

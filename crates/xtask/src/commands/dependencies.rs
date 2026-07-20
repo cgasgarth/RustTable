@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -12,6 +13,9 @@ use crate::root::RepositoryRoot;
 const LOCKFILE: &str = "Cargo.lock";
 const WORKSPACE: &str = "Cargo.toml";
 const POLICY: &str = "quality/dependency-sources.toml";
+const INHERITED_PACKAGE_FIELDS: [&str; 4] = ["edition", "license", "rust-version", "version"];
+const CENTRALIZED_EXTERNAL_DEPENDENCIES: [&str; 4] =
+    ["process-wrap", "tokio", "wasmtime", "wasmtime-wasi"];
 
 #[derive(Debug, Deserialize)]
 struct DependencyPolicy {
@@ -72,6 +76,13 @@ struct NativePackage {
     rationale: String,
 }
 
+pub(crate) fn verify(root: &RepositoryRoot, runner: &ProcessRunner, offline: bool) -> Result {
+    if !offline {
+        return Err("dependencies verify: --offline is required".to_owned());
+    }
+    verify_policy(root, runner)
+}
+
 pub(crate) fn verify_policy(root: &RepositoryRoot, runner: &ProcessRunner) -> Result {
     let workspace_text = read(root, WORKSPACE)?;
     let workspace: Value =
@@ -87,6 +98,7 @@ pub(crate) fn verify_policy(root: &RepositoryRoot, runner: &ProcessRunner) -> Re
         .and_then(Value::as_array)
         .ok_or_else(|| format!("{WORKSPACE}: workspace.members is missing"))?;
     let mut checked = Vec::new();
+    let mut manifests = Vec::new();
     for member in members {
         let member = member
             .as_str()
@@ -100,7 +112,12 @@ pub(crate) fn verify_policy(root: &RepositoryRoot, runner: &ProcessRunner) -> Re
             workspace.get("workspace"),
         ));
         checked.push(path);
+        manifests.push((
+            checked.last().expect("path was just added").clone(),
+            manifest,
+        ));
     }
+    findings.extend(validate_manifest_policy(&workspace, &manifests));
     if !root.join(LOCKFILE).is_file() {
         findings.push(format!("{LOCKFILE}: committed lockfile is required"));
     }
@@ -122,6 +139,7 @@ pub(crate) fn verify_policy(root: &RepositoryRoot, runner: &ProcessRunner) -> Re
         "duplicate_exceptions": policy.exceptions.duplicate_versions.len(),
         "advisory_exceptions": policy.exceptions.advisories.len(),
         "provenance": "direct and transitive requirements are exact and centrally owned",
+        "manifest_policy": "workspace package fields, lint inheritance, naming, and internal dependencies are fail-closed",
         "diagnostics": "credentials and absolute paths omitted",
     });
     Ok(report(root, "dependencies.verify-policy", data))
@@ -361,12 +379,105 @@ pub(crate) fn validate_workspace(workspace: &Value) -> Vec<String> {
     findings
 }
 
+fn validate_manifest_policy(workspace: &Value, manifests: &[(String, Value)]) -> Vec<String> {
+    let mut findings = Vec::new();
+    let workspace_dependencies = workspace_dependencies(workspace.get("workspace"));
+    let workspace_version = workspace
+        .get("workspace")
+        .and_then(|value| value.get("package"))
+        .and_then(|value| value.get("version"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let mut members = BTreeMap::new();
+
+    for (path, manifest) in manifests {
+        let Some(package) = manifest.get("package").and_then(Value::as_table) else {
+            findings.push(format!("{path}: [package] is required"));
+            continue;
+        };
+        let expected_name = Path::new(path)
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        let name = package
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if name != expected_name || (!name.starts_with("rusttable-") && name != "xtask") {
+            findings.push(format!(
+                "{path}: package.name must be the canonical workspace crate name {expected_name}"
+            ));
+        }
+        if !members.insert(name.to_owned(), path.clone()).is_none() {
+            findings.push(format!("{path}: package.name {name} is duplicated"));
+        }
+        for field in INHERITED_PACKAGE_FIELDS {
+            let inherited = package
+                .get(field)
+                .and_then(Value::as_table)
+                .and_then(|value| value.get("workspace"))
+                .and_then(Value::as_bool)
+                == Some(true);
+            if !inherited {
+                findings.push(format!("{path}: package.{field}.workspace must be true"));
+            }
+        }
+        let lint_inheritance = manifest
+            .get("lints")
+            .and_then(Value::as_table)
+            .and_then(|value| value.get("workspace"))
+            .and_then(Value::as_bool)
+            == Some(true);
+        if !lint_inheritance {
+            findings.push(format!("{path}: [lints] workspace = true is required"));
+        }
+    }
+
+    for (name, path) in &members {
+        let Some(requirement) = workspace
+            .get("workspace")
+            .and_then(|value| value.get("dependencies"))
+            .and_then(|value| value.get(name))
+        else {
+            findings.push(format!(
+                "{WORKSPACE}: internal crate {name} must be declared in [workspace.dependencies]"
+            ));
+            continue;
+        };
+        let Some(requirement) = requirement.as_table() else {
+            findings.push(format!(
+                "{WORKSPACE}: internal crate {name} must declare a path and exact version"
+            ));
+            continue;
+        };
+        let expected_path = path.trim_end_matches("/Cargo.toml");
+        let exact_version = format!("={workspace_version}");
+        if requirement.get("path").and_then(Value::as_str) != Some(expected_path)
+            || requirement.get("version").and_then(Value::as_str) != Some(exact_version.as_str())
+        {
+            findings.push(format!(
+                "{WORKSPACE}: internal crate {name} must use path {expected_path} and version {exact_version}"
+            ));
+        }
+    }
+    for name in CENTRALIZED_EXTERNAL_DEPENDENCIES {
+        if !workspace_dependencies.contains(name) {
+            findings.push(format!(
+                "{WORKSPACE}: centralized dependency {name} is missing"
+            ));
+        }
+    }
+    findings
+}
+
 pub(crate) fn validate_manifest(
     path: &str,
     manifest: &Value,
     workspace: Option<&Value>,
 ) -> Vec<String> {
     let owned = workspace_dependencies(workspace);
+    let internal = internal_workspace_dependencies(workspace);
     let mut findings = Vec::new();
     for (section_name, section) in dependency_sections(manifest) {
         let Some(table) = section.as_table() else {
@@ -374,7 +485,12 @@ pub(crate) fn validate_manifest(
             continue;
         };
         for (name, requirement) in table {
-            if is_local_dependency(name, requirement) {
+            if internal.contains(name) {
+                if !inherits_workspace_dependency(requirement) {
+                    findings.push(format!(
+                        "{path}: internal dependency {name} must use workspace = true"
+                    ));
+                }
                 continue;
             }
             if requirement.get("path").is_some() {
@@ -391,6 +507,12 @@ pub(crate) fn validate_manifest(
                 }
                 continue;
             }
+            if CENTRALIZED_EXTERNAL_DEPENDENCIES.contains(&name.as_str()) {
+                findings.push(format!(
+                    "{path}: centralized dependency {name} must use workspace = true"
+                ));
+                continue;
+            }
             if let Some(message) =
                 validate_requirement(&format!("{path}: {name}"), requirement, false)
             {
@@ -399,6 +521,12 @@ pub(crate) fn validate_manifest(
         }
     }
     findings
+}
+
+fn inherits_workspace_dependency(requirement: &Value) -> bool {
+    requirement.get("workspace").and_then(Value::as_bool) == Some(true)
+        && requirement.get("path").is_none()
+        && requirement.get("version").is_none()
 }
 
 fn validate_requirement(
@@ -486,9 +614,20 @@ fn workspace_dependencies(workspace: Option<&Value>) -> BTreeSet<String> {
         .unwrap_or_default()
 }
 
-fn is_local_dependency(name: &str, requirement: &Value) -> bool {
-    let _ = requirement;
-    name.starts_with("rusttable-") || name == "xtask"
+fn internal_workspace_dependencies(workspace: Option<&Value>) -> BTreeSet<String> {
+    workspace
+        .and_then(|value| value.get("dependencies"))
+        .and_then(Value::as_table)
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, requirement)| {
+            requirement
+                .get("path")
+                .and_then(Value::as_str)
+                .filter(|path| path.starts_with("crates/"))
+                .map(|_| name.clone())
+        })
+        .collect()
 }
 
 fn is_exact_version(version: &str) -> bool {
@@ -562,7 +701,7 @@ fn read(root: &RepositoryRoot, path: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_manifest, validate_workspace};
+    use super::{validate_manifest, validate_manifest_policy, validate_workspace};
 
     #[test]
     fn exact_workspace_requirements_pass() {
@@ -619,6 +758,84 @@ mod tests {
             findings
                 .iter()
                 .any(|finding| finding.contains("external dependency codec"))
+        );
+    }
+
+    #[test]
+    fn manifest_policy_requires_inherited_metadata_and_lints() {
+        let workspace: toml::Value = toml::from_str(
+            "[workspace.package]\nversion = \"0.1.0\"\n\
+             [workspace.dependencies]\n\
+             rusttable-core = { path = \"crates/rusttable-core\", version = \"=0.1.0\" }\n\
+             process-wrap = \"=9.1.0\"\n\
+             tokio = \"=1.51.1\"\n\
+             wasmtime = \"=46.0.1\"\n\
+             wasmtime-wasi = \"=46.0.1\"\n",
+        )
+        .expect("workspace");
+        let manifest: toml::Value = toml::from_str(
+            "[package]\nname = \"rusttable-core\"\n\
+             edition.workspace = true\n\
+             license.workspace = true\n\
+             rust-version.workspace = true\n\
+             version.workspace = true\n\
+             [lints]\nworkspace = true\n",
+        )
+        .expect("manifest");
+        assert!(
+            validate_manifest_policy(
+                &workspace,
+                &[("crates/rusttable-core/Cargo.toml".to_owned(), manifest)]
+            )
+            .is_empty()
+        );
+
+        let incomplete: toml::Value = toml::from_str(
+            "[package]\nname = \"rusttable-core\"\n\
+             edition.workspace = true\n\
+             license.workspace = true\n\
+             rust-version.workspace = true\n\
+             version.workspace = true\n",
+        )
+        .expect("manifest");
+        let findings = validate_manifest_policy(
+            &workspace,
+            &[("crates/rusttable-core/Cargo.toml".to_owned(), incomplete)],
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("[lints] workspace = true"))
+        );
+    }
+
+    #[test]
+    fn internal_and_centralized_dependencies_must_inherit_workspace_values() {
+        let workspace: toml::Value = toml::from_str(
+            "[workspace.dependencies]\n\
+             rusttable-core = { path = \"crates/rusttable-core\", version = \"=0.1.0\" }\n\
+             process-wrap = \"=9.1.0\"\n\
+             tokio = \"=1.51.1\"\n\
+             wasmtime = \"=46.0.1\"\n\
+             wasmtime-wasi = \"=46.0.1\"\n",
+        )
+        .expect("workspace");
+        let manifest: toml::Value = toml::from_str(
+            "[dependencies]\n\
+             rusttable-core = { path = \"../rusttable-core\", version = \"0.1.0\" }\n\
+             tokio = \"=1.51.1\"\n",
+        )
+        .expect("manifest");
+        let findings = validate_manifest("Cargo.toml", &manifest, workspace.get("workspace"));
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("rusttable-core must use workspace = true"))
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.contains("tokio must use workspace = true"))
         );
     }
 }
