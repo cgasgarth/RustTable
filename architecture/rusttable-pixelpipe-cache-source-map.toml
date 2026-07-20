@@ -1,0 +1,61 @@
+schema = "rusttable.pixelpipe-cache-source-map.v1"
+issue = 270
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "cache-identity"
+upstream_path = "src/common/cache.h"
+upstream_symbol = "dt_cache_entry_t::key"
+rust_path = "crates/rusttable-pixelpipe/src/cache_key.rs"
+key_component = "source, descriptor, snapshot, node, input, output, params, mask/blend/raster/analysis, backend, schema"
+status = "replaced"
+
+[[responsibility]]
+id = "cache-cost-and-eviction"
+upstream_path = "src/common/cache.h"
+upstream_symbol = "dt_cache_entry_t::{data_size,cost,lock}"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+key_component = "value descriptor, resident/auxiliary bytes, creation cost, pin count"
+status = "replaced"
+
+[[responsibility]]
+id = "cache-acquisition"
+upstream_path = "src/common/cache.c"
+upstream_symbol = "dt_cache_get_with_caller"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+key_component = "full CacheKey equality and typed lease"
+status = "replaced"
+
+[[responsibility]]
+id = "mipmap-purpose-modes"
+upstream_path = "src/common/mipmap_cache.h"
+upstream_symbol = "dt_mipmap_cache_get"
+rust_path = "crates/rusttable-pixelpipe/src/cache_key.rs"
+key_component = "purpose, quality, precision, output geometry/format/color"
+status = "redesigned"
+
+[[responsibility]]
+id = "pixelpipe-result-publication"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "cache lookup and result publication"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+key_component = "validated immutable value, stale invalidation sequence, single-flight"
+status = "replaced"
+
+[[responsibility]]
+id = "edit-invalidation"
+upstream_path = "src/develop/develop.c"
+upstream_symbol = "DT_DEV_PIPE_SYNCH"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+key_component = "source/snapshot/implementation/backend explicit scopes; natural key miss"
+status = "redesigned"
+
+[[responsibility]]
+id = "history-parameters"
+upstream_path = "src/common/history.h"
+upstream_symbol = "dt_history_item_t"
+rust_path = "crates/rusttable-pixelpipe/src/cache_key.rs"
+key_component = "snapshot identity, node parameters/version/enable/opacity"
+status = "delegated"
+delegated_issue = 264

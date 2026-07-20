@@ -1,7 +1,7 @@
 use clap::Subcommand;
 use std::path::Path;
 
-use crate::{Result, color, gpu, operations, pixelpipe};
+use crate::{Result, color, gpu, memory, operations, pixelpipe};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum MigrationCommand {
@@ -44,6 +44,16 @@ pub(crate) fn run(root: &Path, command: MigrationCommand) -> Result {
             }
             SourceMapCommand::Verify { issue } if issue == 266 => {
                 pixelpipe::verify_source_map(root, issue)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
+            SourceMapCommand::Verify { issue } if issue == 270 => {
+                pixelpipe::verify_cache_source_map(root, issue)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
+            SourceMapCommand::Verify { issue } if issue == 269 => {
+                memory::verify_source_map(root, issue)?;
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }

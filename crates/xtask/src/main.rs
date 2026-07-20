@@ -9,6 +9,7 @@ mod dist;
 mod fixtures;
 mod foundation;
 mod gpu;
+mod memory;
 mod migration;
 mod operations;
 mod pixelpipe;
@@ -85,6 +86,11 @@ enum Task {
         #[command(subcommand)]
         command: migration::MigrationCommand,
     },
+    /// Exercise bounded host memory pools and their acceptance receipts.
+    Memory {
+        #[command(subcommand)]
+        command: memory::MemoryCommand,
+    },
     /// Verify operation descriptors against their darktable source accounting.
     OperationSchema {
         #[command(subcommand)]
@@ -122,6 +128,7 @@ fn main() -> ExitCode {
         Task::Dist => dist::run(&root),
         Task::Configuration { command } => configuration::run(&root, command),
         Task::Migration { command } => migration::run(&root, command),
+        Task::Memory { command } => memory::run(&root, command),
         Task::OperationSchema { command } => operations::run_schema(&root, &command),
         Task::OperationStack { command } => operations::run_stack(&root, &command),
         Task::OperationRegistry { command } => operations::run_registry(&root, &command),
@@ -176,6 +183,7 @@ mod tests {
             "dist",
             "configuration",
             "migration",
+            "memory",
             "operation-schema",
             "operation-stack",
             "operation-registry",
