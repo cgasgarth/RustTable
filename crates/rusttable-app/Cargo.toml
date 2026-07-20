@@ -8,20 +8,22 @@ version.workspace = true
 
 [dependencies]
 directories.workspace = true
+rfd.workspace = true
 rusttable-catalog.workspace = true
 rusttable-catalog-store.workspace = true
 rusttable-diagnostics.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
+rusttable-import.workspace = true
+rusttable-metadata.workspace = true
 rusttable-render.workspace = true
 rusttable-scripting.workspace = true
 rusttable-ui.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 iced_test.workspace = true
-rusttable-import.workspace = true
-rusttable-metadata.workspace = true
 rusttable-testkit.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

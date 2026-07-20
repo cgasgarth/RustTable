@@ -364,6 +364,21 @@ fn keyboard_operates_photo_workspace() -> Result<(), iced_test::Error> {
         Size::new(800.0, 600.0),
         view::view(&shell),
     );
+    simulator.tap_key(Key::Named(Named::Tab));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(rusttable_ui::InputIntent::FocusNext)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(rusttable_ui::InputIntent::FocusNext),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
     simulator.tap_key(Key::Named(Named::Enter));
     assert_eq!(
         simulator.into_messages().collect::<Vec<_>>(),

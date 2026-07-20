@@ -4,6 +4,7 @@
 )]
 mod edit_draft;
 mod preview_loader;
+mod raster_import;
 
 #[expect(
     unused_imports,
@@ -14,3 +15,4 @@ pub use edit_draft::{
     BasicEditParameter, BasicEditValue, BasicEditValueError, ParameterValueType,
 };
 pub(crate) use preview_loader::{SelectedPreview, load_selected_preview};
+pub(crate) use raster_import::{pick_raster_files, run_raster_import};

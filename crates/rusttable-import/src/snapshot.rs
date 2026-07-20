@@ -43,21 +43,28 @@ impl ImportSourceLimits {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceSnapshot {
+    path: PathBuf,
     bytes: Vec<u8>,
     length: ByteLength,
 }
 
 impl SourceSnapshot {
-    fn new(bytes: Vec<u8>) -> Result<Self, SourceSnapshotError> {
+    fn new(path: PathBuf, bytes: Vec<u8>) -> Result<Self, SourceSnapshotError> {
         let length =
             u64::try_from(bytes.len()).map_err(|_| SourceSnapshotError::LengthConversion)?;
         if length == 0 {
             return Err(SourceSnapshotError::EmptySource);
         }
         Ok(Self {
+            path,
             bytes,
             length: ByteLength::from_bytes(length),
         })
+    }
+
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     #[must_use]
@@ -87,6 +94,12 @@ pub enum SourceSnapshotError {
         path: PathBuf,
     },
     NotRegularFile {
+        path: PathBuf,
+    },
+    SymlinkRejected {
+        path: PathBuf,
+    },
+    SourceChanged {
         path: PathBuf,
     },
     EmptySource,
@@ -122,6 +135,26 @@ pub trait SourceSnapshotReader: Send + Sync {
         path: &Path,
         limits: ImportSourceLimits,
     ) -> Result<SourceSnapshot, SourceSnapshotError>;
+
+    /// Reopens and compares the source with the immutable snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed source error when the path is no longer readable or its
+    /// exact bytes changed after the snapshot was created.
+    fn revalidate(
+        &self,
+        snapshot: &SourceSnapshot,
+        limits: ImportSourceLimits,
+    ) -> Result<(), SourceSnapshotError> {
+        let current = self.read_snapshot(snapshot.path(), limits)?;
+        if current.bytes() != snapshot.bytes() {
+            return Err(SourceSnapshotError::SourceChanged {
+                path: snapshot.path().to_owned(),
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -137,6 +170,16 @@ impl SourceSnapshotReader for FileSourceSnapshotReader {
             .max_source_bytes()
             .checked_add(1)
             .ok_or(SourceSnapshotError::MaxPlusOneOverflow)?;
+        let link_metadata =
+            std::fs::symlink_metadata(path).map_err(|_| SourceSnapshotError::Io {
+                stage: SourceReadStage::Open,
+                path: path.to_owned(),
+            })?;
+        if link_metadata.file_type().is_symlink() {
+            return Err(SourceSnapshotError::SymlinkRejected {
+                path: path.to_owned(),
+            });
+        }
         let mut file = File::open(path).map_err(|_| SourceSnapshotError::Io {
             stage: SourceReadStage::Open,
             path: path.to_owned(),
@@ -174,6 +217,6 @@ impl SourceSnapshotReader for FileSourceSnapshotReader {
                 actual,
             });
         }
-        SourceSnapshot::new(bytes)
+        SourceSnapshot::new(path.to_owned(), bytes)
     }
 }

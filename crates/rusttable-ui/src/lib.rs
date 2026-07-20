@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "Reusable Iced UI contracts and presentation components for `RustTable`."]
 
+pub mod import;
 pub mod input;
 pub mod library;
 pub mod navigation;
@@ -12,6 +13,7 @@ pub mod tokens;
 pub mod view;
 pub mod widgets;
 
+pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use input::{FocusTarget, InputEffect, InputIntent, InputState, UiMessage};
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
 pub use navigation::{NavigationIntent, NavigationState, WorkspaceRoute};

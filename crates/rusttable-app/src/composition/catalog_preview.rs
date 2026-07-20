@@ -2,6 +2,10 @@ use std::path::Path;
 
 use rusttable_catalog::{EditRepository, EditRepositoryError, ImportRepository, RepositoryError};
 use rusttable_core::{EditId, PhotoId};
+use rusttable_import::{
+    FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReader,
+    decode_reference_source,
+};
 use rusttable_render::RenderOutput;
 
 use crate::{PreviewError, PreviewService};
@@ -52,10 +56,22 @@ impl CatalogPreviewService {
                 actual_photo_id: edit.photo_id(),
             });
         }
-        let source = request.source_root.join(record.source().as_str());
-        self.preview
-            .render(&source, &edit)
-            .map_err(CatalogPreviewError::Preview)
+        let source = decode_reference_source(record.source())
+            .unwrap_or_else(|_| request.source_root.join(record.source().as_str()));
+        let limits = ImportSourceLimits::new(64 * 1024 * 1024)
+            .map_err(|_| CatalogPreviewError::SourceLimits)?;
+        let reader = FileSourceSnapshotReader;
+        let snapshot = reader
+            .read_snapshot(&source, limits)
+            .map_err(CatalogPreviewError::Snapshot)?;
+        let output = self
+            .preview
+            .render_bytes(snapshot.bytes(), &edit)
+            .map_err(CatalogPreviewError::Preview)?;
+        reader
+            .revalidate(&snapshot, limits)
+            .map_err(CatalogPreviewError::Snapshot)?;
+        Ok(output)
     }
 }
 
@@ -109,6 +125,8 @@ pub enum CatalogPreviewError {
         actual_photo_id: PhotoId,
     },
     Preview(PreviewError),
+    Snapshot(SourceSnapshotError),
+    SourceLimits,
 }
 
 impl std::fmt::Display for CatalogPreviewError {
@@ -131,6 +149,8 @@ impl std::fmt::Display for CatalogPreviewError {
                 "edit {edit_id} belongs to photo {actual_photo_id}, not {expected_photo_id}"
             ),
             Self::Preview(error) => write!(formatter, "catalog preview failed: {error}"),
+            Self::Snapshot(error) => write!(formatter, "catalog preview source failed: {error}"),
+            Self::SourceLimits => formatter.write_str("catalog preview source limits are invalid"),
         }
     }
 }
@@ -141,7 +161,9 @@ impl std::error::Error for CatalogPreviewError {
             Self::ImportRepository(error) => Some(error),
             Self::EditRepository(error) => Some(error),
             Self::Preview(error) => Some(error),
-            Self::UnknownPhoto { .. }
+            Self::Snapshot(error) => Some(error),
+            Self::SourceLimits
+            | Self::UnknownPhoto { .. }
             | Self::UnknownEdit { .. }
             | Self::EditPhotoMismatch { .. } => None,
         }

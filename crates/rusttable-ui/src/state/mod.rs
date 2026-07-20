@@ -10,6 +10,7 @@ pub struct UiState {
     navigation: NavigationState,
     library_state: LibraryState,
     input: InputState,
+    import_panel: crate::ImportPanelViewModel,
 }
 
 impl Default for UiState {
@@ -19,6 +20,7 @@ impl Default for UiState {
             navigation: NavigationState::default(),
             library_state: LibraryState::default(),
             input: InputState::default(),
+            import_panel: crate::ImportPanelViewModel::default(),
         }
     }
 }
@@ -67,10 +69,30 @@ impl UiState {
     }
 
     #[must_use]
+    pub const fn import_panel(&self) -> &crate::ImportPanelViewModel {
+        &self.import_panel
+    }
+
+    pub fn set_import_panel(&mut self, panel: crate::ImportPanelViewModel) {
+        self.import_panel = panel;
+    }
+
+    #[must_use]
     pub fn handle(&mut self, message: UiMessage) -> UiEffect {
         match message {
             UiMessage::ToggleSidebar => {
                 self.sidebar_visible = !self.sidebar_visible;
+            }
+            UiMessage::ImportFiles => return UiEffect::ImportFiles,
+            UiMessage::CancelImport => return UiEffect::CancelImport,
+            UiMessage::RetryImport(item_id) => return UiEffect::RetryImport(item_id),
+            UiMessage::RemoveImportResult(item_id) => {
+                self.import_panel.remove(item_id);
+            }
+            UiMessage::CloseImportPanel => {
+                if !self.import_panel.active() {
+                    self.import_panel = crate::ImportPanelViewModel::default();
+                }
             }
             UiMessage::Navigate(intent) => {
                 let _ = self.navigation.apply(intent);
@@ -91,6 +113,7 @@ impl UiState {
                         let _ = self.navigation.apply(navigation);
                     }
                     InputEffect::RetryLibrary => return UiEffect::RetryLibrary,
+                    InputEffect::ImportFiles => return UiEffect::ImportFiles,
                 }
             }
         }
@@ -109,6 +132,7 @@ impl UiState {
             FocusTarget::PhotoCard(photo_id) => Some(photo_id),
             FocusTarget::SidebarToggle
             | FocusTarget::Library
+            | FocusTarget::ImportFiles
             | FocusTarget::RetryLibrary
             | FocusTarget::BackToLibrary => None,
         }
@@ -119,6 +143,9 @@ impl UiState {
 pub enum UiEffect {
     None,
     RetryLibrary,
+    ImportFiles,
+    CancelImport,
+    RetryImport(u64),
 }
 
 #[cfg(test)]

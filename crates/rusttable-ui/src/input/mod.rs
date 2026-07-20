@@ -6,6 +6,11 @@ use crate::navigation::{NavigationIntent, WorkspaceRoute};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UiMessage {
     ToggleSidebar,
+    ImportFiles,
+    CancelImport,
+    RetryImport(u64),
+    RemoveImportResult(u64),
+    CloseImportPanel,
     Navigate(NavigationIntent),
     RetryLibrary,
     Input(InputIntent),
@@ -15,6 +20,7 @@ pub enum UiMessage {
 pub enum FocusTarget {
     SidebarToggle,
     Library,
+    ImportFiles,
     RetryLibrary,
     PhotoCard(PhotoId),
     BackToLibrary,
@@ -36,6 +42,7 @@ pub enum InputEffect {
     ToggleSidebar,
     Navigate(NavigationIntent),
     RetryLibrary,
+    ImportFiles,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +187,7 @@ impl InputState {
         match self.focused {
             FocusTarget::SidebarToggle => InputEffect::ToggleSidebar,
             FocusTarget::Library => InputEffect::Navigate(NavigationIntent::ShowLibrary),
+            FocusTarget::ImportFiles => InputEffect::ImportFiles,
             FocusTarget::PhotoCard(photo_id) => {
                 self.origin = Some(photo_id);
                 self.focused = FocusTarget::BackToLibrary;
@@ -233,6 +241,7 @@ pub fn focus_chain(
     }
     match route {
         WorkspaceRoute::Library => {
+            chain.push(FocusTarget::ImportFiles);
             if let Some(workspace) = library_state.ready_workspace() {
                 chain.extend(
                     workspace
@@ -284,6 +293,7 @@ mod tests {
             vec![
                 FocusTarget::SidebarToggle,
                 FocusTarget::Library,
+                FocusTarget::ImportFiles,
                 FocusTarget::PhotoCard(PhotoId::new(1).unwrap()),
                 FocusTarget::PhotoCard(PhotoId::new(2).unwrap()),
             ]
@@ -297,7 +307,7 @@ mod tests {
         let route = crate::navigation::WorkspaceRoute::Library;
         let mut state = InputState::default();
 
-        for _ in 0..4 {
+        for _ in 0..5 {
             let _ = state.apply(InputIntent::FocusNext, true, route, &model);
         }
         assert_eq!(state.focused(), FocusTarget::SidebarToggle);
@@ -354,6 +364,7 @@ mod tests {
         let library = crate::navigation::WorkspaceRoute::Library;
         let detail = crate::navigation::WorkspaceRoute::PhotoDetail(PhotoId::new(2).unwrap());
         let mut state = InputState::default();
+        let _ = state.apply(InputIntent::FocusNext, true, library, &model);
         let _ = state.apply(InputIntent::FocusNext, true, library, &model);
         let _ = state.apply(InputIntent::FocusNext, true, library, &model);
         let _ = state.apply(InputIntent::FocusNext, true, library, &model);
@@ -438,11 +449,13 @@ mod tests {
             vec![
                 FocusTarget::SidebarToggle,
                 FocusTarget::Library,
+                FocusTarget::ImportFiles,
                 FocusTarget::RetryLibrary,
             ]
         );
 
         let mut state = InputState::default();
+        let _ = state.apply(InputIntent::FocusNext, true, route, &library);
         let _ = state.apply(InputIntent::FocusNext, true, route, &library);
         let _ = state.apply(InputIntent::FocusNext, true, route, &library);
         assert_eq!(state.focused(), FocusTarget::RetryLibrary);

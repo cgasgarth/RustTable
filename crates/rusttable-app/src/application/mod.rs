@@ -2,12 +2,16 @@ use iced::Task;
 use std::path::PathBuf;
 
 use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
-use crate::workspace::{SelectedPreview, load_selected_preview};
+use crate::workspace::{
+    SelectedPreview, load_selected_preview, pick_raster_files, run_raster_import,
+};
 use rusttable_core::PhotoId;
+use rusttable_import::{RasterImportBatch, RasterImportCancellation, RasterImportStatus};
 use rusttable_ui::{
-    InputIntent, LibraryFailureKind, LibraryState, NavigationIntent, PhotoWorkspaceViewModel,
-    PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewFailure,
-    SelectedPreviewState, UiEffect, UiMessage, UiState, WorkspaceRoute,
+    ImportPanelViewModel, ImportRowState, ImportRowViewModel, InputIntent, LibraryFailureKind,
+    LibraryState, NavigationIntent, PhotoWorkspaceViewModel, PresentationText, PreviewDimensions,
+    Rgba8PreviewMetadata, SelectedPreviewFailure, SelectedPreviewState, UiEffect, UiMessage,
+    UiState, WorkspaceRoute,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -19,6 +23,9 @@ pub(crate) struct Shell {
     source_root: Result<PathBuf, LibraryFailureKind>,
     preview_generation: u64,
     active_preview: Option<(u64, PhotoId)>,
+    import_paths: Vec<PathBuf>,
+    import_cancellation: Option<RasterImportCancellation>,
+    pending_import_selection: Option<PhotoId>,
 }
 
 impl Default for Shell {
@@ -31,6 +38,9 @@ impl Default for Shell {
             source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         }
     }
 }
@@ -68,6 +78,9 @@ impl Shell {
             source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         }
     }
 
@@ -84,6 +97,9 @@ impl Shell {
             source_root,
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         }
     }
 
@@ -119,6 +135,14 @@ pub(crate) enum Message {
         photo_id: PhotoId,
         result: PreviewLoadResult,
     },
+    ImportFiles,
+    ImportPickerCompleted(Vec<PathBuf>),
+    FilesDropped(Vec<PathBuf>),
+    CancelImport,
+    RetryImport(u64),
+    RemoveImportResult(u64),
+    CloseImportPanel,
+    ImportCompleted(RasterImportBatch),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +158,11 @@ impl From<UiMessage> for Message {
             UiMessage::Navigate(intent) => Self::Navigate(intent),
             UiMessage::RetryLibrary => Self::RetryLibrary,
             UiMessage::Input(intent) => Self::Input(intent),
+            UiMessage::ImportFiles => Self::ImportFiles,
+            UiMessage::CancelImport => Self::CancelImport,
+            UiMessage::RetryImport(item_id) => Self::RetryImport(item_id),
+            UiMessage::RemoveImportResult(item_id) => Self::RemoveImportResult(item_id),
+            UiMessage::CloseImportPanel => Self::CloseImportPanel,
         }
     }
 }
@@ -148,10 +177,22 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
                 Message::Input(intent) => UiMessage::Input(intent),
                 Message::LibraryLoaded { .. }
                 | Message::RetryLibrary
-                | Message::PreviewLoaded { .. } => unreachable!(),
+                | Message::PreviewLoaded { .. }
+                | Message::ImportFiles
+                | Message::ImportPickerCompleted(_)
+                | Message::FilesDropped(_)
+                | Message::CancelImport
+                | Message::RetryImport(_)
+                | Message::RemoveImportResult(_)
+                | Message::CloseImportPanel
+                | Message::ImportCompleted(_) => unreachable!(),
             };
-            if shell.ui.handle(ui_message) == UiEffect::RetryLibrary {
-                return retry_library(shell);
+            match shell.ui.handle(ui_message) {
+                UiEffect::RetryLibrary => return retry_library(shell),
+                UiEffect::ImportFiles => return import_picker_task(),
+                UiEffect::CancelImport => cancel_import(shell),
+                UiEffect::RetryImport(item_id) => return retry_import(shell, item_id),
+                UiEffect::None => {}
             }
             reconcile_preview_route(shell, previous_route);
             if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route()
@@ -178,6 +219,18 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
                         .ui
                         .handle(UiMessage::Navigate(NavigationIntent::ShowLibrary));
                 }
+                if let Some(photo_id) = shell.pending_import_selection.take()
+                    && shell
+                        .ui
+                        .library_state()
+                        .ready_workspace()
+                        .is_some_and(|workspace| workspace.detail(photo_id).is_some())
+                {
+                    let _ = shell
+                        .ui
+                        .handle(UiMessage::Navigate(NavigationIntent::ShowPhoto(photo_id)));
+                    return start_preview(shell, photo_id);
+                }
             }
         }
         Message::RetryLibrary => return retry_library(shell),
@@ -198,8 +251,145 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
                 }
             }
         }
+        Message::ImportFiles => return import_picker_task(),
+        Message::ImportPickerCompleted(paths) | Message::FilesDropped(paths) => {
+            return begin_import(shell, paths);
+        }
+        Message::CancelImport => cancel_import(shell),
+        Message::RetryImport(item_id) => return retry_import(shell, item_id),
+        Message::RemoveImportResult(item_id) => {
+            let _ = shell.ui.handle(UiMessage::RemoveImportResult(item_id));
+        }
+        Message::CloseImportPanel => {
+            let _ = shell.ui.handle(UiMessage::CloseImportPanel);
+        }
+        Message::ImportCompleted(batch) => return finish_import(shell, &batch),
     }
     Task::none()
+}
+
+fn import_picker_task() -> Task<Message> {
+    Task::perform(pick_raster_files(), Message::ImportPickerCompleted)
+}
+
+fn begin_import(shell: &mut Shell, mut paths: Vec<PathBuf>) -> Task<Message> {
+    if shell.import_cancellation.is_some() || paths.is_empty() {
+        return Task::none();
+    }
+    paths.truncate(rusttable_import::MAX_RASTER_IMPORT_ITEMS);
+    let rows = paths
+        .iter()
+        .enumerate()
+        .filter_map(|(index, path)| {
+            let item_id = u64::try_from(index).ok()?.checked_add(1)?;
+            let alias = safe_import_alias(path);
+            Some(ImportRowViewModel::new(
+                item_id,
+                alias,
+                ImportRowState::Queued,
+            ))
+        })
+        .collect();
+    shell
+        .ui
+        .set_import_panel(ImportPanelViewModel::new(rows, true));
+    shell.import_paths.clone_from(&paths);
+    let cancellation = RasterImportCancellation::default();
+    shell.import_cancellation = Some(cancellation.clone());
+    let Ok(catalog_path) = shell.catalog_path.clone() else {
+        shell.import_cancellation = None;
+        shell.ui.set_import_panel(failed_import_panel(&paths));
+        return Task::none();
+    };
+    Task::perform(
+        async move { run_raster_import(&catalog_path, paths, &cancellation) },
+        Message::ImportCompleted,
+    )
+}
+
+fn finish_import(shell: &mut Shell, batch: &RasterImportBatch) -> Task<Message> {
+    shell.import_cancellation = None;
+    shell.pending_import_selection = batch.first_selected_photo();
+    let rows = batch
+        .receipts()
+        .map(|receipt| {
+            ImportRowViewModel::new(
+                receipt.item_id.get(),
+                PresentationText::new(&receipt.source_alias)
+                    .unwrap_or_else(|_| PresentationText::new("Image").expect("constant text")),
+                import_row_state(receipt.status),
+            )
+        })
+        .collect();
+    shell
+        .ui
+        .set_import_panel(ImportPanelViewModel::new(rows, false));
+    refresh_library(shell)
+}
+
+fn refresh_library(shell: &mut Shell) -> Task<Message> {
+    let Some(request_id) = shell.active_load_request_id.next() else {
+        return Task::none();
+    };
+    shell.active_load_request_id = request_id;
+    shell.load_in_flight = true;
+    start_load(request_id, shell.catalog_path.clone())
+}
+
+fn retry_import(shell: &mut Shell, item_id: u64) -> Task<Message> {
+    let path = usize::try_from(item_id)
+        .ok()
+        .and_then(|item_id| item_id.checked_sub(1))
+        .and_then(|index| shell.import_paths.get(index))
+        .cloned();
+    path.map_or_else(Task::none, |path| begin_import(shell, vec![path]))
+}
+
+fn cancel_import(shell: &mut Shell) {
+    if let Some(cancellation) = &shell.import_cancellation {
+        cancellation.cancel();
+    }
+}
+
+fn safe_import_alias(path: &std::path::Path) -> PresentationText {
+    let alias = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Image")
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(128)
+        .collect::<String>();
+    PresentationText::new(if alias.is_empty() { "Image" } else { &alias })
+        .unwrap_or_else(|_| PresentationText::new("Image").expect("constant text"))
+}
+
+fn failed_import_panel(paths: &[PathBuf]) -> ImportPanelViewModel {
+    ImportPanelViewModel::new(
+        paths
+            .iter()
+            .enumerate()
+            .filter_map(|(index, path)| {
+                Some(ImportRowViewModel::new(
+                    u64::try_from(index).ok()?.checked_add(1)?,
+                    safe_import_alias(path),
+                    ImportRowState::Failed,
+                ))
+            })
+            .collect(),
+        false,
+    )
+}
+
+const fn import_row_state(status: RasterImportStatus) -> ImportRowState {
+    match status {
+        RasterImportStatus::Imported => ImportRowState::Completed,
+        RasterImportStatus::AlreadyImported => ImportRowState::AlreadyImported,
+        RasterImportStatus::ImportedPreviewPending => ImportRowState::ImportedPreviewPending,
+        RasterImportStatus::ImportedPreviewFailed => ImportRowState::ImportedPreviewFailed,
+        RasterImportStatus::Failed(_) => ImportRowState::Failed,
+        RasterImportStatus::Cancelled => ImportRowState::Cancelled,
+    }
 }
 
 fn start_load(
@@ -375,6 +565,9 @@ mod tests {
                 source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
                 preview_generation: 0,
                 active_preview: None,
+                import_paths: Vec::new(),
+                import_cancellation: None,
+                pending_import_selection: None,
             }
         );
     }
@@ -417,6 +610,9 @@ mod tests {
             source_root: Ok(PathBuf::from("/tmp")),
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         };
 
         let task = update(
@@ -448,6 +644,9 @@ mod tests {
             source_root: Ok(PathBuf::from("/tmp")),
             preview_generation: 2,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         };
         let _ = update(
             &mut shell,
@@ -489,6 +688,9 @@ mod tests {
             source_root: Ok(PathBuf::from("/tmp")),
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         };
 
         let task = update(
@@ -519,6 +721,9 @@ mod tests {
             source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         };
         let _ = update(
             &mut shell,
@@ -556,6 +761,9 @@ mod tests {
             source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
             preview_generation: 0,
             active_preview: None,
+            import_paths: Vec::new(),
+            import_cancellation: None,
+            pending_import_selection: None,
         };
         let _ = update(
             &mut shell,
