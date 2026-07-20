@@ -2378,6 +2378,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-ai"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
 name = "rusttable-app"
 version = "0.1.0"
 dependencies = [

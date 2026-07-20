@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/rusttable-app",
+    "crates/rusttable-ai",
     "crates/rusttable-camera",
     "crates/rusttable-catalog",
     "crates/rusttable-core",
@@ -61,6 +62,7 @@ redb = "=4.1.0"
 rand = "=0.10.2"
 rfd = "=0.17.2"
 rusttable-app = { path = "crates/rusttable-app", version = "=0.1.0" }
+rusttable-ai = { path = "crates/rusttable-ai", version = "=0.1.0" }
 rusttable-camera = { path = "crates/rusttable-camera", version = "=0.1.0" }
 rusttable-catalog = { path = "crates/rusttable-catalog", version = "=0.1.0" }
 rusttable-catalog-store = { path = "crates/rusttable-catalog-store", version = "=0.1.0" }
