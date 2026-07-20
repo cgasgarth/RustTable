@@ -246,7 +246,7 @@ pub fn evaluate_graph(
     let pixels = evaluate_steps(
         graph
             .nodes()
-            .map(|node| (node.pipeline_step_index(), node.operation())),
+            .map(|node| (node.pipeline_step_index(), node.prepared())),
         input.pixel_slice(),
         0,
     )?;
@@ -320,7 +320,7 @@ pub fn evaluate_graph_window(
     let pixels = evaluate_steps(
         graph
             .nodes()
-            .map(|node| (node.pipeline_step_index(), node.operation())),
+            .map(|node| (node.pipeline_step_index(), node.prepared())),
         source,
         start_index,
     )

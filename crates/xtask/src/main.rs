@@ -94,6 +94,11 @@ enum Task {
         #[command(subcommand)]
         command: operations::OperationStackCommand,
     },
+    /// Generate or verify the static operation registry receipt.
+    OperationRegistry {
+        #[command(subcommand)]
+        command: operations::OperationRegistryCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -113,6 +118,7 @@ fn main() -> ExitCode {
         Task::Migration { command } => migration::run(&root, command),
         Task::OperationSchema { command } => operations::run_schema(&root, &command),
         Task::OperationStack { command } => operations::run_stack(&root, &command),
+        Task::OperationRegistry { command } => operations::run_registry(&root, &command),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -165,6 +171,7 @@ mod tests {
             "migration",
             "operation-schema",
             "operation-stack",
+            "operation-registry",
         ] {
             assert!(help.contains(command), "missing {command}");
         }

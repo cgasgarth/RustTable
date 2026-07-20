@@ -6,11 +6,8 @@ use rusttable_core::{
 
 use crate::{FiniteF32, ScalarNarrowingError};
 
-const EXPOSURE_KEY: &str = "rusttable.exposure";
 const EXPOSURE_PARAMETER: &str = "stops";
-const LINEAR_OFFSET_KEY: &str = "rusttable.linear_offset";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
-const RGB_GAIN_KEY: &str = "rusttable.rgb_gain";
 const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,19 +82,49 @@ impl ProcessingOperation {
     /// Returns a typed [`OperationCompileError`] when the operation key or its
     /// exact schema is not supported by the processing boundary.
     pub fn compile(operation: &Operation) -> Result<Self, OperationCompileError> {
-        match operation.key().as_str() {
-            EXPOSURE_KEY => compile_scalar(operation, EXPOSURE_PARAMETER, |stops| {
-                ProcessingOperationKind::Exposure { stops }
-            }),
-            LINEAR_OFFSET_KEY => compile_scalar(operation, LINEAR_OFFSET_PARAMETER, |value| {
-                ProcessingOperationKind::LinearOffset { value }
-            }),
-            RGB_GAIN_KEY => compile_rgb_gain(operation),
-            _ => Err(OperationCompileError::UnsupportedOperationKey {
-                operation_id: operation.id(),
-                key: operation.key().clone(),
-            }),
-        }
+        Self::prepare(operation).map(|prepared| prepared.operation().clone())
+    }
+
+    pub(crate) fn prepare(
+        operation: &Operation,
+    ) -> Result<crate::registry::PreparedCpuOperation, OperationCompileError> {
+        crate::registry::builtin_registry()
+            .prepare_cpu(operation)
+            .map_err(|error| match error {
+                crate::registry::RegistryLookupError::UnknownOperation(key) => {
+                    OperationCompileError::UnsupportedOperationKey {
+                        operation_id: operation.id(),
+                        key,
+                    }
+                }
+                crate::registry::RegistryLookupError::Factory { source, .. } => match *source {
+                    crate::registry::FactoryError::Operation(source) => source,
+                    crate::registry::FactoryError::DescriptorMismatch { .. } => {
+                        OperationCompileError::UnsupportedOperationKey {
+                            operation_id: operation.id(),
+                            key: operation.key().clone(),
+                        }
+                    }
+                },
+            })
+    }
+
+    pub(crate) fn compile_exposure(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_scalar(operation, EXPOSURE_PARAMETER, |stops| {
+            ProcessingOperationKind::Exposure { stops }
+        })
+    }
+
+    pub(crate) fn compile_linear_offset(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_scalar(operation, LINEAR_OFFSET_PARAMETER, |value| {
+            ProcessingOperationKind::LinearOffset { value }
+        })
+    }
+
+    pub(crate) fn compile_rgb_gain(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_rgb_gain(operation)
     }
 
     #[must_use]

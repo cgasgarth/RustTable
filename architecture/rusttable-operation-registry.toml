@@ -1,0 +1,28 @@
+schema = "rusttable.operation-registry.v1"
+build_id = "rusttable-processing.operation-registry.v1"
+snapshot_hash = "6610c24dd9e5bcf16e4c27d9e59777084e30c87bb5946406dcf98ea5e28c6720"
+
+[[operation]]
+rust_id = "rusttable.exposure"
+compatibility_name = "exposure"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.linear_offset"
+compatibility_name = "linear-offset"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.rgb_gain"
+compatibility_name = "rgbgain"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+

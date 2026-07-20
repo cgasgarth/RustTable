@@ -25,6 +25,7 @@ mod operation;
 pub mod operation_stack;
 mod output;
 mod pipeline;
+pub mod registry;
 mod scalar;
 mod window;
 
@@ -34,6 +35,7 @@ pub use color::{
     SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingRgbImage,
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
+pub use descriptor::{exposure_descriptor, linear_offset_descriptor, rgb_gain_descriptor};
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
@@ -51,6 +53,13 @@ pub use output::{
     encode_linear_srgb,
 };
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
+pub use registry::{
+    BUILTIN_OPERATIONS, CpuFactory, DefinitionAvailability, DeviceCapabilitySnapshot,
+    ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
+    OperationCapability, OperationDefinition, OperationDefinitionFactory, PreparedCpuOperation,
+    RegistryBuildError, RegistryLookupError, RegistrySnapshot, RegistryValidationError,
+    builtin_registry,
+};
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
