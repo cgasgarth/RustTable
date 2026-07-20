@@ -1,7 +1,7 @@
 //! Darktable-shaped GTK4 header and lighttable mode chrome.
 
 use crate::display_profile::DisplayProfileBanner;
-use gtk4::accessible::Property;
+use gtk4::accessible::{Property, State};
 use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
@@ -11,14 +11,13 @@ use super::{
 };
 
 #[cfg(test)]
-const HEADER_WIDGET_IDS: [&str; 7] = [
+const HEADER_WIDGET_IDS: [&str; 6] = [
     "header",
     "header-left",
     "header-center",
     "header-right",
     "view-lighttable",
     "view-darkroom",
-    "view-other",
 ];
 
 /// Widgets and actions owned by the persistent top panel.
@@ -37,6 +36,8 @@ impl HeaderChrome {
     ) -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         root.set_widget_name(ShellRegion::Header.identifier());
+        root.set_height_request(i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px));
+        root.set_vexpand(false);
         apply_theme_role(&root, ThemeRole::Header);
 
         root.append(&brand(i18n));
@@ -191,14 +192,17 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     let lighttable =
         gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceLighttable, &MessageArgs::new()));
     lighttable.set_widget_name("view-lighttable");
+    lighttable.add_css_class("dt_mode_button");
+    lighttable.set_can_focus(true);
+    lighttable.set_accessible_role(gtk4::AccessibleRole::Radio);
     lighttable.update_property(&[Property::Label("Switch to lighttable")]);
     let darkroom =
         gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()));
     darkroom.set_widget_name("view-darkroom");
+    darkroom.add_css_class("dt_mode_button");
+    darkroom.set_can_focus(true);
+    darkroom.set_accessible_role(gtk4::AccessibleRole::Radio);
     darkroom.update_property(&[Property::Label("Switch to darkroom")]);
-    let other = gtk4::Button::with_label("other ⌄");
-    other.set_widget_name("view-other");
-    other.update_property(&[Property::Label("Open other views")]);
 
     connect_mode(&lighttable, workspace, WorkspaceRole::Lighttable);
     connect_mode(&darkroom, workspace, WorkspaceRole::Darkroom);
@@ -212,8 +216,6 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     modes.append(&lighttable);
     modes.append(&separator());
     modes.append(&darkroom);
-    modes.append(&separator());
-    modes.append(&other);
     modes
 }
 
@@ -223,15 +225,29 @@ fn connect_mode(button: &gtk4::Button, workspace: &gtk4::Stack, role: WorkspaceR
 }
 
 fn sync_mode_classes(workspace: &gtk4::Stack, lighttable: &gtk4::Button, darkroom: &gtk4::Button) {
-    let lighttable_active =
-        workspace.visible_child_name().as_deref() == Some(WorkspaceRole::Lighttable.stack_name());
-    if lighttable_active {
-        lighttable.add_css_class("active");
-        darkroom.remove_css_class("active");
-    } else {
-        lighttable.remove_css_class("active");
-        darkroom.add_css_class("active");
+    match workspace.visible_child_name().as_deref() {
+        Some(name) if name == WorkspaceRole::Lighttable.stack_name() => {
+            set_mode_active(lighttable, true);
+            set_mode_active(darkroom, false);
+        }
+        Some(name) if name == WorkspaceRole::Darkroom.stack_name() => {
+            set_mode_active(lighttable, false);
+            set_mode_active(darkroom, true);
+        }
+        _ => {
+            set_mode_active(lighttable, false);
+            set_mode_active(darkroom, false);
+        }
     }
+}
+
+fn set_mode_active(button: &gtk4::Button, active: bool) {
+    if active {
+        button.add_css_class("active");
+    } else {
+        button.remove_css_class("active");
+    }
+    button.update_state(&[State::Selected(Some(active))]);
 }
 
 fn separator() -> gtk4::Label {
@@ -255,7 +271,6 @@ mod tests {
                 "header-right",
                 "view-lighttable",
                 "view-darkroom",
-                "view-other",
             ]
         );
     }
