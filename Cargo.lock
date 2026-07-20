@@ -2754,11 +2754,13 @@ dependencies = [
 name = "rusttable-export"
 version = "0.1.0"
 dependencies = [
+ "png",
  "rusttable-color",
  "rusttable-core",
  "rusttable-image",
  "rusttable-image-io",
  "sha2",
+ "tiff 0.11.3",
 ]
 
 [[package]]
