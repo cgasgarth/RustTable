@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use crate::display_profile::DisplayProfileBanner;
+use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
@@ -17,15 +18,16 @@ use super::runtime_layout::{
     desktop_body, mode_panel_stack, render_modules, right_panel, synchronize_panel_stacks,
     workspace_stack,
 };
-use super::thumbnail::{ThumbnailPair, ThumbnailSurface};
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomView, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LibraryBrowserModel, LighttableContentState, LighttableToolbar, LighttableToolbarAction,
-    LighttableToolbarState, PhotoPreview, ShellLayout, THUMBNAIL_METRICS, ThemeRole, WorkspaceRole,
-    apply_theme_role,
+    LighttablePhotoState, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
+    LighttableZoom, PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole, apply_theme_role,
 };
-use super::{header::HeaderChrome, left_panel::LeftPanel};
+use super::{
+    LighttableInteractionState, LighttableSelectionAction, NavigationDirection, SelectionModifiers,
+    header::HeaderChrome, left_panel::LeftPanel,
+};
 use crate::ai_batch::AiBatchPanel;
 use crate::ai_models::AiModelsPanel;
 use crate::camera::{CameraAction, CameraPanel, CameraViewModel};
@@ -36,7 +38,9 @@ use crate::neural_restore::NeuralRestorePanel;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus};
 
-type PhotoSelectedHandler = Box<dyn Fn(PhotoId)>;
+use super::runtime_lighttable::{PhotoTilePair, WorkspaceRenderHandle};
+
+pub(super) type PhotoSelectedHandler = Box<dyn Fn(PhotoId)>;
 
 /// Reusable GTK4 window with Darktable-style lighttable and darkroom modes.
 #[derive(Clone)]
@@ -64,8 +68,11 @@ pub struct GtkShell {
     i18n: Rc<RefCell<I18n>>,
     display_profile_banner: DisplayProfileBanner,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
+    lighttable_filter: Rc<RefCell<Option<BTreeSet<PhotoId>>>>,
+    lighttable_interaction: Rc<RefCell<LighttableInteractionState>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
+    photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
 }
 
 impl GtkShell {
@@ -159,7 +166,7 @@ impl GtkShell {
         shell.append(&content);
         window.set_child(Some(&shell));
 
-        Self {
+        let shell = Self {
             window,
             layout,
             workspace,
@@ -186,9 +193,14 @@ impl GtkShell {
             i18n: Rc::clone(&i18n),
             display_profile_banner,
             lighttable_workspace: Rc::new(RefCell::new(None)),
+            lighttable_filter: Rc::new(RefCell::new(None)),
+            lighttable_interaction: Rc::new(RefCell::new(LighttableInteractionState::new(6))),
             photo_selected: Rc::new(RefCell::new(None)),
             photo_tiles: Rc::new(RefCell::new(BTreeMap::new())),
-        }
+            photo_details: Rc::new(RefCell::new(BTreeMap::new())),
+        };
+        shell.install_lighttable_keyboard();
+        shell
     }
 
     /// Applies a locale and GTK text direction to the live shell controls.
@@ -299,7 +311,42 @@ impl GtkShell {
     pub fn set_collection_filter_state(&self, state: &CollectionFilterState) {
         self.collection_controls.set_state(state.controls());
         self.lighttable_toolbar.set_state(state.toolbar());
+        self.lighttable_interaction
+            .borrow_mut()
+            .reconcile_selection(
+                state
+                    .matching_photo_ids()
+                    .iter()
+                    .copied()
+                    .filter(|photo_id| {
+                        state
+                            .photo_state(*photo_id)
+                            .is_some_and(LighttablePhotoState::selected)
+                    }),
+            );
+        self.lighttable_filter.replace(Some(
+            state
+                .matching_photo_ids()
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>(),
+        ));
         self.refresh_lighttable(state.matching_photo_ids());
+    }
+
+    /// Changes the lighttable density and rerenders the active collection.
+    pub fn set_lighttable_zoom(&self, zoom: LighttableZoom) {
+        let _ = self
+            .lighttable_interaction
+            .borrow_mut()
+            .apply(LighttableSelectionAction::SetZoom(zoom));
+        let workspace = self.lighttable_workspace.borrow();
+        let Some(view_model) = workspace.as_ref() else {
+            return;
+        };
+        let filter = self.lighttable_filter.borrow();
+        self.workspace_render_handle()
+            .render(view_model, filter.as_ref());
     }
 
     /// Projects the typed lighttable toolbar state into the persistent header row.
@@ -397,6 +444,7 @@ impl GtkShell {
     /// view model. Each native card switches to darkroom and reports the typed
     /// [`PhotoId`] through [`Self::set_photo_selected_handler`].
     pub fn set_lighttable_workspace(&self, view_model: &PhotoWorkspaceViewModel) {
+        self.lighttable_filter.replace(None);
         self.lighttable_workspace.replace(Some(view_model.clone()));
         self.workspace_render_handle().render(view_model, None);
     }
@@ -408,6 +456,8 @@ impl GtkShell {
         matching_photo_ids: impl IntoIterator<Item = PhotoId>,
     ) {
         let matching_photo_ids = matching_photo_ids.into_iter().collect::<BTreeSet<_>>();
+        self.lighttable_filter
+            .replace(Some(matching_photo_ids.clone()));
         self.lighttable_workspace.replace(Some(view_model.clone()));
         self.workspace_render_handle()
             .render(view_model, Some(&matching_photo_ids));
@@ -496,7 +546,71 @@ impl GtkShell {
             export_panel: self.export_panel.clone(),
             external_editor_panel: self.external_editor_panel.clone(),
             photo_tiles: Rc::clone(&self.photo_tiles),
+            interaction: Rc::clone(&self.lighttable_interaction),
+            photo_details: Rc::clone(&self.photo_details),
+            lighttable_workspace: Rc::clone(&self.lighttable_workspace),
+            lighttable_filter: Rc::clone(&self.lighttable_filter),
         }
+    }
+
+    fn install_lighttable_keyboard(&self) {
+        let controller = gtk4::EventControllerKey::new();
+        controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let render = self.workspace_render_handle();
+        controller.connect_key_pressed(move |_, key, _, modifiers| {
+            let modifiers = SelectionModifiers::new(
+                modifiers.contains(gdk::ModifierType::CONTROL_MASK)
+                    || modifiers.contains(gdk::ModifierType::SUPER_MASK),
+                modifiers.contains(gdk::ModifierType::SHIFT_MASK),
+            );
+            let action = match key {
+                gdk::Key::Left => Some(LighttableSelectionAction::Move {
+                    direction: NavigationDirection::Previous,
+                    modifiers,
+                }),
+                gdk::Key::Right => Some(LighttableSelectionAction::Move {
+                    direction: NavigationDirection::Next,
+                    modifiers,
+                }),
+                gdk::Key::Up => Some(LighttableSelectionAction::Move {
+                    direction: NavigationDirection::RowPrevious,
+                    modifiers,
+                }),
+                gdk::Key::Down => Some(LighttableSelectionAction::Move {
+                    direction: NavigationDirection::RowNext,
+                    modifiers,
+                }),
+                gdk::Key::Escape => Some(LighttableSelectionAction::Clear),
+                gdk::Key::Return | gdk::Key::KP_Enter => {
+                    render.open_focused();
+                    return gtk4::glib::Propagation::Stop;
+                }
+                gdk::Key::minus | gdk::Key::KP_Subtract => {
+                    let zoom = render.interaction.borrow().zoom().smaller();
+                    Some(LighttableSelectionAction::SetZoom(zoom))
+                }
+                gdk::Key::plus | gdk::Key::KP_Add => {
+                    let zoom = render.interaction.borrow().zoom().larger();
+                    Some(LighttableSelectionAction::SetZoom(zoom))
+                }
+                _ => None,
+            };
+            let Some(action) = action else {
+                return gtk4::glib::Propagation::Proceed;
+            };
+            let zoom_changed = matches!(action, LighttableSelectionAction::SetZoom(_));
+            let selected = render.interaction.borrow_mut().apply(action);
+            if zoom_changed {
+                render.rerender_current();
+            } else {
+                render.sync_selection_styles();
+                if selected.is_some() {
+                    render.focus_selected();
+                }
+            }
+            gtk4::glib::Propagation::Stop
+        });
+        self.lighttable.add_controller(controller);
     }
 }
 
@@ -512,6 +626,13 @@ impl CollectionRefreshHandle {
     fn apply(&self, state: &CollectionFilterState) {
         self.controls.set_state(state.controls());
         self.toolbar.set_state(state.toolbar());
+        self.render.lighttable_filter.replace(Some(
+            state
+                .matching_photo_ids()
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>(),
+        ));
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
             return;
@@ -521,217 +642,17 @@ impl CollectionRefreshHandle {
             .iter()
             .copied()
             .collect::<BTreeSet<_>>();
-        self.render.render(view_model, Some(&matching_photo_ids));
-    }
-}
-
-#[derive(Clone)]
-struct WorkspaceRenderHandle {
-    lighttable: gtk4::FlowBox,
-    lighttable_empty_state: gtk4::Stack,
-    filmstrip: gtk4::FlowBox,
-    darkroom_preview: PhotoPreview,
-    workspace: gtk4::Stack,
-    photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
-    export_panel: ExportPanel,
-    external_editor_panel: ExternalEditorPanel,
-    photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
-}
-
-#[derive(Clone)]
-struct PhotoTilePair {
-    thumbnails: ThumbnailPair,
-    lighttable_button: gtk4::Button,
-    filmstrip_button: gtk4::Button,
-}
-
-#[derive(Clone)]
-struct PhotoSelectionContext {
-    darkroom_preview: PhotoPreview,
-    workspace: gtk4::Stack,
-    photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
-    export_panel: ExportPanel,
-    external_editor_panel: ExternalEditorPanel,
-    photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
-}
-
-impl WorkspaceRenderHandle {
-    fn render(
-        &self,
-        view_model: &PhotoWorkspaceViewModel,
-        matching_photo_ids: Option<&BTreeSet<PhotoId>>,
-    ) {
-        clear_children(&self.lighttable);
-        clear_children(&self.filmstrip);
-        self.photo_tiles.borrow_mut().clear();
-        let browser = LibraryBrowserModel::from_workspace(view_model);
-        let mut rendered_photos = 0;
-        let selection = PhotoSelectionContext {
-            darkroom_preview: self.darkroom_preview.clone(),
-            workspace: self.workspace.clone(),
-            photo_selected: Rc::clone(&self.photo_selected),
-            export_panel: self.export_panel.clone(),
-            external_editor_panel: self.external_editor_panel.clone(),
-            photo_tiles: Rc::clone(&self.photo_tiles),
-        };
-
-        for photo in browser.photos() {
-            if matching_photo_ids.is_some_and(|ids| !ids.contains(&photo.id())) {
-                continue;
-            }
-            let Some(detail) = view_model.detail(photo.id()) else {
-                continue;
-            };
-            let detail = detail.clone();
-            let (card, card_thumbnail) = lighttable_card(
-                photo.id(),
-                photo.title(),
-                photo.secondary(),
-                photo.indicators(),
-            );
-            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo.id(), photo.title());
-            connect_photo_selection(&card, photo.id(), detail.clone(), &selection);
-            connect_photo_selection(&filmstrip_item, photo.id(), detail, &selection);
-            self.lighttable.insert(&card, -1);
-            self.filmstrip.insert(&filmstrip_item, -1);
-            self.photo_tiles.borrow_mut().insert(
-                photo.id(),
-                PhotoTilePair {
-                    thumbnails: ThumbnailPair::new(card_thumbnail, filmstrip_thumbnail),
-                    lighttable_button: card,
-                    filmstrip_button: filmstrip_item,
-                },
-            );
-            rendered_photos += 1;
-        }
-        self.lighttable_empty_state.set_visible_child_name(
-            LighttableContentState::from_rendered_count(rendered_photos).stack_name(),
+        self.render.interaction.borrow_mut().reconcile_selection(
+            state
+                .matching_photo_ids()
+                .iter()
+                .copied()
+                .filter(|photo_id| {
+                    state
+                        .photo_state(*photo_id)
+                        .is_some_and(LighttablePhotoState::selected)
+                }),
         );
-    }
-}
-
-fn connect_photo_selection(
-    button: &gtk4::Button,
-    photo_id: PhotoId,
-    detail: PhotoDetailViewModel,
-    context: &PhotoSelectionContext,
-) {
-    let photo_preview = context.darkroom_preview.clone();
-    let workspace = context.workspace.clone();
-    let handler = Rc::clone(&context.photo_selected);
-    let export_panel = context.export_panel.clone();
-    let external_editor_panel = context.external_editor_panel.clone();
-    let selected_button = button.clone();
-    let photo_tiles = Rc::clone(&context.photo_tiles);
-    button.connect_clicked(move |_| {
-        for (id, pair) in photo_tiles.borrow().iter() {
-            for button in [&pair.lighttable_button, &pair.filmstrip_button] {
-                if *id == photo_id {
-                    button.add_css_class(ThemeRole::SelectedPhoto.class_name());
-                } else {
-                    button.remove_css_class(ThemeRole::SelectedPhoto.class_name());
-                }
-            }
-        }
-        selected_button.add_css_class(ThemeRole::SelectedPhoto.class_name());
-        export_panel.set_selected(true);
-        external_editor_panel.set_selection(1);
-        show_photo_detail(&photo_preview, &detail);
-        workspace.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
-        if let Some(handler) = handler.borrow().as_ref() {
-            handler(photo_id);
-        }
-    });
-}
-
-fn lighttable_card(
-    photo_id: PhotoId,
-    title: &str,
-    secondary: Option<&str>,
-    indicators: crate::presentation::ThumbnailIndicators,
-) -> (gtk4::Button, ThumbnailSurface) {
-    let card = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    card.set_margin_top(4);
-    card.set_margin_bottom(4);
-    card.set_margin_start(4);
-    card.set_margin_end(4);
-    let thumbnail = ThumbnailSurface::new(
-        &format!("photo-thumbnail-{photo_id}"),
-        &format!("Thumbnail for {title}"),
-        i32::from(THUMBNAIL_METRICS.grid_width_px),
-        i32::from(THUMBNAIL_METRICS.grid_height_px),
-    );
-    apply_theme_role(thumbnail.widget(), ThemeRole::ThumbnailImage);
-    let thumbnail_overlay = gtk4::Overlay::new();
-    thumbnail_overlay.set_child(Some(thumbnail.widget()));
-    let badges = thumbnail_badges(indicators);
-    badges.set_halign(gtk4::Align::End);
-    badges.set_valign(gtk4::Align::Start);
-    thumbnail_overlay.add_overlay(&badges);
-    card.append(&thumbnail_overlay);
-    let title_label = gtk4::Label::new(Some(title));
-    title_label.set_halign(gtk4::Align::Start);
-    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    title_label.set_max_width_chars(22);
-    title_label.set_single_line_mode(true);
-    card.append(&title_label);
-    if let Some(secondary) = secondary {
-        let secondary_label = gtk4::Label::new(Some(secondary));
-        secondary_label.set_halign(gtk4::Align::Start);
-        secondary_label.add_css_class("dim-label");
-        secondary_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-        secondary_label.set_max_width_chars(22);
-        secondary_label.set_single_line_mode(true);
-        card.append(&secondary_label);
-    }
-    let button = gtk4::Button::new();
-    button.set_widget_name(&format!("photo-{photo_id}"));
-    apply_theme_role(&button, ThemeRole::PhotoCard);
-    button.set_child(Some(&card));
-    button.set_tooltip_text(Some(title));
-    (button, thumbnail)
-}
-
-fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk4::Box {
-    let badges = gtk4::Box::new(gtk4::Orientation::Horizontal, 2);
-    badges.set_widget_name("thumbnail-indicators");
-    badges.add_css_class("dt_thumbnail_indicators");
-    for (visible, text, name) in [
-        (indicators.grouped, "G", "grouped photo"),
-        (indicators.local_copy, "C", "local copy"),
-        (indicators.altered, "●", "altered edit"),
-    ] {
-        if visible {
-            let badge = gtk4::Label::new(Some(text));
-            badge.set_tooltip_text(Some(name));
-            badges.append(&badge);
-        }
-    }
-    badges
-}
-
-fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSurface) {
-    let thumbnail = ThumbnailSurface::new(
-        &format!("filmstrip-thumbnail-{photo_id}"),
-        &format!("Filmstrip thumbnail for {title}"),
-        i32::from(THUMBNAIL_METRICS.filmstrip_width_px),
-        i32::from(THUMBNAIL_METRICS.filmstrip_height_px),
-    );
-    let button = gtk4::Button::new();
-    button.set_widget_name(&format!("filmstrip-photo-{photo_id}"));
-    apply_theme_role(&button, ThemeRole::PhotoCard);
-    button.add_css_class("dt_filmstrip_item");
-    button.set_tooltip_text(Some(title));
-    button.set_child(Some(thumbnail.widget()));
-    (button, thumbnail)
-}
-
-fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {
-    preview.set_detail(detail);
-}
-
-fn clear_children(container: &impl IsA<gtk4::Widget>) {
-    while let Some(child) = container.first_child() {
-        child.unparent();
+        self.render.render(view_model, Some(&matching_photo_ids));
     }
 }

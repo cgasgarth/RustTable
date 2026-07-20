@@ -7,17 +7,20 @@
 mod ai_surfaces;
 mod collection_controls;
 mod darkroom;
+mod darkroom_modules;
 mod darktable_spec;
 mod export_panel;
 mod exposure_panel;
 mod header;
 mod left_panel;
 mod lighttable;
+mod lighttable_interaction;
 mod lighttable_toolbar;
 mod model;
 mod photo_preview;
 mod runtime;
 mod runtime_layout;
+mod runtime_lighttable;
 mod theme;
 mod thumbnail;
 
@@ -28,6 +31,10 @@ pub use collection_controls::{
     LighttablePhotoState,
 };
 pub use darkroom::{DARKROOM_WIDGET_IDS, DarkroomView};
+pub use darkroom_modules::{
+    DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel,
+    DarkroomModulesViewModel, build_module_column, build_module_panel,
+};
 pub use darktable_spec::{
     ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarktableColors,
     DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LIGHTTABLE_COMPOSITION,
@@ -38,6 +45,10 @@ pub use darktable_spec::{
 };
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;
+pub use lighttable_interaction::{
+    LighttableInteractionState, LighttableSelectionAction, LighttableZoom, NavigationDirection,
+    SelectionModifiers,
+};
 pub use lighttable_toolbar::{
     LighttableColorLabel, LighttableRating, LighttableSort, LighttableToolbar,
     LighttableToolbarAction, LighttableToolbarState,

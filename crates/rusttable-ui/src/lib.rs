@@ -45,10 +45,14 @@ pub use external_editor::{
 };
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    DarktableTheme, ExportAction, ExportPanel, ExportSize, ExposurePanel, GtkShell,
-    LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableSort,
-    LighttableToolbar, LighttableToolbarAction, LighttableToolbarState, ShellLayout, ShellRegion,
-    ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css, install_darktable_theme,
+    DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel,
+    DarkroomModulesViewModel, DarkroomWorkspaceViewModel, DarktableTheme, ExportAction,
+    ExportPanel, ExportSize, ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
+    LighttableInteractionState, LighttablePhotoState, LighttableRating, LighttableSelectionAction,
+    LighttableSort, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
+    LighttableZoom, ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel,
+    NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole,
+    apply_theme_role, darktable_theme_css, install_darktable_theme,
 };
 pub use import::{
     IMPORT_SESSION_FOCUS_ORDER, ImportAction, ImportItemOutcome, ImportPanelViewModel,
@@ -73,10 +77,12 @@ pub use neural_restore::{
     PreviewStatus, RestoreSettings, RestoreTask, Roi, ViewportState,
 };
 pub use presentation::{
-    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
-    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
-    PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
-    SelectedPreviewFailure, SelectedPreviewState, ThumbnailIndicators,
+    ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlKind,
+    DarkroomControlValue, DarkroomControlViewModel, DarkroomControlsStatus,
+    DarkroomControlsViewModel, PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel,
+    PhotoWorkspaceViewModel, PhotoWorkspaceViewModelError, PresentationText, PresentationTextError,
+    PreviewDimensions, PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
+    SelectedPreviewFailure, SelectedPreviewState, SliderSpec, ThumbnailIndicators,
 };
 pub use viewport_presentation::{
     DisplayPresentationController, DisplayPresentationFrame, DisplayPresentationPort,

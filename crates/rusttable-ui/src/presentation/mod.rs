@@ -3,10 +3,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use rusttable_core::PhotoId;
 
 pub mod basic_edit;
+pub mod darkroom_controls;
 pub mod exposure;
 
 pub use basic_edit::{
     BasicEditField, BasicEditInspectorViewModel, BasicEditSaveState, BasicEditValues,
+};
+pub use darkroom_controls::{
+    ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlKind,
+    DarkroomControlValue, DarkroomControlViewModel, DarkroomControlsStatus,
+    DarkroomControlsViewModel, SliderSpec,
 };
 pub use exposure::ExposurePanelViewModel;
 
