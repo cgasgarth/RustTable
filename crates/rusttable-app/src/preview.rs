@@ -1,8 +1,16 @@
 use rusttable_core::Edit;
-use rusttable_image::{DecodeLimits, ImageInput};
+use rusttable_image::{ColorEncoding, DecodeLimits, DecodedImage, ImageInput};
 use rusttable_image_io::FileImageInput;
+use rusttable_pixelpipe::{
+    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeRequest, RgbaF32ColorEncoding,
+    RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+};
+use rusttable_processing::{
+    CompiledOperationGraph, FiniteF32, LinearRgb, RasterDimensions, WorkingRgbImage,
+};
 use rusttable_render::{
-    PreviewBounds, RenderOutput, RenderPlan, RenderTarget, SourceColorPolicy, render_edit_with_plan,
+    PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, PreviewBounds, RenderOutput,
+    RenderProvenance, RenderTarget, SourceColorDecision, render_prepared_cpu_pixelpipe,
 };
 
 /// Production CPU preview boundary used by the application composition.
@@ -69,39 +77,98 @@ impl PreviewService {
 
     fn render_preview_decoded(
         &self,
-        input: &rusttable_image::DecodedImage,
+        input: &DecodedImage,
         edit: &Edit,
     ) -> Result<RenderOutput, PreviewError> {
-        let plan =
-            RenderPlan::for_source(input.dimensions(), RenderTarget::PreviewFit(self.bounds));
-        render_edit_with_plan(
-            edit,
-            input,
-            SourceColorPolicy::AssumeSrgbWhenUnspecified,
-            plan,
-        )
-        .map_err(PreviewError::Render)
+        render_decoded_with_target(input, edit, RenderTarget::PreviewFit(self.bounds))
     }
 }
 
 fn render_with_target(
-    input: &rusttable_image::DecodedImage,
+    input: &DecodedImage,
     edit: &Edit,
     target: RenderTarget,
 ) -> Result<RenderOutput, PreviewError> {
-    let plan = RenderPlan::for_source(input.dimensions(), target);
-    render_edit_with_plan(
-        edit,
-        input,
-        SourceColorPolicy::AssumeSrgbWhenUnspecified,
-        plan,
+    render_decoded_with_target(input, edit, target)
+}
+
+fn render_decoded_with_target(
+    input: &DecodedImage,
+    edit: &Edit,
+    target: RenderTarget,
+) -> Result<RenderOutput, PreviewError> {
+    let source_color_decision = source_color_decision(input.color_encoding())?;
+    let dimensions = RasterDimensions::new(input.dimensions().width(), input.dimensions().height())
+        .expect("decoded images have nonzero dimensions");
+    let (source_pixels, remainder) = input.pixels().as_chunks::<4>();
+    debug_assert!(remainder.is_empty(), "decoded images are packed RGBA8");
+    let pixelpipe_input = RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::SrgbD65),
+        source_pixels
+            .iter()
+            .map(|pixel| {
+                RgbaF32Pixel::new(
+                    f32::from(pixel[0]) / 255.0,
+                    f32::from(pixel[1]) / 255.0,
+                    f32::from(pixel[2]) / 255.0,
+                    f32::from(pixel[3]) / 255.0,
+                )
+            })
+            .collect(),
     )
-    .map_err(PreviewError::Render)
+    .map_err(PreviewError::PixelpipeInput)?;
+    let graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
+    let result = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(pixelpipe_input, graph))
+        .map_err(PreviewError::Pixelpipe)?;
+    let pixels = result
+        .image()
+        .pixels()
+        .iter()
+        .map(|pixel| {
+            LinearRgb::new(
+                FiniteF32::new(pixel.red()).expect("CPU pixelpipe output is finite"),
+                FiniteF32::new(pixel.green()).expect("CPU pixelpipe output is finite"),
+                FiniteF32::new(pixel.blue()).expect("CPU pixelpipe output is finite"),
+            )
+        })
+        .collect();
+    let working = WorkingRgbImage::new(dimensions, pixels)
+        .expect("CPU pixelpipe preserves its validated image dimensions");
+    let alpha = source_pixels.iter().map(|pixel| pixel[3]).collect();
+    let prepared = PreparedCpuPixelpipeResult::new(
+        working,
+        alpha,
+        source_color_decision,
+        RenderProvenance::new(
+            edit.id(),
+            edit.photo_id(),
+            edit.base_photo_revision(),
+            edit.revision(),
+        ),
+    )
+    .map_err(PreviewError::Prepared)?;
+    render_prepared_cpu_pixelpipe(&prepared, target).map_err(PreviewError::Render)
+}
+
+fn source_color_decision(encoding: ColorEncoding) -> Result<SourceColorDecision, PreviewError> {
+    match encoding {
+        ColorEncoding::Srgb => Ok(SourceColorDecision::DeclaredSrgb),
+        ColorEncoding::Unspecified => Ok(SourceColorDecision::AssumedSrgb),
+        ColorEncoding::DisplayP3 => {
+            Err(PreviewError::UnsupportedPixelpipeColor { actual: encoding })
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum PreviewError {
     Decode(rusttable_image::ImageInputError),
+    UnsupportedPixelpipeColor { actual: ColorEncoding },
+    PixelpipeInput(RgbaF32ImageError),
+    Graph(rusttable_processing::OperationGraphCompileError),
+    Pixelpipe(CpuPixelpipeError),
+    Prepared(PreparedCpuPixelpipeResultError),
     Render(rusttable_render::RenderError),
 }
 
@@ -109,6 +176,16 @@ impl std::fmt::Display for PreviewError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Decode(error) => write!(formatter, "preview decode failed: {error}"),
+            Self::UnsupportedPixelpipeColor { actual } => write!(
+                formatter,
+                "preview CPU pixelpipe does not support {actual:?} source color"
+            ),
+            Self::PixelpipeInput(error) => write!(formatter, "preview CPU input failed: {error}"),
+            Self::Graph(error) => write!(formatter, "preview graph compilation failed: {error}"),
+            Self::Pixelpipe(error) => write!(formatter, "preview CPU pixelpipe failed: {error}"),
+            Self::Prepared(error) => {
+                write!(formatter, "preview CPU render preparation failed: {error}")
+            }
             Self::Render(error) => write!(formatter, "preview render failed: {error}"),
         }
     }
@@ -118,6 +195,11 @@ impl std::error::Error for PreviewError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Decode(error) => Some(error),
+            Self::UnsupportedPixelpipeColor { .. } => None,
+            Self::PixelpipeInput(error) => Some(error),
+            Self::Graph(error) => Some(error),
+            Self::Pixelpipe(error) => Some(error),
+            Self::Prepared(error) => Some(error),
             Self::Render(error) => Some(error),
         }
     }
