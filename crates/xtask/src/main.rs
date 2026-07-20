@@ -11,6 +11,7 @@ mod foundation;
 mod gpu;
 mod migration;
 mod operations;
+mod pixelpipe;
 mod reference;
 
 use std::path::{Path, PathBuf};
@@ -99,6 +100,11 @@ enum Task {
         #[command(subcommand)]
         command: operations::OperationRegistryCommand,
     },
+    /// Prepare immutable pixelpipe snapshots and receipts.
+    Pixelpipe {
+        #[command(subcommand)]
+        command: pixelpipe::PixelpipeCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -119,6 +125,7 @@ fn main() -> ExitCode {
         Task::OperationSchema { command } => operations::run_schema(&root, &command),
         Task::OperationStack { command } => operations::run_stack(&root, &command),
         Task::OperationRegistry { command } => operations::run_registry(&root, &command),
+        Task::Pixelpipe { command } => pixelpipe::run(&root, command),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -172,6 +179,7 @@ mod tests {
             "operation-schema",
             "operation-stack",
             "operation-registry",
+            "pixelpipe",
         ] {
             assert!(help.contains(command), "missing {command}");
         }

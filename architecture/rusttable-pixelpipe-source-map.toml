@@ -1,0 +1,64 @@
+schema = "rusttable.pixelpipe-source-map.v1"
+issue = 266
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "pixelpipe-aggregate"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbol = "dt_dev_pixelpipe_t"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_snapshot.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "pixelpipe-piece"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_dev_pixelpipe_process"
+rust_path = "crates/rusttable-pixelpipe/src/preparation.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "pixelpipe-profile"
+upstream_path = "src/develop/develop.h"
+upstream_symbol = "dt_develop_t"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+status = "delegated"
+delegated_issue = 257
+
+[[responsibility]]
+id = "pixelpipe-history"
+upstream_path = "src/common/history.h"
+upstream_symbol = "dt_history_item_t"
+rust_path = "crates/rusttable-processing/src/operation_stack.rs"
+status = "delegated"
+delegated_issue = 264
+
+[[responsibility]]
+id = "pixelpipe-mask"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbol = "dt_dev_pixelpipe_t::raster_mask"
+rust_path = "crates/rusttable-pixelpipe/src/preparation.rs"
+status = "deferred"
+deferred_issue = 271
+
+[[responsibility]]
+id = "pixelpipe-caller-purpose"
+upstream_path = "src/develop/develop.h"
+upstream_symbol = "dt_dev_pixelpipe_t::type"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "pixelpipe-roi"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbol = "dt_iop_roi_t"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+status = "delegated"
+delegated_issue = 263
+
+[[responsibility]]
+id = "pixelpipe-publication"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "pipe->shutdown"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_snapshot.rs"
+status = "replaced"
