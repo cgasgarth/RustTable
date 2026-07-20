@@ -1,10 +1,10 @@
-use iced::widget::{column, container, image, row, scrollable, text};
+use iced::widget::{column, container, image, row, scrollable, slider, text};
 use iced::{ContentFit, Element, Fill, Length};
 use rusttable_core::product_name;
 
 use crate::input::{
-    BasicEditControl, BasicEditIntent, ExportIntent, ExportSize, FocusTarget, InputIntent,
-    UiMessage,
+    BasicEditControl, BasicEditIntent, CustomExportSizeAdjustment, ExportIntent, ExportSize,
+    FocusTarget, InputIntent, UiMessage,
 };
 use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
@@ -270,11 +270,11 @@ fn rendered_copy_controls(
     let size_choices: Element<'_, UiMessage> = if in_progress {
         text(format!("Output size locked: {}", selected_size.label())).into()
     } else {
-        row(ExportSize::ALL.into_iter().map(|size| {
+        let presets = row(ExportSize::ALL.into_iter().map(|size| {
             let label = if size == selected_size {
                 format!("{} selected", size.label())
             } else {
-                size.label().to_owned()
+                size.label()
             };
             action_button(
                 text(label),
@@ -282,8 +282,47 @@ fn rendered_copy_controls(
                 state.is_focused(FocusTarget::ExportSize(photo_id, size)),
             )
         }))
-        .spacing(REGION_SPACING)
-        .into()
+        .spacing(REGION_SPACING);
+        let custom = state.custom_export_size();
+        let custom_label = if selected_size == ExportSize::Custom(custom.value()) {
+            format!("{} selected", custom.status_label())
+        } else {
+            custom.status_label()
+        };
+        let custom_controls = row![
+            action_button(
+                text("Decrease custom size"),
+                UiMessage::Input(InputIntent::Export(ExportIntent::AdjustCustomSize(
+                    CustomExportSizeAdjustment::Decrease,
+                ))),
+                state.is_focused(FocusTarget::DecreaseCustomExportSize(photo_id)),
+            ),
+            text(custom_label),
+            slider(
+                crate::ExportPixelSize::MINIMUM..=crate::ExportPixelSize::MAXIMUM,
+                custom.value().value(),
+                |value| {
+                    let size = crate::ExportPixelSize::new(value)
+                        .expect("Iced slider emits values inside its configured range");
+                    UiMessage::Input(InputIntent::Export(ExportIntent::SelectSize(
+                        ExportSize::Custom(size),
+                    )))
+                },
+            )
+            .default(crate::ExportPixelSize::DEFAULT.value())
+            .shift_step(1_024),
+            action_button(
+                text("Increase custom size"),
+                UiMessage::Input(InputIntent::Export(ExportIntent::AdjustCustomSize(
+                    CustomExportSizeAdjustment::Increase,
+                ))),
+                state.is_focused(FocusTarget::IncreaseCustomExportSize(photo_id)),
+            ),
+        ]
+        .spacing(REGION_SPACING);
+        column![presets, custom_controls]
+            .spacing(REGION_SPACING)
+            .into()
     };
     let action = if in_progress {
         action_button(
@@ -638,6 +677,9 @@ mod tests {
         simulator.find("Original selected")?;
         simulator.find("Fit 2048")?;
         simulator.find("Fit 4096")?;
+        simulator.find("Decrease custom size")?;
+        simulator.find("Custom size: 2048 px (1–16384 px)")?;
+        simulator.find("Increase custom size")?;
         simulator.find("Save PNG…")?;
 
         Ok(())
@@ -657,6 +699,7 @@ mod tests {
         simulator.find("Cancel PNG export")?;
         assert!(simulator.find("Save PNG…").is_err());
         assert!(simulator.find("Fit 2048").is_err());
+        assert!(simulator.find("Decrease custom size").is_err());
         drop(simulator);
         assert_eq!(state.export_size(), crate::input::ExportSize::Original);
         assert_eq!(

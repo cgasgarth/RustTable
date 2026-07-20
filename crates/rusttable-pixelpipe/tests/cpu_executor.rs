@@ -3,9 +3,9 @@ use rusttable_core::{
     ParameterValue, PhotoId, Revision,
 };
 use rusttable_pixelpipe::{
-    CpuImplementation, CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
-    CpuPixelpipeRequest, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel,
+    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
+    CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuTilePlan, CpuTilePlanError, RgbaF32Channel,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
 
@@ -50,6 +50,25 @@ fn image() -> RgbaF32Image {
         ],
     )
     .expect("valid input")
+}
+
+fn tiled_image() -> RgbaF32Image {
+    let descriptor = RgbaF32Descriptor::new(
+        RasterDimensions::new(5, 3).expect("nonzero dimensions"),
+        RgbaF32ColorEncoding::SrgbD65,
+    );
+    let pixels = (0_u16..15)
+        .map(|index| {
+            let index = f32::from(index);
+            RgbaF32Pixel::new(
+                (index + 1.0) / 20.0,
+                (index + 2.0) / 20.0,
+                (index + 3.0) / 20.0,
+                (index + 4.0) / 20.0,
+            )
+        })
+        .collect();
+    RgbaF32Image::new(descriptor, pixels).expect("valid tiled input")
 }
 
 #[test]
@@ -115,6 +134,66 @@ fn receipt_is_deterministic_and_records_scalar_cpu_provenance() {
     assert_ne!(
         first.receipt().input_identity(),
         first.receipt().output_identity()
+    );
+}
+
+#[test]
+fn source_identity_evidence_rejects_replaced_input_before_execution() {
+    let original = image();
+    let expected = original.source_identity();
+    let descriptor = original.descriptor();
+    let replacement = vec![
+        RgbaF32Pixel::new(0.6, 0.25, 0.75, 0.4),
+        RgbaF32Pixel::new(0.1, 0.2, 0.3, 1.0),
+    ];
+
+    assert!(matches!(
+        RgbaF32Image::new_with_source_identity(descriptor, replacement, expected),
+        Err(RgbaF32ImageError::SourceIdentityMismatch {
+            expected: rejected_expected,
+            actual,
+        }) if rejected_expected == expected && actual != expected
+    ));
+}
+
+#[test]
+fn receipt_refuses_publication_when_source_evidence_is_replaced() {
+    let original = image();
+    let original_identity = original.source_identity();
+    let result = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            original,
+            graph(Vec::new()),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("CPU execution succeeds");
+    let replacement = RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            RasterDimensions::new(2, 1).expect("nonzero dimensions"),
+            RgbaF32ColorEncoding::SrgbD65,
+        ),
+        vec![
+            RgbaF32Pixel::new(0.6, 0.25, 0.75, 0.4),
+            RgbaF32Pixel::new(0.1, 0.2, 0.3, 1.0),
+        ],
+    )
+    .expect("valid replacement");
+
+    assert_eq!(result.receipt().source_identity(), original_identity);
+    assert_eq!(
+        result
+            .receipt()
+            .authorize_publication_for(original_identity),
+        Ok(())
+    );
+    assert_eq!(
+        result
+            .receipt()
+            .authorize_publication_for(replacement.source_identity()),
+        Err(CpuPipelineReceiptError::SourceIdentityMismatch {
+            expected: replacement.source_identity(),
+            actual: original_identity,
+        })
     );
 }
 
@@ -202,4 +281,96 @@ fn output_modes_have_known_linear_and_srgb_boundaries_with_identical_alpha() {
         full.receipt().output_identity(),
         preview.receipt().output_identity()
     );
+}
+
+#[test]
+fn checked_tile_grid_is_row_major_and_includes_edge_tiles() {
+    let plan = CpuTilePlan::new(2, 2).expect("valid tile plan");
+    let grid = plan
+        .grid_for(RasterDimensions::new(5, 3).expect("nonzero dimensions"))
+        .expect("valid grid");
+
+    assert_eq!((grid.columns(), grid.rows(), grid.tile_count()), (3, 2, 6));
+    let tiles = (0..grid.tile_count())
+        .map(|index| grid.tile_at(index).expect("checked tile").expect("in grid"))
+        .map(|tile| {
+            (
+                tile.origin_x(),
+                tile.origin_y(),
+                tile.dimensions().width(),
+                tile.dimensions().height(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        tiles,
+        [
+            (0, 0, 2, 2),
+            (2, 0, 2, 2),
+            (4, 0, 1, 2),
+            (0, 2, 2, 1),
+            (2, 2, 2, 1),
+            (4, 2, 1, 1),
+        ]
+    );
+    assert_eq!(grid.tile_at(6).expect("checked boundary"), None);
+}
+
+#[test]
+fn tile_plan_rejects_zero_extents() {
+    assert_eq!(CpuTilePlan::new(0, 1), Err(CpuTilePlanError::ZeroTileWidth));
+    assert_eq!(
+        CpuTilePlan::new(1, 0),
+        Err(CpuTilePlanError::ZeroTileHeight)
+    );
+}
+
+#[test]
+fn tile_grid_preserves_checked_coordinates_at_u32_boundaries() {
+    let dimensions = RasterDimensions::new(u32::MAX, u32::MAX).expect("nonzero dimensions");
+    let grid = CpuTilePlan::new(1, 1)
+        .expect("valid tile plan")
+        .grid_for(dimensions)
+        .expect("checked grid");
+
+    let last = grid
+        .tile_at(grid.tile_count() - 1)
+        .expect("checked tile")
+        .expect("final tile");
+    assert_eq!(
+        (last.origin_x(), last.origin_y()),
+        (u32::MAX - 1, u32::MAX - 1)
+    );
+    assert_eq!(
+        last.dimensions(),
+        RasterDimensions::new(1, 1).expect("nonzero tile")
+    );
+}
+
+#[test]
+fn tiled_execution_matches_full_frame_image_and_receipt() {
+    let executor = CpuPixelpipeExecutor;
+    let operation_graph = graph(vec![
+        operation(7, "rusttable.exposure", &[("stops", 0.75)]),
+        operation(8, "rusttable.linear_offset", &[("value", 0.03)]),
+        operation(
+            9,
+            "rusttable.rgb_gain",
+            &[("red", 1.1), ("green", 0.8), ("blue", 1.3)],
+        ),
+    ]);
+
+    for output_mode in [
+        CpuPixelpipeOutputMode::Preview,
+        CpuPixelpipeOutputMode::FullExport,
+    ] {
+        let request = CpuPixelpipeRequest::new(tiled_image(), operation_graph.clone(), output_mode);
+        let full_frame = executor.execute(&request).expect("full-frame execution");
+        let tiled = executor
+            .execute_tiled(&request, CpuTilePlan::new(2, 2).expect("valid tile plan"))
+            .expect("tiled execution");
+
+        assert_eq!(tiled.image(), full_frame.image());
+        assert_eq!(tiled.receipt(), full_frame.receipt());
+    }
 }

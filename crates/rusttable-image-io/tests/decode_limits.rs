@@ -1,8 +1,12 @@
-use std::fs;
-use std::path::Path;
+use std::fs::{self, File, OpenOptions};
+use std::io::{ErrorKind, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusttable_image::{DecodeLimits, ImageInput, ImageInputError};
 use rusttable_image_io::FileImageInput;
+
+static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn png() -> Vec<u8> {
     decode(include_str!("fixtures/rgba-2x1.png.b64"))
@@ -46,19 +50,59 @@ fn input(limits: DecodeLimits) -> FileImageInput {
 }
 
 fn with_png<T>(name: &str, operation: impl FnOnce(&Path) -> T) -> T {
-    with_bytes(name, png(), operation)
+    let bytes = png();
+    with_bytes(name, &bytes, operation)
 }
 
 fn with_png_1x2<T>(name: &str, operation: impl FnOnce(&Path) -> T) -> T {
-    with_bytes(name, png_1x2(), operation)
+    let bytes = png_1x2();
+    with_bytes(name, &bytes, operation)
 }
 
-fn with_bytes<T>(name: &str, bytes: Vec<u8>, operation: impl FnOnce(&Path) -> T) -> T {
-    let path = std::env::temp_dir().join(format!("rusttable-image-io-limit-{name}.fixture"));
-    fs::write(&path, bytes).expect("fixture should be writable");
-    let result = operation(&path);
-    fs::remove_file(path).expect("fixture should be removable");
-    result
+fn with_bytes<T>(name: &str, bytes: &[u8], operation: impl FnOnce(&Path) -> T) -> T {
+    let fixture = TestFixture::create(name, bytes);
+    operation(fixture.path())
+}
+
+struct TestFixture {
+    path: PathBuf,
+}
+
+impl TestFixture {
+    fn create(name: &str, bytes: &[u8]) -> Self {
+        let (path, mut file) = unique_file(name);
+        file.write_all(bytes).expect("fixture should be writable");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TestFixture {
+    fn drop(&mut self) {
+        match fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => panic!("owned fixture should be removable: {error}"),
+        }
+    }
+}
+
+fn unique_file(name: &str) -> (PathBuf, File) {
+    loop {
+        let sequence = FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "rusttable-image-io-limit-{name}-{}-{sequence}.fixture",
+            std::process::id()
+        ));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => return (path, file),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+            Err(error) => panic!("unique fixture should be creatable: {error}"),
+        }
+    }
 }
 
 fn limits(

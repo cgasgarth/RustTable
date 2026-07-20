@@ -29,6 +29,8 @@ pub enum FocusTarget {
     CloseImportPanel,
     SaveRenderedCopy(PhotoId),
     ExportSize(PhotoId, ExportSize),
+    DecreaseCustomExportSize(PhotoId),
+    IncreaseCustomExportSize(PhotoId),
     StartRenderedCopy(PhotoId),
     CancelRenderedCopy(PhotoId),
     RetryLibrary,
@@ -54,27 +56,91 @@ pub enum InputIntent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportIntent {
     SelectSize(ExportSize),
+    AdjustCustomSize(CustomExportSizeAdjustment),
     Start,
     Cancel,
 }
 
-/// The only output-size presets exposed by the initial PNG save surface.
+/// A validated maximum edge length for a custom PNG export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ExportPixelSize(u16);
+
+impl ExportPixelSize {
+    pub const MINIMUM: u16 = 1;
+    pub const MAXIMUM: u16 = 16_384;
+    pub const DEFAULT: Self = Self(2_048);
+
+    /// Creates a size only when it is supported by the UI's export contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `value` is outside 1 through 16,384 pixels.
+    pub const fn new(value: u16) -> Result<Self, ExportPixelSizeError> {
+        if value == 0 {
+            Err(ExportPixelSizeError::TooSmall)
+        } else if value > Self::MAXIMUM {
+            Err(ExportPixelSizeError::TooLarge)
+        } else {
+            Ok(Self(value))
+        }
+    }
+
+    #[must_use]
+    pub const fn value(self) -> u16 {
+        self.0
+    }
+
+    #[must_use]
+    pub const fn decrease(self) -> Option<Self> {
+        if self.0 == Self::MINIMUM {
+            None
+        } else {
+            Some(Self(self.0 - 1))
+        }
+    }
+
+    #[must_use]
+    pub const fn increase(self) -> Option<Self> {
+        if self.0 == Self::MAXIMUM {
+            None
+        } else {
+            Some(Self(self.0 + 1))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportPixelSizeError {
+    TooSmall,
+    TooLarge,
+}
+
+/// A keyboard-safe, typed adjustment for the custom export-size control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CustomExportSizeAdjustment {
+    Decrease,
+    Increase,
+}
+
+/// The PNG output-size choices exposed by the save surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportSize {
     Original,
     Fit2048,
     Fit4096,
+    Custom(ExportPixelSize),
 }
 
 impl ExportSize {
     pub const ALL: [Self; 3] = [Self::Original, Self::Fit2048, Self::Fit4096];
 
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::Original => "Original",
-            Self::Fit2048 => "Fit 2048",
-            Self::Fit4096 => "Fit 4096",
+            Self::Original => "Original".to_owned(),
+            Self::Fit2048 => "Fit 2048".to_owned(),
+            Self::Fit4096 => "Fit 4096".to_owned(),
+            Self::Custom(size) => format!("Custom {} px", size.value()),
         }
     }
 }
@@ -116,6 +182,8 @@ pub enum InputEffect {
     CloseImportPanel,
     SaveRenderedCopy(PhotoId),
     ExportSize(PhotoId, ExportSize),
+    DecreaseCustomExportSize(PhotoId),
+    IncreaseCustomExportSize(PhotoId),
     StartRenderedCopy(PhotoId),
     CancelRenderedCopy(PhotoId),
 }
@@ -376,6 +444,12 @@ impl InputState {
             FocusTarget::ExportSize(photo_id, size) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
                 InputEffect::ExportSize(photo_id, size)
             }
+            FocusTarget::DecreaseCustomExportSize(photo_id) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
+                InputEffect::DecreaseCustomExportSize(photo_id)
+            }
+            FocusTarget::IncreaseCustomExportSize(photo_id) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
+                InputEffect::IncreaseCustomExportSize(photo_id)
+            }
             FocusTarget::StartRenderedCopy(photo_id) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
                 InputEffect::StartRenderedCopy(photo_id)
             }
@@ -389,6 +463,8 @@ impl InputState {
             }
             FocusTarget::SaveRenderedCopy(_)
             | FocusTarget::ExportSize(_, _)
+            | FocusTarget::DecreaseCustomExportSize(_)
+            | FocusTarget::IncreaseCustomExportSize(_)
             | FocusTarget::StartRenderedCopy(_)
             | FocusTarget::CancelRenderedCopy(_)
             | FocusTarget::Preview(_)
@@ -524,6 +600,8 @@ fn focus_chain_with_import_panel_and_export(
                     for size in ExportSize::ALL {
                         chain.push(FocusTarget::ExportSize(photo_id, size));
                     }
+                    chain.push(FocusTarget::DecreaseCustomExportSize(photo_id));
+                    chain.push(FocusTarget::IncreaseCustomExportSize(photo_id));
                     chain.push(FocusTarget::StartRenderedCopy(photo_id));
                 }
             }
@@ -538,8 +616,8 @@ mod tests {
     use rusttable_core::PhotoId;
 
     use super::{
-        BasicEditControl, ExportSize, FocusTarget, InputEffect, InputIntent, InputState,
-        focus_chain, focus_chain_with_import_panel,
+        BasicEditControl, ExportPixelSize, ExportPixelSizeError, ExportSize, FocusTarget,
+        InputEffect, InputIntent, InputState, focus_chain, focus_chain_with_import_panel,
     };
     use crate::library::{LibraryFailureKind, LibraryState};
     use crate::presentation::{
@@ -701,6 +779,8 @@ mod tests {
                 FocusTarget::ExportSize(photo_id, ExportSize::Original),
                 FocusTarget::ExportSize(photo_id, ExportSize::Fit2048),
                 FocusTarget::ExportSize(photo_id, ExportSize::Fit4096),
+                FocusTarget::DecreaseCustomExportSize(photo_id),
+                FocusTarget::IncreaseCustomExportSize(photo_id),
                 FocusTarget::StartRenderedCopy(photo_id),
                 FocusTarget::BackToLibrary,
             ]
@@ -726,11 +806,39 @@ mod tests {
             state.apply(InputIntent::Activate, true, route, &model),
             InputEffect::StartRenderedCopy(photo_id)
         );
+        state.focused = FocusTarget::DecreaseCustomExportSize(photo_id);
+        assert_eq!(
+            state.apply(InputIntent::Activate, true, route, &model),
+            InputEffect::DecreaseCustomExportSize(photo_id)
+        );
+        state.focused = FocusTarget::IncreaseCustomExportSize(photo_id);
+        assert_eq!(
+            state.apply(InputIntent::Activate, true, route, &model),
+            InputEffect::IncreaseCustomExportSize(photo_id)
+        );
         state.focused = FocusTarget::CancelRenderedCopy(photo_id);
         assert_eq!(
             state.apply(InputIntent::Activate, true, route, &model),
             InputEffect::CancelRenderedCopy(photo_id)
         );
+    }
+
+    #[test]
+    fn custom_export_pixels_are_typed_and_bounded() {
+        assert_eq!(ExportPixelSize::new(0), Err(ExportPixelSizeError::TooSmall));
+        assert_eq!(
+            ExportPixelSize::new(ExportPixelSize::MAXIMUM + 1),
+            Err(ExportPixelSizeError::TooLarge)
+        );
+        let minimum = ExportPixelSize::new(ExportPixelSize::MINIMUM)
+            .expect("minimum custom export size is valid");
+        let maximum = ExportPixelSize::new(ExportPixelSize::MAXIMUM)
+            .expect("maximum custom export size is valid");
+
+        assert_eq!(minimum.decrease(), None);
+        assert_eq!(maximum.increase(), None);
+        assert_eq!(minimum.increase().map(ExportPixelSize::value), Some(2));
+        assert_eq!(maximum.decrease().map(ExportPixelSize::value), Some(16_383));
     }
 
     #[test]
