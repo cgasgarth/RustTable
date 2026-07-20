@@ -53,6 +53,7 @@
 - Leave long-running agents running without routine polling; completion messages wake the orchestrator. Inspect only on completion or an urgent dependency.
 - Keep each agent in an isolated worktree. More agents may collaborate inside one PR, but active PR batch limits still apply.
 - Keep at least two agents on disjoint, product-facing Rust implementation slices whenever a batch is active. Prefer a coherent upstream subsystem's composition, persistence, UI, render, or test slices over setup, policy, or workflow work.
+- Use up to four concurrent agents when the slices are genuinely disjoint and materially accelerate the active migration batch; keep at least two product slices working, and reduce concurrency when shared-file conflicts outweigh the speedup.
 - Combine tightly coupled implementation work into the active PR rather than serializing tiny scaffolding PRs; do not combine unrelated subsystems just to increase PR size.
 - Re-read the current issue and parent issue before follow-up work because GitHub scope may change.
 
