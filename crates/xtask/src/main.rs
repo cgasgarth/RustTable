@@ -8,6 +8,7 @@ mod configuration;
 mod dist;
 mod fixtures;
 mod foundation;
+mod gpu;
 mod migration;
 mod reference;
 
@@ -55,6 +56,11 @@ enum Task {
         #[command(subcommand)]
         command: foundation::FoundationCommand,
     },
+    /// Qualify the WGPU device and CPU fallback service.
+    Gpu {
+        #[command(subcommand)]
+        command: gpu::GpuCommand,
+    },
     /// Provision or exercise the pinned darktable reference.
     Reference {
         #[command(subcommand)]
@@ -88,6 +94,7 @@ fn main() -> ExitCode {
         Task::Codegen { command } => codegen::run(&root, command),
         Task::Fixtures { command } => fixtures::run(&root, command),
         Task::Foundation { command } => foundation::run(&root, command),
+        Task::Gpu { command } => gpu::run(&root, command),
         Task::Reference { command } => reference::run(&root, *command),
         Task::Bench { command } => bench::run(&root, command),
         Task::Dist => dist::run(&root),
@@ -137,6 +144,7 @@ mod tests {
             "codegen",
             "fixtures",
             "foundation",
+            "gpu",
             "reference",
             "bench",
             "dist",
