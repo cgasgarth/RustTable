@@ -1,0 +1,69 @@
+schema = "rusttable.gpu-transfer-source-map.v1"
+issue = 294
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "image-to-host-readback"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["dt_opencl_copy_image_to_host", "dt_opencl_read_host_from_image_raw"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "TransferPlanner and TransferPlan::unpack_readback"
+status = "replaced"
+
+[[responsibility]]
+id = "host-to-image-upload"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["dt_opencl_write_host_to_image"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "TransferPlan::pack_upload"
+status = "replaced"
+
+[[responsibility]]
+id = "mapped-buffer-transfer"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["dt_opencl_map_buffer", "dt_opencl_unmap_mem_object"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "ReadbackMap strategy and typed plan"
+status = "replaced"
+
+[[responsibility]]
+id = "pipeline-readback-handoff"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbols = ["dt_opencl_copy_image_to_host"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "logical-byte readback receipt"
+status = "replaced"
+
+[[responsibility]]
+id = "tile-region-and-row-pitch"
+upstream_path = "src/develop/tiling.c"
+upstream_symbols = ["dt_iop_roi_t", "tile row pitch"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "TransferRegion and checked alignment"
+status = "replaced"
+
+[[responsibility]]
+id = "typed-operation-parameters"
+upstream_path = "src/iop/exposure.c"
+upstream_symbols = ["process_cl"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "Uniform and RawBytes payloads"
+status = "replaced"
+
+[[responsibility]]
+id = "completion-ordering"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["dt_opencl_events_flush"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "SubmissionToken fence hook"
+status = "delegated"
+delegated_issue = 296
+
+[[responsibility]]
+id = "pinned-memory-policy"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["pinned host allocation", "unified memory hint"]
+rust_path = "crates/rusttable-gpu/src/transfer.rs"
+owner = "versioned TransferPolicy"
+status = "replaced"

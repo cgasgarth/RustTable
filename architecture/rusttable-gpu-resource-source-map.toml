@@ -1,0 +1,70 @@
+schema = "rusttable.gpu-resource-source-map.v1"
+issue = 293
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "device-memory-state"
+upstream_path = "src/common/opencl.h"
+upstream_symbols = ["dt_opencl_device_t.device_mem", "dt_opencl_device_t.device_available"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "GpuResourcePool accounting"
+status = "replaced"
+
+[[responsibility]]
+id = "device-allocation"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["dt_opencl_alloc_device", "dt_opencl_free_device"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "ResourceLease and ResourceState"
+status = "replaced"
+
+[[responsibility]]
+id = "pipeline-resource-allocation"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbols = ["dt_opencl_alloc_device"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "typed ResourceClass"
+status = "replaced"
+
+[[responsibility]]
+id = "tile-resource-allocation"
+upstream_path = "src/develop/tiling.c"
+upstream_symbols = ["dt_opencl_alloc_device", "dt_opencl_release_mem_object"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "bounded pool acquire/release"
+status = "replaced"
+
+[[responsibility]]
+id = "host-device-ownership"
+upstream_path = "src/common/mipmap_cache.h"
+upstream_symbols = ["dt_mipmap_buffer_t"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "typed generation and lease boundary"
+status = "delegated"
+delegated_issue = 269
+
+[[responsibility]]
+id = "submission-retirement"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["dt_opencl_events_reset"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "SubmissionToken retirement hook"
+status = "delegated"
+delegated_issue = 296
+
+[[responsibility]]
+id = "view-and-bind-group-cache"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["cl_mem image views", "kernel argument resource bindings"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "exact ResourceClass compatibility"
+status = "replaced"
+
+[[responsibility]]
+id = "allocation-temporaries"
+upstream_path = "src/develop/tiling.c"
+upstream_symbols = ["temporary tile resources", "manual release paths"]
+rust_path = "crates/rusttable-gpu/src/resource.rs"
+owner = "one-shot and priority-aware leases"
+status = "replaced"

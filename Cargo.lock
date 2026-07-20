@@ -2830,6 +2830,8 @@ version = "0.1.0"
 dependencies = [
  "naga",
  "postcard",
+ "rusttable-color",
+ "rusttable-image",
  "serde",
  "sha2",
  "tokio",
