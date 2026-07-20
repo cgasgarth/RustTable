@@ -10,7 +10,7 @@ mod platform;
 mod preview;
 mod ui_shell;
 
-pub use composition::run;
+pub use composition::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, run};
 pub use extensions::ApplicationExtensions;
 pub use preview::{PreviewError, PreviewService};
 

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use redb::{Database, ReadableDatabase, ReadableTable};
 use rusttable_catalog::{ImportRecord, ImportRepository, RepositoryError, SourcePath};
@@ -8,7 +9,7 @@ use crate::codec;
 use crate::schema::{self, ASSET_INDEX_TABLE, PHOTO_INDEX_TABLE, RECORDS_TABLE};
 
 pub struct RedbImportRepository {
-    database: Database,
+    database: Arc<Database>,
 }
 
 impl RedbImportRepository {
@@ -19,8 +20,12 @@ impl RedbImportRepository {
     /// Returns a typed unavailable or corrupt-persisted-data error.
     pub fn open(path: &Path) -> Result<Self, RepositoryError> {
         Ok(Self {
-            database: schema::open(path)?,
+            database: Arc::new(schema::open(path)?),
         })
+    }
+
+    pub(crate) const fn from_database(database: Arc<Database>) -> Self {
+        Self { database }
     }
 }
 

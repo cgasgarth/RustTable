@@ -1,3 +1,7 @@
+mod catalog_preview;
+
+pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
+
 use crate::lifecycle::run_with_bootstrap;
 use crate::ui_shell::{DaemonState, boot, subscription, update, view as daemon_view};
 
@@ -11,9 +15,6 @@ mod view {
         rusttable_ui::view::view(shell.ui_state()).map(Message::from)
     }
 }
-
-#[cfg(test)]
-mod ui_smoke;
 
 /// Starts the `RustTable` desktop application.
 ///
@@ -37,3 +38,6 @@ pub fn run() -> iced::Result {
         |warning| eprintln!("{warning}"),
     )
 }
+
+#[cfg(test)]
+mod ui_smoke;

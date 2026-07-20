@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use redb::{Database, ReadableDatabase, ReadableTable};
 use rusttable_catalog::{EditRepository, EditRepositoryError};
@@ -9,7 +10,7 @@ use crate::schema::{self, EDITS_TABLE};
 
 /// Durable edit persistence backed by the shared `RustTable` redb catalog file.
 pub struct RedbEditRepository {
-    database: Database,
+    database: Arc<Database>,
 }
 
 impl RedbEditRepository {
@@ -20,8 +21,12 @@ impl RedbEditRepository {
     /// Returns a typed unavailable or corrupt-persisted-data error.
     pub fn open(path: &Path) -> Result<Self, EditRepositoryError> {
         Ok(Self {
-            database: schema::open(path).map_err(|error| map_schema_error(&error))?,
+            database: Arc::new(schema::open(path).map_err(|error| map_schema_error(&error))?),
         })
+    }
+
+    pub(crate) const fn from_database(database: Arc<Database>) -> Self {
+        Self { database }
     }
 }
 
