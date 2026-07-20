@@ -118,6 +118,7 @@ impl UiState {
                     InputEffect::ToggleSidebar => self.sidebar_visible = !self.sidebar_visible,
                     InputEffect::Navigate(navigation) => {
                         let _ = self.navigation.apply(navigation);
+                        self.input.note_navigation(navigation, &self.library_state);
                     }
                     InputEffect::RetryLibrary => return UiEffect::RetryLibrary,
                     InputEffect::ImportFiles => return UiEffect::ImportFiles,
@@ -159,6 +160,7 @@ impl UiState {
             | FocusTarget::RemoveImportResult(_)
             | FocusTarget::CloseImportPanel
             | FocusTarget::RetryLibrary
+            | FocusTarget::Preview(_)
             | FocusTarget::BackToLibrary => None,
         }
     }
@@ -198,5 +200,39 @@ mod tests {
             UiEffect::None
         );
         assert!(state.sidebar_visible());
+    }
+
+    #[test]
+    fn preview_focus_returns_to_the_selected_catalog_card_on_escape() {
+        let photo_id = rusttable_core::PhotoId::new(1).expect("test photo ID is non-zero");
+        let workspace = crate::PhotoWorkspaceViewModel::new(
+            vec![crate::PhotoCardViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                None,
+            )],
+            vec![crate::PhotoDetailViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut state = UiState::with_photo_workspace(workspace);
+
+        assert_eq!(
+            state.handle(UiMessage::Navigate(crate::NavigationIntent::ShowPhoto(
+                photo_id
+            ),)),
+            UiEffect::None
+        );
+        assert!(state.is_focused(crate::FocusTarget::Preview(photo_id)));
+
+        assert_eq!(
+            state.handle(UiMessage::Input(crate::InputIntent::Escape)),
+            UiEffect::None
+        );
+        assert_eq!(state.route(), crate::WorkspaceRoute::Library);
+        assert!(state.is_focused(crate::FocusTarget::PhotoCard(photo_id)));
     }
 }

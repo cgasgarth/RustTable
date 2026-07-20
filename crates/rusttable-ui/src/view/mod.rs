@@ -223,11 +223,17 @@ fn detail_content(state: &UiState, photo_id: rusttable_core::PhotoId) -> Element
         .into();
     };
 
-    detail_view(detail, back)
+    let preview = action_button(
+        selected_preview_content(detail.selected_preview()),
+        UiMessage::Navigate(NavigationIntent::ShowLibrary),
+        state.is_focused(FocusTarget::Preview(detail.id())),
+    );
+    detail_view(detail, preview, back)
 }
 
 fn detail_view<'a>(
     detail: &'a PhotoDetailViewModel,
+    preview: Element<'a, UiMessage>,
     back: Element<'a, UiMessage>,
 ) -> Element<'a, UiMessage> {
     let facts = column(detail.facts().map(|fact| {
@@ -240,7 +246,7 @@ fn detail_view<'a>(
     column![
         text("Photo detail"),
         text(detail.title().as_str()),
-        selected_preview_content(detail.selected_preview()),
+        preview,
         facts,
         back
     ]

@@ -26,6 +26,7 @@ pub enum FocusTarget {
     RemoveImportResult(u64),
     CloseImportPanel,
     RetryLibrary,
+    Preview(PhotoId),
     PhotoCard(PhotoId),
     BackToLibrary,
 }
@@ -157,7 +158,7 @@ impl InputState {
         match intent {
             NavigationIntent::ShowPhoto(photo_id) => {
                 self.origin = Some(photo_id);
-                self.focused = FocusTarget::BackToLibrary;
+                self.focused = FocusTarget::Preview(photo_id);
             }
             NavigationIntent::ShowLibrary => {
                 self.focused = self.library_return_target(library_state);
@@ -237,9 +238,10 @@ impl InputState {
             FocusTarget::CloseImportPanel => InputEffect::CloseImportPanel,
             FocusTarget::PhotoCard(photo_id) => {
                 self.origin = Some(photo_id);
-                self.focused = FocusTarget::BackToLibrary;
+                self.focused = FocusTarget::Preview(photo_id);
                 InputEffect::Navigate(NavigationIntent::ShowPhoto(photo_id))
             }
+            FocusTarget::Preview(_) => InputEffect::None,
             FocusTarget::BackToLibrary => {
                 self.focused = self.library_return_target(library_state);
                 self.origin = None;
@@ -326,7 +328,10 @@ pub fn focus_chain_with_import_panel(
                 chain.push(FocusTarget::CloseImportPanel);
             }
         }
-        WorkspaceRoute::PhotoDetail(_) => chain.push(FocusTarget::BackToLibrary),
+        WorkspaceRoute::PhotoDetail(photo_id) => {
+            chain.push(FocusTarget::Preview(photo_id));
+            chain.push(FocusTarget::BackToLibrary);
+        }
     }
     chain
 }
@@ -452,7 +457,10 @@ mod tests {
                 PhotoId::new(2).unwrap()
             ))
         );
-        assert_eq!(state.focused(), FocusTarget::BackToLibrary);
+        assert_eq!(
+            state.focused(),
+            FocusTarget::Preview(PhotoId::new(2).unwrap())
+        );
         assert_eq!(
             state.apply(InputIntent::Escape, true, detail, &model),
             InputEffect::Navigate(crate::navigation::NavigationIntent::ShowLibrary)
@@ -460,6 +468,26 @@ mod tests {
         assert_eq!(
             state.focused(),
             FocusTarget::PhotoCard(PhotoId::new(2).unwrap())
+        );
+    }
+
+    #[test]
+    fn detail_focus_chain_places_preview_before_back_control() {
+        let model = workspace();
+        let photo_id = PhotoId::new(2).unwrap();
+
+        assert_eq!(
+            focus_chain(
+                true,
+                crate::navigation::WorkspaceRoute::PhotoDetail(photo_id),
+                &model,
+            ),
+            vec![
+                FocusTarget::SidebarToggle,
+                FocusTarget::Library,
+                FocusTarget::Preview(photo_id),
+                FocusTarget::BackToLibrary,
+            ]
         );
     }
 
