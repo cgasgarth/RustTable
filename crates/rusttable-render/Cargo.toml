@@ -11,6 +11,7 @@ rusttable-color.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-processing.workspace = true
+sha2.workspace = true
 
 [lints]
 workspace = true

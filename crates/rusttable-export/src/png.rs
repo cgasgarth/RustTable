@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Controls whether a PNG export may replace an existing destination.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CollisionPolicy {
     /// Publish only if the destination does not already exist.
     CreateNew,

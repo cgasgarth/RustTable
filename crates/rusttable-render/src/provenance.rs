@@ -3,6 +3,7 @@ use std::fmt;
 use rusttable_core::{AssetId, ByteLength, ContentHash, Edit, PhotoId};
 use rusttable_image::{ColorEncoding, ImageDimensions, ImageProbe};
 use rusttable_processing::GamutClipReport;
+use sha2::{Digest, Sha256};
 
 use crate::{RenderError, RenderPlan, RenderProvenance, SourceColorDecision, SourceColorPolicy};
 
@@ -242,6 +243,28 @@ impl RenderReceipt {
     #[must_use]
     pub const fn output_encoding(&self) -> ColorEncoding {
         self.output_encoding
+    }
+
+    /// Returns the stable receipt representation used by export artifacts.
+    #[must_use]
+    pub fn canonical_encoding(&self) -> String {
+        format!(
+            "render-receipt-v1\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\n",
+            self.context.source,
+            self.context.edit,
+            self.context.policy,
+            self.context.plan,
+            self.source_color_decision,
+            self.render_provenance,
+            self.clipping,
+            self.output_dimensions,
+            self.output_encoding,
+        )
+    }
+
+    #[must_use]
+    pub fn identity_hash(&self) -> [u8; 32] {
+        Sha256::digest(self.canonical_encoding().as_bytes()).into()
     }
 }
 

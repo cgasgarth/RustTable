@@ -2758,6 +2758,7 @@ dependencies = [
  "rusttable-core",
  "rusttable-image",
  "rusttable-image-io",
+ "rusttable-render",
  "sha2",
 ]
 
@@ -2877,6 +2878,7 @@ dependencies = [
  "rusttable-color",
  "rusttable-core",
  "serde",
+ "serde_json",
  "sha2",
 ]
 
@@ -2888,6 +2890,7 @@ dependencies = [
  "rusttable-core",
  "rusttable-image",
  "rusttable-processing",
+ "sha2",
 ]
 
 [[package]]
@@ -4334,6 +4337,7 @@ dependencies = [
  "rusttable-catalog-store",
  "rusttable-color",
  "rusttable-core",
+ "rusttable-export",
  "rusttable-gpu",
  "rusttable-image",
  "rusttable-image-io",
@@ -4344,6 +4348,7 @@ dependencies = [
  "rusttable-processing",
  "rusttable-render",
  "rusttable-testkit",
+ "serde",
  "serde_json",
  "sha2",
  "toml 0.9.12+spec-1.1.0",

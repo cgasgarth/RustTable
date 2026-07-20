@@ -1,0 +1,1861 @@
+{
+  "schema": "rusttable.operation-capabilities.v1",
+  "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
+  "reference_version": "5.7.0",
+  "registry_hash": "6651e99a369c7487024dcdad1626e2434f233bfd50590dd7dd6a700c55a90987",
+  "entries": [
+    {
+      "identity": "darktable:agx:src/iop/agx.c:v7",
+      "compatibility_name": "agx",
+      "rust_id": null,
+      "reference_path": "src/iop/agx.c",
+      "descriptor_version": 7,
+      "parameter_versions": [
+        7
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 155,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:ashift:src/iop/ashift.c:v5",
+      "compatibility_name": "ashift",
+      "rust_id": null,
+      "reference_path": "src/iop/ashift.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 136,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:atrous:src/iop/atrous.c:v2",
+      "compatibility_name": "atrous",
+      "rust_id": null,
+      "reference_path": "src/iop/atrous.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 113,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:basecurve:src/iop/basecurve.c:v6",
+      "compatibility_name": "basecurve",
+      "rust_id": null,
+      "reference_path": "src/iop/basecurve.c",
+      "descriptor_version": 6,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 92,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:basicadj:src/iop/basicadj.c:v2",
+      "compatibility_name": "basicadj",
+      "rust_id": null,
+      "reference_path": "src/iop/basicadj.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 78,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:bilat:src/iop/bilat.c:v3",
+      "compatibility_name": "bilat",
+      "rust_id": null,
+      "reference_path": "src/iop/bilat.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 133,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:bilateral:src/iop/bilateral.cc:v1",
+      "compatibility_name": "bilateral",
+      "rust_id": null,
+      "reference_path": "src/iop/bilateral.cc",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 102,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:bloom:src/iop/bloom.c:v1",
+      "compatibility_name": "bloom",
+      "rust_id": null,
+      "reference_path": "src/iop/bloom.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 67,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:blurs:src/iop/blurs.c:v1",
+      "compatibility_name": "blurs",
+      "rust_id": null,
+      "reference_path": "src/iop/blurs.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 153,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:borders:src/iop/borders.c:v4",
+      "compatibility_name": "borders",
+      "rust_id": null,
+      "reference_path": "src/iop/borders.c",
+      "descriptor_version": 4,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 122,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:cacorrect:src/iop/cacorrect.c:v2",
+      "compatibility_name": "cacorrect",
+      "rust_id": null,
+      "reference_path": "src/iop/cacorrect.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 114,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:cacorrectrgb:src/iop/cacorrectrgb.c:v1",
+      "compatibility_name": "cacorrectrgb",
+      "rust_id": null,
+      "reference_path": "src/iop/cacorrectrgb.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 151,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:censorize:src/iop/censorize.c:v1",
+      "compatibility_name": "censorize",
+      "rust_id": null,
+      "reference_path": "src/iop/censorize.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 149,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:channelmixer:src/iop/channelmixer.c:v2",
+      "compatibility_name": "channelmixer",
+      "rust_id": null,
+      "reference_path": "src/iop/channelmixer.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 106,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:channelmixerrgb:src/iop/channelmixerrgb.c:v3",
+      "compatibility_name": "channelmixerrgb",
+      "rust_id": null,
+      "reference_path": "src/iop/channelmixerrgb.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 148,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:clahe:src/iop/clahe.c:v1",
+      "compatibility_name": "clahe",
+      "rust_id": null,
+      "reference_path": "src/iop/clahe.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 101,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:clipping:src/iop/clipping.c:v5",
+      "compatibility_name": "clipping",
+      "rust_id": null,
+      "reference_path": "src/iop/clipping.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 86,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colisa:src/iop/colisa.c:v1",
+      "compatibility_name": "colisa",
+      "rust_id": null,
+      "reference_path": "src/iop/colisa.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 74,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorbalance:src/iop/colorbalance.c:v3",
+      "compatibility_name": "colorbalance",
+      "rust_id": null,
+      "reference_path": "src/iop/colorbalance.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 82,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorbalancergb:src/iop/colorbalancergb.c:v5",
+      "compatibility_name": "colorbalancergb",
+      "rust_id": null,
+      "reference_path": "src/iop/colorbalancergb.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 150,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorchecker:src/iop/colorchecker.c:v2",
+      "compatibility_name": "colorchecker",
+      "rust_id": null,
+      "reference_path": "src/iop/colorchecker.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 85,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorcontrast:src/iop/colorcontrast.c:v2",
+      "compatibility_name": "colorcontrast",
+      "rust_id": null,
+      "reference_path": "src/iop/colorcontrast.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 124,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorcorrection:src/iop/colorcorrection.c:v1",
+      "compatibility_name": "colorcorrection",
+      "rust_id": null,
+      "reference_path": "src/iop/colorcorrection.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 77,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorequal:src/iop/colorequal.c:v4",
+      "compatibility_name": "colorequal",
+      "rust_id": null,
+      "reference_path": "src/iop/colorequal.c",
+      "descriptor_version": 4,
+      "parameter_versions": [
+        4
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 157,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorharmonizer:src/iop/colorharmonizer.c:v1",
+      "compatibility_name": "colorharmonizer",
+      "rust_id": null,
+      "reference_path": "src/iop/colorharmonizer.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 64,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorin:src/iop/colorin.c:v7",
+      "compatibility_name": "colorin",
+      "rust_id": null,
+      "reference_path": "src/iop/colorin.c",
+      "descriptor_version": 7,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 83,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorize:src/iop/colorize.c:v2",
+      "compatibility_name": "colorize",
+      "rust_id": null,
+      "reference_path": "src/iop/colorize.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 127,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colormapping:src/iop/colormapping.c:v1",
+      "compatibility_name": "colormapping",
+      "rust_id": null,
+      "reference_path": "src/iop/colormapping.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 105,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorout:src/iop/colorout.c:v5",
+      "compatibility_name": "colorout",
+      "rust_id": null,
+      "reference_path": "src/iop/colorout.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 84,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorreconstruct:src/iop/colorreconstruction.c:v3",
+      "compatibility_name": "colorreconstruct",
+      "rust_id": null,
+      "reference_path": "src/iop/colorreconstruction.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 71,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colortransfer:src/iop/colortransfer.c:v1",
+      "compatibility_name": "colortransfer",
+      "rust_id": null,
+      "reference_path": "src/iop/colortransfer.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 104,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:colorzones:src/iop/colorzones.c:v5",
+      "compatibility_name": "colorzones",
+      "rust_id": null,
+      "reference_path": "src/iop/colorzones.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 93,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:crop:src/iop/crop.c:v3",
+      "compatibility_name": "crop",
+      "rust_id": null,
+      "reference_path": "src/iop/crop.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 88,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:defringe:src/iop/defringe.c:v1",
+      "compatibility_name": "defringe",
+      "rust_id": null,
+      "reference_path": "src/iop/defringe.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 135,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:demosaic:src/iop/demosaic.c:v6",
+      "compatibility_name": "demosaic",
+      "rust_id": null,
+      "reference_path": "src/iop/demosaic.c",
+      "descriptor_version": 6,
+      "parameter_versions": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 110,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:denoiseprofile:src/iop/denoiseprofile.c:v12",
+      "compatibility_name": "denoiseprofile",
+      "rust_id": null,
+      "reference_path": "src/iop/denoiseprofile.c",
+      "descriptor_version": 12,
+      "parameter_versions": [
+        1,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 134,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:diffuse:src/iop/diffuse.c:v2",
+      "compatibility_name": "diffuse",
+      "rust_id": null,
+      "reference_path": "src/iop/diffuse.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 152,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:dither:src/iop/dither.c:v2",
+      "compatibility_name": "dither",
+      "rust_id": null,
+      "reference_path": "src/iop/dither.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 90,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:enlargecanvas:src/iop/enlargecanvas.c:v1",
+      "compatibility_name": "enlargecanvas",
+      "rust_id": null,
+      "reference_path": "src/iop/enlargecanvas.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 87,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:equalizer:src/iop/equalizer.c:v1",
+      "compatibility_name": "equalizer",
+      "rust_id": null,
+      "reference_path": "src/iop/equalizer.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 80,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:exposure:src/iop/exposure.c:v7",
+      "compatibility_name": "exposure",
+      "rust_id": "rusttable.exposure",
+      "reference_path": "src/iop/exposure.c",
+      "descriptor_version": 7,
+      "parameter_versions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 79,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "darktable:filmic:src/iop/filmic.c:v3",
+      "compatibility_name": "filmic",
+      "rust_id": null,
+      "reference_path": "src/iop/filmic.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 138,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:filmicrgb:src/iop/filmicrgb.c:v6",
+      "compatibility_name": "filmicrgb",
+      "rust_id": null,
+      "reference_path": "src/iop/filmicrgb.c",
+      "descriptor_version": 6,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 146,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:finalscale:src/iop/finalscale.c:v1",
+      "compatibility_name": "finalscale",
+      "rust_id": null,
+      "reference_path": "src/iop/finalscale.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 131,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:flip:src/iop/flip.c:v2",
+      "compatibility_name": "flip",
+      "rust_id": null,
+      "reference_path": "src/iop/flip.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 130,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:gamma:src/iop/gamma.c:v1",
+      "compatibility_name": "gamma",
+      "rust_id": null,
+      "reference_path": "src/iop/gamma.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 75,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:globaltonemap:src/iop/globaltonemap.c:v3",
+      "compatibility_name": "globaltonemap",
+      "rust_id": null,
+      "reference_path": "src/iop/globaltonemap.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 132,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:graduatednd:src/iop/graduatednd.c:v1",
+      "compatibility_name": "graduatednd",
+      "rust_id": null,
+      "reference_path": "src/iop/graduatednd.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 107,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:grain:src/iop/grain.c:v2",
+      "compatibility_name": "grain",
+      "rust_id": null,
+      "reference_path": "src/iop/grain.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 100,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:hazeremoval:src/iop/hazeremoval.c:v3",
+      "compatibility_name": "hazeremoval",
+      "rust_id": null,
+      "reference_path": "src/iop/hazeremoval.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 137,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:highlights:src/iop/highlights.c:v4",
+      "compatibility_name": "highlights",
+      "rust_id": null,
+      "reference_path": "src/iop/highlights.c",
+      "descriptor_version": 4,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 94,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:highpass:src/iop/highpass.c:v1",
+      "compatibility_name": "highpass",
+      "rust_id": null,
+      "reference_path": "src/iop/highpass.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 68,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:hotpixels:src/iop/hotpixels.c:v1",
+      "compatibility_name": "hotpixels",
+      "rust_id": null,
+      "reference_path": "src/iop/hotpixels.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 116,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:invert:src/iop/invert.c:v2",
+      "compatibility_name": "invert",
+      "rust_id": null,
+      "reference_path": "src/iop/invert.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 128,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:lens:src/iop/lens.cc:v10",
+      "compatibility_name": "lens",
+      "rust_id": null,
+      "reference_path": "src/iop/lens.cc",
+      "descriptor_version": 10,
+      "parameter_versions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 164,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:levels:src/iop/levels.c:v2",
+      "compatibility_name": "levels",
+      "rust_id": null,
+      "reference_path": "src/iop/levels.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 125,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:liquify:src/iop/liquify.c:v1",
+      "compatibility_name": "liquify",
+      "rust_id": null,
+      "reference_path": "src/iop/liquify.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 120,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:lowlight:src/iop/lowlight.c:v1",
+      "compatibility_name": "lowlight",
+      "rust_id": null,
+      "reference_path": "src/iop/lowlight.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 117,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:lowpass:src/iop/lowpass.c:v4",
+      "compatibility_name": "lowpass",
+      "rust_id": null,
+      "reference_path": "src/iop/lowpass.c",
+      "descriptor_version": 4,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 69,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:lut3d:src/iop/lut3d.c:v3",
+      "compatibility_name": "lut3d",
+      "rust_id": null,
+      "reference_path": "src/iop/lut3d.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 141,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:mask_manager:src/iop/mask_manager.c:v2",
+      "compatibility_name": "mask_manager",
+      "rust_id": null,
+      "reference_path": "src/iop/mask_manager.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 139,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:monochrome:src/iop/monochrome.c:v2",
+      "compatibility_name": "monochrome",
+      "rust_id": null,
+      "reference_path": "src/iop/monochrome.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 91,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:negadoctor:src/iop/negadoctor.c:v2",
+      "compatibility_name": "negadoctor",
+      "rust_id": null,
+      "reference_path": "src/iop/negadoctor.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 147,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:nlmeans:src/iop/nlmeans.c:v2",
+      "compatibility_name": "nlmeans",
+      "rust_id": null,
+      "reference_path": "src/iop/nlmeans.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 123,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:overexposed:src/iop/overexposed.c:v1",
+      "compatibility_name": "overexposed",
+      "rust_id": null,
+      "reference_path": "src/iop/overexposed.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 115,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:overlay:src/iop/overlay.c:v1",
+      "compatibility_name": "overlay",
+      "rust_id": null,
+      "reference_path": "src/iop/overlay.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 95,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:primaries:src/iop/primaries.c:v1",
+      "compatibility_name": "primaries",
+      "rust_id": null,
+      "reference_path": "src/iop/primaries.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 156,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:profile_gamma:src/iop/profile_gamma.c:v2",
+      "compatibility_name": "profile_gamma",
+      "rust_id": null,
+      "reference_path": "src/iop/profile_gamma.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 103,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rasterfile:src/iop/rasterfile.c:v1",
+      "compatibility_name": "rasterfile",
+      "rust_id": null,
+      "reference_path": "src/iop/rasterfile.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 158,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rawdenoise:src/iop/rawdenoise.c:v2",
+      "compatibility_name": "rawdenoise",
+      "rust_id": null,
+      "reference_path": "src/iop/rawdenoise.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 121,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rawoverexposed:src/iop/rawoverexposed.c:v1",
+      "compatibility_name": "rawoverexposed",
+      "rust_id": null,
+      "reference_path": "src/iop/rawoverexposed.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 96,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rawprepare:src/iop/rawprepare.c:v2",
+      "compatibility_name": "rawprepare",
+      "rust_id": null,
+      "reference_path": "src/iop/rawprepare.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 65,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:relight:src/iop/relight.c:v1",
+      "compatibility_name": "relight",
+      "rust_id": null,
+      "reference_path": "src/iop/relight.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 108,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:retouch:src/iop/retouch.c:v3",
+      "compatibility_name": "retouch",
+      "rust_id": null,
+      "reference_path": "src/iop/retouch.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 119,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rgbcurve:src/iop/rgbcurve.c:v1",
+      "compatibility_name": "rgbcurve",
+      "rust_id": null,
+      "reference_path": "src/iop/rgbcurve.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 81,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rgblevels:src/iop/rgblevels.c:v1",
+      "compatibility_name": "rgblevels",
+      "rust_id": null,
+      "reference_path": "src/iop/rgblevels.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 126,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:rotatepixels:src/iop/rotatepixels.c:v1",
+      "compatibility_name": "rotatepixels",
+      "rust_id": null,
+      "reference_path": "src/iop/rotatepixels.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 111,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:scalepixels:src/iop/scalepixels.c:v1",
+      "compatibility_name": "scalepixels",
+      "rust_id": null,
+      "reference_path": "src/iop/scalepixels.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 112,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:shadhi:src/iop/shadhi.c:v5",
+      "compatibility_name": "shadhi",
+      "rust_id": null,
+      "reference_path": "src/iop/shadhi.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 70,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:sharpen:src/iop/sharpen.c:v1",
+      "compatibility_name": "sharpen",
+      "rust_id": null,
+      "reference_path": "src/iop/sharpen.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 89,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:sigmoid:src/iop/sigmoid.c:v3",
+      "compatibility_name": "sigmoid",
+      "rust_id": null,
+      "reference_path": "src/iop/sigmoid.c",
+      "descriptor_version": 3,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 154,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:soften:src/iop/soften.c:v1",
+      "compatibility_name": "soften",
+      "rust_id": null,
+      "reference_path": "src/iop/soften.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 66,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:splittoning:src/iop/splittoning.c:v1",
+      "compatibility_name": "splittoning",
+      "rust_id": null,
+      "reference_path": "src/iop/splittoning.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 99,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:spots:src/iop/spots.c:v2",
+      "compatibility_name": "spots",
+      "rust_id": null,
+      "reference_path": "src/iop/spots.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 118,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:temperature:src/iop/temperature.c:v4",
+      "compatibility_name": "temperature",
+      "rust_id": null,
+      "reference_path": "src/iop/temperature.c",
+      "descriptor_version": 4,
+      "parameter_versions": [
+        2,
+        3,
+        4
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 76,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:tonecurve:src/iop/tonecurve.c:v5",
+      "compatibility_name": "tonecurve",
+      "rust_id": null,
+      "reference_path": "src/iop/tonecurve.c",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 73,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:toneequal:src/iop/toneequal.c:v2",
+      "compatibility_name": "toneequal",
+      "rust_id": null,
+      "reference_path": "src/iop/toneequal.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 145,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:tonemap:src/iop/tonemap.cc:v1",
+      "compatibility_name": "tonemap",
+      "rust_id": null,
+      "reference_path": "src/iop/tonemap.cc",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 72,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:velvia:src/iop/velvia.c:v2",
+      "compatibility_name": "velvia",
+      "rust_id": null,
+      "reference_path": "src/iop/velvia.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 97,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:vibrance:src/iop/vibrance.c:v2",
+      "compatibility_name": "vibrance",
+      "rust_id": null,
+      "reference_path": "src/iop/vibrance.c",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        2
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 129,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:vignette:src/iop/vignette.c:v4",
+      "compatibility_name": "vignette",
+      "rust_id": null,
+      "reference_path": "src/iop/vignette.c",
+      "descriptor_version": 4,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 98,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:watermark:src/iop/watermark.c:v7",
+      "compatibility_name": "watermark",
+      "rust_id": null,
+      "reference_path": "src/iop/watermark.c",
+      "descriptor_version": 7,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 161,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "darktable:zonesystem:src/iop/zonesystem.c:v1",
+      "compatibility_name": "zonesystem",
+      "rust_id": null,
+      "reference_path": "src/iop/zonesystem.c",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "",
+      "issue_sequence_id": 395,
+      "order": 109,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "reference operation is not yet registered in RustTable"
+    },
+    {
+      "identity": "rusttable.exposure",
+      "compatibility_name": "exposure",
+      "rust_id": "rusttable.exposure",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 0,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "rusttable.linear_offset",
+      "compatibility_name": "linear-offset",
+      "rust_id": "rusttable.linear_offset",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 1,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "rusttable.rgb_gain",
+      "compatibility_name": "rgbgain",
+      "rust_id": "rusttable.rgb_gain",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 2,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "Implemented",
+      "reason": null
+    }
+  ]
+}

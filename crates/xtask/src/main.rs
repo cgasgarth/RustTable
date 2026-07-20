@@ -6,6 +6,7 @@ mod codegen;
 mod color;
 mod configuration;
 mod dist;
+mod export_contract;
 mod fixtures;
 mod foundation;
 mod gpu;
@@ -110,6 +111,16 @@ enum Task {
         #[command(subcommand)]
         command: operations::OperationRegistryCommand,
     },
+    /// Generate or verify the complete operation capability closure.
+    OperationManifest {
+        #[arg(long)]
+        check: bool,
+    },
+    /// Generate or verify the canonical export request and artifact contract.
+    ExportContract {
+        #[arg(long)]
+        check: bool,
+    },
     /// Prepare immutable pixelpipe snapshots and receipts.
     Pixelpipe {
         #[command(subcommand)]
@@ -141,6 +152,8 @@ fn main() -> ExitCode {
         Task::OperationSchema { command } => operations::run_schema(&root, &command),
         Task::OperationStack { command } => operations::run_stack(&root, &command),
         Task::OperationRegistry { command } => operations::run_registry(&root, &command),
+        Task::OperationManifest { check } => operations::run_manifest(&root, check),
+        Task::ExportContract { check } => export_contract::run(&root, check),
         Task::Pixelpipe { command } => pixelpipe::run(&root, command),
         Task::Shaders { command } => shaders::run(&root, &command),
     };
@@ -197,6 +210,7 @@ mod tests {
             "operation-schema",
             "operation-stack",
             "operation-registry",
+            "operation-manifest",
             "pixelpipe",
             "shaders",
         ] {

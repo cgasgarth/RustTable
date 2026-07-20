@@ -8,7 +8,11 @@ use rusttable_core::{
 };
 use rusttable_processing::descriptor::{exposure_descriptor, rgb_gain_descriptor};
 use rusttable_processing::operation_stack::{OperationStackSnapshot, OperationStackTemplate};
-use rusttable_processing::{FiniteF32, LinearRgb, PipelineStepIndex, builtin_registry};
+use rusttable_processing::{
+    FiniteF32, LinearRgb, OperationClassification, PipelineStepIndex, RegistryClosure,
+    RegistryClosureEntry, builtin_registry,
+};
+use serde::Serialize;
 
 use crate::Result;
 
@@ -153,6 +157,128 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
             Ok(())
         }
     }
+}
+
+pub(crate) fn run_manifest(root: &Path, check: bool) -> Result {
+    let path = root.join("architecture/operation-capabilities.json");
+    let rendered = render_operation_capabilities(root)?;
+    if check {
+        let committed = fs::read_to_string(&path)
+            .map_err(|error| format!("operation manifest: read failed: {error}"))?;
+        if committed != rendered {
+            return Err(
+                "operation manifest is stale; run cargo xtask operation-manifest generate"
+                    .to_owned(),
+            );
+        }
+        eprintln!("operation manifest closure verified: {}", path.display());
+    } else {
+        fs::write(&path, rendered)
+            .map_err(|error| format!("operation manifest: write failed: {error}"))?;
+        eprintln!("operation manifest closure generated: {}", path.display());
+    }
+    Ok(())
+}
+
+pub(crate) fn verify_operation_manifest(root: &Path) -> Result {
+    run_manifest(root, true)
+}
+
+#[derive(Debug, Serialize)]
+struct OperationCapabilitiesArtifact {
+    schema: &'static str,
+    reference_commit: String,
+    reference_version: String,
+    registry_hash: String,
+    entries: Vec<RegistryClosureEntry>,
+}
+
+fn render_operation_capabilities(root: &Path) -> Result<String> {
+    let manifest_path = root.join("architecture/darktable-operations.toml");
+    let source = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("operation manifest: read failed: {error}"))?;
+    let manifest = rusttable_parity::parse_operation_manifest(&source)
+        .map_err(|error| format!("operation manifest: parse failed: {error}"))?;
+    rusttable_parity::validate_operation_manifest(&manifest)
+        .map_err(|error| format!("operation manifest: validation failed: {error}"))?;
+
+    let registry = builtin_registry();
+    let registry_closure = RegistryClosure::from_registry(registry)
+        .map_err(|error| format!("operation manifest: registry failed: {error}"))?;
+    let mut entries = registry_closure.entries.clone();
+    for operation in &manifest.operations {
+        let identity = format!(
+            "darktable:{}:{}:v{}",
+            operation.name, operation.reference_path, operation.module_version
+        );
+        let registered = registry
+            .definitions()
+            .iter()
+            .find(|definition| definition.descriptor().id.compatibility_name == operation.name);
+        let (rust_id, status, implementation_crate, cpu_supported, gpu_supported, reason) =
+            match registered {
+                Some(definition) => (
+                    Some(definition.descriptor().id.rust_id.clone()),
+                    OperationClassification::Implemented,
+                    "rusttable-processing".to_owned(),
+                    definition.cpu().is_some(),
+                    definition.gpu().is_some(),
+                    None,
+                ),
+                None => (
+                    None,
+                    OperationClassification::IntentionallyUnsupportedBlocking,
+                    String::new(),
+                    operation.cpu_implementation != "none",
+                    !operation.opencl_kernels.is_empty(),
+                    Some("reference operation is not yet registered in RustTable".to_owned()),
+                ),
+            };
+        let descriptor_version = u16::try_from(operation.module_version)
+            .map_err(|_| format!("operation manifest: version is too large: {identity}"))?;
+        let parameter_versions = if operation.parameter_versions.is_empty() {
+            vec![descriptor_version]
+        } else {
+            operation
+                .parameter_versions
+                .iter()
+                .map(|version| {
+                    u16::try_from(version.version).map_err(|_| {
+                        format!("operation manifest: parameter version is too large: {identity}")
+                    })
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        entries.push(RegistryClosureEntry {
+            identity,
+            compatibility_name: operation.name.clone(),
+            rust_id,
+            reference_path: operation.reference_path.clone(),
+            descriptor_version,
+            parameter_versions,
+            implementation_crate,
+            issue_sequence_id: 395,
+            order: operation.default_order,
+            cpu_supported,
+            gpu_supported,
+            cpu_fallback: cpu_supported,
+            status,
+            reason,
+        });
+    }
+    let closure = RegistryClosure::new(entries)
+        .map_err(|error| format!("operation manifest: closure failed: {error}"))?;
+    let artifact = OperationCapabilitiesArtifact {
+        schema: rusttable_processing::REGISTRY_CLOSURE_SCHEMA,
+        reference_commit: manifest.reference.source_commit,
+        reference_version: manifest.reference.build_version,
+        registry_hash: closure.identity_hash().to_owned(),
+        entries: closure.entries,
+    };
+    let mut rendered = serde_json::to_string_pretty(&artifact)
+        .map_err(|error| format!("operation manifest: serialization failed: {error}"))?;
+    rendered.push('\n');
+    Ok(rendered)
 }
 
 fn execute_builtin_smoke() -> Result {

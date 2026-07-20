@@ -8,6 +8,7 @@ mod id;
 mod metadata;
 mod model;
 pub mod platform;
+mod render;
 pub mod template;
 mod value;
 
@@ -22,6 +23,7 @@ pub use metadata::{
     MetadataTextError, Orientation, OrientationError, PositiveRational, PositiveRationalError,
 };
 pub use model::{Asset, AssetRole, ByteLength, ContentHash, HashAlgorithm, Photo, PhotoBuildError};
+pub use render::{RenderSizeError, RenderSizeRequest};
 pub use value::{
     FiniteF64, FiniteF64Error, OperationOpacity, OperationOpacityError, Revision, RevisionOverflow,
 };

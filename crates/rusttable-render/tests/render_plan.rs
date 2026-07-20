@@ -1,3 +1,4 @@
+use rusttable_core::RenderSizeRequest;
 use rusttable_image::ImageDimensions;
 use rusttable_render::{PreviewBounds, RenderPlan, RenderSampling, RenderTarget};
 
@@ -11,6 +12,18 @@ fn preview_bounds_have_distinct_zero_axis_errors() {
         PreviewBounds::new(1, 0),
         Err(rusttable_render::PreviewBoundsError::ZeroHeight)
     ));
+}
+
+#[test]
+fn shared_render_size_request_drives_the_same_plan_used_by_export() {
+    let source = ImageDimensions::new(400, 200).expect("source");
+    let request = RenderSizeRequest::fit(100, 100).expect("request");
+    let plan = RenderPlan::for_source_with_size_request(source, request).expect("plan");
+    assert_eq!(
+        plan.output_dimensions(),
+        ImageDimensions::new(100, 50).unwrap()
+    );
+    assert_eq!(plan.sampling(), RenderSampling::CenterPoint);
 }
 
 #[test]
