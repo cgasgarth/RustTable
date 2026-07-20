@@ -3,7 +3,7 @@ commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 
 [[responsibility]]
 source = "src/common/image.h"
-rust = "rusttable-image::ImageDescriptor, Orientation, ColorEncoding, RawMosaic"
+rust = "rusttable-image::ImageDescriptor, Orientation, RawMosaic; rusttable-color::ColorEncoding"
 fields = ["dimensions", "orientation", "colorspace", "profile", "raw levels", "load status"]
 
 [[responsibility]]

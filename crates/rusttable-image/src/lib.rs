@@ -32,8 +32,7 @@ pub use output::{
     SUPPORTED_OUTPUT_FORMATS,
 };
 pub use pixel::{
-    AlphaMode, ByteOrder, ChannelLayout, ColorProfileRef, ColorProfileRefError, PixelFormat,
-    PixelFormatError, SampleType, StorageLayout,
+    AlphaMode, ByteOrder, ChannelLayout, PixelFormat, PixelFormatError, SampleType, StorageLayout,
 };
 pub use raw::{
     BlackWhiteLevels, BlackWhiteLevelsError, CfaColor, CfaDescriptor, CfaPattern, CfaPhase,

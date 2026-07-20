@@ -1,0 +1,110 @@
+schema = "rusttable.color-source-map.v1"
+issue = 257
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "profile-role-identities"
+upstream_path = "src/common/colorspaces.h"
+upstream_symbols = ["dt_colorspaces_color_profile_type_t"]
+rust_path = "crates/rusttable-color/src/space.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "profile-material-resolution"
+upstream_path = "src/common/colorspaces.c"
+upstream_symbols = ["dt_colorspaces_get_profile"]
+rust_path = "crates/rusttable-color/src/profile.rs"
+status = "deferred"
+deferred_issue = 535
+
+[[responsibility]]
+id = "scalar-conversions"
+upstream_path = "src/common/colorspaces_inline_conversions.h"
+upstream_symbols = ["dt_XYZ_to_Lab"]
+rust_path = "crates/rusttable-color/src/space.rs"
+status = "deferred"
+deferred_issue = 535
+
+[[responsibility]]
+id = "pipeline-profile-state"
+upstream_path = "src/common/iop_profile.c"
+upstream_symbols = ["dt_ioppr_get_profile_info"]
+rust_path = "crates/rusttable-color/src/transform.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "custom-primaries"
+upstream_path = "src/common/custom_primaries.h"
+upstream_symbols = ["dt_colorspaces_primaries_t"]
+rust_path = "crates/rusttable-color/src/space.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "matrix-math"
+upstream_path = "src/common/matrices.c"
+upstream_symbols = ["matrix multiplication", "matrix inversion"]
+rust_path = "crates/rusttable-color/src/matrix.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "input-output-contract"
+upstream_path = "src/iop/colorin.c"
+upstream_symbols = ["input color transform boundary"]
+rust_path = "crates/rusttable-image/src/image.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "display-export-contract"
+upstream_path = "src/iop/colorout.c"
+upstream_symbols = ["output color transform boundary"]
+rust_path = "crates/rusttable-color/src/planner.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "profile-discovery-adapter"
+upstream_path = "src/common/colorspaces.c"
+upstream_symbols = ["monitor profile discovery"]
+rust_path = "crates/rusttable-display-profile/src/profile.rs"
+status = "deferred"
+deferred_issue = 495
+
+[[responsibility]]
+id = "execution-adapter"
+upstream_path = "src/iop/colorin.c"
+upstream_symbols = ["profile execution"]
+rust_path = "crates/rusttable-processing/src/lib.rs"
+status = "deferred"
+deferred_issue = 535
+
+[[responsibility]]
+id = "pixelpipe-color-state"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbols = ["pixelpipe colorspace state"]
+rust_path = "crates/rusttable-pixelpipe/src/lib.rs"
+status = "deferred"
+deferred_issue = 535
+
+[[responsibility]]
+id = "decoder-color-boundary"
+upstream_path = "src/imageio/imageio_common.h"
+upstream_symbols = ["decoder color metadata"]
+rust_path = "crates/rusttable-image-io/src/lib.rs"
+status = "deferred"
+deferred_issue = 535
+
+[[responsibility]]
+id = "export-color-boundary"
+upstream_path = "src/iop/colorout.c"
+upstream_symbols = ["export color output"]
+rust_path = "crates/rusttable-export/src/lib.rs"
+status = "deferred"
+deferred_issue = 535
+
+[[responsibility]]
+id = "gpu-color-boundary"
+upstream_path = "src/common/opencl.c"
+upstream_symbols = ["GPU color transform execution"]
+rust_path = "crates/rusttable-gpu/src/lib.rs"
+status = "deferred"
+deferred_issue = 535

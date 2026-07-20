@@ -179,9 +179,10 @@ fn source_color_decision(encoding: ColorEncoding) -> Result<SourceColorDecision,
     match encoding {
         ColorEncoding::Srgb | ColorEncoding::LinearSrgb => Ok(SourceColorDecision::DeclaredSrgb),
         ColorEncoding::Unspecified => Ok(SourceColorDecision::AssumedSrgb),
-        ColorEncoding::DisplayP3 => {
+        ColorEncoding::DisplayP3D65 | ColorEncoding::LinearDisplayP3D65 => {
             Err(PreviewError::UnsupportedPixelpipeColor { actual: encoding })
         }
+        _ => Err(PreviewError::UnsupportedPixelpipeColor { actual: encoding }),
     }
 }
 

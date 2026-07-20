@@ -280,17 +280,21 @@ fn source_color_decision(
         (ColorEncoding::Srgb | ColorEncoding::LinearSrgb, _) => {
             Ok(SourceColorDecision::DeclaredSrgb)
         }
-        (ColorEncoding::DisplayP3, SourceColorPolicy::RequireDeclaredSrgb) => {
-            Err(RenderError::SourceColor { actual })
-        }
-        (ColorEncoding::DisplayP3, _) => Ok(SourceColorDecision::DeclaredDisplayP3),
-        (ColorEncoding::Unspecified, SourceColorPolicy::AssumeSrgbWhenUnspecified) => {
-            Ok(SourceColorDecision::AssumedSrgb)
-        }
         (
+            ColorEncoding::DisplayP3D65 | ColorEncoding::LinearDisplayP3D65,
+            SourceColorPolicy::RequireDeclaredSrgb,
+        )
+        | (
             ColorEncoding::Unspecified,
             SourceColorPolicy::RequireDeclaredSrgb | SourceColorPolicy::RequireDeclaredSupported,
         ) => Err(RenderError::SourceColor { actual }),
+        (ColorEncoding::DisplayP3D65 | ColorEncoding::LinearDisplayP3D65, _) => {
+            Ok(SourceColorDecision::DeclaredDisplayP3)
+        }
+        (ColorEncoding::Unspecified, SourceColorPolicy::AssumeSrgbWhenUnspecified) => {
+            Ok(SourceColorDecision::AssumedSrgb)
+        }
+        _ => Err(RenderError::SourceColor { actual }),
     }
 }
 
@@ -311,7 +315,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
     .expect("decoded pixel count fits the host allocation");
     let mut alpha = Vec::with_capacity(pixel_count);
     match input.color_encoding() {
-        ColorEncoding::DisplayP3 => {
+        ColorEncoding::DisplayP3D65 | ColorEncoding::LinearDisplayP3D65 => {
             let mut source_pixels = Vec::with_capacity(pixel_count);
             for pixel in input.pixels().as_chunks::<4>().0 {
                 source_pixels.push(DisplayP3Rgb::new(
@@ -353,6 +357,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
                 alpha,
             )
         }
+        _ => unreachable!("source_image is called only after source-color validation"),
     }
 }
 
