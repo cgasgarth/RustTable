@@ -1,0 +1,65 @@
+schema = "rusttable.pixelpipe-tiling-source-map.v1"
+issue = 268
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "tiling-requirements"
+upstream_path = "src/develop/tiling.h"
+upstream_symbol = "dt_develop_tiling_t"
+rust_path = "crates/rusttable-pixelpipe/src/tiling_requirements.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "candidate-search"
+upstream_path = "src/develop/tiling.c"
+upstream_symbol = "_maximum_number_tiles;_align_down"
+rust_path = "crates/rusttable-pixelpipe/src/tiling_planner.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "roi-overlap-grid"
+upstream_path = "src/develop/tiling.c"
+upstream_symbol = "_default_process_tiling_roi"
+rust_path = "crates/rusttable-pixelpipe/src/tiling_planner/helpers.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "scratch-requirement"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "tiling_callback"
+rust_path = "crates/rusttable-pixelpipe/src/tiling_requirements.rs"
+status = "accounted"
+
+[[responsibility]]
+id = "backend-device-limits"
+upstream_path = "src/common/opencl.c"
+upstream_symbol = "dt_opencl_get_device_info"
+rust_path = "crates/rusttable-pixelpipe/src/tiling_planner.rs"
+status = "delegated"
+delegated_issue = 290
+
+[[responsibility]]
+id = "pipeline-choice"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_dev_pixelpipe_process"
+rust_path = "crates/rusttable-pixelpipe/src/tiling_planner.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.exposure"
+descriptor_issue = 263
+registry_issue = 265
+owner = "crates/rusttable-processing/src/descriptor.rs"
+
+[[operation]]
+rust_id = "rusttable.linear_offset"
+descriptor_issue = 263
+registry_issue = 265
+owner = "crates/rusttable-processing/src/descriptor.rs"
+
+[[operation]]
+rust_id = "rusttable.rgb_gain"
+descriptor_issue = 263
+registry_issue = 265
+owner = "crates/rusttable-processing/src/descriptor.rs"

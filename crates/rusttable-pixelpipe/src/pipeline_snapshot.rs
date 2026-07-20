@@ -4,6 +4,7 @@ use rusttable_color::{ColorEncoding, Precision};
 use rusttable_image::Roi;
 use rusttable_processing::OperationStackSnapshot;
 
+use crate::RoiPlanIdentity;
 use crate::pipeline_contracts::{
     BlendStatus, ColorIdentity, ContractError, ImplementationIdentity, MaskStatus,
     PipelineGeneration, PipelineInput, PipelineMode, PipelinePurpose, PipelineQuality,
@@ -315,6 +316,21 @@ impl PipelineSnapshot {
             components.push(SnapshotDiffComponent::Implementation);
         }
         SnapshotDiff::new(components)
+    }
+
+    /// Adds an attributable ROI component to the ordinary snapshot diff.
+    #[must_use]
+    pub fn diff_with_roi(
+        &self,
+        other: &Self,
+        left: RoiPlanIdentity,
+        right: RoiPlanIdentity,
+    ) -> SnapshotDiff {
+        let mut diff = self.diff(other);
+        if left != right && !diff.components().contains(&SnapshotDiffComponent::Roi) {
+            diff.push(SnapshotDiffComponent::Roi);
+        }
+        diff
     }
 
     /// Publication is valid only for the generation that produced the output.

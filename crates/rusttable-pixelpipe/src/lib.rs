@@ -12,8 +12,13 @@ mod pipeline_snapshot;
 mod preparation;
 pub mod purpose;
 mod receipt;
+mod roi;
 mod snapshot;
 mod tile;
+mod tile_geometry;
+mod tiling_models;
+mod tiling_planner;
+mod tiling_requirements;
 
 pub use cache::{
     Cache, CacheConfig, CacheError, CacheEvent, CacheLease, CacheMetrics, CacheReceipt, CacheScope,
@@ -27,6 +32,7 @@ pub use cache_value::{
     AnalysisValue, CacheValue, CancellationToken, CreationCost, PlanValue, ValueDescriptor,
     ValueKind,
 };
+
 pub use cpu::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
     CpuTileAssemblyError,
@@ -52,6 +58,12 @@ pub use preparation::{
 pub use receipt::{
     CpuImplementation, CpuNodeReceipt, CpuPipelineReceipt, CpuPipelineReceiptError, PixelIdentity,
 };
+pub use roi::{
+    DistortionBinding, DistortionError, DistortionMapping, FillValue, NodeRoiContract,
+    ROI_SCHEMA_VERSION, RationalScale, RoiBackwardStep, RoiDescriptor, RoiDescriptorIdentity,
+    RoiError, RoiForwardStep, RoiNode, RoiPlan, RoiPlanIdentity, RoiPlanner, RoiPlanningError,
+    RoiRect, RoiRequest, RoiRequestPolicy, RoiSupport,
+};
 pub use rusttable_image::{
     AcquireOptions, AllocationClass, BufferAlignment, BufferLease, BufferRead, BufferRequest,
     BufferUsage, BufferWrite, CancellationToken as HostPoolCancellationToken, HostBufferPool,
@@ -61,6 +73,21 @@ pub use rusttable_image::{
 };
 pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};
+pub use tile_geometry::{
+    EdgeOverlap, GeometryError, RoiChain, RoiStage, ScaleRatio, TileAlignment, TileRect,
+};
+pub use tiling_models::{
+    DominantResource, EstimateComponent, EstimateFailure, MemoryEstimate, PlannedTile,
+    PlannedTileGrid, TileInputRoi, TilePlan, TilePlanIdentity, TilePlanReceipt,
+};
+pub use tiling_planner::{
+    MemoryBudget, TileDeviceLimits, TilePlanError, TilePlanRequest, TilePlanner,
+};
+pub use tiling_requirements::{
+    AreaSource, BackendRequirement, BufferRequirement, BytesPerPixel, EstimateError,
+    FullFrameRequirements, MemoryFactor, NodeRequirement, NodeRequirements, ResourceKind,
+    TileBackend, TileDimensions,
+};
 
 /// Compatibility name for callers not yet migrated to explicit snapshots.
 pub type CpuPixelpipeRequest = CpuPixelpipeSnapshot;
