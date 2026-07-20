@@ -1,6 +1,8 @@
 # RustTable
 
-RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, using [Iced](https://iced.rs/) for the desktop UI. This repository contains the Rust product; the original project is kept in a separate read-only clone for behavioral and format reference.
+RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, using GTK4 through [gtk-rs](https://github.com/gtk-rs/gtk4-rs) for the desktop UI. This repository contains the Rust product; the original project is kept in a separate read-only clone for behavioral, layout, and format reference.
+
+The migration is shift-in-place by responsibility: Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` behavior guides RustTable's GTK4 module structure and workflows. RustTable ports that behavior in Rust; it does not retain, call, or ship Darktable C/C++/OpenCL code.
 
 ## Setup
 

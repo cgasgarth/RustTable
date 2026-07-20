@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 directories.workspace = true
+gtk4.workspace = true
 rfd.workspace = true
 rusttable-catalog.workspace = true
 rusttable-catalog-store.workspace = true
