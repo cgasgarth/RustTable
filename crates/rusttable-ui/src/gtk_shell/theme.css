@@ -199,6 +199,15 @@ button:hover,
   color: {{foreground}};
 }
 
+#lighttable-grid {
+  padding: 6px;
+}
+
+#lighttable-grid > flowboxchild {
+  margin: 3px;
+  padding: 0;
+}
+
 .dt_empty_state {
   min-width: 38em;
   min-height: 14em;
@@ -291,11 +300,16 @@ expander:hover {
   padding: 0 1px;
 }
 
-#lighttable-rating-0 { color: #d94b45ff; }
-#lighttable-rating-1 { color: #d0a933ff; }
-#lighttable-rating-2 { color: #4b9f58ff; }
-#lighttable-rating-3 { color: #4c7fb4ff; }
-#lighttable-rating-4 { color: #8f5aa8ff; }
+#lighttable-color-0, .dt_color_red { color: #d94b45ff; }
+#lighttable-color-1, .dt_color_yellow { color: #d0a933ff; }
+#lighttable-color-2, .dt_color_green { color: #4b9f58ff; }
+#lighttable-color-3, .dt_color_blue { color: #4c7fb4ff; }
+#lighttable-color-4, .dt_color_purple { color: #8f5aa8ff; }
+
+.dt_filter_button.dt_selected {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+}
 
 .dt_header_icon {
   min-width: 22px;
@@ -344,6 +358,22 @@ spinbutton,
   min-height: 5em;
   background-color: {{thumbnail_background}};
   color: {{foreground}};
+}
+
+#photo-thumbnail {
+  min-width: 220px;
+  min-height: 146px;
+}
+
+#photo-organization {
+  min-height: 14px;
+  padding: 0 2px;
+  font-size: 10px;
+}
+
+#bottom #photo-thumbnail {
+  min-width: 92px;
+  min-height: 62px;
 }
 
 .dt_photo_card:hover,

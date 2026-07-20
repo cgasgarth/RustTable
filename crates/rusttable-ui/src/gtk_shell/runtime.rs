@@ -18,9 +18,10 @@ use super::thumbnail::{ThumbnailPair, ThumbnailSurface};
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomView, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LIGHTTABLE_RIGHT_MODULES, LibraryBrowserModel, LighttableContentState, ModuleControlKind,
-    ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, THUMBNAIL_METRICS,
-    ThemeRole, WorkspaceRole, apply_theme_role,
+    LIGHTTABLE_RIGHT_MODULES, LibraryBrowserModel, LighttableContentState, LighttableToolbar,
+    LighttableToolbarAction, LighttableToolbarState, ModuleControlKind, ModulePanelViewModel,
+    PanelSlot, PhotoPreview, ShellLayout, ShellRegion, THUMBNAIL_METRICS, ThemeRole, WorkspaceRole,
+    apply_theme_role,
 };
 use super::{header::HeaderChrome, left_panel::LeftPanel};
 use crate::input_mapping::InputMappingEditor;
@@ -43,6 +44,7 @@ pub struct GtkShell {
     right_modules: gtk4::Box,
     import_buttons: Vec<gtk4::Button>,
     collection_controls: CollectionControls,
+    lighttable_toolbar: LighttableToolbar,
     input_mapping_editor: InputMappingEditor,
     i18n: Rc<RefCell<I18n>>,
     display_profile_banner: DisplayProfileBanner,
@@ -96,6 +98,7 @@ impl GtkShell {
         let input_mapping_editor = InputMappingEditor::new(application);
         let display_profile_banner = DisplayProfileBanner::new();
         let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
+        let lighttable_toolbar = header.lighttable_toolbar().clone();
         header.preferences_button().connect_clicked({
             let editor = input_mapping_editor.clone();
             move |_| editor.present()
@@ -143,6 +146,7 @@ impl GtkShell {
                 lighttable_left_panel.import_button().clone(),
             ],
             collection_controls,
+            lighttable_toolbar,
             input_mapping_editor,
             i18n: Rc::clone(&i18n),
             display_profile_banner,
@@ -235,7 +239,29 @@ impl GtkShell {
     /// Applies a collection projection to both the controls and the lighttable.
     pub fn set_collection_filter_state(&self, state: &CollectionFilterState) {
         self.collection_controls.set_state(state.controls());
+        self.lighttable_toolbar.set_state(state.toolbar());
         self.refresh_lighttable(state.matching_photo_ids());
+    }
+
+    /// Projects the typed lighttable toolbar state into the persistent header row.
+    pub fn set_lighttable_toolbar_state(&self, state: &LighttableToolbarState) {
+        self.lighttable_toolbar.set_state(state);
+    }
+
+    /// Connects the persistent header controls to the application collection controller.
+    pub fn connect_lighttable_toolbar_action<F>(&self, callback: F)
+    where
+        F: Fn(LighttableToolbarAction) -> CollectionFilterState + 'static,
+    {
+        let refresh = CollectionRefreshHandle {
+            controls: self.collection_controls.clone(),
+            toolbar: self.lighttable_toolbar.clone(),
+            render: self.workspace_render_handle(),
+            lighttable_workspace: Rc::clone(&self.lighttable_workspace),
+        };
+        self.lighttable_toolbar.connect_action(move |action| {
+            refresh.apply(&callback(action));
+        });
     }
 
     /// Connects a typed collection action to an application-owned rule controller.
@@ -248,6 +274,7 @@ impl GtkShell {
     {
         let refresh = CollectionRefreshHandle {
             controls: self.collection_controls.clone(),
+            toolbar: self.lighttable_toolbar.clone(),
             render: self.workspace_render_handle(),
             lighttable_workspace: Rc::clone(&self.lighttable_workspace),
         };
@@ -373,6 +400,7 @@ impl GtkShell {
 #[derive(Clone)]
 struct CollectionRefreshHandle {
     controls: CollectionControls,
+    toolbar: LighttableToolbar,
     render: WorkspaceRenderHandle,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
 }
@@ -380,6 +408,7 @@ struct CollectionRefreshHandle {
 impl CollectionRefreshHandle {
     fn apply(&self, state: &CollectionFilterState) {
         self.controls.set_state(state.controls());
+        self.toolbar.set_state(state.toolbar());
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
             return;

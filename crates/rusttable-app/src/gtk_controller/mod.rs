@@ -148,8 +148,8 @@ impl GtkCatalogController {
         };
         let repository = RedbImportRepository::open(catalog.location().catalog_path()).ok()?;
         let records = repository.list().ok()?;
-        Some(CollectionController::with_locale(
-            records.iter().map(collection::collection_item),
+        Some(CollectionController::from_import_records_with_locale(
+            records.iter(),
             locale,
         ))
     }

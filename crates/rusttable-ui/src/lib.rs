@@ -14,9 +14,10 @@ pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    DarktableTheme, ExportAction, ExportPanel, ExportSize, ExposurePanel, GtkShell, ShellLayout,
-    ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css,
-    install_darktable_theme,
+    DarktableTheme, ExportAction, ExportPanel, ExportSize, ExposurePanel, GtkShell,
+    LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableSort,
+    LighttableToolbar, LighttableToolbarAction, LighttableToolbarState, ShellLayout, ShellRegion,
+    ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css, install_darktable_theme,
 };
 pub use import::{ImportAction, ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use input::GtkInputAdapter;

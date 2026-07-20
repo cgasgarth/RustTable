@@ -1,5 +1,6 @@
 mod catalog_preview;
 mod catalog_preview_smoke;
+mod collection_bridge;
 mod preview_lifecycle;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
@@ -9,7 +10,7 @@ pub use catalog_preview_smoke::{
     CatalogPreviewSmokeService, CatalogPreviewSmokeStage, CatalogPreviewSmokeStatus,
 };
 
-use crate::gtk_controller::{CollectionController, CollectionSnapshot, GtkCatalogController};
+use crate::gtk_controller::{CollectionController, GtkCatalogController};
 use crate::gtk_export::{
     ExportCancellation, ExportCollisionSelection, ExportCompletion, ExportRequest, ExportRunError,
     ExportSettings, ExportSizeSelection, ExportStage, ExportStatus, run_with_progress,
@@ -33,10 +34,7 @@ use rusttable_input::{
     ActionId, ActionInputService, ActionMapping, ActionMode, ActionPhase, Binding, InputSource,
     KeyCode, Modifiers,
 };
-use rusttable_ui::{
-    CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
-    ExportAction, ExportSize as UiExportSize, ImportAction,
-};
+use rusttable_ui::{ExportAction, ExportSize as UiExportSize, ImportAction};
 use std::cell::RefCell;
 use std::fmt;
 use std::path::Path;
@@ -45,6 +43,10 @@ use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+use collection_bridge::{
+    apply_collection_action, apply_lighttable_toolbar_action, collection_filter_state,
+    empty_collection_filter_state,
+};
 use preview_lifecycle::{PreviewLifecycle, PreviewSelectionToken};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
@@ -211,6 +213,15 @@ fn activate_application(
             return empty_collection_filter_state();
         };
         apply_collection_action(controller, action);
+        collection_filter_state(&controller.snapshot())
+    });
+    let toolbar_for_actions = Rc::clone(active_collection);
+    shell.connect_lighttable_toolbar_action(move |action| {
+        let mut controller = toolbar_for_actions.borrow_mut();
+        let Some(controller) = controller.as_mut() else {
+            return empty_collection_filter_state();
+        };
+        apply_lighttable_toolbar_action(controller, action);
         collection_filter_state(&controller.snapshot())
     });
     let import_shell = shell.clone();
@@ -829,29 +840,6 @@ fn export_request(
     ))
 }
 
-fn apply_collection_action(controller: &mut CollectionController, action: CollectionControlAction) {
-    match action {
-        CollectionControlAction::SetProperty(property) => controller.set_property(property),
-        CollectionControlAction::SetSearchText(search_text) => {
-            controller.set_search_text(search_text);
-        }
-        CollectionControlAction::Clear => controller.clear(),
-    }
-}
-
-fn collection_filter_state(snapshot: &CollectionSnapshot) -> CollectionFilterState {
-    let controls = CollectionControlState::new(snapshot.property(), snapshot.total_count())
-        .with_results(snapshot.search_text(), snapshot.result_count());
-    CollectionFilterState::new(controls, snapshot.matching_photo_ids().collect())
-}
-
-fn empty_collection_filter_state() -> CollectionFilterState {
-    CollectionFilterState::new(
-        CollectionControlState::new(CollectionProperty::Filename, 0),
-        Vec::new(),
-    )
-}
-
 struct PreviewResult {
     token: PreviewSelectionToken,
     state: GtkPreviewState,
@@ -933,12 +921,9 @@ fn install_preview_state(preview: &rusttable_ui::gtk_shell::PhotoPreview, state:
 #[cfg(test)]
 mod tests {
     use rusttable_core::PhotoId;
-    use rusttable_ui::{CollectionItem, CollectionProperty};
+    use rusttable_ui::{CollectionControlAction, CollectionItem, CollectionProperty};
 
-    use super::{
-        CollectionControlAction, CollectionController, apply_collection_action,
-        collection_filter_state,
-    };
+    use super::{CollectionController, apply_collection_action, collection_filter_state};
 
     fn id(value: u128) -> PhotoId {
         PhotoId::new(value).expect("non-zero test photo identifier")
