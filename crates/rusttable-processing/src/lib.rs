@@ -17,6 +17,7 @@
 #![doc = "```"]
 
 mod color;
+pub mod demosaic;
 pub mod descriptor;
 mod evaluate;
 mod exposure;
@@ -26,6 +27,7 @@ pub mod operation_stack;
 pub mod operations;
 mod output;
 mod pipeline;
+pub mod rawprepare;
 pub mod registry;
 mod registry_closure;
 mod registry_color;
@@ -39,6 +41,7 @@ pub use color::{
     SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingRgbImage,
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
+pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
     color_reconstruction_descriptor, colorin_descriptor, exposure_descriptor,
     highlights_descriptor, linear_offset_descriptor, primaries_descriptor, rgb_gain_descriptor,
@@ -60,6 +63,7 @@ pub use output::{
     encode_linear_srgb,
 };
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
+pub use rawprepare::{NormalizedRaw, RawPrepareConfig, RawPrepareError, RawPreparePlan};
 pub use registry::{
     BUILTIN_OPERATIONS, CpuFactory, DefinitionAvailability, DeviceCapabilitySnapshot,
     ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
