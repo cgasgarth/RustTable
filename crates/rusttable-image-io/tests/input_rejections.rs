@@ -90,6 +90,34 @@ fn source_limit_precedes_signature_and_codec_work() {
 }
 
 #[test]
+fn byte_probe_rejects_oversized_source_before_signature_work() {
+    let payload = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n', 0, 1];
+    let result = input(9).probe_bytes(&payload);
+
+    assert_eq!(
+        result,
+        Err(ImageInputError::SourceTooLarge {
+            limit: 9,
+            actual: 10
+        })
+    );
+}
+
+#[test]
+fn byte_decode_rejects_oversized_source_before_codec_work() {
+    let payload = [0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n', 0, 1];
+    let result = input(9).decode_bytes(&payload);
+
+    assert_eq!(
+        result,
+        Err(ImageInputError::SourceTooLarge {
+            limit: 9,
+            actual: 10
+        })
+    );
+}
+
+#[test]
 fn missing_path_is_a_typed_io_error() {
     let result = input(1_000_000).probe_path(Path::new("does-not-exist.rusttable"));
     assert!(matches!(result, Err(ImageInputError::Io { .. })));

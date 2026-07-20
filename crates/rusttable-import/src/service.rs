@@ -6,7 +6,10 @@ use rusttable_image::{ImageInput, ImageInputError};
 use rusttable_metadata::{MetadataInput, MetadataInputError};
 use sha2::{Digest, Sha256};
 
-use crate::{ImportSourceLimits, SourceImportRequest, SourceSnapshotError, SourceSnapshotReader};
+use crate::{
+    ImportSourceLimits, SourceImportRequest, SourceSnapshotError, SourceSnapshotReadError,
+    SourceSnapshotReader,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceImportError {
@@ -15,6 +18,7 @@ pub enum SourceImportError {
         actual: Revision,
     },
     Snapshot(SourceSnapshotError),
+    SnapshotRead(SourceSnapshotReadError),
     Image(ImageInputError),
     Metadata(MetadataInputError),
     Candidate(rusttable_catalog::ImportCandidateError),
@@ -31,6 +35,7 @@ impl std::error::Error for SourceImportError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Snapshot(error) => Some(error),
+            Self::SnapshotRead(error) => Some(error),
             Self::Image(error) => Some(error),
             Self::Metadata(error) => Some(error),
             Self::Candidate(error) => Some(error),
@@ -73,14 +78,17 @@ impl SourceImportService {
         let snapshot = snapshot_reader
             .read_snapshot(request.physical_path(), limits)
             .map_err(SourceImportError::Snapshot)?;
+        let bytes = snapshot
+            .materialize(limits)
+            .map_err(SourceImportError::SnapshotRead)?;
         let probe = image_input
-            .probe_bytes(snapshot.bytes())
+            .probe_bytes(&bytes)
             .map_err(SourceImportError::Image)?;
         let metadata = metadata_input
-            .read_bytes(probe.format(), snapshot.bytes())
+            .read_bytes(probe.format(), &bytes)
             .map_err(SourceImportError::Metadata)?;
         let mut hasher = Sha256::new();
-        hasher.update(snapshot.bytes());
+        hasher.update(&bytes);
         let hash: [u8; 32] = hasher.finalize().into();
         let candidate = ImportCandidate::new(
             request.photo_id(),

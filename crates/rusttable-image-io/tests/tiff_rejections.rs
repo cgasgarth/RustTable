@@ -1,8 +1,11 @@
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusttable_image::{DecodeLimits, ImageInput, ImageInputError};
 use rusttable_image_io::FileImageInput;
+
+static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(0);
 
 fn decode_base64(encoded: &str) -> Vec<u8> {
     let mut output = Vec::new();
@@ -50,7 +53,11 @@ fn input(max_source_bytes: u64) -> FileImageInput {
 }
 
 fn with_bytes<T>(name: &str, bytes: Vec<u8>, operation: impl FnOnce(&Path) -> T) -> T {
-    let path = std::env::temp_dir().join(format!("rusttable-tiff-reject-{name}.fixture"));
+    let unique = NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "rusttable-tiff-reject-{name}-{}-{unique}.fixture",
+        std::process::id()
+    ));
     fs::write(&path, bytes).unwrap();
     let result = operation(&path);
     fs::remove_file(path).unwrap();

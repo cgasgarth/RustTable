@@ -125,12 +125,15 @@ impl RasterPreviewPort for AppPreview {
         let snapshot = reader
             .read_snapshot(&path, source_limits())
             .map_err(|_| RasterPreviewError::Unavailable)?;
+        let bytes = snapshot
+            .materialize(source_limits())
+            .map_err(|_| RasterPreviewError::Unavailable)?;
         let output = PreviewService::new(
             decode_limits(),
             PreviewBounds::new(THUMBNAIL_EDGE, THUMBNAIL_EDGE)
                 .expect("constant preview bounds are valid"),
         )
-        .render_bytes(snapshot.bytes(), &entry.edit)
+        .render_bytes(&bytes, &entry.edit)
         .map_err(|_| RasterPreviewError::Render)?;
         reader
             .revalidate(&snapshot, source_limits())

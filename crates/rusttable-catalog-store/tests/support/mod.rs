@@ -1,10 +1,13 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusttable_catalog::{ImportCandidate, ImportRecord, SourcePath};
 use rusttable_core::{
     Asset, AssetId, AssetRole, ByteLength, ContentHash, ImageMetadata, Photo, PhotoId,
 };
 use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
+
+static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(0);
 
 #[allow(dead_code)]
 pub fn record(source: &str, photo_id: u128, asset_id: u128, byte: u8) -> ImportRecord {
@@ -32,7 +35,11 @@ pub fn record(source: &str, photo_id: u128, asset_id: u128, byte: u8) -> ImportR
 }
 
 pub fn temp_path(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("rusttable-catalog-store-{name}.redb"));
+    let unique = NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "rusttable-catalog-store-{name}-{}-{unique}.redb",
+        std::process::id()
+    ));
     let _ = std::fs::remove_file(&path);
     path
 }

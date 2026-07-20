@@ -8,19 +8,32 @@ use rusttable_image::{
     InputFormat, UnsupportedImageFeature,
 };
 
+use crate::ImageDecoderRegistry;
+
 pub struct FileImageInput {
     limits: DecodeLimits,
+    registry: ImageDecoderRegistry,
 }
 
 impl FileImageInput {
     #[must_use]
     pub const fn new(limits: DecodeLimits) -> Self {
-        Self { limits }
+        Self::with_registry(limits, ImageDecoderRegistry::standard())
+    }
+
+    #[must_use]
+    pub const fn with_registry(limits: DecodeLimits, registry: ImageDecoderRegistry) -> Self {
+        Self { limits, registry }
     }
 
     #[must_use]
     pub const fn limits(&self) -> DecodeLimits {
         self.limits
+    }
+
+    #[must_use]
+    pub const fn registry(&self) -> ImageDecoderRegistry {
+        self.registry
     }
 
     fn read_source(&self, path: &Path) -> Result<Vec<u8>, ImageInputError> {
@@ -35,6 +48,11 @@ impl FileImageInput {
             .take(read_limit)
             .read_to_end(&mut bytes)
             .map_err(|error| io_error(&error))?;
+        self.enforce_source_limit(bytes.as_slice())?;
+        Ok(bytes)
+    }
+
+    fn enforce_source_limit(&self, bytes: &[u8]) -> Result<(), ImageInputError> {
         let actual = u64::try_from(bytes.len()).map_err(|_| ImageInputError::ArithmeticOverflow)?;
         if actual > self.limits.max_source_bytes() {
             return Err(ImageInputError::SourceTooLarge {
@@ -42,37 +60,17 @@ impl FileImageInput {
                 actual,
             });
         }
-        Ok(bytes)
+        Ok(())
     }
 
     fn probe_bytes_inner(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
-        let format = detect_format(bytes)?;
-        if format == InputFormat::Tiff {
-            return probe_tiff(bytes, self.limits);
-        }
-        let dimensions = ImageReader::with_format(Cursor::new(bytes), image_format(format))
-            .into_dimensions()
-            .map_err(|error| malformed(format, &error))?;
-        let dimensions = ImageDimensions::new(dimensions.0, dimensions.1)
-            .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-        enforce_limits(self.limits, dimensions)?;
-        Ok(ImageProbe::new(format, dimensions))
+        self.enforce_source_limit(bytes)?;
+        self.registry.probe_bytes(bytes, self.limits)
     }
 
     fn decode_bytes_inner(&self, bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
-        let probe = self.probe_bytes_inner(bytes)?;
-        let decoded = ImageReader::with_format(Cursor::new(bytes), image_format(probe.format()))
-            .decode()
-            .map_err(|error| malformed(probe.format(), &error))?
-            .to_rgba8();
-        DecodedImage::new(probe.dimensions(), decoded.into_raw()).map_err(|error| match error {
-            rusttable_image::DecodedImageError::ArithmeticOverflow => {
-                ImageInputError::ArithmeticOverflow
-            }
-            rusttable_image::DecodedImageError::ByteLengthMismatch { expected, actual } => {
-                ImageInputError::DecodedBufferInvariant { expected, actual }
-            }
-        })
+        self.enforce_source_limit(bytes)?;
+        self.registry.decode_bytes(bytes, self.limits)
     }
 }
 
@@ -94,37 +92,6 @@ impl ImageInput for FileImageInput {
     }
 }
 
-fn detect_format(bytes: &[u8]) -> Result<InputFormat, ImageInputError> {
-    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
-        return Ok(InputFormat::Jpeg);
-    }
-    if bytes.starts_with(&[0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n']) {
-        return Ok(InputFormat::Png);
-    }
-    if bytes.starts_with(&[b'I', b'I', 0x2a, 0x00]) || bytes.starts_with(&[b'M', b'M', 0x00, 0x2a])
-    {
-        return Ok(InputFormat::Tiff);
-    }
-    if bytes.starts_with(&[b'I', b'I', 0x2b, 0x00]) || bytes.starts_with(&[b'M', b'M', 0x00, 0x2b])
-    {
-        return Err(ImageInputError::UnsupportedFeature {
-            format: InputFormat::Tiff,
-            reason: UnsupportedImageFeature::BigTiff,
-        });
-    }
-    Err(ImageInputError::UnsupportedSignature {
-        signature: bytes.iter().copied().take(8).collect(),
-    })
-}
-
-fn image_format(format: InputFormat) -> ImageFormat {
-    match format {
-        InputFormat::Jpeg => ImageFormat::Jpeg,
-        InputFormat::Png => ImageFormat::Png,
-        InputFormat::Tiff => ImageFormat::Tiff,
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TiffByteOrder {
     Little,
@@ -137,7 +104,10 @@ struct TiffImageSpec {
     height: u32,
 }
 
-fn probe_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
+pub(crate) fn probe_tiff(
+    bytes: &[u8],
+    limits: DecodeLimits,
+) -> Result<ImageProbe, ImageInputError> {
     let spec = inspect_tiff(bytes)?;
     let dimensions = ImageDimensions::new(spec.width, spec.height)
         .map_err(|_| ImageInputError::ArithmeticOverflow)?;
@@ -411,7 +381,7 @@ fn malformed_tiff(message: &str) -> ImageInputError {
     }
 }
 
-fn enforce_limits(
+pub(crate) fn enforce_limits(
     limits: DecodeLimits,
     dimensions: ImageDimensions,
 ) -> Result<(), ImageInputError> {
@@ -448,7 +418,7 @@ fn enforce_limits(
     Ok(())
 }
 
-fn malformed(format: InputFormat, error: &image::ImageError) -> ImageInputError {
+pub(crate) fn malformed(format: InputFormat, error: &image::ImageError) -> ImageInputError {
     ImageInputError::MalformedInput {
         format,
         message: error.to_string(),

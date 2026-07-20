@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use rusttable_app::PreviewService;
 use rusttable_core::{Edit, EditId, PhotoId, Revision};
 use rusttable_image::DecodeLimits;
+use rusttable_import::{FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotReader};
 use rusttable_render::PreviewBounds;
 
 #[test]
@@ -23,7 +24,14 @@ fn renders_the_committed_png_fixture_through_the_production_cpu_path() {
         PreviewBounds::new(64, 64).expect("valid bounds"),
     );
 
-    let output = service.render(&source, &edit).expect("fixture renders");
+    let source_limits = ImportSourceLimits::new(32 * 1024 * 1024).expect("source cap");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&source, source_limits)
+        .expect("fixture snapshot");
+    let bytes = snapshot.materialize(source_limits).expect("fixture bytes");
+    let output = service
+        .render_bytes(&bytes, &edit)
+        .expect("fixture renders");
 
     assert!(output.image().dimensions().width() <= 64);
     assert!(output.image().dimensions().height() <= 64);

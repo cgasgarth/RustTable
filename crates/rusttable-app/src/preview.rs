@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use rusttable_core::Edit;
 use rusttable_image::{DecodeLimits, ImageInput};
 use rusttable_image_io::FileImageInput;
@@ -18,19 +16,6 @@ impl PreviewService {
     #[must_use]
     pub const fn new(limits: DecodeLimits, bounds: PreviewBounds) -> Self {
         Self { limits, bounds }
-    }
-
-    /// Decodes and renders `source` through the exact immutable edit.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PreviewError`] if decoding the source or evaluating the CPU
-    /// render plan fails.
-    pub fn render(&self, source: &Path, edit: &Edit) -> Result<RenderOutput, PreviewError> {
-        let input = FileImageInput::new(self.limits)
-            .decode_path(source)
-            .map_err(PreviewError::Decode)?;
-        self.render_preview_decoded(&input, edit)
     }
 
     /// Decodes immutable snapshot bytes and renders the exact edit.

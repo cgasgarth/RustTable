@@ -27,13 +27,17 @@ fn limits_are_finite_and_reserve_the_extra_byte() {
 }
 
 #[test]
-fn reads_one_owned_nonempty_snapshot_and_exposes_only_borrowed_bytes() {
+fn reads_one_nonempty_snapshot_through_explicit_bounded_materialization() {
     let file = path("valid");
     fs::write(&file, b"source-bytes").expect("fixture writes");
+    let limits = ImportSourceLimits::new(64).unwrap();
     let snapshot = FileSourceSnapshotReader
-        .read_snapshot(&file, ImportSourceLimits::new(64).unwrap())
+        .read_snapshot(&file, limits)
         .expect("snapshot reads");
-    assert_eq!(snapshot.bytes(), b"source-bytes");
+    assert_eq!(
+        snapshot.materialize(limits).expect("source materializes"),
+        b"source-bytes"
+    );
     assert_eq!(snapshot.byte_length().get(), 12);
     fs::remove_file(file).expect("fixture removes");
 }
@@ -95,4 +99,158 @@ fn snapshot_reader_is_object_safe() {
             )
             .is_err()
     );
+}
+
+#[test]
+fn random_access_and_sequential_readers_are_independent_and_bounded() {
+    let file = path("access");
+    fs::write(&file, b"0123456789").expect("fixture writes");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&file, ImportSourceLimits::new(64).unwrap())
+        .expect("snapshot reads");
+
+    let mut random = [0; 3];
+    snapshot.read_exact_at(4, &mut random).expect("random read");
+    assert_eq!(&random, b"456");
+
+    let mut first = snapshot.open_reader(6).expect("first reader creates");
+    let mut second = snapshot.open_reader(6).expect("second reader creates");
+    let mut first_bytes = [0; 2];
+    let mut second_bytes = [0; 2];
+    first
+        .read_exact_checked(&mut first_bytes)
+        .expect("first reader reads");
+    second
+        .read_exact_checked(&mut second_bytes)
+        .expect("second reader reads");
+    assert_eq!(&first_bytes, b"01");
+    assert_eq!(&second_bytes, b"01");
+    assert_eq!(first.position(), 2);
+    assert_eq!(first.remaining(), 4);
+    assert_eq!(second.position(), 2);
+
+    let mut too_much = [0; 5];
+    assert!(matches!(
+        first.read_exact_checked(&mut too_much),
+        Err(
+            rusttable_import::SourceSnapshotReadError::ReaderBudgetExceeded {
+                requested: 5,
+                remaining: 4,
+            }
+        )
+    ));
+    fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn checked_ranges_reject_overflow_and_reader_limits() {
+    let file = path("bounds");
+    fs::write(&file, b"0123456789").expect("fixture writes");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&file, ImportSourceLimits::new(64).unwrap())
+        .expect("snapshot reads");
+
+    let mut bytes = [0; 2];
+    assert!(matches!(
+        snapshot.read_exact_at(u64::MAX, &mut bytes),
+        Err(rusttable_import::SourceSnapshotReadError::OffsetOverflow { .. })
+    ));
+    assert!(matches!(
+        snapshot.open_reader(11),
+        Err(
+            rusttable_import::SourceSnapshotReadError::ReaderLimitExceedsSource {
+                limit: 11,
+                source_length: 10,
+            }
+        )
+    ));
+    fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn reads_fail_after_the_opened_source_changes() {
+    let file = path("changed");
+    fs::write(&file, b"original").expect("fixture writes");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&file, ImportSourceLimits::new(64).unwrap())
+        .expect("snapshot reads");
+    fs::write(&file, b"changed!").expect("source changes");
+
+    let mut bytes = [0; 4];
+    assert!(matches!(
+        snapshot.read_exact_at(0, &mut bytes),
+        Err(rusttable_import::SourceSnapshotReadError::SourceChanged { .. })
+    ));
+    fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn reads_fail_after_same_length_rewrite_with_preserved_mtime() {
+    let file = path("same-length-rewrite");
+    fs::write(&file, b"original").expect("fixture writes");
+    let limits = ImportSourceLimits::new(64).expect("limits create");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&file, limits)
+        .expect("snapshot reads");
+    let original_modified = fs::metadata(&file)
+        .expect("fixture metadata reads")
+        .modified()
+        .expect("fixture modified time reads");
+
+    fs::write(&file, b"changed!").expect("same-length source rewrites");
+    fs::File::open(&file)
+        .expect("fixture opens for time restore")
+        .set_times(std::fs::FileTimes::new().set_modified(original_modified))
+        .expect("fixture modified time restores");
+
+    assert!(matches!(
+        snapshot.materialize(limits),
+        Err(rusttable_import::SourceSnapshotReadError::SourceChanged { .. })
+    ));
+    fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn opened_handle_survives_path_replacement_until_path_revalidation() {
+    let file = path("replacement");
+    let replacement = path("replacement-new");
+    fs::write(&file, b"original").expect("fixture writes");
+    let limits = ImportSourceLimits::new(64).unwrap();
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&file, limits)
+        .expect("snapshot reads");
+    fs::rename(&file, &replacement).expect("source moves");
+    fs::write(&file, b"replaced").expect("replacement writes");
+
+    let mut bytes = [0; 8];
+    snapshot
+        .read_exact_at(0, &mut bytes)
+        .expect("opened handle remains stable");
+    assert_eq!(&bytes, b"original");
+    assert!(matches!(
+        FileSourceSnapshotReader.revalidate(&snapshot, limits),
+        Err(SourceSnapshotError::SourceChanged { .. })
+    ));
+    fs::remove_file(file).expect("replacement removes");
+    fs::remove_file(replacement).expect("moved source removes");
+}
+
+#[test]
+fn materialization_requires_an_explicit_byte_limit() {
+    let file = path("materialize-limit");
+    fs::write(&file, b"0123456789").expect("fixture writes");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(&file, ImportSourceLimits::new(64).unwrap())
+        .expect("snapshot reads");
+
+    assert!(matches!(
+        snapshot.materialize(ImportSourceLimits::new(4).unwrap()),
+        Err(
+            rusttable_import::SourceSnapshotReadError::MaterializationLimitExceeded {
+                limit: 4,
+                source_length: 10,
+            }
+        )
+    ));
+    fs::remove_file(file).expect("fixture removes");
 }
