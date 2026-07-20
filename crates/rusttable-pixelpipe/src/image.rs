@@ -1,6 +1,7 @@
 use std::fmt;
 
 use rusttable_processing::RasterDimensions;
+use sha2::{Digest, Sha256};
 
 /// A CPU pixelpipe raster channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,6 +10,44 @@ pub enum RgbaF32Channel {
     Green,
     Blue,
     Alpha,
+}
+
+/// Immutable evidence for the decoded source raster supplied to a pixelpipe.
+///
+/// The identity is a SHA-256 digest of the exact, ordered RGBA f32 bit pattern.
+/// It therefore binds a request to the decoded source raster rather than a
+/// mutable path or decoder buffer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SourceRasterIdentity([u8; 32]);
+
+impl SourceRasterIdentity {
+    #[must_use]
+    pub(crate) fn from_components(components: impl IntoIterator<Item = f32>) -> Self {
+        let mut hasher = Sha256::new();
+        for component in components {
+            hasher.update(component.to_bits().to_le_bytes());
+        }
+        Self(hasher.finalize().into())
+    }
+
+    #[must_use]
+    pub(crate) const fn from_digest(digest: [u8; 32]) -> Self {
+        Self(digest)
+    }
+
+    #[must_use]
+    pub const fn as_bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl fmt::Debug for SourceRasterIdentity {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in self.0 {
+            write!(formatter, "{byte:02x}")?;
+        }
+        Ok(())
+    }
 }
 
 /// The color interpretation of a packed RGBA f32 raster.
@@ -114,6 +153,10 @@ pub enum RgbaF32ImageError {
         pixel_index: usize,
         channel: RgbaF32Channel,
     },
+    SourceIdentityMismatch {
+        expected: SourceRasterIdentity,
+        actual: SourceRasterIdentity,
+    },
 }
 
 /// An immutable, tightly packed RGBA f32 image with validated descriptor semantics.
@@ -121,6 +164,7 @@ pub enum RgbaF32ImageError {
 pub struct RgbaF32Image {
     descriptor: RgbaF32Descriptor,
     pixels: Vec<RgbaF32Pixel>,
+    source_identity: SourceRasterIdentity,
 }
 
 impl RgbaF32Image {
@@ -156,7 +200,37 @@ impl RgbaF32Image {
             }
             validate_normalized(pixel_index, RgbaF32Channel::Alpha, pixel.alpha())?;
         }
-        Ok(Self { descriptor, pixels })
+        let source_identity = SourceRasterIdentity::from_components(
+            pixels
+                .iter()
+                .flat_map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]),
+        );
+        Ok(Self {
+            descriptor,
+            pixels,
+            source_identity,
+        })
+    }
+
+    /// Validates an immutable source-raster identity while constructing input.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the image is invalid or its supplied identity does
+    /// not describe the exact packed pixel bits.
+    pub fn new_with_source_identity(
+        descriptor: RgbaF32Descriptor,
+        pixels: Vec<RgbaF32Pixel>,
+        expected_source_identity: SourceRasterIdentity,
+    ) -> Result<Self, RgbaF32ImageError> {
+        let image = Self::new(descriptor, pixels)?;
+        if image.source_identity != expected_source_identity {
+            return Err(RgbaF32ImageError::SourceIdentityMismatch {
+                expected: expected_source_identity,
+                actual: image.source_identity,
+            });
+        }
+        Ok(image)
     }
 
     #[must_use]
@@ -167,6 +241,12 @@ impl RgbaF32Image {
     #[must_use]
     pub fn pixels(&self) -> &[RgbaF32Pixel] {
         &self.pixels
+    }
+
+    /// Returns immutable evidence for the validated decoded source raster.
+    #[must_use]
+    pub const fn source_identity(&self) -> SourceRasterIdentity {
+        self.source_identity
     }
 }
 
@@ -222,6 +302,10 @@ impl fmt::Display for RgbaF32ImageError {
             } => write!(
                 formatter,
                 "RGBA f32 image pixel {pixel_index} has an out-of-range {channel:?} component"
+            ),
+            Self::SourceIdentityMismatch { expected, actual } => write!(
+                formatter,
+                "RGBA f32 image source identity mismatch: expected {expected:?}, got {actual:?}"
             ),
         }
     }

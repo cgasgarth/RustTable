@@ -3,9 +3,9 @@ use rusttable_core::{
     ParameterValue, PhotoId, Revision,
 };
 use rusttable_pixelpipe::{
-    CpuImplementation, CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
-    CpuPixelpipeRequest, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel,
+    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
+    CpuPixelpipeOutputMode, CpuPixelpipeRequest, RgbaF32Channel, RgbaF32ColorEncoding,
+    RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
 
@@ -115,6 +115,66 @@ fn receipt_is_deterministic_and_records_scalar_cpu_provenance() {
     assert_ne!(
         first.receipt().input_identity(),
         first.receipt().output_identity()
+    );
+}
+
+#[test]
+fn source_identity_evidence_rejects_replaced_input_before_execution() {
+    let original = image();
+    let expected = original.source_identity();
+    let descriptor = original.descriptor();
+    let replacement = vec![
+        RgbaF32Pixel::new(0.6, 0.25, 0.75, 0.4),
+        RgbaF32Pixel::new(0.1, 0.2, 0.3, 1.0),
+    ];
+
+    assert!(matches!(
+        RgbaF32Image::new_with_source_identity(descriptor, replacement, expected),
+        Err(RgbaF32ImageError::SourceIdentityMismatch {
+            expected: rejected_expected,
+            actual,
+        }) if rejected_expected == expected && actual != expected
+    ));
+}
+
+#[test]
+fn receipt_refuses_publication_when_source_evidence_is_replaced() {
+    let original = image();
+    let original_identity = original.source_identity();
+    let result = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeRequest::new(
+            original,
+            graph(Vec::new()),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("CPU execution succeeds");
+    let replacement = RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            RasterDimensions::new(2, 1).expect("nonzero dimensions"),
+            RgbaF32ColorEncoding::SrgbD65,
+        ),
+        vec![
+            RgbaF32Pixel::new(0.6, 0.25, 0.75, 0.4),
+            RgbaF32Pixel::new(0.1, 0.2, 0.3, 1.0),
+        ],
+    )
+    .expect("valid replacement");
+
+    assert_eq!(result.receipt().source_identity(), original_identity);
+    assert_eq!(
+        result
+            .receipt()
+            .authorize_publication_for(original_identity),
+        Ok(())
+    );
+    assert_eq!(
+        result
+            .receipt()
+            .authorize_publication_for(replacement.source_identity()),
+        Err(CpuPipelineReceiptError::SourceIdentityMismatch {
+            expected: replacement.source_identity(),
+            actual: original_identity,
+        })
     );
 }
 

@@ -2,7 +2,7 @@ use sha2::{Digest, Sha256};
 
 use rusttable_core::OperationId;
 
-use crate::{CpuPixelpipeOutputMode, RgbaF32Descriptor};
+use crate::{CpuPixelpipeOutputMode, RgbaF32Descriptor, SourceRasterIdentity};
 
 /// Identifies the deterministic CPU implementation that produced a result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -39,6 +39,28 @@ impl std::fmt::Debug for PixelIdentity {
     }
 }
 
+/// A receipt did not retain the immutable source identity required for publication.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuPipelineReceiptError {
+    SourceIdentityMismatch {
+        expected: SourceRasterIdentity,
+        actual: SourceRasterIdentity,
+    },
+}
+
+impl std::fmt::Display for CpuPipelineReceiptError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SourceIdentityMismatch { expected, actual } => write!(
+                formatter,
+                "pixelpipe receipt source identity mismatch: expected {expected:?}, got {actual:?}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CpuPipelineReceiptError {}
+
 /// Ordered execution evidence for one registered operation node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CpuNodeReceipt {
@@ -72,6 +94,7 @@ pub struct CpuPipelineReceipt {
     implementation: CpuImplementation,
     input_descriptor: RgbaF32Descriptor,
     output_descriptor: RgbaF32Descriptor,
+    source_identity: SourceRasterIdentity,
     input_identity: PixelIdentity,
     output_identity: PixelIdentity,
     output_mode: CpuPixelpipeOutputMode,
@@ -92,6 +115,7 @@ impl CpuPipelineReceipt {
             implementation: CpuImplementation::ScalarReferenceV1,
             input_descriptor,
             output_descriptor,
+            source_identity: SourceRasterIdentity::from_digest(input_identity.as_bytes()),
             input_identity,
             output_identity,
             output_mode,
@@ -112,6 +136,32 @@ impl CpuPipelineReceipt {
     #[must_use]
     pub const fn output_descriptor(&self) -> RgbaF32Descriptor {
         self.output_descriptor
+    }
+
+    /// Returns the immutable decoded-source evidence bound to this execution.
+    #[must_use]
+    pub const fn source_identity(&self) -> SourceRasterIdentity {
+        self.source_identity
+    }
+
+    /// Authorizes publication only for the source raster used by this execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a source was replaced or does not match the
+    /// immutable input evidence captured in this receipt.
+    pub fn authorize_publication_for(
+        &self,
+        expected_source_identity: SourceRasterIdentity,
+    ) -> Result<(), CpuPipelineReceiptError> {
+        if self.source_identity == expected_source_identity {
+            Ok(())
+        } else {
+            Err(CpuPipelineReceiptError::SourceIdentityMismatch {
+                expected: expected_source_identity,
+                actual: self.source_identity,
+            })
+        }
     }
 
     #[must_use]
