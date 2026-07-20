@@ -12,6 +12,7 @@ members = [
     "crates/rusttable-gpu",
     "crates/rusttable-image",
     "crates/rusttable-image-io",
+    "crates/rusttable-input",
     "crates/rusttable-metadata",
     "crates/rusttable-masks",
     "crates/rusttable-import",
@@ -60,6 +61,7 @@ rusttable-export = { path = "crates/rusttable-export", version = "=0.1.0" }
 rusttable-gpu = { path = "crates/rusttable-gpu", version = "=0.1.0" }
 rusttable-image = { path = "crates/rusttable-image", version = "=0.1.0" }
 rusttable-image-io = { path = "crates/rusttable-image-io", version = "=0.1.0" }
+rusttable-input = { path = "crates/rusttable-input", version = "=0.1.0" }
 rusttable-import = { path = "crates/rusttable-import", version = "=0.1.0" }
 rusttable-masks = { path = "crates/rusttable-masks", version = "=0.1.0" }
 rusttable-metadata = { path = "crates/rusttable-metadata", version = "=0.1.0" }

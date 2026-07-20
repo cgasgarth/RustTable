@@ -4,8 +4,9 @@ use rusttable_core::{
 };
 use rusttable_pixelpipe::{
     CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
-    CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuTilePlan, CpuTilePlanError, RgbaF32Channel,
-    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError,
+    CpuTilePlan, CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor,
+    RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
 
@@ -134,6 +135,83 @@ fn receipt_is_deterministic_and_records_scalar_cpu_provenance() {
     assert_ne!(
         first.receipt().input_identity(),
         first.receipt().output_identity()
+    );
+}
+
+#[test]
+fn immutable_snapshot_identity_is_deterministic_and_bound_to_receipt() {
+    let snapshot = CpuPixelpipeSnapshot::new(
+        image(),
+        graph(vec![operation(
+            7,
+            "rusttable.linear_offset",
+            &[("value", 0.05)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let clone = snapshot.clone();
+    assert_eq!(snapshot, clone);
+    assert_eq!(snapshot.identity(), clone.identity());
+    assert_eq!(
+        snapshot.source_identity(),
+        snapshot.input().source_identity()
+    );
+
+    let result = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("snapshot execution succeeds");
+    assert_eq!(result.receipt().snapshot_identity(), snapshot.identity());
+}
+
+#[test]
+fn snapshot_identity_changes_for_pixel_affecting_preparation_changes() {
+    let source = image();
+    let base = CpuPixelpipeSnapshot::new(
+        source.clone(),
+        graph(vec![operation(
+            7,
+            "rusttable.linear_offset",
+            &[("value", 0.05)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let changed_operation = CpuPixelpipeSnapshot::new(
+        source.clone(),
+        graph(vec![operation(
+            7,
+            "rusttable.linear_offset",
+            &[("value", 0.06)],
+        )]),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let changed_mode = CpuPixelpipeSnapshot::new(
+        source,
+        graph(vec![operation(
+            7,
+            "rusttable.linear_offset",
+            &[("value", 0.05)],
+        )]),
+        CpuPixelpipeOutputMode::Preview,
+    );
+
+    assert_ne!(base.identity(), changed_operation.identity());
+    assert_ne!(base.identity(), changed_mode.identity());
+}
+
+#[test]
+fn checked_snapshot_rejects_unsupported_input_before_execution() {
+    let descriptor = RgbaF32Descriptor::new(
+        RasterDimensions::new(1, 1).expect("nonzero dimensions"),
+        RgbaF32ColorEncoding::LinearSrgbD65,
+    );
+    let input = RgbaF32Image::new(descriptor, vec![RgbaF32Pixel::new(1.5, 0.0, 0.0, 1.0)])
+        .expect("linear extended range is valid");
+
+    assert_eq!(
+        CpuPixelpipeSnapshot::try_new(input, graph(Vec::new()), CpuPixelpipeOutputMode::FullExport),
+        Err(CpuPixelpipeSnapshotError::UnsupportedInputEncoding {
+            actual: RgbaF32ColorEncoding::LinearSrgbD65,
+        })
     );
 }
 

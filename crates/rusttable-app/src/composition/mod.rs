@@ -12,6 +12,11 @@ use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind,
 use crate::lifecycle::run_with_bootstrap;
 use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual, FileExt};
 use gtk4::glib::{self, ControlFlow};
+use gtk4::prelude::GtkWindowExt;
+use rusttable_input::{
+    ActionId, ActionInputService, ActionMapping, ActionMode, ActionPhase, Binding, InputSource,
+    KeyCode, Modifiers,
+};
 use rusttable_ui::{
     CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
     ExportAction, ExportSize as UiExportSize,
@@ -79,6 +84,7 @@ pub fn run() -> Result<(), DesktopRunError> {
                         catalog_controller.borrow().collection_controller(),
                     ));
                     let shell = rusttable_ui::GtkShell::new(application);
+                    install_action_input(&shell);
                     let export_panel = shell.export_panel().clone();
                     let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
                     let workspace = catalog_controller.borrow().state().workspace().cloned();
@@ -133,6 +139,55 @@ pub fn run() -> Result<(), DesktopRunError> {
         },
         |warning| eprintln!("{warning}"),
     )
+}
+
+fn install_action_input(shell: &rusttable_ui::GtkShell) {
+    let mut service = ActionInputService::new();
+    service.add_mapping(ActionMapping::new(
+        ActionId::new("view/lighttable").expect("static action id"),
+        Binding::Keyboard {
+            key: KeyCode::character('l'),
+            modifiers: Modifiers::empty(),
+        },
+    ));
+    service.add_mapping(ActionMapping::new(
+        ActionId::new("view/darkroom").expect("static action id"),
+        Binding::Keyboard {
+            key: KeyCode::character('d'),
+            modifiers: Modifiers::empty(),
+        },
+    ));
+    service.add_mapping(
+        ActionMapping::new(
+            ActionId::new("window/fullscreen").expect("static action id"),
+            Binding::Keyboard {
+                key: KeyCode::named("F11"),
+                modifiers: Modifiers::empty(),
+            },
+        )
+        .with_mode(ActionMode::Activate),
+    );
+    let service = Rc::new(RefCell::new(service));
+    let shell = shell.clone();
+    let window = shell.window().clone();
+    let callback_window = window.clone();
+    let _input_adapter = rusttable_ui::GtkInputAdapter::attach(&window, &service, move |event| {
+        if event.phase != ActionPhase::Pressed || event.source != InputSource::Keyboard {
+            return;
+        }
+        match event.action.as_str() {
+            "view/lighttable" => shell.show_workspace(rusttable_ui::WorkspaceRole::Lighttable),
+            "view/darkroom" => shell.show_workspace(rusttable_ui::WorkspaceRole::Darkroom),
+            "window/fullscreen" => {
+                if callback_window.is_fullscreen() {
+                    callback_window.unfullscreen();
+                } else {
+                    callback_window.fullscreen();
+                }
+            }
+            _ => {}
+        }
+    });
 }
 
 #[derive(Debug, Default)]

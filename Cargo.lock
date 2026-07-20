@@ -2090,6 +2090,7 @@ dependencies = [
  "rusttable-image",
  "rusttable-image-io",
  "rusttable-import",
+ "rusttable-input",
  "rusttable-metadata",
  "rusttable-pixelpipe",
  "rusttable-processing",
@@ -2192,6 +2193,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rusttable-input"
+version = "0.1.0"
+
+[[package]]
 name = "rusttable-masks"
 version = "0.1.0"
 
@@ -2280,6 +2285,7 @@ version = "0.1.0"
 dependencies = [
  "gtk4",
  "rusttable-core",
+ "rusttable-input",
  "rusttable-processing",
 ]
 

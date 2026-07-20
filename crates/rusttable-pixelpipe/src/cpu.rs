@@ -1,14 +1,14 @@
 use std::fmt;
 
 use rusttable_processing::{
-    CompiledOperationGraph, EvaluationError, SourceRgb, SourceRgbImage, SrgbChannel,
-    encode_linear_srgb, evaluate_graph, to_linear_srgb,
+    EvaluationError, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb, evaluate_graph,
+    to_linear_srgb,
 };
 
 use crate::{
-    CpuNodeReceipt, CpuPipelineReceipt, CpuTilePlan, CpuTilePlanError, PixelIdentity,
-    RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError,
-    RgbaF32Pixel,
+    CpuNodeReceipt, CpuPipelineReceipt, CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError,
+    PixelIdentity, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
+    RgbaF32ImageError, RgbaF32Pixel,
 };
 
 /// The typed presentation boundary requested from a CPU pixelpipe execution.
@@ -26,44 +26,6 @@ impl CpuPixelpipeOutputMode {
             Self::Preview => RgbaF32ColorEncoding::SrgbD65,
             Self::FullExport => RgbaF32ColorEncoding::LinearSrgbD65,
         }
-    }
-}
-
-/// Immutable prepared CPU execution input.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CpuPixelpipeRequest {
-    input: RgbaF32Image,
-    graph: CompiledOperationGraph,
-    output_mode: CpuPixelpipeOutputMode,
-}
-
-impl CpuPixelpipeRequest {
-    #[must_use]
-    pub fn new(
-        input: RgbaF32Image,
-        graph: CompiledOperationGraph,
-        output_mode: CpuPixelpipeOutputMode,
-    ) -> Self {
-        Self {
-            input,
-            graph,
-            output_mode,
-        }
-    }
-
-    #[must_use]
-    pub const fn input(&self) -> &RgbaF32Image {
-        &self.input
-    }
-
-    #[must_use]
-    pub const fn graph(&self) -> &CompiledOperationGraph {
-        &self.graph
-    }
-
-    #[must_use]
-    pub const fn output_mode(&self) -> CpuPixelpipeOutputMode {
-        self.output_mode
     }
 }
 
@@ -126,7 +88,7 @@ impl CpuPixelpipeExecutor {
     /// Returns a typed failure before exposing a partial output image.
     pub fn execute(
         &self,
-        request: &CpuPixelpipeRequest,
+        request: &CpuPixelpipeSnapshot,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         let image = Self::execute_image(request, request.input())?;
         Ok(Self::result_for(request, image))
@@ -145,7 +107,7 @@ impl CpuPixelpipeExecutor {
     /// source boundary, evaluation, or checked assembly fails.
     pub fn execute_tiled(
         &self,
-        request: &CpuPixelpipeRequest,
+        request: &CpuPixelpipeSnapshot,
         tile_plan: CpuTilePlan,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
@@ -181,7 +143,7 @@ impl CpuPixelpipeExecutor {
     }
 
     fn execute_image(
-        request: &CpuPixelpipeRequest,
+        request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
         validate_input_encoding(input)?;
@@ -199,12 +161,13 @@ impl CpuPixelpipeExecutor {
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
     }
 
-    fn result_for(request: &CpuPixelpipeRequest, image: RgbaF32Image) -> CpuPixelpipeResult {
+    fn result_for(request: &CpuPixelpipeSnapshot, image: RgbaF32Image) -> CpuPixelpipeResult {
         let receipt = CpuPipelineReceipt::new(
             request.input().descriptor(),
             image.descriptor(),
-            pixel_identity(request.input()),
-            pixel_identity(&image),
+            request.source_identity(),
+            (pixel_identity(request.input()), pixel_identity(&image)),
+            request.identity(),
             request.output_mode(),
             request
                 .graph()

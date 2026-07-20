@@ -2,8 +2,9 @@ use rusttable_core::Edit;
 use rusttable_image::{ColorEncoding, DecodeLimits, DecodedImage, ImageInput};
 use rusttable_image_io::FileImageInput;
 use rusttable_pixelpipe::{
-    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
-    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot,
+    CpuPixelpipeSnapshotError, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
+    RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{
     CompiledOperationGraph, FiniteF32, LinearRgb, RasterDimensions, WorkingRgbImage,
@@ -118,13 +119,15 @@ fn render_decoded_with_target(
     )
     .map_err(PreviewError::PixelpipeInput)?;
     let graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        pixelpipe_input,
+        graph,
+        // The prepared-render boundary owns deterministic target encoding.
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .map_err(PreviewError::PixelpipeSnapshot)?;
     let result = CpuPixelpipeExecutor
-        .execute(&CpuPixelpipeRequest::new(
-            pixelpipe_input,
-            graph,
-            // The prepared-render boundary owns deterministic target encoding.
-            CpuPixelpipeOutputMode::FullExport,
-        ))
+        .execute(&snapshot)
         .map_err(PreviewError::Pixelpipe)?;
     let pixels = result
         .image()
@@ -171,6 +174,7 @@ pub enum PreviewError {
     Decode(rusttable_image::ImageInputError),
     UnsupportedPixelpipeColor { actual: ColorEncoding },
     PixelpipeInput(RgbaF32ImageError),
+    PixelpipeSnapshot(CpuPixelpipeSnapshotError),
     Graph(rusttable_processing::OperationGraphCompileError),
     Pixelpipe(CpuPixelpipeError),
     Prepared(PreparedCpuPixelpipeResultError),
@@ -186,6 +190,9 @@ impl std::fmt::Display for PreviewError {
                 "preview CPU pixelpipe does not support {actual:?} source color"
             ),
             Self::PixelpipeInput(error) => write!(formatter, "preview CPU input failed: {error}"),
+            Self::PixelpipeSnapshot(error) => {
+                write!(formatter, "preview CPU snapshot failed: {error}")
+            }
             Self::Graph(error) => write!(formatter, "preview graph compilation failed: {error}"),
             Self::Pixelpipe(error) => write!(formatter, "preview CPU pixelpipe failed: {error}"),
             Self::Prepared(error) => {
@@ -202,6 +209,7 @@ impl std::error::Error for PreviewError {
             Self::Decode(error) => Some(error),
             Self::UnsupportedPixelpipeColor { .. } => None,
             Self::PixelpipeInput(error) => Some(error),
+            Self::PixelpipeSnapshot(error) => Some(error),
             Self::Graph(error) => Some(error),
             Self::Pixelpipe(error) => Some(error),
             Self::Prepared(error) => Some(error),

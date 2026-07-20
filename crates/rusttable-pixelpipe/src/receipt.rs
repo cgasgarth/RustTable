@@ -2,7 +2,9 @@ use sha2::{Digest, Sha256};
 
 use rusttable_core::OperationId;
 
-use crate::{CpuPixelpipeOutputMode, RgbaF32Descriptor, SourceRasterIdentity};
+use crate::{
+    CpuPixelpipeOutputMode, CpuPixelpipeSnapshotIdentity, RgbaF32Descriptor, SourceRasterIdentity,
+};
 
 /// Identifies the deterministic CPU implementation that produced a result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,6 +99,7 @@ pub struct CpuPipelineReceipt {
     source_identity: SourceRasterIdentity,
     input_identity: PixelIdentity,
     output_identity: PixelIdentity,
+    snapshot_identity: CpuPixelpipeSnapshotIdentity,
     output_mode: CpuPixelpipeOutputMode,
     nodes: Vec<CpuNodeReceipt>,
 }
@@ -106,8 +109,9 @@ impl CpuPipelineReceipt {
     pub(crate) fn new(
         input_descriptor: RgbaF32Descriptor,
         output_descriptor: RgbaF32Descriptor,
-        input_identity: PixelIdentity,
-        output_identity: PixelIdentity,
+        source_identity: SourceRasterIdentity,
+        pixel_identities: (PixelIdentity, PixelIdentity),
+        snapshot_identity: CpuPixelpipeSnapshotIdentity,
         output_mode: CpuPixelpipeOutputMode,
         nodes: Vec<CpuNodeReceipt>,
     ) -> Self {
@@ -115,9 +119,10 @@ impl CpuPipelineReceipt {
             implementation: CpuImplementation::ScalarReferenceV1,
             input_descriptor,
             output_descriptor,
-            source_identity: SourceRasterIdentity::from_digest(input_identity.as_bytes()),
-            input_identity,
-            output_identity,
+            source_identity,
+            input_identity: pixel_identities.0,
+            output_identity: pixel_identities.1,
+            snapshot_identity,
             output_mode,
             nodes,
         }
@@ -172,6 +177,12 @@ impl CpuPipelineReceipt {
     #[must_use]
     pub const fn output_identity(&self) -> PixelIdentity {
         self.output_identity
+    }
+
+    /// Returns the immutable preparation identity consumed by this execution.
+    #[must_use]
+    pub const fn snapshot_identity(&self) -> CpuPixelpipeSnapshotIdentity {
+        self.snapshot_identity
     }
 
     #[must_use]

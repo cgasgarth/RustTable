@@ -18,6 +18,7 @@ rusttable-export.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
+rusttable-input.workspace = true
 rusttable-import.workspace = true
 rusttable-metadata.workspace = true
 rusttable-pixelpipe.workspace = true
