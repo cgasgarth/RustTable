@@ -129,7 +129,14 @@ mod tests {
         ] {
             assert!(help.contains(command), "missing {command}");
         }
-        for retired in ["github", "ecosystem", "parity", "scheduler", "coverage"] {
+        for retired in [
+            "github",
+            "ecosystem",
+            "migration",
+            "parity",
+            "scheduler",
+            "coverage",
+        ] {
             assert!(
                 !help.contains(retired),
                 "retired command {retired} survived"
