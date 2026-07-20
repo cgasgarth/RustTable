@@ -1,6 +1,7 @@
 //! `GtkShell` accessors for the AI settings and Neural Restore surfaces.
 
 use super::runtime::GtkShell;
+use crate::ai_batch::{AiBatchAction, AiBatchPanel, AiBatchState};
 use crate::ai_models::{AiModelsAction, AiModelsPanel, AiModelsViewModel};
 use crate::neural_restore::{NeuralRestoreAction, NeuralRestorePanel, NeuralRestoreViewModel};
 
@@ -41,5 +42,21 @@ impl GtkShell {
         F: Fn(NeuralRestoreAction) + 'static,
     {
         self.neural_restore_panel.connect_action(handler);
+    }
+
+    #[must_use]
+    pub const fn ai_batch_panel(&self) -> &AiBatchPanel {
+        &self.ai_batch_panel
+    }
+
+    pub fn set_ai_batch_state(&self, state: &AiBatchState) {
+        self.ai_batch_panel.set_state(state);
+    }
+
+    pub fn connect_ai_batch_action<F>(&self, handler: F)
+    where
+        F: Fn(AiBatchAction) + 'static,
+    {
+        self.ai_batch_panel.connect_action(handler);
     }
 }

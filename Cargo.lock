@@ -3490,6 +3490,9 @@ version = "0.1.0"
 dependencies = [
  "rusttable-core",
  "rusttable-image",
+ "serde",
+ "sha2",
+ "unicode-normalization-alignments",
 ]
 
 [[package]]
@@ -3503,6 +3506,7 @@ dependencies = [
  "rusttable-export",
  "rusttable-image",
  "serde",
+ "sha2",
 ]
 
 [[package]]

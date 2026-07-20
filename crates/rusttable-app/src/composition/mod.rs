@@ -44,7 +44,7 @@ use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use ai_ui::install_ai_ui_bridges;
+use ai_ui::{install_ai_batch_ui_bridge, install_ai_ui_bridges};
 use collection_bridge::{
     apply_collection_action, apply_lighttable_toolbar_action, collection_filter_state,
     empty_collection_filter_state,
@@ -201,8 +201,10 @@ fn activate_application(
     }
     install_action_input(&shell);
     let neural_controller = install_ai_ui_bridges(&shell);
+    let ai_batch_controller = install_ai_batch_ui_bridge(&shell);
     let neural_for_selection = Rc::clone(&neural_controller);
     let neural_selection_shell = shell.clone();
+    let ai_batch_selection_shell = shell.clone();
     let export_panel = shell.export_panel().clone();
     let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
     let workspace = catalog_controller.borrow().state().workspace().cloned();
@@ -269,6 +271,14 @@ fn activate_application(
             0,
         )));
         neural_selection_shell.set_neural_restore_state(neural.state());
+        let mut ai_batch = ai_batch_controller.borrow_mut();
+        ai_batch.set_selection(vec![rusttable_ui::AiBatchSelection {
+            photo_id,
+            source_revision: 0,
+            edit_revision: 0,
+            catalog_revision: 0,
+        }]);
+        ai_batch_selection_shell.set_ai_batch_state(ai_batch.state());
         let catalog = selection_controller.borrow().clone();
         start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
     });

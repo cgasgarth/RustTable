@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 postcard.workspace = true
 redb.workspace = true
+sha2.workspace = true
 rusttable-catalog.workspace = true
 rusttable-core.workspace = true
 rusttable-export.workspace = true

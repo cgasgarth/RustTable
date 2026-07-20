@@ -6,10 +6,55 @@
 use std::path::PathBuf;
 
 use rusttable_ui::{
+    AiBatchPreflight, AiBatchRecipe, AiBatchReview, AiBatchSelection, AiBatchServiceError,
+    AiBatchServicePort,
+};
+use rusttable_ui::{
     AiModelsServiceError, AiModelsServicePort, AiModelsSnapshot, AiProvider, AiProviderPolicy,
     AiTask, InstallSummary, ModelHash, NeuralRestorePreviewPort, NeuralRestoreSnapshot,
     PhotoSelection, PreviewRequest, PreviewServiceError, QualificationJob,
 };
+
+#[derive(Debug, Default)]
+pub(crate) struct UnavailableAiBatchService;
+
+impl AiBatchServicePort for UnavailableAiBatchService {
+    fn review(
+        &mut self,
+        _: &[AiBatchSelection],
+        _: &AiBatchRecipe,
+    ) -> Result<AiBatchReview, AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn preflight(&mut self, _: &AiBatchReview) -> Result<AiBatchPreflight, AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn enqueue(
+        &mut self,
+        _: &AiBatchReview,
+        _: &AiBatchPreflight,
+    ) -> Result<u64, AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn pause(&mut self, _: u64) -> Result<(), AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn resume(&mut self, _: u64) -> Result<(), AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn cancel(&mut self, _: u64) -> Result<(), AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn retry_failed(&mut self, _: u64) -> Result<(), AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn reconcile(&mut self, _: u64) -> Result<(), AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+    fn remove_history(&mut self, _: u64) -> Result<(), AiBatchServiceError> {
+        Err(AiBatchServiceError::Unavailable)
+    }
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct UnavailableAiModelsService;

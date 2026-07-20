@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "GTK4 UI components and presentation models for `RustTable`."]
 
+pub mod ai_batch;
 pub mod ai_models;
 pub mod collection;
 pub mod display_profile;
@@ -14,6 +15,12 @@ pub mod neural_restore;
 pub mod presentation;
 pub mod viewport_presentation;
 
+pub use ai_batch::{
+    AI_BATCH_FOCUS_ORDER, AiBatchAction, AiBatchCollision, AiBatchController,
+    AiBatchControllerError, AiBatchEligibility, AiBatchEnqueuePolicy, AiBatchItem, AiBatchPanel,
+    AiBatchPreflight, AiBatchRecipe, AiBatchReview, AiBatchSelection, AiBatchServiceError,
+    AiBatchServicePort, AiBatchStage, AiBatchState, AiBatchTask,
+};
 pub use ai_models::{
     AI_MODELS_FOCUS_ORDER, AiModelsAction, AiModelsController, AiModelsControllerError,
     AiModelsFailure, AiModelsPanel, AiModelsServiceError, AiModelsServicePort, AiModelsSnapshot,

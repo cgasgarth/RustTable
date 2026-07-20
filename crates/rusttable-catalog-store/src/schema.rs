@@ -4,7 +4,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 use rusttable_catalog::RepositoryError;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 4;
+pub const CURRENT_SCHEMA_VERSION: u8 = 5;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -26,6 +26,20 @@ pub(crate) const RECIPE_HEADS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_export_recipe_heads");
 pub(crate) const RECIPE_REFERENCES_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_export_recipe_references");
+pub(crate) const COLLECTION_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_collection_state");
+pub(crate) const COLLECTIONS_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_saved_collections");
+pub(crate) const COLLECTION_NAME_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_collection_name_index");
+pub(crate) const RECENT_QUERY_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_recent_queries");
+pub(crate) const RECENT_ORDER_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_recent_order_index");
+pub(crate) const ACTIVE_VIEW_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_active_library_view");
+pub(crate) const COLLECTION_INTEGRITY_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_collection_integrity");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
 
 pub(crate) fn open(path: &Path) -> Result<Database, RepositoryError> {
@@ -83,6 +97,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(RECIPE_REFERENCES_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
+        open_collection_tables(&transaction)?;
     }
     transaction
         .commit()
@@ -102,6 +117,11 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
         .ok_or(RepositoryError::CorruptPersistedData)?;
     match version.value() {
         [CURRENT_SCHEMA_VERSION] => validate_tables(&transaction),
+        [4] => {
+            drop(schema);
+            drop(transaction);
+            migrate_to_v5(database)
+        }
         [3] => {
             drop(schema);
             drop(transaction);
@@ -127,6 +147,13 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
         RECIPES_TABLE,
         RECIPE_HEADS_TABLE,
         RECIPE_REFERENCES_TABLE,
+        COLLECTION_STATE_TABLE,
+        COLLECTIONS_TABLE,
+        COLLECTION_NAME_INDEX_TABLE,
+        RECENT_QUERY_TABLE,
+        RECENT_ORDER_INDEX_TABLE,
+        ACTIVE_VIEW_TABLE,
+        COLLECTION_INTEGRITY_TABLE,
     ] {
         transaction
             .open_table(table)
@@ -179,6 +206,7 @@ fn migrate_legacy_to_v4(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(RECIPE_REFERENCES_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
+        open_collection_tables(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -213,6 +241,7 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(RECIPE_REFERENCES_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
+        open_collection_tables(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -220,4 +249,46 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
     transaction
         .commit()
         .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn migrate_to_v5(database: &Database) -> Result<(), RepositoryError> {
+    let transaction = database
+        .begin_write()
+        .map_err(|_| RepositoryError::Unavailable)?;
+    open_collection_tables(&transaction)?;
+    let mut schema = transaction
+        .open_table(SCHEMA_TABLE)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    schema
+        .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+        .map_err(|_| RepositoryError::Unavailable)?;
+    drop(schema);
+    transaction
+        .commit()
+        .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
+    transaction
+        .open_table(COLLECTION_STATE_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(COLLECTIONS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(COLLECTION_NAME_INDEX_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(RECENT_QUERY_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(RECENT_ORDER_INDEX_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(ACTIVE_VIEW_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(COLLECTION_INTEGRITY_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    Ok(())
 }
