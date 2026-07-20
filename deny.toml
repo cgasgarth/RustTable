@@ -10,6 +10,7 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "build-only parser for trusted Wayland protocol XML" },
     { id = "RUSTSEC-2026-0195", reason = "build-only parser for trusted Wayland protocol XML" },
     { id = "RUSTSEC-2023-0089", reason = "transitive Wasmtime/postcard dependency with no safe upgrade" },
+    { id = "RUSTSEC-2024-0436", reason = "transitive rav1e proc-macro dependency with no safe upgrade" },
 ]
 
 [licenses]
@@ -27,6 +28,7 @@ allow = [
     "LGPL-2.1-or-later",
     "MIT",
     "MPL-2.0",
+    "NCSA",
     "Unicode-3.0",
     "Unlicense",
     "Zlib",
