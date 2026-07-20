@@ -14,7 +14,7 @@ use process_wrap::std::CommandWrap;
 #[cfg(windows)]
 use process_wrap::std::JobObject;
 #[cfg(unix)]
-use process_wrap::std::ProcessSession;
+use process_wrap::std::ProcessGroup;
 use sha2::{Digest, Sha256};
 
 use super::identity::{ReferenceIdentity, isolation_arguments};
@@ -153,7 +153,11 @@ impl ReferenceRunner {
             match rx.recv_timeout(Duration::from_millis(10)) {
                 Ok(event) => streams.accept(event, &mut reason),
                 Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Disconnected) => {
+                    // Reader shutdown can precede the leader's observable exit status. Keep
+                    // polling the child so a closed pipe never becomes a synthetic failure.
+                    thread::sleep(Duration::from_millis(1));
+                }
             }
         }
         if reason.is_some() {
@@ -365,7 +369,9 @@ fn spawn(
             .stderr(Stdio::piped());
     });
     #[cfg(unix)]
-    command.wrap(ProcessSession);
+    // Keep the leader's exit status observable while signaling its descendants as a group.
+    // A new session made the reference receipt race on macOS when the pipes drained first.
+    command.wrap(ProcessGroup::leader());
     #[cfg(windows)]
     command.wrap(JobObject);
     command.spawn().map_err(|error| ReferenceError::Spawn {

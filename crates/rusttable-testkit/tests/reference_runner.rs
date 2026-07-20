@@ -52,7 +52,7 @@ esac
 case "{mode}" in
   success) printf 'timestamp=111 pid=1 thread=2\n'; printf 'timestamp=222 pid=3 thread=4\n' >&2; printf 'fake-image\n' > "$RUSTTABLE_REFERENCE_OUTPUT"; exit 0 ;;
   timeout|ignored-cancellation|child-spawn) (sleep 30) & wait ;;
-  excessive-output) head -c 4096 /dev/zero; exit 0 ;;
+  excessive-output) printf '%4096s' x; exit 0 ;;
   missing-image) exit 0 ;;
   nonzero-exit|partial-output) printf 'partial\n' > "$RUSTTABLE_REFERENCE_OUTPUT"; exit 7 ;;
 esac
@@ -247,6 +247,31 @@ fn timeout_cancellation_and_limits_are_bounded() {
         excessive.run(&request(&source, 3000)),
         Err(ReferenceError::StreamLimit(_, _))
     ));
+}
+
+#[test]
+fn repeated_reference_runs_preserve_completed_exit_status() {
+    let _guard = TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let directory = TempDirectory::new("repeated-completion");
+    let source = directory.path().join("source.raw");
+    fs::write(&source, b"source").expect("source");
+    let executable = fake_executable(&directory, "success");
+    let data = directory.path().join("data");
+    fs::create_dir(&data).expect("data");
+    let runner = ReferenceRunner::new(identity(executable, data), ReferenceLimits::default());
+    let expected = ReferenceStatus::Completed(rusttable_testkit::reference::ExitStatus {
+        code: Some(0),
+        success: true,
+    });
+
+    for _ in 0..32 {
+        let receipt = runner
+            .run(&request(&source, 3000))
+            .expect("reference run should complete");
+        assert_eq!(receipt.status, expected);
+    }
 }
 
 #[test]
