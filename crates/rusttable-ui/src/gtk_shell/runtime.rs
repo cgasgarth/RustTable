@@ -516,9 +516,13 @@ fn left_panel(collection_controls: &CollectionControls, i18n: &I18n) -> (gtk4::B
         "collection filters",
         false,
     ));
-    center.append(&module_group(
+    let image_information = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    image_information.append(&gtk4::Label::new(Some("selected image")));
+    image_information.append(&gtk4::Label::new(Some("rating · color label · tags")));
+    center.append(&module_group_with_child(
         "image-information",
         "image information",
+        &image_information,
         false,
     ));
     let bottom = panel_slot(PanelSlot::LeftBottom);
@@ -546,9 +550,9 @@ fn right_panel(i18n: &I18n) -> (gtk4::Box, gtk4::Box, ExportPanel) {
     ];
     let group_labels = groups.iter().map(String::as_str).collect::<Vec<_>>();
     let group_selector = gtk4::DropDown::from_strings(&group_labels);
+    group_selector.set_widget_name("right-module-group-selector");
     top.append(&group_selector);
     let export_panel = ExportPanel::new();
-    top.append(export_panel.widget());
     let center = panel_slot(PanelSlot::RightCenter);
     for (id, label) in [
         ("selection", "selection"),
@@ -562,6 +566,12 @@ fn right_panel(i18n: &I18n) -> (gtk4::Box, gtk4::Box, ExportPanel) {
     ] {
         center.append(&module_group(id, label, false));
     }
+    center.append(&module_group_with_child(
+        "export",
+        "export",
+        export_panel.widget(),
+        true,
+    ));
     let bottom = panel_slot(PanelSlot::RightBottom);
     bottom.append(&gtk4::SearchEntry::new());
     append_panel_slots(&panel, &top, &center, &bottom);
@@ -627,13 +637,15 @@ fn workspace_stack(
     apply_theme_role(&lighttable, ThemeRole::Lighttable);
     let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     lighttable_page.set_widget_name("lighttable-page");
-    lighttable_page.append(&panel_heading(i18n, MessageId::WorkspaceLighttable));
+    lighttable_page.append(&lighttable_toolbar(i18n));
     let lighttable_scroll = gtk4::ScrolledWindow::builder()
         .child(&lighttable)
         .hexpand(true)
         .vexpand(true)
         .build();
     let empty_state = empty_collection_state();
+    empty_state.set_hexpand(true);
+    empty_state.set_vexpand(true);
     let lighttable_overlay = gtk4::Overlay::new();
     lighttable_overlay.set_hexpand(true);
     lighttable_overlay.set_vexpand(true);
@@ -676,9 +688,7 @@ fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     strip.set_height_request(i32::from(
         DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px,
     ));
-    strip.append(&gtk4::Label::new(Some(
-        &i18n.text(MessageId::PanelFilmstrip, &MessageArgs::new()),
-    )));
+    strip.append(&filmstrip_toolbar(i18n));
     let photos = gtk4::FlowBox::builder()
         .max_children_per_line(12)
         .selection_mode(gtk4::SelectionMode::None)
@@ -686,6 +696,56 @@ fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     photos.set_widget_name(PanelSlot::Bottom.identifier());
     strip.append(&photos);
     (strip, photos)
+}
+
+fn lighttable_toolbar(i18n: &I18n) -> gtk4::Box {
+    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    toolbar.set_widget_name("lighttable-collection-toolbar");
+    apply_theme_role(&toolbar, ThemeRole::Toolbar);
+
+    let import =
+        gtk4::Button::with_label(&i18n.text(MessageId::ToolbarImport, &MessageArgs::new()));
+    import.set_widget_name("lighttable-import");
+    toolbar.append(&import);
+
+    let property = gtk4::DropDown::from_strings(&["filename", "folder", "capture date"]);
+    property.set_widget_name("lighttable-filter-property");
+    toolbar.append(&property);
+    let filter = gtk4::SearchEntry::new();
+    filter.set_widget_name("lighttable-filter-entry");
+    filter.set_placeholder_text(Some("filter all images"));
+    filter.set_hexpand(true);
+    toolbar.append(&filter);
+
+    for (index, color) in ["★", "●", "●", "●", "●", "●"].into_iter().enumerate() {
+        let button = gtk4::Button::with_label(color);
+        button.set_widget_name(&format!("lighttable-rating-{index}"));
+        button.add_css_class("dt_filter_button");
+        toolbar.append(&button);
+    }
+    let sort = gtk4::DropDown::from_strings(&["filename", "capture date", "rating"]);
+    sort.set_widget_name("lighttable-sort");
+    toolbar.append(&sort);
+    let count = gtk4::Label::new(Some("0 images selected of 0"));
+    count.set_widget_name("lighttable-selection-count");
+    count.add_css_class("dim-label");
+    toolbar.append(&count);
+    toolbar
+}
+
+fn filmstrip_toolbar(i18n: &I18n) -> gtk4::Box {
+    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    toolbar.set_widget_name("filmstrip-toolbar");
+    apply_theme_role(&toolbar, ThemeRole::Toolbar);
+    toolbar.append(&gtk4::Label::new(Some(
+        &i18n.text(MessageId::PanelFilmstrip, &MessageArgs::new()),
+    )));
+    for label in ["grid", "zoom", "fit", "before/after", "soft proof"] {
+        let button = gtk4::Button::with_label(label);
+        button.add_css_class("dt_filmstrip_button");
+        toolbar.append(&button);
+    }
+    toolbar
 }
 
 fn panel_column(region: ShellRegion, width: i32) -> gtk4::Box {
@@ -823,14 +883,20 @@ fn filmstrip_item(photo_id: PhotoId, title: &str) -> gtk4::Button {
 }
 
 fn empty_collection_state() -> gtk4::Box {
-    let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 36);
     root.set_widget_name("empty-collection-state");
     root.set_halign(gtk4::Align::Center);
     root.set_valign(gtk4::Align::Center);
+    root.set_margin_start(48);
+    root.set_margin_end(48);
+    root.set_margin_top(28);
+    root.set_margin_bottom(28);
     root.set_can_target(false);
     apply_theme_role(&root, ThemeRole::EmptyState);
 
     let collection = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    collection.set_hexpand(true);
+    collection.set_valign(gtk4::Align::Center);
     let title = gtk4::Label::new(Some("there are no images in this collection"));
     title.add_css_class("title-3");
     title.set_halign(gtk4::Align::Start);
@@ -842,6 +908,8 @@ fn empty_collection_state() -> gtk4::Box {
         "or add images in the collections module",
         "try the 'no-click' workflow",
         "hover over an image and use keyboard shortcuts",
+        "to apply ratings, colors, styles, etc.",
+        "hover over any button for its description and shortcuts",
     ] {
         let label = gtk4::Label::new(Some(text));
         label.set_halign(gtk4::Align::Start);
@@ -850,6 +918,8 @@ fn empty_collection_state() -> gtk4::Box {
     }
 
     let help = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    help.set_hexpand(true);
+    help.set_valign(gtk4::Align::Center);
     let help_title = gtk4::Label::new(Some("need help?"));
     help_title.add_css_class("title-3");
     help_title.set_halign(gtk4::Align::End);
@@ -860,6 +930,8 @@ fn empty_collection_state() -> gtk4::Box {
         "personalize darktable",
         "click on the gear icon for global preferences",
         "set module-specific preferences through a module's menu",
+        "make default raw development look more like your camera's JPEG",
+        "by applying a camera-specific style",
     ] {
         let label = gtk4::Label::new(Some(text));
         label.set_halign(gtk4::Align::End);

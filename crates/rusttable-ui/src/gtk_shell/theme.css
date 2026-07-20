@@ -96,7 +96,16 @@ button:hover,
 }
 
 .dt_empty_state {
-  padding: 2.5em;
+  min-width: 38em;
+  padding: 2.5em 3.5em;
+  color: {{foreground}};
+}
+
+#empty-collection-state {
+  background-color: transparent;
+}
+
+#empty-collection-state label {
   color: {{foreground}};
 }
 
@@ -133,6 +142,37 @@ expander:hover {
   padding: 0.12em 0.28em;
   background-color: {{background}};
   color: {{foreground}};
+}
+
+#lighttable-collection-toolbar,
+#filmstrip-toolbar {
+  min-height: 2em;
+  padding: 0.08em 0.28em;
+  background-color: {{background}};
+  border-bottom: 1px solid {{border}};
+}
+
+#lighttable-collection-toolbar entry,
+#lighttable-collection-toolbar dropdown,
+.dt_filter_button,
+.dt_filmstrip_button {
+  min-height: 1.5em;
+  padding: 0.08em 0.4em;
+  border: 1px solid {{border}};
+  border-radius: 2px;
+  background-color: {{button_background}};
+  color: {{foreground}};
+}
+
+#lighttable-collection-toolbar entry {
+  min-width: 12em;
+}
+
+#lighttable-collection-toolbar button:hover,
+.dt_filter_button:hover,
+.dt_filmstrip_button:hover {
+  background-color: {{hovered_thumbnail}};
+  color: {{background}};
 }
 
 entry,
