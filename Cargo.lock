@@ -2275,6 +2275,7 @@ version = "0.1.0"
 dependencies = [
  "gtk4",
  "rusttable-core",
+ "rusttable-processing",
 ]
 
 [[package]]

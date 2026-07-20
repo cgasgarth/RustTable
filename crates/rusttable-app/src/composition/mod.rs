@@ -119,7 +119,6 @@ pub fn run() -> Result<(), DesktopRunError> {
     )
 }
 
-<<<<<<< HEAD
 fn apply_collection_action(controller: &mut CollectionController, action: CollectionControlAction) {
     match action {
         CollectionControlAction::SetProperty(property) => controller.set_property(property),

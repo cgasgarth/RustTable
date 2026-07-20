@@ -3,10 +3,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use rusttable_core::PhotoId;
 
 pub mod basic_edit;
+pub mod exposure;
 
 pub use basic_edit::{
     BasicEditField, BasicEditInspectorViewModel, BasicEditSaveState, BasicEditValues,
 };
+pub use exposure::ExposurePanelViewModel;
 
 const MAX_PRESENTATION_TEXT_BYTES: usize = 256;
 const MAX_SELECTED_PREVIEW_RGBA8_BYTES: usize = 64 * 1024 * 1024;

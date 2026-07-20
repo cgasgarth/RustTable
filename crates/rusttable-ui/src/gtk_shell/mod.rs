@@ -6,6 +6,7 @@
 
 mod collection_controls;
 mod darktable_spec;
+mod exposure_panel;
 mod model;
 mod photo_preview;
 mod runtime;
@@ -20,6 +21,7 @@ pub use darktable_spec::{
     PANEL_SLOTS, PanelRole, PanelSlot as VisualPanelSlot, SidePanelWidths, TOP_BAR_SECTIONS,
     TopBarSection, ViewMode,
 };
+pub use exposure_panel::ExposurePanel;
 pub use model::{
     DarkroomWorkspaceViewModel, LibraryBrowserModel, LibraryPhoto, ModuleControlKind,
     ModuleControlViewModel, ModulePanelViewModel, PanelSlot, ShellLayout, ShellRegion,

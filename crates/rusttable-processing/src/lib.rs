@@ -18,6 +18,7 @@
 
 mod color;
 mod evaluate;
+mod exposure;
 mod graph;
 mod operation;
 mod output;
@@ -32,6 +33,12 @@ pub use color::{
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
+pub use exposure::{
+    BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
+    DEFAULT_BLACK_LEVEL, DEFAULT_EXPOSURE_EV, EXPOSURE_EV_MAXIMUM, EXPOSURE_EV_MINIMUM,
+    EXPOSURE_EV_SOFT_MAXIMUM, EXPOSURE_EV_SOFT_MINIMUM, ExposureAction, ExposureActionError,
+    ExposureMode, ExposureModuleState,
+};
 pub use graph::{
     CompiledOperationGraph, OperationGraphCompileError, OperationGraphInput, OperationGraphNode,
     OperationGraphNodeIndex, OperationGraphOutput,

@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 gtk4.workspace = true
 rusttable-core.workspace = true
+rusttable-processing.workspace = true
 
 [lints]
 workspace = true
