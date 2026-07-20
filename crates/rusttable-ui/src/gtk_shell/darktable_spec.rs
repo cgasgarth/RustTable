@@ -332,8 +332,8 @@ pub const PANEL_SLOTS: [PanelSlot; 6] = [
 
 /// Darktable's fixed desktop metrics and resize constraints.
 pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
-    window_width_px: 900,
-    window_height_px: 500,
+    window_width_px: 1224,
+    window_height_px: 768,
     outer_border_px: 10,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
@@ -342,12 +342,12 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     center_minimum_width_px: 650,
     side_panel_widths: SidePanelWidths {
         minimum_px: 150,
-        preferred_px: 160,
+        preferred_px: 154,
         maximum_px: 1_500,
     },
     filmstrip_heights: FilmstripHeights {
         minimum_px: 64,
-        preferred_px: 120,
+        preferred_px: 104,
         maximum_px: 400,
     },
 };
@@ -446,11 +446,11 @@ mod tests {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 160);
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 154);
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
         assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
-        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
+        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 104);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
     }
