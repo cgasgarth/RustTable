@@ -10,6 +10,7 @@
 - A desktop UI PR must name the Darktable source paths it maps and include a direct visual/behavioral comparison. Prefer a faithful GTK4 equivalent over a new layout or renamed workflow unless an upstream behavior is intentionally deferred in the linked issue.
 - When a capability is replaced, delete obsolete native payload from RustTable. Preserve behavior and formats, not the upstream file graph.
 - A GTK4 controller owns each migrated desktop workflow. Delete superseded UI source, tests, and dependency paths in the same migration slice; never maintain two live UI implementations for one workflow.
+- One backend, one UI workflow rule: a product capability has one typed service owner and one GTK4/gtk-rs controller/view path. UI modules may define only the smallest typed port needed to cross into that service; they must not grow a second backend, duplicate process/filesystem/catalog logic, or preserve an Iced compatibility surface.
 - Follow the Rust crate/module structure while using `architecture/darktable-subsystems.toml` for broad upstream navigation.
 
 ## Rust rules

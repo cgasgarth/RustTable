@@ -3,10 +3,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
 use crate::presentation::{self, PhotoDetailViewModel, SelectedPreviewState};
+use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus};
 
 use super::{ThemeRole, apply_theme_role};
 
@@ -72,6 +74,8 @@ impl PhotoPreview {
         status.set_widget_name("darkroom-preview-status");
         status.set_halign(gtk4::Align::End);
         status.add_css_class("dim-label");
+        status.set_accessible_role(gtk4::AccessibleRole::Status);
+        status.update_property(&[Property::Label("Viewport presentation status")]);
 
         let dimensions = gtk4::Label::new(None);
         dimensions.set_widget_name("darkroom-preview-dimensions");
@@ -212,6 +216,41 @@ impl PhotoPreview {
         self.dimensions.set_text(&format_dimensions(metadata));
         self.placeholder.set_text("rendering preview");
         Ok(texture)
+    }
+
+    /// Projects a color-managed frame from the application presentation port.
+    ///
+    /// The frame contains only validated RGBA8 bytes and an explicit SDR/HDR/fallback status;
+    /// no profile bytes, WGPU handles, or source paths enter the widget.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture error when the validated dimensions cannot be represented by GTK.
+    pub fn set_presentation(
+        &self,
+        frame: &DisplayPresentationFrame,
+    ) -> Result<(), PhotoPreviewTextureError> {
+        self.set_rgba8(frame.metadata())?;
+        self.status.set_text(&frame.status().label());
+        self.status.remove_css_class("warning");
+        if frame.status().is_explicit_fallback() {
+            self.status.add_css_class("warning");
+        }
+        Ok(())
+    }
+
+    /// Shows a typed presentation failure while keeping the source/edit untouched.
+    pub fn set_presentation_status(&self, status: PresentationStatus) {
+        self.status.set_text(&status.label());
+        self.status.remove_css_class("warning");
+        if matches!(
+            status,
+            PresentationStatus::SrgbFallback(_) | PresentationStatus::Failed(_)
+        ) {
+            self.status.add_css_class("warning");
+        }
+        self.placeholder.set_text(&status.label());
+        self.placeholder.set_visible(true);
     }
 
     /// Removes the rendered texture while retaining the typed status presentation.

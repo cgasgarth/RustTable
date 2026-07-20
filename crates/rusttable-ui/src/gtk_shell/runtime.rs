@@ -24,8 +24,10 @@ use super::{
     apply_theme_role,
 };
 use super::{header::HeaderChrome, left_panel::LeftPanel};
+use crate::external_editor::{ExternalEditorAction, ExternalEditorPanel, ExternalEditorViewModel};
 use crate::input_mapping::InputMappingEditor;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
+use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus};
 
 type PhotoSelectedHandler = Box<dyn Fn(PhotoId)>;
 
@@ -39,6 +41,7 @@ pub struct GtkShell {
     lighttable_empty_state: gtk4::Stack,
     darkroom_preview: PhotoPreview,
     export_panel: ExportPanel,
+    external_editor_panel: ExternalEditorPanel,
     filmstrip: gtk4::FlowBox,
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
@@ -107,7 +110,7 @@ impl GtkShell {
             I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
         );
         let lighttable_left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
-        let (lighttable_right_panel, export_panel) = right_panel();
+        let (lighttable_right_panel, export_panel, external_editor_panel) = right_panel();
         let left_panel = mode_panel_stack(
             "left-panel-stack",
             lighttable_left_panel.widget(),
@@ -138,6 +141,7 @@ impl GtkShell {
             lighttable_empty_state,
             darkroom_preview,
             export_panel,
+            external_editor_panel,
             filmstrip,
             left_modules: darkroom.left_modules().clone(),
             right_modules: darkroom.right_modules().clone(),
@@ -198,6 +202,30 @@ impl GtkShell {
     #[must_use]
     pub fn export_panel(&self) -> &ExportPanel {
         &self.export_panel
+    }
+
+    /// Returns the service-safe external-editor workflow module.
+    #[must_use]
+    pub fn external_editor_panel(&self) -> &ExternalEditorPanel {
+        &self.external_editor_panel
+    }
+
+    /// Projects external-editor presets, qualification, and durable job state into GTK.
+    pub fn set_external_editor_state(&self, state: &ExternalEditorViewModel) {
+        self.external_editor_panel.set_state(state);
+    }
+
+    /// Connects typed external-editor commands to the application service boundary.
+    pub fn connect_external_editor_action<F>(&self, handler: F)
+    where
+        F: Fn(ExternalEditorAction) + 'static,
+    {
+        self.external_editor_panel.connect_action(handler);
+    }
+
+    /// Updates the send-to module with the application's revision-pinned selection count.
+    pub fn set_external_editor_selection(&self, count: usize) {
+        self.external_editor_panel.set_selection(count);
     }
 
     /// Enables the export module only when a catalog photo is selected.
@@ -378,6 +406,23 @@ impl GtkShell {
         self.show_workspace(WorkspaceRole::Darkroom);
     }
 
+    /// Installs a generation-checked frame from the color presentation service.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture error when the frame dimensions cannot be represented by GTK.
+    pub fn set_darkroom_presentation(
+        &self,
+        frame: &DisplayPresentationFrame,
+    ) -> Result<(), super::PhotoPreviewTextureError> {
+        self.darkroom_preview.set_presentation(frame)
+    }
+
+    /// Projects a pending/failure/fallback status without touching the source edit.
+    pub fn set_darkroom_presentation_status(&self, status: PresentationStatus) {
+        self.darkroom_preview.set_presentation_status(status);
+    }
+
     /// Switches the central workspace without starting or owning a GTK loop.
     pub fn show_workspace(&self, role: WorkspaceRole) {
         self.workspace.set_visible_child_name(role.stack_name());
@@ -392,6 +437,7 @@ impl GtkShell {
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
             export_panel: self.export_panel.clone(),
+            external_editor_panel: self.external_editor_panel.clone(),
             photo_tiles: Rc::clone(&self.photo_tiles),
         }
     }
@@ -431,6 +477,7 @@ struct WorkspaceRenderHandle {
     workspace: gtk4::Stack,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     export_panel: ExportPanel,
+    external_editor_panel: ExternalEditorPanel,
     photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
 }
 
@@ -447,6 +494,7 @@ struct PhotoSelectionContext {
     workspace: gtk4::Stack,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     export_panel: ExportPanel,
+    external_editor_panel: ExternalEditorPanel,
     photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
 }
 
@@ -466,6 +514,7 @@ impl WorkspaceRenderHandle {
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
             export_panel: self.export_panel.clone(),
+            external_editor_panel: self.external_editor_panel.clone(),
             photo_tiles: Rc::clone(&self.photo_tiles),
         };
 
@@ -514,6 +563,7 @@ fn connect_photo_selection(
     let workspace = context.workspace.clone();
     let handler = Rc::clone(&context.photo_selected);
     let export_panel = context.export_panel.clone();
+    let external_editor_panel = context.external_editor_panel.clone();
     let selected_button = button.clone();
     let photo_tiles = Rc::clone(&context.photo_tiles);
     button.connect_clicked(move |_| {
@@ -528,6 +578,7 @@ fn connect_photo_selection(
         }
         selected_button.add_css_class(ThemeRole::SelectedPhoto.class_name());
         export_panel.set_selected(true);
+        external_editor_panel.set_selection(1);
         show_photo_detail(&photo_preview, &detail);
         workspace.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
         if let Some(handler) = handler.borrow().as_ref() {
@@ -536,24 +587,26 @@ fn connect_photo_selection(
     });
 }
 
-fn right_panel() -> (gtk4::Box, ExportPanel) {
+fn right_panel() -> (gtk4::Box, ExportPanel, ExternalEditorPanel) {
     let panel = panel_column(
         ShellRegion::RightPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
     );
     apply_theme_role(&panel, ThemeRole::Panel);
     let export_panel = ExportPanel::new();
+    let external_editor_panel = ExternalEditorPanel::new();
     let center = panel_slot(PanelSlot::RightCenter);
     for module in &LIGHTTABLE_RIGHT_MODULES[..LIGHTTABLE_RIGHT_MODULES.len() - 1] {
         center.append(&module_group(module.widget_name, module.title, false));
     }
     center.append(export_panel.widget());
+    center.append(external_editor_panel.widget());
     let bottom = panel_slot(PanelSlot::RightBottom);
     let search = gtk4::SearchEntry::new();
     search.set_widget_name("right-module-search");
     bottom.append(&search);
     append_panel_slots(&panel, &panel_slot(PanelSlot::RightTop), &center, &bottom);
-    (panel, export_panel)
+    (panel, export_panel, external_editor_panel)
 }
 
 fn mode_panel_stack(
