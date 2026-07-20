@@ -24,6 +24,8 @@ pub enum FocusTarget {
 pub enum InputIntent {
     FocusNext,
     FocusPrevious,
+    FocusNextPhoto,
+    FocusPreviousPhoto,
     Activate,
     Escape,
 }
@@ -78,6 +80,14 @@ impl InputState {
                 self.move_focus(-1, sidebar_visible, route, library_state);
                 InputEffect::None
             }
+            InputIntent::FocusNextPhoto => {
+                self.move_photo_focus(1, route, library_state);
+                InputEffect::None
+            }
+            InputIntent::FocusPreviousPhoto => {
+                self.move_photo_focus(-1, route, library_state);
+                InputEffect::None
+            }
             InputIntent::Activate => self.activate(library_state),
             InputIntent::Escape => self.escape(route, library_state),
         }
@@ -128,6 +138,42 @@ impl InputState {
             index - 1
         };
         self.focused = chain[next];
+    }
+
+    fn move_photo_focus(
+        &mut self,
+        direction: isize,
+        route: WorkspaceRoute,
+        library_state: &LibraryState,
+    ) {
+        if !matches!(route, WorkspaceRoute::Library) {
+            return;
+        }
+        let Some(workspace) = library_state.ready_workspace() else {
+            return;
+        };
+        let photos: Vec<_> = workspace
+            .cards()
+            .map(crate::PhotoCardViewModel::id)
+            .collect();
+        let Some(last_index) = photos.len().checked_sub(1) else {
+            return;
+        };
+        let next_index = match self.focused {
+            FocusTarget::PhotoCard(photo_id) => {
+                let index = photos.iter().position(|candidate| *candidate == photo_id);
+                match (index, direction.is_positive()) {
+                    (Some(index), true) if index == last_index => 0,
+                    (Some(index), true) => index + 1,
+                    (Some(0) | None, false) => last_index,
+                    (Some(index), false) => index - 1,
+                    (None, true) => 0,
+                }
+            }
+            _ if direction.is_positive() => 0,
+            _ => last_index,
+        };
+        self.focused = FocusTarget::PhotoCard(photos[next_index]);
     }
 
     fn activate(&mut self, library_state: &LibraryState) -> InputEffect {
@@ -256,6 +302,34 @@ mod tests {
         }
         assert_eq!(state.focused(), FocusTarget::SidebarToggle);
         let _ = state.apply(InputIntent::FocusPrevious, true, route, &model);
+        assert_eq!(
+            state.focused(),
+            FocusTarget::PhotoCard(PhotoId::new(2).unwrap())
+        );
+    }
+
+    #[test]
+    fn photo_navigation_moves_only_between_catalog_cards() {
+        let model = workspace();
+        let route = crate::navigation::WorkspaceRoute::Library;
+        let mut state = InputState::default();
+
+        let _ = state.apply(InputIntent::FocusNextPhoto, true, route, &model);
+        assert_eq!(
+            state.focused(),
+            FocusTarget::PhotoCard(PhotoId::new(1).unwrap())
+        );
+        let _ = state.apply(InputIntent::FocusNextPhoto, true, route, &model);
+        assert_eq!(
+            state.focused(),
+            FocusTarget::PhotoCard(PhotoId::new(2).unwrap())
+        );
+        let _ = state.apply(InputIntent::FocusNextPhoto, true, route, &model);
+        assert_eq!(
+            state.focused(),
+            FocusTarget::PhotoCard(PhotoId::new(1).unwrap())
+        );
+        let _ = state.apply(InputIntent::FocusPreviousPhoto, true, route, &model);
         assert_eq!(
             state.focused(),
             FocusTarget::PhotoCard(PhotoId::new(2).unwrap())

@@ -16,6 +16,7 @@ use rusttable_ui::{
 };
 
 const CATALOG_FILENAME: &str = "catalog.redb";
+const MAX_BROWSER_PHOTOS: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LibraryLoadRequestId(NonZeroU64);
@@ -85,6 +86,18 @@ pub(crate) fn catalog_path() -> Result<PathBuf, LibraryFailureKind> {
     select_catalog_path(override_path.as_deref(), default_data_directory.as_deref())
 }
 
+pub(crate) fn source_root(catalog_path: &Path) -> Result<PathBuf, LibraryFailureKind> {
+    let override_path = std::env::var_os("RUSTTABLE_SOURCE_ROOT").map(PathBuf::from);
+    if let Some(path) = override_path.filter(|path| !path.as_os_str().is_empty()) {
+        return Ok(path);
+    }
+    catalog_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .ok_or(LibraryFailureKind::CatalogLocationUnavailable)
+}
+
 fn select_catalog_path(
     override_path: Option<&Path>,
     default_data_directory: Option<&Path>,
@@ -132,6 +145,7 @@ fn present_records(
     mut records: Vec<ImportRecord>,
 ) -> Result<PhotoWorkspaceViewModel, CatalogPresentationError> {
     records.sort_by(|left, right| left.source().cmp(right.source()));
+    records.truncate(MAX_BROWSER_PHOTOS);
     let mut cards = Vec::with_capacity(records.len());
     let mut details = Vec::with_capacity(records.len());
 
@@ -221,7 +235,8 @@ mod tests {
 
     use super::{
         CatalogPresentationError, LibraryLoadError, LibraryLoadRequestId, LibraryLoadResult,
-        format_file_size, load_catalog, present_records, select_catalog_path,
+        MAX_BROWSER_PHOTOS, format_file_size, load_catalog, present_records, select_catalog_path,
+        source_root,
     };
     use crate::library::LibraryFailureKind;
     use rusttable_ui::PhotoWorkspaceViewModelError;
@@ -295,6 +310,12 @@ mod tests {
             select_catalog_path(None, None),
             Err(LibraryFailureKind::CatalogLocationUnavailable)
         );
+    }
+
+    #[test]
+    fn source_root_uses_the_catalog_parent_without_an_override() {
+        let catalog = Path::new("/tmp/rusttable/catalog.redb");
+        assert_eq!(source_root(catalog), Ok(PathBuf::from("/tmp/rusttable")));
     }
 
     #[test]
@@ -405,6 +426,37 @@ mod tests {
             error,
             CatalogPresentationError::InvalidText { .. }
         ));
+    }
+
+    #[test]
+    fn presentation_is_bounded_to_the_first_two_hundred_sorted_sources() {
+        let records = (1..=201)
+            .map(|number| {
+                record(
+                    &format!("collection/{number:03}.png"),
+                    number,
+                    number + 1_000,
+                    InputFormat::Png,
+                )
+            })
+            .rev()
+            .collect();
+
+        let workspace = present_records(records).expect("bounded presentation");
+
+        assert_eq!(workspace.cards().len(), MAX_BROWSER_PHOTOS);
+        assert_eq!(
+            workspace
+                .cards()
+                .map(|card| card.id().get())
+                .collect::<Vec<_>>(),
+            (1..=u128::try_from(MAX_BROWSER_PHOTOS).expect("fits test IDs")).collect::<Vec<_>>()
+        );
+        assert!(
+            workspace
+                .detail(PhotoId::new(201).expect("test photo ID"))
+                .is_none()
+        );
     }
 
     #[test]

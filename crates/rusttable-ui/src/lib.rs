@@ -17,7 +17,9 @@ pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
 pub use navigation::{NavigationIntent, NavigationState, WorkspaceRoute};
 pub use presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
-    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError,
+    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
+    PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
+    SelectedPreviewFailure, SelectedPreviewState,
 };
 pub use shell::{AppUiState, WindowKey, WindowRole};
 pub use state::{UiEffect, UiState};
