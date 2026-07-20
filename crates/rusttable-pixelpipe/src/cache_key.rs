@@ -11,12 +11,12 @@ use rusttable_image::{
 use sha2::{Digest, Sha256};
 
 use crate::{
-    BlendStatus, ColorIdentity, ImplementationIdentity, MaskStatus, PipelineGeneration,
+    BlendStatus, ColorIdentity, ImplementationIdentity, MaskStatus, ModePlan, PipelineGeneration,
     PipelinePurpose, PipelineQuality, PipelineSnapshot, PipelineSnapshotIdentity, SourceIdentity,
 };
 
 /// Version of the structured in-memory cache identity.
-pub const CACHE_KEY_SCHEMA_VERSION: u16 = 1;
+pub const CACHE_KEY_SCHEMA_VERSION: u16 = 2;
 
 /// The precision identity used by a cache key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -198,6 +198,7 @@ pub enum CacheKeyComponent {
     MaskBlendRaster,
     Backend,
     Schema,
+    Mode,
 }
 
 /// A complete output-affecting pixelpipe cache identity.
@@ -223,6 +224,7 @@ pub struct CacheKey {
     raster_identity: [u8; 32],
     analysis_identity: [u8; 32],
     backend_identity: [u8; 32],
+    mode_identity: [u8; 32],
 }
 
 impl Hash for CacheKey {
@@ -269,6 +271,64 @@ impl CacheKey {
             raster_identity: snapshot.source().identity().as_bytes(),
             analysis_identity: [0; 32],
             backend_identity: implementation_identity(snapshot.implementation()),
+            mode_identity: [0; 32],
+        }
+    }
+
+    /// Creates a key whose mode component is the complete immutable mode plan.
+    #[must_use]
+    pub fn from_mode_plan(plan: &ModePlan) -> Self {
+        let mut key = Self::from_snapshot_identity(plan);
+        key.mode_identity = plan.identity().as_bytes();
+        key.purpose = plan.request().purpose();
+        key.quality = match plan.request().quality() {
+            crate::ModeQuality::Interactive => CacheQuality::Draft,
+            crate::ModeQuality::Balanced => CacheQuality::Normal,
+            crate::ModeQuality::High => CacheQuality::High,
+            crate::ModeQuality::Exact => CacheQuality::Maximum,
+        };
+        key.output = OutputIdentity::new(
+            plan.request().output().dimensions(),
+            plan.request().roi(),
+            plan.request().output().format(),
+            plan.request().output().color(),
+            plan.request().target().as_bytes(),
+        );
+        key
+    }
+
+    fn from_snapshot_identity(plan: &ModePlan) -> Self {
+        Self {
+            schema_version: CACHE_KEY_SCHEMA_VERSION,
+            source: plan.source_identity(),
+            source_descriptor: Vec::new(),
+            snapshot: plan.snapshot_identity(),
+            generation: plan.generation(),
+            purpose: plan.request().purpose(),
+            quality: CacheQuality::Normal,
+            precision: plan.request().precision().into(),
+            node: NodeBoundary::whole(
+                ImplementationIdentity::new("rusttable.pixelpipe.mode", 1, "planner")
+                    .expect("constant identity"),
+            ),
+            inputs: Vec::new(),
+            output: OutputIdentity::new(
+                plan.request().output().dimensions(),
+                plan.request().roi(),
+                plan.request().output().format(),
+                plan.request().output().color(),
+                plan.request().target().as_bytes(),
+            ),
+            params: plan.canonical_bytes(),
+            params_version: crate::MODE_SCHEMA_VERSION,
+            enabled: true,
+            opacity_basis_points: 10_000,
+            mask: MaskStatus::NotReferenced,
+            blend: BlendStatus::NotReferenced,
+            raster_identity: plan.source_identity().as_bytes(),
+            analysis_identity: [0; 32],
+            backend_identity: [0; 32],
+            mode_identity: plan.identity().as_bytes(),
         }
     }
 
@@ -320,11 +380,15 @@ impl CacheKey {
     pub const fn backend_identity(&self) -> [u8; 32] {
         self.backend_identity
     }
+    #[must_use]
+    pub const fn mode_identity(&self) -> [u8; 32] {
+        self.mode_identity
+    }
 
     #[must_use]
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(256);
-        bytes.extend_from_slice(b"rusttable.pixelpipe.cache-key.v1");
+        bytes.extend_from_slice(b"rusttable.pixelpipe.cache-key.v2");
         bytes.extend_from_slice(&self.schema_version.to_le_bytes());
         bytes.extend_from_slice(&self.source.as_bytes());
         write_bytes(&self.source_descriptor, &mut bytes);
@@ -352,6 +416,7 @@ impl CacheKey {
         bytes.extend_from_slice(&self.raster_identity);
         bytes.extend_from_slice(&self.analysis_identity);
         bytes.extend_from_slice(&self.backend_identity);
+        bytes.extend_from_slice(&self.mode_identity);
         bytes
     }
 
@@ -372,6 +437,7 @@ impl CacheKey {
             CacheKeyComponent::Parameters,
             CacheKeyComponent::MaskBlendRaster,
             CacheKeyComponent::Backend,
+            CacheKeyComponent::Mode,
             CacheKeyComponent::Schema,
         ]
     }
@@ -410,6 +476,7 @@ pub struct CacheKeyBuilder {
     raster_identity: [u8; 32],
     analysis_identity: [u8; 32],
     backend_identity: [u8; 32],
+    mode_identity: [u8; 32],
 }
 
 impl Default for CacheKeyBuilder {
@@ -434,6 +501,7 @@ impl Default for CacheKeyBuilder {
             raster_identity: [0; 32],
             analysis_identity: [0; 32],
             backend_identity: [0; 32],
+            mode_identity: [0; 32],
         }
     }
 }
@@ -530,6 +598,11 @@ impl CacheKeyBuilder {
         self.backend_identity = value;
         self
     }
+    #[must_use]
+    pub const fn mode_identity(mut self, value: [u8; 32]) -> Self {
+        self.mode_identity = value;
+        self
+    }
 
     /// Builds a complete key and rejects incomplete or malformed identity.
     pub fn build(self) -> Result<CacheKey, CacheKeyError> {
@@ -556,6 +629,7 @@ impl CacheKeyBuilder {
             raster_identity: self.raster_identity,
             analysis_identity: self.analysis_identity,
             backend_identity: self.backend_identity,
+            mode_identity: self.mode_identity,
         };
         if key.params_version == 0 || key.node.first > key.node.last {
             return Err(CacheKeyError::Invalid("version or node range"));

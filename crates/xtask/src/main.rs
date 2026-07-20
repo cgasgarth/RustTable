@@ -13,7 +13,9 @@ mod memory;
 mod migration;
 mod operations;
 mod pixelpipe;
+mod pixelpipe_mode;
 mod reference;
+mod shaders;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
@@ -111,6 +113,11 @@ enum Task {
         #[command(subcommand)]
         command: pixelpipe::PixelpipeCommand,
     },
+    /// Generate, validate, and smoke-test checked-in WGSL shaders.
+    Shaders {
+        #[command(subcommand)]
+        command: shaders::ShadersCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -133,6 +140,7 @@ fn main() -> ExitCode {
         Task::OperationStack { command } => operations::run_stack(&root, &command),
         Task::OperationRegistry { command } => operations::run_registry(&root, &command),
         Task::Pixelpipe { command } => pixelpipe::run(&root, command),
+        Task::Shaders { command } => shaders::run(&root, &command),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -188,6 +196,7 @@ mod tests {
             "operation-stack",
             "operation-registry",
             "pixelpipe",
+            "shaders",
         ] {
             assert!(help.contains(command), "missing {command}");
         }

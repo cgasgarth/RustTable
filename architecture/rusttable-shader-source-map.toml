@@ -1,0 +1,84 @@
+schema = "rusttable.shader-source-map.v1"
+repository = "darktable-org/darktable"
+commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+issue = 292
+
+[[responsibility]]
+id = "program-registry-basic"
+upstream_path = "data/kernels/programs.conf"
+upstream_symbol = "basic"
+rust_owner = "crates/rusttable-gpu/src/shader/registry.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "kernel-source-basic"
+upstream_path = "data/kernels/basic.cl"
+upstream_symbol = "exposure"
+rust_owner = "crates/rusttable-gpu/shaders/point.wgsl"
+status = "Replaced"
+
+[[responsibility]]
+id = "shared-color-kernel-source"
+upstream_path = "data/kernels/colorspaces.cl"
+upstream_symbol = "Lab_to_XYZ"
+rust_owner = "crates/rusttable-gpu/shaders/includes/point_common.wgsl"
+status = "Deferred"
+owner_issue = 300
+
+[[responsibility]]
+id = "kernel-source-transitive-includes"
+upstream_path = "data/kernels/programs.conf;data/kernels/basic.cl"
+upstream_symbol = "transitive include closure"
+rust_owner = "crates/rusttable-gpu/src/shader/source.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "host-kernel-creation"
+upstream_path = "src/common/opencl.c"
+upstream_symbol = "dt_opencl_create_kernel"
+rust_owner = "crates/rusttable-gpu/src/shader/registry.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "host-exposure-binding"
+upstream_path = "src/iop/exposure.c"
+upstream_symbol = "kernel_exposure/process_cl"
+rust_owner = "crates/rusttable-processing/src/registry.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "pipeline-dispatch-boundary"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "process_cl"
+rust_owner = "crates/rusttable-gpu/src/runtime.rs"
+status = "Deferred"
+owner_issue = 301
+
+[[responsibility]]
+id = "operation-manifest-join"
+upstream_path = "architecture/darktable-operations.toml"
+upstream_symbol = "exposure.opencl_programs/opencl_kernels"
+rust_owner = "architecture/rusttable-operation-registry.toml"
+status = "Replaced"
+
+[[responsibility]]
+id = "operation-exposure-entry"
+upstream_path = "src/iop/exposure.c"
+upstream_symbol = "exposure"
+rust_owner = "crates/rusttable-gpu/src/shader/registry.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "infrastructure-point-entries"
+upstream_path = "RustTable-owned infrastructure"
+upstream_symbol = "transfer/offset/gain/copy/probe"
+rust_owner = "crates/rusttable-gpu/src/shader/registry.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "unported-operation-kernels"
+upstream_path = "data/kernels/programs.conf"
+upstream_symbol = "unported entries"
+rust_owner = "architecture/rusttable-shader-source-map.toml"
+status = "Deferred"
+owner_issue = 301

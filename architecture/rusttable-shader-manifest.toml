@@ -1,0 +1,444 @@
+schema = "rusttable.shader.v1"
+reflection_schema = "rusttable.shader-reflection.v1"
+
+[[shader]]
+id = "rusttable.point.copy"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "infrastructure.none"
+owner_operations = []
+owner_kernels = ["rusttable.kernel.copy"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.copy"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.copy"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.copy"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.exposure"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "rusttable.cpu.exposure"
+owner_operations = ["rusttable.exposure"]
+owner_kernels = ["darktable.basic.exposure"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.exposure"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.exposure"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.exposure"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.linear_offset"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "infrastructure.none"
+owner_operations = []
+owner_kernels = ["rusttable.kernel.linear-offset"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.linear_offset"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.linear_offset"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.linear_offset"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.probe"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "infrastructure.none"
+owner_operations = []
+owner_kernels = ["rusttable.kernel.probe"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.probe"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.probe"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.probe"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.rgb_gain"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "infrastructure.none"
+owner_operations = []
+owner_kernels = ["rusttable.kernel.rgb-gain"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.rgb_gain"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.rgb_gain"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.rgb_gain"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.transfer_decode"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "infrastructure.none"
+owner_operations = []
+owner_kernels = ["rusttable.kernel.transfer-decode"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.transfer_decode"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.transfer_decode"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.transfer_decode"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.transfer_encode"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "ee8b4e39559e381cac2ed096f9dc56c2682ddc433b17147eaf5175c4f7b4e3f6"
+generated_wgsl_hash = "d080fd031e106ed2930bb60af163d551661a82978d8c1f5a0cdbc799b4c6c209"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "infrastructure.none"
+owner_operations = []
+owner_kernels = ["rusttable.kernel.transfer-encode"]
+workgroup_size = [256, 1, 1]
+
+[[shader.binding]]
+shader = "rusttable.point.transfer_encode"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.transfer_encode"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f4>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 14
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.transfer_encode"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 15
+source_column = 1
+

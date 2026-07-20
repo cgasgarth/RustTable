@@ -7,6 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+naga.workspace = true
 postcard.workspace = true
 serde.workspace = true
 sha2.workspace = true
