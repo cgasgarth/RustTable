@@ -3,12 +3,14 @@ use std::fmt;
 use std::fmt::Write as _;
 
 use rusttable_color::{BlackPointCompensation, ColorEncoding, ProfileId, RenderingIntent};
-use rusttable_core::template::{EncoderDescriptor, EvaluationError, Template, TemplateContext};
-use rusttable_core::{ContentHash, EditId, PhotoId, RenderSizeError, RenderSizeRequest, Revision};
+use rusttable_core::template::{EncoderDescriptor, Template, TemplateContext};
+use rusttable_core::{ContentHash, EditId, PhotoId, RenderSizeRequest, Revision};
 use rusttable_image::ImageDimensions;
 use rusttable_render::RenderReceipt;
 use sha2::{Digest, Sha256};
 
+use crate::errors::{ExportContractError, ExportValidationError};
+use crate::hash_helpers;
 use crate::{ArtifactKind, CollisionPolicy};
 
 pub const EXPORT_CONTRACT_SCHEMA: &str = "rusttable.export-contract.v1";
@@ -220,6 +222,7 @@ impl EncoderSettings {
 pub struct DestinationSettings {
     destination_id: String,
     collision: CollisionPolicy,
+    parameters: BTreeMap<String, String>,
 }
 
 impl DestinationSettings {
@@ -229,7 +232,14 @@ impl DestinationSettings {
         Self {
             destination_id: destination_id.into(),
             collision,
+            parameters: BTreeMap::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_parameter(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.parameters.insert(name.into(), value.into());
+        self
     }
 
     #[must_use]
@@ -240,6 +250,11 @@ impl DestinationSettings {
     #[must_use]
     pub const fn collision(&self) -> CollisionPolicy {
         self.collision
+    }
+
+    #[must_use]
+    pub fn parameters(&self) -> &BTreeMap<String, String> {
+        &self.parameters
     }
 }
 
@@ -256,6 +271,16 @@ impl Dependency {
             id: id.into(),
             content_hash,
         }
+    }
+
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    #[must_use]
+    pub const fn content_hash(&self) -> ContentHash {
+        self.content_hash
     }
 }
 
@@ -296,6 +321,31 @@ impl DependencySnapshot {
     pub fn with_asset(mut self, asset: Dependency) -> Self {
         self.assets.push(asset);
         self
+    }
+
+    #[must_use]
+    pub const fn catalog_revision(&self) -> Revision {
+        self.catalog_revision
+    }
+
+    #[must_use]
+    pub const fn edit_revision(&self) -> Revision {
+        self.edit_revision
+    }
+
+    #[must_use]
+    pub const fn style_hash(&self) -> Option<ContentHash> {
+        self.style_hash
+    }
+
+    #[must_use]
+    pub const fn profile(&self) -> Option<ProfileId> {
+        self.profile
+    }
+
+    #[must_use]
+    pub fn assets(&self) -> &[Dependency] {
+        &self.assets
     }
 }
 
@@ -353,6 +403,16 @@ impl OutputProfile {
             encoding,
             profile_id: Some(profile_id),
         }
+    }
+
+    #[must_use]
+    pub const fn encoding(self) -> ColorEncoding {
+        self.encoding
+    }
+
+    #[must_use]
+    pub const fn profile_id(self) -> Option<ProfileId> {
+        self.profile_id
     }
 }
 
@@ -436,8 +496,23 @@ impl ExportRequest {
     }
 
     #[must_use]
-    pub const fn edit_revision(&self) -> Option<Revision> {
-        self.edit_revision
+    pub const fn quality(&self) -> PipelineQuality {
+        self.quality
+    }
+
+    #[must_use]
+    pub const fn interpolation(&self) -> Interpolation {
+        self.interpolation
+    }
+
+    #[must_use]
+    pub const fn rendering_intent(&self) -> RenderingIntent {
+        self.intent
+    }
+
+    #[must_use]
+    pub const fn black_point_compensation(&self) -> BlackPointCompensation {
+        self.black_point_compensation
     }
 
     #[must_use]
@@ -458,6 +533,26 @@ impl ExportRequest {
     #[must_use]
     pub const fn priority(&self) -> ExportPriority {
         self.priority
+    }
+
+    #[must_use]
+    pub fn encoder_settings(&self) -> &EncoderSettings {
+        &self.encoder_settings
+    }
+
+    #[must_use]
+    pub fn destination(&self) -> &DestinationSettings {
+        &self.destination
+    }
+
+    #[must_use]
+    pub fn dependencies(&self) -> Option<&DependencySnapshot> {
+        self.dependencies.as_ref()
+    }
+
+    #[must_use]
+    pub const fn edit_revision(&self) -> Option<Revision> {
+        self.edit_revision
     }
 
     #[must_use]
@@ -498,6 +593,21 @@ impl ExportRequest {
     #[must_use]
     pub fn with_interpolation(mut self, interpolation: Interpolation) -> Self {
         self.interpolation = interpolation;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_rendering_intent(mut self, intent: RenderingIntent) -> Self {
+        self.intent = intent;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_black_point_compensation(
+        mut self,
+        compensation: BlackPointCompensation,
+    ) -> Self {
+        self.black_point_compensation = compensation;
         self
     }
 
@@ -587,6 +697,14 @@ impl ExportRequest {
         {
             return Err(ExportValidationError::EmptyEncoderParameter);
         }
+        if self
+            .destination
+            .parameters
+            .keys()
+            .any(|key| key.trim().is_empty())
+        {
+            return Err(ExportValidationError::EmptyDestinationParameter);
+        }
         if dependencies
             .assets
             .iter()
@@ -612,11 +730,30 @@ impl ExportRequest {
         writeln!(output, "kind={:?}", self.kind).expect("String cannot fail");
         writeln!(output, "template={}", self.template.ast_hash()).expect("String cannot fail");
         writeln!(output, "evaluation={}", receipt.receipt_hash()).expect("String cannot fail");
-        writeln!(output, "photo={}", display_option(self.photo_id)).expect("String cannot fail");
-        writeln!(output, "edit={}", display_option(self.edit_id)).expect("String cannot fail");
-        writeln!(output, "revision={}", display_option(self.edit_revision))
-            .expect("String cannot fail");
-        writeln!(output, "style={}", hash_option(self.style_hash)).expect("String cannot fail");
+        writeln!(
+            output,
+            "photo={}",
+            hash_helpers::display_option(self.photo_id)
+        )
+        .expect("String cannot fail");
+        writeln!(
+            output,
+            "edit={}",
+            hash_helpers::display_option(self.edit_id)
+        )
+        .expect("String cannot fail");
+        writeln!(
+            output,
+            "revision={}",
+            hash_helpers::display_option(self.edit_revision)
+        )
+        .expect("String cannot fail");
+        writeln!(
+            output,
+            "style={}",
+            hash_helpers::hash_option(self.style_hash)
+        )
+        .expect("String cannot fail");
         writeln!(output, "quality={:?}", self.quality).expect("String cannot fail");
         writeln!(output, "size={:?}", self.size).expect("String cannot fail");
         writeln!(output, "interpolation={:?}", self.interpolation).expect("String cannot fail");
@@ -630,20 +767,23 @@ impl ExportRequest {
         writeln!(
             output,
             "encoder={}",
-            encoder_settings_hash(&self.encoder_settings)
+            hash_helpers::encoder_settings_hash(&self.encoder_settings)
         )
         .expect("String cannot fail");
         writeln!(
             output,
             "destination={}|{:?}",
-            opaque_string_hash(&self.destination.destination_id),
+            hash_helpers::opaque_string_hash(&self.destination.destination_id),
             self.destination.collision
         )
         .expect("String cannot fail");
+        for (name, value) in &self.destination.parameters {
+            writeln!(output, "destination-parameter={name}:{value}").expect("String cannot fail");
+        }
         writeln!(
             output,
             "dependencies={}",
-            hex(&dependency_hash(self.dependencies.as_ref()))
+            hash_helpers::hex(&hash_helpers::dependency_hash(self.dependencies.as_ref()))
         )
         .expect("String cannot fail");
         writeln!(output, "priority={:?}", self.priority).expect("String cannot fail");
@@ -655,69 +795,10 @@ impl ExportRequest {
     ///
     /// Returns an error when canonical template evaluation fails.
     pub fn request_hash(&self) -> Result<[u8; 32], ExportContractError> {
+        self.validate().map_err(ExportContractError::Validation)?;
         Ok(Sha256::digest(self.canonical_bytes()?).into())
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExportValidationError {
-    MissingPhotoId,
-    MissingEditRevision,
-    MissingDependencySnapshot,
-    MissingAssetDependency,
-    InvalidSize(RenderSizeError),
-    UnspecifiedOutputProfile,
-    MissingOutputProfileReference,
-    EncodingProfileMismatch,
-    AlphaNotRepresentable,
-    InvalidOpaqueIdentifier { field: &'static str },
-    EmptyEncoderParameter,
-}
-
-impl fmt::Display for ExportValidationError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::MissingPhotoId => "export request is missing a photo ID",
-            Self::MissingEditRevision => "export request is missing an exact edit revision",
-            Self::MissingDependencySnapshot => "export request is missing its dependency snapshot",
-            Self::MissingAssetDependency => {
-                "export request is missing its primary asset dependency"
-            }
-            Self::InvalidSize(error) => return error.fmt(formatter),
-            Self::UnspecifiedOutputProfile => "export output profile is unspecified",
-            Self::MissingOutputProfileReference => {
-                "external output profile has no opaque reference"
-            }
-            Self::EncodingProfileMismatch => "pixel encoding and output profile disagree",
-            Self::AlphaNotRepresentable => {
-                "required alpha is not representable by the pixel encoding"
-            }
-            Self::InvalidOpaqueIdentifier { field } => {
-                return write!(formatter, "{field} must be a non-empty opaque identifier");
-            }
-            Self::EmptyEncoderParameter => "encoder parameter names must not be empty",
-        })
-    }
-}
-
-impl std::error::Error for ExportValidationError {}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExportContractError {
-    Evaluation(EvaluationError),
-    Validation(ExportValidationError),
-}
-
-impl fmt::Display for ExportContractError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Evaluation(error) => write!(formatter, "export request template failed: {error}"),
-            Self::Validation(error) => write!(formatter, "export request is invalid: {error}"),
-        }
-    }
-}
-
-impl std::error::Error for ExportContractError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactBuffer {
@@ -846,8 +927,8 @@ impl ExportArtifact {
         {
             return Err(ArtifactError::InvalidFilename);
         }
-        let dependency_hash = dependency_hash(request.dependencies.as_ref());
-        let content_hash = artifact_hash(&buffer, &metadata_packet);
+        let dependency_hash = hash_helpers::dependency_hash(request.dependencies.as_ref());
+        let content_hash = hash_helpers::artifact_hash(&buffer, &metadata_packet);
         let request_hash = request.request_hash().map_err(ArtifactError::Request)?;
         Ok(Self {
             buffer,
@@ -896,73 +977,10 @@ impl ExportArtifact {
     }
 }
 
-fn artifact_hash(buffer: &ArtifactBuffer, metadata: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(buffer.dimensions.width().to_be_bytes());
-    hasher.update(buffer.dimensions.height().to_be_bytes());
-    hasher.update(buffer.stride.to_be_bytes());
-    hasher.update(buffer.encoding.label().as_bytes());
-    hasher.update(buffer.bytes());
-    hasher.update(metadata);
-    hasher.finalize().into()
-}
-
-fn dependency_hash(snapshot: Option<&DependencySnapshot>) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    if let Some(snapshot) = snapshot {
-        hasher.update(snapshot.catalog_revision.get().to_be_bytes());
-        hasher.update(snapshot.edit_revision.get().to_be_bytes());
-        if let Some(hash) = snapshot.style_hash {
-            hasher.update(hash.bytes());
-        }
-        if let Some(profile) = snapshot.profile {
-            hasher.update(profile.sha256());
-            hasher.update(profile.size().to_be_bytes());
-        }
-        for asset in &snapshot.assets {
-            hasher.update(asset.id.as_bytes());
-            hasher.update(asset.content_hash.bytes());
-        }
-    }
-    hasher.finalize().into()
-}
-
-fn hash_option(value: Option<ContentHash>) -> String {
-    value.map_or_else(|| "none".to_owned(), |hash| hex(hash.bytes()))
-}
-
-fn opaque_identifier(value: &str) -> bool {
+pub(crate) fn opaque_identifier(value: &str) -> bool {
     !value.trim().is_empty()
         && !value.starts_with('.')
         && !value.contains('/')
         && !value.contains('\\')
         && !value.contains('\0')
-}
-
-fn opaque_string_hash(value: &str) -> String {
-    hex(&Sha256::digest(value.as_bytes()).into())
-}
-
-fn encoder_settings_hash(settings: &EncoderSettings) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{:?}\n", settings.format).as_bytes());
-    for (name, value) in &settings.parameters {
-        hasher.update(name.as_bytes());
-        hasher.update([0]);
-        hasher.update(value.as_bytes());
-        hasher.update([0]);
-    }
-    hex(&hasher.finalize().into())
-}
-
-fn display_option<T: fmt::Display>(value: Option<T>) -> String {
-    value.map_or_else(|| "none".to_owned(), |value| value.to_string())
-}
-
-fn hex(bytes: &[u8; 32]) -> String {
-    let mut output = String::with_capacity(64);
-    for byte in bytes {
-        write!(output, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    output
 }

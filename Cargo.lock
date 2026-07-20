@@ -2906,6 +2906,7 @@ dependencies = [
  "redb",
  "rusttable-catalog",
  "rusttable-core",
+ "rusttable-export",
  "rusttable-image",
  "serde",
 ]
@@ -2960,7 +2961,8 @@ version = "0.1.0"
 dependencies = [
  "mozjpeg-rs",
  "png",
- "rusttable-catalog-store",
+ "postcard",
+ "redb",
  "rusttable-color",
  "rusttable-core",
  "rusttable-image",
@@ -2970,6 +2972,8 @@ dependencies = [
  "rusttable-pixelpipe",
  "rusttable-render",
  "rusttable-webp-native",
+ "serde",
+ "serde_json",
  "sha2",
  "tiff 0.11.3",
 ]

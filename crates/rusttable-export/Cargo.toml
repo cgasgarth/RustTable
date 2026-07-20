@@ -8,9 +8,10 @@ version.workspace = true
 
 [dependencies]
 mozjpeg-rs.workspace = true
+postcard.workspace = true
 png.workspace = true
+redb.workspace = true
 rusttable-color.workspace = true
-rusttable-catalog-store.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
@@ -20,6 +21,8 @@ rusttable-jxl-native.workspace = true
 rusttable-webp-native.workspace = true
 rusttable-pixelpipe.workspace = true
 sha2.workspace = true
+serde_json.workspace = true
+serde.workspace = true
 tiff.workspace = true
 
 [lints]

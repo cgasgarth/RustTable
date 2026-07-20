@@ -11,6 +11,7 @@ postcard.workspace = true
 redb.workspace = true
 rusttable-catalog.workspace = true
 rusttable-core.workspace = true
+rusttable-export.workspace = true
 rusttable-image.workspace = true
 serde.workspace = true
 
