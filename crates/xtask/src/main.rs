@@ -10,6 +10,7 @@ mod fixtures;
 mod foundation;
 mod gpu;
 mod migration;
+mod operations;
 mod reference;
 
 use std::path::{Path, PathBuf};
@@ -83,6 +84,16 @@ enum Task {
         #[command(subcommand)]
         command: migration::MigrationCommand,
     },
+    /// Verify operation descriptors against their darktable source accounting.
+    OperationSchema {
+        #[command(subcommand)]
+        command: operations::OperationSchemaCommand,
+    },
+    /// Verify immutable operation-stack templates and command contracts.
+    OperationStack {
+        #[command(subcommand)]
+        command: operations::OperationStackCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -100,6 +111,8 @@ fn main() -> ExitCode {
         Task::Dist => dist::run(&root),
         Task::Configuration { command } => configuration::run(&root, command),
         Task::Migration { command } => migration::run(&root, command),
+        Task::OperationSchema { command } => operations::run_schema(&root, &command),
+        Task::OperationStack { command } => operations::run_stack(&root, &command),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -150,6 +163,8 @@ mod tests {
             "dist",
             "configuration",
             "migration",
+            "operation-schema",
+            "operation-stack",
         ] {
             assert!(help.contains(command), "missing {command}");
         }

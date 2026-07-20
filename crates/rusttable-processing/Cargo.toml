@@ -7,8 +7,11 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+postcard.workspace = true
 rusttable-core.workspace = true
 rusttable-color.workspace = true
+serde.workspace = true
+sha2.workspace = true
 
 [[bench]]
 name = "performance_budgets"

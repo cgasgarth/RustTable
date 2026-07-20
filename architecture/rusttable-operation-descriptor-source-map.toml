@@ -1,0 +1,53 @@
+schema = "rusttable.operation-source-map.v1"
+issue = 263
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "operation-instance-descriptor"
+upstream_path = "src/develop/imageop.h"
+upstream_symbol = "dt_iop_module_t"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "operation-shared-descriptor"
+upstream_path = "src/develop/imageop.h"
+upstream_symbol = "dt_iop_module_so_t"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "operation-abi-surface"
+upstream_path = "src/iop/iop_api.h"
+upstream_symbol = "REQUIRED"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "roi-contract"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbol = "dt_iop_roi_t"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "tiling-contract"
+upstream_path = "src/develop/tiling.h"
+upstream_symbol = "dt_develop_tiling_t"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "history-parameter-contract"
+upstream_path = "src/common/history.h"
+upstream_symbol = "dt_history_item_t"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "representative-descriptors"
+upstream_path = "src/iop/exposure.c"
+upstream_symbol = "dt_iop_exposure_params_t"
+rust_path = "crates/rusttable-processing/src/descriptor.rs"
+status = "replaced"

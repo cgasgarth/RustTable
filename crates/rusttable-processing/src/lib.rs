@@ -17,10 +17,12 @@
 #![doc = "```"]
 
 mod color;
+pub mod descriptor;
 mod evaluate;
 mod exposure;
 mod graph;
 mod operation;
+pub mod operation_stack;
 mod output;
 mod pipeline;
 mod scalar;
@@ -53,4 +55,10 @@ pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
     evaluate_graph, evaluate_graph_window,
+};
+
+pub use operation_stack::{
+    CommandReceipt, InsertPosition, MigrationFinding, MigrationOutcome, MoveTarget,
+    OpaqueOperation, OperationInstance, OperationStackError, OperationStackResult,
+    OperationStackSnapshot, OperationStackTemplate, StackCommand, StackStage, StackStageFence,
 };

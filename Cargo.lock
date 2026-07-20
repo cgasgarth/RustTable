@@ -2931,8 +2931,11 @@ version = "0.1.0"
 name = "rusttable-processing"
 version = "0.1.0"
 dependencies = [
+ "postcard",
  "rusttable-color",
  "rusttable-core",
+ "serde",
+ "sha2",
 ]
 
 [[package]]
@@ -4463,6 +4466,7 @@ dependencies = [
  "rusttable-import",
  "rusttable-metadata",
  "rusttable-parity",
+ "rusttable-processing",
  "rusttable-render",
  "rusttable-testkit",
  "serde_json",
