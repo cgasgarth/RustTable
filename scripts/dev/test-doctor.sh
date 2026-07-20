@@ -48,7 +48,7 @@ cat >"$bin/bun" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "${FAKE_BUN_VERSION:-fixture-bun}"
 EOF
-for tool in cargo rustc rustfmt cargo-clippy pre-commit rg; do
+for tool in cargo rustc rustfmt cargo-clippy cargo-deny rg; do
   printf '#!/usr/bin/env bash\nexit 0\n' >"$bin/$tool"
 done
 chmod +x "$bin"/*
@@ -74,12 +74,12 @@ if (cd "$repo" && FAKE_ROOT="$repo" FAKE_BRANCH=main env -u GIT_DIR -u GIT_WORK_
   exit 1
 fi
 grep -q 'implementation branch is protected: main' "$fixture/output"
-if (cd "$repo" && FAKE_ROOT="$repo" FAKE_ORIGIN=https://user:secret@example.invalid/RustTable.git rm "$bin/pre-commit" && FAKE_ROOT="$repo" FAKE_ORIGIN=https://user:secret@example.invalid/RustTable.git env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE PATH="$fixture_path" bash scripts/dev/doctor.sh >"$fixture/output" 2>&1); then
+if (cd "$repo" && FAKE_ROOT="$repo" FAKE_ORIGIN=https://user:secret@example.invalid/RustTable.git rm "$bin/cargo" && FAKE_ROOT="$repo" FAKE_ORIGIN=https://user:secret@example.invalid/RustTable.git env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE PATH="$fixture_path" bash scripts/dev/doctor.sh >"$fixture/output" 2>&1); then
   printf 'expected aggregated failures to fail\n' >&2
   exit 1
 fi
 grep -q 'origin must resolve to cgasgarth/RustTable' "$fixture/output"
-grep -q 'missing tool: pre-commit' "$fixture/output"
+grep -q 'missing tool: cargo' "$fixture/output"
 if grep -q secret "$fixture/output"; then
   printf 'doctor leaked remote credentials\n' >&2
   exit 1

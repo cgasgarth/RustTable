@@ -14,6 +14,9 @@ pub(crate) fn reference_commit(source: &Path) -> String {
         }
     }
     std::process::Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .args([
             "-C",
             &source.display().to_string(),

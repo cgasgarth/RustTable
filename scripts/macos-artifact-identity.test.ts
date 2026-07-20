@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   buildMacosArchiveBasename,
   expectedMachOArchitecture,
@@ -10,10 +9,10 @@ import {
   renderMacosSmokeLog,
 } from './macos-artifact-identity';
 
-const rustRelease = /^(?:release) = "([^"]+)"$/m.exec(
-  readFileSync(resolve(import.meta.dir, '../quality/compiler-baseline.toml'), 'utf8'),
+const rustRelease = /^release: (\S+)$/m.exec(
+  execFileSync('rustc', ['-vV'], { encoding: 'utf8' }),
 )?.[1];
-if (!rustRelease) throw new Error('compiler baseline release is missing');
+if (!rustRelease) throw new Error('selected rustc release is missing');
 const rustc = (host: string, release = rustRelease): string =>
   `rustc ${release} (fixture)\nbinary: rustc\ncommit-hash: fixture\ncommit-date: fixture\nhost: ${host}\nrelease: ${release}\nLLVM version: 20.1.0\n`;
 

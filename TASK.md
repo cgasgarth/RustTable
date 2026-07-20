@@ -2,37 +2,43 @@
 
 ## Goal
 
-Rewrite darktable completely in Rust, using iced for the UI, while preserving the useful domain behavior and history context of the original project.
+Rewrite darktable completely in Rust with Iced, preserving useful image-processing behavior, catalog and metadata formats, editing workflows, compatibility history, and reference-render fidelity.
 
 ## Source of truth
 
-- GitHub milestones define broad delivery areas.
-- GitHub issues define the executable work queue.
-- Each issue maps to exactly one pull request.
-- Every pull request targets `main` and uses squash merge.
-- Do not commit directly to `main` or `master`.
-- Use `/Users/cgas/Documents/RustTable/worktrees` for development worktrees.
+- GitHub milestones define delivery areas.
+- GitHub issues, labels, priorities, dependencies, and state define executable work.
+- Do not commit issue snapshots, hashes, generated queues, readiness calculations, or source-file ownership databases.
+- One coherent issue maps to one ready-for-review, squash-merged PR.
 
 ## Engineering constraints
 
-- Use strict Rust compiler diagnostics, rustfmt, and Clippy; warnings are errors.
-- Avoid unsafe Rust. Permit it only when absolutely necessary, isolate it, document safety invariants, and test it.
-- Keep hand-written source files at or below 1,000 lines; generated files are the only exception.
-- Prefer established Rust crates and standard-library/framework features where appropriate.
-- Use test-driven development with deterministic, focused regression coverage.
+- Use the pinned Rust 1.98 beta, Rust 2024, strict warnings/Clippy, and `unsafe_code = "forbid"`.
+- Keep handwritten source files at or below 1,000 lines.
+- Prefer established crates and language/framework features.
+- Use deterministic test-driven development.
+- Keep darktable C/C++/OpenCL only in the separate reference clone.
 
-## Validation policy
+## Product evidence
 
-- Pre-commit: complete local merge-readiness checks; no elapsed-time cap.
-- Pre-push: complete local merge-readiness checks; no elapsed-time cap.
-- Pull-request GitHub Actions: none.
-- Pushes to `main`: rerun the complete gate and all exhaustive or heavyweight validation.
+- Preserve the pinned darktable identity.
+- Preserve the generated operation/history compatibility manifest.
+- Preserve the real fixture corpus, differential reference runner, product benchmarks, and distribution tooling.
+- Use the short subsystem map for navigation; do not recreate exhaustive file-to-issue accounting.
+
+## Validation
+
+- Local: `cargo xtask check`.
+- Pull requests: Linux formatting/Clippy/tests/product-data checks, macOS and Windows checks/tests, and dependency/security checks.
+- Post-merge/release: coverage and distribution.
+- Local hooks are optional and uncapped. Pull-request CI is authoritative.
 
 ## Execution loop
 
-1. Choose one open GitHub issue and its milestone.
-2. Create one focused worktree branch for that issue.
-3. Write the failing test or executable acceptance check first.
-4. Implement the smallest complete change and validate it within the applicable budget.
-5. Open one PR that closes only that issue, then squash-merge it.
-6. Start the next issue only after the prior issue is integrated or explicitly blocked.
+1. Select dependency-ready work by priority.
+2. Create an isolated worktree from `origin/main`.
+3. Write the focused failing test or executable acceptance check.
+4. Implement the smallest complete product slice.
+5. Run `cargo xtask check`.
+6. Open one ready PR with Why, How, Validation, and issue linkage.
+7. Enable squash auto-merge and integrate before exceeding the active two-PR batch.

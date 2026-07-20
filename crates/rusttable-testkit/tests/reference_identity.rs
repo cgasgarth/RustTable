@@ -201,16 +201,16 @@ fn expected_target() -> &'static str {
 }
 
 fn source_commit(source: &Path) -> String {
-    let output = Command::new("git")
+    let output = isolated_git()
         .args(["init", "--quiet", source.to_str().expect("source path")])
         .output()
         .expect("git init");
     assert!(output.status.success());
-    let _ = Command::new("git")
+    let _ = isolated_git()
         .args(["-C", source.to_str().expect("source path"), "add", "."])
         .status()
         .expect("git add");
-    let _ = Command::new("git")
+    let _ = isolated_git()
         .args([
             "-C",
             source.to_str().expect("source path"),
@@ -226,7 +226,7 @@ fn source_commit(source: &Path) -> String {
         .status()
         .expect("git commit");
     String::from_utf8(
-        Command::new("git")
+        isolated_git()
             .args([
                 "-C",
                 source.to_str().expect("source path"),
@@ -240,6 +240,15 @@ fn source_commit(source: &Path) -> String {
     .expect("commit is utf8")
     .trim()
     .to_owned()
+}
+
+fn isolated_git() -> Command {
+    let mut command = Command::new("git");
+    command
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE");
+    command
 }
 
 fn hash_file(path: &Path) -> String {

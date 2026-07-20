@@ -1,98 +1,16 @@
-# Authoritative RustTable implementation/native boundary policy.
-schema = "rusttable.native-boundaries.v1"
-owner_issue = 168
-primary_compiler = "quality/compiler-baseline.toml"
-ownership_map = "architecture/native-ownership.toml"
-workspace_dag = "architecture/workspace-dag.toml"
-dependency_policy = "quality/dependency-sources.toml"
-reference_clone = "../upstream"
+# RustTable stays Rust-owned. This policy is intentionally human-readable; the
+# compiler lint and cargo xtask check are the executable enforcement surfaces.
+schema = "rusttable.native-boundaries.v2"
+unsafe_code = "forbid"
+reference_repository = "darktable-org/darktable"
+reference_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 
-# These are repository inputs, not a vendored copy of the reference project.
-forbidden_extensions = ["c", "cc", "cpp", "cxx", "h", "hh", "hpp", "m", "mm", "asm", "s", "S", "cl", "cmake"]
-forbidden_filenames = ["CMakeLists.txt", "ConfigureChecks.cmake", "build.rs"]
-forbidden_direct_dependencies = ["cc", "cmake", "bindgen", "pkg-config", "libloading", "libheif-sys", "littlecms2-sys", "gphoto2-sys", "libsqlite3-sys", "mlua-sys", "lua-src", "luajit-src"]
-forbidden_source_tokens = ["extern \"C\"", "#[link(", "rustc-link-lib", "rustc-link-search", "bindgen::Builder", "cc::Build", "cmake::Config", "-C link-", "-Clink-", "raw-dylib", "global_asm!", "naked", "RUSTC_BOOTSTRAP", "#![feature(", "unsafe_code = \"allow\"", "#![allow(unsafe_code)]"]
-forbidden_reference_tokens = ["../upstream", "/upstream/", "\\upstream\\", "darktable/src/", "darktable\\src\\"]
-allowed_unsafe_crates = ["rusttable-simd"]
-forbidden_adapter_consumers = ["rusttable-core", "rusttable-image", "rusttable-image-io", "rusttable-color", "rusttable-pixelpipe", "rusttable-masks", "rusttable-ui", "rusttable-gpu", "rusttable-catalog", "rusttable-catalog-store", "rusttable-import", "rusttable-processing", "rusttable-render", "rusttable-export", "rusttable-metadata", "rusttable-plugin-api"]
+forbidden_source_extensions = [
+  "c", "cc", "cl", "cmake", "cpp", "cxx", "h", "hh", "hpp", "m", "mm", "s",
+]
+forbidden_build_files = ["CMakeLists.txt", "ConfigureChecks.cmake"]
+forbidden_direct_dependencies = ["bindgen", "cc", "cmake", "libloading", "pkg-config"]
 
-[[adapters]]
-id = "sqlite-compat-reading"
-adapter_crate = "rusttable-sqlite-native"
-native_library = "SQLite"
-purpose = "read existing darktable SQLite catalogs without importing darktable code"
-owning_api = "rusttable-compat::sqlite"
-allowed_dependents = ["rusttable-compat", "rusttable-catalog-store"]
-build_features = ["system-sqlite-only"]
-unsafe_surface = "opaque owned connection and statement handles; no raw handle in public API"
-callback_model = "no callbacks across the boundary; panic-free by construction"
-thread_model = "connection-affine; one owner at a time"
-removal_condition = "Rust-native compatibility reader replaces the adapter and its transitive native library"
-status = "reserved"
-
-[[adapters]]
-id = "littlecms-icc"
-adapter_crate = "rusttable-littlecms-native"
-native_library = "LittleCMS"
-purpose = "ICC transforms required by compatibility and color qualification"
-owning_api = "rusttable-color::icc"
-allowed_dependents = ["rusttable-color", "rusttable-testkit"]
-build_features = ["system-littlecms-only"]
-unsafe_surface = "opaque owned transform handle; explicit buffer bounds"
-callback_model = "no callbacks across the boundary; panic-free by construction"
-thread_model = "transform instance is Send only when the vendor contract permits it"
-removal_condition = "Rust-native ICC transform path covers the accepted profile matrix"
-status = "reserved"
-
-[[adapters]]
-id = "libheif-codecs"
-adapter_crate = "rusttable-libheif-native"
-native_library = "libheif/codec integration"
-purpose = "HEIF/AVIF codec integration where the Rust codec set is insufficient"
-owning_api = "rusttable-image-io::heif"
-allowed_dependents = ["rusttable-image-io", "rusttable-import"]
-build_features = ["system-libheif-only"]
-unsafe_surface = "opaque owned decoded buffers with checked dimensions and deterministic release"
-callback_model = "vendor callbacks are contained and panic-free"
-thread_model = "decoder instance is not shared across threads"
-removal_condition = "Rust-native codec support covers the accepted HEIF/AVIF corpus"
-status = "reserved"
-
-[[adapters]]
-id = "gphoto2-camera"
-adapter_crate = "rusttable-gphoto2-native"
-native_library = "gPhoto2"
-purpose = "camera control and capture"
-owning_api = "rusttable-camera"
-allowed_dependents = ["rusttable-camera", "rusttable-app"]
-build_features = ["system-gphoto2-only"]
-unsafe_surface = "opaque camera/session handles with deterministic close"
-callback_model = "diagnostics bounded to 64 KiB; callbacks are panic-free and cannot unwind"
-thread_model = "camera session is thread-affine and generation-bound"
-removal_condition = "Rust-native camera transport covers supported devices"
-status = "reserved"
-
-[[adapters]]
-id = "lua54-host"
-adapter_crate = "rusttable-lua-native"
-native_library = "Lua 5.4"
-purpose = "bounded Lua 5.4 hosting"
-owning_api = "rusttable-scripting"
-allowed_dependents = ["rusttable-app", "xtask"]
-build_features = ["lua54-vendored", "lua54-system"]
-unsafe_surface = "mlua owns the native VM; RustTable exposes only typed DTOs and opaque script IDs"
-callback_model = "panic-contained callbacks; diagnostics are bounded"
-thread_model = "VM is owner-thread-affine and generation-bound"
-removal_condition = "rusttable-lua-native owns the direct mlua dependency and rusttable-scripting remains a safe facade"
-status = "transitional"
-
-[[migration_receipts]]
-id = "lua54-direct-dependency"
-from_crate = "rusttable-scripting"
-target_adapter = "rusttable-lua-native"
-native_dependency = "mlua"
-owner_issue = 168
-status = "accepted-transitional"
-evidence = ["crates/rusttable-scripting/Cargo.toml", "crates/rusttable-scripting/src/host.rs", "quality/dependency-sources.toml"]
-expires = "2026-08-20"
-reason = "The existing Lua host already contains the safe callback, quota, generation, and DTO boundary; isolation of its direct mlua dependency is recorded explicitly until the facade extraction lands."
+# Native transitive dependencies owned by maintained Rust crates are acceptable.
+# A direct FFI adapter requires a focused issue, a safe public API, documented
+# invariants, deterministic cleanup, and tests before this file is amended.

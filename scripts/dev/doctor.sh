@@ -49,7 +49,7 @@ for hook in pre-commit pre-push; do
   fi
 done
 
-for tool in git rustup cargo rustc rustfmt cargo-clippy bun pre-commit rg; do
+for tool in git rustup cargo rustc rustfmt cargo-clippy cargo-deny bun rg; do
   if command -v "$tool" >/dev/null 2>&1; then
     pass "tool available: $tool"
   else

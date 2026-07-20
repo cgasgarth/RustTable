@@ -1,6 +1,18 @@
 [graph]
 all-features = true
 
+[advisories]
+# wayland-scanner uses quick-xml only at compile time to parse trusted protocol
+# definitions. Its current 0.31.10 release pins quick-xml 0.39, so the runtime
+# denial-of-service advisories cannot be reached by RustTable. Remove these
+# exceptions as soon as wayland-scanner accepts quick-xml 0.41 or newer.
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "build-only parser for trusted Wayland protocol XML" },
+    { id = "RUSTSEC-2026-0195", reason = "build-only parser for trusted Wayland protocol XML" },
+    { id = "RUSTSEC-2023-0089", reason = "transitive Wasmtime/postcard dependency with no safe upgrade" },
+    { id = "RUSTSEC-2026-0192", reason = "transitive Iced font dependency with no safe upgrade" },
+]
+
 [licenses]
 allow = [
     "0BSD",

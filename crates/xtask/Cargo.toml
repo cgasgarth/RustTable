@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Typed RustTable repository automation command surface."
+description = "Small product-engineering task runner for RustTable."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,17 +8,11 @@ rust-version.workspace = true
 
 [dependencies]
 clap.workspace = true
-rusttable-core.workspace = true
 rusttable-parity.workspace = true
-rusttable-scripting.workspace = true
 rusttable-testkit.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-icu_casemap.workspace = true
 toml.workspace = true
-unicode-normalization.workspace = true
-process-wrap.workspace = true
 
 [lints]
 workspace = true

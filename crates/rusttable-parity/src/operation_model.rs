@@ -95,7 +95,6 @@ pub struct Operation {
     #[serde(default)]
     pub migrations: Vec<ParameterMigration>,
     pub preset_sources: Vec<String>,
-    pub owning_issue_number: u64,
     #[serde(default)]
     pub evidence: Vec<OperationEvidence>,
     #[serde(default = "default_tolerance_class")]
@@ -194,8 +193,6 @@ pub struct OperationOverride {
     pub migrations: Option<Vec<ParameterMigration>>,
     #[serde(default)]
     pub preset_sources: Option<Vec<String>>,
-    #[serde(default)]
-    pub owning_issue_number: Option<u64>,
     #[serde(default)]
     pub evidence: Option<Vec<OperationEvidence>>,
     #[serde(default)]

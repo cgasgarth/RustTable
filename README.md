@@ -1,62 +1,53 @@
 # RustTable
 
-RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, with [iced](https://iced.rs/) as the application UI framework. The RustTable repository contains only the active Rust implementation and its validation surface; the original tree is kept separately for reference.
+RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, using [Iced](https://iced.rs/) for the desktop UI. This repository contains the Rust product; the original project is kept in a separate read-only clone for behavioral and format reference.
 
-## Status
+## Setup
 
-The migration is being delivered through focused GitHub issues and squash-merged pull requests. The current plan and operating rules are [TASK.md](TASK.md) and [AGENTS.md](AGENTS.md).
-
-## Prerequisites
-
-Install Rust through the toolchain declared in [rust-toolchain.toml](rust-toolchain.toml), and install Bun through the `packageManager` value in [package.json](package.json). The repository doctor checks the complete local setup without installing or fetching anything.
-
-## Clone and worktrees
+Install the toolchain selected by `rust-toolchain.toml`. Bun is needed only for the macOS app installer and distribution tooling.
 
 ```sh
 git clone https://github.com/cgasgarth/RustTable.git
 cd RustTable
+cargo install cargo-deny --version 0.19.8 --locked
 git config core.hooksPath .githooks
-mkdir -p /Users/cgas/Documents/RustTable/worktrees
-git worktree add /Users/cgas/Documents/RustTable/worktrees/<issue> -b codex/<issue> main
 bash scripts/dev/doctor.sh
 ```
 
-The canonical remotes are `origin` and `upstream`, both resolving to `cgasgarth/RustTable`; the `darktable` remote is reference-only. Never push to `darktable-org/darktable`.
-
-## Validation
-
-Run the fast checks before publishing work:
+Create issue worktrees under the dedicated directory:
 
 ```sh
-bash scripts/precommit-fast.sh  # full local build/lint/test gate; intentionally uncapped
-bash scripts/prepush-fast.sh    # complete local merge-readiness gate; intentionally uncapped
-bash scripts/main-ci.sh          # merge-to-main validation
+bash scripts/dev/create-agent-worktree.sh --issue ISSUE_NUMBER
 ```
 
-Pre-commit is the complete local merge-readiness gate. GitHub Actions runs from pushes to
-`main`, repeating that gate and adding coverage, offline closure, packaging, platform,
-security, provenance, and compiler-channel validation.
-
-## Application
-
-Build and run the iced application with locked dependencies:
+## Build and run
 
 ```sh
 cargo build --package rusttable-app --bin rusttable-app --locked
 cargo run --package rusttable-app --bin rusttable-app --locked
 ```
 
-On macOS, Computer Use installs the canonical `rusttable - latest` app at
-`~/Applications/rusttable - latest.app`:
+On macOS, install or replace the canonical Computer Use app:
 
 ```sh
 bun run install:computer-use
 ```
 
-## Contribution workflow
+## Product engineering tasks
 
-Use one GitHub issue, one dedicated worktree, and one pull request per change. Work on a feature branch, pass the local gates, open a PR against `main`, and squash-merge only after review and the local gate pass. Do not commit directly to `main`; repository policy and detailed migration guidance live in [TASK.md](TASK.md) and [AGENTS.md](AGENTS.md).
+```sh
+cargo xtask check
+cargo xtask codegen operations --check
+cargo xtask fixtures verify
+cargo xtask reference provision --help
+cargo xtask reference test --help
+cargo xtask bench run --check
+cargo xtask bench compare --help
+cargo xtask dist
+```
 
-## Reference
+`cargo xtask check` runs formatting, strict Clippy, full workspace tests, source policy, generated-operation validation, the real fixture corpus, and standard dependency checks. Pull-request CI repeats merge-authoritative checks on Linux, macOS, and Windows. Coverage and distribution run after merge and for releases.
 
-The original [darktable project](https://github.com/darktable-org/darktable) remains available in the local reference clone at `/Users/cgas/Documents/RustTable/Darktable` for historical context and behavioral comparison. RustTable's active source is the workspace described by [Cargo.toml](Cargo.toml), with the iced application in [crates/rusttable-app](crates/rusttable-app).
+## Contribution model
+
+GitHub issues, priority labels, and milestones define work. Implement one coherent issue in a dedicated worktree, open a ready-for-review PR against `main`, and squash merge after validation. See [CONTRIBUTING.md](CONTRIBUTING.md), [TASK.md](TASK.md), and [AGENTS.md](AGENTS.md).

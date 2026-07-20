@@ -22,17 +22,16 @@ fn version_evidence() -> &'static str {
 }
 
 fn overrides() -> String {
-    let mut value = String::from(
-        "[[operation]]\nname = \"alpha\"\nowning_issue_number = 448\ntiling_requirement = \"full-frame\"\n",
-    );
-    for field in ["registration", "layout", "contract", "ownership"] {
+    let mut value =
+        String::from("[[operation]]\nname = \"alpha\"\ntiling_requirement = \"full-frame\"\n");
+    for field in ["registration", "layout", "contract"] {
         value.push_str(&evidence(field, "src/iop/alpha.c"));
     }
     value.push_str(&semantic_contract("alpha", "identity", "full-frame"));
     value.push_str(
-        "\n[[operation]]\nname = \"zeta\"\nowning_issue_number = 448\nmodule_version = 2\nparameter_size = 8\nparameter_layout_hash = \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"\n",
+        "\n[[operation]]\nname = \"zeta\"\nmodule_version = 2\nparameter_size = 8\nparameter_layout_hash = \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"\n",
     );
-    for field in ["registration", "layout", "contract", "ownership", "gpu"] {
+    for field in ["registration", "layout", "contract", "gpu"] {
         value.push_str(&evidence(field, "src/iop/zeta.c"));
     }
     value.push_str(&semantic_contract("zeta", "identity", "tiled"));
@@ -123,7 +122,7 @@ fn operation_scan_is_deterministic_and_uses_only_explicit_evidence() {
 }
 
 #[test]
-fn operation_scan_rejects_fabricated_versions_and_missing_ownership() {
+fn operation_scan_rejects_fabricated_versions_and_invalid_evidence() {
     let root = fixture_root("operation-negative");
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(root.join("src/iop")).expect("fixture iop directory");
@@ -146,10 +145,6 @@ fn operation_scan_rejects_fabricated_versions_and_missing_ownership() {
         "kernel void basic() {}\n",
     )
     .expect("fixture kernel");
-
-    let missing_ownership =
-        overrides().replace("owning_issue_number = 448", "owning_issue_number = 0");
-    assert!(scan_operations_with_overrides(&root, &missing_ownership).is_err());
 
     let fabricated = overrides().replace(
         "fixture_id = \"operation.zeta.params.v1\"",

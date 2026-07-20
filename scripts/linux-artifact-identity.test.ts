@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import {
   parseElfHeader,
   parseLinuxArtifactIdentity,
@@ -10,10 +9,10 @@ import {
   validateLdd,
 } from './linux-artifact-identity';
 
-const rustRelease = /^(?:release) = "([^"]+)"$/m.exec(
-  readFileSync(resolve(import.meta.dir, '../quality/compiler-baseline.toml'), 'utf8'),
+const rustRelease = /^release: (\S+)$/m.exec(
+  execFileSync('rustc', ['-vV'], { encoding: 'utf8' }),
 )?.[1];
-if (!rustRelease) throw new Error('compiler baseline release is missing');
+if (!rustRelease) throw new Error('selected rustc release is missing');
 const rustc = `rustc ${rustRelease} (fixture)\nrelease: ${rustRelease}\ncommit-hash: fixture\nhost: x86_64-unknown-linux-gnu\n`;
 const elfHeader = `ELF Header:
   Magic:   7f 45 4c 46 02 01 01 00

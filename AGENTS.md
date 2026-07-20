@@ -1,88 +1,56 @@
 # RustTable Engineering Guidelines
 
-## Project direction
+## Product direction
 
-- RustTable is a complete rewrite of darktable in Rust; do not incrementally port the existing C implementation.
-- After a darktable capability is ported, delete its corresponding legacy C/C++ implementation and obsolete CMake/native build, packaging, and generated-native files from RustTable. Keep historical C/C++ only in the separate local darktable reference clone at `/Users/cgas/Documents/RustTable/Darktable`; do not retain a fallback or parallel native implementation in this repository.
-- Use `iced` for the user interface.
-- Prefer established Rust crates where they materially improve correctness or maintainability. Prefer the Rust standard library and framework facilities when they are sufficient.
-- Keep the architecture modular, testable, and suitable for independently replaceable components.
+- RustTable is a complete Rust rewrite of darktable with Iced 0.15 from its pinned development revision.
+- Build working import, catalog, edit, preview, save, processing, and export paths. At least one PR in every active batch must advance product behavior.
+- Keep the separate `/Users/cgas/Documents/RustTable/Darktable` clone as the read-only reference. Never copy, compile, link, or retain upstream C/C++/OpenCL in RustTable.
+- When a capability is replaced, delete obsolete native payload from RustTable. Preserve behavior and formats, not the upstream file graph.
+- Follow the Rust crate/module structure while using `architecture/darktable-subsystems.toml` for broad upstream navigation.
 
-## Rust safety and compiler strictness
+## Rust rules
 
-- Rust code must compile with strict diagnostics and all warnings treated as errors.
-- GitHub issue #456 is the authoritative compiler/dependency-baseline change: keep every
-  compiler, dependency, cache, packaging, and validation surface derived from the
-  repository's exact date-pinned Rust 1.98 beta baseline.
-- Enable and maintain strict Clippy and rustfmt checks in CI and local hooks.
-- Unsafe Rust is forbidden by default. Use it only when it is absolutely necessary, isolate it behind the smallest safe API, document the safety invariants at the unsafe boundary, and add focused tests.
-- Do not weaken lints to make code pass. Any lint exception must be narrow, justified in a comment, and reviewed.
-- Keep dependency versions bounded and review new dependencies for maintenance, license, security, and build-time cost.
+- Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
+- Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
+- Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
+- Keep handwritten source files at or below 1,000 lines. Generated compatibility data is the only exception.
+- Prefer the standard library, Iced facilities, and established Rust crates over bespoke infrastructure.
 
-## File size
+## Development and tests
 
-- Keep every hand-written source file at or below 1,000 lines.
-- Generated files are the only exception. Mark generated files clearly and do not hand-edit them.
-- Split modules before they approach the limit; do not use the limit as a reason to create opaque abstractions.
+- Use test-driven development. Add focused deterministic coverage for every behavior change and regression.
+- Keep external runtimes, packaging, full reference execution, and other expensive checks out of unit tests.
+- `cargo xtask check` is the complete local gate: source policy, formatting, strict Clippy, all-target/all-feature tests, operation data, fixtures, and standard dependency checks.
+- Local hooks are optional convenience. Pull-request CI on Linux, macOS, Windows, and dependency checks is the merge authority.
+- Extended coverage and distribution run after merge or for releases. Do not recreate validation schedulers, timing budgets, wave planners, or receipt graphs.
+- Run independent hosted jobs in parallel and use caches; do not impose local elapsed-time caps.
 
-## Test-driven development
+## Issues and pull requests
 
-- Use strong test-driven development: write a focused failing test first, implement the smallest correct change, then refactor.
-- Every behavior change needs appropriate unit, integration, property, snapshot, or end-to-end coverage.
-- Keep tests deterministic, isolated, and fast. Avoid sleeps and network access in unit or PR checks.
-- Defects require a regression test unless the change is strictly non-functional.
+- GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
+- Select dependency-ready work by priority label, P0 through P4.
+- Each coherent issue maps to one ready-for-review PR unless the user explicitly defines a combined issue boundary.
+- Work in batches of at most two PRs; both must merge before the next batch starts. Multiple agents may collaborate on one PR.
+- Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
+- Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.
+- When fewer than ten open issues remain, start fresh milestone-scoped consults to propose concrete product issues.
 
-## Shift-left validation
+## Worktrees and remotes
 
-- Pre-commit is intentionally uncapped and runs the complete local Rust build, all-target/all-feature warnings-denied Clippy, and all-target/all-feature test gate alongside deterministic repository, source/native, layout, and workflow-policy checks. There is no pull-request GitHub Actions validation lane; hosted validation runs only after pushes to `main`.
-- Schedule independent checks in parallel, but serialize checks that contend for the shared Cargo target directory; never skip or weaken pre-commit coverage to satisfy a duration target.
-- Pre-push is also uncapped and keeps the complete local merge-readiness checks local. Release-mode and other merge-only production validation remains on main.
-- Hooks must clean up the complete child-process tree on success, failure, interrupt, and timeout; failures report bounded actionable excerpts and measured duration.
-- Hooks must not use the network, mutate GitHub, require secrets, or run heavyweight packaging, corpus, benchmark, GUI, or merge-only validation.
-- Pull-request linkage and body conventions are human/process guidance only; they are never blocking hosted gates. Main validation retains exhaustive all-target/all-feature Rust coverage and heavyweight checks outside the local hook tiers.
-- Formatting, linting, compilation, tests, dependency checks, file-size checks, and unsafe-code checks should fail as early as practical.
-- Measure hook and workflow duration when changing validation for diagnostics, but never add an elapsed-time cap to local hooks.
+- Use `/Users/cgas/Documents/RustTable/worktrees` for development worktrees and `scripts/dev/create-agent-worktree.sh --issue NUMBER` to start from `origin/main`.
+- Reserve `/Users/cgas/Documents/RustTable/RustTable` for repository management; it tracks the fork's `origin/main`.
+- `origin` and `upstream` are `cgasgarth/RustTable`; `darktable` is fetch-only. Never push to `darktable-org/darktable`.
+- Protect `main` and `master` from direct commits. Use squash-merged GitHub PRs.
+- Preserve unrelated and untracked user files. Copy only explicit untracked inputs into a new worktree.
 
-## Worktrees and Git remotes
+## Agent orchestration
 
-- Use `/Users/cgas/Documents/RustTable/worktrees` for all development worktrees.
-- Do not develop directly in the `fork` checkout; reserve it for repository management and worktree creation.
-- Create agent worktrees with `scripts/dev/create-agent-worktree.sh --issue NUMBER`. The script fetches `origin/main`, creates the isolated branch under the canonical `worktrees/` directory, and accepts repeated `--include PATH` options only for intentional repository-relative untracked inputs. Never copy an entire source checkout or silently copy tracked files; update the script's focused test when its safety contract changes.
-- In the RustTable checkout, `origin` and `upstream` refer to `https://github.com/cgasgarth/RustTable.git`; the original project is retained as the read-only `darktable` remote for history and reference.
-- Never push to or open pull requests against `darktable-org/darktable`.
-- Use focused branches and descriptive commit messages. Keep changes small enough to review and validate quickly.
-- Open every pull request ready for review by default. Do not open draft pull requests unless the user explicitly requests a draft; if tooling creates a draft, mark it ready before handoff.
-- Keep the required pull-request sections and issue linkage in human review guidance, not in blocking GitHub Actions checks.
-- After required checks pass and required review is present, enable GitHub auto-merge with squash for the pull request (`gh pr merge --auto --squash` or the equivalent UI). Do not enable auto-merge for drafts, failing checks, unresolved conflicts, or unapproved pull requests.
-- Treat local hooks as the strongest shift-left gate: they are uncapped, include the complete local build/lint/test suite, and must clean up their owned process tree on interruption or failure. Schedule independent checks in parallel, but serialize checks that contend for shared resources or give them isolated resources.
+- Reuse a completed agent only when its context and clean worktree directly continue the same PR.
+- Leave long-running agents running without routine polling; completion messages wake the orchestrator. Inspect only on completion or an urgent dependency.
+- Keep each agent in an isolated worktree. More agents may collaborate inside one PR, but active PR batch limits still apply.
+- Re-read the current issue and parent issue before follow-up work because GitHub scope may change.
 
-For workflow/orchestration follow-up work, reuse a completed worker only when its prior context and isolated worktree are clean, relevant, and materially continue the new issue; otherwise start a fresh worker. Close completed workers before reuse, keep worktrees isolated, and maintain one GitHub issue per PR.
+## Computer Use installation
 
-Drain the currently open PR queue before opening a new batch. After the queue is empty, select up to two dependency-ready issues in priority order and create one ready-for-review PR per issue. Multiple workers may collaborate within each PR, but do not start or modify a third issue or PR until both PRs in the active batch merge. Treat each active issue as one atomic change batch: every file in the batch must serve that issue, and the orchestrator must validate the integrated batch before committing. Never combine unrelated issue batches in one commit or pull request. Preserve one issue per ready-for-review PR, squash auto-merge, strict checks, and no branch-protection bypass.
-
-Leave long-running subagents running without routine polling; completion messages should wake/notify the orchestrator; inspect a worker only when its result arrives or an urgent dependency requires it; bounded waits are reserved for urgent dependencies.
-
-## Documentation and review
-
-- Document architectural decisions, public APIs, safety invariants, and non-obvious performance tradeoffs.
-- Keep code, tests, and documentation consistent with the current RustTable design; do not copy stale darktable assumptions into new APIs without validation.
-- Before submitting changes, inspect the diff, run the fastest relevant checks, and report any skipped validation explicitly.
-
-### Computer Use installation
-
-- `bun run install:computer-use` must install exactly the canonical `rusttable - latest` app at `~/Applications/rusttable - latest.app` with the stable `com.cgasgarth.rusttable.latest` bundle identity.
-- Rerunning the installer replaces that canonical app transactionally; never create a versioned or alternate canonical path.
-- Cleanup may target only repository-owned RustTable bundles and LaunchServices registrations from the repository worktrees or the known legacy `~/Applications/RustTable.app` path. Preserve unrelated applications and prefer recoverable cleanup (such as moving duplicates to the user Trash) where possible.
-
-## Issue queue and consults
-
-- Treat open GitHub issues and milestones as the migration plan's source of truth; each issue maps to exactly one pull request.
-- When fewer than 10 open GitHub issues remain, kick off fresh consults to scope additional work against the current repository and milestones.
-- Prompt each consult for concrete issue-sized proposals with a title, rationale, scope, acceptance criteria, dependencies, and recommended milestone.
-- Convert accepted consult proposals into GitHub issues before implementation, then work from those issues without using consult chats as a second task tracker.
-
-## Pinned darktable migration evidence
-
-- Treat `darktable-org/darktable@cfe57f3bbf5269bfacf31e832267279caa6938ad` as the only accepted upstream baseline; inspect it with Git object reads from the separate `Darktable` reference clone, never by copying or compiling its C/C++/OpenCL code.
-- Before starting or closing a migration issue, keep its `## Upstream darktable source anchors` section and `architecture/darktable-source-map.toml` synchronized. Source-ready work needs explicit, verified typed anchors (symbol, type, table, config key, kernel, action, or registration) plus Preserve/Redesign/Excluded, Rust ownership, and an oracle.
-- A path-only, generic, stale, or unverifiable anchor is migration debt, not acceptance evidence. Keep it in the deterministic debt receipt linked to #570 and do not bypass the source-map audit or ready queue.
+- `bun run install:computer-use` installs exactly `~/Applications/rusttable - latest.app` with bundle ID `com.cgasgarth.rusttable.latest`.
+- Rerunning replaces that app transactionally and must not create duplicates. Preserve unrelated applications.

@@ -108,7 +108,6 @@ assert_field() {
   local actual
   actual="$(plutil -extract "$key" raw -o - "$plist")"
   [[ "$actual" == "$expected" ]] || fail "${label}-field-${key}"
-  pass "${label}-field-${key}"
 }
 
 assert_payload() {
@@ -134,6 +133,7 @@ assert_field staged CFBundleIdentifier com.cgasgarth.rusttable
 assert_field staged CFBundlePackageType APPL
 assert_field staged CFBundleShortVersionString "$version"
 assert_field staged CFBundleVersion "$version"
+pass 'staged-plist-fields'
 assert_payload staged "$bundle"
 
 capture "$rustc_output" rustc -vV
@@ -208,6 +208,7 @@ assert_field extracted CFBundleIdentifier com.cgasgarth.rusttable
 assert_field extracted CFBundlePackageType APPL
 assert_field extracted CFBundleShortVersionString "$version"
 assert_field extracted CFBundleVersion "$version"
+pass 'extracted-plist-fields'
 assert_payload extracted "$extracted_bundle"
 
 extracted_lipo_output="$work_directory/extracted-lipo-archs"

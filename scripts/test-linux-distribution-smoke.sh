@@ -4,7 +4,9 @@ set -euo pipefail
 root_directory="$(cd "$(dirname "$0")/.." && pwd -P)"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
-export RUSTTABLE_EXPECTED_RELEASE="$(bash "$root_directory/scripts/rust-baseline.sh" release)"
+export RUSTTABLE_EXPECTED_RELEASE="$(
+  rustc -vV | sed -n 's/^release: //p'
+)"
 
 fixture="$temporary_directory/fixture"
 fake_tools="$temporary_directory/tools"
@@ -12,7 +14,6 @@ mkdir -p "$fixture/scripts" "$fixture/architecture" "$fixture/crates/rusttable-a
 cp "$root_directory/scripts/linux-distribution-smoke.sh" "$fixture/scripts/"
 cp "$root_directory/scripts/linux-artifact-identity.ts" "$fixture/scripts/"
 cp "$root_directory/scripts/platform-support.ts" "$fixture/scripts/"
-cp "$root_directory/scripts/with-validation-budget.sh" "$fixture/scripts/"
 cp "$root_directory/architecture/platform-support.toml" "$fixture/architecture/"
 cp "$root_directory/LICENSE" "$fixture/LICENSE"
 touch "$fixture/crates/rusttable-app/Cargo.toml"
@@ -40,7 +41,6 @@ fi
 if [ "$1" = build ]; then
   printf '%s\n' "$*" >"$FAKE_LOG"
   [ "$FAKE_FAIL_BUILD" = 1 ] && exit 77
-  [ "$FAKE_SLEEP_BUILD" = 1 ] && sleep 5
   mkdir -p "$FAKE_ROOT/target/release"
   printf '#!/bin/sh\n[ "$1" = --version ] && printf "RustTable 0.1.0\\n"\n' >"$FAKE_ROOT/target/release/rusttable-app"
   chmod 755 "$FAKE_ROOT/target/release/rusttable-app"
@@ -164,18 +164,6 @@ else
   failure_status=$?
 fi
 [[ "$failure_status" -ne 0 ]]
-[[ ! -e "$fixture/target/linux-distribution/RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz" ]]
-[[ ! -e "$fixture/target/linux-distribution/smoke.log" ]]
-
-rm -rf "$fixture/target/linux-distribution"
-if run_smoke env FAKE_SLEEP_BUILD=1 bash "$fixture/scripts/with-validation-budget.sh" 1 linux-distribution-smoke bash "$fixture/scripts/linux-distribution-smoke.sh"; then
-  printf 'expected timeout fixture to fail\n' >&2
-  exit 1
-else
-  timeout_status=$?
-fi
-[[ "$timeout_status" -eq 124 ]]
-sleep 1
 [[ ! -e "$fixture/target/linux-distribution/RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz" ]]
 [[ ! -e "$fixture/target/linux-distribution/smoke.log" ]]
 

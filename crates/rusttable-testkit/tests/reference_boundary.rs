@@ -22,12 +22,6 @@ fn reference_process_boundary_stays_in_testkit() {
             "reference runner leaked into {}",
             path.display()
         );
-        let identity_only = source.replace("rusttable_testkit::reference", "");
-        assert!(
-            !identity_only.contains("rusttable_testkit::reference"),
-            "reference dependency leaked into {}",
-            path.display()
-        );
     }
     for path in cargo_manifests(&root) {
         if path == root.join("crates/rusttable-testkit/Cargo.toml")
@@ -38,12 +32,45 @@ fn reference_process_boundary_stays_in_testkit() {
             continue;
         }
         let manifest = fs::read_to_string(&path).expect("Cargo manifest should be readable");
+        let manifest: toml::Value = toml::from_str(&manifest).expect("Cargo manifest should parse");
         assert!(
-            !manifest.contains("rusttable-testkit"),
+            !has_production_testkit_dependency(&manifest),
             "product dependency leaked into {}",
             path.display()
         );
     }
+}
+
+fn has_production_testkit_dependency(manifest: &toml::Value) -> bool {
+    dependency_table_contains(manifest.get("dependencies"))
+        || dependency_table_contains(manifest.get("build-dependencies"))
+        || manifest
+            .get("target")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|targets| {
+                targets.values().any(|target| {
+                    dependency_table_contains(target.get("dependencies"))
+                        || dependency_table_contains(target.get("build-dependencies"))
+                })
+            })
+}
+
+fn dependency_table_contains(value: Option<&toml::Value>) -> bool {
+    value.and_then(toml::Value::as_table).is_some_and(|table| {
+        table.iter().any(|(name, specification)| {
+            name == "rusttable-testkit"
+                || specification.get("package").and_then(toml::Value::as_str)
+                    == Some("rusttable-testkit")
+        })
+    })
+}
+
+#[test]
+fn dev_dependency_is_not_a_product_dependency() {
+    let manifest: toml::Value =
+        toml::from_str("[dev-dependencies]\nrusttable-testkit.workspace = true\n")
+            .expect("fixture manifest");
+    assert!(!has_production_testkit_dependency(&manifest));
 }
 
 fn rust_sources(root: &Path) -> Vec<PathBuf> {
