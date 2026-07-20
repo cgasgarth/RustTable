@@ -2,7 +2,10 @@ use std::fmt;
 
 use rusttable_core::{Edit, EditId, OperationId, PhotoId, Revision};
 
-use crate::{CompiledPipeline, PipelineCompileError, PipelineStepIndex, ProcessingOperation};
+use crate::{
+    CompiledPipeline, PipelineCompileError, PipelineStepIndex, PreparedCpuOperation,
+    ProcessingOperation,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OperationGraphNodeIndex(usize);
@@ -36,7 +39,7 @@ pub struct OperationGraphNode {
     index: OperationGraphNodeIndex,
     pipeline_step_index: PipelineStepIndex,
     input: OperationGraphInput,
-    operation: ProcessingOperation,
+    prepared: PreparedCpuOperation,
 }
 
 impl OperationGraphNode {
@@ -57,7 +60,11 @@ impl OperationGraphNode {
 
     #[must_use]
     pub const fn operation(&self) -> &ProcessingOperation {
-        &self.operation
+        self.prepared.operation()
+    }
+
+    pub(crate) const fn prepared(&self) -> &PreparedCpuOperation {
+        &self.prepared
     }
 }
 
@@ -101,7 +108,7 @@ impl CompiledOperationGraph {
                 } else {
                     OperationGraphInput::Node(OperationGraphNodeIndex::new(index - 1))
                 },
-                operation: step.operation().clone(),
+                prepared: step.prepared().clone(),
             })
             .collect::<Vec<_>>();
         let output = nodes.last().map_or(OperationGraphOutput::Source, |node| {

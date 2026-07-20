@@ -1,0 +1,57 @@
+schema = "rusttable.operation-registry-source-map.v1"
+issue = 265
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "dynamic-discovery-and-binding"
+upstream_path = "src/develop/imageop.c"
+upstream_symbol = "dt_iop_load_modules_so"
+rust_path = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "dynamic-symbol-resolution"
+upstream_path = "src/common/dynload.c"
+upstream_symbol = "dt_gmodule_open;dt_gmodule_symbol"
+rust_path = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "required-operation-exports"
+upstream_path = "src/iop/iop_api.h"
+upstream_symbol = "REQUIRED"
+rust_path = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "pipeline-preparation"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "commit_params"
+rust_path = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "operation-enumeration"
+upstream_path = "src/common/iop_order.c"
+upstream_symbol = "dt_ioppr_get_iop_order_list"
+rust_path = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.exposure"
+manifest_name = "exposure"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.linear_offset"
+manifest_name = ""
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.rgb_gain"
+manifest_name = ""
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"

@@ -2,7 +2,7 @@ use std::fmt;
 
 use rusttable_core::{Edit, EditId, OperationId, PhotoId, Revision};
 
-use crate::{OperationCompileError, ProcessingOperation};
+use crate::{OperationCompileError, PreparedCpuOperation, ProcessingOperation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PipelineStepIndex(usize);
@@ -22,7 +22,7 @@ impl PipelineStepIndex {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PipelineStep {
     index: PipelineStepIndex,
-    operation: ProcessingOperation,
+    prepared: PreparedCpuOperation,
 }
 
 impl PipelineStep {
@@ -33,7 +33,11 @@ impl PipelineStep {
 
     #[must_use]
     pub const fn operation(&self) -> &ProcessingOperation {
-        &self.operation
+        self.prepared.operation()
+    }
+
+    pub(crate) const fn prepared(&self) -> &PreparedCpuOperation {
+        &self.prepared
     }
 }
 
@@ -67,7 +71,7 @@ impl CompiledPipeline {
         let mut steps = Vec::new();
         for (index, operation) in edit.operations().enumerate() {
             let step_index = PipelineStepIndex::new(index);
-            let compiled = ProcessingOperation::compile(operation).map_err(|source| {
+            let prepared = ProcessingOperation::prepare(operation).map_err(|source| {
                 PipelineCompileError::Operation {
                     edit_id: edit.id(),
                     step_index,
@@ -77,7 +81,7 @@ impl CompiledPipeline {
             })?;
             steps.push(PipelineStep {
                 index: step_index,
-                operation: compiled,
+                prepared,
             });
         }
         Ok(Self {
@@ -114,7 +118,9 @@ impl CompiledPipeline {
     }
 
     pub fn active_steps(&self) -> impl Iterator<Item = &PipelineStep> {
-        self.steps.iter().filter(|step| step.operation.is_enabled())
+        self.steps
+            .iter()
+            .filter(|step| step.operation().is_enabled())
     }
 }
 

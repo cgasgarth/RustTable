@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, ProcessingOperation,
-    ProcessingOperationKind, RgbChannel, WorkingRgbImage,
+    CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, PreparedCpuOperation,
+    ProcessingOperation, ProcessingOperationKind, RgbChannel, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
 
@@ -48,9 +48,7 @@ pub fn evaluate(
     input: &WorkingRgbImage,
 ) -> Result<WorkingRgbImage, EvaluationError> {
     let output = evaluate_steps(
-        pipeline
-            .steps()
-            .map(|step| (step.index(), step.operation())),
+        pipeline.steps().map(|step| (step.index(), step.prepared())),
         input.pixel_slice(),
         0,
     )?;
@@ -66,13 +64,27 @@ pub(crate) fn evaluate_steps<'a, I>(
     pixel_index_offset: usize,
 ) -> Result<Vec<LinearRgb>, EvaluationError>
 where
-    I: IntoIterator<Item = (PipelineStepIndex, &'a ProcessingOperation)>,
+    I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
 {
     let mut output = input.to_vec();
     for (step_index, operation) in steps {
-        apply_operation(step_index, operation, &mut output, pixel_index_offset)?;
+        operation.execute(step_index, &mut output, pixel_index_offset)?;
     }
     Ok(output)
+}
+
+pub(crate) fn execute_prepared_operation(
+    operation: &PreparedCpuOperation,
+    step_index: PipelineStepIndex,
+    pixels: &mut [LinearRgb],
+    pixel_index_offset: usize,
+) -> Result<(), EvaluationError> {
+    apply_operation(
+        step_index,
+        operation.operation(),
+        pixels,
+        pixel_index_offset,
+    )
 }
 
 fn apply_operation(

@@ -751,6 +751,43 @@ pub fn rgb_gain_descriptor() -> OperationDescriptor {
         group_key: "group.color".to_owned(),
         control: "triplet".to_owned(),
     });
+    descriptor.flags = descriptor.flags.insert(OperationFlags::COLOR);
+    descriptor
+}
+
+#[must_use]
+///
+/// # Panics
+///
+/// This function cannot panic because its fixed descriptor identity is valid.
+pub fn linear_offset_descriptor() -> OperationDescriptor {
+    let mut descriptor = exposure_descriptor();
+    descriptor.id =
+        DescriptorId::new("linear-offset", "rusttable.linear_offset", 1, 1, 1).expect("static ID");
+    descriptor.parameters = vec![ParameterDescriptor {
+        id: "value".to_owned(),
+        kind: ParameterKind::Scalar {
+            minimum: -64.0,
+            maximum: 64.0,
+        },
+        default: ParameterDefault::Scalar(0.0),
+        required: true,
+        introduced_version: 1,
+        removed_version: None,
+        unit: None,
+        step: Some(0.001),
+        precision: 3,
+        role: ParameterRole::Processing,
+        cache_affecting: true,
+        animatable: true,
+        ui_hint: Some("slider".to_owned()),
+        condition: None,
+    }];
+    descriptor.ui = Some(UiHint {
+        label_key: "operation.linear_offset".to_owned(),
+        group_key: "group.basic".to_owned(),
+        control: "slider".to_owned(),
+    });
     descriptor
 }
 
