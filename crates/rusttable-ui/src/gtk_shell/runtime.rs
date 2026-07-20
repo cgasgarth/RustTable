@@ -13,11 +13,13 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
+use super::lighttable::empty_collection_state;
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LibraryBrowserModel, LighttableContentState, ModuleControlKind, ModulePanelViewModel,
-    PanelSlot, PhotoPreview, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role,
+    LIGHTTABLE_RIGHT_MODULES, LibraryBrowserModel, LighttableContentState, ModuleControlKind,
+    ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, ThemeRole,
+    WorkspaceRole, apply_theme_role,
 };
 use super::{header::HeaderChrome, left_panel::LeftPanel};
 use crate::input_mapping::InputMappingEditor;
@@ -97,7 +99,7 @@ impl GtkShell {
             I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
         );
         let left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
-        let (right_panel, right_modules, export_panel) = right_panel(&initial_i18n);
+        let (right_panel, right_modules, export_panel) = right_panel();
         let center = central_workspace(&workspace, &initial_i18n);
         let layout_metrics = DARKTABLE_DESKTOP_SPEC.layout;
         let split = gtk4::Paned::builder()
@@ -117,7 +119,7 @@ impl GtkShell {
             .start_child(&split)
             .end_child(&right_panel)
             .resize_end_child(false)
-            .shrink_end_child(false)
+            .shrink_end_child(true)
             .position(i32::from(layout_metrics.preferred_right_panel_position_px(
                 layout_metrics.window_width_px,
             )))
@@ -463,52 +465,28 @@ fn connect_photo_selection(
     });
 }
 
-fn right_panel(i18n: &I18n) -> (gtk4::Box, gtk4::Box, ExportPanel) {
+fn right_panel() -> (gtk4::Box, gtk4::Box, ExportPanel) {
     let panel = panel_column(
         ShellRegion::RightPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
     );
     apply_theme_role(&panel, ThemeRole::Panel);
-    let top = panel_slot(PanelSlot::RightTop);
-    top.append(&panel_heading(i18n, MessageId::PanelModuleGroups));
-    let groups = [
-        i18n.text(MessageId::PanelFavorites, &MessageArgs::new()),
-        i18n.text(MessageId::PanelActive, &MessageArgs::new()),
-        i18n.text(MessageId::PanelTone, &MessageArgs::new()),
-        i18n.text(MessageId::PanelColor, &MessageArgs::new()),
-    ];
-    let group_labels = groups.iter().map(String::as_str).collect::<Vec<_>>();
-    let group_selector = gtk4::DropDown::from_strings(&group_labels);
-    group_selector.set_widget_name("right-module-group-selector");
-    top.append(&group_selector);
     let export_panel = ExportPanel::new();
     let center = panel_slot(PanelSlot::RightCenter);
-    for (id, label) in [
-        ("selection", "selection"),
-        ("actions-on-selection", "actions on selection"),
-        ("history-stack", "history stack"),
-        ("styles", "styles"),
-        ("metadata-editor", "metadata editor"),
-        ("tagging", "tagging"),
-        ("geotagging", "geotagging"),
-        ("neural-restore", "neural restore"),
-    ] {
-        center.append(&module_group(id, label, false));
+    for module in &LIGHTTABLE_RIGHT_MODULES[..LIGHTTABLE_RIGHT_MODULES.len() - 1] {
+        center.append(&module_group(module.widget_name, module.title, false));
     }
-    center.append(&module_group_with_child(
-        "export",
-        "export",
-        export_panel.widget(),
-        true,
-    ));
+    center.append(export_panel.widget());
     let bottom = panel_slot(PanelSlot::RightBottom);
-    bottom.append(&gtk4::SearchEntry::new());
-    append_panel_slots(&panel, &top, &center, &bottom);
+    let search = gtk4::SearchEntry::new();
+    search.set_widget_name("right-module-search");
+    bottom.append(&search);
+    append_panel_slots(&panel, &panel_slot(PanelSlot::RightTop), &center, &bottom);
     (panel, center, export_panel)
 }
 
 fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
-    let center = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    let center = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     center.set_hexpand(true);
     center.set_vexpand(true);
     center.set_widget_name("workspace");
@@ -516,6 +494,7 @@ fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
+    bottom_tools.add_css_class("dt_lighttable_footer");
     for message_id in [
         MessageId::WorkspaceFit,
         MessageId::WorkspaceBeforeAfter,
@@ -550,7 +529,7 @@ fn workspace_stack(
         .build();
     lighttable.set_widget_name("lighttable-grid");
     apply_theme_role(&lighttable, ThemeRole::Lighttable);
-    let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+    let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     lighttable_page.set_widget_name("lighttable-page");
     let lighttable_scroll = gtk4::ScrolledWindow::builder()
         .child(&lighttable)
@@ -596,18 +575,13 @@ fn workspace_stack(
     (workspace, lighttable, lighttable_canvas, darkroom_preview)
 }
 
-fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
-    let strip = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
+    let strip = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     strip.set_widget_name(ShellRegion::Filmstrip.identifier());
     apply_theme_role(&strip, ThemeRole::Filmstrip);
-    strip.set_margin_top(6);
-    strip.set_margin_bottom(6);
-    strip.set_margin_start(12);
-    strip.set_margin_end(12);
     strip.set_height_request(i32::from(
         DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px,
     ));
-    strip.append(&filmstrip_toolbar(i18n));
     let photos = gtk4::FlowBox::builder()
         .max_children_per_line(12)
         .selection_mode(gtk4::SelectionMode::None)
@@ -615,21 +589,6 @@ fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     photos.set_widget_name(PanelSlot::Bottom.identifier());
     strip.append(&photos);
     (strip, photos)
-}
-
-fn filmstrip_toolbar(i18n: &I18n) -> gtk4::Box {
-    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    toolbar.set_widget_name("filmstrip-toolbar");
-    apply_theme_role(&toolbar, ThemeRole::Toolbar);
-    toolbar.append(&gtk4::Label::new(Some(
-        &i18n.text(MessageId::PanelFilmstrip, &MessageArgs::new()),
-    )));
-    for label in ["grid", "zoom", "fit", "before/after", "soft proof"] {
-        let button = gtk4::Button::with_label(label);
-        button.add_css_class("dt_filmstrip_button");
-        toolbar.append(&button);
-    }
-    toolbar
 }
 
 fn panel_column(region: ShellRegion, width: i32) -> gtk4::Box {
@@ -680,24 +639,6 @@ fn module_group(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
     group_widget.set_widget_name(id);
     apply_theme_role(&group_widget, ThemeRole::ModuleGroup);
     group_widget
-}
-
-fn module_group_with_child<W: IsA<gtk4::Widget>>(
-    id: &str,
-    label: &str,
-    child: &W,
-    expanded: bool,
-) -> gtk4::Expander {
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    content.append(child);
-    let module_widget = gtk4::Expander::builder()
-        .label(label)
-        .expanded(expanded)
-        .child(&content)
-        .build();
-    module_widget.set_widget_name(id);
-    apply_theme_role(&module_widget, ThemeRole::ModuleGroup);
-    module_widget
 }
 
 fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expander {
@@ -763,66 +704,6 @@ fn filmstrip_item(photo_id: PhotoId, title: &str) -> gtk4::Button {
     button.set_widget_name(&format!("filmstrip-photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
     button
-}
-
-fn empty_collection_state() -> gtk4::Box {
-    let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 36);
-    root.set_widget_name("empty-collection-state");
-    root.set_halign(gtk4::Align::Center);
-    root.set_valign(gtk4::Align::Center);
-    root.set_margin_start(48);
-    root.set_margin_end(48);
-    root.set_margin_top(28);
-    root.set_margin_bottom(28);
-    apply_theme_role(&root, ThemeRole::EmptyState);
-
-    let collection = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-    collection.set_hexpand(true);
-    collection.set_valign(gtk4::Align::Center);
-    let title = gtk4::Label::new(Some("there are no images in this collection"));
-    title.add_css_class("title-3");
-    title.set_halign(gtk4::Align::Start);
-    collection.append(&title);
-    for text in [
-        "if you have not imported any images yet",
-        "you can do so from the import module",
-        "try to relax the filter settings in the top panel",
-        "or add images in the collections module",
-        "try the 'no-click' workflow",
-        "hover over an image and use keyboard shortcuts",
-        "to apply ratings, colors, styles, etc.",
-        "hover over any button for its description and shortcuts",
-    ] {
-        let label = gtk4::Label::new(Some(text));
-        label.set_halign(gtk4::Align::Start);
-        label.set_wrap(true);
-        collection.append(&label);
-    }
-
-    let help = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-    help.set_hexpand(true);
-    help.set_valign(gtk4::Align::Center);
-    let help_title = gtk4::Label::new(Some("need help?"));
-    help_title.add_css_class("title-3");
-    help_title.set_halign(gtk4::Align::End);
-    help.append(&help_title);
-    for text in [
-        "click on ? then an on-screen item to open the manual page",
-        "press and hold 'h' to show all active keyboard shortcuts",
-        "personalize darktable",
-        "click on the gear icon for global preferences",
-        "set module-specific preferences through a module's menu",
-        "make default raw development look more like your camera's JPEG",
-        "by applying a camera-specific style",
-    ] {
-        let label = gtk4::Label::new(Some(text));
-        label.set_halign(gtk4::Align::End);
-        label.set_wrap(true);
-        help.append(&label);
-    }
-    root.append(&collection);
-    root.append(&help);
-    root
 }
 
 fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {

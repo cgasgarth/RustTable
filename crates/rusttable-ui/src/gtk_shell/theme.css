@@ -202,7 +202,7 @@ button:hover,
 .dt_empty_state {
   min-width: 38em;
   min-height: 14em;
-  padding: 2.5em 3.5em;
+  font-size: 14px;
   color: {{foreground}};
 }
 
@@ -214,8 +214,9 @@ button:hover,
   color: {{foreground}};
 }
 
-.dt_empty_state .title-3 {
+.dt_empty_state .dt_empty_heading {
   color: {{hovered_thumbnail}};
+  font-weight: bold;
 }
 
 .dt_module_group,
@@ -250,9 +251,9 @@ expander:hover {
 }
 
 #lighttable-collection-toolbar,
-#filmstrip-toolbar {
-  min-height: 30px;
-  padding: 1px 2px;
+#center-bottom {
+  min-height: 2em;
+  padding: 0.08em 0.28em;
   background-color: {{background}};
   border-bottom: 1px solid {{border}};
 }
@@ -260,7 +261,7 @@ expander:hover {
 #lighttable-collection-toolbar entry,
 #lighttable-collection-toolbar dropdown,
 .dt_filter_button,
-.dt_filmstrip_button {
+#center-bottom button {
   min-height: 21px;
   padding: 0 3px;
   border: 0;
@@ -303,7 +304,7 @@ expander:hover {
 
 #lighttable-collection-toolbar button:hover,
 .dt_filter_button:hover,
-.dt_filmstrip_button:hover {
+#center-bottom button:hover {
   background-color: {{hovered_thumbnail}};
   color: {{background}};
 }
@@ -320,6 +321,7 @@ spinbutton,
 }
 
 #bottom-filmstrip,
+#filmstrip,
 .dt_filmstrip {
   min-height: 64px;
   background-color: {{filmstrip_background}};
