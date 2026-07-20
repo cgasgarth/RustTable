@@ -80,36 +80,93 @@ impl CatalogPreviewService {
         self.render_record(source_root, &record, edit)
     }
 
+    /// Renders the exact persisted edit at source resolution for publication.
+    ///
+    /// The source is read through the same immutable snapshot and revalidation
+    /// boundary as preview rendering. Only the render target differs, so PNG
+    /// publication cannot accidentally export the display-sized preview.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when catalog lookup, edit lookup, ownership
+    /// validation, source resolution, decoding, or CPU rendering fails.
+    pub fn render_full_resolution(
+        &self,
+        request: CatalogPreviewRequest<'_>,
+        imports: &dyn ImportRepository,
+        edits: &dyn EditRepository,
+    ) -> Result<RenderOutput, CatalogPreviewError> {
+        let record = imports
+            .find_by_photo_id(request.photo_id)
+            .map_err(CatalogPreviewError::ImportRepository)?
+            .ok_or(CatalogPreviewError::UnknownPhoto {
+                photo_id: request.photo_id,
+            })?;
+        let edit = edits
+            .find_by_edit_id(request.edit_id)
+            .map_err(CatalogPreviewError::EditRepository)?
+            .ok_or(CatalogPreviewError::UnknownEdit {
+                edit_id: request.edit_id,
+            })?;
+        self.render_record_full_resolution(request.source_root, &record, &edit)
+    }
+
     fn render_record(
         &self,
         source_root: &Path,
         record: &ImportRecord,
         edit: &Edit,
     ) -> Result<RenderOutput, CatalogPreviewError> {
-        if edit.photo_id() != record.photo().id() {
-            return Err(CatalogPreviewError::EditPhotoMismatch {
-                edit_id: edit.id(),
-                expected_photo_id: record.photo().id(),
-                actual_photo_id: edit.photo_id(),
-            });
-        }
+        self.render_snapshot(source_root, record, edit, |preview, bytes, edit| {
+            preview.render_bytes(bytes, edit)
+        })
+    }
+
+    fn render_record_full_resolution(
+        &self,
+        source_root: &Path,
+        record: &ImportRecord,
+        edit: &Edit,
+    ) -> Result<RenderOutput, CatalogPreviewError> {
+        self.render_snapshot(source_root, record, edit, |preview, bytes, edit| {
+            preview.render_full_resolution_bytes(bytes, edit)
+        })
+    }
+
+    fn render_snapshot(
+        &self,
+        source_root: &Path,
+        record: &ImportRecord,
+        edit: &Edit,
+        render: impl FnOnce(&PreviewService, &[u8], &Edit) -> Result<RenderOutput, PreviewError>,
+    ) -> Result<RenderOutput, CatalogPreviewError> {
+        validate_edit_ownership(record, edit)?;
         let source = decode_reference_source(record.source())
             .unwrap_or_else(|_| source_root.join(record.source().as_str()));
         let limits = ImportSourceLimits::new(64 * 1024 * 1024)
             .map_err(|_| CatalogPreviewError::SourceLimits)?;
-        let reader = FileSourceSnapshotReader;
-        let snapshot = reader
+        let snapshot_reader = FileSourceSnapshotReader;
+        let snapshot = snapshot_reader
             .read_snapshot(&source, limits)
             .map_err(CatalogPreviewError::Snapshot)?;
-        let output = self
-            .preview
-            .render_bytes(snapshot.bytes(), edit)
-            .map_err(CatalogPreviewError::Preview)?;
-        reader
+        let output =
+            render(&self.preview, snapshot.bytes(), edit).map_err(CatalogPreviewError::Preview)?;
+        snapshot_reader
             .revalidate(&snapshot, limits)
             .map_err(CatalogPreviewError::Snapshot)?;
         Ok(output)
     }
+}
+
+fn validate_edit_ownership(record: &ImportRecord, edit: &Edit) -> Result<(), CatalogPreviewError> {
+    if edit.photo_id() != record.photo().id() {
+        return Err(CatalogPreviewError::EditPhotoMismatch {
+            edit_id: edit.id(),
+            expected_photo_id: record.photo().id(),
+            actual_photo_id: edit.photo_id(),
+        });
+    }
+    Ok(())
 }
 
 /// Identifies the persisted values and local source root for one preview.
@@ -276,6 +333,39 @@ mod tests {
 
         assert_eq!(output.provenance().source_photo_id(), photo_id);
         assert_eq!(output.provenance().source_edit_id(), edit.id());
+    }
+
+    #[test]
+    fn full_resolution_render_preserves_the_source_dimensions() {
+        let photo_id = PhotoId::new(1).unwrap();
+        let persisted = edit(9, 1);
+        let imports = Imports {
+            records: BTreeMap::from([(
+                photo_id,
+                record(1, "fixtures/corpus/assets/raster-png-16-alpha.png"),
+            )]),
+        };
+        let edits = Edits {
+            edits: BTreeMap::from([(persisted.id(), persisted)]),
+        };
+        let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let service = CatalogPreviewService::new(PreviewService::new(
+            DecodeLimits::new(64 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024).unwrap(),
+            PreviewBounds::new(1, 1).unwrap(),
+        ));
+
+        let output = service
+            .render_full_resolution(
+                CatalogPreviewRequest::new(&source_root, photo_id, EditId::new(9).unwrap()),
+                &imports,
+                &edits,
+            )
+            .expect("full-resolution catalog render succeeds");
+
+        assert_eq!(
+            output.image().dimensions(),
+            ImageDimensions::new(4, 3).unwrap()
+        );
     }
 
     #[test]

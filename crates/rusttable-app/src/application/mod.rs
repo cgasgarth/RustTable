@@ -1,7 +1,9 @@
+mod edit;
+mod export;
+mod preview;
+
 use iced::Task;
 use std::path::PathBuf;
-mod edit;
-mod preview;
 
 use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
 use crate::workspace::{BasicEditSession, SelectedPreview, pick_raster_files, run_raster_import};
@@ -156,6 +158,15 @@ pub(crate) enum Message {
     RetryImport(u64),
     RemoveImportResult(u64),
     CloseImportPanel,
+    SaveRenderedCopy(PhotoId),
+    ExportDestinationSelected {
+        photo_id: PhotoId,
+        destination: Option<PathBuf>,
+    },
+    ExportFinished {
+        photo_id: PhotoId,
+        result: export::ExportTaskResult,
+    },
     ImportProgress(RasterImportProgress),
     ImportFinished(Option<RasterImportBatch>),
 }
@@ -179,6 +190,7 @@ impl From<UiMessage> for Message {
             UiMessage::RetryImport(item_id) => Self::RetryImport(item_id),
             UiMessage::RemoveImportResult(item_id) => Self::RemoveImportResult(item_id),
             UiMessage::CloseImportPanel => Self::CloseImportPanel,
+            UiMessage::SaveRenderedCopy(photo_id) => Self::SaveRenderedCopy(photo_id),
         }
     }
 }
@@ -217,6 +229,35 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
         Message::CloseImportPanel => {
             let _ = shell.ui.handle(UiMessage::CloseImportPanel);
         }
+        Message::SaveRenderedCopy(photo_id) => return export::pick_destination(photo_id),
+        Message::ExportDestinationSelected {
+            photo_id,
+            destination: Some(destination),
+        } => {
+            let (Ok(catalog_path), Ok(source_root)) =
+                (shell.catalog_path.clone(), shell.source_root.clone())
+            else {
+                shell.ui.set_export_status(
+                    photo_id,
+                    "The catalog is unavailable for export.".to_owned(),
+                );
+                return Task::none();
+            };
+            shell
+                .ui
+                .set_export_status(photo_id, "Rendering selected edit…".to_owned());
+            return export::start(catalog_path, source_root, photo_id, destination);
+        }
+        Message::ExportDestinationSelected {
+            destination: None, ..
+        } => {}
+        Message::ExportFinished { photo_id, result } => {
+            let status = match result {
+                export::ExportTaskResult::Completed(status)
+                | export::ExportTaskResult::Failed(status) => status,
+            };
+            shell.ui.set_export_status(photo_id, status);
+        }
         Message::ImportProgress(progress) => {
             shell.ui.update_import_row(
                 progress.item_id.get(),
@@ -244,6 +285,7 @@ fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
         UiEffect::ImportFiles => return import_picker_task(),
         UiEffect::CancelImport => cancel_import(shell),
         UiEffect::RetryImport(item_id) => return retry_import(shell, item_id),
+        UiEffect::SaveRenderedCopy(photo_id) => return export::pick_destination(photo_id),
         UiEffect::None => {}
     }
     preview::reconcile_route(shell, previous_route);

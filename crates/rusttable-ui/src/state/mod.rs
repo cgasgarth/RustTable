@@ -11,6 +11,7 @@ pub struct UiState {
     input: InputState,
     import_panel: crate::ImportPanelViewModel,
     basic_edit: Option<crate::presentation::BasicEditInspectorViewModel>,
+    export_status: Option<(PhotoId, crate::PresentationText)>,
 }
 
 impl Default for UiState {
@@ -22,6 +23,7 @@ impl Default for UiState {
             input: InputState::default(),
             import_panel: crate::ImportPanelViewModel::default(),
             basic_edit: None,
+            export_status: None,
         }
     }
 }
@@ -79,6 +81,21 @@ impl UiState {
             }
             self.reconcile_input();
         }
+    }
+
+    pub fn set_export_status(&mut self, photo_id: PhotoId, status: String) {
+        if self.selected_photo_detail(photo_id) {
+            self.export_status = crate::PresentationText::new(status)
+                .ok()
+                .map(|status| (photo_id, status));
+        }
+    }
+
+    #[must_use]
+    pub fn export_status(&self, photo_id: PhotoId) -> Option<&crate::PresentationText> {
+        self.export_status
+            .as_ref()
+            .and_then(|(selected, status)| (*selected == photo_id).then_some(status))
     }
 
     pub fn set_basic_edit_draft_values(
@@ -172,6 +189,11 @@ impl UiState {
                     self.import_panel = crate::ImportPanelViewModel::default();
                 }
             }
+            UiMessage::SaveRenderedCopy(photo_id) => {
+                if self.selected_photo_detail(photo_id) {
+                    return UiEffect::SaveRenderedCopy(photo_id);
+                }
+            }
             UiMessage::Navigate(intent) => {
                 let _ = self.navigation.apply(intent);
                 self.input.note_navigation(intent, &self.library_state);
@@ -208,6 +230,9 @@ impl UiState {
                         if !self.import_panel.active() {
                             self.import_panel = crate::ImportPanelViewModel::default();
                         }
+                    }
+                    InputEffect::SaveRenderedCopy(photo_id) => {
+                        return UiEffect::SaveRenderedCopy(photo_id);
                     }
                 }
             }
@@ -265,6 +290,15 @@ impl UiState {
         }
     }
 
+    fn selected_photo_detail(&self, photo_id: PhotoId) -> bool {
+        matches!(self.route(), WorkspaceRoute::PhotoDetail(selected) if selected == photo_id)
+            && self
+                .library_state
+                .ready_workspace()
+                .and_then(|workspace| workspace.detail(photo_id))
+                .is_some()
+    }
+
     #[must_use]
     pub fn focused_photo(&self) -> Option<PhotoId> {
         match self.input.focused() {
@@ -276,6 +310,7 @@ impl UiState {
             | FocusTarget::RetryImport(_)
             | FocusTarget::RemoveImportResult(_)
             | FocusTarget::CloseImportPanel
+            | FocusTarget::SaveRenderedCopy(_)
             | FocusTarget::RetryLibrary
             | FocusTarget::Preview(_)
             | FocusTarget::BasicEdit(_)
@@ -291,6 +326,7 @@ pub enum UiEffect {
     ImportFiles,
     CancelImport,
     RetryImport(u64),
+    SaveRenderedCopy(PhotoId),
 }
 
 #[cfg(test)]
@@ -355,6 +391,39 @@ mod tests {
         );
         assert_eq!(state.route(), crate::WorkspaceRoute::Library);
         assert!(state.is_focused(crate::FocusTarget::PhotoCard(photo_id)));
+    }
+
+    #[test]
+    fn export_status_is_scoped_to_the_selected_photo_detail() {
+        let photo_id = rusttable_core::PhotoId::new(1).expect("test photo ID is non-zero");
+        let workspace = crate::PhotoWorkspaceViewModel::new(
+            vec![crate::PhotoCardViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                None,
+            )],
+            vec![crate::PhotoDetailViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut state = UiState::with_photo_workspace(workspace);
+
+        state.set_export_status(photo_id, "Ignored before selection".to_owned());
+        assert!(state.export_status(photo_id).is_none());
+        let _ = state.handle(UiMessage::Navigate(crate::NavigationIntent::ShowPhoto(
+            photo_id,
+        )));
+        state.set_export_status(photo_id, "Saved rendered.png".to_owned());
+
+        assert_eq!(
+            state
+                .export_status(photo_id)
+                .map(crate::PresentationText::as_str),
+            Some("Saved rendered.png")
+        );
     }
 
     #[test]

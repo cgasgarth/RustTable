@@ -30,7 +30,7 @@ impl PreviewService {
         let input = FileImageInput::new(self.limits)
             .decode_path(source)
             .map_err(PreviewError::Decode)?;
-        self.render_decoded(&input, edit)
+        self.render_preview_decoded(&input, edit)
     }
 
     /// Decodes immutable snapshot bytes and renders the exact edit.
@@ -42,10 +42,30 @@ impl PreviewService {
         let input = FileImageInput::new(self.limits)
             .decode_bytes(source)
             .map_err(PreviewError::Decode)?;
-        self.render_decoded(&input, edit)
+        self.render_preview_decoded(&input, edit)
     }
 
-    fn render_decoded(
+    /// Decodes immutable snapshot bytes and renders the exact edit at source resolution.
+    ///
+    /// This is deliberately separate from [`Self::render_bytes`]: preview callers
+    /// retain their bounded display target while export callers share the same
+    /// production decode, edit, and color path without a second renderer.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed decode or CPU-render failure.
+    pub fn render_full_resolution_bytes(
+        &self,
+        source: &[u8],
+        edit: &Edit,
+    ) -> Result<RenderOutput, PreviewError> {
+        let input = FileImageInput::new(self.limits)
+            .decode_bytes(source)
+            .map_err(PreviewError::Decode)?;
+        render_full_resolution(&input, edit)
+    }
+
+    fn render_preview_decoded(
         &self,
         input: &rusttable_image::DecodedImage,
         edit: &Edit,
@@ -60,6 +80,20 @@ impl PreviewService {
         )
         .map_err(PreviewError::Render)
     }
+}
+
+fn render_full_resolution(
+    input: &rusttable_image::DecodedImage,
+    edit: &Edit,
+) -> Result<RenderOutput, PreviewError> {
+    let plan = RenderPlan::for_source(input.dimensions(), RenderTarget::FullResolution);
+    render_edit_with_plan(
+        edit,
+        input,
+        SourceColorPolicy::AssumeSrgbWhenUnspecified,
+        plan,
+    )
+    .map_err(PreviewError::Render)
 }
 
 #[derive(Debug)]

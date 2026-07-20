@@ -3262,6 +3262,7 @@ dependencies = [
  "rusttable-catalog-store",
  "rusttable-core",
  "rusttable-diagnostics",
+ "rusttable-export",
  "rusttable-image",
  "rusttable-image-io",
  "rusttable-import",
@@ -3325,6 +3326,8 @@ name = "rusttable-export"
 version = "0.1.0"
 dependencies = [
  "rusttable-core",
+ "rusttable-image",
+ "rusttable-image-io",
  "sha2",
 ]
 
