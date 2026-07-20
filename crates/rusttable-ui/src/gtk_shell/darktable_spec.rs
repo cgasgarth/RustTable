@@ -392,7 +392,7 @@ pub struct DarktableDesktopSpec {
     pub colors: DarktableColors,
 }
 
-/// The single visual specification for the RustTable GTK4 desktop.
+/// The single visual specification for the `RustTable` GTK4 desktop.
 pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
     regions: &DESKTOP_REGIONS,
     top_bar_sections: &TOP_BAR_SECTIONS,

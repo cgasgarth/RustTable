@@ -11,8 +11,8 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
 use super::{
-    DarkroomWorkspaceViewModel, LibraryBrowserModel, ModuleControlKind, ModulePanelViewModel,
-    PanelSlot, ShellLayout, ShellRegion, WorkspaceRole,
+    DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, LibraryBrowserModel, ModuleControlKind,
+    ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, WorkspaceRole,
 };
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 
@@ -25,7 +25,7 @@ pub struct GtkShell {
     layout: ShellLayout,
     workspace: gtk4::Stack,
     lighttable: gtk4::FlowBox,
-    darkroom_detail: gtk4::Box,
+    darkroom_preview: PhotoPreview,
     filmstrip: gtk4::FlowBox,
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
@@ -47,11 +47,11 @@ impl GtkShell {
     pub fn with_layout(application: &gtk4::Application, layout: ShellLayout) -> Self {
         let window = gtk4::ApplicationWindow::builder()
             .application(application)
-            .default_width(1_440)
-            .default_height(920)
+            .default_width(i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_width_px))
+            .default_height(i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_height_px))
             .title("RustTable")
             .build();
-        let (workspace, lighttable, darkroom_detail) = workspace_stack(layout.initial_workspace());
+        let (workspace, lighttable, darkroom_preview) = workspace_stack(layout.initial_workspace());
         let header = header_bar(&workspace);
         let (left_panel, left_modules) = left_panel();
         let (right_panel, right_modules) = right_panel();
@@ -62,7 +62,9 @@ impl GtkShell {
             .end_child(&center)
             .resize_start_child(false)
             .shrink_start_child(false)
-            .position(280)
+            .position(i32::from(
+                DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px,
+            ))
             .build();
         let workspace_with_right_panel = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
@@ -70,7 +72,10 @@ impl GtkShell {
             .end_child(&right_panel)
             .resize_end_child(false)
             .shrink_end_child(false)
-            .position(1_120)
+            .position(
+                i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_width_px)
+                    - i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
+            )
             .build();
         let filmstrip = filmstrip();
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -85,7 +90,7 @@ impl GtkShell {
             layout,
             workspace,
             lighttable,
-            darkroom_detail,
+            darkroom_preview,
             filmstrip: filmstrip.1,
             left_modules,
             right_modules,
@@ -108,6 +113,12 @@ impl GtkShell {
     #[must_use]
     pub fn window(&self) -> &gtk4::ApplicationWindow {
         &self.window
+    }
+
+    /// Returns the reusable darkroom preview surface for rendered texture updates.
+    #[must_use]
+    pub fn darkroom_preview(&self) -> &PhotoPreview {
+        &self.darkroom_preview
     }
 
     /// Installs the controller callback invoked when the user selects a photo.
@@ -159,7 +170,7 @@ impl GtkShell {
     /// This surface deliberately accepts only `rusttable-ui` presentation
     /// types, keeping the UI crate independent from application composition.
     pub fn set_darkroom_workspace(&self, view_model: &DarkroomWorkspaceViewModel) {
-        show_photo_detail(&self.darkroom_detail, view_model.detail());
+        self.darkroom_preview.set_detail(view_model.detail());
         render_modules(&self.left_modules, view_model.left_modules());
         render_modules(&self.right_modules, view_model.right_modules());
         self.show_workspace(WorkspaceRole::Darkroom);
@@ -176,11 +187,11 @@ impl GtkShell {
         photo_id: PhotoId,
         detail: PhotoDetailViewModel,
     ) {
-        let photo_detail = self.darkroom_detail.clone();
+        let photo_preview = self.darkroom_preview.clone();
         let workspace = self.workspace.clone();
         let handler = Rc::clone(&self.photo_selected);
         button.connect_clicked(move |_| {
-            show_photo_detail(&photo_detail, &detail);
+            show_photo_detail(&photo_preview, &detail);
             workspace.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
             if let Some(handler) = handler.borrow().as_ref() {
                 handler(photo_id);
@@ -218,7 +229,10 @@ fn header_bar(workspace: &gtk4::Stack) -> gtk4::HeaderBar {
 }
 
 fn left_panel() -> (gtk4::Box, gtk4::Box) {
-    let panel = panel_column(ShellRegion::LeftPanel, 280);
+    let panel = panel_column(
+        ShellRegion::LeftPanel,
+        i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
+    );
     let top = panel_slot(PanelSlot::LeftTop);
     top.append(&panel_heading("navigation"));
     top.append(&gtk4::Button::with_label("recently used collections"));
@@ -230,7 +244,10 @@ fn left_panel() -> (gtk4::Box, gtk4::Box) {
 }
 
 fn right_panel() -> (gtk4::Box, gtk4::Box) {
-    let panel = panel_column(ShellRegion::RightPanel, 320);
+    let panel = panel_column(
+        ShellRegion::RightPanel,
+        i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
+    );
     let top = panel_slot(PanelSlot::RightTop);
     top.append(&panel_heading("module groups"));
     let group_selector = gtk4::DropDown::from_strings(&["favorites", "active", "tone", "color"]);
@@ -262,7 +279,7 @@ fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
     center
 }
 
-fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Box) {
+fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::FlowBox, PhotoPreview) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -289,21 +306,14 @@ fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::Flow
         .build();
     lighttable_page.append(&lighttable_scroll);
 
-    let darkroom_detail = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-    darkroom_detail.set_widget_name("darkroom-image-details");
-    let darkroom_frame = gtk4::Frame::builder()
-        .label("darkroom image preview")
-        .child(&darkroom_detail)
-        .hexpand(true)
-        .vexpand(true)
-        .build();
+    let darkroom_preview = PhotoPreview::new();
     let darkroom_page = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     darkroom_page.set_margin_top(16);
     darkroom_page.set_margin_bottom(16);
     darkroom_page.set_margin_start(16);
     darkroom_page.set_margin_end(16);
     darkroom_page.append(&panel_heading("darkroom"));
-    darkroom_page.append(&darkroom_frame);
+    darkroom_page.append(darkroom_preview.widget());
 
     workspace.add_titled(
         &lighttable_page,
@@ -316,7 +326,7 @@ fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::Flow
         "darkroom",
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
-    (workspace, lighttable, darkroom_detail)
+    (workspace, lighttable, darkroom_preview)
 }
 
 fn filmstrip() -> (gtk4::Box, gtk4::FlowBox) {
@@ -326,6 +336,9 @@ fn filmstrip() -> (gtk4::Box, gtk4::FlowBox) {
     strip.set_margin_bottom(6);
     strip.set_margin_start(12);
     strip.set_margin_end(12);
+    strip.set_height_request(i32::from(
+        DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px,
+    ));
     strip.append(&gtk4::Label::new(Some("filmstrip")));
     let photos = gtk4::FlowBox::builder()
         .max_children_per_line(12)
@@ -429,20 +442,8 @@ fn filmstrip_item(title: &str) -> gtk4::Button {
     button
 }
 
-fn show_photo_detail(container: &gtk4::Box, detail: &PhotoDetailViewModel) {
-    clear_children(container);
-    container.append(&panel_heading(detail.title().as_str()));
-    for fact in detail.facts() {
-        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let label = gtk4::Label::new(Some(fact.label().as_str()));
-        label.set_halign(gtk4::Align::Start);
-        label.add_css_class("dim-label");
-        let value = gtk4::Label::new(Some(fact.value().as_str()));
-        value.set_halign(gtk4::Align::Start);
-        row.append(&label);
-        row.append(&value);
-        container.append(&row);
-    }
+fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {
+    preview.set_detail(detail);
 }
 
 fn panel_heading(title: &str) -> gtk4::Label {
