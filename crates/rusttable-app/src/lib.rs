@@ -7,10 +7,12 @@ mod extensions;
 mod library;
 mod lifecycle;
 mod platform;
+mod preview;
 mod ui_shell;
 
 pub use composition::run;
 pub use extensions::ApplicationExtensions;
+pub use preview::{PreviewError, PreviewService};
 
 #[cfg(test)]
 mod lua_host {
