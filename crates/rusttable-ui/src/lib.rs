@@ -3,6 +3,7 @@
 
 pub mod ai_batch;
 pub mod ai_models;
+pub mod camera;
 pub mod collection;
 pub mod display_profile;
 pub mod external_editor;
@@ -27,6 +28,10 @@ pub use ai_models::{
     AiModelsViewModel, AiProvider, AiProviderPolicy, AiTask, InstallSummary, InstalledModel,
     ModelHash, ModelServiceState, ProviderCapability, QualificationJob,
 };
+pub use camera::{
+    CAMERA_FOCUS_ORDER, CameraAction, CameraController, CameraControllerError, CameraPanel,
+    CameraViewModel,
+};
 pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use external_editor::{
@@ -45,7 +50,13 @@ pub use gtk_shell::{
     LighttableToolbar, LighttableToolbarAction, LighttableToolbarState, ShellLayout, ShellRegion,
     ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css, install_darktable_theme,
 };
-pub use import::{ImportAction, ImportPanelViewModel, ImportRowState, ImportRowViewModel};
+pub use import::{
+    IMPORT_SESSION_FOCUS_ORDER, ImportAction, ImportItemOutcome, ImportPanelViewModel,
+    ImportReviewRow, ImportRowState, ImportRowViewModel, ImportSessionAction,
+    ImportSessionController, ImportSessionControllerError, ImportSessionEvent, ImportSessionPanel,
+    ImportSessionServiceError, ImportSessionServicePort, ImportSessionState,
+    ImportSessionViewModel,
+};
 pub use input::GtkInputAdapter;
 pub use input_mapping::{
     ActionContext, ActionDefinition, ActionId, Binding, BindingSource, Curve, DeviceDescriptor,

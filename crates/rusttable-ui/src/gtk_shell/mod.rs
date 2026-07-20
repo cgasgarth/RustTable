@@ -17,6 +17,7 @@ mod lighttable_toolbar;
 mod model;
 mod photo_preview;
 mod runtime;
+mod runtime_layout;
 mod theme;
 mod thumbnail;
 

@@ -120,3 +120,16 @@ impl ImportPanelViewModel {
         }
     }
 }
+mod session_controller;
+mod session_model;
+mod session_view;
+
+pub use session_controller::{
+    ImportSessionAction, ImportSessionController, ImportSessionControllerError,
+    ImportSessionServiceError, ImportSessionServicePort,
+};
+pub use session_model::{
+    ImportItemOutcome, ImportReviewRow, ImportSessionEvent, ImportSessionState,
+    ImportSessionViewModel,
+};
+pub use session_view::{IMPORT_SESSION_FOCUS_ORDER, ImportSessionPanel};
