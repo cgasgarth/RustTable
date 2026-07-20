@@ -1,12 +1,13 @@
 [package]
 name = "rusttable-ui"
-description = "Reusable Iced widgets, input, navigation, theme, and presentation models for RustTable."
+description = "Reusable Rust UI contracts and GTK4 shell components for RustTable."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+gtk4.workspace = true
 rusttable-core.workspace = true
 
 [dev-dependencies]

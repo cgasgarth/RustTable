@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
-#![doc = "Reusable Iced UI contracts and presentation components for `RustTable`."]
+#![doc = "Reusable Rust UI contracts, GTK4 shell components, and presentation models for `RustTable`."]
 
+pub mod gtk_shell;
 pub mod import;
 pub mod input;
 pub mod library;
@@ -13,6 +14,7 @@ pub mod tokens;
 pub mod view;
 pub mod widgets;
 
+pub use gtk_shell::{GtkShell, ShellLayout, ShellRegion, WorkspaceRole};
 pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use input::{
     CustomExportSizeAdjustment, ExportIntent, ExportPixelSize, ExportPixelSizeError, ExportSize,
