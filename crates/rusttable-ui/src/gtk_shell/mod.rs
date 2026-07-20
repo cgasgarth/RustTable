@@ -7,5 +7,9 @@
 mod model;
 mod runtime;
 
-pub use model::{ShellLayout, ShellRegion, WorkspaceRole};
+pub use model::{
+    DarkroomWorkspaceViewModel, LibraryBrowserModel, LibraryPhoto, ModuleControlKind,
+    ModuleControlViewModel, ModulePanelViewModel, PanelSlot, ShellLayout, ShellRegion,
+    WorkspaceRole,
+};
 pub use runtime::GtkShell;
