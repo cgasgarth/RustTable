@@ -12,6 +12,7 @@ pub use edit_draft::{
 };
 pub use edit_history::{BasicEditMutation, BasicEditSession};
 pub use preview_loader::{
-    SelectedPreview, WorkspacePreviewError, load_selected_export_render, load_selected_preview,
+    SelectedPreview, WorkspacePreviewError, load_selected_export_render,
+    load_selected_export_render_for_edit, load_selected_preview, selected_edit_id,
 };
 pub use raster_import::{pick_raster_files, run_raster_import};

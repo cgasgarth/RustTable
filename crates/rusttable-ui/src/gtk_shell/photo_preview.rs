@@ -75,7 +75,7 @@ impl PhotoPreview {
         canvas.set_hexpand(true);
         canvas.set_vexpand(true);
         canvas.set_can_shrink(true);
-        canvas.set_keep_aspect_ratio(true);
+        canvas.set_content_fit(gtk4::ContentFit::Contain);
 
         let placeholder = gtk4::Label::new(Some("preview unavailable"));
         placeholder.set_widget_name("darkroom-preview-placeholder");
