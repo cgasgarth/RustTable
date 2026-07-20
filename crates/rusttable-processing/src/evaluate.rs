@@ -154,6 +154,24 @@ fn apply_operation(
                 value * gain.get()
             },
         ),
+        ProcessingOperationKind::Temperature { config } => {
+            let multipliers = config.multipliers();
+            apply_channels(
+                pixels,
+                step_index,
+                operation_id,
+                opacity,
+                pixel_index_offset,
+                |channel, value| {
+                    let multiplier = match channel {
+                        RgbChannel::Red => multipliers.red(),
+                        RgbChannel::Green => multipliers.green(),
+                        RgbChannel::Blue => multipliers.blue(),
+                    };
+                    value * multiplier.get()
+                },
+            )
+        }
         ProcessingOperationKind::Highlights { config } => {
             let plan = HighlightsPlan::new(
                 *config,

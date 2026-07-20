@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "f1c077204a7bd314624bdbf9060dac04ab6c8020c87bea6a451d00a79764a780",
+  "registry_hash": "b4b072bf13c6bb245e5a03bfab61063f3ce6c15dea4901bfdf84f10f91a015f2",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -1628,7 +1628,7 @@
     {
       "identity": "darktable:temperature:src/iop/temperature.c:v4",
       "compatibility_name": "temperature",
-      "rust_id": null,
+      "rust_id": "rusttable.temperature",
       "reference_path": "src/iop/temperature.c",
       "descriptor_version": 4,
       "parameter_versions": [
@@ -1636,14 +1636,14 @@
         3,
         4
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 76,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:tonecurve:src/iop/tonecurve.c:v5",
@@ -1980,6 +1980,27 @@
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 8,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "rusttable.temperature",
+      "compatibility_name": "temperature",
+      "rust_id": "rusttable.temperature",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 9,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,

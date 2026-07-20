@@ -3706,9 +3706,11 @@ dependencies = [
  "postcard",
  "rusttable-color",
  "rusttable-core",
+ "rusttable-gpu",
  "rusttable-image",
  "rusttable-processing",
  "sha2",
+ "tokio",
 ]
 
 [[package]]

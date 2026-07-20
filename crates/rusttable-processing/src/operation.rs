@@ -5,9 +5,13 @@ use rusttable_core::{
 };
 
 use crate::operations::{
-    colorcorrection::ColorCorrectionConfig, colorin::ColorInConfig, colorout::ColorOutConfig,
-    colorreconstruction::ColorReconstructionConfig, highlights::HighlightsConfig,
+    colorcorrection::ColorCorrectionConfig,
+    colorin::ColorInConfig,
+    colorout::ColorOutConfig,
+    colorreconstruction::ColorReconstructionConfig,
+    highlights::HighlightsConfig,
     primaries::PrimariesConfig,
+    temperature::{TemperatureConfig, WhiteBalanceSource},
 };
 use crate::{FiniteF32, ScalarNarrowingError};
 
@@ -53,6 +57,9 @@ pub enum ProcessingOperationKind {
     },
     ColorCorrection {
         config: ColorCorrectionConfig,
+    },
+    Temperature {
+        config: TemperatureConfig,
     },
 }
 
@@ -181,6 +188,12 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_colorcorrection(operation)
+    }
+
+    pub(crate) fn compile_temperature(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_temperature(operation)
     }
 
     #[must_use]
@@ -399,6 +412,22 @@ const COLORCORRECTION_PARAMETERS: [&str; 10] = [
     "balance",
     "mode",
 ];
+const TEMPERATURE_PARAMETERS: [&str; 14] = [
+    "red",
+    "green",
+    "blue",
+    "various",
+    "preset",
+    "source",
+    "temperature",
+    "tint",
+    "stage",
+    "camera_alias",
+    "preset_id",
+    "tuning",
+    "source_table_revision",
+    "temp_out",
+];
 
 fn compile_highlights(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &HIGHLIGHTS_PARAMETERS)?;
@@ -563,6 +592,106 @@ fn compile_colorcorrection(
     })
 }
 
+fn compile_temperature(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &TEMPERATURE_PARAMETERS)?;
+    let preset = parameter_integer(operation, "preset", 0.0)?;
+    let source = match operation.parameter(&ParameterName::new("source").expect("static name")) {
+        None => source_from_legacy_preset(operation, preset)?,
+        Some(ParameterValue::Text(value)) => WhiteBalanceSource::parse(value.as_str())
+            .map_err(|error| invalid_parameters(operation, error))?,
+        Some(_) => {
+            return Err(OperationCompileError::WrongParameterType {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter: ParameterName::new("source").expect("static name"),
+            });
+        }
+    };
+    let camera_alias = optional_parameter_text(operation, "camera_alias")?;
+    let preset_id = optional_parameter_text(operation, "preset_id")?;
+    let provenance = match (camera_alias, preset_id) {
+        (Some(camera_alias), Some(preset_id))
+            if !camera_alias.is_empty() && !preset_id.is_empty() =>
+        {
+            Some(
+                crate::operations::temperature::PresetProvenance::new(
+                    camera_alias,
+                    preset_id,
+                    i16::try_from(parameter_integer(operation, "tuning", 0.0)?)
+                        .map_err(|_| invalid_parameters(operation, "tuning is out of range"))?,
+                    u64::try_from(parameter_integer(operation, "source_table_revision", 0.0)?)
+                        .map_err(|_| {
+                            invalid_parameters(operation, "source table revision is negative")
+                        })?,
+                )
+                .map_err(|error| invalid_parameters(operation, error))?,
+            )
+        }
+        (None, None) => None,
+        _ => {
+            return Err(invalid_parameters(
+                operation,
+                "preset provenance is incomplete",
+            ));
+        }
+    };
+    let multipliers = crate::operations::temperature::ChannelMultipliers::from_coefficients([
+        parameter_f32(operation, "red", 1.0)?,
+        parameter_f32(operation, "green", 1.0)?,
+        parameter_f32(operation, "blue", 1.0)?,
+        parameter_f32(operation, "various", 1.0)?,
+    ])
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let stage = match optional_parameter_text(operation, "stage")? {
+        Some(value) => crate::operations::temperature::WhiteBalanceStage::parse(&value)
+            .map_err(|error| invalid_parameters(operation, error))?,
+        None => crate::operations::temperature::WhiteBalanceStage::PreDemosaic,
+    };
+    let temperature_tint = if source == WhiteBalanceSource::TemperatureTint {
+        crate::operations::temperature::TemperatureTint::new(
+            parameter_f32(operation, "temperature", 4000.0)?,
+            parameter_f32(operation, "tint", 1.0)?,
+        )
+        .ok()
+    } else {
+        None
+    };
+    let config = crate::operations::temperature::TemperatureConfig::with_details(
+        multipliers,
+        source,
+        stage,
+        temperature_tint,
+        provenance,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::Temperature { config },
+    })
+}
+
+fn source_from_legacy_preset(
+    operation: &Operation,
+    preset: i32,
+) -> Result<WhiteBalanceSource, OperationCompileError> {
+    match preset {
+        -1 | 2 => Ok(WhiteBalanceSource::Custom),
+        0 => Ok(WhiteBalanceSource::AsShot),
+        1 => Ok(WhiteBalanceSource::Spot),
+        3 => Ok(WhiteBalanceSource::CameraReference),
+        4 => Ok(WhiteBalanceSource::DaylightReference),
+        _ => Err(invalid_parameters(
+            operation,
+            "named white-balance presets require immutable preset provenance",
+        )),
+    }
+}
+
 fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), OperationCompileError> {
     if let Some((parameter, _)) = operation
         .parameters()
@@ -632,6 +761,22 @@ fn parameter_text(
             parameter,
         }),
         None => Err(OperationCompileError::MissingParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
+    }
+}
+
+fn optional_parameter_text(
+    operation: &Operation,
+    name: &'static str,
+) -> Result<Option<String>, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    match operation.parameter(&parameter) {
+        None => Ok(None),
+        Some(ParameterValue::Text(value)) => Ok(Some(value.as_str().to_owned())),
+        Some(_) => Err(OperationCompileError::WrongParameterType {
             operation_id: operation.id(),
             key: operation.key().clone(),
             parameter,

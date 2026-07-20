@@ -7,6 +7,7 @@ mod cache_value;
 mod cancellation;
 mod cpu;
 mod failure_policy;
+mod gpu;
 mod histogram;
 mod host_pool;
 mod image;
@@ -63,6 +64,10 @@ pub use failure_policy::{
     OutputCandidate, OutputExpectation, OutputValidationError, OutputValidationReceipt,
     OutputValidator, PolicyAction, PolicyError, PolicyRequest, PublicationAction, QuarantineHint,
     ReceiptBuilder, integrate_failure,
+};
+pub use gpu::{
+    PixelpipeBackend, PixelpipeExecutionReceipt, PixelpipeExecutionResult,
+    PixelpipeExecutionService,
 };
 pub use histogram::{
     HistogramAggregationError, HistogramAggregator, HistogramChannel, HistogramChannelModel,
