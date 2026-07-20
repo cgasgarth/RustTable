@@ -66,10 +66,53 @@ impl UiState {
         values: crate::presentation::BasicEditValues,
     ) {
         if matches!(self.route(), WorkspaceRoute::PhotoDetail(current) if current == photo_id) {
-            self.basic_edit = Some(
-                crate::presentation::BasicEditInspectorViewModel::with_values(photo_id, values),
-            );
+            if let Some(inspector) = self
+                .basic_edit
+                .as_mut()
+                .filter(|inspector| inspector.photo_id() == photo_id)
+            {
+                inspector.apply_saved_values(values);
+            } else {
+                self.basic_edit = Some(
+                    crate::presentation::BasicEditInspectorViewModel::with_values(photo_id, values),
+                );
+            }
             self.reconcile_input();
+        }
+    }
+
+    pub fn set_basic_edit_draft_values(
+        &mut self,
+        photo_id: PhotoId,
+        values: crate::presentation::BasicEditValues,
+    ) {
+        if let Some(inspector) = self
+            .basic_edit
+            .as_mut()
+            .filter(|inspector| inspector.photo_id() == photo_id)
+        {
+            inspector.set_draft_values(values);
+            self.reconcile_input();
+        }
+    }
+
+    pub fn begin_basic_edit_save(&mut self, photo_id: PhotoId) {
+        if let Some(inspector) = self
+            .basic_edit
+            .as_mut()
+            .filter(|inspector| inspector.photo_id() == photo_id)
+        {
+            inspector.begin_save();
+        }
+    }
+
+    pub fn fail_basic_edit_save(&mut self, photo_id: PhotoId) {
+        if let Some(inspector) = self
+            .basic_edit
+            .as_mut()
+            .filter(|inspector| inspector.photo_id() == photo_id)
+        {
+            inspector.mark_save_failed();
         }
     }
 
@@ -354,7 +397,53 @@ mod tests {
                 .basic_edit()
                 .expect("selected photo has inspector")
                 .save_state(),
-            crate::presentation::BasicEditSaveState::SaveRequested
+            crate::presentation::BasicEditSaveState::Saving
         );
+    }
+
+    #[test]
+    fn failed_basic_edit_save_keeps_values_until_successful_projection() {
+        let photo_id = rusttable_core::PhotoId::new(1).expect("test photo ID is non-zero");
+        let workspace = crate::PhotoWorkspaceViewModel::new(
+            vec![crate::PhotoCardViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                None,
+            )],
+            vec![crate::PhotoDetailViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut state = UiState::with_photo_workspace(workspace);
+        let _ = state.handle(UiMessage::Navigate(crate::NavigationIntent::ShowPhoto(
+            photo_id,
+        )));
+
+        let values = crate::presentation::BasicEditValues::defaults();
+        let mut inspector =
+            crate::presentation::BasicEditInspectorViewModel::with_values(photo_id, values);
+        inspector.increment(crate::presentation::BasicEditField::Exposure);
+        let changed = inspector.values();
+        state.set_basic_edit_draft_values(photo_id, changed);
+        state.begin_basic_edit_save(photo_id);
+        state.fail_basic_edit_save(photo_id);
+
+        let failed = state.basic_edit().expect("selected photo has inspector");
+        assert_eq!(
+            failed.save_state(),
+            crate::presentation::BasicEditSaveState::Failed
+        );
+        assert_eq!(failed.values(), changed);
+
+        state.set_basic_edit_values(photo_id, changed);
+        let clean = state.basic_edit().expect("selected photo has inspector");
+        assert_eq!(
+            clean.save_state(),
+            crate::presentation::BasicEditSaveState::Clean
+        );
+        assert_eq!(clean.values(), changed);
     }
 }

@@ -155,7 +155,8 @@ fn finite(minimum: f64, value: f64, maximum: f64) -> FiniteF64 {
 pub enum BasicEditSaveState {
     Clean,
     Unsaved,
-    SaveRequested,
+    Saving,
+    Failed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,8 +219,27 @@ impl BasicEditInspectorViewModel {
         self.mark_unsaved();
     }
 
+    pub fn set_draft_values(&mut self, values: BasicEditValues) {
+        self.draft = values;
+        self.mark_unsaved();
+    }
+
+    pub fn apply_saved_values(&mut self, values: BasicEditValues) {
+        self.saved = values;
+        self.draft = values;
+        self.save_state = BasicEditSaveState::Clean;
+    }
+
+    pub fn begin_save(&mut self) {
+        self.save_state = BasicEditSaveState::Saving;
+    }
+
+    pub fn mark_save_failed(&mut self) {
+        self.save_state = BasicEditSaveState::Failed;
+    }
+
     pub fn request_save(&mut self) {
-        self.save_state = BasicEditSaveState::SaveRequested;
+        self.begin_save();
     }
 
     fn mark_unsaved(&mut self) {
@@ -279,14 +299,34 @@ mod tests {
     }
 
     #[test]
-    fn reset_and_save_state_are_explicit_and_eq_safe() {
+    fn save_lifecycle_preserves_draft_until_successful_projection() {
         let mut inspector = BasicEditInspectorViewModel::new(photo_id());
         inspector.increment(BasicEditField::GreenGain);
         assert_eq!(inspector.save_state(), BasicEditSaveState::Unsaved);
 
-        inspector.reset();
+        let unsaved_values = inspector.values();
+        inspector.begin_save();
+        assert_eq!(inspector.save_state(), BasicEditSaveState::Saving);
+        assert_eq!(inspector.values(), unsaved_values);
+
+        inspector.mark_save_failed();
+        assert_eq!(inspector.save_state(), BasicEditSaveState::Failed);
+        assert_eq!(inspector.values(), unsaved_values);
+
+        inspector.apply_saved_values(unsaved_values);
         assert_eq!(inspector.save_state(), BasicEditSaveState::Clean);
-        inspector.request_save();
-        assert_eq!(inspector.save_state(), BasicEditSaveState::SaveRequested);
+        assert_eq!(inspector.values(), unsaved_values);
+    }
+
+    #[test]
+    fn editing_after_a_failed_save_returns_to_unsaved() {
+        let mut inspector = BasicEditInspectorViewModel::new(photo_id());
+        inspector.increment(BasicEditField::GreenGain);
+        inspector.begin_save();
+        inspector.mark_save_failed();
+
+        inspector.increment(BasicEditField::GreenGain);
+
+        assert_eq!(inspector.save_state(), BasicEditSaveState::Unsaved);
     }
 }

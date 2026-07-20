@@ -273,7 +273,8 @@ fn basic_edit_inspector(
     let status = match inspector.save_state() {
         BasicEditSaveState::Clean => "No unsaved changes",
         BasicEditSaveState::Unsaved => "Unsaved edit",
-        BasicEditSaveState::SaveRequested => "Save requested",
+        BasicEditSaveState::Saving => "Saving edit",
+        BasicEditSaveState::Failed => "Save failed; unsaved edit retained",
     };
     column![
         text("Basic edit inspector"),
