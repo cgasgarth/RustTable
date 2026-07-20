@@ -9,6 +9,7 @@ pub use manifest::{
     ExportRequest, LogicalArtifact,
 };
 pub use png::{
-    CollisionPolicy, PngExportLimits, PngExportLimitsError, PngExportReceipt, PngPublishError,
-    PngPublisher,
+    CollisionPolicy, PngCollisionResult, PngExportLimits, PngExportLimitsError, PngExportReceipt,
+    PngPublishCompletion, PngPublishControl, PngPublishError, PngPublishObserver,
+    PngPublishProgress, PngPublishStage, PngPublisher, PngVerificationReceipt,
 };

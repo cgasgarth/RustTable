@@ -2,7 +2,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rusttable_export::{CollisionPolicy, PngExportLimits, PngPublishError, PngPublisher};
+use rusttable_export::{
+    CollisionPolicy, PngCollisionResult, PngExportLimits, PngPublishCompletion, PngPublishControl,
+    PngPublishError, PngPublishProgress, PngPublishStage, PngPublisher,
+};
 use rusttable_image::{DecodeLimits, DecodedImage, ImageDimensions, ImageInput};
 use rusttable_image_io::FileImageInput;
 
@@ -50,6 +53,10 @@ fn create_new_publishes_and_verifies_the_rendered_pixels() {
     assert_eq!(receipt.destination(), destination);
     assert_eq!(receipt.dimensions(), source.dimensions());
     assert_eq!(receipt.verified_dimensions(), source.dimensions());
+    assert_eq!(receipt.collision(), PngCollisionResult::CreatedNew);
+    assert_eq!(receipt.completion(), PngPublishCompletion::Completed);
+    assert_eq!(receipt.verification().artifact_sha256().len(), 64);
+    assert_eq!(receipt.verification().pixel_sha256().len(), 64);
     assert_eq!(decode(&destination), source);
     assert_eq!(fs::read_dir(&directory).expect("directory").count(), 1);
     fs::remove_dir_all(directory).expect("cleanup");
@@ -76,10 +83,113 @@ fn replace_existing_atomically_publishes_the_new_png() {
     let destination = directory.join("render.png");
     fs::write(&destination, b"old output").expect("seed destination");
 
-    publisher(2, 1, 1_000_000)
+    let receipt = publisher(2, 1, 1_000_000)
         .publish(&image(), &destination, CollisionPolicy::ReplaceExisting)
         .expect("replacement publication");
 
+    assert_eq!(receipt.collision(), PngCollisionResult::ReplacedExisting);
+    assert_eq!(decode(&destination), image());
+    fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[test]
+fn observer_reports_explicit_stages_and_receipt_verification_data() {
+    let directory = test_directory("progress");
+    let destination = directory.join("render.png");
+    let mut stages = Vec::new();
+
+    let receipt = publisher(2, 1, 1_000_000)
+        .publish_with_observer(
+            &image(),
+            &destination,
+            CollisionPolicy::CreateNew,
+            |progress: PngPublishProgress| {
+                stages.push(progress.stage());
+                PngPublishControl::Continue
+            },
+        )
+        .expect("PNG publication");
+
+    assert_eq!(
+        stages,
+        vec![
+            PngPublishStage::Preparing,
+            PngPublishStage::Encoding,
+            PngPublishStage::Verifying,
+            PngPublishStage::Publishing,
+            PngPublishStage::Completed,
+        ]
+    );
+    assert_eq!(receipt.verification().dimensions(), image().dimensions());
+    assert!(
+        receipt
+            .verification()
+            .artifact_sha256()
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    );
+    fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[test]
+fn cancellation_before_publication_removes_staging_and_preserves_destination() {
+    let directory = test_directory("cancel-before-publish");
+    let destination = directory.join("render.png");
+    fs::write(&destination, b"previous artifact").expect("seed destination");
+
+    let error = publisher(2, 1, 1_000_000)
+        .publish_with_observer(
+            &image(),
+            &destination,
+            CollisionPolicy::ReplaceExisting,
+            |progress: PngPublishProgress| {
+                if progress.stage() == PngPublishStage::Publishing {
+                    PngPublishControl::Cancel
+                } else {
+                    PngPublishControl::Continue
+                }
+            },
+        )
+        .expect_err("cancellation must stop before replacement");
+
+    assert!(matches!(
+        error,
+        PngPublishError::Cancelled {
+            stage: PngPublishStage::Publishing
+        }
+    ));
+    assert_eq!(
+        fs::read(&destination).expect("destination"),
+        b"previous artifact"
+    );
+    assert_eq!(fs::read_dir(&directory).expect("directory").count(), 1);
+    fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[test]
+fn cancellation_after_publication_is_recorded_without_rollback() {
+    let directory = test_directory("cancel-after-publish");
+    let destination = directory.join("render.png");
+
+    let receipt = publisher(2, 1, 1_000_000)
+        .publish_with_observer(
+            &image(),
+            &destination,
+            CollisionPolicy::CreateNew,
+            |progress: PngPublishProgress| {
+                if progress.stage() == PngPublishStage::Completed {
+                    PngPublishControl::Cancel
+                } else {
+                    PngPublishControl::Continue
+                }
+            },
+        )
+        .expect("completed publication cannot be rolled back");
+
+    assert_eq!(
+        receipt.completion(),
+        PngPublishCompletion::CompletedAfterCancellation
+    );
     assert_eq!(decode(&destination), image());
     fs::remove_dir_all(directory).expect("cleanup");
 }
