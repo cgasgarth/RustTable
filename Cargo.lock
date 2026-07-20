@@ -3778,6 +3778,7 @@ name = "rusttable-ui"
 version = "0.1.0"
 dependencies = [
  "gtk4",
+ "rusttable-camera",
  "rusttable-color",
  "rusttable-core",
  "rusttable-display-profile",
