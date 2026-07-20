@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk4::prelude::*;
+use rusttable_core::PhotoId;
 
 use crate::presentation::{self, PhotoDetailViewModel, SelectedPreviewState};
 
@@ -22,6 +23,7 @@ pub struct PhotoPreview {
     dimensions: gtk4::Label,
     facts: gtk4::Grid,
     texture: Rc<RefCell<Option<gtk4::gdk::Texture>>>,
+    photo_id: Rc<RefCell<Option<PhotoId>>>,
 }
 
 /// Errors raised while adapting validated RGBA8 presentation data to a GTK texture.
@@ -118,6 +120,7 @@ impl PhotoPreview {
             dimensions,
             facts,
             texture: Rc::new(RefCell::new(None)),
+            photo_id: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -129,10 +132,31 @@ impl PhotoPreview {
 
     /// Replaces the typed photo detail and clears any texture belonging to the previous photo.
     pub fn set_detail(&self, detail: &PhotoDetailViewModel) {
-        self.clear_texture();
+        if *self.photo_id.borrow() != Some(detail.id()) {
+            self.clear_texture();
+        }
+        self.photo_id.replace(Some(detail.id()));
         self.title.set_text(detail.title().as_str());
         self.render_preview_state(detail.selected_preview());
         self.render_facts(detail);
+    }
+
+    /// Shows that the selected photo is being rendered without blocking the GTK main loop.
+    pub fn set_loading(&self) {
+        self.clear_texture();
+        self.status.set_text("loading preview");
+        self.dimensions.set_text("");
+        self.placeholder.set_text("loading preview");
+        self.placeholder.set_visible(true);
+    }
+
+    /// Shows the exact display-safe failure supplied by the application preview controller.
+    pub fn set_failure(&self, message: &str) {
+        self.clear_texture();
+        self.status.set_text(message);
+        self.dimensions.set_text("");
+        self.placeholder.set_text(message);
+        self.placeholder.set_visible(true);
     }
 
     /// Installs or replaces the rendered preview texture supplied by the application service.
