@@ -3722,6 +3722,7 @@ dependencies = [
  "postcard",
  "rusttable-color",
  "rusttable-core",
+ "rusttable-image",
  "serde",
  "serde_json",
  "sha2",
