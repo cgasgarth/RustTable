@@ -1,0 +1,87 @@
+schema = "rusttable.pixelpipe-mode-source-map.v1"
+issue = 271
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "purpose"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbol = "DT_DEV_PIXELPIPE_FULL"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "preview-quality"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "DT_DEV_PIXELPIPE_PREVIEW"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "thumbnail-size-class"
+upstream_path = "src/common/mipmap_cache.h"
+upstream_symbol = "DT_MIPMAP_0"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "interactive-request"
+upstream_path = "src/views/darkroom.c"
+upstream_symbol = "expose"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "export-quality"
+upstream_path = "src/imageio/imageio.c"
+upstream_symbol = "dt_imageio_export"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "operation-inclusion"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "operation inclusion and fast branch"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "approximation-identity"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "preview fast-path quality branch"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "output-accounting"
+upstream_path = "src/imageio/imageio.c"
+upstream_symbol = "export output encoding and precision"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "snapshot-identity"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "pixelpipe generation"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_snapshot.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cache-identity"
+upstream_path = "src/common/mipmap_cache.h"
+upstream_symbol = "full preview thumbnail cache mode"
+rust_path = "crates/rusttable-pixelpipe/src/cache_key.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "basic-stack-fixture"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "representative operation stack"
+rust_path = "crates/rusttable-pixelpipe/src/mode.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "architecture-boundary"
+upstream_path = "src/views/darkroom.c"
+upstream_symbol = "caller/window driven pipeline selection"
+rust_path = "crates/xtask/src/pixelpipe_mode.rs"
+status = "implemented"

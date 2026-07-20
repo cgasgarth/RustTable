@@ -13,6 +13,7 @@ mod memory;
 mod migration;
 mod operations;
 mod pixelpipe;
+mod pixelpipe_mode;
 mod reference;
 
 use std::path::{Path, PathBuf};

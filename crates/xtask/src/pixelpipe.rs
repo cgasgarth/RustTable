@@ -79,6 +79,8 @@ pub(crate) enum PixelpipeCommand {
         #[arg(long)]
         verify_estimates: bool,
     },
+    /// Emit the complete purpose/quality mode matrix for the real raster fixture.
+    ModeMatrix(crate::pixelpipe_mode::ModeMatrixArgs),
 }
 
 pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
@@ -112,6 +114,7 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
             verify_cover,
             verify_estimates,
         } => tiling(root, &fixtures, &budgets, verify_cover, verify_estimates),
+        PixelpipeCommand::ModeMatrix(arguments) => crate::pixelpipe_mode::run(root, &arguments),
     }
 }
 
