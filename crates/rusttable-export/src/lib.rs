@@ -1,10 +1,13 @@
 #![forbid(unsafe_code)]
 #![doc = "Pure, deterministic logical export artifact planning for `RustTable`."]
 
+mod artifact;
 mod contract;
+pub mod encoders;
 mod manifest;
 mod png;
 
+pub use artifact::{CanonicalArtifact, Density, DensityUnit, ExportMetadata, MetadataText};
 pub use contract::{
     AlphaPolicy, ArtifactBuffer, ArtifactError, BitDepth, ChannelLayout, Dependency,
     DependencySnapshot, DestinationSettings, DitherPolicy, EXPORT_CONTRACT_SCHEMA, EncoderSettings,

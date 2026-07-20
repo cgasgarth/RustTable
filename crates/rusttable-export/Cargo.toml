@@ -7,12 +7,14 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+png.workspace = true
 rusttable-color.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
 rusttable-render.workspace = true
 sha2.workspace = true
+tiff.workspace = true
 
 [lints]
 workspace = true
