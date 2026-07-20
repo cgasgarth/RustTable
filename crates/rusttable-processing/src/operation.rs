@@ -13,15 +13,22 @@ use crate::operations::{
     flip::{FlipConfig, FlipMode, OrientationBits},
     highlights::HighlightsConfig,
     primaries::PrimariesConfig,
+    rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
+    scalepixels::ScalePixelsConfig,
     temperature::{TemperatureConfig, WhiteBalanceSource},
 };
 use crate::{FiniteF32, ScalarNarrowingError};
+
+#[path = "operation_error.rs"]
+mod operation_error;
 
 const EXPOSURE_PARAMETER: &str = "stops";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
 const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
 const CROP_PARAMETERS: [&str; 6] = ["cx", "cy", "cw", "ch", "ratio_n", "ratio_d"];
 const FLIP_PARAMETERS: [&str; 2] = ["mode", "orientation"];
+const ROTATEPIXELS_PARAMETERS: [&str; 3] = ["rx", "ry", "angle"];
+const SCALEPIXELS_PARAMETERS: [&str; 1] = ["pixel_aspect_ratio"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessingOperation {
@@ -49,6 +56,12 @@ pub enum ProcessingOperationKind {
     },
     Flip {
         config: FlipConfig,
+    },
+    RotatePixels {
+        config: RotatePixelsConfig,
+    },
+    ScalePixels {
+        config: ScalePixelsConfig,
     },
     Highlights {
         config: HighlightsConfig,
@@ -212,6 +225,18 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_flip(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_flip(operation)
+    }
+
+    pub(crate) fn compile_rotatepixels(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_rotatepixels(operation)
+    }
+
+    pub(crate) fn compile_scalepixels(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_scalepixels(operation)
     }
 
     #[must_use]
@@ -749,6 +774,38 @@ fn compile_flip(operation: &Operation) -> Result<ProcessingOperation, OperationC
     })
 }
 
+fn compile_rotatepixels(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &ROTATEPIXELS_PARAMETERS)?;
+    let rx = parameter_u32(operation, "rx", 0)?;
+    let ry = parameter_u32(operation, "ry", 0)?;
+    let angle = parameter_f32(operation, "angle", 0.0)?;
+    let config = RotatePixelsConfig::new(RotatePixelsParametersV1::new(rx, ry, angle))
+        .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::RotatePixels { config },
+    })
+}
+
+fn compile_scalepixels(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &SCALEPIXELS_PARAMETERS)?;
+    let ratio = parameter_f32(operation, "pixel_aspect_ratio", 1.0)?;
+    let config =
+        ScalePixelsConfig::new(ratio).map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::ScalePixels { config },
+    })
+}
+
 fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), OperationCompileError> {
     if let Some((parameter, _)) = operation
         .parameters()
@@ -881,6 +938,26 @@ fn parameter_integer(
     Ok(value as i32)
 }
 
+fn parameter_u32(
+    operation: &Operation,
+    name: &'static str,
+    default: i64,
+) -> Result<u32, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    let value = match operation.parameter(&parameter) {
+        None => default,
+        Some(ParameterValue::Integer(value)) => *value,
+        Some(_) => {
+            return Err(OperationCompileError::WrongParameterType {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            });
+        }
+    };
+    u32::try_from(value).map_err(|_| invalid_parameters(operation, format!("{name} must be a u32")))
+}
+
 fn invalid_parameters<E: fmt::Display>(operation: &Operation, error: E) -> OperationCompileError {
     OperationCompileError::InvalidParameters {
         operation_id: operation.id(),
@@ -902,80 +979,3 @@ fn compile_opacity(operation: &Operation) -> Result<FiniteF32, OperationCompileE
         Err(ScalarNarrowingError::Overflow) => unreachable!("checked opacity cannot overflow f32"),
     }
 }
-
-impl fmt::Display for OperationCompileError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnsupportedOperationKey { operation_id, key } => {
-                write!(
-                    formatter,
-                    "operation {operation_id} has unsupported key {key}"
-                )
-            }
-            Self::MissingParameter {
-                operation_id,
-                key,
-                parameter,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} is missing parameter {parameter}"
-            ),
-            Self::UnexpectedParameter {
-                operation_id,
-                key,
-                parameter,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} has unexpected parameter {parameter}"
-            ),
-            Self::WrongParameterType {
-                operation_id,
-                key,
-                parameter,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} has wrong type for parameter {parameter}"
-            ),
-            Self::ScalarNarrowingOverflow {
-                operation_id,
-                key,
-                parameter,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} overflows f32 parameter {parameter}"
-            ),
-            Self::ScalarNarrowingUnderflow {
-                operation_id,
-                key,
-                parameter,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} underflows f32 parameter {parameter}"
-            ),
-            Self::OpacityNarrowingUnderflow { operation_id } => {
-                write!(
-                    formatter,
-                    "operation {operation_id} has opacity that underflows f32"
-                )
-            }
-            Self::NegativeParameter {
-                operation_id,
-                key,
-                parameter,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} has negative parameter {parameter}"
-            ),
-            Self::InvalidParameters {
-                operation_id,
-                key,
-                reason,
-            } => write!(
-                formatter,
-                "operation {operation_id} with key {key} has invalid parameters: {reason}"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for OperationCompileError {}

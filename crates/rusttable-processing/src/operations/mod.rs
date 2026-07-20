@@ -14,6 +14,8 @@ pub mod crop;
 pub mod flip;
 pub mod highlights;
 pub mod primaries;
+pub mod rotatepixels;
+pub mod scalepixels;
 pub mod temperature;
 
 pub use common::{

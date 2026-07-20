@@ -156,7 +156,25 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
     write_u128(hasher, operation.operation_id().get());
     hasher.update([u8::from(operation.is_enabled())]);
     hasher.update(operation.opacity().get().to_bits().to_le_bytes());
-    match operation.kind() {
+    write_operation_kind(hasher, operation.kind());
+}
+
+fn write_operation_kind(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
+    match kind {
+        ProcessingOperationKind::Exposure { .. }
+        | ProcessingOperationKind::LinearOffset { .. }
+        | ProcessingOperationKind::RgbGain { .. }
+        | ProcessingOperationKind::Highlights { .. }
+        | ProcessingOperationKind::ColorReconstruction { .. }
+        | ProcessingOperationKind::ColorIn { .. }
+        | ProcessingOperationKind::Primaries { .. }
+        | ProcessingOperationKind::ColorOut { .. } => write_operation_kind_core(hasher, kind),
+        _ => write_operation_kind_extended(hasher, kind),
+    }
+}
+
+fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
+    match kind {
         ProcessingOperationKind::Exposure { stops } => {
             hasher.update([0]);
             hasher.update(stops.get().to_bits().to_le_bytes());
@@ -211,6 +229,12 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
             let bytes = postcard::to_allocvec(config).expect("colorout config is serializable");
             hasher.update(bytes);
         }
+        _ => unreachable!("extended operation routed to the extended snapshot writer"),
+    }
+}
+
+fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
+    match kind {
         ProcessingOperationKind::ColorCorrection { config } => {
             hasher.update([8]);
             for value in config.shadow().into_iter().chain(config.highlight()) {
@@ -248,6 +272,30 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
         ProcessingOperationKind::Flip { config } => {
             write_flip_operation(hasher, config);
         }
+        ProcessingOperationKind::RotatePixels { config } => {
+            let parameters = config.parameters();
+            hasher.update([12]);
+            hasher.update(parameters.rx.to_le_bytes());
+            hasher.update(parameters.ry.to_le_bytes());
+            hasher.update(parameters.angle.to_bits().to_le_bytes());
+            if let Some(source) = config.opaque_source() {
+                hasher.update([1]);
+                hasher.update(source);
+            } else {
+                hasher.update([0]);
+            }
+        }
+        ProcessingOperationKind::ScalePixels { config } => {
+            hasher.update([13]);
+            hasher.update(config.pixel_aspect_ratio().to_bits().to_le_bytes());
+            if let Some(source) = config.opaque_source() {
+                hasher.update([1]);
+                hasher.update(source);
+            } else {
+                hasher.update([0]);
+            }
+        }
+        _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }
 

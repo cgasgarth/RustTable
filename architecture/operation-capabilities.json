@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "f2028b4c7cb343b9acdebb0717b4bf7e19ac9f409b5aa56887bf802a98ebfee8",
+  "registry_hash": "7fec8c8b2249165c25780e01d8fd7f40cf2bf8051caf1341d6f54b5b822850e7",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -1477,38 +1477,38 @@
     {
       "identity": "darktable:rotatepixels:src/iop/rotatepixels.c:v1",
       "compatibility_name": "rotatepixels",
-      "rust_id": null,
+      "rust_id": "rusttable.rotatepixels",
       "reference_path": "src/iop/rotatepixels.c",
       "descriptor_version": 1,
       "parameter_versions": [
         1
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 111,
       "cpu_supported": true,
-      "gpu_supported": false,
+      "gpu_supported": true,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:scalepixels:src/iop/scalepixels.c:v1",
       "compatibility_name": "scalepixels",
-      "rust_id": null,
+      "rust_id": "rusttable.scalepixels",
       "reference_path": "src/iop/scalepixels.c",
       "descriptor_version": 1,
       "parameter_versions": [
         1
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 112,
       "cpu_supported": true,
-      "gpu_supported": false,
+      "gpu_supported": true,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:shadhi:src/iop/shadhi.c:v5",
@@ -2026,6 +2026,42 @@
       "reason": null
     },
     {
+      "identity": "rusttable.rotatepixels",
+      "compatibility_name": "rotatepixels",
+      "rust_id": "rusttable.rotatepixels",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 11,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "rusttable.scalepixels",
+      "compatibility_name": "scalepixels",
+      "rust_id": "rusttable.scalepixels",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 12,
+      "cpu_supported": true,
+      "gpu_supported": true,
+      "cpu_fallback": true,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
       "identity": "rusttable.temperature",
       "compatibility_name": "temperature",
       "rust_id": "rusttable.temperature",
@@ -2039,7 +2075,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 11,
+      "order": 13,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,

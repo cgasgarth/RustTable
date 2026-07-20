@@ -40,6 +40,12 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         }
         crate::ProcessingOperationKind::Crop { .. } => crate::descriptor::crop_descriptor().id,
         crate::ProcessingOperationKind::Flip { .. } => crate::descriptor::flip_descriptor().id,
+        crate::ProcessingOperationKind::RotatePixels { .. } => {
+            crate::descriptor::rotatepixels_descriptor().id
+        }
+        crate::ProcessingOperationKind::ScalePixels { .. } => {
+            crate::descriptor::scalepixels_descriptor().id
+        }
     }
 }
 

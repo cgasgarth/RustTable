@@ -8,7 +8,8 @@ use super::{
 use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, crop_descriptor, exposure_descriptor,
-    flip_descriptor, linear_offset_descriptor, rgb_gain_descriptor, temperature_descriptor,
+    flip_descriptor, linear_offset_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
+    scalepixels_descriptor, temperature_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -219,6 +220,28 @@ fn prepare_flip(
     )
 }
 
+fn prepare_rotatepixels(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_rotatepixels(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_scalepixels(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_scalepixels(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
@@ -310,6 +333,17 @@ fn geometry_definition(
     roi: RoiKind,
     migrations: impl IntoIterator<Item = MigrationBinding>,
 ) -> OperationDefinition {
+    geometry_definition_with_gpu(descriptor, prepare, evidence, roi, migrations, None)
+}
+
+fn geometry_definition_with_gpu(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+    roi: RoiKind,
+    migrations: impl IntoIterator<Item = MigrationBinding>,
+    gpu: Option<GpuBinding>,
+) -> OperationDefinition {
     let compatibility = descriptor.id.compatibility_name.clone();
     let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
     OperationDefinition::new(
@@ -321,7 +355,7 @@ fn geometry_definition(
             tileable,
             false,
         )),
-        None,
+        gpu,
         migrations.into_iter().collect(),
         ImplementationIdentity::new(
             format!("{REGISTRY_BUILD_ID}.{compatibility}"),
@@ -356,6 +390,49 @@ pub fn flip_definition() -> OperationDefinition {
     )
 }
 
+pub fn rotatepixels_definition() -> OperationDefinition {
+    geometry_definition_with_gpu(
+        rotatepixels_descriptor(),
+        prepare_rotatepixels,
+        &[
+            "iop.rotatepixels.descriptor",
+            "iop.rotatepixels.cpu",
+            "iop.rotatepixels.wgpu",
+        ],
+        RoiKind::Distortion,
+        std::iter::empty(),
+        Some(GpuBinding::new(
+            "rusttable.rotatepixels.wgpu",
+            1,
+            Vec::<String>::new(),
+            vec!["rgba32float".to_owned()],
+        )),
+    )
+}
+
+pub fn scalepixels_definition() -> OperationDefinition {
+    geometry_definition_with_gpu(
+        scalepixels_descriptor(),
+        prepare_scalepixels,
+        &[
+            "iop.scalepixels.descriptor",
+            "iop.scalepixels.cpu",
+            "iop.scalepixels.wgpu",
+        ],
+        RoiKind::Scale,
+        std::iter::empty(),
+        Some(GpuBinding::new(
+            "rusttable.scalepixels.wgpu",
+            1,
+            vec![
+                "scalepixels_image_resampler".to_owned(),
+                "scalepixels_mask_resampler".to_owned(),
+            ],
+            vec!["rgba32float".to_owned()],
+        )),
+    )
+}
+
 /// Defines the static built-in factory slice used by startup and xtask.
 #[macro_export]
 macro_rules! builtin_operations {
@@ -367,6 +444,8 @@ macro_rules! builtin_operations {
             $crate::registry::temperature_definition,
             $crate::registry::crop_definition,
             $crate::registry::flip_definition,
+            $crate::registry::rotatepixels_definition,
+            $crate::registry::scalepixels_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,

@@ -14,6 +14,8 @@ pub use descriptor_color::{
 mod descriptor_operations;
 pub use crate::operations::crop::crop_descriptor;
 pub use crate::operations::flip::flip_descriptor;
+pub use crate::operations::rotatepixels::rotatepixels_descriptor;
+pub use crate::operations::scalepixels::scalepixels_descriptor;
 pub use descriptor_operations::{
     color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,
     linear_offset_descriptor, rgb_gain_descriptor, temperature_descriptor,
