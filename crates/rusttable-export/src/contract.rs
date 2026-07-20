@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::errors::{ExportContractError, ExportValidationError};
 use crate::hash_helpers;
+use crate::metadata_policy::MetadataPolicy;
 use crate::{ArtifactKind, CollisionPolicy};
 
 pub const EXPORT_CONTRACT_SCHEMA: &str = "rusttable.export-contract.v1";
@@ -144,46 +145,6 @@ pub enum DitherPolicy {
     None,
     Ordered8x8,
     ErrorDiffusion,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum MetadataAction {
-    Include,
-    Exclude,
-    Redact,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MetadataPolicy {
-    pub exif: MetadataAction,
-    pub iptc: MetadataAction,
-    pub xmp: MetadataAction,
-    pub gps: MetadataAction,
-    pub faces_and_regions: MetadataAction,
-    pub ratings_labels_tags: MetadataAction,
-    pub history: MetadataAction,
-    pub thumbnail: MetadataAction,
-    pub icc_and_cicp: MetadataAction,
-    pub software_and_version: MetadataAction,
-    pub user_fields: MetadataAction,
-}
-
-impl Default for MetadataPolicy {
-    fn default() -> Self {
-        Self {
-            exif: MetadataAction::Include,
-            iptc: MetadataAction::Include,
-            xmp: MetadataAction::Include,
-            gps: MetadataAction::Redact,
-            faces_and_regions: MetadataAction::Redact,
-            ratings_labels_tags: MetadataAction::Include,
-            history: MetadataAction::Exclude,
-            thumbnail: MetadataAction::Include,
-            icc_and_cicp: MetadataAction::Include,
-            software_and_version: MetadataAction::Include,
-            user_fields: MetadataAction::Redact,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -639,6 +600,18 @@ impl ExportRequest {
     pub fn with_metadata_policy(mut self, metadata: MetadataPolicy) -> Self {
         self.metadata = metadata;
         self
+    }
+
+    /// Builds canonical metadata from the immutable queued request policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed metadata error when a candidate is malformed or exceeds a bound.
+    pub fn build_metadata_packet(
+        &self,
+        builder: rusttable_metadata::MetadataPacketBuilder,
+    ) -> Result<rusttable_metadata::MetadataPacket, rusttable_metadata::MetadataBuildError> {
+        builder.policy(self.metadata.canonical()).build()
     }
 
     #[must_use]

@@ -7,6 +7,9 @@ mod extract;
 mod image_output;
 mod limits;
 mod output;
+mod packet;
+mod policy;
+mod views;
 
 pub use error::{
     MetadataInputError, MetadataLimitsError, MetadataOutputError, MetadataOutputLimit,
@@ -16,6 +19,12 @@ pub use extract::{ExifMetadataInput, MetadataInput};
 pub use image_output::{MetadataImageOutput, MetadataImageOutputError};
 pub use limits::{MetadataLimits, MetadataOutputLimits};
 pub use output::{CanonicalExifOutput, EncodedExif, MetadataOutput};
+pub use packet::{MetadataPacket, MetadataPacketBuilder};
+pub use policy::{
+    CanonicalMetadataPolicy, MetadataAction, MetadataBuildError, MetadataCategory,
+    MetadataProperty, MetadataSource, MetadataValue,
+};
 pub use rusttable_core::{
     ImageMetadata, MetadataEntry, MetadataText, Orientation, PositiveRational,
 };
+pub use views::{FormatView, FormatViewKind};

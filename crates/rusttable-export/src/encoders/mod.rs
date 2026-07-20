@@ -4,6 +4,7 @@ pub mod avif;
 pub mod copy;
 pub mod heif;
 pub mod jpeg;
+pub mod jpeg2000;
 pub mod jpegxl;
 pub mod pdf;
 pub mod png;

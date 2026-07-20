@@ -294,7 +294,9 @@ fn insert_metadata(
         | OutputFormat::Xcf
         | OutputFormat::Avif
         | OutputFormat::Heif
-        | OutputFormat::Heic => {
+        | OutputFormat::Heic
+        | OutputFormat::Jpeg2000
+        | OutputFormat::Jp2 => {
             return Err(image_output_error(ImageOutputError::EncodeFailure {
                 format,
             }));
@@ -323,7 +325,9 @@ fn insert_metadata(
         | OutputFormat::Heif
         | OutputFormat::Heic
         | OutputFormat::Pdf
-        | OutputFormat::Xcf => Err(image_output_error(ImageOutputError::EncodeFailure {
+        | OutputFormat::Xcf
+        | OutputFormat::Jpeg2000
+        | OutputFormat::Jp2 => Err(image_output_error(ImageOutputError::EncodeFailure {
             format,
         })),
     }

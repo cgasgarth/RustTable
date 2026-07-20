@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-jpeg2000-native"
+description = "Safe RustTable boundary for the pinned pure-Rust JPEG 2000 codec."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+dicom-toolkit-jpeg2000.workspace = true
+
+[lints]
+workspace = true
