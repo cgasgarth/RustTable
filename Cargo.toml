@@ -15,6 +15,7 @@ members = [
     "crates/rusttable-gpu",
     "crates/rusttable-image",
     "crates/rusttable-image-io",
+    "crates/rusttable-jxl-native",
     "crates/rusttable-input",
     "crates/rusttable-i18n",
     "crates/rusttable-metadata",
@@ -28,6 +29,7 @@ members = [
     "crates/rusttable-simd",
     "crates/rusttable-testkit",
     "crates/rusttable-ui",
+    "crates/rusttable-webp-native",
     "crates/rusttable-parity",
     "crates/xtask",
 ]
@@ -55,6 +57,7 @@ icu_list = "=2.2.0"
 icu_locale = "=2.2.0"
 icu_plurals = "=2.2.0"
 image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
+jpegxl-rs = { version = "=0.15.0", default-features = false, features = ["vendored"] }
 png = "=0.18.1"
 kamadak-exif = { version = "=0.6.1", default-features = false }
 mlua = { version = "=0.11.4", default-features = false, features = ["async", "serialize"] }
@@ -78,6 +81,7 @@ rusttable-export = { path = "crates/rusttable-export", version = "=0.1.0" }
 rusttable-gpu = { path = "crates/rusttable-gpu", version = "=0.1.0" }
 rusttable-image = { path = "crates/rusttable-image", version = "=0.1.0" }
 rusttable-image-io = { path = "crates/rusttable-image-io", version = "=0.1.0" }
+rusttable-jxl-native = { path = "crates/rusttable-jxl-native", version = "=0.1.0" }
 rusttable-input = { path = "crates/rusttable-input", version = "=0.1.0" }
 rusttable-i18n = { path = "crates/rusttable-i18n", version = "=0.1.0" }
 rusttable-import = { path = "crates/rusttable-import", version = "=0.1.0" }
@@ -92,6 +96,8 @@ rusttable-scripting = { path = "crates/rusttable-scripting", version = "=0.1.0" 
 rusttable-simd = { path = "crates/rusttable-simd", version = "=0.1.0" }
 rusttable-testkit = { path = "crates/rusttable-testkit", version = "=0.1.0" }
 rusttable-ui = { path = "crates/rusttable-ui", version = "=0.1.0" }
+rusttable-webp-native = { path = "crates/rusttable-webp-native", version = "=0.1.0" }
+webpx = { version = "=0.4.0", default-features = false, features = ["decode", "encode", "std", "icc"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.150"
 sha2 = { version = "=0.10.9", default-features = false }

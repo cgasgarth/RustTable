@@ -13,6 +13,9 @@ rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
 rusttable-render.workspace = true
+rusttable-jxl-native.workspace = true
+rusttable-webp-native.workspace = true
+rusttable-pixelpipe.workspace = true
 sha2.workspace = true
 tiff.workspace = true
 
