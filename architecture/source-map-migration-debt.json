@@ -2698,7 +2698,7 @@
       "path": null
     }
   ],
-  "issue_count": 575,
+  "issue_count": 577,
   "issue_snapshot": "architecture/issue-spec-snapshot.json",
   "linked_issue": 570,
   "parent_issue": 158,
@@ -2706,5 +2706,5 @@
   "schema": "rusttable.source-map-migration-debt.v1",
   "source_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "strict_issue_count": 45,
-  "unowned_inventory_entry_count": 1901
+  "unowned_inventory_entry_count": 1900
 }

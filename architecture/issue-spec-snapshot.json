@@ -7346,6 +7346,30 @@
       "source_anchor_hash": "",
       "state": "closed",
       "title": "Replace inherited project documentation"
+    },
+    {
+      "body": "## Parent\n\nParent: #158\n\n## Outcome\n\nRestore the full local pre-commit gate by resolving every current warnings-denied Clippy violation in `rusttable-metadata` without weakening workspace lint policy or adding broad allowances.\n\n## Fixed decisions\n\n- Policy: workspace `clippy::pedantic` remains deny-by-default; no blanket allow or lint-policy weakening is permitted.\n- Repository: the complete `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` command is the acceptance authority.\n\n## Upstream darktable source anchors\n\nCanonical source: `darktable-org/darktable@cfe57f3bbf5269bfacf31e832267279caa6938ad`. Each typed identifier below was verified with `git -C /Users/cgas/Documents/RustTable/Darktable show cfe57f3bbf5269bfacf31e832267279caa6938ad:<path>`.\n\n- `src/common/exif.cc` — `gboolean dt_exif_read_from_blob(dt_image_t *img,`: bounded EXIF parse boundary.\n- `src/common/exif.cc` — `int dt_exif_write_blob(uint8_t *blob,`: EXIF output serialization boundary.\n\n**Preserve:** bounded metadata parsing/output and typed failure behavior.\n\n**Redesign:** safe Rust metadata limits, typed errors, and strict compile-time quality replace the native implementation.\n\n**Excluded:** source-text translation, native EXIF dependencies, and new metadata features.\n\nRust ownership: `crates/rusttable-metadata/src/{extract,limits,output,image_output}.rs` and their integration tests own the replacement behavior.\n\n## Implementation\n\n- Add required `# Errors` documentation to public `Result` APIs.\n- Split oversized handwritten functions into focused helpers, retain behavior and tests, and apply idiomatic lifetime/match cleanup.\n- Rename only internal limit fields where needed to satisfy lint semantics; preserve checked constructors and externally observable behavior.\n\n## Failure and edge behavior\n\n- Every existing metadata parsing, limit, and EXIF output failure stays typed and behaviorally equivalent.\n- No lint allow may obscure a source-size, unsafe, or metadata-validation failure.\n\n## Test matrix\n\n- Existing metadata parser/output/limit success and malformed-input tests pass unchanged.\n- The full workspace Clippy command passes with warnings denied.\n\n## Acceptance evidence\n\n- `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` passes.\n- `cargo test -p rusttable-metadata --all-targets --locked` passes.\n- `bash scripts/precommit-fast.sh` passes.\n\n## Dependencies\n\nNone.\n\n## One-PR boundary\n\nOne PR restores strict `rusttable-metadata` lint compliance only. It excludes lint-policy relaxation, metadata feature expansion, and unrelated crate cleanup.",
+      "body_hash": "c7aa510863685f6639a8b23f63cf9afd8d6d301aad8c5dbdbaa13032f92dfe18",
+      "is_pull_request": false,
+      "labels": [
+        "priority: P0"
+      ],
+      "milestone": "Image I/O & Metadata",
+      "number": 576,
+      "source_anchor_hash": "69448ea0c4224ea56a77ced6754c19ebacaeac0c4c1386df4f7d573ef103bcf4",
+      "state": "closed",
+      "title": "Restore strict Clippy compliance in rusttable-metadata"
+    },
+    {
+      "body": "## Why\n\nThe complete local merge-readiness gate was blocked by strict-Clippy failures in `rusttable-metadata`.\n\n## How\n\nDocument fallible metadata APIs, split oversized parsing and EXIF serialization functions, use idiomatic internal limit names and lifetimes, and clean up the affected fixture helpers without relaxing lint policy.\n\n## Validation\n\n- `cargo clippy -p rusttable-metadata --all-targets --locked -- -D warnings`\n- `cargo test -p rusttable-metadata --all-targets --locked`\n- `bash scripts/precommit-fast.sh`\n\nCloses #576",
+      "body_hash": "2091a4e58c33bb590aed697f59f542acf2c1ff05bc048205a3d697aed94a04d7",
+      "is_pull_request": true,
+      "labels": [],
+      "milestone": null,
+      "number": 577,
+      "source_anchor_hash": "",
+      "state": "closed",
+      "title": "Restore metadata strict Clippy compliance"
     }
   ],
   "parent_issue": 158,

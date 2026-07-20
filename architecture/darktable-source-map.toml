@@ -1113,7 +1113,6 @@ unowned_inventory_paths = [
     "src/common/eaw.c",
     "src/common/eaw.h",
     "src/common/eigf.h",
-    "src/common/exif.cc",
     "src/common/extra_optimizations.h",
     "src/common/fast_guided_filter.h",
     "src/common/file_location.h",
@@ -19495,6 +19494,46 @@ oracle_fixtures = ["issue.570.source"]
 kind = "symbol"
 name = "add_subdirectory"
 
+[[issues]]
+number = 576
+title = "Restore strict Clippy compliance in rusttable-metadata"
+state = "closed"
+priority = "priority: P0"
+milestone = "Image I/O & Metadata"
+body_hash = "c7aa510863685f6639a8b23f63cf9afd8d6d301aad8c5dbdbaa13032f92dfe18"
+source_anchor_hash = "69448ea0c4224ea56a77ced6754c19ebacaeac0c4c1386df4f7d573ef103bcf4"
+source_status = "anchored"
+class = "source-owned"
+preserve = ["bounded metadata parsing/output and typed failure behavior."]
+redesign = ["safe Rust metadata limits, typed errors, and strict compile-time quality replace the native implementation."]
+excluded = ["source-text translation, native EXIF dependencies, and new metadata features."]
+rust_targets = ["issue-576-rust-owner"]
+dependencies = []
+
+[[issues.anchors]]
+path = "src/common/exif.cc"
+blob_id = "6fd7b862ebcb39af18483adb0b835e30881ba482"
+role = "authoritative-behavior"
+evidence = "issue-576-source-anchor-section"
+rust_owners = ["issue-576-rust-owner"]
+oracle_fixtures = ["issue.576.source"]
+
+[issues.anchors.selector]
+kind = "symbol"
+name = "gboolean"
+
+[[issues.anchors]]
+path = "src/common/exif.cc"
+blob_id = "6fd7b862ebcb39af18483adb0b835e30881ba482"
+role = "authoritative-behavior"
+evidence = "issue-576-source-anchor-section"
+rust_owners = ["issue-576-rust-owner"]
+oracle_fixtures = ["issue.576.source"]
+
+[issues.anchors.selector]
+kind = "symbol"
+name = "int"
+
 [[responsibilities]]
 id = "issue-178-anchor-0"
 issue = 178
@@ -23464,3 +23503,33 @@ oracle_fixtures = ["issue.570.source"]
 [responsibilities.selector]
 kind = "symbol"
 name = "add_subdirectory"
+
+[[responsibilities]]
+id = "issue-576-anchor-0"
+issue = 576
+kind = "source-owned"
+path = "src/common/exif.cc"
+blob_id = "6fd7b862ebcb39af18483adb0b835e30881ba482"
+role = "authoritative-behavior"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+rust_owners = ["issue-576-rust-owner"]
+oracle_fixtures = ["issue.576.source"]
+
+[responsibilities.selector]
+kind = "symbol"
+name = "gboolean"
+
+[[responsibilities]]
+id = "issue-576-anchor-1"
+issue = 576
+kind = "source-owned"
+path = "src/common/exif.cc"
+blob_id = "6fd7b862ebcb39af18483adb0b835e30881ba482"
+role = "authoritative-behavior"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+rust_owners = ["issue-576-rust-owner"]
+oracle_fixtures = ["issue.576.source"]
+
+[responsibilities.selector]
+kind = "symbol"
+name = "int"
