@@ -8,7 +8,7 @@ use rusttable_import::{
     FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReadError,
     SourceSnapshotReader, decode_reference_source,
 };
-use rusttable_render::RenderOutput;
+use rusttable_render::{RenderOutput, RenderTarget};
 
 use crate::{PreviewError, PreviewService};
 
@@ -96,6 +96,22 @@ impl CatalogPreviewService {
         imports: &dyn ImportRepository,
         edits: &dyn EditRepository,
     ) -> Result<RenderOutput, CatalogPreviewError> {
+        self.render_for_target(request, imports, edits, RenderTarget::FullResolution)
+    }
+
+    /// Renders the exact persisted edit through an explicit production target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when catalog lookup, edit lookup, ownership
+    /// validation, source resolution, decoding, or CPU rendering fails.
+    pub fn render_for_target(
+        &self,
+        request: CatalogPreviewRequest<'_>,
+        imports: &dyn ImportRepository,
+        edits: &dyn EditRepository,
+        target: RenderTarget,
+    ) -> Result<RenderOutput, CatalogPreviewError> {
         let record = imports
             .find_by_photo_id(request.photo_id)
             .map_err(CatalogPreviewError::ImportRepository)?
@@ -108,7 +124,7 @@ impl CatalogPreviewService {
             .ok_or(CatalogPreviewError::UnknownEdit {
                 edit_id: request.edit_id,
             })?;
-        self.render_record_full_resolution(request.source_root, &record, &edit)
+        self.render_record_for_target(request.source_root, &record, &edit, target)
     }
 
     fn render_record(
@@ -122,14 +138,15 @@ impl CatalogPreviewService {
         })
     }
 
-    fn render_record_full_resolution(
+    fn render_record_for_target(
         &self,
         source_root: &Path,
         record: &ImportRecord,
         edit: &Edit,
+        target: RenderTarget,
     ) -> Result<RenderOutput, CatalogPreviewError> {
         self.render_snapshot(source_root, record, edit, |preview, bytes, edit| {
-            preview.render_full_resolution_bytes(bytes, edit)
+            preview.render_bytes_for_target(bytes, edit, target)
         })
     }
 
