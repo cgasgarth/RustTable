@@ -3267,6 +3267,8 @@ dependencies = [
  "rusttable-image-io",
  "rusttable-import",
  "rusttable-metadata",
+ "rusttable-pixelpipe",
+ "rusttable-processing",
  "rusttable-render",
  "rusttable-scripting",
  "rusttable-testkit",
