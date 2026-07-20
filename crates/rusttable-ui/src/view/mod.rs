@@ -1,17 +1,22 @@
-use iced::widget::{column, container, row, scrollable, text};
-use iced::{Element, Fill, Length};
+use iced::widget::{column, container, image, row, scrollable, text};
+use iced::{ContentFit, Element, Fill, Length};
 use rusttable_core::product_name;
 
 use crate::input::{FocusTarget, UiMessage};
 use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
-use crate::presentation::{PhotoCardViewModel, PhotoDetailViewModel};
+use crate::presentation::{
+    PhotoCardViewModel, PhotoDetailViewModel, Rgba8PreviewMetadata, SelectedPreviewState,
+};
 use crate::state::UiState;
 use crate::theme::{
     CONTENT_PADDING, HEADER_HEIGHT, PHOTO_CARD_HEIGHT, PHOTO_CARD_WIDTH, PHOTO_GRID_COLUMNS,
     PHOTO_GRID_SPACING, REGION_SPACING, SIDEBAR_WIDTH,
 };
 use crate::widgets::{action_button, sized_action_button};
+
+const SELECTED_PREVIEW_SURFACE_WIDTH: f32 = 320.0;
+const SELECTED_PREVIEW_SURFACE_HEIGHT: f32 = 240.0;
 
 #[must_use]
 pub fn view(state: &UiState) -> Element<'_, UiMessage> {
@@ -112,7 +117,7 @@ fn ready_library_content<'a>(
 }
 
 fn photo_card<'a>(state: &UiState, card: &'a PhotoCardViewModel) -> Element<'a, UiMessage> {
-    let mut content = column![text("Preview unavailable"), text(card.title().as_str())];
+    let mut content = column![text("Select to preview"), text(card.title().as_str())];
     if let Some(secondary) = card.secondary() {
         content = content.push(text(secondary.as_str()));
     }
@@ -168,8 +173,51 @@ fn detail_view<'a>(
     column![
         text("Photo detail"),
         text(detail.title().as_str()),
+        selected_preview_content(detail.selected_preview()),
         facts,
         back
+    ]
+    .into()
+}
+
+fn selected_preview_content(state: &SelectedPreviewState) -> Element<'_, UiMessage> {
+    match state {
+        SelectedPreviewState::Loading => column![text("Preview"), text("Loading preview")].into(),
+        SelectedPreviewState::Ready(metadata) => ready_preview_content(metadata),
+        SelectedPreviewState::Unavailable => {
+            column![text("Preview"), text("Preview unavailable")].into()
+        }
+        SelectedPreviewState::Failed(failure) => column![
+            text("Preview"),
+            text("Preview failed"),
+            text(failure.detail().as_str()),
+        ]
+        .into(),
+    }
+}
+
+fn ready_preview_content(metadata: &Rgba8PreviewMetadata) -> Element<'_, UiMessage> {
+    let dimensions = metadata.dimensions();
+    let handle = image::Handle::from_rgba(
+        dimensions.width(),
+        dimensions.height(),
+        metadata.pixels().to_vec(),
+    );
+    let surface = image::Image::new(handle)
+        .width(Length::Fixed(SELECTED_PREVIEW_SURFACE_WIDTH))
+        .height(Length::Fixed(SELECTED_PREVIEW_SURFACE_HEIGHT))
+        .content_fit(ContentFit::Contain);
+
+    column![
+        text("Preview"),
+        text("RGBA8 preview"),
+        surface,
+        text(format!(
+            "{} × {} pixels",
+            dimensions.width(),
+            dimensions.height()
+        )),
+        text(metadata.status().as_str()),
     ]
     .into()
 }
@@ -186,6 +234,7 @@ mod tests {
     use crate::navigation::NavigationIntent;
     use crate::presentation::{
         PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
+        PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewFailure, SelectedPreviewState,
     };
     use crate::state::UiState;
 
@@ -204,6 +253,25 @@ mod tests {
             )],
         )
         .expect("test workspace is valid")
+    }
+
+    fn workspace_with_selected_preview(preview: SelectedPreviewState) -> PhotoWorkspaceViewModel {
+        let photo_id = PhotoId::new(1).expect("test photo ID is non-zero");
+        PhotoWorkspaceViewModel::new(
+            vec![PhotoCardViewModel::new(photo_id, text("Photo 1"), None)],
+            vec![
+                PhotoDetailViewModel::new(photo_id, text("Photo 1"), Vec::new())
+                    .with_selected_preview(preview),
+            ],
+        )
+        .expect("test workspace is valid")
+    }
+
+    fn selected_photo_state(preview: SelectedPreviewState) -> UiState {
+        let photo_id = PhotoId::new(1).expect("test photo ID is non-zero");
+        let mut state = UiState::with_photo_workspace(workspace_with_selected_preview(preview));
+        let _ = state.handle(UiMessage::Navigate(NavigationIntent::ShowPhoto(photo_id)));
+        state
     }
 
     #[test]
@@ -288,6 +356,51 @@ mod tests {
         simulator.find("Photo 1")?;
         assert!(simulator.find("Loading library").is_err());
         assert!(simulator.find("No photos in this catalog").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn selected_preview_rgba8_surface_renders_in_photo_detail() -> Result<(), iced_test::Error> {
+        let dimensions = PreviewDimensions::new(2, 1).expect("non-zero dimensions");
+        let state = selected_photo_state(SelectedPreviewState::Ready(
+            Rgba8PreviewMetadata::new(
+                dimensions,
+                text("Edited preview ready"),
+                vec![255, 0, 0, 255, 0, 0, 255, 255],
+            )
+            .expect("valid RGBA8 pixels"),
+        ));
+        let mut simulator =
+            Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&state));
+
+        simulator.find("RGBA8 preview")?;
+        simulator.find("2 × 1 pixels")?;
+        simulator.find("Edited preview ready")?;
+        assert!(simulator.find("Preview unavailable").is_err());
+        simulator.snapshot(&iced::Theme::Dark)?;
+        Ok(())
+    }
+
+    #[test]
+    fn selected_preview_loading_unavailable_and_failed_states_are_explicit()
+    -> Result<(), iced_test::Error> {
+        for (preview, expected) in [
+            (SelectedPreviewState::Loading, "Loading preview"),
+            (SelectedPreviewState::Unavailable, "Preview unavailable"),
+            (
+                SelectedPreviewState::Failed(SelectedPreviewFailure::new(text(
+                    "The preview could not be decoded.",
+                ))),
+                "The preview could not be decoded.",
+            ),
+        ] {
+            let state = selected_photo_state(preview);
+            let mut simulator =
+                Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&state));
+
+            simulator.find("Preview")?;
+            simulator.find(expected)?;
+        }
         Ok(())
     }
 }
