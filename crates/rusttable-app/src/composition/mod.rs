@@ -165,6 +165,16 @@ fn activate_application(
         application,
         I18n::new(resolved_locale.locale().clone()).unwrap_or_default(),
     );
+    let mut display_profiles = rusttable_display_profile::DisplayProfileService::new();
+    if display_profiles
+        .reconcile(rusttable_ui::GtkMonitorInventory.discover())
+        .is_ok()
+    {
+        let snapshot = display_profiles.snapshots().next().cloned();
+        shell
+            .display_profile_banner()
+            .set_snapshot(snapshot.as_ref());
+    }
     install_action_input(&shell);
     let export_panel = shell.export_panel().clone();
     let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));

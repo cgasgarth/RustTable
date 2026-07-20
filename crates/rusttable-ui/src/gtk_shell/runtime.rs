@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
+use crate::display_profile::DisplayProfileBanner;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
@@ -38,6 +39,7 @@ pub struct GtkShell {
     collection_controls: CollectionControls,
     input_mapping_editor: InputMappingEditor,
     i18n: Rc<RefCell<I18n>>,
+    display_profile_banner: DisplayProfileBanner,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
 }
@@ -80,7 +82,9 @@ impl GtkShell {
         let (workspace, lighttable, darkroom_preview) =
             workspace_stack(layout.initial_workspace(), &initial_i18n);
         let input_mapping_editor = InputMappingEditor::new(application);
-        let (header, preferences_button) = header_bar(&workspace, &initial_i18n);
+        let display_profile_banner = DisplayProfileBanner::new();
+        let (header, preferences_button) =
+            header_bar(&workspace, &initial_i18n, &display_profile_banner);
         preferences_button.connect_clicked({
             let editor = input_mapping_editor.clone();
             move |_| editor.present()
@@ -133,6 +137,7 @@ impl GtkShell {
             collection_controls,
             input_mapping_editor,
             i18n: Rc::clone(&i18n),
+            display_profile_banner,
             lighttable_workspace: Rc::new(RefCell::new(None)),
             photo_selected: Rc::new(RefCell::new(None)),
         }
@@ -202,6 +207,12 @@ impl GtkShell {
     #[must_use]
     pub fn input_mapping_editor(&self) -> &InputMappingEditor {
         &self.input_mapping_editor
+    }
+
+    /// Returns the visible monitor-profile status surface.
+    #[must_use]
+    pub const fn display_profile_banner(&self) -> &DisplayProfileBanner {
+        &self.display_profile_banner
     }
 
     /// Projects collection counts and rule values into the left-panel controls.
@@ -409,7 +420,11 @@ fn connect_photo_selection(
     });
 }
 
-fn header_bar(workspace: &gtk4::Stack, i18n: &I18n) -> (gtk4::HeaderBar, gtk4::Button) {
+fn header_bar(
+    workspace: &gtk4::Stack,
+    i18n: &I18n,
+    display_profile_banner: &DisplayProfileBanner,
+) -> (gtk4::HeaderBar, gtk4::Button) {
     let header = gtk4::HeaderBar::new();
     header.set_widget_name(ShellRegion::Header.identifier());
     header.set_show_title_buttons(true);
@@ -426,6 +441,7 @@ fn header_bar(workspace: &gtk4::Stack, i18n: &I18n) -> (gtk4::HeaderBar, gtk4::B
     ));
     let preferences =
         gtk4::Button::with_label(&i18n.text(MessageId::ToolbarPreferences, &MessageArgs::new()));
+    tools.append(display_profile_banner.widget());
     tools.append(&preferences);
     header.set_title_widget(Some(&tools));
 

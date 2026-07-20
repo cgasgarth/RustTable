@@ -9,6 +9,7 @@ members = [
     "crates/rusttable-export",
     "crates/rusttable-catalog-store",
     "crates/rusttable-diagnostics",
+    "crates/rusttable-display-profile",
     "crates/rusttable-gpu",
     "crates/rusttable-image",
     "crates/rusttable-image-io",
@@ -67,6 +68,7 @@ rusttable-color = { path = "crates/rusttable-color", version = "=0.1.0" }
 rusttable-compat = { path = "crates/rusttable-compat", version = "=0.1.0" }
 rusttable-core = { path = "crates/rusttable-core", version = "=0.1.0" }
 rusttable-diagnostics = { path = "crates/rusttable-diagnostics", version = "=0.1.0" }
+rusttable-display-profile = { path = "crates/rusttable-display-profile", version = "=0.1.0" }
 rusttable-export = { path = "crates/rusttable-export", version = "=0.1.0" }
 rusttable-gpu = { path = "crates/rusttable-gpu", version = "=0.1.0" }
 rusttable-image = { path = "crates/rusttable-image", version = "=0.1.0" }

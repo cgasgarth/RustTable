@@ -2389,6 +2389,7 @@ dependencies = [
  "rusttable-catalog-store",
  "rusttable-core",
  "rusttable-diagnostics",
+ "rusttable-display-profile",
  "rusttable-export",
  "rusttable-i18n",
  "rusttable-image",
@@ -2454,6 +2455,13 @@ dependencies = [
  "rand",
  "sha2",
  "tracing",
+]
+
+[[package]]
+name = "rusttable-display-profile"
+version = "0.1.0"
+dependencies = [
+ "sha2",
 ]
 
 [[package]]
@@ -2607,6 +2615,7 @@ dependencies = [
  "gtk4",
  "rusttable-core",
  "rusttable-i18n",
+ "rusttable-display-profile",
  "rusttable-input",
  "rusttable-processing",
  "serde",

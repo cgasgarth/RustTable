@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-display-profile"
+description = "Cross-platform monitor profile discovery and change tracking for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+sha2.workspace = true
+
+[lints]
+workspace = true
