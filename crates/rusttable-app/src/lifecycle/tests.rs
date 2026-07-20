@@ -30,9 +30,9 @@ impl fmt::Display for TestRunError {
 impl std::error::Error for TestRunError {}
 
 impl Recorder for FakeGuard {
-    fn record(&self, event: DiagnosticEvent) -> Result<(), DiagnosticsError> {
-        self.events.borrow_mut().push(event);
-        if self.failure == Some(event) {
+    fn record(&self, event: &DiagnosticEvent) -> Result<(), DiagnosticsError> {
+        self.events.borrow_mut().push(event.clone());
+        if self.failure == Some(event.clone()) {
             Err(DiagnosticsError::DirectoryUnavailable)
         } else {
             Ok(())
@@ -81,7 +81,7 @@ fn startup_and_shutdown_surround_successful_application() {
     assert!(result.is_ok());
     assert_eq!(
         events.borrow().as_slice(),
-        &[DiagnosticEvent::Startup, DiagnosticEvent::Shutdown]
+        &[DiagnosticEvent::startup(), DiagnosticEvent::shutdown()]
     );
 }
 
@@ -102,8 +102,8 @@ fn application_failure_is_returned_without_replacement() {
     assert_eq!(
         events.borrow().as_slice(),
         &[
-            DiagnosticEvent::Startup,
-            DiagnosticEvent::ApplicationFailure(ApplicationFailureCode::DesktopUiRun),
+            DiagnosticEvent::startup(),
+            DiagnosticEvent::application_failure(ApplicationFailureCode::DesktopUiRun),
         ]
     );
 }
@@ -116,7 +116,7 @@ fn startup_record_failure_does_not_skip_application() {
         || {
             Ok(FakeGuard {
                 events: Rc::new(RefCell::new(Vec::new())),
-                failure: Some(DiagnosticEvent::Startup),
+                failure: Some(DiagnosticEvent::startup()),
             })
         },
         || {
@@ -137,7 +137,7 @@ fn final_record_failure_does_not_replace_application_result() {
         || {
             Ok(FakeGuard {
                 events: Rc::new(RefCell::new(Vec::new())),
-                failure: Some(DiagnosticEvent::Shutdown),
+                failure: Some(DiagnosticEvent::shutdown()),
             })
         },
         || Ok(()),

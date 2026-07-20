@@ -124,6 +124,9 @@ pub enum ImageInputError {
     UnsupportedSignature {
         signature: Vec<u8>,
     },
+    ProbeBudgetExceeded {
+        limit: u64,
+    },
     UnsupportedFeature {
         format: InputFormat,
         reason: UnsupportedImageFeature,
@@ -159,6 +162,7 @@ pub enum ImageInputError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnsupportedImageFeature {
     BigTiff,
+    Animation,
     MultipleImages,
     BitDepth,
     SampleFormat,
@@ -175,6 +179,9 @@ impl fmt::Display for ImageInputError {
             Self::Io { message } => write!(formatter, "image input I/O failed: {message}"),
             Self::UnsupportedSignature { .. } => {
                 formatter.write_str("image signature is unsupported")
+            }
+            Self::ProbeBudgetExceeded { limit } => {
+                write!(formatter, "image probe exceeded the {limit}-byte budget")
             }
             Self::UnsupportedFeature { format, reason } => {
                 write!(

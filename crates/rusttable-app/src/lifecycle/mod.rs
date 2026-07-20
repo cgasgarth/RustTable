@@ -746,11 +746,11 @@ impl ServiceRegistry {
 pub(crate) type ApplicationRunResult<Error> = Result<(), Error>;
 
 pub(crate) trait Recorder {
-    fn record(&self, event: DiagnosticEvent) -> Result<(), DiagnosticsError>;
+    fn record(&self, event: &DiagnosticEvent) -> Result<(), DiagnosticsError>;
 }
 
 impl Recorder for DiagnosticsGuard {
-    fn record(&self, event: DiagnosticEvent) -> Result<(), DiagnosticsError> {
+    fn record(&self, event: &DiagnosticEvent) -> Result<(), DiagnosticsError> {
         DiagnosticsGuard::record(self, event)
     }
 }
@@ -774,7 +774,7 @@ where
     };
 
     if let Some(ref guard) = guard
-        && guard.record(DiagnosticEvent::Startup).is_err()
+        && guard.record(&DiagnosticEvent::startup()).is_err()
     {
         warn("RustTable diagnostics startup record failed; continuing");
     }
@@ -782,12 +782,12 @@ where
     let result = application();
     if let Some(ref guard) = guard {
         let event = result.as_ref().map_or(
-            DiagnosticEvent::ApplicationFailure(
+            DiagnosticEvent::application_failure(
                 rusttable_diagnostics::ApplicationFailureCode::DesktopUiRun,
             ),
-            |()| DiagnosticEvent::Shutdown,
+            |()| DiagnosticEvent::shutdown(),
         );
-        if guard.record(event).is_err() {
+        if guard.record(&event).is_err() {
             warn("RustTable diagnostics final record failed; continuing");
         }
     }

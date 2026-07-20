@@ -4,7 +4,10 @@ use std::process::{Command, Output};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rusttable_diagnostics::{DiagnosticEvent, install};
+use rusttable_diagnostics::{
+    CorrelationContext, DiagnosticCode, DiagnosticEvent, DiagnosticField, Severity, Subsystem,
+    install,
+};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -18,18 +21,30 @@ fn diagnostics_process() {
     let root = unique_directory("parent");
     fs::create_dir_all(&root).expect("temporary root");
     run_child("normal", &root).assert_success();
-    let log = fs::read_to_string(root.join("rusttable.log")).expect("normal log");
+    let log = fs::read_to_string(root.join("rusttable.jsonl")).expect("normal JSON log");
     assert_eq!(log.lines().count(), 2);
-    assert!(log.starts_with("{\"schema_version\":1,\"timestamp_unix_ms\":"));
-    assert!(
-        log.contains("\"package_version\":\"0.1.0\",\"event\":\"startup\",\"failure_code\":null}")
-    );
-    assert!(log.contains("\"event\":\"shutdown\",\"failure_code\":null}"));
+    assert!(log.starts_with("{\"schema_version\":1,\"sequence\":1,\"timestamp_unix_ms\":"));
+    assert!(log.contains("\"code\":\"lifecycle.startup\""));
+    assert!(log.contains("\"code\":\"lifecycle.shutdown\""));
+    let human = fs::read_to_string(root.join("rusttable.log")).expect("normal human log");
+    assert!(human.contains("info lifecycle.startup"));
+    assert!(human.contains("info lifecycle.shutdown"));
+
+    let structured = unique_directory("structured");
+    run_child("structured", &structured).assert_success();
+    let structured_json = fs::read_to_string(structured.join("rusttable.jsonl")).unwrap();
+    assert!(structured_json.contains("\"code\":\"import.source.open\""));
+    assert!(structured_json.contains("\"severity\":\"warning\""));
+    assert!(structured_json.contains("\"privacy\":\"private\",\"value\":\"alias-"));
+    assert!(structured_json.contains("\"key\":\"format\""));
+    assert!(!structured_json.contains("private/photo.raw"));
+    assert!(!structured_json.contains("credential-sentinel"));
+    assert!(!structured_json.contains("pixel-sentinel"));
 
     let concurrent = unique_directory("concurrent");
     run_child("concurrent", &concurrent).assert_success();
     assert_eq!(
-        fs::read_to_string(concurrent.join("rusttable.log"))
+        fs::read_to_string(concurrent.join("rusttable.jsonl"))
             .unwrap()
             .lines()
             .count(),
@@ -38,13 +53,13 @@ fn diagnostics_process() {
 
     let rotation = unique_directory("rotation");
     fs::create_dir_all(&rotation).unwrap();
-    fs::write(rotation.join("rusttable.log"), vec![b'x'; 5 * 1024 * 1024]).unwrap();
+    fs::write(rotation.join("rusttable.log"), vec![b'x'; 10 * 1024 * 1024]).unwrap();
     run_child("rotation", &rotation).assert_success();
     assert_eq!(
         fs::metadata(rotation.join("rusttable.log.1"))
             .unwrap()
             .len(),
-        5 * 1024 * 1024
+        10 * 1024 * 1024
     );
     assert!(
         fs::read_to_string(rotation.join("rusttable.log"))
@@ -88,7 +103,7 @@ fn diagnostics_process() {
         let target = symlink_dir.join("target.log");
         fs::write(&target, b"target").unwrap();
         std::os::unix::fs::symlink(&target, symlink_dir.join("rusttable.log")).unwrap();
-        assert!(!run_child("normal", &symlink_dir).status.success());
+        assert!(run_child("normal", &symlink_dir).status.success());
         assert_eq!(fs::read(&target).unwrap(), b"target");
     }
 }
@@ -97,8 +112,8 @@ fn child_mode(mode: &str) {
     match mode {
         "normal" => {
             let guard = install().expect("install");
-            guard.record(DiagnosticEvent::Startup).unwrap();
-            guard.record(DiagnosticEvent::Shutdown).unwrap();
+            guard.record(&DiagnosticEvent::startup()).unwrap();
+            guard.record(&DiagnosticEvent::shutdown()).unwrap();
         }
         "concurrent" => {
             let guard = Arc::new(install().expect("install"));
@@ -107,7 +122,7 @@ fn child_mode(mode: &str) {
                 let guard = Arc::clone(&guard);
                 threads.push(std::thread::spawn(move || {
                     for _ in 0..10 {
-                        guard.record(DiagnosticEvent::Startup).unwrap();
+                        guard.record(&DiagnosticEvent::startup()).unwrap();
                     }
                 }));
             }
@@ -117,7 +132,26 @@ fn child_mode(mode: &str) {
         }
         "rotation" => {
             let guard = install().expect("install");
-            guard.record(DiagnosticEvent::Startup).unwrap();
+            guard.record(&DiagnosticEvent::startup()).unwrap();
+        }
+        "structured" => {
+            let guard = install().expect("install");
+            let subsystem = Subsystem::new("import").unwrap();
+            let code = DiagnosticCode::new(subsystem, "source.open").unwrap();
+            let context = CorrelationContext::default().request(guard.redactor(), "request-42");
+            let event = DiagnosticEvent::new(code, Severity::Warning, "open")
+                .unwrap()
+                .with_context(context)
+                .with_field(DiagnosticField::public_text("format", "raw").unwrap())
+                .unwrap()
+                .with_field(DiagnosticField::path("private/photo.raw").unwrap())
+                .unwrap()
+                .with_field(DiagnosticField::credential("credential-sentinel").unwrap())
+                .unwrap()
+                .with_field(DiagnosticField::pixel_data(b"pixel-sentinel").unwrap())
+                .unwrap();
+            guard.record(&event).unwrap();
+            assert_eq!(guard.recent_snapshot().unwrap().len(), 1);
         }
         "invalid" => assert!(install().is_err()),
         "static-crash" => {
@@ -195,7 +229,11 @@ fn assert_one_bounded_report(directory: &Path, payload_kind: &str, payload: &str
     assert!(report.len() <= 256 * 1024);
     assert!(report.ends_with('\n'));
     assert!(report.contains(&format!("\"payload_kind\":\"{payload_kind}\"")));
-    assert!(report.contains(&format!("\"payload_text\":\"{payload}\"")));
+    assert!(report.contains("\"payload_class\":\"payload\""));
+    assert!(report.contains("\"payload_text\":\"[redacted]\""));
+    if payload == "private-dynamic-sentinel" {
+        assert!(!report.contains(payload));
+    }
     assert!(report.contains("\"backtrace_status\":"));
 }
 

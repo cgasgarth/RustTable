@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::json::{PanicFields, crash_line};
+use crate::json::escape;
+use crate::privacy::Redactor;
 use crate::storage::refuse_symlink;
 
 const CRASH_LIMIT: usize = 256 * 1024;
@@ -16,53 +17,45 @@ const RETAINED_REPORTS: usize = 5;
 pub(crate) struct CrashState {
     pub(crate) directory: PathBuf,
     pub(crate) package_version: &'static str,
+    pub(crate) redactor: Redactor,
 }
 
 impl CrashState {
     pub(crate) fn write(&self, panic: &PanicHookInfo<'_>) {
         let timestamp = unix_millis();
         let pid = std::process::id();
-        let name = format!("crash-{timestamp}-{pid}.json");
-        let path = self.directory.join(name);
+        let path = self.directory.join(format!("crash-{timestamp}-{pid}.json"));
         if refuse_symlink(&path, "crash report").is_err() {
             return;
         }
-        let (payload_kind, payload_text) = payload(panic);
         let backtrace = Backtrace::capture();
         let backtrace_status = match backtrace.status() {
             BacktraceStatus::Captured => "captured",
             BacktraceStatus::Disabled => "disabled",
             _ => "unsupported",
         };
-        let backtrace_text = backtrace.to_string();
-        let fields = PanicFields {
-            file: panic.location().map(std::panic::Location::file),
-            line: panic.location().map(std::panic::Location::line),
-            column: panic.location().map(std::panic::Location::column),
-            payload_kind,
-            payload_text,
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("unnamed");
+        let thread_alias = self.redactor.alias(thread_name);
+        let payload_kind = if panic.payload().is::<&'static str>() {
+            "static_str"
+        } else if panic.payload().is::<String>() {
+            "dynamic_string"
+        } else {
+            "unknown"
         };
-        let bounded_backtrace = truncate_utf8(&backtrace_text, CRASH_LIMIT / 2);
-        let mut line = crash_line(
-            self.package_version,
-            timestamp,
-            pid,
-            &fields,
+        let mut line = format!(
+            "{{\"schema_version\":1,\"package_version\":\"{}\",\"timestamp_unix_ms\":{timestamp},\"pid\":{pid},\"target_os\":\"{}\",\"target_arch\":\"{}\",\"thread_alias\":\"{}\",\"payload_class\":\"payload\",\"payload_kind\":\"{}\",\"payload_text\":\"[redacted]\",\"backtrace_status\":\"{}\",\"backtrace_text\":\"{}\"}}\n",
+            escape(self.package_version),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            escape(thread_alias.as_str()),
+            payload_kind,
             backtrace_status,
-            bounded_backtrace,
+            escape(truncate_utf8(&backtrace.to_string(), CRASH_LIMIT / 2)),
         );
         if line.len() > CRASH_LIMIT {
-            line = crash_line(
-                self.package_version,
-                timestamp,
-                pid,
-                &fields,
-                backtrace_status,
-                truncate_utf8(bounded_backtrace, CRASH_LIMIT / 4),
-            );
-        }
-        if line.len() > CRASH_LIMIT {
-            line = truncate_utf8(&line, CRASH_LIMIT.saturating_sub(1)).to_owned();
+            line.truncate(truncate_utf8(&line, CRASH_LIMIT.saturating_sub(1)).len());
             line.push('\n');
         }
         if let Ok(mut file) = OpenOptions::new().write(true).create_new(true).open(&path) {
@@ -73,37 +66,25 @@ impl CrashState {
     }
 
     fn retain(&self) {
-        let mut reports = Vec::new();
         let Ok(entries) = fs::read_dir(&self.directory) else {
             return;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Ok(metadata) = fs::symlink_metadata(&path) else {
-                continue;
-            };
-            if !metadata.is_file() || metadata.file_type().is_symlink() {
-                continue;
-            }
-            let Some((timestamp, pid)) = parse_report_name(&path) else {
-                continue;
-            };
-            reports.push((timestamp, pid, path));
-        }
+        let mut reports = entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                let metadata = fs::symlink_metadata(&path).ok()?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    return None;
+                }
+                let (timestamp, pid) = parse_report_name(&path)?;
+                Some((timestamp, pid, path))
+            })
+            .collect::<Vec<_>>();
         reports.sort_by_key(|report| Reverse((report.0, report.1)));
         for (_, _, path) in reports.into_iter().skip(RETAINED_REPORTS) {
             let _ = fs::remove_file(path);
         }
-    }
-}
-
-fn payload(panic: &PanicHookInfo<'_>) -> (&'static str, &'static str) {
-    if let Some(message) = panic.payload().downcast_ref::<&'static str>() {
-        ("static_str", message)
-    } else if panic.payload().downcast_ref::<String>().is_some() {
-        ("dynamic_string", "[redacted]")
-    } else {
-        ("unknown", "[redacted]")
     }
 }
 

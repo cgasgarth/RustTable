@@ -1,14 +1,14 @@
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
 
-use image::{ImageFormat, ImageReader};
 use rusttable_image::{
     DecodeLimits, DecodedImage, ImageDimensions, ImageInput, ImageInputError, ImageProbe,
     InputFormat, UnsupportedImageFeature,
 };
 
 use crate::ImageDecoderRegistry;
+use crate::registry::PROBE_BUDGET_BYTES;
 
 pub struct FileImageInput {
     limits: DecodeLimits,
@@ -108,17 +108,16 @@ pub(crate) fn probe_tiff(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<ImageProbe, ImageInputError> {
-    let spec = inspect_tiff(bytes)?;
+    let window = &bytes[..bytes.len().min(PROBE_BUDGET_BYTES)];
+    let spec = inspect_tiff(window, window.len() == bytes.len())?;
     let dimensions = ImageDimensions::new(spec.width, spec.height)
         .map_err(|_| ImageInputError::ArithmeticOverflow)?;
     enforce_limits(limits, dimensions)?;
-    let decoded_dimensions = ImageReader::with_format(Cursor::new(bytes), ImageFormat::Tiff)
-        .into_dimensions()
-        .map_err(|error| malformed(InputFormat::Tiff, &error))?;
-    if decoded_dimensions != (spec.width, spec.height) {
-        return Err(malformed_tiff("decoder dimensions differ from TIFF IFD"));
-    }
     Ok(ImageProbe::new(InputFormat::Tiff, dimensions))
+}
+
+pub(crate) fn validate_tiff(bytes: &[u8]) -> Result<(), ImageInputError> {
+    inspect_tiff(bytes, true).map(|_| ())
 }
 
 #[derive(Debug)]
@@ -135,13 +134,20 @@ struct TiffDirectory {
     next_offset: u32,
 }
 
-fn inspect_tiff(bytes: &[u8]) -> Result<TiffImageSpec, ImageInputError> {
+fn inspect_tiff(bytes: &[u8], validate_payload: bool) -> Result<TiffImageSpec, ImageInputError> {
     let order = match bytes.get(0..2) {
         Some([b'I', b'I']) => TiffByteOrder::Little,
         Some([b'M', b'M']) => TiffByteOrder::Big,
         _ => return Err(malformed_tiff("missing TIFF byte-order marker")),
     };
-    if read_u16(bytes, 2, order)? != 42 {
+    let magic = read_u16(bytes, 2, order)?;
+    if magic == 43 {
+        return Err(ImageInputError::UnsupportedFeature {
+            format: InputFormat::Tiff,
+            reason: UnsupportedImageFeature::BigTiff,
+        });
+    }
+    if magic != 42 {
         return Err(malformed_tiff("invalid classic TIFF magic"));
     }
     let ifd_offset = read_u32(bytes, 4, order)?;
@@ -166,6 +172,13 @@ fn inspect_tiff(bytes: &[u8]) -> Result<TiffImageSpec, ImageInputError> {
     let photometric = directory
         .photometric
         .ok_or_else(|| malformed_tiff("missing PhotometricInterpretation"))?;
+    if validate_payload {
+        validate_strip_ranges(
+            bytes,
+            directory.strip_offsets.as_deref(),
+            directory.strip_byte_counts.as_deref(),
+        )?;
+    }
     if bits.iter().any(|value| *value != 8) {
         return Err(unsupported_tiff(UnsupportedImageFeature::BitDepth));
     }
@@ -180,11 +193,6 @@ fn inspect_tiff(bytes: &[u8]) -> Result<TiffImageSpec, ImageInputError> {
             UnsupportedImageFeature::PlanarConfiguration,
         ));
     }
-    validate_strip_ranges(
-        bytes,
-        directory.strip_offsets.as_deref(),
-        directory.strip_byte_counts.as_deref(),
-    )?;
     let supported_color_model = (photometric == 1 && (samples == 1 || samples == 2))
         || (photometric == 2 && (samples == 3 || samples == 4));
     if !supported_color_model || bits.len() != usize::try_from(samples).unwrap_or(usize::MAX) {

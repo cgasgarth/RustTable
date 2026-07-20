@@ -7,4 +7,6 @@ mod registry;
 
 pub use input::FileImageInput;
 pub use output::FileImageOutput;
-pub use registry::ImageDecoderRegistry;
+pub use registry::{
+    DecoderDescriptor, DecoderIdentity, ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome,
+};
