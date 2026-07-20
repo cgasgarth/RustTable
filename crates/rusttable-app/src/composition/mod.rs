@@ -17,6 +17,7 @@ use gtk4::gio::prelude::{ActionMapExt, ApplicationExt, ApplicationExtManual, Fil
 use gtk4::glib::{self, ControlFlow};
 use gtk4::prelude::GtkWindowExt;
 use gtk4::prelude::{GtkApplicationExt, RecentManagerExt, WidgetExt};
+use rusttable_i18n::{I18n, LocaleSelection};
 use rusttable_import::{RasterImportBatch, RasterImportStatus};
 use rusttable_input::{
     ActionId, ActionInputService, ActionMapping, ActionMode, ActionPhase, Binding, InputSource,
@@ -154,8 +155,26 @@ fn activate_application(
     }
     let catalog_controller = Rc::new(RefCell::new(GtkCatalogController::load_persisted()));
     active_catalog.replace(Some(Rc::clone(&catalog_controller)));
-    active_collection.replace(catalog_controller.borrow().collection_controller());
-    let shell = rusttable_ui::GtkShell::new(application);
+    let resolved_locale = LocaleSelection::from_environment().resolve();
+    active_collection.replace(
+        catalog_controller
+            .borrow()
+            .collection_controller_with_locale(resolved_locale.locale().clone()),
+    );
+    let shell = rusttable_ui::GtkShell::with_i18n(
+        application,
+        I18n::new(resolved_locale.locale().clone()).unwrap_or_default(),
+    );
+    let mut display_profiles = rusttable_display_profile::DisplayProfileService::new();
+    if display_profiles
+        .reconcile(rusttable_ui::GtkMonitorInventory.discover())
+        .is_ok()
+    {
+        let snapshot = display_profiles.snapshots().next().cloned();
+        shell
+            .display_profile_banner()
+            .set_snapshot(snapshot.as_ref());
+    }
     install_action_input(&shell);
     let export_panel = shell.export_panel().clone();
     let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));

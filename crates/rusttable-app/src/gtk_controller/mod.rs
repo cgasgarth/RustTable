@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use rusttable_catalog::ImportRepository;
 use rusttable_catalog_store::RedbImportRepository;
 use rusttable_core::PhotoId;
+use rusttable_i18n::LocaleTag;
 use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 
 use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root};
@@ -133,12 +134,24 @@ impl GtkCatalogController {
     /// source records so filmroll, folder, and filename values are not reconstructed from labels.
     #[must_use]
     pub fn collection_controller(&self) -> Option<CollectionController> {
+        self.collection_controller_with_locale(LocaleTag::default_locale())
+    }
+
+    /// Reopens collection records with the locale selected by the application shell.
+    #[must_use]
+    pub fn collection_controller_with_locale(
+        &self,
+        locale: LocaleTag,
+    ) -> Option<CollectionController> {
         let GtkCatalogState::Ready(catalog) = &self.state else {
             return None;
         };
         let repository = RedbImportRepository::open(catalog.location().catalog_path()).ok()?;
         let records = repository.list().ok()?;
-        Some(CollectionController::from_import_records(&records))
+        Some(CollectionController::with_locale(
+            records.iter().map(collection::collection_item),
+            locale,
+        ))
     }
 
     /// Selects a photo present in the ready workspace.

@@ -2,6 +2,7 @@
 #![doc = "GTK4 UI components and presentation models for `RustTable`."]
 
 pub mod collection;
+pub mod display_profile;
 pub mod gtk_shell;
 pub mod import;
 pub mod input;
@@ -10,6 +11,7 @@ pub mod library;
 pub mod presentation;
 
 pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
+pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DarktableTheme, ExportAction, ExportPanel, ExportSize, ExposurePanel, GtkShell, ShellLayout,

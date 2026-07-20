@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use rusttable_core::PhotoId;
+use rusttable_i18n::{I18n, MessageArgs, MessageId, normalize_search};
 
 /// The first Darktable collection properties supported by `RustTable`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -20,14 +21,20 @@ impl CollectionProperty {
     /// All supported properties in the same order used by the GTK dropdown.
     pub const ALL: [Self; 3] = [Self::Filmroll, Self::Folders, Self::Filename];
 
-    /// Returns the display label used by the collection control.
+    /// Returns the stable message ID used by the collection control.
     #[must_use]
-    pub const fn label(self) -> &'static str {
+    pub const fn message_id(self) -> MessageId {
         match self {
-            Self::Filmroll => "filmroll",
-            Self::Folders => "folders",
-            Self::Filename => "filename",
+            Self::Filmroll => MessageId::CollectionPropertyFilmroll,
+            Self::Folders => MessageId::CollectionPropertyFolders,
+            Self::Filename => MessageId::CollectionPropertyFilename,
         }
+    }
+
+    /// Returns the localized collection-property label.
+    #[must_use]
+    pub fn localized_label(self, i18n: &I18n) -> String {
+        i18n.text(self.message_id(), &MessageArgs::new())
     }
 
     /// Returns the dropdown index for this property.
@@ -194,7 +201,7 @@ fn strip_prefix_wildcard(value: &str) -> &str {
 }
 
 fn contains_case_insensitive(haystack: &str, needle: &str) -> bool {
-    needle.is_empty() || haystack.to_lowercase().contains(&needle.to_lowercase())
+    needle.is_empty() || normalize_search(haystack).contains(&normalize_search(needle))
 }
 
 #[cfg(test)]
