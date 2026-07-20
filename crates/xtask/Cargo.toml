@@ -18,6 +18,7 @@ rusttable-color.workspace = true
 rusttable-import.workspace = true
 rusttable-metadata.workspace = true
 rusttable-parity.workspace = true
+rusttable-processing.workspace = true
 rusttable-render.workspace = true
 rusttable-testkit.workspace = true
 serde_json.workspace = true

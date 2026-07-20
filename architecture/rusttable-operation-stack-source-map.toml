@@ -1,0 +1,40 @@
+schema = "rusttable.operation-source-map.v1"
+issue = 264
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "operation-order"
+upstream_path = "src/common/iop_order.c"
+upstream_symbol = "dt_ioppr_get_iop_order_list"
+rust_path = "crates/rusttable-processing/src/operation_stack.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "operation-instance"
+upstream_path = "src/develop/imageop.h"
+upstream_symbol = "dt_iop_module_t::multi_priority"
+rust_path = "crates/rusttable-processing/src/operation_stack.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "style-history-order"
+upstream_path = "src/common/styles.c"
+upstream_symbol = "dt_styles_apply_to_image"
+rust_path = "crates/rusttable-processing/src/operation_stack.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "history-order-state"
+upstream_path = "src/common/history.h"
+upstream_symbol = "dt_history_item_t"
+rust_path = "crates/rusttable-processing/src/operation_stack.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "ui-history-synchronization"
+upstream_path = "src/develop/imageop_gui.c"
+upstream_symbol = "dt_iop_gui_update"
+rust_path = "crates/rusttable-processing/src/operation_stack.rs"
+status = "deferred"
+deferred_issue = 265
