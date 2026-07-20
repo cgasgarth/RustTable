@@ -108,10 +108,11 @@ impl ExportPanel {
 
         let expander = gtk4::Expander::builder()
             .label("export")
-            .expanded(true)
+            .expanded(false)
             .child(&content)
             .build();
         expander.set_widget_name("export");
+        expander.add_css_class("dt_module_group");
 
         let panel = Self {
             expander,
