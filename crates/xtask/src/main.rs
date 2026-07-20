@@ -13,6 +13,7 @@ mod gpu;
 mod memory;
 mod migration;
 mod operations;
+mod organization;
 mod pixelpipe;
 mod pixelpipe_cancellation;
 mod pixelpipe_mode;
@@ -91,6 +92,11 @@ enum Task {
         #[command(subcommand)]
         command: migration::MigrationCommand,
     },
+    /// Run typed Darktable organization compatibility receipts.
+    Compatibility {
+        #[command(subcommand)]
+        command: organization::CompatibilityCommand,
+    },
     /// Exercise bounded host memory pools and their acceptance receipts.
     Memory {
         #[command(subcommand)]
@@ -148,6 +154,7 @@ fn main() -> ExitCode {
         Task::Dist => dist::run(&root),
         Task::Configuration { command } => configuration::run(&root, command),
         Task::Migration { command } => migration::run(&root, command),
+        Task::Compatibility { command } => organization::run(&root, &command),
         Task::Memory { command } => memory::run(&root, command),
         Task::OperationSchema { command } => operations::run_schema(&root, &command),
         Task::OperationStack { command } => operations::run_stack(&root, &command),
@@ -206,6 +213,7 @@ mod tests {
             "dist",
             "configuration",
             "migration",
+            "compatibility",
             "memory",
             "operation-schema",
             "operation-stack",

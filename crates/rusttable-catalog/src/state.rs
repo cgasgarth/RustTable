@@ -1,8 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusttable_core::{AssetId, Edit, EditId, Photo, PhotoId, Revision};
 
-use crate::{CatalogCommand, CatalogError};
+use crate::{
+    CatalogCommand, CatalogError, CatalogQuery, ColorLabel, OrganizationProjection,
+    PhotoOrganizationState, Rating,
+};
 
 /// Current catalog aggregates and their derived optimistic revision.
 ///
@@ -16,6 +19,10 @@ pub struct CatalogState {
     photos: BTreeMap<PhotoId, Photo>,
     edits: BTreeMap<EditId, Edit>,
     asset_owners: BTreeMap<AssetId, PhotoId>,
+    organization: BTreeMap<PhotoId, PhotoOrganizationState>,
+    rating_index: BTreeMap<Rating, BTreeSet<PhotoId>>,
+    rejected_index: BTreeSet<PhotoId>,
+    color_label_index: BTreeMap<ColorLabel, BTreeSet<PhotoId>>,
 }
 
 impl CatalogState {
@@ -26,6 +33,10 @@ impl CatalogState {
             photos: BTreeMap::new(),
             edits: BTreeMap::new(),
             asset_owners: BTreeMap::new(),
+            organization: BTreeMap::new(),
+            rating_index: BTreeMap::new(),
+            rejected_index: BTreeSet::new(),
+            color_label_index: BTreeMap::new(),
         }
     }
 
@@ -53,6 +64,19 @@ impl CatalogState {
                 expected_edit_revision,
                 replacement,
             } => self.replace_edit(edit_id, expected_edit_revision, replacement),
+            CatalogCommand::SetRating { photo_ids, rating } => self.set_rating(&photo_ids, rating),
+            CatalogCommand::SetRejection {
+                photo_ids,
+                rejected,
+            } => self.set_rejection(&photo_ids, rejected),
+            CatalogCommand::SetColorLabel {
+                photo_ids,
+                label,
+                enabled,
+            } => self.set_color_label(&photo_ids, label, enabled),
+            CatalogCommand::ToggleColorLabel { photo_ids, label } => {
+                self.toggle_color_label(&photo_ids, label)
+            }
         }
     }
 
@@ -80,6 +104,56 @@ impl CatalogState {
     }
 
     #[must_use]
+    pub fn organization(&self, photo_id: PhotoId) -> Option<&PhotoOrganizationState> {
+        self.organization.get(&photo_id)
+    }
+
+    /// Returns deterministic projections matching every supplied filter.
+    #[must_use]
+    pub fn query(&self, query: CatalogQuery) -> Vec<OrganizationProjection> {
+        self.organization
+            .values()
+            .filter(|state| query.rating.is_none_or(|rating| state.rating == rating))
+            .filter(|state| {
+                query
+                    .rejected
+                    .is_none_or(|rejected| state.rejected == rejected)
+            })
+            .filter(|state| {
+                query
+                    .color_label
+                    .is_none_or(|label| state.color_labels.contains(&label))
+            })
+            .map(|state| OrganizationProjection {
+                photo_id: state.photo_id,
+                rating: state.rating,
+                rejected: state.rejected,
+                color_labels: state.color_labels.iter().copied().collect(),
+            })
+            .collect()
+    }
+
+    pub fn photos_with_rating(&self, rating: Rating) -> impl Iterator<Item = PhotoId> + '_ {
+        self.rating_index
+            .get(&rating)
+            .into_iter()
+            .flatten()
+            .copied()
+    }
+
+    pub fn rejected_photos(&self) -> impl Iterator<Item = PhotoId> + '_ {
+        self.rejected_index.iter().copied()
+    }
+
+    pub fn photos_with_color_label(&self, label: ColorLabel) -> impl Iterator<Item = PhotoId> + '_ {
+        self.color_label_index
+            .get(&label)
+            .into_iter()
+            .flatten()
+            .copied()
+    }
+
+    #[must_use]
     pub fn asset_owner(&self, asset_id: AssetId) -> Option<PhotoId> {
         self.asset_owners.get(&asset_id).copied()
     }
@@ -90,12 +164,21 @@ impl CatalogState {
         edits: BTreeMap<EditId, Edit>,
         asset_owners: BTreeMap<AssetId, PhotoId>,
     ) -> Self {
-        Self {
+        let mut state = Self {
             revision,
             photos,
             edits,
             asset_owners,
+            organization: BTreeMap::new(),
+            rating_index: BTreeMap::new(),
+            rejected_index: BTreeSet::new(),
+            color_label_index: BTreeMap::new(),
+        };
+        let photo_ids = state.photos.keys().copied().collect::<Vec<_>>();
+        for photo_id in photo_ids {
+            state.insert_organization(PhotoOrganizationState::new(photo_id));
         }
+        state
     }
 
     fn register_photo(&mut self, photo: Photo) -> Result<Revision, CatalogError> {
@@ -123,6 +206,7 @@ impl CatalogState {
             self.asset_owners.insert(asset.id(), photo_id);
         }
         self.photos.insert(photo_id, photo);
+        self.insert_organization(PhotoOrganizationState::new(photo_id));
         self.revision = next_revision;
         Ok(next_revision)
     }
@@ -210,6 +294,154 @@ impl CatalogState {
         self.revision = next_catalog_revision;
         Ok(next_catalog_revision)
     }
+
+    fn set_rating(
+        &mut self,
+        photo_ids: &[PhotoId],
+        rating: Rating,
+    ) -> Result<Revision, CatalogError> {
+        let photo_ids = self.validate_organization_batch(photo_ids)?;
+        for photo_id in photo_ids {
+            let old_rating = self
+                .organization
+                .get(&photo_id)
+                .expect("photo organization exists")
+                .rating;
+            self.rating_index
+                .get_mut(&old_rating)
+                .expect("old rating index exists")
+                .remove(&photo_id);
+            self.organization
+                .get_mut(&photo_id)
+                .expect("photo organization exists")
+                .rating = rating;
+            self.rating_index
+                .entry(rating)
+                .or_default()
+                .insert(photo_id);
+        }
+        self.advance_revision()
+    }
+
+    fn set_rejection(
+        &mut self,
+        photo_ids: &[PhotoId],
+        rejected: bool,
+    ) -> Result<Revision, CatalogError> {
+        let photo_ids = self.validate_organization_batch(photo_ids)?;
+        for photo_id in photo_ids {
+            self.organization
+                .get_mut(&photo_id)
+                .expect("photo organization exists")
+                .rejected = rejected;
+            if rejected {
+                self.rejected_index.insert(photo_id);
+            } else {
+                self.rejected_index.remove(&photo_id);
+            }
+        }
+        self.advance_revision()
+    }
+
+    fn set_color_label(
+        &mut self,
+        photo_ids: &[PhotoId],
+        label: ColorLabel,
+        enabled: bool,
+    ) -> Result<Revision, CatalogError> {
+        let photo_ids = self.validate_organization_batch(photo_ids)?;
+        for photo_id in photo_ids {
+            let state = self
+                .organization
+                .get_mut(&photo_id)
+                .expect("photo organization exists");
+            if enabled {
+                if state.color_labels.insert(label) {
+                    self.color_label_index
+                        .entry(label)
+                        .or_default()
+                        .insert(photo_id);
+                }
+            } else if state.color_labels.remove(&label) {
+                self.color_label_index
+                    .get_mut(&label)
+                    .expect("label index exists")
+                    .remove(&photo_id);
+            }
+        }
+        self.advance_revision()
+    }
+
+    fn toggle_color_label(
+        &mut self,
+        photo_ids: &[PhotoId],
+        label: ColorLabel,
+    ) -> Result<Revision, CatalogError> {
+        let photo_ids = self.validate_organization_batch(photo_ids)?;
+        for photo_id in photo_ids {
+            let enabled = !self
+                .organization
+                .get(&photo_id)
+                .expect("photo organization exists")
+                .color_labels
+                .contains(&label);
+            let state = self
+                .organization
+                .get_mut(&photo_id)
+                .expect("photo organization exists");
+            if enabled {
+                state.color_labels.insert(label);
+                self.color_label_index
+                    .entry(label)
+                    .or_default()
+                    .insert(photo_id);
+            } else {
+                state.color_labels.remove(&label);
+                self.color_label_index
+                    .get_mut(&label)
+                    .expect("label index exists")
+                    .remove(&photo_id);
+            }
+        }
+        self.advance_revision()
+    }
+
+    fn validate_organization_batch(
+        &self,
+        photo_ids: &[PhotoId],
+    ) -> Result<Vec<PhotoId>, CatalogError> {
+        if photo_ids.is_empty() {
+            return Err(CatalogError::EmptyOrganizationBatch);
+        }
+        let mut unique = BTreeSet::new();
+        for photo_id in photo_ids {
+            if !unique.insert(*photo_id) {
+                return Err(CatalogError::DuplicatePhotoInOrganizationBatch {
+                    photo_id: *photo_id,
+                });
+            }
+            if !self.photos.contains_key(photo_id) {
+                return Err(CatalogError::UnknownPhoto {
+                    photo_id: *photo_id,
+                });
+            }
+        }
+        Ok(unique.into_iter().collect())
+    }
+
+    fn insert_organization(&mut self, state: PhotoOrganizationState) {
+        self.rating_index
+            .entry(state.rating)
+            .or_default()
+            .insert(state.photo_id);
+        self.organization.insert(state.photo_id, state);
+    }
+
+    fn advance_revision(&mut self) -> Result<Revision, CatalogError> {
+        let next_revision = next_revision(self.revision)?;
+        self.revision = next_revision;
+        Ok(next_revision)
+    }
 }
 
 impl Default for CatalogState {
@@ -270,6 +502,10 @@ mod tests {
             photos: BTreeMap::new(),
             edits: BTreeMap::new(),
             asset_owners: BTreeMap::new(),
+            organization: BTreeMap::new(),
+            rating_index: BTreeMap::new(),
+            rejected_index: BTreeSet::new(),
+            color_label_index: BTreeMap::new(),
         };
         let before = state.clone();
 
@@ -291,6 +527,16 @@ mod tests {
             photos: BTreeMap::from([(PhotoId::new(1).unwrap(), photo())]),
             edits: BTreeMap::from([(EditId::new(2).unwrap(), edit(Revision::from_u64(u64::MAX)))]),
             asset_owners: BTreeMap::from([(AssetId::new(1).unwrap(), PhotoId::new(1).unwrap())]),
+            organization: BTreeMap::from([(
+                PhotoId::new(1).unwrap(),
+                PhotoOrganizationState::new(PhotoId::new(1).unwrap()),
+            )]),
+            rating_index: BTreeMap::from([(
+                Rating::Zero,
+                BTreeSet::from([PhotoId::new(1).unwrap()]),
+            )]),
+            rejected_index: BTreeSet::new(),
+            color_label_index: BTreeMap::new(),
         };
         let before = state.clone();
 

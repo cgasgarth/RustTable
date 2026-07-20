@@ -14,6 +14,7 @@ mod edit_repository;
 mod error;
 mod import;
 mod import_details;
+mod organization;
 mod repository;
 mod restore;
 mod snapshot;
@@ -33,6 +34,9 @@ pub use import_details::{
     IMPORT_DETAILS_VERSION, ImportDetails, ImportDetailsValidationError, ImportMetadataSummary,
     ImportRegistration, ImportRegistrationReceipt, ImportRegistrationReceiptError,
     ImportRegistrationStatus, ReferencePathIdentity,
+};
+pub use organization::{
+    CatalogQuery, ColorLabel, OrganizationProjection, PhotoOrganizationState, Rating,
 };
 pub use repository::{ImportRepository, RepositoryError};
 pub use restore::CatalogRestoreError;

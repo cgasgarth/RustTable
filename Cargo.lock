@@ -2721,6 +2721,9 @@ dependencies = [
 [[package]]
 name = "rusttable-compat"
 version = "0.1.0"
+dependencies = [
+ "rusttable-sqlite-native",
+]
 
 [[package]]
 name = "rusttable-core"
@@ -2911,6 +2914,10 @@ dependencies = [
 
 [[package]]
 name = "rusttable-simd"
+version = "0.1.0"
+
+[[package]]
+name = "rusttable-sqlite-native"
 version = "0.1.0"
 
 [[package]]
@@ -4338,6 +4345,7 @@ dependencies = [
  "rusttable-catalog",
  "rusttable-catalog-store",
  "rusttable-color",
+ "rusttable-compat",
  "rusttable-core",
  "rusttable-export",
  "rusttable-gpu",
@@ -4349,6 +4357,7 @@ dependencies = [
  "rusttable-pixelpipe",
  "rusttable-processing",
  "rusttable-render",
+ "rusttable-sqlite-native",
  "rusttable-testkit",
  "serde",
  "serde_json",

@@ -2,8 +2,8 @@ use clap::Subcommand;
 use std::path::Path;
 
 use crate::{
-    Result, color, gpu, memory, operations, pixelpipe, pixelpipe_cancellation, pixelpipe_mode,
-    pixelpipe_scheduler, shaders,
+    Result, color, gpu, memory, operations, organization, pixelpipe, pixelpipe_cancellation,
+    pixelpipe_mode, pixelpipe_scheduler, shaders,
 };
 
 #[derive(Debug, Subcommand)]
@@ -49,6 +49,11 @@ pub(crate) fn run(root: &Path, command: MigrationCommand) -> Result {
             }
             SourceMapCommand::Verify { issue } if issue == 292 => {
                 shaders::verify_source_map(root)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
+            SourceMapCommand::Verify { issue } if issue == 189 => {
+                organization::verify_source_map(root, issue)?;
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }
