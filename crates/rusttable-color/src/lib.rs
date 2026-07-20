@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![doc = "Typed color-management contracts for the `RustTable` rewrite."]
 
+mod chromaticity;
 mod matrix;
 mod planner;
 mod profile;
@@ -9,6 +10,7 @@ mod scalar;
 mod space;
 mod transform;
 
+pub use chromaticity::{ChromaticityMatrixError, rgb_to_xyz_matrix, rotate_and_scale_primary};
 pub use matrix::{Matrix3, MatrixError};
 pub use planner::{BuiltinColorTransformPlanner, ColorTransformPlanner, PlannerError};
 pub use profile::{
@@ -22,8 +24,9 @@ pub use space::{
 pub use transform::{
     Adaptation, AlphaTransform, BlackPointCompensation, ColorTransformRequest,
     ColorTransformRequestError, CompositeStep, Intent, Lut1D, Lut1DError, Lut3D, Lut3DError,
-    LutInterpolation, LutPacking, MatrixErrorAdapter, Precision, RenderingIntent, TransformPlan,
-    TransformPlanError, TransformReceipt, TransformStep, TransformStepError,
+    LutInterpolation, LutPacking, MatrixErrorAdapter, Precision, RenderingIntent,
+    TransformExecutionError, TransformPlan, TransformPlanError, TransformReceipt, TransformStep,
+    TransformStepError,
 };
 
 /// Schema version for the stable color DTOs.

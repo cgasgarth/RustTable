@@ -55,3 +55,15 @@ rust_id = "rusttable.rgb_gain"
 manifest_name = ""
 owner = "crates/rusttable-processing/src/registry.rs"
 status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.colorin"
+manifest_name = "colorin"
+owner = "crates/rusttable-processing/src/registry_color.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.primaries"
+manifest_name = "primaries"
+owner = "crates/rusttable-processing/src/registry_color.rs"
+status = "replaced"

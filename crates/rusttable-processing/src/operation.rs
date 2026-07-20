@@ -5,7 +5,8 @@ use rusttable_core::{
 };
 
 use crate::operations::{
-    colorreconstruction::ColorReconstructionConfig, highlights::HighlightsConfig,
+    colorin::ColorInConfig, colorreconstruction::ColorReconstructionConfig,
+    highlights::HighlightsConfig, primaries::PrimariesConfig,
 };
 use crate::{FiniteF32, ScalarNarrowingError};
 
@@ -39,6 +40,12 @@ pub enum ProcessingOperationKind {
     },
     ColorReconstruction {
         config: ColorReconstructionConfig,
+    },
+    ColorIn {
+        config: ColorInConfig,
+    },
+    Primaries {
+        config: PrimariesConfig,
     },
 }
 
@@ -149,6 +156,14 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_color_reconstruction(operation)
+    }
+
+    pub(crate) fn compile_colorin(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_colorin(operation)
+    }
+
+    pub(crate) fn compile_primaries(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_primaries(operation)
     }
 
     #[must_use]
@@ -331,6 +346,23 @@ const HIGHLIGHTS_PARAMETERS: [&str; 12] = [
 
 const COLOR_RECONSTRUCTION_PARAMETERS: [&str; 5] =
     ["threshold", "spatial", "range", "hue", "precedence"];
+const COLORIN_PARAMETERS: [&str; 5] = [
+    "input_profile",
+    "working_profile",
+    "intent",
+    "normalize",
+    "blue_mapping",
+];
+const PRIMARIES_PARAMETERS: [&str; 8] = [
+    "achromatic_tint_hue",
+    "achromatic_tint_purity",
+    "red_hue",
+    "red_purity",
+    "green_hue",
+    "green_purity",
+    "blue_hue",
+    "blue_purity",
+];
 
 fn compile_highlights(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &HIGHLIGHTS_PARAMETERS)?;
@@ -391,6 +423,55 @@ fn compile_color_reconstruction(
     })
 }
 
+fn compile_colorin(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &COLORIN_PARAMETERS)?;
+    let input_profile = parameter_text(operation, "input_profile")?;
+    let working_profile = parameter_text(operation, "working_profile")?;
+    let intent = parameter_integer(operation, "intent", 0.0)?;
+    let normalization = parameter_integer(operation, "normalize", 0.0)?;
+    let blue_mapping = parameter_bool(operation, "blue_mapping")?;
+    let config = crate::operations::colorin::migrate(
+        7,
+        crate::operations::colorin::ColorInLegacyParameters {
+            input_profile,
+            working_profile: Some(working_profile),
+            intent: i64::from(intent),
+            normalization: i64::from(normalization),
+            blue_mapping: Some(blue_mapping),
+        },
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::ColorIn { config },
+    })
+}
+
+fn compile_primaries(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &PRIMARIES_PARAMETERS)?;
+    let config = PrimariesConfig::new(
+        parameter_f32(operation, "achromatic_tint_hue", 0.0)?,
+        parameter_f32(operation, "achromatic_tint_purity", 0.0)?,
+        parameter_f32(operation, "red_hue", 0.0)?,
+        parameter_f32(operation, "red_purity", 1.0)?,
+        parameter_f32(operation, "green_hue", 0.0)?,
+        parameter_f32(operation, "green_purity", 1.0)?,
+        parameter_f32(operation, "blue_hue", 0.0)?,
+        parameter_f32(operation, "blue_purity", 1.0)?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::Primaries { config },
+    })
+}
+
 fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), OperationCompileError> {
     if let Some((parameter, _)) = operation
         .parameters()
@@ -413,6 +494,12 @@ fn parameter_f32(
     let parameter = ParameterName::new(name).expect("static processing parameter");
     let value = match operation.parameter(&parameter) {
         None => default,
+        Some(ParameterValue::Integer(value)) => {
+            let value = i32::try_from(*value).map_err(|_| {
+                invalid_parameters(operation, format!("{name} must be an exact small integer"))
+            })?;
+            f64::from(value)
+        }
         Some(ParameterValue::Scalar(value)) => value.get(),
         Some(_) => {
             return Err(OperationCompileError::WrongParameterType {
@@ -438,6 +525,46 @@ fn parameter_f32(
                 parameter,
             })
         }
+    }
+}
+
+fn parameter_text(
+    operation: &Operation,
+    name: &'static str,
+) -> Result<String, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    match operation.parameter(&parameter) {
+        Some(ParameterValue::Text(value)) => Ok(value.as_str().to_owned()),
+        Some(_) => Err(OperationCompileError::WrongParameterType {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
+        None => Err(OperationCompileError::MissingParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
+    }
+}
+
+fn parameter_bool(
+    operation: &Operation,
+    name: &'static str,
+) -> Result<bool, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    match operation.parameter(&parameter) {
+        Some(ParameterValue::Bool(value)) => Ok(*value),
+        Some(_) => Err(OperationCompileError::WrongParameterType {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
+        None => Err(OperationCompileError::MissingParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
     }
 }
 

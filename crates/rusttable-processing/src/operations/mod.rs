@@ -5,9 +5,11 @@
 //! by the existing operation registry and pixelpipe; they are not a second
 //! pipeline.
 
+pub mod colorin;
 pub mod colorreconstruction;
 mod common;
 pub mod highlights;
+pub mod primaries;
 
 pub use common::{
     OperationExecutionError, ReconstructionBudget, ReconstructionDiagnostics, ReconstructionReceipt,
