@@ -28,6 +28,7 @@ mod output;
 mod pipeline;
 pub mod registry;
 mod registry_closure;
+mod registry_color;
 mod registry_reconstruction;
 mod scalar;
 mod window;
@@ -39,8 +40,8 @@ pub use color::{
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 pub use descriptor::{
-    color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,
-    linear_offset_descriptor, rgb_gain_descriptor,
+    color_reconstruction_descriptor, colorin_descriptor, exposure_descriptor,
+    highlights_descriptor, linear_offset_descriptor, primaries_descriptor, rgb_gain_descriptor,
 };
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use exposure::{

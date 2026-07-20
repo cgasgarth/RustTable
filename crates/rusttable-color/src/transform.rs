@@ -1,6 +1,6 @@
 use crate::{
     AdaptationMethod, ColorEncoding, ColorRole, FiniteF32, FiniteF32Error, Matrix3,
-    TransferFunction, WhitePoint,
+    TransferFunction, TransferFunctionError, WhitePoint,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -509,6 +509,33 @@ pub struct TransformPlan {
     steps: Vec<TransformStep>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransformExecutionError {
+    Cancelled,
+    NonFinite,
+    Transfer(TransferFunctionError),
+    InvalidLut,
+}
+
+impl fmt::Display for TransformExecutionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Cancelled => "color transform was cancelled",
+            Self::NonFinite => "color transform produced a non-finite value",
+            Self::Transfer(error) => return error.fmt(formatter),
+            Self::InvalidLut => "color transform LUT interpolation is invalid",
+        })
+    }
+}
+
+impl std::error::Error for TransformExecutionError {}
+
+impl From<TransferFunctionError> for TransformExecutionError {
+    fn from(error: TransferFunctionError) -> Self {
+        Self::Transfer(error)
+    }
+}
+
 /// A bounded durable projection containing no profile bytes or native handles.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TransformReceipt {
@@ -642,6 +669,137 @@ impl TransformPlan {
             resource_estimate: self.resource_estimate(),
         })
     }
+
+    /// Applies the checked plan to one RGB triplet without clipping extended
+    /// or negative values. The callback is polled between plan steps.
+    pub fn apply_rgb<F>(
+        &self,
+        rgb: [f32; 3],
+        cancelled: F,
+    ) -> Result<[f32; 3], TransformExecutionError>
+    where
+        F: Fn() -> bool,
+    {
+        let mut value = rgb;
+        for step in &self.steps {
+            if cancelled() {
+                return Err(TransformExecutionError::Cancelled);
+            }
+            apply_step(step, &mut value)?;
+        }
+        if value.iter().all(|channel| channel.is_finite()) {
+            Ok(value)
+        } else {
+            Err(TransformExecutionError::NonFinite)
+        }
+    }
+}
+
+fn apply_step(step: &TransformStep, value: &mut [f32; 3]) -> Result<(), TransformExecutionError> {
+    match step {
+        TransformStep::Identity => {}
+        TransformStep::Transfer { function, decode } => {
+            for channel in value.iter_mut() {
+                *channel = if *decode {
+                    function.decode(*channel)?
+                } else {
+                    function.encode(*channel)?
+                };
+            }
+        }
+        TransformStep::Matrix(matrix) | TransformStep::Adaptation(Adaptation { matrix, .. }) => {
+            *value = matrix.apply(*value);
+        }
+        TransformStep::Lut1D(lut) => {
+            for (channel_index, channel) in value.iter_mut().enumerate() {
+                *channel = interpolate_lut_channel(lut.samples(), channel_index, *channel)?;
+            }
+        }
+        TransformStep::Lut3D(lut) => {
+            *value = interpolate_lut_3d(lut, *value)?;
+        }
+        TransformStep::Composite(composite) => {
+            for child in composite.steps() {
+                apply_step(child, value)?;
+            }
+        }
+    }
+    if value.iter().all(|channel| channel.is_finite()) {
+        Ok(())
+    } else {
+        Err(TransformExecutionError::NonFinite)
+    }
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn interpolate_lut_channel(
+    samples: &[[FiniteF32; 3]],
+    channel_index: usize,
+    value: f32,
+) -> Result<f32, TransformExecutionError> {
+    if samples.len() < 2 || channel_index >= 3 || !value.is_finite() {
+        return Err(TransformExecutionError::InvalidLut);
+    }
+    let position = value.clamp(0.0, 1.0) * (samples.len() - 1) as f32;
+    let lower = (position.floor() as usize).min(samples.len() - 2);
+    let fraction = position - lower as f32;
+    let output = samples[lower][channel_index].get() * (1.0 - fraction)
+        + samples[lower + 1][channel_index].get() * fraction;
+    output
+        .is_finite()
+        .then_some(output)
+        .ok_or(TransformExecutionError::NonFinite)
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn interpolate_lut_3d(lut: &Lut3D, value: [f32; 3]) -> Result<[f32; 3], TransformExecutionError> {
+    let edge = usize::from(lut.edge());
+    if edge < 2 || lut.values().len() != edge * edge * edge {
+        return Err(TransformExecutionError::InvalidLut);
+    }
+    let scaled = value.map(|channel| channel.clamp(0.0, 1.0) * (edge - 1) as f32);
+    let base = scaled.map(|channel| (channel.floor() as usize).min(edge - 2));
+    let fraction = scaled.map(|channel| channel - channel.floor());
+    let mut output = [0.0; 3];
+    for dz in 0..=1 {
+        for dy in 0..=1 {
+            for dx in 0..=1 {
+                let x = base[0] + dx;
+                let y = base[1] + dy;
+                let z = base[2] + dz;
+                let index = z * edge * edge + y * edge + x;
+                let weight = if dx == 0 {
+                    1.0 - fraction[0]
+                } else {
+                    fraction[0]
+                } * if dy == 0 {
+                    1.0 - fraction[1]
+                } else {
+                    fraction[1]
+                } * if dz == 0 {
+                    1.0 - fraction[2]
+                } else {
+                    fraction[2]
+                };
+                for (channel, output_channel) in output.iter_mut().enumerate() {
+                    *output_channel += lut.values()[index][channel].get() * weight;
+                }
+            }
+        }
+    }
+    output
+        .iter()
+        .all(|channel| channel.is_finite())
+        .then_some(output)
+        .ok_or(TransformExecutionError::NonFinite)
 }
 
 fn step_resource_estimate(step: &TransformStep) -> u64 {

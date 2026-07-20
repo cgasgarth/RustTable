@@ -23,6 +23,12 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::ColorReconstruction { .. } => {
             crate::descriptor::color_reconstruction_descriptor().id
         }
+        crate::ProcessingOperationKind::ColorIn { .. } => {
+            crate::descriptor::colorin_descriptor().id
+        }
+        crate::ProcessingOperationKind::Primaries { .. } => {
+            crate::descriptor::primaries_descriptor().id
+        }
     }
 }
 

@@ -938,7 +938,6 @@ fn definition(
     )
 }
 
-#[doc(hidden)]
 pub fn exposure_definition() -> OperationDefinition {
     definition(
         exposure_descriptor(),
@@ -947,7 +946,6 @@ pub fn exposure_definition() -> OperationDefinition {
     )
 }
 
-#[doc(hidden)]
 pub fn linear_offset_definition() -> OperationDefinition {
     definition(
         linear_offset_descriptor(),
@@ -959,7 +957,6 @@ pub fn linear_offset_definition() -> OperationDefinition {
     )
 }
 
-#[doc(hidden)]
 pub fn rgb_gain_definition() -> OperationDefinition {
     definition(
         rgb_gain_descriptor(),
@@ -978,6 +975,8 @@ macro_rules! builtin_operations {
             $crate::registry::rgb_gain_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
+            $crate::registry_color::colorin_definition,
+            $crate::registry_color::primaries_definition,
         ]
     };
     ($($factory:path),+ $(,)?) => {

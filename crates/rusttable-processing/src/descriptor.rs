@@ -4,6 +4,10 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[path = "descriptor_color.rs"]
+mod descriptor_color;
+pub use descriptor_color::{colorin_descriptor, primaries_descriptor};
+
 const MAX_ID: usize = 96;
 const MAX_PARAMETERS: usize = 256;
 const MAX_ENUM_TAGS: usize = 128;

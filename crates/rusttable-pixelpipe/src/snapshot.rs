@@ -196,6 +196,16 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
                 u8::try_from(config.precedence().id()).expect("precedence IDs fit in u8")
             ]);
         }
+        ProcessingOperationKind::ColorIn { config } => {
+            hasher.update([5]);
+            let bytes = postcard::to_allocvec(config).expect("colorin config is serializable");
+            hasher.update(bytes);
+        }
+        ProcessingOperationKind::Primaries { config } => {
+            hasher.update([6]);
+            let bytes = postcard::to_allocvec(config).expect("primaries config is serializable");
+            hasher.update(bytes);
+        }
     }
 }
 

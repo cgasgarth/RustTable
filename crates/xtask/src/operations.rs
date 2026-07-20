@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use clap::Subcommand;
 use rusttable_core::{
-    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterText, ParameterValue,
 };
 use rusttable_processing::descriptor::{exposure_descriptor, rgb_gain_descriptor};
 use rusttable_processing::operation_stack::{OperationStackSnapshot, OperationStackTemplate};
@@ -122,7 +122,7 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
         OperationRegistryCommand::Generate => {
             fs::write(&receipt_path, builtin_registry().receipt())
                 .map_err(|error| format!("operation registry: write failed: {error}"))?;
-            eprintln!("operation registry generated (definitions=3)");
+            eprintln!("operation registry generated (definitions=7)");
             Ok(())
         }
         OperationRegistryCommand::Check {
@@ -151,7 +151,7 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
                 execute_builtin_smoke()?;
             }
             eprintln!(
-                "operation registry check passed (definitions=3, snapshot={})",
+                "operation registry check passed (definitions=7, snapshot={})",
                 builtin_registry().identity_hash_hex()
             );
             Ok(())
@@ -281,6 +281,7 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
     Ok(rendered)
 }
 
+#[allow(clippy::too_many_lines)]
 fn execute_builtin_smoke() -> Result {
     let cases = [
         ("rusttable.exposure", [("stops", 0.5), ("", 0.0), ("", 0.0)]),
@@ -311,21 +312,99 @@ fn execute_builtin_smoke() -> Result {
             parameters,
         )
         .map_err(|error| format!("operation registry: smoke operation failed: {error}"))?;
-        let prepared = builtin_registry()
-            .prepare_cpu(&operation)
-            .map_err(|error| format!("operation registry: factory failed: {error}"))?;
-        let finite = FiniteF32::new(0.25).expect("finite pixel");
-        let mut pixels = [LinearRgb::new(finite, finite, finite)];
-        prepared
-            .execute(
-                PipelineStepIndex::new(index),
-                &mut pixels,
-                RasterDimensions::new(1, 1).expect("smoke dimensions"),
-                0,
-            )
-            .map_err(|error| format!("operation registry: executor failed: {error}"))?;
+        execute_smoke_operation(index, &operation)?;
     }
+    execute_smoke_operation(
+        3,
+        &Operation::new(
+            OperationId::new(4).expect("operation ID"),
+            OperationKey::from_str("rusttable.colorin").expect("built-in key"),
+            true,
+            [
+                (
+                    ParameterName::new("input_profile").expect("parameter"),
+                    ParameterValue::Text(ParameterText::new("srgb").expect("text")),
+                ),
+                (
+                    ParameterName::new("working_profile").expect("parameter"),
+                    ParameterValue::Text(ParameterText::new("linear_rec2020_rgb").expect("text")),
+                ),
+                (
+                    ParameterName::new("intent").expect("parameter"),
+                    ParameterValue::Integer(0),
+                ),
+                (
+                    ParameterName::new("normalize").expect("parameter"),
+                    ParameterValue::Integer(0),
+                ),
+                (
+                    ParameterName::new("blue_mapping").expect("parameter"),
+                    ParameterValue::Bool(true),
+                ),
+            ],
+        )
+        .map_err(|error| format!("operation registry: smoke operation failed: {error}"))?,
+    )?;
+    execute_smoke_operation(
+        4,
+        &Operation::new(
+            OperationId::new(5).expect("operation ID"),
+            OperationKey::from_str("rusttable.primaries").expect("built-in key"),
+            true,
+            [
+                (
+                    ParameterName::new("achromatic_tint_hue").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(0.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("achromatic_tint_purity").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(0.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("red_hue").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(0.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("red_purity").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(1.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("green_hue").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(0.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("green_purity").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(1.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("blue_hue").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(0.0).expect("finite value")),
+                ),
+                (
+                    ParameterName::new("blue_purity").expect("parameter"),
+                    ParameterValue::Scalar(FiniteF64::new(1.0).expect("finite value")),
+                ),
+            ],
+        )
+        .map_err(|error| format!("operation registry: smoke operation failed: {error}"))?,
+    )?;
     Ok(())
+}
+
+fn execute_smoke_operation(index: usize, operation: &Operation) -> Result {
+    let prepared = builtin_registry()
+        .prepare_cpu(operation)
+        .map_err(|error| format!("operation registry: factory failed: {error}"))?;
+    let finite = FiniteF32::new(0.25).expect("finite pixel");
+    let mut pixels = [LinearRgb::new(finite, finite, finite)];
+    prepared
+        .execute(
+            PipelineStepIndex::new(index),
+            &mut pixels,
+            RasterDimensions::new(1, 1).expect("smoke dimensions"),
+            0,
+        )
+        .map_err(|error| format!("operation registry: executor failed: {error}"))
 }
 
 pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
@@ -503,6 +582,8 @@ fn verify_registry_operations(root: &Path, document: &toml::Value) -> Result {
         "rusttable.exposure",
         "rusttable.linear_offset",
         "rusttable.rgb_gain",
+        "rusttable.colorin",
+        "rusttable.primaries",
     ];
     if entries.len() != expected.len() {
         return Err(format!(

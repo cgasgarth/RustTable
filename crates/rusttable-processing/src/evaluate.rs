@@ -101,6 +101,7 @@ pub(crate) fn execute_prepared_operation(
     )
 }
 
+#[allow(clippy::too_many_lines)]
 fn apply_operation(
     step_index: PipelineStepIndex,
     operation: &ProcessingOperation,
@@ -192,6 +193,39 @@ fn apply_operation(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::ColorIn { config } => {
+            let plan = crate::operations::colorin::ColorInPlan::new(config.clone())
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let execution = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                execution.pixels(),
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::Primaries { config } => {
+            let plan = crate::operations::primaries::PrimariesPlan::new(
+                *config,
+                rusttable_color::Primaries::srgb(),
+            )
+            .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let execution = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                execution.pixels(),
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
     }
 }
 
@@ -199,6 +233,18 @@ fn operation_error(
     step_index: PipelineStepIndex,
     operation_id: OperationId,
     error: OperationExecutionError,
+) -> EvaluationError {
+    EvaluationError::OperationExecution {
+        step_index,
+        operation_id,
+        reason: error.to_string(),
+    }
+}
+
+fn operation_plan_error<E: fmt::Display>(
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    error: E,
 ) -> EvaluationError {
     EvaluationError::OperationExecution {
         step_index,
