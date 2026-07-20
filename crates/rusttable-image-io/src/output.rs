@@ -287,7 +287,11 @@ fn insert_metadata(
         OutputFormat::Png => 12usize
             .checked_add(exif.len())
             .ok_or_else(|| image_output_error(ImageOutputError::AllocationFailure))?,
-        OutputFormat::Tiff | OutputFormat::JpegXl | OutputFormat::Webp => {
+        OutputFormat::Tiff
+        | OutputFormat::JpegXl
+        | OutputFormat::Webp
+        | OutputFormat::Pdf
+        | OutputFormat::Xcf => {
             return Err(image_output_error(ImageOutputError::EncodeFailure {
                 format,
             }));
@@ -312,7 +316,7 @@ fn insert_metadata(
         OutputFormat::Tiff => Err(image_output_error(ImageOutputError::EncodeFailure {
             format,
         })),
-        OutputFormat::JpegXl | OutputFormat::Webp => {
+        OutputFormat::JpegXl | OutputFormat::Webp | OutputFormat::Pdf | OutputFormat::Xcf => {
             Err(image_output_error(ImageOutputError::EncodeFailure {
                 format,
             }))

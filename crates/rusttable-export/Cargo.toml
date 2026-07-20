@@ -8,6 +8,8 @@ version.workspace = true
 
 [dependencies]
 mozjpeg-rs.workspace = true
+flate2.workspace = true
+pdf-writer.workspace = true
 postcard.workspace = true
 png.workspace = true
 redb.workspace = true

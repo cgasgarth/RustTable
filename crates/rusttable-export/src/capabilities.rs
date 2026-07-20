@@ -60,6 +60,8 @@ impl EncoderCapabilityDescriptor {
             OutputFormat::JpegXl,
             OutputFormat::Tiff,
             OutputFormat::Webp,
+            OutputFormat::Pdf,
+            OutputFormat::Xcf,
         ]);
         self
     }
@@ -378,5 +380,7 @@ pub(crate) fn format_id(format: OutputFormat) -> &'static str {
         OutputFormat::JpegXl => "jpeg-xl",
         OutputFormat::Tiff => "tiff",
         OutputFormat::Webp => "webp",
+        OutputFormat::Pdf => "pdf",
+        OutputFormat::Xcf => "xcf",
     }
 }

@@ -11,6 +11,8 @@ pub enum OutputFormat {
     JpegXl,
     Tiff,
     Webp,
+    Pdf,
+    Xcf,
 }
 
 pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 3] =
