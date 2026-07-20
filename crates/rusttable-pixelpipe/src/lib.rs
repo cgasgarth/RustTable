@@ -15,6 +15,10 @@ mod receipt;
 mod roi;
 mod snapshot;
 mod tile;
+mod tile_geometry;
+mod tiling_models;
+mod tiling_planner;
+mod tiling_requirements;
 
 pub use cache::{
     Cache, CacheConfig, CacheError, CacheEvent, CacheLease, CacheMetrics, CacheReceipt, CacheScope,
@@ -69,6 +73,21 @@ pub use rusttable_image::{
 };
 pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};
+pub use tile_geometry::{
+    EdgeOverlap, GeometryError, RoiChain, RoiStage, ScaleRatio, TileAlignment, TileRect,
+};
+pub use tiling_models::{
+    DominantResource, EstimateComponent, EstimateFailure, MemoryEstimate, PlannedTile,
+    PlannedTileGrid, TileInputRoi, TilePlan, TilePlanIdentity, TilePlanReceipt,
+};
+pub use tiling_planner::{
+    MemoryBudget, TileDeviceLimits, TilePlanError, TilePlanRequest, TilePlanner,
+};
+pub use tiling_requirements::{
+    AreaSource, BackendRequirement, BufferRequirement, BytesPerPixel, EstimateError,
+    FullFrameRequirements, MemoryFactor, NodeRequirement, NodeRequirements, ResourceKind,
+    TileBackend, TileDimensions,
+};
 
 /// Compatibility name for callers not yet migrated to explicit snapshots.
 pub type CpuPixelpipeRequest = CpuPixelpipeSnapshot;

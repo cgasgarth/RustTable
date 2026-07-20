@@ -52,6 +52,11 @@ pub(crate) fn run(root: &Path, command: MigrationCommand) -> Result {
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }
+            SourceMapCommand::Verify { issue } if issue == 268 => {
+                pixelpipe::verify_tiling_source_map(root, issue)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
             SourceMapCommand::Verify { issue } if issue == 269 => {
                 memory::verify_source_map(root, issue)?;
                 eprintln!("migration source map passed (issue={issue})");
