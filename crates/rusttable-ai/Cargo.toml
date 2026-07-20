@@ -1,0 +1,17 @@
+[package]
+name = "rusttable-ai"
+description = "Bounded, deterministic AI image workflows for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+rusttable-image.workspace = true
+rusttable-pixelpipe.workspace = true
+rusttable-processing.workspace = true
+sha2.workspace = true
+tiff.workspace = true
+
+[lints]
+workspace = true
