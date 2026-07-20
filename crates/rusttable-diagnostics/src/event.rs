@@ -187,12 +187,14 @@ impl DiagnosticEvent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApplicationFailureCode {
     DesktopUiRun,
+    ConfigurationRejected,
 }
 
 impl ApplicationFailureCode {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::DesktopUiRun => "desktop_ui_run",
+            Self::ConfigurationRejected => "configuration_rejected",
         }
     }
 }

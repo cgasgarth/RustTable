@@ -1,7 +1,13 @@
 mod catalog_preview;
+mod catalog_preview_smoke;
 mod preview_lifecycle;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
+pub use catalog_preview_smoke::{
+    CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError, CatalogPreviewSmokePorts,
+    CatalogPreviewSmokeReceipt, CatalogPreviewSmokeRequest, CatalogPreviewSmokeResult,
+    CatalogPreviewSmokeService, CatalogPreviewSmokeStage, CatalogPreviewSmokeStatus,
+};
 
 use crate::gtk_controller::{CollectionController, CollectionSnapshot, GtkCatalogController};
 use crate::gtk_export::{
@@ -66,6 +72,14 @@ pub fn run() -> Result<(), DesktopRunError> {
     run_with_bootstrap(
         rusttable_diagnostics::install,
         || {
+            if let Err(error) = crate::configuration::load() {
+                rusttable_diagnostics::emit(
+                    &rusttable_diagnostics::DiagnosticEvent::application_failure(
+                        rusttable_diagnostics::ApplicationFailureCode::ConfigurationRejected,
+                    ),
+                );
+                eprintln!("RustTable configuration rejected; using compiled defaults: {error}");
+            }
             if !preflight.is_supported() {
                 return Ok(());
             }

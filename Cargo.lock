@@ -2414,6 +2414,8 @@ dependencies = [
  "rusttable-scripting",
  "rusttable-testkit",
  "rusttable-ui",
+ "serde",
+ "serde_json",
  "sha2",
  "tokio",
 ]
@@ -2454,7 +2456,9 @@ version = "0.1.0"
 name = "rusttable-core"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "sha2",
+ "toml 0.9.12+spec-1.1.0",
  "unicode-normalization-alignments",
 ]
 
@@ -3901,7 +3905,16 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "rusttable-app",
+ "rusttable-catalog",
+ "rusttable-catalog-store",
+ "rusttable-core",
+ "rusttable-image",
+ "rusttable-image-io",
+ "rusttable-import",
+ "rusttable-metadata",
  "rusttable-parity",
+ "rusttable-render",
  "rusttable-testkit",
  "serde_json",
  "sha2",

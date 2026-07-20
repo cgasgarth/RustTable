@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 #![doc = "Core domain foundation for the `RustTable` rewrite."]
-#![doc = "The core crate has no normal dependencies; catalog code may depend on it, never the reverse."]
+#![doc = "The core crate owns typed domain/configuration contracts; product services may depend on it, never the reverse."]
 
+pub mod config;
 mod edit;
 mod id;
 mod metadata;

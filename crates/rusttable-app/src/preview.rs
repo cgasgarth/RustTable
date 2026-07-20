@@ -76,6 +76,22 @@ impl PreviewService {
         render_with_target(&input, edit, target)
     }
 
+    /// Renders an image that was already decoded by the composition's input
+    /// port. This keeps catalog-preview orchestration independent of a
+    /// concrete decoder while retaining the canonical CPU path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed CPU-render failure.
+    pub fn render_decoded_for_target(
+        &self,
+        input: &DecodedImage,
+        edit: &Edit,
+        target: RenderTarget,
+    ) -> Result<RenderOutput, PreviewError> {
+        render_with_target(input, edit, target)
+    }
+
     fn render_preview_decoded(
         &self,
         input: &DecodedImage,
