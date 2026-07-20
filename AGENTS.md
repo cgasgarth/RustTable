@@ -13,7 +13,7 @@
 - Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
 - Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
 - Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
-- Keep handwritten source files at or below 1,000 lines. Generated compatibility data is the only exception.
+- Keep handwritten source files at or below 1,000 lines. Generated compatibility data is the only exception. Split growing code into cohesive modules before it crosses that boundary; never reduce required behavior or reject a feature merely to preserve the limit.
 - Prefer the standard library, Iced facilities, and established Rust crates over bespoke infrastructure.
 
 ## Development and tests

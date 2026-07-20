@@ -14,6 +14,10 @@ mod workspace;
 pub use composition::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, run};
 pub use extensions::ApplicationExtensions;
 pub use preview::{PreviewError, PreviewService};
+pub use workspace::{
+    BasicEditCommand, BasicEditCommandError, BasicEditCommitError, BasicEditDraft, BasicEditValues,
+    commit_basic_edit, commit_basic_edit_at_path,
+};
 
 #[cfg(test)]
 mod lua_host {
