@@ -92,6 +92,10 @@ impl BasicEditSession {
     ///
     /// Invalid values leave the session, including its redo stack, unchanged. An exact typed
     /// draft match is treated as a no-op; no approximate floating-point comparison is used.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BasicEditValueError`] when the mutation has an invalid typed value.
     pub fn apply(&mut self, mutation: BasicEditMutation) -> Result<bool, BasicEditValueError> {
         let next = mutation.apply_to(self.current.clone())?;
         if next == self.current {

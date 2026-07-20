@@ -1,6 +1,6 @@
 # Contributing to RustTable
 
-RustTable is a Rust and Iced rewrite of darktable. The original native project is reference material, not code to extend or merge into this repository.
+RustTable is a Rust and GTK4/gtk-rs rewrite of darktable. The original native project is reference material, not code to extend or merge into this repository.
 
 ## Start from GitHub
 
@@ -20,8 +20,9 @@ GitHub is the planning source of truth. Repository tooling does not mirror, hash
 - Use the pinned Rust toolchain and workspace dependencies/lints.
 - Keep unsafe code forbidden and handwritten files at or below 1,000 lines.
 - Write deterministic tests first for behavior changes and defects.
-- Prefer Rust/Iced facilities and maintained crates.
-- Do not add C/C++, CMake, GTK, or copied OpenCL source.
+- Prefer Rust, GTK4/GLib facilities, and maintained crates.
+- Shift responsibilities in place from Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` into coherent Rust GTK4 modules. Preserve workflow and layout behavior, not C APIs or source files.
+- Do not add C/C++, CMake, GTK3, or copied OpenCL source.
 
 ## Validate and submit
 

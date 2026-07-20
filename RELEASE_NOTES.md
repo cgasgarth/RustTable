@@ -9,8 +9,8 @@ RustTable releases.
 
 ### Migration status
 
-- The active product is the Rust workspace in `crates/`, with Iced as its UI
-  framework.
+- The active product is the Rust workspace in `crates/`, with GTK4 through
+  gtk-rs as its UI framework.
 - The original darktable checkout remains a separate, read-only reference for
   source-accounted behavior and parity evidence.
 - Public release artifacts are deferred until the required package, platform,

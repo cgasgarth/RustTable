@@ -2,7 +2,7 @@
 
 ## Goal
 
-Rewrite darktable completely in Rust with Iced, preserving useful image-processing behavior, catalog and metadata formats, editing workflows, compatibility history, and reference-render fidelity.
+Rewrite darktable completely in Rust with GTK4 through `gtk-rs`, preserving useful image-processing behavior, catalog and metadata formats, editing workflows, compatibility history, and reference-render fidelity. All application UI code is Rust; the separate darktable C checkout is behavior/layout reference only.
 
 ## Source of truth
 

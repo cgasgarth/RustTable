@@ -1,22 +1,14 @@
 [package]
 name = "rusttable-ui"
-description = "Reusable Iced widgets, input, navigation, theme, and presentation models for RustTable."
+description = "GTK4 UI components and presentation models for RustTable."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+gtk4.workspace = true
 rusttable-core.workspace = true
-
-[dev-dependencies]
-iced_test.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-iced = { workspace = true, features = ["x11"] }
-
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-iced.workspace = true
 
 [lints]
 workspace = true
