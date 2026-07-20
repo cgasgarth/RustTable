@@ -50,6 +50,7 @@ pub struct SourceSnapshot {
     length: ByteLength,
     source: Arc<File>,
     state: SourceFileState,
+    content_hash: [u8; 32],
 }
 
 impl SourceSnapshot {
@@ -58,6 +59,7 @@ impl SourceSnapshot {
         length: u64,
         source: Arc<File>,
         state: SourceFileState,
+        content_hash: [u8; 32],
     ) -> Result<Self, SourceSnapshotError> {
         if length == 0 {
             return Err(SourceSnapshotError::EmptySource);
@@ -67,6 +69,7 @@ impl SourceSnapshot {
             length: ByteLength::from_bytes(length),
             source,
             state,
+            content_hash,
         })
     }
 
@@ -78,6 +81,17 @@ impl SourceSnapshot {
     #[must_use]
     pub const fn byte_length(&self) -> ByteLength {
         self.length
+    }
+
+    /// Returns the SHA-256 evidence established while opening this snapshot.
+    #[must_use]
+    pub const fn content_sha256(&self) -> [u8; 32] {
+        self.content_hash
+    }
+
+    #[must_use]
+    pub const fn identity_class(&self) -> SourceIdentityClass {
+        self.state.identity.class()
     }
 
     /// Materializes this opened source into a bounded owned buffer for legacy
@@ -111,8 +125,6 @@ impl SourceSnapshot {
         bytes.resize(length, 0);
         let mut reader = self.open_reader(self.byte_length().get())?;
         reader.read_exact_checked(&mut bytes)?;
-        self.revalidate_opened_source()
-            .map_err(SourceSnapshotReadError::from)?;
         Ok(bytes)
     }
 
@@ -182,7 +194,19 @@ impl SourceSnapshot {
     /// Returns a typed I/O or source-change error when the captured handle no
     /// longer matches the immutable bytes accepted at snapshot creation.
     pub fn revalidate_opened_source(&self) -> Result<(), SourceSnapshotError> {
-        if stable_source_file_state(&self.source, &self.path)? != self.state {
+        self.revalidate_opened_metadata()?;
+
+        let content_hash = source_content_hash(&self.source, self.byte_length().get(), &self.path)?;
+        if content_hash != self.content_hash {
+            return Err(SourceSnapshotError::SourceChanged {
+                path: self.path.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    fn revalidate_opened_metadata(&self) -> Result<(), SourceSnapshotError> {
+        if source_file_state(&self.source, &self.path)? != self.state {
             return Err(SourceSnapshotError::SourceChanged {
                 path: self.path.clone(),
             });
@@ -207,7 +231,10 @@ impl SourceSnapshot {
     }
 
     fn contents_equal(&self, other: &Self) -> Result<bool, SourceSnapshotError> {
-        if self.byte_length() != other.byte_length() {
+        if self.byte_length() != other.byte_length()
+            || self.state != other.state
+            || self.content_hash != other.content_hash
+        {
             return Ok(false);
         }
         let mut offset = 0_u64;
@@ -246,7 +273,10 @@ impl SourceSnapshot {
 
 impl PartialEq for SourceSnapshot {
     fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && self.length == other.length && self.state == other.state
+        self.path == other.path
+            && self.length == other.length
+            && self.state == other.state
+            && self.content_hash == other.content_hash
     }
 }
 
@@ -256,7 +286,49 @@ impl Eq for SourceSnapshot {}
 struct SourceFileState {
     length: u64,
     modified: Option<SystemTime>,
-    content_digest: [u8; 32],
+    identity: SourceIdentity,
+}
+
+/// Stable identity reported by the platform for an already-open regular file.
+///
+/// The portable fallback deliberately carries no guessed identity. The open
+/// handle and content digest remain authoritative there; platform adapters
+/// add stronger file identity whenever the standard library exposes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SourceIdentity {
+    #[cfg(unix)]
+    Unix { device: u64, inode: u64 },
+    #[cfg(windows)]
+    Windows { volume: u32, file_index: u64 },
+    #[cfg(not(any(unix, windows)))]
+    Portable,
+}
+
+/// Privacy-safe classification of the file identity evidence captured by a
+/// snapshot. Raw platform identifiers never leave the adapter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceIdentityClass {
+    FileId,
+    Portable,
+}
+
+/// Hash evidence status recorded in privacy-safe source receipts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceHashStatus {
+    Verified,
+}
+
+impl SourceIdentity {
+    const fn class(&self) -> SourceIdentityClass {
+        match self {
+            #[cfg(unix)]
+            Self::Unix { .. } => SourceIdentityClass::FileId,
+            #[cfg(windows)]
+            Self::Windows { .. } => SourceIdentityClass::FileId,
+            #[cfg(not(any(unix, windows)))]
+            Self::Portable => SourceIdentityClass::Portable,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -374,7 +446,7 @@ impl SourceSnapshotSequentialReader {
         self.remaining -=
             u64::try_from(amount).map_err(|_| SourceSnapshotReadError::LengthConversion)?;
         self.snapshot
-            .revalidate_opened_source()
+            .revalidate_opened_metadata()
             .map_err(SourceSnapshotReadError::from)?;
         Ok(amount)
     }
@@ -403,6 +475,9 @@ impl SourceSnapshotSequentialReader {
             }
             filled += amount;
         }
+        self.snapshot
+            .revalidate_opened_source()
+            .map_err(SourceSnapshotReadError::from)?;
         Ok(())
     }
 }
@@ -547,8 +622,11 @@ impl SourceSnapshotReader for FileSourceSnapshotReader {
             });
         }
         let source = Arc::new(file);
-        let state = stable_source_file_state(&source, path)?;
-        let snapshot = SourceSnapshot::new(path.to_owned(), metadata.len(), source, state)?;
+        let state = source_file_state(&source, path)?;
+        let content_hash = source_content_hash(&source, metadata.len(), path)?;
+        let snapshot =
+            SourceSnapshot::new(path.to_owned(), metadata.len(), source, state, content_hash)?;
+        snapshot.revalidate_opened_source()?;
         Ok(snapshot)
     }
 }
@@ -561,25 +639,44 @@ fn source_file_state(file: &File, path: &Path) -> Result<SourceFileState, Source
     Ok(SourceFileState {
         length: metadata.len(),
         modified: metadata.modified().ok(),
-        content_digest: source_digest(file, metadata.len(), path)?,
+        identity: source_identity(&metadata),
     })
 }
 
-fn stable_source_file_state(
-    file: &File,
-    path: &Path,
-) -> Result<SourceFileState, SourceSnapshotError> {
-    let initial = source_file_state(file, path)?;
-    if source_file_state(file, path)? != initial {
-        return Err(SourceSnapshotError::SourceChanged {
-            path: path.to_owned(),
-        });
+fn source_identity(metadata: &std::fs::Metadata) -> SourceIdentity {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        SourceIdentity::Unix {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }
     }
-    Ok(initial)
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        SourceIdentity::Windows {
+            volume: metadata.volume_serial_number(),
+            file_index: metadata.file_index(),
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        SourceIdentity::Portable
+    }
 }
 
-fn source_digest(file: &File, length: u64, path: &Path) -> Result<[u8; 32], SourceSnapshotError> {
-    let mut digest = Sha256::new();
+fn source_content_hash(
+    file: &File,
+    length: u64,
+    path: &Path,
+) -> Result<[u8; 32], SourceSnapshotError> {
+    let mut hasher = Sha256::new();
     let mut offset = 0_u64;
     let mut buffer = [0_u8; 8192];
     while offset < length {
@@ -592,12 +689,12 @@ fn source_digest(file: &File, length: u64, path: &Path) -> Result<[u8; 32], Sour
                 path: path.to_owned(),
             }
         })?;
-        digest.update(&buffer[..amount]);
+        hasher.update(&buffer[..amount]);
         offset = offset
             .checked_add(u64::try_from(amount).map_err(|_| SourceSnapshotError::LengthConversion)?)
             .ok_or(SourceSnapshotError::LengthConversion)?;
     }
-    Ok(digest.finalize().into())
+    Ok(hasher.finalize().into())
 }
 
 fn read_exact_at_file(file: &File, offset: u64, buffer: &mut [u8]) -> io::Result<()> {
