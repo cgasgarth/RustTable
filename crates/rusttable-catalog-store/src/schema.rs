@@ -4,7 +4,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 use rusttable_catalog::RepositoryError;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 2;
+pub const CURRENT_SCHEMA_VERSION: u8 = 3;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -16,6 +16,10 @@ pub(crate) const ASSET_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_asset_index");
 pub(crate) const EDITS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_edits");
+pub(crate) const IMPORT_DETAILS_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_import_details");
+pub(crate) const REFERENCE_PATH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_reference_path_index");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
 
 pub(crate) fn open(path: &Path) -> Result<Database, RepositoryError> {
@@ -58,6 +62,12 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(EDITS_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
+        transaction
+            .open_table(IMPORT_DETAILS_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
+        transaction
+            .open_table(REFERENCE_PATH_INDEX_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
     }
     transaction
         .commit()
@@ -77,10 +87,10 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
         .ok_or(RepositoryError::CorruptPersistedData)?;
     match version.value() {
         [CURRENT_SCHEMA_VERSION] => validate_tables(&transaction),
-        [1] => {
+        [1 | 2] => {
             drop(schema);
             drop(transaction);
-            migrate_v1_to_v2(database)
+            migrate_to_v3(database)
         }
         _ => Err(RepositoryError::CorruptPersistedData),
     }
@@ -92,6 +102,8 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
         PHOTO_INDEX_TABLE,
         ASSET_INDEX_TABLE,
         EDITS_TABLE,
+        IMPORT_DETAILS_TABLE,
+        REFERENCE_PATH_INDEX_TABLE,
     ] {
         transaction
             .open_table(table)
@@ -100,7 +112,7 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
     Ok(())
 }
 
-fn migrate_v1_to_v2(database: &Database) -> Result<(), RepositoryError> {
+fn migrate_to_v3(database: &Database) -> Result<(), RepositoryError> {
     let transaction = database
         .begin_write()
         .map_err(|_| RepositoryError::Unavailable)?;
@@ -112,9 +124,9 @@ fn migrate_v1_to_v2(database: &Database) -> Result<(), RepositoryError> {
             .get(VERSION_KEY)
             .map_err(|_| RepositoryError::CorruptPersistedData)?
             .ok_or(RepositoryError::CorruptPersistedData)?;
-        let is_v1 = version.value() == [1];
+        let is_legacy = matches!(version.value(), [1 | 2]);
         drop(version);
-        if !is_v1 {
+        if !is_legacy {
             return Err(RepositoryError::CorruptPersistedData);
         }
         transaction
@@ -128,6 +140,12 @@ fn migrate_v1_to_v2(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::CorruptPersistedData)?;
         transaction
             .open_table(EDITS_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
+        transaction
+            .open_table(IMPORT_DETAILS_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
+        transaction
+            .open_table(REFERENCE_PATH_INDEX_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])

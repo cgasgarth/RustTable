@@ -13,6 +13,7 @@ mod durable_edit;
 mod edit_repository;
 mod error;
 mod import;
+mod import_details;
 mod repository;
 mod restore;
 mod snapshot;
@@ -27,6 +28,11 @@ pub use error::CatalogError;
 pub use import::{
     ImportCandidate, ImportCandidateError, ImportError, ImportOutcome, ImportRecord,
     ImportRecordError, ImportService,
+};
+pub use import_details::{
+    IMPORT_DETAILS_VERSION, ImportDetails, ImportDetailsValidationError, ImportMetadataSummary,
+    ImportRegistration, ImportRegistrationReceipt, ImportRegistrationReceiptError,
+    ImportRegistrationStatus, ReferencePathIdentity,
 };
 pub use repository::{ImportRepository, RepositoryError};
 pub use restore::CatalogRestoreError;

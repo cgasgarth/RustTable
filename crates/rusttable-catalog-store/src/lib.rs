@@ -5,6 +5,7 @@ mod catalog_repository;
 mod codec;
 mod edit_codec;
 mod edit_repository;
+mod import_details_codec;
 mod repository;
 mod schema;
 
