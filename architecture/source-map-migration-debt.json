@@ -1,6 +1,6 @@
 {
-  "debt_finding_count": 446,
-  "debt_issue_count": 233,
+  "debt_finding_count": 449,
+  "debt_issue_count": 236,
   "fatal_finding_count": 0,
   "findings": [
     {
@@ -2302,6 +2302,24 @@
       "path": null
     },
     {
+      "code": "debt-missing-map-record",
+      "issue": 445,
+      "message": "master-child issue has no source-map record",
+      "path": null
+    },
+    {
+      "code": "debt-missing-map-record",
+      "issue": 457,
+      "message": "master-child issue has no source-map record",
+      "path": null
+    },
+    {
+      "code": "debt-missing-map-record",
+      "issue": 459,
+      "message": "master-child issue has no source-map record",
+      "path": null
+    },
+    {
       "code": "debt-missing-source-block",
       "issue": 466,
       "message": "open issue lacks source-anchor section",
@@ -2680,13 +2698,13 @@
       "path": null
     }
   ],
-  "issue_count": 570,
+  "issue_count": 577,
   "issue_snapshot": "architecture/issue-spec-snapshot.json",
   "linked_issue": 570,
   "parent_issue": 158,
   "repository": "darktable-org/darktable",
   "schema": "rusttable.source-map-migration-debt.v1",
   "source_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
-  "strict_issue_count": 50,
-  "unowned_inventory_entry_count": 1901
+  "strict_issue_count": 45,
+  "unowned_inventory_entry_count": 1900
 }
