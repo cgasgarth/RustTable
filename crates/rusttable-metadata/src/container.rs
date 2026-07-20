@@ -53,9 +53,9 @@ fn jpeg_payload(
         segments = segments
             .checked_add(1)
             .ok_or(MetadataInputError::ArithmeticOverflow)?;
-        if segments > limits.max_jpeg_segments {
+        if segments > limits.jpeg_segments {
             return Err(MetadataInputError::JpegSegmentLimit {
-                limit: limits.max_jpeg_segments,
+                limit: limits.jpeg_segments,
             });
         }
         let length = usize::from(read_u16(source, cursor, InputFormat::Jpeg)?);
@@ -127,9 +127,9 @@ fn png_payload(
         chunks = chunks
             .checked_add(1)
             .ok_or(MetadataInputError::ArithmeticOverflow)?;
-        if chunks > limits.max_png_chunks {
+        if chunks > limits.png_chunks {
             return Err(MetadataInputError::PngChunkLimit {
-                limit: limits.max_png_chunks,
+                limit: limits.png_chunks,
             });
         }
         let kind = &source[kind_start..data_start];
@@ -170,9 +170,9 @@ fn is_tiff(source: &[u8]) -> bool {
 fn check_payload(payload: &[u8], limits: MetadataLimits) -> Result<(), MetadataInputError> {
     let actual =
         u64::try_from(payload.len()).map_err(|_| MetadataInputError::ArithmeticOverflow)?;
-    if actual > limits.max_exif_bytes {
+    if actual > limits.exif_bytes {
         return Err(MetadataInputError::ExifPayloadTooLarge {
-            limit: limits.max_exif_bytes,
+            limit: limits.exif_bytes,
             actual,
         });
     }

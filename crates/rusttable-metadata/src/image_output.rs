@@ -6,6 +6,12 @@ use rusttable_image::{DecodedImage, ImageOutputError, OutputFormat, OutputOption
 use crate::{ImageMetadata, MetadataOutputError, MetadataOutputLimits};
 
 pub trait MetadataImageOutput: Send + Sync {
+    /// Encodes image metadata and publishes a newly created image atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetadataImageOutputError`] when metadata encoding, EXIF framing,
+    /// or image publication fails.
     fn write_new_with_metadata(
         &self,
         image: &DecodedImage,

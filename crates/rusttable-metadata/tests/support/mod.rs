@@ -45,18 +45,18 @@ pub fn jpeg_with_exif() -> Vec<u8> {
 pub fn png_with_exif() -> Vec<u8> {
     let tiff = tiff_with_metadata();
     let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
-    put_chunk(&mut bytes, b"eXIf", &tiff);
-    put_chunk(&mut bytes, b"IEND", &[]);
+    put_chunk(&mut bytes, *b"eXIf", &tiff);
+    put_chunk(&mut bytes, *b"IEND", &[]);
     bytes
 }
 
-fn put_chunk(bytes: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+fn put_chunk(bytes: &mut Vec<u8>, kind: [u8; 4], data: &[u8]) {
     bytes.extend_from_slice(
         &u32::try_from(data.len())
             .expect("fixture fits PNG")
             .to_be_bytes(),
     );
-    bytes.extend_from_slice(kind);
+    bytes.extend_from_slice(&kind);
     bytes.extend_from_slice(data);
     bytes.extend_from_slice(&[0; 4]);
 }
