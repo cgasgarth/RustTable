@@ -19,9 +19,9 @@ pub use collection_controls::{
 };
 pub use darktable_spec::{
     ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarktableColors,
-    DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LayoutMetrics,
-    PANEL_SLOTS, PanelRole, PanelSlot as VisualPanelSlot, SidePanelWidths, TOP_BAR_SECTIONS,
-    TopBarSection, ViewMode,
+    DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LIGHTTABLE_TOOLBAR,
+    LayoutMetrics, LighttableToolbarSpec, PANEL_SLOTS, PanelRole, PanelSlot as VisualPanelSlot,
+    SidePanelWidths, TOP_BAR_SECTIONS, TopBarSection, ViewMode,
 };
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;
