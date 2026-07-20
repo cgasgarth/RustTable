@@ -16,6 +16,10 @@ mod publication;
 pub mod purpose;
 mod receipt;
 mod roi;
+mod scheduler;
+mod scheduler_executor;
+mod scheduler_metrics;
+mod scheduler_model;
 mod snapshot;
 mod tile;
 mod tile_geometry;
@@ -89,6 +93,18 @@ pub use rusttable_image::{
     HostImageView, HostPoolError, InitializationPolicy, LeaseState, PoolAccounting, PoolBudgets,
     PoolEvent, PriorityClass, ReturnReceipt, SharedBufferLease,
     ShutdownReport as HostPoolShutdownReport,
+};
+pub use scheduler::CpuScheduler;
+pub use scheduler_executor::{CpuWorkerPoolBoundary, WorkUnitCancellationBoundary};
+pub use scheduler_metrics::{
+    FairnessReceipt, SchedulerMetrics, SchedulerSnapshot,
+    ShutdownReport as SchedulerShutdownReport, WorkUnitReceipt,
+};
+pub use scheduler_model::{
+    AdmitReceipt, CancellationBoundary, CpuPriority, LeaseClaim, PublicationTarget,
+    PublicationTargetKind, RequestId, ResourceClaim, RunningTask, SchedulerConfig,
+    SchedulerConfigError, SchedulerError, SchedulerReceipt, ShutdownMode, TaskError, TaskFailure,
+    TaskId, TaskSpec, TaskState, WorkUnitBoundary,
 };
 pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};
