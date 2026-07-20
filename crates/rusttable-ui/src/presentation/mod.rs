@@ -12,7 +12,6 @@ pub use exposure::ExposurePanelViewModel;
 
 const MAX_PRESENTATION_TEXT_BYTES: usize = 256;
 const MAX_SELECTED_PREVIEW_RGBA8_BYTES: usize = 64 * 1024 * 1024;
-const MAX_THUMBNAIL_RGBA8_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PresentationText(String);
@@ -65,7 +64,15 @@ pub struct PhotoCardViewModel {
     id: PhotoId,
     title: PresentationText,
     secondary: Option<PresentationText>,
-    thumbnail: Option<PhotoThumbnailViewModel>,
+    indicators: ThumbnailIndicators,
+}
+
+/// Optional Darktable thumbnail badges supplied by catalog organization state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ThumbnailIndicators {
+    pub grouped: bool,
+    pub local_copy: bool,
+    pub altered: bool,
 }
 
 impl PhotoCardViewModel {
@@ -75,14 +82,13 @@ impl PhotoCardViewModel {
             id,
             title,
             secondary,
-            thumbnail: None,
+            indicators: ThumbnailIndicators::default(),
         }
     }
 
-    /// Returns this card with immutable checked thumbnail pixels.
     #[must_use]
-    pub fn with_thumbnail(mut self, thumbnail: PhotoThumbnailViewModel) -> Self {
-        self.thumbnail = Some(thumbnail);
+    pub const fn with_indicators(mut self, indicators: ThumbnailIndicators) -> Self {
+        self.indicators = indicators;
         self
     }
 
@@ -102,51 +108,8 @@ impl PhotoCardViewModel {
     }
 
     #[must_use]
-    pub fn thumbnail(&self) -> Option<&PhotoThumbnailViewModel> {
-        self.thumbnail.as_ref()
-    }
-}
-
-/// Bounded immutable RGBA8 content for lighttable and filmstrip thumbnails.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PhotoThumbnailViewModel {
-    dimensions: PreviewDimensions,
-    pixels: Vec<u8>,
-}
-
-impl PhotoThumbnailViewModel {
-    /// Creates checked thumbnail pixels without exposing image or cache types to GTK.
-    ///
-    /// # Errors
-    ///
-    /// Returns a checked length, arithmetic, or presentation-size error.
-    pub fn new(
-        dimensions: PreviewDimensions,
-        pixels: Vec<u8>,
-    ) -> Result<Self, Rgba8PreviewMetadataError> {
-        let expected = rgba8_byte_len(dimensions)?;
-        if expected > MAX_THUMBNAIL_RGBA8_BYTES || pixels.len() > MAX_THUMBNAIL_RGBA8_BYTES {
-            return Err(Rgba8PreviewMetadataError::TooLarge {
-                byte_length: expected.max(pixels.len()),
-            });
-        }
-        if pixels.len() != expected {
-            return Err(Rgba8PreviewMetadataError::IncorrectByteLength {
-                expected,
-                actual: pixels.len(),
-            });
-        }
-        Ok(Self { dimensions, pixels })
-    }
-
-    #[must_use]
-    pub const fn dimensions(&self) -> PreviewDimensions {
-        self.dimensions
-    }
-
-    #[must_use]
-    pub fn pixels(&self) -> &[u8] {
-        &self.pixels
+    pub const fn indicators(&self) -> ThumbnailIndicators {
+        self.indicators
     }
 }
 
@@ -457,18 +420,6 @@ impl PhotoWorkspaceViewModel {
     pub fn details(&self) -> impl ExactSizeIterator<Item = &PhotoDetailViewModel> {
         self.details.values()
     }
-
-    /// Replaces one card's thumbnail while preserving card order and details.
-    #[must_use]
-    pub fn with_thumbnail(
-        mut self,
-        photo_id: PhotoId,
-        thumbnail: PhotoThumbnailViewModel,
-    ) -> Option<Self> {
-        let card = self.cards.iter_mut().find(|card| card.id() == photo_id)?;
-        card.thumbnail = Some(thumbnail);
-        Some(self)
-    }
 }
 
 #[cfg(test)]
@@ -476,10 +427,10 @@ mod tests {
     use rusttable_core::PhotoId;
 
     use super::{
-        PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoThumbnailViewModel,
-        PhotoWorkspaceViewModel, PhotoWorkspaceViewModelError, PresentationText,
-        PresentationTextError, PreviewDimensions, PreviewDimensionsError, Rgba8PreviewMetadata,
-        Rgba8PreviewMetadataError, SelectedPreviewFailure, SelectedPreviewState,
+        PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
+        PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
+        PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
+        SelectedPreviewFailure, SelectedPreviewState,
     };
 
     fn id(value: u128) -> PhotoId {
@@ -492,25 +443,6 @@ mod tests {
 
     fn card(value: u128) -> PhotoCardViewModel {
         PhotoCardViewModel::new(id(value), text("Title"), None)
-    }
-
-    #[test]
-    fn thumbnail_contract_rejects_wrong_lengths_and_projects_immutably() {
-        let dimensions = PreviewDimensions::new(2, 1).expect("dimensions");
-        assert!(PhotoThumbnailViewModel::new(dimensions, vec![0; 7]).is_err());
-        let thumbnail = PhotoThumbnailViewModel::new(dimensions, vec![7; 8]).expect("thumbnail");
-        let workspace = PhotoWorkspaceViewModel::new(vec![card(1)], vec![detail(1)])
-            .expect("workspace")
-            .with_thumbnail(id(1), thumbnail)
-            .expect("known photo");
-        let projected = workspace
-            .cards()
-            .next()
-            .and_then(PhotoCardViewModel::thumbnail);
-        assert_eq!(
-            projected.map(PhotoThumbnailViewModel::pixels),
-            Some(&[7; 8][..])
-        );
     }
 
     fn detail(value: u128) -> PhotoDetailViewModel {

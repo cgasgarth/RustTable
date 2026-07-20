@@ -19,7 +19,6 @@ const LIGHTTABLE_LEFT_MODULE_IDS: [&str; 5] = [
 /// Persistent left rail and the action-bearing import control it owns.
 pub(super) struct LeftPanel {
     root: gtk4::Box,
-    modules: gtk4::Box,
     import: gtk4::Button,
 }
 
@@ -74,17 +73,12 @@ impl LeftPanel {
         root.append(&bottom);
         Self {
             root,
-            modules,
             import: import.1,
         }
     }
 
     pub(super) const fn widget(&self) -> &gtk4::Box {
         &self.root
-    }
-
-    pub(super) const fn modules(&self) -> &gtk4::Box {
-        &self.modules
     }
 
     pub(super) const fn import_button(&self) -> &gtk4::Button {

@@ -3,7 +3,7 @@
 * {
   color: {{foreground}};
   font-family: Sans;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: normal;
 }
 
@@ -17,7 +17,7 @@ window,
 }
 
 #header {
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 4px;
   border-bottom: 1px solid {{border}};
 }
@@ -30,18 +30,18 @@ window,
 }
 
 #header-left {
-  min-width: 154px;
+  min-width: 150px;
   padding: 3px 7px 3px 2px;
 }
 
 #rusttable-aperture-mark {
-  min-width: 27px;
-  min-height: 27px;
+  min-width: 24px;
+  min-height: 24px;
 }
 
 .dt_brand_title {
   color: {{foreground}};
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -108,7 +108,7 @@ button:hover,
 
 #left-panel,
 #right-panel {
-  min-width: 154px;
+  min-width: 150px;
   background-color: {{background}};
   border: 0;
 }
@@ -127,18 +127,18 @@ button:hover,
 
 #left-center,
 #left-bottom {
-  min-width: 154px;
+  min-width: 150px;
 }
 
 #left-module-scroll {
-  min-width: 154px;
+  min-width: 150px;
   background-color: {{background}};
 }
 
 #left-panel expander {
   margin: 0;
   padding: 2px 4px;
-  min-width: 146px;
+  min-width: 142px;
   background-image: none;
   box-shadow: none;
 }
@@ -390,6 +390,177 @@ spinbutton,
   background-color: {{selected_thumbnail}};
   color: {{background}};
   border-color: {{active_image_marker}};
+}
+
+button:focus-visible,
+entry:focus-visible,
+dropdown:focus-visible,
+scale:focus-visible {
+  outline: 1px solid {{hovered_thumbnail}};
+  outline-offset: -1px;
+}
+
+#darkroom-left-panel,
+#darkroom-right-panel {
+  min-width: 150px;
+  background-color: {{background}};
+}
+
+#darkroom-left-panel {
+  border-right: 1px solid {{border}};
+}
+
+#darkroom-right-panel {
+  border-left: 1px solid {{border}};
+}
+
+#darkroom-left-panel expander,
+#darkroom-right-panel expander {
+  margin: 0;
+  padding: 1px 3px;
+  border-bottom: 1px solid {{border}};
+  background-color: {{module_background}};
+}
+
+#darkroom-left-panel expander > title,
+#darkroom-right-panel expander > title {
+  min-height: 18px;
+  padding: 0;
+  font-weight: bold;
+}
+
+#darkroom-left-panel expander > box,
+#darkroom-right-panel expander > box {
+  padding: 3px 2px 4px 10px;
+}
+
+.dt_darkroom_module_header {
+  min-height: 18px;
+  padding: 1px 3px;
+  border: 0;
+  border-bottom: 1px solid {{border}};
+  border-radius: 0;
+  background-color: {{module_background}};
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+.dt_darkroom_module_header label {
+  font-weight: bold;
+}
+
+.dt_module_row {
+  min-height: 18px;
+  padding: 1px 0;
+}
+
+.dt_module_row label {
+  font-size: 10px;
+}
+
+.dt_module_row switch,
+.dt_module_row dropdown,
+.dt_module_row scale {
+  min-height: 18px;
+}
+
+#darkroom-histogram {
+  min-height: 92px;
+  background: linear-gradient(to top, #1d1d1dff, #383838ff);
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-module-groups {
+  min-height: 25px;
+  padding: 1px 2px;
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-module-groups button,
+.dt_darkroom_toolbar button {
+  min-height: 20px;
+  min-width: 20px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+.dt_darkroom_toolbar {
+  min-height: 24px;
+  padding: 1px 3px;
+  background-color: {{background}};
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-toolbar-bottom {
+  border-top: 1px solid {{border}};
+  border-bottom: 0;
+}
+
+#darkroom-photo-preview,
+#darkroom-preview-overlay,
+#darkroom-preview-canvas-frame {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background-color: {{darkroom_canvas}};
+}
+
+#darkroom-preview-header,
+#darkroom-preview-facts {
+  min-height: 20px;
+  padding: 2px 5px;
+  margin: 0;
+  background-color: {{background}};
+}
+
+#darkroom-preview-title {
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.dt_thumbnail_surface {
+  background-color: {{thumbnail_background}};
+}
+
+.dt_thumbnail_placeholder {
+  color: {{foreground}};
+  font-size: 10px;
+}
+
+.dt_thumbnail_indicators {
+  margin: 3px;
+  padding: 1px 3px;
+  background-color: #202020cc;
+  border-radius: 2px;
+}
+
+.dt_thumbnail_indicators label {
+  color: #eeeeeeff;
+  font-size: 9px;
+  font-weight: bold;
+}
+
+#lighttable-grid {
+  padding: 6px;
+}
+
+.dt_photo_card {
+  margin: 2px;
+}
+
+.dt_filmstrip_item {
+  margin: 2px 1px;
+  border-top: 2px solid transparent;
+}
+
+.dt_filmstrip_item.dt_selected {
+  border-top-color: {{active_image_marker}};
 }
 
 .dt_placeholder,

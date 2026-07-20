@@ -1,6 +1,7 @@
 //! Darktable-shaped GTK4 header and lighttable mode chrome.
 
 use crate::display_profile::DisplayProfileBanner;
+use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
@@ -104,8 +105,10 @@ fn brand(i18n: &I18n) -> gtk4::Box {
 fn aperture_mark() -> gtk4::DrawingArea {
     let mark = gtk4::DrawingArea::new();
     mark.set_widget_name("rusttable-aperture-mark");
-    mark.set_content_width(27);
-    mark.set_content_height(27);
+    mark.set_content_width(24);
+    mark.set_content_height(24);
+    mark.set_accessible_role(gtk4::AccessibleRole::Img);
+    mark.update_property(&[Property::Label("RustTable aperture logo")]);
     mark.set_draw_func(|_, context, width, height| {
         let center_x = f64::from(width) / 2.0;
         let center_y = f64::from(height) / 2.0;
@@ -157,6 +160,7 @@ fn header_toolbar(
     import.set_tooltip_text(Some(
         &i18n.text(MessageId::ToolbarImport, &MessageArgs::new()),
     ));
+    import.update_property(&[Property::Label("Import images")]);
     import.add_css_class("dt_header_icon");
     toolbar.append(&import);
 
@@ -172,6 +176,7 @@ fn header_toolbar(
     preferences.set_tooltip_text(Some(
         &i18n.text(MessageId::ToolbarPreferences, &MessageArgs::new()),
     ));
+    preferences.update_property(&[Property::Label("Open preferences")]);
     preferences.add_css_class("dt_header_icon");
     toolbar.append(&preferences);
     (toolbar, import, preferences, lighttable_toolbar)
@@ -186,11 +191,14 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     let lighttable =
         gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceLighttable, &MessageArgs::new()));
     lighttable.set_widget_name("view-lighttable");
+    lighttable.update_property(&[Property::Label("Switch to lighttable")]);
     let darkroom =
         gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()));
     darkroom.set_widget_name("view-darkroom");
+    darkroom.update_property(&[Property::Label("Switch to darkroom")]);
     let other = gtk4::Button::with_label("other ⌄");
     other.set_widget_name("view-other");
+    other.update_property(&[Property::Label("Open other views")]);
 
     connect_mode(&lighttable, workspace, WorkspaceRole::Lighttable);
     connect_mode(&darkroom, workspace, WorkspaceRole::Darkroom);

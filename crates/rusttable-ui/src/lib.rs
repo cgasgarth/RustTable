@@ -28,8 +28,8 @@ pub use input_mapping::{
 };
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
 pub use presentation::{
-    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoThumbnailViewModel,
-    PhotoWorkspaceViewModel, PhotoWorkspaceViewModelError, PresentationText, PresentationTextError,
-    PreviewDimensions, PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
-    SelectedPreviewFailure, SelectedPreviewState,
+    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
+    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
+    PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
+    SelectedPreviewFailure, SelectedPreviewState, ThumbnailIndicators,
 };
