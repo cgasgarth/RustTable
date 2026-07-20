@@ -12,9 +12,13 @@ use rusttable_processing::{
 };
 
 mod plan;
+mod prepared_pixelpipe;
 mod provenance;
 
 pub use plan::{PreviewBounds, PreviewBoundsError, RenderPlan, RenderSampling, RenderTarget};
+pub use prepared_pixelpipe::{
+    PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, render_prepared_cpu_pixelpipe,
+};
 pub use provenance::{
     ProvenancedRenderError, ProvenancedRenderErrorKind, ProvenancedRenderOutput,
     RenderFailureStage, RenderReceipt, RenderRequestContext, RenderSourceProvenance,
