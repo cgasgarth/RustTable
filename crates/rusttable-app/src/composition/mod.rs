@@ -2,10 +2,13 @@ mod catalog_preview;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
 
-use crate::gtk_controller::GtkCatalogController;
+use crate::gtk_controller::{CollectionController, CollectionSnapshot, GtkCatalogController};
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewState};
 use crate::lifecycle::run_with_bootstrap;
 use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual};
+use rusttable_ui::{
+    CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
+};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
@@ -47,13 +50,33 @@ pub fn run() -> Result<(), DesktopRunError> {
                 .application_id("com.cgasgarth.rusttable")
                 .build();
             application.connect_activate(|application| {
+                if let Some(display) = gtk4::gdk::Display::default() {
+                    rusttable_ui::install_darktable_theme(&display);
+                }
                 let catalog_controller =
                     Rc::new(RefCell::new(GtkCatalogController::load_persisted()));
+                let collection_controller = Rc::new(RefCell::new(
+                    catalog_controller.borrow().collection_controller(),
+                ));
                 let shell = rusttable_ui::GtkShell::new(application);
                 let workspace = catalog_controller.borrow().state().workspace().cloned();
                 if let Some(workspace) = workspace.as_ref() {
                     shell.set_photo_workspace(workspace);
                 }
+                if let Some(controller) = collection_controller.borrow().as_ref() {
+                    shell.set_collection_filter_state(&collection_filter_state(
+                        &controller.snapshot(),
+                    ));
+                }
+                let collection_for_actions = Rc::clone(&collection_controller);
+                shell.connect_collection_action(move |action| {
+                    let mut controller = collection_for_actions.borrow_mut();
+                    let Some(controller) = controller.as_mut() else {
+                        return empty_collection_filter_state();
+                    };
+                    apply_collection_action(controller, action);
+                    collection_filter_state(&controller.snapshot())
+                });
                 let selection_controller = Rc::clone(&catalog_controller);
                 let preview_shell = shell.clone();
                 shell.set_photo_selected_handler(move |photo_id| {
@@ -75,6 +98,29 @@ pub fn run() -> Result<(), DesktopRunError> {
             }
         },
         |warning| eprintln!("{warning}"),
+    )
+}
+
+fn apply_collection_action(controller: &mut CollectionController, action: CollectionControlAction) {
+    match action {
+        CollectionControlAction::SetProperty(property) => controller.set_property(property),
+        CollectionControlAction::SetSearchText(search_text) => {
+            controller.set_search_text(search_text);
+        }
+        CollectionControlAction::Clear => controller.clear(),
+    }
+}
+
+fn collection_filter_state(snapshot: &CollectionSnapshot) -> CollectionFilterState {
+    let controls = CollectionControlState::new(snapshot.property(), snapshot.total_count())
+        .with_results(snapshot.search_text(), snapshot.result_count());
+    CollectionFilterState::new(controls, snapshot.matching_photo_ids().collect())
+}
+
+fn empty_collection_filter_state() -> CollectionFilterState {
+    CollectionFilterState::new(
+        CollectionControlState::new(CollectionProperty::Filename, 0),
+        Vec::new(),
     )
 }
 

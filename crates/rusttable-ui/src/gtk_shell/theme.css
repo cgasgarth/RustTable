@@ -1,0 +1,142 @@
+/*
+ * RustTable's GTK4 visual contract.
+ *
+ * The placeholders are populated from darktable_spec::DARKTABLE_COLORS so the
+ * palette remains a single Rust-owned source of truth. The selectors mirror
+ * the widget names established by the darktable GTK shell and the dt_* class
+ * convention used by Darktable's data/themes/darktable.css.
+ */
+
+* {
+  color: {{foreground}};
+  font-family: sans-serif;
+  font-weight: normal;
+}
+
+window,
+#header,
+#left-panel,
+#right-panel,
+.dt_shell,
+.dt_header,
+.dt_panel {
+  background-color: {{background}};
+  color: {{foreground}};
+}
+
+#header {
+  border-bottom: 1px solid {{border}};
+  padding: 0.14em 0.28em;
+}
+
+#left-panel,
+#right-panel {
+  border: 1px solid {{border}};
+  padding: 0.5em;
+}
+
+#center-workspace,
+.dt_workspace {
+  background-color: {{darkroom_canvas}};
+  color: {{foreground}};
+}
+
+#lighttable-grid,
+.dt_lighttable {
+  background-color: {{lighttable_canvas}};
+  color: {{foreground}};
+}
+
+#bottom-filmstrip,
+.dt_filmstrip {
+  background-color: {{filmstrip_background}};
+  color: {{foreground}};
+  border-top: 1px solid {{border}};
+}
+
+button,
+.dt_button {
+  background-color: {{button_background}};
+  color: {{foreground}};
+  border: 1px solid {{border}};
+  border-radius: 2px;
+  padding: 0.28em 0.5em;
+}
+
+button:hover,
+.dt_button:hover {
+  background-color: {{hovered_thumbnail}};
+  color: {{background}};
+}
+
+entry,
+dropdown,
+.dt_field {
+  background-color: {{active_field_background}};
+  color: {{foreground}};
+  border: 1px solid {{border}};
+  border-radius: 2px;
+}
+
+.dt_module,
+expander,
+.dt_module_panel {
+  background-color: {{module_background}};
+  color: {{foreground}};
+  border-bottom: 1px solid {{border}};
+}
+
+.dt_section_label,
+.dt_section_expander {
+  color: {{foreground}};
+  background-color: {{module_background}};
+}
+
+.dt_toolbar {
+  background-color: {{background}};
+  color: {{foreground}};
+  padding: 0.14em 0.28em;
+}
+
+.dt_photo_card,
+#lighttable-photo-card,
+#filmstrip-photo {
+  background-color: {{button_background}};
+  color: {{foreground}};
+  border: 1px solid {{border}};
+}
+
+.dt_photo_card:hover,
+#lighttable-photo-card:hover,
+#filmstrip-photo:hover {
+  background-color: {{hovered_thumbnail}};
+  color: {{background}};
+}
+
+.dt_photo_card:selected,
+.dt_photo_card.dt_selected,
+#lighttable-photo-card.dt_selected,
+#filmstrip-photo.dt_selected,
+.dt_selected {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+  border-color: {{active_image_marker}};
+}
+
+.dt_preview,
+.dt_darkroom_canvas {
+  background-color: {{darkroom_canvas}};
+}
+
+.dt_placeholder,
+.dim-label {
+  color: {{foreground}};
+}
+
+scrollbar slider {
+  background-color: {{border}};
+}
+
+scrollbar slider:hover {
+  background-color: {{hovered_thumbnail}};
+}

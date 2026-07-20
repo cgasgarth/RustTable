@@ -5,12 +5,14 @@
 //! deliberately uses GTK widgets directly instead of a framework adapter.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
 use super::{
+    CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, LibraryBrowserModel, ModuleControlKind,
     ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, WorkspaceRole,
 };
@@ -29,6 +31,8 @@ pub struct GtkShell {
     filmstrip: gtk4::FlowBox,
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
+    collection_controls: CollectionControls,
+    lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
 }
 
@@ -53,7 +57,8 @@ impl GtkShell {
             .build();
         let (workspace, lighttable, darkroom_preview) = workspace_stack(layout.initial_workspace());
         let header = header_bar(&workspace);
-        let (left_panel, left_modules) = left_panel();
+        let collection_controls = CollectionControls::new();
+        let (left_panel, left_modules) = left_panel(&collection_controls);
         let (right_panel, right_modules) = right_panel();
         let center = central_workspace(&workspace);
         let split = gtk4::Paned::builder()
@@ -94,6 +99,8 @@ impl GtkShell {
             filmstrip: filmstrip.1,
             left_modules,
             right_modules,
+            collection_controls,
+            lighttable_workspace: Rc::new(RefCell::new(None)),
             photo_selected: Rc::new(RefCell::new(None)),
         }
     }
@@ -121,6 +128,45 @@ impl GtkShell {
         &self.darkroom_preview
     }
 
+    /// Returns the Darktable-shaped collection rule controls in the left panel.
+    #[must_use]
+    pub fn collection_controls(&self) -> &CollectionControls {
+        &self.collection_controls
+    }
+
+    /// Projects collection counts and rule values into the left-panel controls.
+    pub fn set_collection_state(&self, state: &CollectionControlState) {
+        self.collection_controls.set_state(state);
+    }
+
+    /// Applies a collection projection to both the controls and the lighttable.
+    pub fn set_collection_filter_state(&self, state: &CollectionFilterState) {
+        self.collection_controls.set_state(state.controls());
+        self.refresh_lighttable(state.matching_photo_ids());
+    }
+
+    /// Connects a typed collection action to an application-owned rule controller.
+    ///
+    /// The callback captures only GTK child handles and the application controller. It does not
+    /// capture `GtkShell`, avoiding a shell-to-handler reference cycle.
+    pub fn connect_collection_action<F>(&self, callback: F)
+    where
+        F: Fn(CollectionControlAction) -> CollectionFilterState + 'static,
+    {
+        let refresh = CollectionRefreshHandle {
+            controls: self.collection_controls.clone(),
+            lighttable: self.lighttable.clone(),
+            filmstrip: self.filmstrip.clone(),
+            darkroom_preview: self.darkroom_preview.clone(),
+            workspace: self.workspace.clone(),
+            lighttable_workspace: Rc::clone(&self.lighttable_workspace),
+            photo_selected: Rc::clone(&self.photo_selected),
+        };
+        self.collection_controls.connect_action(move |action| {
+            refresh.apply(&callback(action));
+        });
+    }
+
     /// Installs the controller callback invoked when the user selects a photo.
     ///
     /// The shell moves to darkroom before calling the handler, so controllers
@@ -138,26 +184,52 @@ impl GtkShell {
     /// view model. Each native card switches to darkroom and reports the typed
     /// [`PhotoId`] through [`Self::set_photo_selected_handler`].
     pub fn set_lighttable_workspace(&self, view_model: &PhotoWorkspaceViewModel) {
-        clear_children(&self.lighttable);
-        clear_children(&self.filmstrip);
-        let browser = LibraryBrowserModel::from_workspace(view_model);
+        self.lighttable_workspace.replace(Some(view_model.clone()));
+        render_lighttable_workspace(
+            &self.lighttable,
+            &self.filmstrip,
+            &self.darkroom_preview,
+            &self.workspace,
+            &self.photo_selected,
+            view_model,
+            None,
+        );
+    }
 
-        if browser.photos().len() == 0 {
+    /// Renders only the photos selected by the active collection rule.
+    pub fn set_lighttable_workspace_filtered(
+        &self,
+        view_model: &PhotoWorkspaceViewModel,
+        matching_photo_ids: impl IntoIterator<Item = PhotoId>,
+    ) {
+        let matching_photo_ids = matching_photo_ids.into_iter().collect::<BTreeSet<_>>();
+        self.lighttable_workspace.replace(Some(view_model.clone()));
+        render_lighttable_workspace(
+            &self.lighttable,
+            &self.filmstrip,
+            &self.darkroom_preview,
+            &self.workspace,
+            &self.photo_selected,
+            view_model,
+            Some(&matching_photo_ids),
+        );
+    }
+
+    fn refresh_lighttable(&self, matching_photo_ids: &[PhotoId]) {
+        let workspace = self.lighttable_workspace.borrow();
+        let Some(view_model) = workspace.as_ref() else {
             return;
-        }
-
-        for photo in browser.photos() {
-            let Some(detail) = view_model.detail(photo.id()) else {
-                continue;
-            };
-            let detail = detail.clone();
-            let card = lighttable_card(photo.title(), photo.secondary());
-            let filmstrip_item = filmstrip_item(photo.title());
-            self.connect_photo_selection(&card, photo.id(), detail.clone());
-            self.connect_photo_selection(&filmstrip_item, photo.id(), detail);
-            self.lighttable.insert(&card, -1);
-            self.filmstrip.insert(&filmstrip_item, -1);
-        }
+        };
+        let matching_photo_ids = matching_photo_ids.iter().copied().collect::<BTreeSet<_>>();
+        render_lighttable_workspace(
+            &self.lighttable,
+            &self.filmstrip,
+            &self.darkroom_preview,
+            &self.workspace,
+            &self.photo_selected,
+            view_model,
+            Some(&matching_photo_ids),
+        );
     }
 
     /// Compatibility spelling for updating the lighttable presentation model.
@@ -180,24 +252,105 @@ impl GtkShell {
     pub fn show_workspace(&self, role: WorkspaceRole) {
         self.workspace.set_visible_child_name(role.stack_name());
     }
+}
 
-    fn connect_photo_selection(
-        &self,
-        button: &gtk4::Button,
-        photo_id: PhotoId,
-        detail: PhotoDetailViewModel,
-    ) {
-        let photo_preview = self.darkroom_preview.clone();
-        let workspace = self.workspace.clone();
-        let handler = Rc::clone(&self.photo_selected);
-        button.connect_clicked(move |_| {
-            show_photo_detail(&photo_preview, &detail);
-            workspace.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
-            if let Some(handler) = handler.borrow().as_ref() {
-                handler(photo_id);
-            }
-        });
+#[derive(Clone)]
+struct CollectionRefreshHandle {
+    controls: CollectionControls,
+    lighttable: gtk4::FlowBox,
+    filmstrip: gtk4::FlowBox,
+    darkroom_preview: PhotoPreview,
+    workspace: gtk4::Stack,
+    lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
+    photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
+}
+
+impl CollectionRefreshHandle {
+    fn apply(&self, state: &CollectionFilterState) {
+        self.controls.set_state(state.controls());
+        let workspace = self.lighttable_workspace.borrow();
+        let Some(view_model) = workspace.as_ref() else {
+            return;
+        };
+        let matching_photo_ids = state
+            .matching_photo_ids()
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        render_lighttable_workspace(
+            &self.lighttable,
+            &self.filmstrip,
+            &self.darkroom_preview,
+            &self.workspace,
+            &self.photo_selected,
+            view_model,
+            Some(&matching_photo_ids),
+        );
     }
+}
+
+fn render_lighttable_workspace(
+    lighttable: &gtk4::FlowBox,
+    filmstrip: &gtk4::FlowBox,
+    darkroom_preview: &PhotoPreview,
+    workspace: &gtk4::Stack,
+    photo_selected: &Rc<RefCell<Option<PhotoSelectedHandler>>>,
+    view_model: &PhotoWorkspaceViewModel,
+    matching_photo_ids: Option<&BTreeSet<PhotoId>>,
+) {
+    clear_children(lighttable);
+    clear_children(filmstrip);
+    let browser = LibraryBrowserModel::from_workspace(view_model);
+
+    for photo in browser.photos() {
+        if matching_photo_ids.is_some_and(|ids| !ids.contains(&photo.id())) {
+            continue;
+        }
+        let Some(detail) = view_model.detail(photo.id()) else {
+            continue;
+        };
+        let detail = detail.clone();
+        let card = lighttable_card(photo.title(), photo.secondary());
+        let filmstrip_item = filmstrip_item(photo.title());
+        connect_photo_selection(
+            &card,
+            photo.id(),
+            detail.clone(),
+            darkroom_preview,
+            workspace,
+            photo_selected,
+        );
+        connect_photo_selection(
+            &filmstrip_item,
+            photo.id(),
+            detail,
+            darkroom_preview,
+            workspace,
+            photo_selected,
+        );
+        lighttable.insert(&card, -1);
+        filmstrip.insert(&filmstrip_item, -1);
+    }
+}
+
+fn connect_photo_selection(
+    button: &gtk4::Button,
+    photo_id: PhotoId,
+    detail: PhotoDetailViewModel,
+    photo_preview: &PhotoPreview,
+    workspace: &gtk4::Stack,
+    photo_selected: &Rc<RefCell<Option<PhotoSelectedHandler>>>,
+) {
+    let photo_preview = photo_preview.clone();
+    let workspace = workspace.clone();
+    let handler = Rc::clone(photo_selected);
+    button.connect_clicked(move |_| {
+        show_photo_detail(&photo_preview, &detail);
+        workspace.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
+        if let Some(handler) = handler.borrow().as_ref() {
+            handler(photo_id);
+        }
+    });
 }
 
 fn header_bar(workspace: &gtk4::Stack) -> gtk4::HeaderBar {
@@ -228,14 +381,14 @@ fn header_bar(workspace: &gtk4::Stack) -> gtk4::HeaderBar {
     header
 }
 
-fn left_panel() -> (gtk4::Box, gtk4::Box) {
+fn left_panel(collection_controls: &CollectionControls) -> (gtk4::Box, gtk4::Box) {
     let panel = panel_column(
         ShellRegion::LeftPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
     );
     let top = panel_slot(PanelSlot::LeftTop);
     top.append(&panel_heading("navigation"));
-    top.append(&gtk4::Button::with_label("recently used collections"));
+    top.append(collection_controls.widget());
     let center = panel_slot(PanelSlot::LeftCenter);
     let bottom = panel_slot(PanelSlot::LeftBottom);
     bottom.append(&gtk4::Label::new(Some("background jobs")));
