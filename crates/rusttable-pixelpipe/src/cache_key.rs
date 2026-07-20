@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Version of the structured in-memory cache identity.
-pub const CACHE_KEY_SCHEMA_VERSION: u16 = 1;
+pub const CACHE_KEY_SCHEMA_VERSION: u16 = 2;
 
 /// The precision identity used by a cache key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -388,7 +388,7 @@ impl CacheKey {
     #[must_use]
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(256);
-        bytes.extend_from_slice(b"rusttable.pixelpipe.cache-key.v1");
+        bytes.extend_from_slice(b"rusttable.pixelpipe.cache-key.v2");
         bytes.extend_from_slice(&self.schema_version.to_le_bytes());
         bytes.extend_from_slice(&self.source.as_bytes());
         write_bytes(&self.source_descriptor, &mut bytes);
@@ -437,6 +437,7 @@ impl CacheKey {
             CacheKeyComponent::Parameters,
             CacheKeyComponent::MaskBlendRaster,
             CacheKeyComponent::Backend,
+            CacheKeyComponent::Mode,
             CacheKeyComponent::Schema,
         ]
     }

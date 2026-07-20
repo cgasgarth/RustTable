@@ -209,6 +209,7 @@ fn fixture_snapshot(
     .map_err(|error| error.to_string())
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn verify_mode_source_map(root: &Path, issue: i64) -> Result {
     if issue != 271 {
         return Err(format!(
@@ -230,18 +231,62 @@ pub(crate) fn verify_mode_source_map(root: &Path, issue: i64) -> Result {
         return Err("pixelpipe mode source map header is invalid".to_owned());
     }
     let expected = [
-        "purpose",
-        "preview-quality",
-        "thumbnail-size-class",
-        "interactive-request",
-        "export-quality",
-        "operation-inclusion",
-        "approximation-identity",
-        "output-accounting",
-        "snapshot-identity",
-        "cache-identity",
-        "basic-stack-fixture",
-        "architecture-boundary",
+        (
+            "purpose",
+            "src/develop/pixelpipe.h",
+            "DT_DEV_PIXELPIPE_FULL",
+        ),
+        (
+            "preview-quality",
+            "src/develop/pixelpipe_hb.c",
+            "DT_DEV_PIXELPIPE_PREVIEW",
+        ),
+        (
+            "thumbnail-size-class",
+            "src/common/mipmap_cache.h",
+            "DT_MIPMAP_0",
+        ),
+        ("interactive-request", "src/views/darkroom.c", "expose"),
+        (
+            "export-quality",
+            "src/imageio/imageio.c",
+            "dt_imageio_export",
+        ),
+        (
+            "operation-inclusion",
+            "src/develop/pixelpipe_hb.c",
+            "operation inclusion and fast branch",
+        ),
+        (
+            "approximation-identity",
+            "src/develop/pixelpipe_hb.c",
+            "preview fast-path quality branch",
+        ),
+        (
+            "output-accounting",
+            "src/imageio/imageio.c",
+            "export output encoding and precision",
+        ),
+        (
+            "snapshot-identity",
+            "src/develop/pixelpipe_hb.c",
+            "pixelpipe generation",
+        ),
+        (
+            "cache-identity",
+            "src/common/mipmap_cache.h",
+            "full preview thumbnail cache mode",
+        ),
+        (
+            "basic-stack-fixture",
+            "src/develop/pixelpipe_hb.c",
+            "representative operation stack",
+        ),
+        (
+            "architecture-boundary",
+            "src/views/darkroom.c",
+            "caller/window driven pipeline selection",
+        ),
     ];
     let entries = document
         .get("responsibility")
@@ -259,7 +304,11 @@ pub(crate) fn verify_mode_source_map(root: &Path, issue: i64) -> Result {
             .get("id")
             .and_then(toml::Value::as_str)
             .ok_or_else(|| "mode source-map ID is missing".to_owned())?;
-        if !expected.contains(&id) || !seen.insert(id) {
+        let Some((_, expected_path, expected_symbol)) = expected.iter().find(|entry| entry.0 == id)
+        else {
+            return Err(format!("unexpected mode source-map ID {id}"));
+        };
+        if !seen.insert(id) {
             return Err(format!("unexpected mode source-map ID {id}"));
         }
         for key in ["upstream_path", "upstream_symbol", "rust_path", "status"] {
@@ -270,6 +319,14 @@ pub(crate) fn verify_mode_source_map(root: &Path, issue: i64) -> Result {
         let owner = table["rust_path"].as_str().expect("validated owner");
         if !root.join(owner).is_file() {
             return Err(format!("mode source-map owner missing {owner}"));
+        }
+        if table["upstream_path"].as_str() != Some(*expected_path)
+            || table["upstream_symbol"].as_str() != Some(*expected_symbol)
+            || table["status"].as_str() != Some("implemented")
+        {
+            return Err(format!(
+                "mode source-map {id} does not match its pinned anchor"
+            ));
         }
     }
     let mode_source = fs::read_to_string(root.join("crates/rusttable-pixelpipe/src/mode.rs"))

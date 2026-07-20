@@ -376,6 +376,8 @@ impl ModeRequest {
             },
             latency: if exact {
                 LatencyClass::Background
+            } else if matches!(purpose, PipelinePurpose::Thumbnail) {
+                LatencyClass::Settled
             } else {
                 LatencyClass::Interactive
             },
@@ -579,6 +581,11 @@ impl ModeRequest {
         {
             return Err(ModeRequestError::ExactQualityRequired);
         }
+        if matches!(self.backend, BackendPolicy::ExactRequestedBackend)
+            && matches!(self.degradation, DegradationPolicy::CpuFallback)
+        {
+            return Err(ModeRequestError::ContradictoryBackendFallback);
+        }
         Ok(())
     }
 
@@ -606,6 +613,14 @@ impl ModeRequest {
         bytes.push(self.analysis as u8);
         bytes.push(self.degradation as u8);
         bytes.push(self.backend as u8);
+        bytes.push(self.output.format().sample_type() as u8);
+        bytes.push(self.output.format().channels() as u8);
+        bytes.push(self.output.format().alpha() as u8);
+        bytes.push(self.output.format().byte_order() as u8);
+        bytes.push(self.output.format().storage() as u8);
+        for value in self.output.background().rgba() {
+            bytes.extend_from_slice(&value.to_bits().to_le_bytes());
+        }
         bytes.push(u8::from(self.source_preview));
         if let Some(provenance) = self.source_preview_provenance {
             bytes.extend_from_slice(&provenance.as_bytes());
@@ -623,6 +638,7 @@ pub enum ModeRequestError {
     DegradationForbidden,
     ThumbnailUpscale,
     ExactQualityRequired,
+    ContradictoryBackendFallback,
 }
 
 impl fmt::Display for ModeRequestError {
@@ -634,6 +650,9 @@ impl fmt::Display for ModeRequestError {
             Self::DegradationForbidden => "mode degradation is forbidden for full/export",
             Self::ThumbnailUpscale => "thumbnail requests cannot upscale",
             Self::ExactQualityRequired => "full/export requests require exact quality",
+            Self::ContradictoryBackendFallback => {
+                "exact backend requests cannot allow CPU fallback degradation"
+            }
         })
     }
 }
@@ -826,6 +845,8 @@ impl ModePlanner {
         }
         let mut included_operations = Vec::new();
         let mut approximations = Vec::new();
+        let mut supports_masks = false;
+        let mut supports_analysis = false;
         for operation in operations {
             if !operation.purposes().contains(&request.purpose) {
                 if operation.mandatory() {
@@ -874,23 +895,19 @@ impl ModePlanner {
                 ));
             }
             included_operations.push(operation.operation_id());
+            supports_masks |= operation.supports_masks();
+            supports_analysis |= operation.supports_analysis();
             if approximation_allowed && let Some(approximation) = operation.approximations().first()
             {
                 approximations.push((operation.operation_id(), approximation.clone()));
             }
         }
-        if matches!(request.masks, MaskRequest::Required)
-            && !operations
-                .iter()
-                .any(ModeOperationCapability::supports_masks)
-        {
+        included_operations.sort_unstable();
+        approximations.sort_by_key(|entry| entry.0);
+        if matches!(request.masks, MaskRequest::Required) && !supports_masks {
             return Err(ModePlanningError::Finding(ModeFinding::MaskUnsupported));
         }
-        if matches!(request.analysis, AnalysisRequest::Required)
-            && !operations
-                .iter()
-                .any(ModeOperationCapability::supports_analysis)
-        {
+        if matches!(request.analysis, AnalysisRequest::Required) && !supports_analysis {
             return Err(ModePlanningError::Finding(ModeFinding::AnalysisUnsupported));
         }
         if request.source_preview

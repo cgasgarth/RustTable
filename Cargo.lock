@@ -2828,6 +2828,7 @@ dependencies = [
 name = "rusttable-gpu"
 version = "0.1.0"
 dependencies = [
+ "naga",
  "postcard",
  "serde",
  "sha2",
@@ -4463,6 +4464,7 @@ dependencies = [
  "rusttable-catalog-store",
  "rusttable-color",
  "rusttable-core",
+ "rusttable-gpu",
  "rusttable-image",
  "rusttable-image-io",
  "rusttable-import",

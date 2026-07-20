@@ -6,6 +6,7 @@ mod cache;
 mod contracts;
 pub mod purpose;
 mod runtime;
+pub mod shader;
 
 pub use contracts::{
     AdapterCandidate, AdapterIdentity, AdapterSelection, AdvertisedFeatures, Backend,
