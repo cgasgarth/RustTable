@@ -12,6 +12,7 @@ pub mod colorreconstruction;
 mod common;
 pub mod highlights;
 pub mod primaries;
+pub mod temperature;
 
 pub use common::{
     OperationExecutionError, ReconstructionBudget, ReconstructionDiagnostics, ReconstructionReceipt,

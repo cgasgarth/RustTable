@@ -188,6 +188,10 @@ impl GpuRuntime {
             && matches!(self.snapshot.state, crate::FaultState::Healthy)
     }
 
+    pub(crate) fn handles(&self) -> Option<(&wgpu::Device, &wgpu::Queue)> {
+        self.device.as_ref().zip(self.queue.as_ref())
+    }
+
     fn cpu_only(instance: wgpu::Instance) -> Self {
         Self {
             instance: Some(instance),

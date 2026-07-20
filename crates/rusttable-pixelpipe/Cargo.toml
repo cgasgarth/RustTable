@@ -10,9 +10,13 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+rusttable-gpu.workspace = true
 rusttable-color.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-processing.workspace = true
 postcard.workspace = true
 sha2.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

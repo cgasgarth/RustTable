@@ -4,6 +4,7 @@
 
 mod cache;
 mod contracts;
+mod point;
 pub mod purpose;
 mod resource;
 mod runtime;
@@ -18,6 +19,7 @@ pub use contracts::{
 };
 
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
+pub use point::{BasicPointError, BasicPointOperation, BasicPointRequest, BasicPointResult};
 pub use resource::{
     DeviceGeneration, GpuResourcePool, InitializationPolicy, PoolError, PoolEvent,
     ResourceAccounting, ResourceClass, ResourceFormat, ResourceId, ResourceKind, ResourceLease,

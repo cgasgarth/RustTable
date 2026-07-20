@@ -224,6 +224,24 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
                 rusttable_processing::operations::colorcorrection::ColorCorrectionMode::Axis => 1,
             }]);
         }
+        ProcessingOperationKind::Temperature { config } => {
+            hasher.update([9]);
+            hasher.update(config.source().tag().as_bytes());
+            hasher.update(config.stage().tag().as_bytes());
+            for multiplier in config.multipliers().as_array() {
+                hasher.update(multiplier.get().to_bits().to_le_bytes());
+            }
+            if let Some(pair) = config.temperature_tint() {
+                hasher.update(pair.temperature_kelvin().get().to_bits().to_le_bytes());
+                hasher.update(pair.tint().get().to_bits().to_le_bytes());
+            }
+            if let Some(provenance) = config.preset_provenance() {
+                hasher.update(provenance.camera_alias().as_bytes());
+                hasher.update(provenance.preset_identifier().as_bytes());
+                hasher.update(provenance.tuning().to_le_bytes());
+                hasher.update(provenance.source_table_revision().to_le_bytes());
+            }
+        }
     }
 }
 
