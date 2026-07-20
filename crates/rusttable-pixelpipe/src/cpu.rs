@@ -139,6 +139,8 @@ impl CpuPixelpipeExecutor {
                 node.operation().kind(),
                 rusttable_processing::ProcessingOperationKind::Highlights { .. }
                     | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+                    | rusttable_processing::ProcessingOperationKind::Crop { .. }
+                    | rusttable_processing::ProcessingOperationKind::Flip { .. }
             )
         }) {
             // Both Darktable operations freeze full-image evidence before
@@ -192,6 +194,8 @@ impl CpuPixelpipeExecutor {
                 node.operation().kind(),
                 rusttable_processing::ProcessingOperationKind::Highlights { .. }
                     | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+                    | rusttable_processing::ProcessingOperationKind::Crop { .. }
+                    | rusttable_processing::ProcessingOperationKind::Flip { .. }
             )
         }) {
             scope

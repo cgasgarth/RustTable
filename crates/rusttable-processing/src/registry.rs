@@ -745,8 +745,8 @@ impl RegistrySnapshot {
 #[path = "registry_operations.rs"]
 mod registry_operations;
 pub use registry_operations::{
-    BUILTIN_OPERATIONS, exposure_definition, linear_offset_definition, rgb_gain_definition,
-    temperature_definition,
+    BUILTIN_OPERATIONS, crop_definition, exposure_definition, flip_definition,
+    linear_offset_definition, rgb_gain_definition, temperature_definition,
 };
 use registry_operations::{
     hex, operation_descriptor_for, snapshot_hash, unavailable, validate_definition,

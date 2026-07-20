@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "b4b072bf13c6bb245e5a03bfab61063f3ce6c15dea4901bfdf84f10f91a015f2",
+  "registry_hash": "f2028b4c7cb343b9acdebb0717b4bf7e19ac9f409b5aa56887bf802a98ebfee8",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -625,7 +625,7 @@
     {
       "identity": "darktable:crop:src/iop/crop.c:v3",
       "compatibility_name": "crop",
-      "rust_id": null,
+      "rust_id": "rusttable.crop",
       "reference_path": "src/iop/crop.c",
       "descriptor_version": 3,
       "parameter_versions": [
@@ -633,14 +633,14 @@
         2,
         3
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 88,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:defringe:src/iop/defringe.c:v1",
@@ -870,21 +870,21 @@
     {
       "identity": "darktable:flip:src/iop/flip.c:v2",
       "compatibility_name": "flip",
-      "rust_id": null,
+      "rust_id": "rusttable.flip",
       "reference_path": "src/iop/flip.c",
       "descriptor_version": 2,
       "parameter_versions": [
         1,
         2
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 130,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:gamma:src/iop/gamma.c:v1",
@@ -1894,6 +1894,26 @@
       "reason": null
     },
     {
+      "identity": "rusttable.crop",
+      "compatibility_name": "crop",
+      "rust_id": "rusttable.crop",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1,
+        2,
+        3
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 4,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
       "identity": "rusttable.exposure",
       "compatibility_name": "exposure",
       "rust_id": "rusttable.exposure",
@@ -1904,7 +1924,26 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 4,
+      "order": 5,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "rusttable.flip",
+      "compatibility_name": "flip",
+      "rust_id": "rusttable.flip",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 6,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
@@ -1925,7 +1964,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 5,
+      "order": 7,
       "cpu_supported": true,
       "gpu_supported": true,
       "cpu_fallback": true,
@@ -1943,7 +1982,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 6,
+      "order": 8,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
@@ -1961,7 +2000,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 7,
+      "order": 9,
       "cpu_supported": true,
       "gpu_supported": true,
       "cpu_fallback": true,
@@ -1979,7 +2018,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 8,
+      "order": 10,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
@@ -2000,7 +2039,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 9,
+      "order": 11,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,

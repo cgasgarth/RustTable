@@ -43,9 +43,9 @@ pub use color::{
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
-    color_reconstruction_descriptor, colorin_descriptor, exposure_descriptor,
-    highlights_descriptor, linear_offset_descriptor, primaries_descriptor, rgb_gain_descriptor,
-    temperature_descriptor,
+    color_reconstruction_descriptor, colorin_descriptor, crop_descriptor, exposure_descriptor,
+    flip_descriptor, highlights_descriptor, linear_offset_descriptor, primaries_descriptor,
+    rgb_gain_descriptor, temperature_descriptor,
 };
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use exposure::{

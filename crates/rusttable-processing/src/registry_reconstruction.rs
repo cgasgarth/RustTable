@@ -38,6 +38,8 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Temperature { .. } => {
             crate::descriptor::temperature_descriptor().id
         }
+        crate::ProcessingOperationKind::Crop { .. } => crate::descriptor::crop_descriptor().id,
+        crate::ProcessingOperationKind::Flip { .. } => crate::descriptor::flip_descriptor().id,
     }
 }
 
