@@ -1,8 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use rusttable_catalog::{SourcePath, SourcePathError};
+use sha2::{Digest, Sha256};
 
 const PREFIX: &str = "reference-v1";
+const PATH_IDENTITY_DOMAIN: &[u8] = b"rusttable-reference-path-v1\0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReferenceSourceError {
@@ -31,12 +33,42 @@ pub fn encode_reference_source(
     SourcePath::new(&value).map_err(|_: SourcePathError| ReferenceSourceError::InvalidSourcePath)
 }
 
+/// Hashes the exact accepted path bytes without resolving or canonicalizing it.
+///
+/// # Errors
+///
+/// Returns a typed error when the path cannot be represented by the reference format.
+pub fn reference_path_identity(path: &Path) -> Result<[u8; 32], ReferenceSourceError> {
+    let path = path
+        .to_str()
+        .ok_or(ReferenceSourceError::UnsupportedPathEncoding)?;
+    let mut hasher = Sha256::new();
+    hasher.update(PATH_IDENTITY_DOMAIN);
+    hasher.update(path.as_bytes());
+    Ok(hasher.finalize().into())
+}
+
 /// Decodes one versioned privacy-safe source key into its physical reference.
 ///
 /// # Errors
 ///
 /// Returns a typed error for malformed or unsupported encoding.
 pub fn decode_reference_source(source: &SourcePath) -> Result<PathBuf, ReferenceSourceError> {
+    Ok(parse_reference_source(source)?.1)
+}
+
+/// Returns the complete decoder/probe identity embedded in one reference source key.
+///
+/// # Errors
+///
+/// Returns a typed error when the versioned source key is malformed or unsupported.
+pub fn reference_source_identity(source: &SourcePath) -> Result<[u8; 32], ReferenceSourceError> {
+    Ok(parse_reference_source(source)?.0)
+}
+
+fn parse_reference_source(
+    source: &SourcePath,
+) -> Result<([u8; 32], PathBuf), ReferenceSourceError> {
     let mut components = source.as_str().split('/');
     if components.next() != Some(PREFIX) {
         return Err(ReferenceSourceError::InvalidEncoding);
@@ -53,9 +85,12 @@ pub fn decode_reference_source(source: &SourcePath) -> Result<PathBuf, Reference
     if components.next().is_some() {
         return Err(ReferenceSourceError::InvalidEncoding);
     }
+    let identity = decode_hex(hash)?
+        .try_into()
+        .map_err(|_: Vec<u8>| ReferenceSourceError::InvalidEncoding)?;
     let bytes = decode_hex(encoded)?;
     let path = String::from_utf8(bytes).map_err(|_| ReferenceSourceError::InvalidEncoding)?;
-    Ok(PathBuf::from(path))
+    Ok((identity, PathBuf::from(path)))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -96,7 +131,10 @@ fn digit(byte: u8) -> Result<u8, ReferenceSourceError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_reference_source, encode_reference_source};
+    use super::{
+        decode_reference_source, encode_reference_source, reference_path_identity,
+        reference_source_identity,
+    };
 
     #[test]
     fn reference_source_round_trips_without_exposing_the_path_as_components() {
@@ -104,7 +142,13 @@ mod tests {
         let source = encode_reference_source(path, [7; 32]).expect("encoded source");
 
         assert_eq!(decode_reference_source(&source).unwrap(), path);
+        assert_eq!(reference_source_identity(&source).unwrap(), [7; 32]);
         assert!(!source.as_str().contains("private"));
         assert!(!source.as_str().contains("one.png"));
+        assert_eq!(reference_path_identity(path), reference_path_identity(path));
+        assert_ne!(
+            reference_path_identity(path),
+            reference_path_identity(std::path::Path::new("/private/photos/../photos/one.png"))
+        );
     }
 }

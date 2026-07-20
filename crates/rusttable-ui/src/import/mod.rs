@@ -106,4 +106,10 @@ impl ImportPanelViewModel {
     pub fn remove(&mut self, item_id: u64) {
         self.rows.retain(|row| row.item_id != item_id);
     }
+
+    pub fn update_state(&mut self, item_id: u64, state: ImportRowState) {
+        if let Some(row) = self.rows.iter_mut().find(|row| row.item_id == item_id) {
+            row.state = state;
+        }
+    }
 }

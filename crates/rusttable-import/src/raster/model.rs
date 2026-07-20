@@ -3,11 +3,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rusttable_catalog::ImportRecord;
+use rusttable_catalog::{ImportRecord, ImportRegistration};
 use rusttable_core::{AssetId, Edit, EditId, PhotoId};
-use rusttable_image::InputFormat;
+use rusttable_image::{ImageProbe, InputFormat};
 
 pub const MAX_RASTER_IMPORT_ITEMS: usize = 256;
+pub const RASTER_DECODER_IDENTITY_VERSION: u8 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RasterDuplicateIdentity {
+    pub content_sha256: [u8; 32],
+    pub byte_length: u64,
+    pub decoder_identity_version: u8,
+    pub probe: ImageProbe,
+    pub source_identity: [u8; 32],
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RasterImportItemId(NonZeroU64);
@@ -230,8 +240,7 @@ pub trait AtomicRasterCatalog {
     /// Returns a typed storage failure.
     fn find_by_content(
         &self,
-        sha256: [u8; 32],
-        byte_length: u64,
+        identity: RasterDuplicateIdentity,
     ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError>;
 
     /// Atomically persists the source, photo, and default edit.
@@ -239,8 +248,11 @@ pub trait AtomicRasterCatalog {
     /// # Errors
     ///
     /// Returns a typed failure without publishing a partial entry.
-    fn commit_import(&mut self, entry: &RasterCatalogEntry)
-    -> Result<(), AtomicRasterCatalogError>;
+    fn commit_import(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        registration: &ImportRegistration,
+    ) -> Result<(), AtomicRasterCatalogError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

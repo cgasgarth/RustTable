@@ -21,6 +21,10 @@ pub enum FocusTarget {
     SidebarToggle,
     Library,
     ImportFiles,
+    CancelImport,
+    RetryImport(u64),
+    RemoveImportResult(u64),
+    CloseImportPanel,
     RetryLibrary,
     PhotoCard(PhotoId),
     BackToLibrary,
@@ -43,6 +47,10 @@ pub enum InputEffect {
     Navigate(NavigationIntent),
     RetryLibrary,
     ImportFiles,
+    CancelImport,
+    RetryImport(u64),
+    RemoveImportResult(u64),
+    CloseImportPanel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,13 +86,30 @@ impl InputState {
         route: WorkspaceRoute,
         library_state: &LibraryState,
     ) -> InputEffect {
+        self.apply_with_import_panel(
+            intent,
+            sidebar_visible,
+            route,
+            library_state,
+            &crate::ImportPanelViewModel::default(),
+        )
+    }
+
+    pub fn apply_with_import_panel(
+        &mut self,
+        intent: InputIntent,
+        sidebar_visible: bool,
+        route: WorkspaceRoute,
+        library_state: &LibraryState,
+        import_panel: &crate::ImportPanelViewModel,
+    ) -> InputEffect {
         match intent {
             InputIntent::FocusNext => {
-                self.move_focus(1, sidebar_visible, route, library_state);
+                self.move_focus(1, sidebar_visible, route, library_state, import_panel);
                 InputEffect::None
             }
             InputIntent::FocusPrevious => {
-                self.move_focus(-1, sidebar_visible, route, library_state);
+                self.move_focus(-1, sidebar_visible, route, library_state, import_panel);
                 InputEffect::None
             }
             InputIntent::FocusNextPhoto => {
@@ -106,7 +131,23 @@ impl InputState {
         route: WorkspaceRoute,
         library_state: &LibraryState,
     ) {
-        let chain = focus_chain(sidebar_visible, route, library_state);
+        self.reconcile_with_import_panel(
+            sidebar_visible,
+            route,
+            library_state,
+            &crate::ImportPanelViewModel::default(),
+        );
+    }
+
+    pub fn reconcile_with_import_panel(
+        &mut self,
+        sidebar_visible: bool,
+        route: WorkspaceRoute,
+        library_state: &LibraryState,
+        import_panel: &crate::ImportPanelViewModel,
+    ) {
+        let chain =
+            focus_chain_with_import_panel(sidebar_visible, route, library_state, import_panel);
         if !chain.contains(&self.focused) {
             self.focused = chain[0];
         }
@@ -131,8 +172,10 @@ impl InputState {
         sidebar_visible: bool,
         route: WorkspaceRoute,
         library_state: &LibraryState,
+        import_panel: &crate::ImportPanelViewModel,
     ) {
-        let chain = focus_chain(sidebar_visible, route, library_state);
+        let chain =
+            focus_chain_with_import_panel(sidebar_visible, route, library_state, import_panel);
         let index = chain
             .iter()
             .position(|target| *target == self.focused)
@@ -188,6 +231,10 @@ impl InputState {
             FocusTarget::SidebarToggle => InputEffect::ToggleSidebar,
             FocusTarget::Library => InputEffect::Navigate(NavigationIntent::ShowLibrary),
             FocusTarget::ImportFiles => InputEffect::ImportFiles,
+            FocusTarget::CancelImport => InputEffect::CancelImport,
+            FocusTarget::RetryImport(item_id) => InputEffect::RetryImport(item_id),
+            FocusTarget::RemoveImportResult(item_id) => InputEffect::RemoveImportResult(item_id),
+            FocusTarget::CloseImportPanel => InputEffect::CloseImportPanel,
             FocusTarget::PhotoCard(photo_id) => {
                 self.origin = Some(photo_id);
                 self.focused = FocusTarget::BackToLibrary;
@@ -235,6 +282,21 @@ pub fn focus_chain(
     route: WorkspaceRoute,
     library_state: &LibraryState,
 ) -> Vec<FocusTarget> {
+    focus_chain_with_import_panel(
+        sidebar_visible,
+        route,
+        library_state,
+        &crate::ImportPanelViewModel::default(),
+    )
+}
+
+#[must_use]
+pub fn focus_chain_with_import_panel(
+    sidebar_visible: bool,
+    route: WorkspaceRoute,
+    library_state: &LibraryState,
+    import_panel: &crate::ImportPanelViewModel,
+) -> Vec<FocusTarget> {
     let mut chain = vec![FocusTarget::SidebarToggle];
     if sidebar_visible {
         chain.push(FocusTarget::Library);
@@ -252,6 +314,17 @@ pub fn focus_chain(
             if matches!(library_state, LibraryState::Failed(_)) {
                 chain.push(FocusTarget::RetryLibrary);
             }
+            if import_panel.active() {
+                chain.push(FocusTarget::CancelImport);
+            } else if import_panel.is_visible() {
+                for row in import_panel.rows() {
+                    if row.state().can_retry() {
+                        chain.push(FocusTarget::RetryImport(row.item_id()));
+                    }
+                    chain.push(FocusTarget::RemoveImportResult(row.item_id()));
+                }
+                chain.push(FocusTarget::CloseImportPanel);
+            }
         }
         WorkspaceRoute::PhotoDetail(_) => chain.push(FocusTarget::BackToLibrary),
     }
@@ -262,11 +335,15 @@ pub fn focus_chain(
 mod tests {
     use rusttable_core::PhotoId;
 
-    use super::{FocusTarget, InputEffect, InputIntent, InputState, focus_chain};
+    use super::{
+        FocusTarget, InputEffect, InputIntent, InputState, focus_chain,
+        focus_chain_with_import_panel,
+    };
     use crate::library::{LibraryFailureKind, LibraryState};
     use crate::presentation::{
         PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
     };
+    use crate::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 
     fn text(value: &str) -> PresentationText {
         PresentationText::new(value).expect("test text is valid")
@@ -462,6 +539,73 @@ mod tests {
         assert_eq!(
             state.apply(InputIntent::Activate, true, route, &library),
             InputEffect::RetryLibrary
+        );
+    }
+
+    #[test]
+    fn import_actions_join_focus_order_and_activate_with_typed_effects() {
+        let library = LibraryState::Empty;
+        let route = crate::navigation::WorkspaceRoute::Library;
+        let failed = ImportPanelViewModel::new(
+            vec![ImportRowViewModel::new(
+                7,
+                text("photo.png"),
+                ImportRowState::Failed,
+            )],
+            false,
+        );
+        let chain = focus_chain_with_import_panel(true, route, &library, &failed);
+        assert_eq!(
+            &chain[3..],
+            [
+                FocusTarget::RetryImport(7),
+                FocusTarget::RemoveImportResult(7),
+                FocusTarget::CloseImportPanel,
+            ]
+        );
+        for (target, expected) in [
+            (FocusTarget::RetryImport(7), InputEffect::RetryImport(7)),
+            (
+                FocusTarget::RemoveImportResult(7),
+                InputEffect::RemoveImportResult(7),
+            ),
+            (FocusTarget::CloseImportPanel, InputEffect::CloseImportPanel),
+        ] {
+            let mut input = InputState {
+                focused: target,
+                origin: None,
+            };
+            assert_eq!(
+                input.apply_with_import_panel(
+                    InputIntent::Activate,
+                    true,
+                    route,
+                    &library,
+                    &failed,
+                ),
+                expected
+            );
+        }
+
+        let active = ImportPanelViewModel::new(
+            vec![ImportRowViewModel::new(
+                1,
+                text("photo.png"),
+                ImportRowState::Hashing,
+            )],
+            true,
+        );
+        assert_eq!(
+            focus_chain_with_import_panel(true, route, &library, &active).last(),
+            Some(&FocusTarget::CancelImport)
+        );
+        let mut input = InputState {
+            focused: FocusTarget::CancelImport,
+            origin: None,
+        };
+        assert_eq!(
+            input.apply_with_import_panel(InputIntent::Activate, true, route, &library, &active,),
+            InputEffect::CancelImport
         );
     }
 }

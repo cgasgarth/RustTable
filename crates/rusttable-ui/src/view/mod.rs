@@ -102,38 +102,47 @@ fn library_content(state: &UiState) -> Element<'_, UiMessage> {
     ]
     .spacing(REGION_SPACING);
     if state.import_panel().is_visible() {
-        content = content.push(import_panel(state.import_panel()));
+        content = content.push(import_panel(state));
     }
     content.into()
 }
 
-fn import_panel(panel: &crate::ImportPanelViewModel) -> Element<'_, UiMessage> {
+fn import_panel(state: &UiState) -> Element<'_, UiMessage> {
+    let panel = state.import_panel();
     let rows = panel.rows().map(|item| {
-        let mut row =
-            row![text(item.alias().as_str()), text(item.state().label()),].spacing(REGION_SPACING);
+        let mut row = row![text(format!(
+            "{} — {}",
+            item.alias().as_str(),
+            item.state().label()
+        ))]
+        .spacing(REGION_SPACING);
         if item.state().can_retry() {
             row = row.push(action_button(
                 text(format!("Retry {}", item.alias().as_str())),
                 UiMessage::RetryImport(item.item_id()),
-                false,
+                state.is_focused(FocusTarget::RetryImport(item.item_id())),
             ));
         }
         if !panel.active() {
             row = row.push(action_button(
                 text(format!("Remove {}", item.alias().as_str())),
                 UiMessage::RemoveImportResult(item.item_id()),
-                false,
+                state.is_focused(FocusTarget::RemoveImportResult(item.item_id())),
             ));
         }
         row.into()
     });
     let action = if panel.active() {
-        action_button(text("Cancel import"), UiMessage::CancelImport, false)
+        action_button(
+            text("Cancel import"),
+            UiMessage::CancelImport,
+            state.is_focused(FocusTarget::CancelImport),
+        )
     } else {
         action_button(
             text("Close import results"),
             UiMessage::CloseImportPanel,
-            false,
+            state.is_focused(FocusTarget::CloseImportPanel),
         )
     };
     column![
@@ -481,8 +490,7 @@ mod tests {
         simulator.find("Import files…")?;
         simulator.find("Drop PNG, JPEG, or TIFF files here")?;
         simulator.find("Import progress")?;
-        simulator.find("photo.png")?;
-        simulator.find("Import failed")?;
+        simulator.find("photo.png — Import failed")?;
         simulator.find("Retry photo.png")?;
         simulator.find("Remove photo.png")?;
         simulator.find("Close import results")?;

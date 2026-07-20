@@ -6,7 +6,10 @@ use crate::workspace::{
     SelectedPreview, load_selected_preview, pick_raster_files, run_raster_import,
 };
 use rusttable_core::PhotoId;
-use rusttable_import::{RasterImportBatch, RasterImportCancellation, RasterImportStatus};
+use rusttable_import::{
+    RasterImportBatch, RasterImportCancellation, RasterImportProgress, RasterImportStage,
+    RasterImportStatus,
+};
 use rusttable_ui::{
     ImportPanelViewModel, ImportRowState, ImportRowViewModel, InputIntent, LibraryFailureKind,
     LibraryState, NavigationIntent, PhotoWorkspaceViewModel, PresentationText, PreviewDimensions,
@@ -142,7 +145,8 @@ pub(crate) enum Message {
     RetryImport(u64),
     RemoveImportResult(u64),
     CloseImportPanel,
-    ImportCompleted(RasterImportBatch),
+    ImportProgress(RasterImportProgress),
+    ImportFinished(Option<RasterImportBatch>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,88 +173,18 @@ impl From<UiMessage> for Message {
 
 pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
     match message {
-        Message::ToggleSidebar | Message::Navigate(_) | Message::Input(_) => {
-            let previous_route = shell.ui.route();
-            let ui_message = match message {
-                Message::ToggleSidebar => UiMessage::ToggleSidebar,
-                Message::Navigate(intent) => UiMessage::Navigate(intent),
-                Message::Input(intent) => UiMessage::Input(intent),
-                Message::LibraryLoaded { .. }
-                | Message::RetryLibrary
-                | Message::PreviewLoaded { .. }
-                | Message::ImportFiles
-                | Message::ImportPickerCompleted(_)
-                | Message::FilesDropped(_)
-                | Message::CancelImport
-                | Message::RetryImport(_)
-                | Message::RemoveImportResult(_)
-                | Message::CloseImportPanel
-                | Message::ImportCompleted(_) => unreachable!(),
-            };
-            match shell.ui.handle(ui_message) {
-                UiEffect::RetryLibrary => return retry_library(shell),
-                UiEffect::ImportFiles => return import_picker_task(),
-                UiEffect::CancelImport => cancel_import(shell),
-                UiEffect::RetryImport(item_id) => return retry_import(shell, item_id),
-                UiEffect::None => {}
-            }
-            reconcile_preview_route(shell, previous_route);
-            if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route()
-                && previous_route != shell.ui.route()
-            {
-                return start_preview(shell, photo_id);
-            }
-        }
+        Message::ToggleSidebar => return handle_ui_message(shell, UiMessage::ToggleSidebar),
+        Message::Navigate(intent) => return handle_ui_message(shell, UiMessage::Navigate(intent)),
+        Message::Input(intent) => return handle_ui_message(shell, UiMessage::Input(intent)),
         Message::LibraryLoaded { request_id, result } => {
-            if shell.load_in_flight && request_id == shell.active_load_request_id {
-                shell.load_in_flight = false;
-                shell.ui.set_library_state(result.into_library_state());
-                shell.active_preview = None;
-                if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route() {
-                    if shell
-                        .ui
-                        .library_state()
-                        .ready_workspace()
-                        .is_some_and(|workspace| workspace.detail(photo_id).is_some())
-                    {
-                        return start_preview(shell, photo_id);
-                    }
-                    let _ = shell
-                        .ui
-                        .handle(UiMessage::Navigate(NavigationIntent::ShowLibrary));
-                }
-                if let Some(photo_id) = shell.pending_import_selection.take()
-                    && shell
-                        .ui
-                        .library_state()
-                        .ready_workspace()
-                        .is_some_and(|workspace| workspace.detail(photo_id).is_some())
-                {
-                    let _ = shell
-                        .ui
-                        .handle(UiMessage::Navigate(NavigationIntent::ShowPhoto(photo_id)));
-                    return start_preview(shell, photo_id);
-                }
-            }
+            return handle_library_loaded(shell, request_id, result);
         }
         Message::RetryLibrary => return retry_library(shell),
         Message::PreviewLoaded {
             generation,
             photo_id,
             result,
-        } => {
-            if shell.active_preview == Some((generation, photo_id))
-                && shell.ui.route() == WorkspaceRoute::PhotoDetail(photo_id)
-            {
-                shell.active_preview = None;
-                match result {
-                    PreviewLoadResult::Ready(preview) => publish_preview(shell, photo_id, preview),
-                    PreviewLoadResult::Failed => {
-                        replace_preview(shell, photo_id, preview_failed_state());
-                    }
-                }
-            }
-        }
+        } => handle_preview_loaded(shell, generation, photo_id, result),
         Message::ImportFiles => return import_picker_task(),
         Message::ImportPickerCompleted(paths) | Message::FilesDropped(paths) => {
             return begin_import(shell, paths);
@@ -263,9 +197,96 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
         Message::CloseImportPanel => {
             let _ = shell.ui.handle(UiMessage::CloseImportPanel);
         }
-        Message::ImportCompleted(batch) => return finish_import(shell, &batch),
+        Message::ImportProgress(progress) => {
+            shell.ui.update_import_row(
+                progress.item_id.get(),
+                import_progress_row_state(progress.stage),
+            );
+        }
+        Message::ImportFinished(Some(batch)) => return finish_import(shell, &batch),
+        Message::ImportFinished(None) => {
+            shell.import_cancellation = None;
+            shell
+                .ui
+                .set_import_panel(failed_import_panel(&shell.import_paths));
+        }
     }
     Task::none()
+}
+
+fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
+    let previous_route = shell.ui.route();
+    match shell.ui.handle(message) {
+        UiEffect::RetryLibrary => return retry_library(shell),
+        UiEffect::ImportFiles => return import_picker_task(),
+        UiEffect::CancelImport => cancel_import(shell),
+        UiEffect::RetryImport(item_id) => return retry_import(shell, item_id),
+        UiEffect::None => {}
+    }
+    reconcile_preview_route(shell, previous_route);
+    if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route()
+        && previous_route != shell.ui.route()
+    {
+        return start_preview(shell, photo_id);
+    }
+    Task::none()
+}
+
+fn handle_library_loaded(
+    shell: &mut Shell,
+    request_id: LibraryLoadRequestId,
+    result: LibraryLoadResult,
+) -> Task<Message> {
+    if !shell.load_in_flight || request_id != shell.active_load_request_id {
+        return Task::none();
+    }
+    shell.load_in_flight = false;
+    shell.ui.set_library_state(result.into_library_state());
+    shell.active_preview = None;
+    if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route() {
+        if shell
+            .ui
+            .library_state()
+            .ready_workspace()
+            .is_some_and(|workspace| workspace.detail(photo_id).is_some())
+        {
+            return start_preview(shell, photo_id);
+        }
+        let _ = shell
+            .ui
+            .handle(UiMessage::Navigate(NavigationIntent::ShowLibrary));
+    }
+    if let Some(photo_id) = shell.pending_import_selection.take()
+        && shell
+            .ui
+            .library_state()
+            .ready_workspace()
+            .is_some_and(|workspace| workspace.detail(photo_id).is_some())
+    {
+        let _ = shell
+            .ui
+            .handle(UiMessage::Navigate(NavigationIntent::ShowPhoto(photo_id)));
+        return start_preview(shell, photo_id);
+    }
+    Task::none()
+}
+
+fn handle_preview_loaded(
+    shell: &mut Shell,
+    generation: u64,
+    photo_id: PhotoId,
+    result: PreviewLoadResult,
+) {
+    if shell.active_preview != Some((generation, photo_id))
+        || shell.ui.route() != WorkspaceRoute::PhotoDetail(photo_id)
+    {
+        return;
+    }
+    shell.active_preview = None;
+    match result {
+        PreviewLoadResult::Ready(preview) => publish_preview(shell, photo_id, preview),
+        PreviewLoadResult::Failed => replace_preview(shell, photo_id, preview_failed_state()),
+    }
 }
 
 fn import_picker_task() -> Task<Message> {
@@ -301,10 +322,30 @@ fn begin_import(shell: &mut Shell, mut paths: Vec<PathBuf>) -> Task<Message> {
         shell.ui.set_import_panel(failed_import_panel(&paths));
         return Task::none();
     };
-    Task::perform(
-        async move { run_raster_import(&catalog_path, paths, &cancellation) },
-        Message::ImportCompleted,
-    )
+    import_task(catalog_path, paths, cancellation)
+}
+
+fn import_task(
+    catalog_path: PathBuf,
+    paths: Vec<PathBuf>,
+    cancellation: RasterImportCancellation,
+) -> Task<Message> {
+    let sipper = iced::task::sipper(move |sender| async move {
+        let (finished, receiver) = iced::futures::channel::oneshot::channel();
+        std::thread::spawn(move || {
+            let sender = std::sync::Mutex::new(sender);
+            let observer = |progress| {
+                let mut sender = sender
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                iced::futures::executor::block_on(sender.send(progress));
+            };
+            let batch = run_raster_import(&catalog_path, paths, &cancellation, &observer);
+            let _ = finished.send(batch);
+        });
+        receiver.await.ok()
+    });
+    Task::sip(sipper, Message::ImportProgress, Message::ImportFinished)
 }
 
 fn finish_import(shell: &mut Shell, batch: &RasterImportBatch) -> Task<Message> {
@@ -389,6 +430,22 @@ const fn import_row_state(status: RasterImportStatus) -> ImportRowState {
         RasterImportStatus::ImportedPreviewFailed => ImportRowState::ImportedPreviewFailed,
         RasterImportStatus::Failed(_) => ImportRowState::Failed,
         RasterImportStatus::Cancelled => ImportRowState::Cancelled,
+    }
+}
+
+const fn import_progress_row_state(stage: RasterImportStage) -> ImportRowState {
+    match stage {
+        RasterImportStage::Queued => ImportRowState::Queued,
+        RasterImportStage::Opening => ImportRowState::Opening,
+        RasterImportStage::Hashing => ImportRowState::Hashing,
+        RasterImportStage::Probing => ImportRowState::Probing,
+        RasterImportStage::DecodingHeader => ImportRowState::DecodingHeader,
+        RasterImportStage::Registering => ImportRowState::Registering,
+        RasterImportStage::GeneratingPreview => ImportRowState::GeneratingPreview,
+        RasterImportStage::Completed => ImportRowState::Completed,
+        RasterImportStage::AlreadyImported => ImportRowState::AlreadyImported,
+        RasterImportStage::Failed => ImportRowState::Failed,
+        RasterImportStage::Cancelled => ImportRowState::Cancelled,
     }
 }
 
@@ -510,10 +567,11 @@ mod tests {
     use crate::library::{LibraryFailureKind, LibraryState};
     use crate::library::{LibraryLoadRequestId, LibraryLoadResult};
     use rusttable_core::PhotoId;
+    use rusttable_import::{RasterImportProgress, RasterImportRequest, RasterImportStage};
     use rusttable_ui::{
-        NavigationIntent, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
-        PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState, UiState,
-        WorkspaceRoute,
+        ImportPanelViewModel, ImportRowState, ImportRowViewModel, NavigationIntent,
+        PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
+        PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState, UiState, WorkspaceRoute,
     };
 
     use super::{Message, PreviewLoadResult, Shell, preview_failed_state, update};
@@ -859,5 +917,50 @@ mod tests {
         assert_eq!(retried.get(), first.get() + 1);
         assert_eq!(shell.active_load_request_id(), retried);
         assert_eq!(shell.library_state(), &LibraryState::Loading);
+    }
+
+    #[test]
+    fn ordered_service_progress_updates_the_visible_import_row_live() {
+        let request = RasterImportRequest::new([PathBuf::from("photo.png")]).unwrap();
+        let item_id = request.items().next().unwrap().0;
+        let mut shell = Shell::default();
+        shell.ui.set_import_panel(ImportPanelViewModel::new(
+            vec![ImportRowViewModel::new(
+                item_id.get(),
+                PresentationText::new("photo.png").unwrap(),
+                ImportRowState::Queued,
+            )],
+            true,
+        ));
+
+        for (stage, expected) in [
+            (RasterImportStage::Opening, ImportRowState::Opening),
+            (RasterImportStage::Hashing, ImportRowState::Hashing),
+            (RasterImportStage::Probing, ImportRowState::Probing),
+            (
+                RasterImportStage::DecodingHeader,
+                ImportRowState::DecodingHeader,
+            ),
+            (RasterImportStage::Registering, ImportRowState::Registering),
+            (
+                RasterImportStage::GeneratingPreview,
+                ImportRowState::GeneratingPreview,
+            ),
+            (RasterImportStage::Completed, ImportRowState::Completed),
+        ] {
+            let _ = update(
+                &mut shell,
+                Message::ImportProgress(RasterImportProgress { item_id, stage }),
+            );
+            assert_eq!(
+                shell
+                    .ui
+                    .import_panel()
+                    .rows()
+                    .next()
+                    .map(rusttable_ui::ImportRowViewModel::state),
+                Some(expected)
+            );
+        }
     }
 }

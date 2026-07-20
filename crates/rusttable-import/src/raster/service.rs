@@ -1,6 +1,11 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rusttable_catalog::{ImportCandidate, ImportRecord};
+use rusttable_catalog::{
+    ImportCandidate, ImportDetails, ImportMetadataSummary, ImportRecord, ImportRegistration,
+    ImportRegistrationReceipt, ReferencePathIdentity,
+};
 use rusttable_core::{
     Asset, AssetId, AssetRole, ByteLength, ContentHash, Edit, EditId, FiniteF64, Operation,
     OperationId, OperationKey, ParameterName, ParameterValue, Photo, PhotoId, Revision,
@@ -10,13 +15,31 @@ use rusttable_metadata::MetadataInput;
 use sha2::{Digest, Sha256};
 
 use super::model::{
-    AtomicRasterCatalog, AtomicRasterCatalogError, RasterCatalogEntry, RasterImportBatch,
-    RasterImportCancellation, RasterImportFailure, RasterImportItemId, RasterImportObserver,
-    RasterImportProgress, RasterImportReceipt, RasterImportRequest, RasterImportStage,
-    RasterImportStatus, RasterPreviewPort,
+    AtomicRasterCatalog, AtomicRasterCatalogError, RASTER_DECODER_IDENTITY_VERSION,
+    RasterCatalogEntry, RasterDuplicateIdentity, RasterImportBatch, RasterImportCancellation,
+    RasterImportFailure, RasterImportItemId, RasterImportObserver, RasterImportProgress,
+    RasterImportReceipt, RasterImportRequest, RasterImportStage, RasterImportStatus,
+    RasterPreviewPort,
 };
-use super::reference::{ReferenceSourceError, encode_reference_source};
+use super::reference::{ReferenceSourceError, encode_reference_source, reference_path_identity};
 use crate::{ImportSourceLimits, SourceSnapshot, SourceSnapshotError, SourceSnapshotReader};
+
+const MAX_CONCURRENT_IMPORTS: usize = 4;
+
+struct PreparedRaster {
+    item_id: RasterImportItemId,
+    path: PathBuf,
+    alias: String,
+    snapshot: SourceSnapshot,
+    hash: [u8; 32],
+    probe: rusttable_image::ImageProbe,
+    metadata: rusttable_core::ImageMetadata,
+}
+
+struct BuiltRasterRegistration {
+    entry: RasterCatalogEntry,
+    registration: ImportRegistration,
+}
 
 pub struct RasterImportService<'a> {
     source_limits: ImportSourceLimits,
@@ -49,68 +72,152 @@ impl<'a> RasterImportService<'a> {
         cancellation: &RasterImportCancellation,
         observer: &dyn RasterImportObserver,
     ) -> RasterImportBatch {
-        for (item_id, _) in request.items() {
-            report(observer, item_id, RasterImportStage::Queued);
-        }
-        let receipts = request
+        let items = request
             .items()
-            .map(|(item_id, path)| {
-                self.import_one(item_id, path, catalog, preview, cancellation, observer)
+            .map(|(item_id, path)| (item_id, path.to_owned()))
+            .collect::<Vec<_>>();
+        for (item_id, _) in &items {
+            report(observer, *item_id, RasterImportStage::Queued);
+        }
+        let next = AtomicUsize::new(0);
+        let prepared = Mutex::new(
+            (0..items.len())
+                .map(|_| None)
+                .collect::<Vec<Option<Result<PreparedRaster, Box<RasterImportReceipt>>>>>(),
+        );
+        std::thread::scope(|scope| {
+            for _ in 0..items.len().min(MAX_CONCURRENT_IMPORTS) {
+                scope.spawn(|| {
+                    loop {
+                        let index = next.fetch_add(1, Ordering::Relaxed);
+                        let Some((item_id, path)) = items.get(index) else {
+                            break;
+                        };
+                        let result = self.prepare_one(*item_id, path, cancellation, observer);
+                        prepared
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)[index] =
+                            Some(result);
+                    }
+                });
+            }
+        });
+        let prepared = prepared
+            .into_inner()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let receipts = prepared
+            .into_iter()
+            .map(|result| {
+                match result.unwrap_or_else(|| {
+                    unreachable!("every bounded import preparation stores one result")
+                }) {
+                    Ok(prepared) => {
+                        self.register_prepared(prepared, catalog, preview, cancellation, observer)
+                    }
+                    Err(receipt) => *receipt,
+                }
             })
             .collect();
         RasterImportBatch::new(receipts)
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "the ordered item transaction keeps every cancellation and failure boundary visible"
-    )]
-    fn import_one(
+    fn prepare_one(
         &self,
         item_id: RasterImportItemId,
         path: &Path,
-        catalog: &mut dyn AtomicRasterCatalog,
-        preview: &dyn RasterPreviewPort,
         cancellation: &RasterImportCancellation,
         observer: &dyn RasterImportObserver,
-    ) -> RasterImportReceipt {
+    ) -> Result<PreparedRaster, Box<RasterImportReceipt>> {
         let alias = safe_alias(path);
         if cancellation.is_cancelled() {
             report(observer, item_id, RasterImportStage::Cancelled);
-            return receipt(item_id, alias, RasterImportStatus::Cancelled);
+            return Err(Box::new(receipt(
+                item_id,
+                alias,
+                RasterImportStatus::Cancelled,
+            )));
         }
         report(observer, item_id, RasterImportStage::Opening);
         let snapshot = match self.snapshot_reader.read_snapshot(path, self.source_limits) {
             Ok(snapshot) => snapshot,
-            Err(error) => return failed(item_id, alias, map_snapshot_error(&error), observer),
+            Err(error) => {
+                return Err(Box::new(failed(
+                    item_id,
+                    alias,
+                    map_snapshot_error(&error),
+                    observer,
+                )));
+            }
         };
         report(observer, item_id, RasterImportStage::Hashing);
         let hash = sha256(snapshot.bytes());
         report(observer, item_id, RasterImportStage::Probing);
         let Ok(probe) = self.image_input.probe_bytes(snapshot.bytes()) else {
-            return failed_with_evidence(
+            return Err(Box::new(failed_with_evidence(
                 item_id,
                 alias,
                 hash,
                 None,
                 RasterImportFailure::UnsupportedOrMalformedRaster,
                 observer,
-            );
+            )));
         };
         report(observer, item_id, RasterImportStage::DecodingHeader);
         let Ok(metadata) = self
             .metadata_input
             .read_bytes(probe.format(), snapshot.bytes())
         else {
-            return failed_with_evidence(
+            return Err(Box::new(failed_with_evidence(
                 item_id,
                 alias,
                 hash,
                 Some(probe.format()),
                 RasterImportFailure::MetadataInvalid,
                 observer,
-            );
+            )));
         };
+        if cancellation.is_cancelled() {
+            report(observer, item_id, RasterImportStage::Cancelled);
+            return Err(Box::new(evidence_receipt(
+                item_id,
+                alias,
+                hash,
+                probe.format(),
+                RasterImportStatus::Cancelled,
+            )));
+        }
+        Ok(PreparedRaster {
+            item_id,
+            path: path.to_owned(),
+            alias,
+            snapshot,
+            hash,
+            probe,
+            metadata,
+        })
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "ordered commit, cancellation, and preview boundaries remain explicit"
+    )]
+    fn register_prepared(
+        &self,
+        prepared: PreparedRaster,
+        catalog: &mut dyn AtomicRasterCatalog,
+        preview: &dyn RasterPreviewPort,
+        cancellation: &RasterImportCancellation,
+        observer: &dyn RasterImportObserver,
+    ) -> RasterImportReceipt {
+        let PreparedRaster {
+            item_id,
+            path,
+            alias,
+            snapshot,
+            hash,
+            probe,
+            metadata,
+        } = prepared;
         if cancellation.is_cancelled() {
             report(observer, item_id, RasterImportStage::Cancelled);
             return evidence_receipt(
@@ -136,7 +243,15 @@ impl<'a> RasterImportService<'a> {
         }
         report(observer, item_id, RasterImportStage::Registering);
         let byte_length = snapshot.byte_length().get();
-        let existing = match catalog.find_by_content(hash, byte_length) {
+        let source_identity = source_identity(hash, byte_length, probe);
+        let duplicate_identity = RasterDuplicateIdentity {
+            content_sha256: hash,
+            byte_length,
+            decoder_identity_version: RASTER_DECODER_IDENTITY_VERSION,
+            probe,
+            source_identity,
+        };
+        let existing = match catalog.find_by_content(duplicate_identity) {
             Ok(existing) => existing,
             Err(error) => {
                 return failed_with_evidence(
@@ -152,8 +267,8 @@ impl<'a> RasterImportService<'a> {
         let (entry, imported) = if let Some(entry) = existing {
             (entry, false)
         } else {
-            let entry = match build_entry(path, hash, &snapshot, probe, metadata) {
-                Ok(entry) => entry,
+            let built = match build_entry(&path, &alias, hash, &snapshot, probe, metadata) {
+                Ok(built) => built,
                 Err(error) => {
                     return failed_with_evidence(
                         item_id,
@@ -175,7 +290,7 @@ impl<'a> RasterImportService<'a> {
                     RasterImportStatus::Cancelled,
                 );
             }
-            if let Err(error) = catalog.commit_import(&entry) {
+            if let Err(error) = catalog.commit_import(&built.entry, &built.registration) {
                 return failed_with_evidence(
                     item_id,
                     alias,
@@ -185,7 +300,7 @@ impl<'a> RasterImportService<'a> {
                     observer,
                 );
             }
-            (entry, true)
+            (built.entry, true)
         };
         let mut result = evidence_receipt(
             item_id,
@@ -226,18 +341,20 @@ impl<'a> RasterImportService<'a> {
 
 fn build_entry(
     path: &Path,
+    alias: &str,
     hash: [u8; 32],
     snapshot: &SourceSnapshot,
     probe: rusttable_image::ImageProbe,
     metadata: rusttable_core::ImageMetadata,
-) -> Result<RasterCatalogEntry, RasterImportFailure> {
-    let photo_id =
-        PhotoId::new(derived_id(b"photo", hash)).ok_or(RasterImportFailure::InternalInvariant)?;
-    let asset_id =
-        AssetId::new(derived_id(b"asset", hash)).ok_or(RasterImportFailure::InternalInvariant)?;
+) -> Result<BuiltRasterRegistration, RasterImportFailure> {
+    let identity = source_identity(hash, snapshot.byte_length().get(), probe);
+    let photo_id = PhotoId::new(derived_id(b"photo", identity))
+        .ok_or(RasterImportFailure::InternalInvariant)?;
+    let asset_id = AssetId::new(derived_id(b"asset", identity))
+        .ok_or(RasterImportFailure::InternalInvariant)?;
     let edit_id =
-        EditId::new(derived_id(b"edit", hash)).ok_or(RasterImportFailure::InternalInvariant)?;
-    let source = encode_reference_source(path, hash).map_err(map_reference_error)?;
+        EditId::new(derived_id(b"edit", identity)).ok_or(RasterImportFailure::InternalInvariant)?;
+    let source = encode_reference_source(path, identity).map_err(map_reference_error)?;
     let candidate = ImportCandidate::new(
         photo_id,
         asset_id,
@@ -258,8 +375,43 @@ fn build_entry(
         Photo::new(photo_id, [asset]).map_err(|_| RasterImportFailure::InternalInvariant)?;
     let record =
         ImportRecord::new(&candidate, photo).map_err(|_| RasterImportFailure::InternalInvariant)?;
-    let edit = neutral_edit(edit_id, photo_id, hash)?;
-    Ok(RasterCatalogEntry { record, edit })
+    let edit = neutral_edit(edit_id, photo_id, identity)?;
+    let path_identity = reference_path_identity(path).map_err(map_reference_error)?;
+    let receipt = ImportRegistrationReceipt::new(
+        alias.to_owned(),
+        hash,
+        snapshot.byte_length(),
+        photo_id,
+        asset_id,
+        edit_id,
+    )
+    .map_err(|_| RasterImportFailure::InternalInvariant)?;
+    let details = ImportDetails::new(ImportMetadataSummary::from_record(&record), receipt);
+    Ok(BuiltRasterRegistration {
+        entry: RasterCatalogEntry { record, edit },
+        registration: ImportRegistration::new(details, ReferencePathIdentity::new(path_identity)),
+    })
+}
+
+fn source_identity(
+    hash: [u8; 32],
+    byte_length: u64,
+    probe: rusttable_image::ImageProbe,
+) -> [u8; 32] {
+    let dimensions = probe.dimensions();
+    let mut hasher = Sha256::new();
+    hasher.update(b"rusttable-raster-source-identity-v1\0");
+    hasher.update([RASTER_DECODER_IDENTITY_VERSION]);
+    hasher.update([match probe.format() {
+        InputFormat::Jpeg => 1,
+        InputFormat::Png => 2,
+        InputFormat::Tiff => 3,
+    }]);
+    hasher.update(dimensions.width().to_be_bytes());
+    hasher.update(dimensions.height().to_be_bytes());
+    hasher.update(byte_length.to_be_bytes());
+    hasher.update(hash);
+    hasher.finalize().into()
 }
 
 fn neutral_edit(
