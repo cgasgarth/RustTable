@@ -1,4 +1,4 @@
-//! GTK-facing catalog state without GTK runtime or Iced types.
+//! GTK-facing catalog state without direct GTK runtime types.
 //!
 //! The GTK shell owns widgets and dispatches its signals to this controller. Keeping catalog
 //! loading and selection transitions here makes those interactions deterministic and testable
