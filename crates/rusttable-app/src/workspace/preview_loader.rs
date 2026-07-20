@@ -85,6 +85,34 @@ pub(crate) fn load_selected_preview(
     Ok(selected_preview(photo_id, &output))
 }
 
+/// Resolves the selected persisted edit and renders it at source resolution.
+///
+/// This is the application-side source of truth for a single-image export.
+/// It deliberately returns the render output rather than presentation pixels,
+/// so the export adapter receives canonical sRGB RGBA8 output from the same
+/// edit pipeline without reusing a display-bounded preview.
+///
+/// # Errors
+///
+/// Returns the same typed catalog, edit-selection, source, decode, or render
+/// errors as [`load_selected_preview`].
+pub(crate) fn load_selected_export_render(
+    catalog_path: &Path,
+    source_root: &Path,
+    photo_id: PhotoId,
+) -> Result<rusttable_render::RenderOutput, WorkspacePreviewError> {
+    let edit = load_selected_edit(catalog_path, photo_id)?;
+    let repository =
+        RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
+    CatalogPreviewService::new(preview_service())
+        .render_full_resolution(
+            CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
+            &repository,
+            &repository,
+        )
+        .map_err(WorkspacePreviewError::Preview)
+}
+
 /// Renders a supplied, non-persisted edit for one selected catalog photo.
 ///
 /// The catalog is opened only for the import repository needed by the
@@ -172,7 +200,10 @@ mod tests {
     use rusttable_catalog_store::RedbCatalogRepository;
     use rusttable_core::{EditId, Revision};
 
-    use super::{Edit, PhotoId, WorkspacePreviewError, load_preview_for_edit, select_current_edit};
+    use super::{
+        Edit, PhotoId, WorkspacePreviewError, load_preview_for_edit, load_selected_export_render,
+        select_current_edit,
+    };
 
     static TEST_DIRECTORY_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -294,6 +325,36 @@ mod tests {
                 .iter()
                 .any(|persisted| persisted.id() == transient.id())
         );
+    }
+
+    #[test]
+    fn selected_export_render_uses_full_resolution_not_the_display_preview_bound() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("selected.png");
+        let catalog = directory.0.join("catalog.redb");
+        let bytes = decode_base64(include_str!(
+            "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+        ));
+        fs::write(&source, bytes).expect("fixture source");
+        let batch = crate::workspace::raster_import::run_raster_import(
+            &catalog,
+            vec![source],
+            &rusttable_import::RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let selected = batch
+            .receipts()
+            .next()
+            .and_then(|receipt| receipt.photo_id)
+            .expect("fixture import photo");
+
+        let output =
+            load_selected_export_render(&catalog, Path::new("unused-source-root"), selected)
+                .expect("full export render");
+
+        assert_eq!(output.image().dimensions().width(), 2);
+        assert_eq!(output.image().dimensions().height(), 1);
+        assert_eq!(output.provenance().source_photo_id(), selected);
     }
 
     #[test]

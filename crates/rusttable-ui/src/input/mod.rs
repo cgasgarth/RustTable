@@ -12,6 +12,7 @@ pub enum UiMessage {
     RetryImport(u64),
     RemoveImportResult(u64),
     CloseImportPanel,
+    SaveRenderedCopy(PhotoId),
     Navigate(NavigationIntent),
     RetryLibrary,
     Input(InputIntent),
@@ -26,6 +27,7 @@ pub enum FocusTarget {
     RetryImport(u64),
     RemoveImportResult(u64),
     CloseImportPanel,
+    SaveRenderedCopy(PhotoId),
     RetryLibrary,
     Preview(PhotoId),
     BasicEdit(BasicEditControl),
@@ -79,6 +81,7 @@ pub enum InputEffect {
     RetryImport(u64),
     RemoveImportResult(u64),
     CloseImportPanel,
+    SaveRenderedCopy(PhotoId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,7 +151,7 @@ impl InputState {
                 self.move_photo_focus(-1, route, library_state);
                 InputEffect::None
             }
-            InputIntent::Activate => self.activate(library_state),
+            InputIntent::Activate => self.activate(route, library_state),
             InputIntent::Escape => self.escape(route, library_state),
             InputIntent::BasicEdit(_) => InputEffect::None,
         }
@@ -255,7 +258,7 @@ impl InputState {
         self.focused = FocusTarget::PhotoCard(photos[next_index]);
     }
 
-    fn activate(&mut self, library_state: &LibraryState) -> InputEffect {
+    fn activate(&mut self, route: WorkspaceRoute, library_state: &LibraryState) -> InputEffect {
         match self.focused {
             FocusTarget::SidebarToggle => InputEffect::ToggleSidebar,
             FocusTarget::Library => InputEffect::Navigate(NavigationIntent::ShowLibrary),
@@ -264,12 +267,23 @@ impl InputState {
             FocusTarget::RetryImport(item_id) => InputEffect::RetryImport(item_id),
             FocusTarget::RemoveImportResult(item_id) => InputEffect::RemoveImportResult(item_id),
             FocusTarget::CloseImportPanel => InputEffect::CloseImportPanel,
+            FocusTarget::SaveRenderedCopy(photo_id)
+                if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id)
+                    && library_state
+                        .ready_workspace()
+                        .and_then(|workspace| workspace.detail(photo_id))
+                        .is_some() =>
+            {
+                InputEffect::SaveRenderedCopy(photo_id)
+            }
             FocusTarget::PhotoCard(photo_id) => {
                 self.origin = Some(photo_id);
                 self.focused = FocusTarget::Preview(photo_id);
                 InputEffect::Navigate(NavigationIntent::ShowPhoto(photo_id))
             }
-            FocusTarget::Preview(_) | FocusTarget::BasicEdit(_) => InputEffect::None,
+            FocusTarget::SaveRenderedCopy(_)
+            | FocusTarget::Preview(_)
+            | FocusTarget::BasicEdit(_) => InputEffect::None,
             FocusTarget::BackToLibrary => {
                 self.focused = self.library_return_target(library_state);
                 self.origin = None;
@@ -379,6 +393,7 @@ pub fn focus_chain_with_import_panel(
                     FocusTarget::BasicEdit(BasicEditControl::Reload),
                     FocusTarget::BasicEdit(BasicEditControl::Reapply),
                 ]);
+                chain.push(FocusTarget::SaveRenderedCopy(photo_id));
             }
             chain.push(FocusTarget::BackToLibrary);
         }
@@ -551,6 +566,7 @@ mod tests {
                 FocusTarget::BasicEdit(BasicEditControl::Commit),
                 FocusTarget::BasicEdit(BasicEditControl::Reload),
                 FocusTarget::BasicEdit(BasicEditControl::Reapply),
+                FocusTarget::SaveRenderedCopy(photo_id),
                 FocusTarget::BackToLibrary,
             ]
         );

@@ -229,13 +229,30 @@ fn detail_content(state: &UiState, photo_id: rusttable_core::PhotoId) -> Element
         UiMessage::Navigate(NavigationIntent::ShowLibrary),
         state.is_focused(FocusTarget::Preview(detail.id())),
     );
+    let save_rendered_copy = action_button(
+        text("Save rendered copy…"),
+        UiMessage::SaveRenderedCopy(detail.id()),
+        state.is_focused(FocusTarget::SaveRenderedCopy(detail.id())),
+    );
+    let export_status = state
+        .export_status(detail.id())
+        .map_or_else(|| column![].into(), |status| text(status.as_str()).into());
     let inspector = basic_edit_inspector(state, detail.id());
-    detail_view(detail, preview, inspector, back)
+    detail_view(
+        detail,
+        preview,
+        save_rendered_copy,
+        export_status,
+        inspector,
+        back,
+    )
 }
 
 fn detail_view<'a>(
     detail: &'a PhotoDetailViewModel,
     preview: Element<'a, UiMessage>,
+    save_rendered_copy: Element<'a, UiMessage>,
+    export_status: Element<'a, UiMessage>,
     inspector: Element<'a, UiMessage>,
     back: Element<'a, UiMessage>,
 ) -> Element<'a, UiMessage> {
@@ -247,9 +264,10 @@ fn detail_view<'a>(
     .spacing(REGION_SPACING);
     let preview_and_facts = column![preview, facts].spacing(REGION_SPACING);
 
-    let heading = row![text("Photo detail"), back].spacing(REGION_SPACING);
+    let heading = row![text("Photo detail"), save_rendered_copy, back].spacing(REGION_SPACING);
     column![
         heading,
+        export_status,
         text(detail.title().as_str()),
         row![preview_and_facts, inspector].spacing(REGION_SPACING),
     ]
