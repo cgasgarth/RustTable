@@ -1,0 +1,12 @@
+[package]
+name = "rusttable-input"
+description = "Unified action input service for RustTable desktop controls."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
