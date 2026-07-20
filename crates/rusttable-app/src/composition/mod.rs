@@ -2,9 +2,12 @@ mod catalog_preview;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
 
+use crate::gtk_controller::GtkCatalogController;
 use crate::lifecycle::run_with_bootstrap;
 use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual};
+use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +46,17 @@ pub fn run() -> Result<(), DesktopRunError> {
                 .application_id("com.cgasgarth.rusttable")
                 .build();
             application.connect_activate(|application| {
+                let catalog_controller =
+                    Rc::new(RefCell::new(GtkCatalogController::load_persisted()));
                 let shell = rusttable_ui::GtkShell::new(application);
+                let workspace = catalog_controller.borrow().state().workspace().cloned();
+                if let Some(workspace) = workspace.as_ref() {
+                    shell.set_photo_workspace(workspace);
+                }
+                let selection_controller = Rc::clone(&catalog_controller);
+                shell.set_photo_selected_handler(move |photo_id| {
+                    let _ = selection_controller.borrow_mut().select_photo(photo_id);
+                });
                 shell.present();
             });
             let exit_code = application.run();
