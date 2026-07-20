@@ -165,6 +165,19 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
                 shell.load_in_flight = false;
                 shell.ui.set_library_state(result.into_library_state());
                 shell.active_preview = None;
+                if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route() {
+                    if shell
+                        .ui
+                        .library_state()
+                        .ready_workspace()
+                        .is_some_and(|workspace| workspace.detail(photo_id).is_some())
+                    {
+                        return start_preview(shell, photo_id);
+                    }
+                    let _ = shell
+                        .ui
+                        .handle(UiMessage::Navigate(NavigationIntent::ShowLibrary));
+                }
             }
         }
         Message::RetryLibrary => return retry_library(shell),
@@ -313,14 +326,17 @@ mod tests {
         WorkspaceRoute,
     };
 
-    use super::{Message, PreviewLoadResult, Shell, update};
+    use super::{Message, PreviewLoadResult, Shell, preview_failed_state, update};
 
     fn photo_id() -> PhotoId {
         PhotoId::new(1).expect("test photo ID is non-zero")
     }
 
     fn workspace() -> PhotoWorkspaceViewModel {
-        let photo_id = photo_id();
+        workspace_for(photo_id())
+    }
+
+    fn workspace_for(photo_id: PhotoId) -> PhotoWorkspaceViewModel {
         PhotoWorkspaceViewModel::new(
             vec![PhotoCardViewModel::new(
                 photo_id,
@@ -490,6 +506,74 @@ mod tests {
             Some(&preview)
         );
         let _ = task;
+    }
+
+    #[test]
+    fn catalog_refresh_rerenders_a_selected_photo_that_still_exists() {
+        let photo_id = photo_id();
+        let mut shell = Shell {
+            ui: UiState::with_photo_workspace(workspace()),
+            active_load_request_id: LibraryLoadRequestId::first(),
+            load_in_flight: true,
+            catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
+            source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
+            preview_generation: 0,
+            active_preview: None,
+        };
+        let _ = update(
+            &mut shell,
+            Message::Navigate(NavigationIntent::ShowPhoto(photo_id)),
+        );
+
+        let _ = update(
+            &mut shell,
+            Message::LibraryLoaded {
+                request_id: LibraryLoadRequestId::first(),
+                result: LibraryLoadResult::Ready(workspace()),
+            },
+        );
+
+        assert_eq!(shell.ui.route(), WorkspaceRoute::PhotoDetail(photo_id));
+        assert_eq!(shell.active_preview, None);
+        assert_eq!(
+            shell
+                .library_state()
+                .ready_workspace()
+                .and_then(|workspace| workspace.detail(photo_id))
+                .map(PhotoDetailViewModel::selected_preview),
+            Some(&preview_failed_state())
+        );
+    }
+
+    #[test]
+    fn catalog_refresh_returns_to_library_when_the_selected_photo_is_removed() {
+        let photo_id = photo_id();
+        let mut shell = Shell {
+            ui: UiState::with_photo_workspace(workspace()),
+            active_load_request_id: LibraryLoadRequestId::first(),
+            load_in_flight: true,
+            catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
+            source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
+            preview_generation: 0,
+            active_preview: None,
+        };
+        let _ = update(
+            &mut shell,
+            Message::Navigate(NavigationIntent::ShowPhoto(photo_id)),
+        );
+
+        let _ = update(
+            &mut shell,
+            Message::LibraryLoaded {
+                request_id: LibraryLoadRequestId::first(),
+                result: LibraryLoadResult::Ready(workspace_for(
+                    PhotoId::new(2).expect("test photo ID is non-zero"),
+                )),
+            },
+        );
+
+        assert_eq!(shell.ui.route(), WorkspaceRoute::Library);
+        assert_eq!(shell.active_preview, None);
     }
 
     #[test]
