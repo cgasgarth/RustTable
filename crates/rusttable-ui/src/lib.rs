@@ -3,15 +3,26 @@
 
 pub mod collection;
 pub mod display_profile;
+pub mod external_editor;
 pub mod gtk_shell;
 pub mod import;
 pub mod input;
 pub mod input_mapping;
 pub mod library;
 pub mod presentation;
+pub mod viewport_presentation;
 
 pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
+pub use external_editor::{
+    ArgumentRow, ArgumentRowError, CompletionAction, EXTERNAL_EDITOR_FOCUS_ORDER,
+    ExecutableApproval, ExecutableIdentity, ExternalEditorAction, ExternalEditorController,
+    ExternalEditorControllerError, ExternalEditorDraft, ExternalEditorJob, ExternalEditorPanel,
+    ExternalEditorPreset, ExternalEditorServiceError, ExternalEditorServicePort,
+    ExternalEditorViewModel, InterchangeMode, InvocationReview, JobId, JobStage, Launchability,
+    MetadataPolicy, Placeholder, PresetId, PresetValidationError, QualificationOutcome,
+    QualificationReceipt, QualificationState, SendToEditorRequest, TiffBitDepth, WaitMode,
+};
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DarktableTheme, ExportAction, ExportPanel, ExportSize, ExposurePanel, GtkShell,
@@ -32,4 +43,10 @@ pub use presentation::{
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
     PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
     SelectedPreviewFailure, SelectedPreviewState, ThumbnailIndicators,
+};
+pub use viewport_presentation::{
+    DisplayPresentationController, DisplayPresentationFrame, DisplayPresentationPort,
+    DisplayPresentationRequest, DisplayPresentationState, PresentationFailure,
+    PresentationGeneration, PresentationMode, PresentationStatus, PresentationTicket,
+    SdrFallbackReason,
 };
