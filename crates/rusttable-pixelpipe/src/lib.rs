@@ -5,6 +5,7 @@ mod cache;
 mod cache_key;
 mod cache_value;
 mod cpu;
+mod host_pool;
 mod image;
 mod pipeline_contracts;
 mod pipeline_snapshot;
@@ -30,6 +31,7 @@ pub use cpu::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
     CpuTileAssemblyError,
 };
+pub use host_pool::temporary_buffer_request;
 pub use image::{
     RgbaF32AlphaMode, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
     RgbaF32ImageError, RgbaF32Pixel, SourceRasterIdentity,
@@ -49,6 +51,13 @@ pub use preparation::{
 };
 pub use receipt::{
     CpuImplementation, CpuNodeReceipt, CpuPipelineReceipt, CpuPipelineReceiptError, PixelIdentity,
+};
+pub use rusttable_image::{
+    AcquireOptions, AllocationClass, BufferAlignment, BufferLease, BufferRead, BufferRequest,
+    BufferUsage, BufferWrite, CancellationToken as HostPoolCancellationToken, HostBufferPool,
+    HostImageView, HostPoolError, InitializationPolicy, LeaseState, PoolAccounting, PoolBudgets,
+    PoolEvent, PriorityClass, ReturnReceipt, SharedBufferLease,
+    ShutdownReport as HostPoolShutdownReport,
 };
 pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};

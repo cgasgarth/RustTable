@@ -1,0 +1,54 @@
+schema = "rusttable.host-pool-source-map.v1"
+issue = 269
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "aligned-host-allocation"
+upstream_path = "src/common/darktable.h"
+upstream_symbols = ["dt_alloc_aligned", "dt_free_align"]
+rust_path = "crates/rusttable-image/src/host_pool/storage.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "cache-entry-ownership"
+upstream_path = "src/common/cache.h"
+upstream_symbols = ["dt_cache_t", "dt_cache_get_with_caller", "dt_cache_release_with_caller"]
+rust_path = "crates/rusttable-image/src/host_pool/pool.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "cache-accounting-and-cleanup"
+upstream_path = "src/common/cache.c"
+upstream_symbols = ["dt_cache_init", "dt_cache_cleanup", "dt_cache_gc"]
+rust_path = "crates/rusttable-image/src/host_pool/pool.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "mipmap-buffer-acquisition"
+upstream_path = "src/common/mipmap_cache.h"
+upstream_symbols = ["dt_mipmap_cache_get", "dt_mipmap_cache_release"]
+rust_path = "crates/rusttable-image/src/host_pool/model.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "image-metadata-acquisition"
+upstream_path = "src/common/image_cache.h"
+upstream_symbols = ["dt_image_cache_get", "dt_image_cache_testget", "dt_image_cache_read_release"]
+rust_path = "crates/rusttable-pixelpipe/src/host_pool.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "pixelpipe-tiling-host-scratch"
+upstream_path = "src/develop/tiling.c"
+upstream_symbols = ["default_process_tiling_ptp", "default_process_tiling_roi", "dt_alloc_aligned"]
+rust_path = "crates/rusttable-pixelpipe/src/host_pool.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "gpu-and-native-scratch-boundary"
+upstream_path = "src/develop/tiling.c"
+upstream_symbols = ["dt_opencl_use_pinned_memory", "dt_opencl_get_device_available"]
+rust_path = "crates/rusttable-gpu/src/lib.rs"
+status = "delegated"
+delegated_issue = 290

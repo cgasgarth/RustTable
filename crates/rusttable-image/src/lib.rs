@@ -4,6 +4,7 @@
 mod decode;
 mod format;
 mod geometry;
+mod host_pool;
 mod image;
 mod input;
 mod output;
@@ -17,6 +18,12 @@ pub use decode::{
 };
 pub use format::{InputFormat, SUPPORTED_INPUT_EXTENSIONS, SUPPORTED_INPUT_FORMATS};
 pub use geometry::{Orientation, Roi, RoiError};
+pub use host_pool::{
+    AcquireOptions, AllocationClass, BufferAlignment, BufferLease, BufferRead, BufferRequest,
+    BufferUsage, BufferWrite, CancellationToken, HostBufferPool, HostImageView, HostPoolError,
+    InitializationPolicy, LeaseState, MIN_HOST_ALIGNMENT, PoolAccounting, PoolBudgets, PoolEvent,
+    PriorityClass, ReturnReceipt, SharedBufferLease, ShutdownReport,
+};
 pub use image::{
     ColorEncoding, DecodedImage, DecodedImageError, ImageDimensions, ImageDimensionsError,
     PixelLayout,
