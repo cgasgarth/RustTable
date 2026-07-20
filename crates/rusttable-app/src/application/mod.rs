@@ -1,11 +1,10 @@
 use iced::Task;
 use std::path::PathBuf;
-
 mod edit;
 
 use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
 use crate::workspace::{
-    SelectedPreview, load_selected_preview, pick_raster_files, run_raster_import,
+    BasicEditDraft, SelectedPreview, load_selected_preview, pick_raster_files, run_raster_import,
 };
 use rusttable_core::PhotoId;
 use rusttable_import::{
@@ -31,6 +30,7 @@ pub(crate) struct Shell {
     import_paths: Vec<PathBuf>,
     import_cancellation: Option<RasterImportCancellation>,
     pending_import_selection: Option<PhotoId>,
+    basic_edit: Option<BasicEditDraft>,
 }
 
 impl Default for Shell {
@@ -46,6 +46,7 @@ impl Default for Shell {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         }
     }
 }
@@ -86,6 +87,7 @@ impl Shell {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         }
     }
 
@@ -105,6 +107,7 @@ impl Shell {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         }
     }
 
@@ -143,6 +146,10 @@ pub(crate) enum Message {
     EditLoaded {
         photo_id: PhotoId,
         result: edit::EditLoadResult,
+    },
+    EditCommitted {
+        photo_id: PhotoId,
+        result: edit::EditCommitResult,
     },
     ImportFiles,
     ImportPickerCompleted(Vec<PathBuf>),
@@ -195,6 +202,10 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
             photo_id,
             ref result,
         } => edit::apply_loaded(shell, photo_id, result),
+        Message::EditCommitted {
+            photo_id,
+            ref result,
+        } => return edit::apply_committed(shell, photo_id, result),
         Message::ImportFiles => return import_picker_task(),
         Message::ImportPickerCompleted(paths) | Message::FilesDropped(paths) => {
             return begin_import(shell, paths);
@@ -225,6 +236,9 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
 }
 
 fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
+    if let UiMessage::Input(InputIntent::BasicEdit(intent)) = message {
+        return edit::handle_intent(shell, intent);
+    }
     let previous_route = shell.ui.route();
     match shell.ui.handle(message) {
         UiEffect::RetryLibrary => return retry_library(shell),
@@ -237,6 +251,7 @@ fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
     if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route()
         && previous_route != shell.ui.route()
     {
+        shell.basic_edit = None;
         return Task::batch([
             start_preview(shell, photo_id),
             edit::start_load(shell.catalog_path.as_ref().ok().cloned(), photo_id),
@@ -639,6 +654,7 @@ mod tests {
                 import_paths: Vec::new(),
                 import_cancellation: None,
                 pending_import_selection: None,
+                basic_edit: None,
             }
         );
     }
@@ -684,6 +700,7 @@ mod tests {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         };
 
         let task = update(
@@ -718,6 +735,7 @@ mod tests {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         };
         let _ = update(
             &mut shell,
@@ -762,6 +780,7 @@ mod tests {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         };
 
         let task = update(
@@ -795,6 +814,7 @@ mod tests {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         };
         let _ = update(
             &mut shell,
@@ -835,6 +855,7 @@ mod tests {
             import_paths: Vec::new(),
             import_cancellation: None,
             pending_import_selection: None,
+            basic_edit: None,
         };
         let _ = update(
             &mut shell,
