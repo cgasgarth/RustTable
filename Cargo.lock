@@ -2917,8 +2917,10 @@ dependencies = [
 name = "rusttable-pixelpipe"
 version = "0.1.0"
 dependencies = [
+ "postcard",
  "rusttable-color",
  "rusttable-core",
+ "rusttable-image",
  "rusttable-processing",
  "sha2",
 ]
@@ -4466,6 +4468,7 @@ dependencies = [
  "rusttable-import",
  "rusttable-metadata",
  "rusttable-parity",
+ "rusttable-pixelpipe",
  "rusttable-processing",
  "rusttable-render",
  "rusttable-testkit",

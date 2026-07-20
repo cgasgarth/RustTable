@@ -127,6 +127,24 @@ impl OperationInstance {
         self.name.as_deref()
     }
 
+    #[must_use]
+    pub const fn mask_id(&self) -> Option<u128> {
+        self.mask_id
+    }
+
+    #[must_use]
+    pub const fn blend_id(&self) -> Option<u128> {
+        self.blend_id
+    }
+
+    /// Attaches immutable mask and blend references to this operation.
+    #[must_use]
+    pub const fn with_mask_blend(mut self, mask_id: Option<u128>, blend_id: Option<u128>) -> Self {
+        self.mask_id = mask_id;
+        self.blend_id = blend_id;
+        self
+    }
+
     fn cache_bytes(&self, output: &mut Vec<u8>) {
         output.extend_from_slice(&self.id.to_be_bytes());
         output.extend_from_slice(self.descriptor.compatibility_name.as_bytes());
