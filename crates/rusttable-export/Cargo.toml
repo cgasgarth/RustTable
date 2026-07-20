@@ -9,6 +9,8 @@ version.workspace = true
 [dependencies]
 avif-parse = "=2.1.0"
 mozjpeg-rs.workspace = true
+flate2.workspace = true
+pdf-writer.workspace = true
 postcard.workspace = true
 png.workspace = true
 redb.workspace = true

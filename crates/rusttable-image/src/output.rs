@@ -11,6 +11,8 @@ pub enum OutputFormat {
     JpegXl,
     Tiff,
     Webp,
+    Pdf,
+    Xcf,
     Avif,
     Heif,
     Heic,
