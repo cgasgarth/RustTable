@@ -1,8 +1,31 @@
 use rusttable_image::{DecodeLimits, ImageInputError, InputFormat, UnsupportedImageFeature};
-use rusttable_image_io::ImageDecoderRegistry;
+use rusttable_image_io::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 
 fn limits() -> DecodeLimits {
     DecodeLimits::new(1_000_000, 2, 1, 2, 8).expect("valid test limits")
+}
+
+#[test]
+fn standard_registry_has_stable_unique_decoder_identities() {
+    let descriptors = ImageDecoderRegistry::standard().descriptors();
+    assert_eq!(descriptors.len(), 3);
+    assert_eq!(
+        descriptors
+            .iter()
+            .map(|descriptor| descriptor.identity().id())
+            .collect::<Vec<_>>(),
+        vec![
+            "rusttable.decoder.jpeg.v1",
+            "rusttable.decoder.png.v1",
+            "rusttable.decoder.tiff.v1"
+        ]
+    );
+    assert!(
+        descriptors
+            .iter()
+            .all(|descriptor| descriptor.identity().version() == 1)
+    );
+    assert_eq!(PROBE_BUDGET_BYTES, 64 * 1024);
 }
 
 fn decode_base64(encoded: &str) -> Vec<u8> {
@@ -76,6 +99,43 @@ fn recognized_png_signature_reports_malformed_input() {
             format: InputFormat::Png,
             ..
         })
+    ));
+}
+
+#[test]
+fn png_header_probe_is_structural_and_does_not_need_a_complete_payload() {
+    let mut bytes = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+    bytes.extend_from_slice(&13_u32.to_be_bytes());
+    bytes.extend_from_slice(b"IHDR");
+    bytes.extend_from_slice(&2_u32.to_be_bytes());
+    bytes.extend_from_slice(&3_u32.to_be_bytes());
+    bytes.extend_from_slice(&[8, 6, 0, 0, 0]);
+    bytes.extend_from_slice(&[0; 4]);
+    let result = ImageDecoderRegistry::standard().probe(
+        &bytes,
+        DecodeLimits::new(1_000_000, 2, 3, 6, 24).expect("valid limits"),
+    );
+
+    assert!(matches!(
+        result,
+        ProbeOutcome::Match { decoder, probe }
+            if decoder.format() == InputFormat::Png
+                && probe.dimensions().width() == 2
+                && probe.dimensions().height() == 3
+    ));
+}
+
+#[test]
+fn png_signature_with_invalid_ihdr_is_malformed_before_backend_dispatch() {
+    let mut bytes = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+    bytes.extend_from_slice(&12_u32.to_be_bytes());
+    bytes.extend_from_slice(b"IHDR");
+    bytes.extend_from_slice(&[0; 12]);
+
+    assert!(matches!(
+        ImageDecoderRegistry::standard().probe(&bytes, limits()),
+        ProbeOutcome::MalformedRecognized { decoder, .. }
+            if decoder.format() == InputFormat::Png
     ));
 }
 
