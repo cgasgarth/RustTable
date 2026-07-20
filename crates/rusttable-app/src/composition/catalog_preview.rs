@@ -5,8 +5,8 @@ use rusttable_catalog::{
 };
 use rusttable_core::{Edit, EditId, PhotoId};
 use rusttable_import::{
-    FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReader,
-    decode_reference_source,
+    FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReadError,
+    SourceSnapshotReader, decode_reference_source,
 };
 use rusttable_render::RenderOutput;
 
@@ -149,8 +149,10 @@ impl CatalogPreviewService {
         let snapshot = snapshot_reader
             .read_snapshot(&source, limits)
             .map_err(CatalogPreviewError::Snapshot)?;
-        let output =
-            render(&self.preview, snapshot.bytes(), edit).map_err(CatalogPreviewError::Preview)?;
+        let bytes = snapshot
+            .materialize(limits)
+            .map_err(CatalogPreviewError::SnapshotRead)?;
+        let output = render(&self.preview, &bytes, edit).map_err(CatalogPreviewError::Preview)?;
         snapshot_reader
             .revalidate(&snapshot, limits)
             .map_err(CatalogPreviewError::Snapshot)?;
@@ -220,6 +222,7 @@ pub enum CatalogPreviewError {
     },
     Preview(PreviewError),
     Snapshot(SourceSnapshotError),
+    SnapshotRead(SourceSnapshotReadError),
     SourceLimits,
 }
 
@@ -244,6 +247,9 @@ impl std::fmt::Display for CatalogPreviewError {
             ),
             Self::Preview(error) => write!(formatter, "catalog preview failed: {error}"),
             Self::Snapshot(error) => write!(formatter, "catalog preview source failed: {error}"),
+            Self::SnapshotRead(error) => {
+                write!(formatter, "catalog preview source read failed: {error}")
+            }
             Self::SourceLimits => formatter.write_str("catalog preview source limits are invalid"),
         }
     }
@@ -256,6 +262,7 @@ impl std::error::Error for CatalogPreviewError {
             Self::EditRepository(error) => Some(error),
             Self::Preview(error) => Some(error),
             Self::Snapshot(error) => Some(error),
+            Self::SnapshotRead(error) => Some(error),
             Self::SourceLimits
             | Self::UnknownPhoto { .. }
             | Self::UnknownEdit { .. }

@@ -19,5 +19,6 @@ pub use request::SourceImportRequest;
 pub use service::{SourceImportError, SourceImportService};
 pub use snapshot::{
     FileSourceSnapshotReader, ImportSourceLimits, ImportSourceLimitsError, SourceReadStage,
-    SourceSnapshot, SourceSnapshotError, SourceSnapshotReader,
+    SourceSnapshot, SourceSnapshotError, SourceSnapshotReadError, SourceSnapshotReader,
+    SourceSnapshotSequentialReader,
 };

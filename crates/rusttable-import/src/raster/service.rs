@@ -22,7 +22,10 @@ use super::model::{
     RasterPreviewPort,
 };
 use super::reference::{ReferenceSourceError, encode_reference_source, reference_path_identity};
-use crate::{ImportSourceLimits, SourceSnapshot, SourceSnapshotError, SourceSnapshotReader};
+use crate::{
+    ImportSourceLimits, SourceSnapshot, SourceSnapshotError, SourceSnapshotReadError,
+    SourceSnapshotReader,
+};
 
 const MAX_CONCURRENT_IMPORTS: usize = 4;
 
@@ -149,10 +152,21 @@ impl<'a> RasterImportService<'a> {
                 )));
             }
         };
+        let bytes = match snapshot.materialize(self.source_limits) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return Err(Box::new(failed(
+                    item_id,
+                    alias,
+                    map_snapshot_read_error(&error),
+                    observer,
+                )));
+            }
+        };
         report(observer, item_id, RasterImportStage::Hashing);
-        let hash = sha256(snapshot.bytes());
+        let hash = sha256(&bytes);
         report(observer, item_id, RasterImportStage::Probing);
-        let Ok(probe) = self.image_input.probe_bytes(snapshot.bytes()) else {
+        let Ok(probe) = self.image_input.probe_bytes(&bytes) else {
             return Err(Box::new(failed_with_evidence(
                 item_id,
                 alias,
@@ -163,10 +177,7 @@ impl<'a> RasterImportService<'a> {
             )));
         };
         report(observer, item_id, RasterImportStage::DecodingHeader);
-        let Ok(metadata) = self
-            .metadata_input
-            .read_bytes(probe.format(), snapshot.bytes())
-        else {
+        let Ok(metadata) = self.metadata_input.read_bytes(probe.format(), &bytes) else {
             return Err(Box::new(failed_with_evidence(
                 item_id,
                 alias,
@@ -503,6 +514,23 @@ fn map_snapshot_error(error: &SourceSnapshotError) -> RasterImportFailure {
         SourceSnapshotError::LengthConversion | SourceSnapshotError::MaxPlusOneOverflow => {
             RasterImportFailure::InternalInvariant
         }
+    }
+}
+
+fn map_snapshot_read_error(error: &SourceSnapshotReadError) -> RasterImportFailure {
+    match error {
+        SourceSnapshotReadError::SourceChanged { .. } => RasterImportFailure::SourceChanged,
+        SourceSnapshotReadError::MaterializationLimitExceeded { .. } => {
+            RasterImportFailure::SourceTooLarge
+        }
+        SourceSnapshotReadError::Io { .. } | SourceSnapshotReadError::AllocationFailure { .. } => {
+            RasterImportFailure::SourceUnavailable
+        }
+        SourceSnapshotReadError::OutOfBounds { .. }
+        | SourceSnapshotReadError::OffsetOverflow { .. }
+        | SourceSnapshotReadError::ReaderLimitExceedsSource { .. }
+        | SourceSnapshotReadError::ReaderBudgetExceeded { .. }
+        | SourceSnapshotReadError::LengthConversion => RasterImportFailure::InternalInvariant,
     }
 }
 

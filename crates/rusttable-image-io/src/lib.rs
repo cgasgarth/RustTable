@@ -3,6 +3,8 @@
 
 mod input;
 mod output;
+mod registry;
 
 pub use input::FileImageInput;
 pub use output::FileImageOutput;
+pub use registry::ImageDecoderRegistry;
