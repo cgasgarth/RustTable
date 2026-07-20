@@ -2,11 +2,12 @@ use iced::widget::{column, container, image, row, scrollable, text};
 use iced::{ContentFit, Element, Fill, Length};
 use rusttable_core::product_name;
 
-use crate::input::{FocusTarget, UiMessage};
+use crate::input::{BasicEditControl, BasicEditIntent, FocusTarget, InputIntent, UiMessage};
 use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
 use crate::presentation::{
-    PhotoCardViewModel, PhotoDetailViewModel, Rgba8PreviewMetadata, SelectedPreviewState,
+    BasicEditField, BasicEditSaveState, BasicEditValues, PhotoCardViewModel, PhotoDetailViewModel,
+    Rgba8PreviewMetadata, SelectedPreviewState,
 };
 use crate::state::UiState;
 use crate::theme::{
@@ -223,11 +224,19 @@ fn detail_content(state: &UiState, photo_id: rusttable_core::PhotoId) -> Element
         .into();
     };
 
-    detail_view(detail, back)
+    let preview = action_button(
+        selected_preview_content(detail.selected_preview()),
+        UiMessage::Navigate(NavigationIntent::ShowLibrary),
+        state.is_focused(FocusTarget::Preview(detail.id())),
+    );
+    let inspector = basic_edit_inspector(state, detail.id());
+    detail_view(detail, preview, inspector, back)
 }
 
 fn detail_view<'a>(
     detail: &'a PhotoDetailViewModel,
+    preview: Element<'a, UiMessage>,
+    inspector: Element<'a, UiMessage>,
     back: Element<'a, UiMessage>,
 ) -> Element<'a, UiMessage> {
     let facts = column(detail.facts().map(|fact| {
@@ -236,15 +245,123 @@ fn detail_view<'a>(
             .into()
     }))
     .spacing(REGION_SPACING);
+    let preview_and_facts = column![preview, facts].spacing(REGION_SPACING);
 
+    let heading = row![text("Photo detail"), back].spacing(REGION_SPACING);
     column![
-        text("Photo detail"),
+        heading,
         text(detail.title().as_str()),
-        selected_preview_content(detail.selected_preview()),
-        facts,
-        back
+        row![preview_and_facts, inspector].spacing(REGION_SPACING),
     ]
     .into()
+}
+
+fn basic_edit_inspector(
+    state: &UiState,
+    photo_id: rusttable_core::PhotoId,
+) -> Element<'_, UiMessage> {
+    let Some(inspector) = state
+        .basic_edit()
+        .filter(|inspector| inspector.photo_id() == photo_id)
+    else {
+        return column![].into();
+    };
+    let values = inspector.values();
+    let fields = BasicEditField::ALL
+        .into_iter()
+        .map(|field| basic_edit_field_row(state, values, field));
+    let status = match inspector.save_state() {
+        BasicEditSaveState::Clean => "No unsaved changes",
+        BasicEditSaveState::Unsaved => "Unsaved edit",
+        BasicEditSaveState::Saving => "Saving edit",
+        BasicEditSaveState::Failed => "Save failed; unsaved edit retained",
+        BasicEditSaveState::Conflict => "Edit changed elsewhere; reload or reapply your draft",
+    };
+    column![
+        text("Basic edit inspector"),
+        text("Exposure and RGB gain"),
+        column(fields).spacing(REGION_SPACING),
+        basic_edit_control(
+            state,
+            BasicEditControl::Undo,
+            "Undo edit".to_owned(),
+            BasicEditIntent::Undo,
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Redo,
+            "Redo edit".to_owned(),
+            BasicEditIntent::Redo,
+        ),
+        action_button(
+            text("Reset edit"),
+            UiMessage::Input(InputIntent::BasicEdit(BasicEditIntent::Reset)),
+            state.is_focused(FocusTarget::BasicEdit(BasicEditControl::Reset)),
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Reload,
+            "Reload edit".to_owned(),
+            BasicEditIntent::Reload,
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Reapply,
+            "Reapply draft".to_owned(),
+            BasicEditIntent::Reapply,
+        ),
+        action_button(
+            text("Save edit"),
+            UiMessage::Input(InputIntent::BasicEdit(BasicEditIntent::Commit)),
+            state.is_focused(FocusTarget::BasicEdit(BasicEditControl::Commit)),
+        ),
+        text(status),
+    ]
+    .spacing(REGION_SPACING)
+    .into()
+}
+
+fn basic_edit_field_row<'a>(
+    state: &UiState,
+    values: BasicEditValues,
+    field: BasicEditField,
+) -> Element<'a, UiMessage> {
+    let value = format!(
+        "{} ({}): {}",
+        field.label(),
+        field.unit(),
+        values.display_value(field)
+    );
+    row![
+        text(value),
+        basic_edit_control(
+            state,
+            BasicEditControl::Decrement(field),
+            format!("Decrease {}", field.label()),
+            BasicEditIntent::Decrement(field),
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Increment(field),
+            format!("Increase {}", field.label()),
+            BasicEditIntent::Increment(field),
+        ),
+    ]
+    .spacing(REGION_SPACING)
+    .into()
+}
+
+fn basic_edit_control<'a>(
+    state: &UiState,
+    control: BasicEditControl,
+    label: String,
+    intent: BasicEditIntent,
+) -> Element<'a, UiMessage> {
+    action_button(
+        text(label),
+        UiMessage::Input(InputIntent::BasicEdit(intent)),
+        state.is_focused(FocusTarget::BasicEdit(control)),
+    )
 }
 
 fn selected_preview_content(state: &SelectedPreviewState) -> Element<'_, UiMessage> {
@@ -422,6 +539,7 @@ mod tests {
             Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&state));
 
         simulator.find("Photo 1")?;
+        assert!(simulator.find("Basic edit inspector").is_err());
         assert!(simulator.find("Loading library").is_err());
         assert!(simulator.find("No photos in this catalog").is_err());
         Ok(())
@@ -446,6 +564,26 @@ mod tests {
         simulator.find("Edited preview ready")?;
         assert!(simulator.find("Preview unavailable").is_err());
         simulator.snapshot(&iced::Theme::Dark)?;
+        Ok(())
+    }
+
+    #[test]
+    fn selected_photo_renders_the_basic_edit_inspector() -> Result<(), iced_test::Error> {
+        let state = selected_photo_state(SelectedPreviewState::Unavailable);
+        let mut simulator =
+            Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&state));
+
+        simulator.find("Basic edit inspector")?;
+        simulator.find("Exposure (stops): 0.00")?;
+        simulator.find("Decrease Exposure")?;
+        simulator.find("Increase Exposure")?;
+        simulator.find("Red gain (gain): 1.000")?;
+        simulator.find("Green gain (gain): 1.000")?;
+        simulator.find("Blue gain (gain): 1.000")?;
+        simulator.find("Reset edit")?;
+        simulator.find("Save edit")?;
+        simulator.find("No unsaved changes")?;
+
         Ok(())
     }
 

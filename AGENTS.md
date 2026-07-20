@@ -13,7 +13,7 @@
 - Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
 - Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
 - Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
-- Keep handwritten source files at or below 1,000 lines. Generated compatibility data is the only exception.
+- Keep handwritten source files at or below 1,000 lines. Generated compatibility data is the only exception. Split growing code into cohesive modules before it crosses that boundary; never reduce required behavior or reject a feature merely to preserve the limit.
 - Prefer the standard library, Iced facilities, and established Rust crates over bespoke infrastructure.
 
 ## Development and tests
@@ -29,8 +29,8 @@
 
 - GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
 - Select dependency-ready work by priority label, P0 through P4.
-- Each coherent issue maps to one ready-for-review PR unless the user explicitly defines a combined issue boundary.
-- Work in batches of at most two PRs; both must merge before the next batch starts. Multiple agents may collaborate on one PR.
+- A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body.
+- Work in batches of at most two PRs; both must merge before the next batch starts. Use multiple agents to deliver each PR, with at least one PR in every batch replacing real darktable behavior in Rust.
 - Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
 - Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.
 - When fewer than ten open issues remain, start fresh milestone-scoped consults to propose concrete product issues.
@@ -48,6 +48,8 @@
 - Reuse a completed agent only when its context and clean worktree directly continue the same PR.
 - Leave long-running agents running without routine polling; completion messages wake the orchestrator. Inspect only on completion or an urgent dependency.
 - Keep each agent in an isolated worktree. More agents may collaborate inside one PR, but active PR batch limits still apply.
+- Keep at least two agents on disjoint, product-facing Rust implementation slices whenever a batch is active. Prefer a coherent upstream subsystem's composition, persistence, UI, render, or test slices over setup, policy, or workflow work.
+- Combine tightly coupled implementation work into the active PR rather than serializing tiny scaffolding PRs; do not combine unrelated subsystems just to increase PR size.
 - Re-read the current issue and parent issue before follow-up work because GitHub scope may change.
 
 ## Computer Use installation

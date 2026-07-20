@@ -1,7 +1,9 @@
 use std::path::Path;
 
-use rusttable_catalog::{EditRepository, EditRepositoryError, ImportRepository, RepositoryError};
-use rusttable_core::{EditId, PhotoId};
+use rusttable_catalog::{
+    EditRepository, EditRepositoryError, ImportRecord, ImportRepository, RepositoryError,
+};
+use rusttable_core::{Edit, EditId, PhotoId};
 use rusttable_import::{
     FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReader,
     decode_reference_source,
@@ -49,6 +51,41 @@ impl CatalogPreviewService {
             .ok_or(CatalogPreviewError::UnknownEdit {
                 edit_id: request.edit_id,
             })?;
+        self.render_record(request.source_root, &record, &edit)
+    }
+
+    /// Renders a caller-provided edit without reading or writing an edit record.
+    ///
+    /// The edit is still checked against the persisted photo record before its
+    /// source is read. This keeps transient drafts on the same bounded,
+    /// snapshot-based source path as persisted edits while preventing an edit
+    /// for another photo from being rendered.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when photo lookup, ownership validation, source
+    /// resolution, decoding, or CPU rendering fails.
+    pub fn render_edit(
+        &self,
+        source_root: &Path,
+        edit: &Edit,
+        imports: &dyn ImportRepository,
+    ) -> Result<RenderOutput, CatalogPreviewError> {
+        let record = imports
+            .find_by_photo_id(edit.photo_id())
+            .map_err(CatalogPreviewError::ImportRepository)?
+            .ok_or(CatalogPreviewError::UnknownPhoto {
+                photo_id: edit.photo_id(),
+            })?;
+        self.render_record(source_root, &record, edit)
+    }
+
+    fn render_record(
+        &self,
+        source_root: &Path,
+        record: &ImportRecord,
+        edit: &Edit,
+    ) -> Result<RenderOutput, CatalogPreviewError> {
         if edit.photo_id() != record.photo().id() {
             return Err(CatalogPreviewError::EditPhotoMismatch {
                 edit_id: edit.id(),
@@ -57,7 +94,7 @@ impl CatalogPreviewService {
             });
         }
         let source = decode_reference_source(record.source())
-            .unwrap_or_else(|_| request.source_root.join(record.source().as_str()));
+            .unwrap_or_else(|_| source_root.join(record.source().as_str()));
         let limits = ImportSourceLimits::new(64 * 1024 * 1024)
             .map_err(|_| CatalogPreviewError::SourceLimits)?;
         let reader = FileSourceSnapshotReader;
@@ -66,7 +103,7 @@ impl CatalogPreviewService {
             .map_err(CatalogPreviewError::Snapshot)?;
         let output = self
             .preview
-            .render_bytes(snapshot.bytes(), &edit)
+            .render_bytes(snapshot.bytes(), edit)
             .map_err(CatalogPreviewError::Preview)?;
         reader
             .revalidate(&snapshot, limits)
@@ -213,6 +250,48 @@ mod tests {
                 &imports,
                 &edits,
             ),
+            Err(CatalogPreviewError::EditPhotoMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn renders_a_caller_provided_edit_without_persisted_edit_lookup() {
+        let photo_id = PhotoId::new(1).unwrap();
+        let edit = edit(9, 1);
+        let imports = Imports {
+            records: BTreeMap::from([(
+                photo_id,
+                record(1, "fixtures/corpus/assets/raster-png-16-alpha.png"),
+            )]),
+        };
+        let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let service = CatalogPreviewService::new(PreviewService::new(
+            DecodeLimits::new(64 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024).unwrap(),
+            PreviewBounds::new(1, 1).unwrap(),
+        ));
+
+        let output = service
+            .render_edit(&source_root, &edit, &imports)
+            .expect("caller-provided edit preview renders");
+
+        assert_eq!(output.provenance().source_photo_id(), photo_id);
+        assert_eq!(output.provenance().source_edit_id(), edit.id());
+    }
+
+    #[test]
+    fn rejects_a_caller_provided_edit_owned_by_another_photo_before_source_decode() {
+        let photo_id = PhotoId::new(2).unwrap();
+        let imports = Imports {
+            records: BTreeMap::from([(photo_id, record(1, "missing-source.png"))]),
+        };
+        let edit = edit(9, photo_id.get());
+        let service = CatalogPreviewService::new(PreviewService::new(
+            DecodeLimits::new(1, 1, 1, 1, 1).unwrap(),
+            PreviewBounds::new(1, 1).unwrap(),
+        ));
+
+        assert!(matches!(
+            service.render_edit(Path::new("missing-source-root"), &edit, &imports,),
             Err(CatalogPreviewError::EditPhotoMismatch { .. })
         ));
     }

@@ -2,6 +2,7 @@ use rusttable_core::PhotoId;
 
 use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
+use crate::presentation::BasicEditField;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UiMessage {
@@ -26,6 +27,8 @@ pub enum FocusTarget {
     RemoveImportResult(u64),
     CloseImportPanel,
     RetryLibrary,
+    Preview(PhotoId),
+    BasicEdit(BasicEditControl),
     PhotoCard(PhotoId),
     BackToLibrary,
 }
@@ -38,6 +41,31 @@ pub enum InputIntent {
     FocusPreviousPhoto,
     Activate,
     Escape,
+    BasicEdit(BasicEditIntent),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BasicEditIntent {
+    Increment(BasicEditField),
+    Decrement(BasicEditField),
+    Undo,
+    Redo,
+    Reset,
+    Commit,
+    Reload,
+    Reapply,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BasicEditControl {
+    Decrement(BasicEditField),
+    Increment(BasicEditField),
+    Undo,
+    Redo,
+    Reset,
+    Commit,
+    Reload,
+    Reapply,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +150,7 @@ impl InputState {
             }
             InputIntent::Activate => self.activate(library_state),
             InputIntent::Escape => self.escape(route, library_state),
+            InputIntent::BasicEdit(_) => InputEffect::None,
         }
     }
 
@@ -157,7 +186,7 @@ impl InputState {
         match intent {
             NavigationIntent::ShowPhoto(photo_id) => {
                 self.origin = Some(photo_id);
-                self.focused = FocusTarget::BackToLibrary;
+                self.focused = FocusTarget::Preview(photo_id);
             }
             NavigationIntent::ShowLibrary => {
                 self.focused = self.library_return_target(library_state);
@@ -237,9 +266,10 @@ impl InputState {
             FocusTarget::CloseImportPanel => InputEffect::CloseImportPanel,
             FocusTarget::PhotoCard(photo_id) => {
                 self.origin = Some(photo_id);
-                self.focused = FocusTarget::BackToLibrary;
+                self.focused = FocusTarget::Preview(photo_id);
                 InputEffect::Navigate(NavigationIntent::ShowPhoto(photo_id))
             }
+            FocusTarget::Preview(_) | FocusTarget::BasicEdit(_) => InputEffect::None,
             FocusTarget::BackToLibrary => {
                 self.focused = self.library_return_target(library_state);
                 self.origin = None;
@@ -326,7 +356,32 @@ pub fn focus_chain_with_import_panel(
                 chain.push(FocusTarget::CloseImportPanel);
             }
         }
-        WorkspaceRoute::PhotoDetail(_) => chain.push(FocusTarget::BackToLibrary),
+        WorkspaceRoute::PhotoDetail(photo_id) => {
+            chain.push(FocusTarget::Preview(photo_id));
+            if library_state
+                .ready_workspace()
+                .and_then(|workspace| workspace.detail(photo_id))
+                .is_some()
+            {
+                chain.extend([
+                    FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::Exposure)),
+                    FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::Exposure)),
+                    FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::RedGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::RedGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::GreenGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::GreenGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::BlueGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::BlueGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Undo),
+                    FocusTarget::BasicEdit(BasicEditControl::Redo),
+                    FocusTarget::BasicEdit(BasicEditControl::Reset),
+                    FocusTarget::BasicEdit(BasicEditControl::Commit),
+                    FocusTarget::BasicEdit(BasicEditControl::Reload),
+                    FocusTarget::BasicEdit(BasicEditControl::Reapply),
+                ]);
+            }
+            chain.push(FocusTarget::BackToLibrary);
+        }
     }
     chain
 }
@@ -336,12 +391,13 @@ mod tests {
     use rusttable_core::PhotoId;
 
     use super::{
-        FocusTarget, InputEffect, InputIntent, InputState, focus_chain,
+        BasicEditControl, FocusTarget, InputEffect, InputIntent, InputState, focus_chain,
         focus_chain_with_import_panel,
     };
     use crate::library::{LibraryFailureKind, LibraryState};
     use crate::presentation::{
-        PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
+        BasicEditField, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
+        PresentationText,
     };
     use crate::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 
@@ -452,7 +508,10 @@ mod tests {
                 PhotoId::new(2).unwrap()
             ))
         );
-        assert_eq!(state.focused(), FocusTarget::BackToLibrary);
+        assert_eq!(
+            state.focused(),
+            FocusTarget::Preview(PhotoId::new(2).unwrap())
+        );
         assert_eq!(
             state.apply(InputIntent::Escape, true, detail, &model),
             InputEffect::Navigate(crate::navigation::NavigationIntent::ShowLibrary)
@@ -460,6 +519,40 @@ mod tests {
         assert_eq!(
             state.focused(),
             FocusTarget::PhotoCard(PhotoId::new(2).unwrap())
+        );
+    }
+
+    #[test]
+    fn detail_focus_chain_places_preview_before_back_control() {
+        let model = workspace();
+        let photo_id = PhotoId::new(2).unwrap();
+
+        assert_eq!(
+            focus_chain(
+                true,
+                crate::navigation::WorkspaceRoute::PhotoDetail(photo_id),
+                &model,
+            ),
+            vec![
+                FocusTarget::SidebarToggle,
+                FocusTarget::Library,
+                FocusTarget::Preview(photo_id),
+                FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::Exposure,)),
+                FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::Exposure)),
+                FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::RedGain)),
+                FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::RedGain)),
+                FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::GreenGain,)),
+                FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::GreenGain)),
+                FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::BlueGain)),
+                FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::BlueGain)),
+                FocusTarget::BasicEdit(BasicEditControl::Undo),
+                FocusTarget::BasicEdit(BasicEditControl::Redo),
+                FocusTarget::BasicEdit(BasicEditControl::Reset),
+                FocusTarget::BasicEdit(BasicEditControl::Commit),
+                FocusTarget::BasicEdit(BasicEditControl::Reload),
+                FocusTarget::BasicEdit(BasicEditControl::Reapply),
+                FocusTarget::BackToLibrary,
+            ]
         );
     }
 

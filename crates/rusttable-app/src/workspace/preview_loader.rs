@@ -72,9 +72,9 @@ pub(crate) fn load_selected_preview(
     source_root: &Path,
     photo_id: PhotoId,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
+    let edit = load_selected_edit(catalog_path, photo_id)?;
     let repository =
         RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
-    let edit = current_edit(&repository, photo_id)?;
     let output = CatalogPreviewService::new(preview_service())
         .render(
             CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
@@ -82,11 +82,44 @@ pub(crate) fn load_selected_preview(
             &repository,
         )
         .map_err(WorkspacePreviewError::Preview)?;
-    Ok(SelectedPreview {
-        photo_id,
-        dimensions: output.image().dimensions(),
-        pixels: output.image().pixels().to_vec(),
-    })
+    Ok(selected_preview(photo_id, &output))
+}
+
+/// Renders a supplied, non-persisted edit for one selected catalog photo.
+///
+/// The catalog is opened only for the import repository needed by the
+/// composition boundary. The edit is never looked up or written, so a draft
+/// can be previewed without changing the persisted edit lineage.
+///
+/// # Errors
+///
+/// Returns a typed catalog, source, ownership-validation, decode, or CPU-render failure.
+pub(crate) fn load_preview_for_edit(
+    catalog_path: &Path,
+    source_root: &Path,
+    photo_id: PhotoId,
+    edit: &Edit,
+) -> Result<SelectedPreview, WorkspacePreviewError> {
+    let repository =
+        RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
+    let output = CatalogPreviewService::new(preview_service())
+        .render_edit(source_root, edit, &repository)
+        .map_err(WorkspacePreviewError::Preview)?;
+    Ok(selected_preview(photo_id, &output))
+}
+
+/// Loads the exact current persisted edit for one selected catalog photo.
+///
+/// # Errors
+///
+/// Returns the same typed catalog and edit-selection failures used by selected-preview loading.
+pub(crate) fn load_selected_edit(
+    catalog_path: &Path,
+    photo_id: PhotoId,
+) -> Result<Edit, WorkspacePreviewError> {
+    let repository =
+        RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
+    current_edit(&repository, photo_id)
 }
 
 fn current_edit(
@@ -106,6 +139,14 @@ fn select_current_edit(edits: Vec<Edit>, photo_id: PhotoId) -> Option<Edit> {
         .max_by_key(|edit| (edit.revision().get(), edit.id().get()))
 }
 
+fn selected_preview(photo_id: PhotoId, output: &rusttable_render::RenderOutput) -> SelectedPreview {
+    SelectedPreview {
+        photo_id,
+        dimensions: output.image().dimensions(),
+        pixels: output.image().pixels().to_vec(),
+    }
+}
+
 fn preview_service() -> PreviewService {
     PreviewService::new(
         DecodeLimits::new(
@@ -123,9 +164,38 @@ fn preview_service() -> PreviewService {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use rusttable_catalog::EditRepository;
+    use rusttable_catalog_store::RedbCatalogRepository;
     use rusttable_core::{EditId, Revision};
 
-    use super::{Edit, PhotoId, select_current_edit};
+    use super::{Edit, PhotoId, WorkspacePreviewError, load_preview_for_edit, select_current_edit};
+
+    static TEST_DIRECTORY_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let number = TEST_DIRECTORY_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "rusttable-app-preview-loader-{}-{number}",
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).expect("temporary preview-loader directory");
+            Self(path)
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
 
     fn photo_id(value: u128) -> PhotoId {
         PhotoId::new(value).expect("test photo ID is non-zero")
@@ -172,5 +242,129 @@ mod tests {
             select_current_edit(vec![edit(1, photo_id(1), 1)], photo_id(2)),
             None
         );
+    }
+
+    #[test]
+    fn supplied_edit_preview_preserves_selected_preview_contract_without_persisting_edit() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("selected.png");
+        let catalog = directory.0.join("catalog.redb");
+        let bytes = decode_base64(include_str!(
+            "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+        ));
+        fs::write(&source, bytes).expect("fixture source");
+
+        let batch = crate::workspace::raster_import::run_raster_import(
+            &catalog,
+            vec![source],
+            &rusttable_import::RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let selected = batch
+            .receipts()
+            .next()
+            .and_then(|receipt| receipt.photo_id)
+            .expect("fixture import photo");
+        let persisted_before = RedbCatalogRepository::open(&catalog)
+            .expect("open catalog before transient preview")
+            .list()
+            .expect("list persisted edits before transient preview");
+        let transient = edit(100, selected, 1);
+
+        let preview = load_preview_for_edit(
+            &catalog,
+            Path::new("unused-source-root"),
+            selected,
+            &transient,
+        )
+        .expect("transient edit preview");
+        let (photo_id, dimensions, pixels) = preview.into_parts();
+
+        assert_eq!(photo_id, selected);
+        assert_eq!((dimensions.width(), dimensions.height()), (2, 1));
+        assert_eq!(pixels.len(), 8);
+
+        let persisted_after = RedbCatalogRepository::open(&catalog)
+            .expect("reopen catalog after transient preview")
+            .list()
+            .expect("list persisted edits after transient preview");
+        assert_eq!(persisted_after, persisted_before);
+        assert!(
+            !persisted_after
+                .iter()
+                .any(|persisted| persisted.id() == transient.id())
+        );
+    }
+
+    #[test]
+    fn edit_photo_validation_is_returned_through_the_composition_boundary() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("selected.png");
+        let catalog = directory.0.join("catalog.redb");
+        let bytes = decode_base64(include_str!(
+            "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+        ));
+        fs::write(&source, bytes).expect("fixture source");
+        let batch = crate::workspace::raster_import::run_raster_import(
+            &catalog,
+            vec![source],
+            &rusttable_import::RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let selected = batch
+            .receipts()
+            .next()
+            .and_then(|receipt| receipt.photo_id)
+            .expect("fixture import photo");
+
+        let result = load_preview_for_edit(
+            &catalog,
+            Path::new("unused-source-root"),
+            selected,
+            &edit(101, photo_id(999), 1),
+        );
+
+        assert!(matches!(result, Err(WorkspacePreviewError::Preview(_))));
+    }
+
+    fn decode_base64(encoded: &str) -> Vec<u8> {
+        let mut output = Vec::new();
+        let mut bytes = encoded.bytes().filter(|byte| !byte.is_ascii_whitespace());
+        while let Some(first) = bytes.next() {
+            let second = bytes.next().expect("complete base64 fixture quartet");
+            let third = bytes.next().expect("complete base64 fixture quartet");
+            let fourth = bytes.next().expect("complete base64 fixture quartet");
+            let values = [
+                base64_value(first),
+                base64_value(second),
+                if third == b'=' {
+                    0
+                } else {
+                    base64_value(third)
+                },
+                if fourth == b'=' {
+                    0
+                } else {
+                    base64_value(fourth)
+                },
+            ];
+            output.push((values[0] << 2) | (values[1] >> 4));
+            if third != b'=' {
+                output.push((values[1] << 4) | (values[2] >> 2));
+            }
+            if fourth != b'=' {
+                output.push((values[2] << 6) | values[3]);
+            }
+        }
+        output
+    }
+
+    fn base64_value(byte: u8) -> u8 {
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+            .bytes()
+            .position(|candidate| candidate == byte)
+            .expect("valid base64 fixture")
+            .try_into()
+            .expect("base64 alphabet index fits in u8")
     }
 }
