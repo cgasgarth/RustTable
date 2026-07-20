@@ -441,6 +441,31 @@ impl ExportRequest {
     }
 
     #[must_use]
+    pub const fn alpha_policy(&self) -> AlphaPolicy {
+        self.alpha
+    }
+
+    #[must_use]
+    pub const fn dither_policy(&self) -> DitherPolicy {
+        self.dither
+    }
+
+    #[must_use]
+    pub const fn metadata_policy(&self) -> MetadataPolicy {
+        self.metadata
+    }
+
+    #[must_use]
+    pub const fn priority(&self) -> ExportPriority {
+        self.priority
+    }
+
+    #[must_use]
+    pub fn destination_id(&self) -> &str {
+        self.destination.destination_id()
+    }
+
+    #[must_use]
     pub fn with_size(mut self, size: RenderSizeRequest) -> Self {
         self.size = size;
         self

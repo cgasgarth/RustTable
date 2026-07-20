@@ -1,5 +1,6 @@
 //! Production raster encoders over the canonical export artifact boundary.
 
+pub mod copy;
 pub mod jpeg;
 pub mod jpegxl;
 pub mod png;
