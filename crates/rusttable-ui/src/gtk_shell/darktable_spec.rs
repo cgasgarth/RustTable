@@ -292,6 +292,8 @@ pub struct DarktableColors {
     pub lighttable_canvas: ColorToken,
     /// Darkroom canvas (`darkroom_bg_color`).
     pub darkroom_canvas: ColorToken,
+    /// Thumbnail tile background (`thumbnail_bg_color`).
+    pub thumbnail_background: ColorToken,
     /// Filmstrip background (`filmstrip_bg_color`).
     pub filmstrip_background: ColorToken,
     /// Selected thumbnail background (`thumbnail_selected_bg_color`).
@@ -340,7 +342,7 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     center_minimum_width_px: 650,
     side_panel_widths: SidePanelWidths {
         minimum_px: 150,
-        preferred_px: 300,
+        preferred_px: 160,
         maximum_px: 1_500,
     },
     filmstrip_heights: FilmstripHeights {
@@ -360,6 +362,7 @@ pub const DARKTABLE_COLORS: DarktableColors = DarktableColors {
     active_field_background: ColorToken::new("field_active_bg", [0x3b, 0x3b, 0x3b, 0xff]),
     lighttable_canvas: ColorToken::new("lighttable_bg_color", [0x5e, 0x5e, 0x5e, 0xff]),
     darkroom_canvas: ColorToken::new("darkroom_bg_color", [0x77, 0x77, 0x77, 0xff]),
+    thumbnail_background: ColorToken::new("thumbnail_bg_color", [0x77, 0x77, 0x77, 0xff]),
     filmstrip_background: ColorToken::new("filmstrip_bg_color", [0x5e, 0x5e, 0x5e, 0xff]),
     selected_thumbnail: ColorToken::new("thumbnail_selected_bg_color", [0xab, 0xab, 0xab, 0xff]),
     hovered_thumbnail: ColorToken::new("thumbnail_hover_bg_color", [0xd4, 0xd4, 0xd4, 0xff]),
@@ -443,7 +446,7 @@ mod tests {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 300);
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 160);
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
         assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
@@ -462,6 +465,10 @@ mod tests {
         );
         assert_eq!(
             DARKTABLE_COLORS.darkroom_canvas.rgba(),
+            [0x77, 0x77, 0x77, 0xff]
+        );
+        assert_eq!(
+            DARKTABLE_COLORS.thumbnail_background.rgba(),
             [0x77, 0x77, 0x77, 0xff]
         );
         assert_eq!(

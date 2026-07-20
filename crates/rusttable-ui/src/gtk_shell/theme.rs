@@ -37,6 +37,14 @@ pub enum ThemeRole {
     PhotoCard,
     /// The selected photo card or thumbnail.
     SelectedPhoto,
+    /// The two-column empty collection/help message.
+    EmptyState,
+    /// A compact view switcher control.
+    ViewSwitcher,
+    /// A collapsible navigation or processing group.
+    ModuleGroup,
+    /// The image portion of a thumbnail tile.
+    ThumbnailImage,
 }
 
 impl ThemeRole {
@@ -55,6 +63,10 @@ impl ThemeRole {
             Self::Module => "dt_module",
             Self::PhotoCard => "dt_photo_card",
             Self::SelectedPhoto => "dt_selected",
+            Self::EmptyState => "dt_empty_state",
+            Self::ViewSwitcher => "dt_view_switcher",
+            Self::ModuleGroup => "dt_module_group",
+            Self::ThumbnailImage => "dt_thumbnail_image",
         }
     }
 }
@@ -99,6 +111,7 @@ pub fn darktable_theme_css() -> String {
         ),
         ("{{lighttable_canvas}}", colors.lighttable_canvas),
         ("{{darkroom_canvas}}", colors.darkroom_canvas),
+        ("{{thumbnail_background}}", colors.thumbnail_background),
         ("{{filmstrip_background}}", colors.filmstrip_background),
         ("{{selected_thumbnail}}", colors.selected_thumbnail),
         ("{{hovered_thumbnail}}", colors.hovered_thumbnail),
@@ -138,6 +151,8 @@ mod tests {
         assert!(css.contains("#777777ff"));
         assert!(css.contains("#ffbb00ff"));
         assert!(css.contains(".dt_photo_card"));
+        assert!(css.contains(".dt_empty_state"));
+        assert!(css.contains(".dt_view_switcher"));
     }
 
     #[test]
@@ -145,5 +160,51 @@ mod tests {
         assert_eq!(ThemeRole::Shell.class_name(), "dt_shell");
         assert_eq!(ThemeRole::Darkroom.class_name(), "dt_darkroom_canvas");
         assert_eq!(ThemeRole::SelectedPhoto.class_name(), "dt_selected");
+    }
+
+    #[test]
+    fn css_exposes_the_shell_roles_used_by_screenshot_smoke_checks() {
+        let css = darktable_theme_css();
+
+        for selector in [
+            "#header",
+            "#left-panel",
+            "#center-workspace",
+            "#right-panel",
+            "#bottom-filmstrip",
+            ".dt_empty_state",
+            ".dt_module_group",
+            ".dt_thumbnail_image",
+            ".dt_view_switcher",
+        ] {
+            assert!(css.contains(selector), "missing selector {selector}");
+        }
+    }
+
+    #[test]
+    fn semantic_roles_are_unique_and_stable() {
+        let roles = [
+            ThemeRole::Shell,
+            ThemeRole::Header,
+            ThemeRole::Panel,
+            ThemeRole::Workspace,
+            ThemeRole::Lighttable,
+            ThemeRole::Darkroom,
+            ThemeRole::Filmstrip,
+            ThemeRole::Toolbar,
+            ThemeRole::Module,
+            ThemeRole::PhotoCard,
+            ThemeRole::SelectedPhoto,
+            ThemeRole::EmptyState,
+            ThemeRole::ViewSwitcher,
+            ThemeRole::ModuleGroup,
+            ThemeRole::ThumbnailImage,
+        ];
+        let names = roles
+            .into_iter()
+            .map(ThemeRole::class_name)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(names.len(), roles.len());
     }
 }

@@ -8,6 +8,8 @@ use rusttable_core::PhotoId;
 
 use crate::presentation::{self, PhotoDetailViewModel, SelectedPreviewState};
 
+use super::{ThemeRole, apply_theme_role};
+
 /// The central darkroom image surface and its typed metadata presentation.
 ///
 /// The widget deliberately accepts a [`gdk4::Texture`] rather than image bytes.
@@ -40,6 +42,7 @@ impl PhotoPreview {
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         root.set_widget_name("darkroom-photo-preview");
+        apply_theme_role(&root, ThemeRole::Darkroom);
         root.set_hexpand(true);
         root.set_vexpand(true);
 
@@ -72,6 +75,7 @@ impl PhotoPreview {
 
         let canvas = gtk4::Picture::new();
         canvas.set_widget_name("darkroom-image-canvas");
+        apply_theme_role(&canvas, ThemeRole::Darkroom);
         canvas.set_hexpand(true);
         canvas.set_vexpand(true);
         canvas.set_can_shrink(true);

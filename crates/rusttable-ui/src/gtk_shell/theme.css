@@ -1,22 +1,15 @@
-/*
- * RustTable's GTK4 visual contract.
- *
- * The placeholders are populated from darktable_spec::DARKTABLE_COLORS so the
- * palette remains a single Rust-owned source of truth. The selectors mirror
- * the stable visual roles of the reference desktop and the dt_* class
- * convention used by the RustTable shell.
- */
+/* RustTable's compact GTK4 transcription of Darktable's default grey theme. */
 
 * {
   color: {{foreground}};
-  font-family: sans-serif;
+  font-family: Sans;
+  font-size: 0.85em;
   font-weight: normal;
 }
 
 window,
+headerbar,
 #header,
-#left-panel,
-#right-panel,
 .dt_shell,
 .dt_header,
 .dt_panel {
@@ -24,19 +17,74 @@ window,
   color: {{foreground}};
 }
 
-#header {
+#header,
+headerbar {
+  min-height: 2.1em;
+  padding: 0.12em 0.28em;
   border-bottom: 1px solid {{border}};
-  padding: 0.14em 0.28em;
+}
+
+#header-left,
+#header-center,
+#header-right,
+.dt_view_switcher {
+  background-color: transparent;
+}
+
+.dt_view_switcher {
+  margin: 0;
+  padding: 0;
+}
+
+.dt_view_switcher button,
+.dt_toolbar button,
+.dt_button {
+  min-height: 1.65em;
+  padding: 0.12em 0.55em;
+  border: 1px solid {{border}};
+  border-radius: 2px;
+  background-color: {{button_background}};
+  color: {{foreground}};
+}
+
+.dt_view_switcher button:hover,
+.dt_toolbar button:hover,
+button:hover,
+.dt_button:hover {
+  background-color: {{hovered_thumbnail}};
+  color: {{background}};
+}
+
+.dt_view_switcher button:checked,
+.dt_view_switcher .active {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+  border-color: {{active_image_marker}};
 }
 
 #left-panel,
 #right-panel {
-  border: 1px solid {{border}};
-  padding: 0.5em;
+  min-width: 150px;
+  background-color: {{background}};
+  border: 0;
 }
 
+#left-panel {
+  border-right: 1px solid {{border}};
+}
+
+#right-panel {
+  border-left: 1px solid {{border}};
+}
+
+.dt_panel_slot {
+  padding: 0.25em 0.35em;
+}
+
+#workspace,
 #center-workspace,
-.dt_workspace {
+.dt_workspace,
+.dt_darkroom_canvas {
   background-color: {{darkroom_canvas}};
   color: {{foreground}};
 }
@@ -47,63 +95,80 @@ window,
   color: {{foreground}};
 }
 
-#bottom-filmstrip,
-.dt_filmstrip {
-  background-color: {{filmstrip_background}};
+.dt_empty_state {
+  padding: 2.5em;
   color: {{foreground}};
-  border-top: 1px solid {{border}};
 }
 
-button,
-.dt_button {
+.dt_empty_state .title-3 {
+  color: {{hovered_thumbnail}};
+}
+
+.dt_module_group,
+.dt_module,
+.dt_module_panel,
+expander {
+  margin: 0 0 1px 0;
+  padding: 0.18em 0.35em;
+  background-color: {{module_background}};
+  color: {{foreground}};
+  border-bottom: 1px solid {{border}};
+}
+
+.dt_module_group:hover,
+expander:hover {
   background-color: {{button_background}};
-  color: {{foreground}};
-  border: 1px solid {{border}};
-  border-radius: 2px;
-  padding: 0.28em 0.5em;
 }
 
-button:hover,
-.dt_button:hover {
-  background-color: {{hovered_thumbnail}};
-  color: {{background}};
+.dt_section_label,
+.dt_section_expander,
+.dt_module_group > title {
+  color: {{foreground}};
+  background-color: transparent;
+  font-weight: bold;
+}
+
+.dt_toolbar {
+  min-height: 1.8em;
+  padding: 0.12em 0.28em;
+  background-color: {{background}};
+  color: {{foreground}};
 }
 
 entry,
 dropdown,
+spinbutton,
 .dt_field {
+  min-height: 1.6em;
   background-color: {{active_field_background}};
   color: {{foreground}};
   border: 1px solid {{border}};
   border-radius: 2px;
 }
 
-.dt_module,
-expander,
-.dt_module_panel {
-  background-color: {{module_background}};
+#bottom-filmstrip,
+.dt_filmstrip {
+  min-height: 64px;
+  background-color: {{filmstrip_background}};
   color: {{foreground}};
-  border-bottom: 1px solid {{border}};
-}
-
-.dt_section_label,
-.dt_section_expander {
-  color: {{foreground}};
-  background-color: {{module_background}};
-}
-
-.dt_toolbar {
-  background-color: {{background}};
-  color: {{foreground}};
-  padding: 0.14em 0.28em;
+  border-top: 1px solid {{border}};
 }
 
 .dt_photo_card,
 #lighttable-photo-card,
 #filmstrip-photo {
-  background-color: {{button_background}};
+  padding: 0;
+  background-color: {{thumbnail_background}};
   color: {{foreground}};
-  border: 1px solid {{border}};
+  border: 1px solid {{lighttable_canvas}};
+  border-radius: 1px;
+}
+
+.dt_thumbnail_image {
+  min-width: 8em;
+  min-height: 5em;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
 }
 
 .dt_photo_card:hover,
@@ -113,7 +178,6 @@ expander,
   color: {{background}};
 }
 
-.dt_photo_card:selected,
 .dt_photo_card.dt_selected,
 #lighttable-photo-card.dt_selected,
 #filmstrip-photo.dt_selected,
@@ -123,17 +187,14 @@ expander,
   border-color: {{active_image_marker}};
 }
 
-.dt_preview,
-.dt_darkroom_canvas {
-  background-color: {{darkroom_canvas}};
-}
-
 .dt_placeholder,
 .dim-label {
   color: {{foreground}};
 }
 
 scrollbar slider {
+  min-width: 0.45em;
+  min-height: 0.45em;
   background-color: {{border}};
 }
 
