@@ -48,6 +48,12 @@ impl SourceImportService {
         clippy::too_many_arguments,
         reason = "issue #86 requires explicit state, request, limits, repository, and three adapter ports"
     )]
+    /// Inspects a source and registers its immutable catalog record.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed source, image, metadata, candidate, catalog, or
+    /// repository failure without committing a partial import.
     pub fn inspect_and_register(
         state: &mut CatalogState,
         expected_revision: Revision,

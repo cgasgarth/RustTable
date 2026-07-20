@@ -19,6 +19,11 @@ pub struct ImportSourceLimits {
 
 impl ImportSourceLimits {
     /// Creates a finite source cap whose extra-byte sentinel is representable.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the limit is zero, cannot fit in memory, or
+    /// cannot reserve its extra-byte sentinel.
     pub fn new(max_source_bytes: u64) -> Result<Self, ImportSourceLimitsError> {
         if max_source_bytes == 0 {
             return Err(ImportSourceLimitsError::ZeroLimit);
@@ -106,6 +111,12 @@ impl fmt::Display for SourceSnapshotError {
 impl std::error::Error for SourceSnapshotError {}
 
 pub trait SourceSnapshotReader: Send + Sync {
+    /// Reads one bounded immutable source snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed source-access or limit failure without producing a
+    /// partial snapshot.
     fn read_snapshot(
         &self,
         path: &Path,

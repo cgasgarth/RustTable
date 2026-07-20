@@ -20,6 +20,9 @@ rusttable-ui.workspace = true
 
 [dev-dependencies]
 iced_test.workspace = true
+rusttable-import.workspace = true
+rusttable-metadata.workspace = true
+rusttable-testkit.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 iced = { workspace = true, features = ["wayland", "x11"] }

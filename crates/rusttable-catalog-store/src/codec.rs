@@ -10,8 +10,6 @@ use rusttable_core::{
 };
 use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
 
-use crate::schema::CURRENT_SCHEMA_VERSION;
-
 const RECORD_FORMAT_VERSION: u8 = 1;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,7 +95,7 @@ pub(crate) fn encode(record: &ImportRecord) -> Result<Vec<u8>, ()> {
 
 pub(crate) fn decode(bytes: &[u8]) -> Result<ImportRecord, ()> {
     let stored: StoredRecord = from_bytes(bytes).map_err(|_| ())?;
-    if stored.version != RECORD_FORMAT_VERSION || CURRENT_SCHEMA_VERSION != 1 {
+    if stored.version != RECORD_FORMAT_VERSION {
         return Err(());
     }
     let source =
