@@ -14,6 +14,10 @@ use rusttable_processing::{
 mod plan;
 mod prepared_pixelpipe;
 mod provenance;
+mod thumbnail;
+mod thumbnail_cache;
+mod thumbnail_lifecycle;
+mod thumbnail_scheduler;
 
 pub use plan::{PreviewBounds, PreviewBoundsError, RenderPlan, RenderSampling, RenderTarget};
 pub use prepared_pixelpipe::{
@@ -22,6 +26,21 @@ pub use prepared_pixelpipe::{
 pub use provenance::{
     ProvenancedRenderError, ProvenancedRenderErrorKind, ProvenancedRenderOutput,
     RenderFailureStage, RenderReceipt, RenderRequestContext, RenderSourceProvenance,
+};
+pub use thumbnail::{
+    MipmapLevel, ResamplingQuality, ThumbnailError, ThumbnailGenerator, ThumbnailKey,
+    ThumbnailKeyError, ThumbnailProvenance, ThumbnailRequest, ThumbnailSize,
+};
+pub use thumbnail_cache::{
+    CURRENT_CACHE_SCHEMA, CacheEntry, CacheError, CacheLease, CacheLimits, CachePin, CacheStore,
+    CacheTime, ReconciliationReport,
+};
+pub use thumbnail_lifecycle::{
+    CacheChangeEvent, CacheInvalidationReport, CacheLifecycle, CacheLifecycleError,
+};
+pub use thumbnail_scheduler::{
+    PrefetchCancellation, PrefetchCompletion, PrefetchError, PrefetchHandle, PrefetchJob,
+    PrefetchPriority, PrefetchRequest, PrefetchScheduler,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
