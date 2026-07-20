@@ -2,7 +2,10 @@ use iced::widget::{column, container, image, row, scrollable, text};
 use iced::{ContentFit, Element, Fill, Length};
 use rusttable_core::product_name;
 
-use crate::input::{BasicEditControl, BasicEditIntent, FocusTarget, InputIntent, UiMessage};
+use crate::input::{
+    BasicEditControl, BasicEditIntent, ExportIntent, ExportSize, FocusTarget, InputIntent,
+    UiMessage,
+};
 use crate::library::LibraryState;
 use crate::navigation::{NavigationIntent, WorkspaceRoute};
 use crate::presentation::{
@@ -229,30 +232,15 @@ fn detail_content(state: &UiState, photo_id: rusttable_core::PhotoId) -> Element
         UiMessage::Navigate(NavigationIntent::ShowLibrary),
         state.is_focused(FocusTarget::Preview(detail.id())),
     );
-    let save_rendered_copy = action_button(
-        text("Save rendered copy…"),
-        UiMessage::SaveRenderedCopy(detail.id()),
-        state.is_focused(FocusTarget::SaveRenderedCopy(detail.id())),
-    );
-    let export_status = state
-        .export_status(detail.id())
-        .map_or_else(|| column![].into(), |status| text(status.as_str()).into());
+    let save_rendered_copy = rendered_copy_controls(state, detail.id());
     let inspector = basic_edit_inspector(state, detail.id());
-    detail_view(
-        detail,
-        preview,
-        save_rendered_copy,
-        export_status,
-        inspector,
-        back,
-    )
+    detail_view(detail, preview, save_rendered_copy, inspector, back)
 }
 
 fn detail_view<'a>(
     detail: &'a PhotoDetailViewModel,
     preview: Element<'a, UiMessage>,
     save_rendered_copy: Element<'a, UiMessage>,
-    export_status: Element<'a, UiMessage>,
     inspector: Element<'a, UiMessage>,
     back: Element<'a, UiMessage>,
 ) -> Element<'a, UiMessage> {
@@ -267,11 +255,56 @@ fn detail_view<'a>(
     let heading = row![text("Photo detail"), save_rendered_copy, back].spacing(REGION_SPACING);
     column![
         heading,
-        export_status,
         text(detail.title().as_str()),
         row![preview_and_facts, inspector].spacing(REGION_SPACING),
     ]
     .into()
+}
+
+fn rendered_copy_controls(
+    state: &UiState,
+    photo_id: rusttable_core::PhotoId,
+) -> Element<'_, UiMessage> {
+    let in_progress = state.export_in_progress(photo_id);
+    let selected_size = state.export_size();
+    let size_choices: Element<'_, UiMessage> = if in_progress {
+        text(format!("Output size locked: {}", selected_size.label())).into()
+    } else {
+        row(ExportSize::ALL.into_iter().map(|size| {
+            let label = if size == selected_size {
+                format!("{} selected", size.label())
+            } else {
+                size.label().to_owned()
+            };
+            action_button(
+                text(label),
+                UiMessage::Input(InputIntent::Export(ExportIntent::SelectSize(size))),
+                state.is_focused(FocusTarget::ExportSize(photo_id, size)),
+            )
+        }))
+        .spacing(REGION_SPACING)
+        .into()
+    };
+    let action = if in_progress {
+        action_button(
+            text("Cancel PNG export"),
+            UiMessage::Input(InputIntent::Export(ExportIntent::Cancel)),
+            state.is_focused(FocusTarget::CancelRenderedCopy(photo_id)),
+        )
+    } else {
+        action_button(
+            text("Save PNG…"),
+            UiMessage::Input(InputIntent::Export(ExportIntent::Start)),
+            state.is_focused(FocusTarget::StartRenderedCopy(photo_id)),
+        )
+    };
+    let status: Element<'_, UiMessage> = state
+        .export_status(photo_id)
+        .map_or_else(|| column![].into(), |value| text(value.as_str()).into());
+
+    column![text("PNG export"), size_choices, action, status,]
+        .spacing(REGION_SPACING)
+        .into()
 }
 
 fn basic_edit_inspector(
@@ -601,6 +634,38 @@ mod tests {
         simulator.find("Reset edit")?;
         simulator.find("Save edit")?;
         simulator.find("No unsaved changes")?;
+        simulator.find("PNG export")?;
+        simulator.find("Original selected")?;
+        simulator.find("Fit 2048")?;
+        simulator.find("Fit 4096")?;
+        simulator.find("Save PNG…")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn png_export_progress_replaces_mutable_controls_with_a_cancel_affordance()
+    -> Result<(), iced_test::Error> {
+        let mut state = selected_photo_state(SelectedPreviewState::Unavailable);
+        let _ = state.handle(UiMessage::Input(crate::InputIntent::Export(
+            crate::input::ExportIntent::Start,
+        )));
+        let mut simulator =
+            Simulator::with_size(Settings::default(), Size::new(800.0, 600.0), view(&state));
+
+        simulator.find("Choosing PNG destination…")?;
+        simulator.find("Cancel PNG export")?;
+        assert!(simulator.find("Save PNG…").is_err());
+        assert!(simulator.find("Fit 2048").is_err());
+        drop(simulator);
+        assert_eq!(state.export_size(), crate::input::ExportSize::Original);
+        assert_eq!(
+            state.handle(UiMessage::Input(crate::InputIntent::Export(
+                crate::input::ExportIntent::SelectSize(crate::input::ExportSize::Fit2048),
+            ))),
+            crate::UiEffect::None
+        );
+        assert_eq!(state.export_size(), crate::input::ExportSize::Original);
 
         Ok(())
     }
