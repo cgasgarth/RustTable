@@ -1,0 +1,39 @@
+schema = "rusttable.pixelpipe-roi-source-map.v1"
+issue = 267
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "roi-default-forward-reverse"
+upstream_path = "src/develop/imageop.c"
+upstream_symbol = "_iop_modify_roi_in;_iop_modify_roi_out"
+rust_path = "crates/rusttable-pixelpipe/src/roi.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "roi-trace-observation"
+upstream_path = "src/develop/tiling.c"
+upstream_symbol = "_print_roi"
+rust_path = "crates/rusttable-pixelpipe/src/roi.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "roi-crop-binding"
+upstream_path = "src/iop/crop.c"
+upstream_symbol = "modify_roi_out;modify_roi_in;distort_transform"
+rust_path = "crates/rusttable-pixelpipe/src/roi.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "roi-scale-binding"
+upstream_path = "src/iop/finalscale.c"
+upstream_symbol = "modify_roi_in"
+rust_path = "crates/rusttable-pixelpipe/src/roi.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "roi-distortion-binding"
+upstream_path = "src/iop/lens.cc"
+upstream_symbol = "distort_transform"
+rust_path = "crates/rusttable-pixelpipe/src/roi.rs"
+status = "replaced"

@@ -47,13 +47,18 @@ pub(crate) fn run(root: &Path, command: MigrationCommand) -> Result {
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }
-            SourceMapCommand::Verify { issue } if issue == 270 => {
-                pixelpipe::verify_cache_source_map(root, issue)?;
+            SourceMapCommand::Verify { issue } if issue == 267 => {
+                pixelpipe::verify_roi_source_map(root)?;
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }
             SourceMapCommand::Verify { issue } if issue == 269 => {
                 memory::verify_source_map(root, issue)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
+            SourceMapCommand::Verify { issue } if issue == 270 => {
+                pixelpipe::verify_cache_source_map(root, issue)?;
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }

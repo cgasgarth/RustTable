@@ -12,6 +12,7 @@ mod pipeline_snapshot;
 mod preparation;
 pub mod purpose;
 mod receipt;
+mod roi;
 mod snapshot;
 mod tile;
 
@@ -27,6 +28,7 @@ pub use cache_value::{
     AnalysisValue, CacheValue, CancellationToken, CreationCost, PlanValue, ValueDescriptor,
     ValueKind,
 };
+
 pub use cpu::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
     CpuTileAssemblyError,
@@ -51,6 +53,12 @@ pub use preparation::{
 };
 pub use receipt::{
     CpuImplementation, CpuNodeReceipt, CpuPipelineReceipt, CpuPipelineReceiptError, PixelIdentity,
+};
+pub use roi::{
+    DistortionBinding, DistortionError, DistortionMapping, FillValue, NodeRoiContract,
+    ROI_SCHEMA_VERSION, RationalScale, RoiBackwardStep, RoiDescriptor, RoiDescriptorIdentity,
+    RoiError, RoiForwardStep, RoiNode, RoiPlan, RoiPlanIdentity, RoiPlanner, RoiPlanningError,
+    RoiRect, RoiRequest, RoiRequestPolicy, RoiSupport,
 };
 pub use rusttable_image::{
     AcquireOptions, AllocationClass, BufferAlignment, BufferLease, BufferRead, BufferRequest,

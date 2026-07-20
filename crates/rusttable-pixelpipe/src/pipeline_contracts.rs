@@ -570,6 +570,7 @@ impl fmt::Display for PipelineSnapshotIdentity {
 pub enum SnapshotDiffComponent {
     Source,
     Stack,
+    Roi,
     InputColor,
     WorkingColor,
     OutputColor,
@@ -594,6 +595,10 @@ impl SnapshotDiff {
     #[must_use]
     pub fn components(&self) -> &[SnapshotDiffComponent] {
         &self.components
+    }
+
+    pub(crate) fn push(&mut self, component: SnapshotDiffComponent) {
+        self.components.push(component);
     }
 
     #[must_use]

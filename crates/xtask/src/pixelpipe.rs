@@ -11,6 +11,10 @@ use rusttable_pixelpipe::{
     PipelineSnapshot, PipelineSnapshotIdentity, PipelineSnapshotInput, SourceDescriptor,
     SourceIdentity,
 };
+use rusttable_pixelpipe::{
+    NodeRoiContract, RoiDescriptor, RoiNode, RoiPlanner, RoiRect, RoiRequest, RoiRequestPolicy,
+    RoiSupport,
+};
 use rusttable_processing::descriptor::exposure_descriptor;
 use rusttable_processing::operation_stack::{
     InsertPosition, OperationInstance, OperationStackSnapshot, OperationStackTemplate,
@@ -39,6 +43,15 @@ pub(crate) enum PixelpipeCommand {
         #[arg(long)]
         verify_identities: bool,
     },
+    /// Verify deterministic forward/reverse ROI propagation and conservative enclosures.
+    Roi {
+        #[arg(long)]
+        fixtures: String,
+        #[arg(long, default_value_t = 10_000)]
+        random: u32,
+        #[arg(long)]
+        verify_conservative: bool,
+    },
     /// Exercise cache identity mutations, single-flight, and bounded retention.
     CacheMatrix {
         #[arg(long)]
@@ -60,6 +73,11 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
             purposes,
             verify_identities,
         } => prepare(root, &fixture, &stack, &purposes, verify_identities),
+        PixelpipeCommand::Roi {
+            fixtures,
+            random,
+            verify_conservative,
+        } => roi(root, &fixtures, random, verify_conservative),
         PixelpipeCommand::CacheMatrix {
             fixture,
             mutate_all_identities,
@@ -73,6 +91,87 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
             verify_bounds,
         ),
     }
+}
+
+fn roi(root: &Path, fixtures: &str, random: u32, verify_conservative: bool) -> Result {
+    if fixtures != "all" {
+        return Err("pixelpipe ROI acceptance requires --fixtures all".to_owned());
+    }
+    if random < 10_000 {
+        return Err("pixelpipe ROI acceptance requires --random >= 10000".to_owned());
+    }
+    if !verify_conservative {
+        return Err("pixelpipe ROI acceptance requires --verify-conservative".to_owned());
+    }
+    verify_roi_source_map(root)?;
+    let dimensions = ImageDimensions::new(257, 193).map_err(|error| error.to_string())?;
+    let source = RoiDescriptor::source(dimensions, RoiRect::full(dimensions), [3; 32])
+        .map_err(|error| error.to_string())?;
+    let scale = rusttable_pixelpipe::RationalScale::new(3, 2).map_err(|error| error.to_string())?;
+    let nodes = [
+        RoiNode::new(1, "identity", NodeRoiContract::Identity),
+        RoiNode::new(
+            2,
+            "neighborhood",
+            NodeRoiContract::Neighborhood {
+                support: 2,
+                asymmetric_support: RoiSupport::new(1, 2, 0, 3),
+            },
+        ),
+        RoiNode::new(
+            3,
+            "scale",
+            NodeRoiContract::Scale {
+                rational_x: scale,
+                rational_y: scale,
+                filter_support: RoiSupport::symmetric(1),
+            },
+        ),
+    ];
+    let planner = RoiPlanner;
+    let mut seed = 0x267_u64;
+    let mut under_request = 0_u32;
+    let mut identity = None;
+    for _ in 0..random {
+        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        let x = u32::try_from(seed % 250).expect("bounded");
+        seed = seed.rotate_left(17);
+        let y = u32::try_from(seed % 186).expect("bounded");
+        let request = RoiRequest::new(
+            RoiRect::new(x, y, 1, 1).expect("bounded ROI"),
+            RoiRequestPolicy::ClipToFinalBounds,
+        );
+        let first = planner
+            .plan(source, &nodes, request)
+            .map_err(|error| error.to_string())?;
+        let second = planner
+            .plan(source, &nodes, request)
+            .map_err(|error| error.to_string())?;
+        if first.identity() != second.identity() {
+            return Err("pixelpipe ROI plan identity is unstable".to_owned());
+        }
+        if identity.is_none() {
+            identity = Some(first.identity());
+        }
+        if first.source_required().is_empty()
+            || first
+                .backward()
+                .iter()
+                .any(|step| step.input_required().is_empty())
+        {
+            under_request = under_request.saturating_add(1);
+        }
+    }
+    if under_request != 0 {
+        return Err(format!(
+            "pixelpipe ROI acceptance found {under_request} empty required regions"
+        ));
+    }
+    eprintln!(
+        "pixelpipe ROI acceptance passed (fixtures={fixtures} random={random} under-request={under_request} identity={:?})",
+        identity.expect("iterations")
+    );
+    Ok(())
 }
 
 fn cache_matrix(
@@ -93,10 +192,7 @@ fn cache_matrix(
     }
     verify_cache_source_map(root, 270)?;
     let base = cache_fixture_key(1)?;
-    let mut mutations = Vec::new();
-    for seed in 1..=8 {
-        mutations.push(cache_fixture_key(seed)?);
-    }
+    let mutations = (1..=8).map(cache_fixture_key).collect::<Result<Vec<_>>>()?;
     if mutations.iter().skip(1).any(|key| *key == base) {
         return Err("pixelpipe cache matrix found an identity mutation collision".to_owned());
     }
@@ -401,6 +497,76 @@ pub(crate) fn verify_cache_source_map(root: &Path, issue: i64) -> Result {
         if !root.join(rust_path).is_file() {
             return Err(format!(
                 "pixelpipe cache source map: missing Rust owner {rust_path}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn verify_roi_source_map(root: &Path) -> Result {
+    let path = root.join("architecture/rusttable-pixelpipe-roi-source-map.toml");
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("pixelpipe ROI source map: read failed: {error}"))?;
+    let document = toml::from_str::<toml::Value>(&text)
+        .map_err(|error| format!("pixelpipe ROI source map: invalid TOML: {error}"))?;
+    if document.get("schema").and_then(toml::Value::as_str)
+        != Some("rusttable.pixelpipe-roi-source-map.v1")
+        || document.get("issue").and_then(toml::Value::as_integer) != Some(267)
+        || document
+            .get("upstream_commit")
+            .and_then(toml::Value::as_str)
+            != Some(PINNED_COMMIT)
+    {
+        return Err(
+            "pixelpipe ROI source map: schema, issue, or upstream pin is invalid".to_owned(),
+        );
+    }
+    let expected = [
+        "roi-default-forward-reverse",
+        "roi-trace-observation",
+        "roi-crop-binding",
+        "roi-scale-binding",
+        "roi-distortion-binding",
+    ];
+    let entries = document
+        .get("responsibility")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "pixelpipe ROI source map: responsibilities are missing".to_owned())?;
+    if entries.len() != expected.len() {
+        return Err(format!(
+            "pixelpipe ROI source map: expected {} responsibilities, found {}",
+            expected.len(),
+            entries.len()
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for entry in entries {
+        let table = entry
+            .as_table()
+            .ok_or_else(|| "pixelpipe ROI source map: responsibility is not a table".to_owned())?;
+        for key in [
+            "id",
+            "upstream_path",
+            "upstream_symbol",
+            "rust_path",
+            "status",
+        ] {
+            if table.get(key).and_then(toml::Value::as_str).is_none() {
+                return Err(format!(
+                    "pixelpipe ROI source map: responsibility missing {key}"
+                ));
+            }
+        }
+        let id = table["id"].as_str().expect("validated ID");
+        if !expected.contains(&id) || !seen.insert(id) {
+            return Err(format!(
+                "pixelpipe ROI source map: unexpected or duplicate {id}"
+            ));
+        }
+        let rust_path = table["rust_path"].as_str().expect("validated path");
+        if !root.join(rust_path).is_file() {
+            return Err(format!(
+                "pixelpipe ROI source map: missing Rust owner {rust_path}"
             ));
         }
     }

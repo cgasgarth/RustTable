@@ -74,6 +74,7 @@ pub struct PreparedOperation {
     descriptor: OperationDescriptor,
     implementation: ImplementationIdentity,
     resource: ResourceMetadata,
+    roi_contract: crate::NodeRoiContract,
 }
 
 impl PreparedOperation {
@@ -83,11 +84,19 @@ impl PreparedOperation {
         implementation: ImplementationIdentity,
         resource: ResourceMetadata,
     ) -> Self {
+        let roi_contract = crate::NodeRoiContract::from_kind(descriptor.roi);
         Self {
             descriptor,
             implementation,
             resource,
+            roi_contract,
         }
+    }
+
+    #[must_use]
+    pub fn with_roi_contract(mut self, roi_contract: crate::NodeRoiContract) -> Self {
+        self.roi_contract = roi_contract;
+        self
     }
 
     #[must_use]
@@ -101,6 +110,11 @@ impl PreparedOperation {
     #[must_use]
     pub const fn resource(&self) -> ResourceMetadata {
         self.resource
+    }
+
+    #[must_use]
+    pub fn roi_contract(&self) -> &crate::NodeRoiContract {
+        &self.roi_contract
     }
 }
 
@@ -223,6 +237,7 @@ pub struct PreparedNode {
     mask: MaskStatus,
     blend: BlendStatus,
     cacheability: NodeCacheability,
+    roi_contract: crate::NodeRoiContract,
 }
 
 impl PreparedNode {
@@ -269,6 +284,11 @@ impl PreparedNode {
     #[must_use]
     pub const fn cacheability(&self) -> NodeCacheability {
         self.cacheability
+    }
+
+    #[must_use]
+    pub fn roi_contract(&self) -> &crate::NodeRoiContract {
+        &self.roi_contract
     }
 }
 
@@ -396,6 +416,31 @@ impl PreparedPipeline {
     #[must_use]
     pub const fn receipt(&self) -> &PreparationReceipt {
         &self.receipt
+    }
+
+    /// Plans a final output request against this immutable prepared snapshot.
+    pub fn plan_roi(
+        &self,
+        request: crate::RoiRequest,
+    ) -> Result<crate::RoiPlan, crate::RoiPlanningError> {
+        let source = crate::RoiDescriptor::source(
+            self.snapshot.source().dimensions(),
+            self.snapshot.source().bounds().into(),
+            self.snapshot.source().identity().as_bytes(),
+        )
+        .map_err(crate::RoiPlanningError::InvalidSource)?;
+        let nodes = self
+            .nodes
+            .iter()
+            .map(|node| {
+                crate::RoiNode::new(
+                    node.operation_id(),
+                    node.descriptor().compatibility_name.clone(),
+                    node.roi_contract().clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        crate::RoiPlanner.plan(source, &nodes, request)
     }
 }
 
@@ -618,6 +663,7 @@ fn prepared_node(
     identity_bytes.extend_from_slice(b"rusttable.pixelpipe.node.v1");
     identity_bytes.extend_from_slice(&operation.id().to_le_bytes());
     identity_bytes.extend_from_slice(&descriptor.canonical_hash().unwrap_or([0; 32]));
+    identity_bytes.extend_from_slice(format!("{:?}", prepared.roi_contract()).as_bytes());
     identity_bytes.extend_from_slice(&(operation.parameters().len() as u64).to_le_bytes());
     identity_bytes.extend_from_slice(operation.parameters());
     identity_bytes.extend_from_slice(&operation.opacity_basis_points().to_le_bytes());
@@ -625,6 +671,7 @@ fn prepared_node(
     identity_bytes.extend_from_slice(prepared.implementation().name().as_bytes());
     identity_bytes.extend_from_slice(&prepared.implementation().version().to_le_bytes());
     identity_bytes.extend_from_slice(prepared.implementation().build().as_bytes());
+    let roi_contract = prepared.roi_contract().clone();
     let identity = PreparedNodeIdentity(Sha256::digest(identity_bytes).into());
     PreparedNode {
         index,
@@ -650,6 +697,7 @@ fn prepared_node(
         } else {
             NodeCacheability::Cacheable
         },
+        roi_contract,
     }
 }
 
