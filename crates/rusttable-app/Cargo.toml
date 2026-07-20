@@ -28,6 +28,8 @@ rusttable-processing.workspace = true
 rusttable-render.workspace = true
 rusttable-scripting.workspace = true
 rusttable-ui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 

@@ -2,15 +2,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rusttable_app::{CatalogPreviewRequest, CatalogPreviewService, PreviewService};
+use rusttable_app::{
+    CatalogPreviewRequest, CatalogPreviewService, CatalogPreviewSmokeCancellation,
+    CatalogPreviewSmokeError, CatalogPreviewSmokePorts, CatalogPreviewSmokeRequest,
+    CatalogPreviewSmokeService, PreviewService,
+};
 use rusttable_catalog::{CatalogState, EditRepository, SourcePath};
 use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::{
     AssetId, Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
-use rusttable_image::{DecodeLimits, ImageInput};
-use rusttable_image_io::FileImageInput;
+use rusttable_image::{DecodeLimits, ImageInput, OutputLimits};
+use rusttable_image_io::{FileImageInput, FileImageOutput};
 use rusttable_import::{
     FileSourceSnapshotReader, ImportSourceLimits, SourceImportRequest, SourceImportService,
 };
@@ -47,6 +51,95 @@ fn renders_a_persisted_import_and_two_operation_edit_from_a_fresh_catalog() {
     assert!(output.image().dimensions().width() <= 64);
     assert!(output.image().dimensions().height() <= 64);
     assert!(!output.image().pixels().is_empty());
+}
+
+#[test]
+fn publishes_a_deterministic_receipt_after_reopening_the_catalog() {
+    let fixture = qualified_fixture();
+    let workspace = TempWorkspace::new();
+    let source = workspace.source_root.join("imports/preview.png");
+    fs::create_dir_all(source.parent().unwrap()).expect("source directory");
+    fs::copy(fixture, &source).expect("fixture copy");
+    let photo_id = PhotoId::new(102).expect("photo ID");
+    let edit_id = EditId::new(202).expect("edit ID");
+    persist_catalog(&workspace.catalog, &source, photo_id);
+    persist_edit(&workspace.catalog, edit_id, photo_id);
+    let service = CatalogPreviewSmokeService::new(preview_service());
+    let sources = FileSourceSnapshotReader;
+    let image_input = FileImageInput::new(decode_limits());
+    let image_output =
+        FileImageOutput::new(OutputLimits::new(64 * 1024 * 1024).expect("output limit"));
+
+    let run = |output_root: &Path| {
+        fs::create_dir_all(output_root).expect("output root");
+        let repository = RedbCatalogRepository::open(&workspace.catalog).expect("reopen catalog");
+        let request = CatalogPreviewSmokeRequest::new(
+            workspace.source_root.clone(),
+            output_root.to_owned(),
+            photo_id,
+            edit_id,
+        )
+        .with_preview_bounds(64, 64);
+        let ports = CatalogPreviewSmokePorts {
+            imports: &repository,
+            edits: &repository,
+            sources: &sources,
+            images: &image_input,
+            output: &image_output,
+        };
+        let mut progress = |_| {};
+        service
+            .run(&request, ports, &mut progress)
+            .expect("catalog-preview smoke run")
+    };
+
+    let first = run(&workspace.root.join("output-one"));
+    let second = run(&workspace.root.join("output-two"));
+    assert_eq!(first.receipt(), second.receipt());
+    assert_eq!(first.receipt().source_byte_length, 109);
+    assert_eq!(first.receipt().source_width, 4);
+    assert_eq!(first.receipt().source_height, 3);
+    assert_eq!(first.receipt().preview_width, 4);
+    assert_eq!(first.receipt().preview_height, 3);
+    assert_eq!(first.receipt().operations.len(), 2);
+    assert!(first.output_path().is_file());
+    assert!(first.receipt_path().is_file());
+    let persisted: serde_json::Value =
+        serde_json::from_slice(&fs::read(first.receipt_path()).expect("receipt bytes"))
+            .expect("valid receipt JSON");
+    assert_eq!(persisted["schema_version"], 1);
+    assert!(
+        persisted["source_alias"]
+            .as_str()
+            .unwrap()
+            .starts_with("imports/")
+    );
+
+    let cancelled_root = workspace.root.join("cancelled");
+    fs::create_dir_all(&cancelled_root).expect("cancelled output root");
+    let repository = RedbCatalogRepository::open(&workspace.catalog).expect("reopen catalog");
+    let cancellation = CatalogPreviewSmokeCancellation::new();
+    cancellation.cancel();
+    let request = CatalogPreviewSmokeRequest::new(
+        workspace.source_root.clone(),
+        cancelled_root.clone(),
+        photo_id,
+        edit_id,
+    );
+    let ports = CatalogPreviewSmokePorts {
+        imports: &repository,
+        edits: &repository,
+        sources: &sources,
+        images: &image_input,
+        output: &image_output,
+    };
+    let mut progress = |_| {};
+    assert!(matches!(
+        service.run_with_cancellation(&request, ports, &cancellation, &mut progress),
+        Err(CatalogPreviewSmokeError::Cancelled(_))
+    ));
+    assert!(!cancelled_root.join("preview.png").exists());
+    assert!(!cancelled_root.join("preview.receipt.json").exists());
 }
 
 fn qualified_fixture() -> PathBuf {

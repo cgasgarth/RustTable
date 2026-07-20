@@ -3,8 +3,10 @@
 mod bench;
 mod check;
 mod codegen;
+mod configuration;
 mod dist;
 mod fixtures;
+mod foundation;
 mod reference;
 
 use std::path::{Path, PathBuf};
@@ -41,6 +43,11 @@ enum Task {
         #[command(subcommand)]
         command: fixtures::FixturesCommand,
     },
+    /// Run product foundation smoke workloads.
+    Foundation {
+        #[command(subcommand)]
+        command: foundation::FoundationCommand,
+    },
     /// Provision or exercise the pinned darktable reference.
     Reference {
         #[command(subcommand)]
@@ -53,6 +60,11 @@ enum Task {
     },
     /// Build the host platform distribution artifact.
     Dist,
+    /// Validate the typed configuration contract and its source accounting.
+    Configuration {
+        #[command(subcommand)]
+        command: configuration::ConfigurationCommand,
+    },
 }
 
 fn main() -> ExitCode {
@@ -62,9 +74,11 @@ fn main() -> ExitCode {
         Task::Check => check::run(&root),
         Task::Codegen { command } => codegen::run(&root, command),
         Task::Fixtures { command } => fixtures::run(&root, command),
+        Task::Foundation { command } => foundation::run(&root, command),
         Task::Reference { command } => reference::run(&root, *command),
         Task::Bench { command } => bench::run(&root, command),
         Task::Dist => dist::run(&root),
+        Task::Configuration { command } => configuration::run(&root, command),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -103,18 +117,19 @@ mod tests {
     #[test]
     fn public_command_surface_is_small_and_product_focused() {
         let help = Cli::command().render_long_help().to_string();
-        for command in ["check", "codegen", "fixtures", "reference", "bench", "dist"] {
+        for command in [
+            "check",
+            "codegen",
+            "fixtures",
+            "foundation",
+            "reference",
+            "bench",
+            "dist",
+            "configuration",
+        ] {
             assert!(help.contains(command), "missing {command}");
         }
-        for retired in [
-            "github",
-            "foundation",
-            "ecosystem",
-            "migration",
-            "parity",
-            "scheduler",
-            "coverage",
-        ] {
+        for retired in ["github", "ecosystem", "parity", "scheduler", "coverage"] {
             assert!(
                 !help.contains(retired),
                 "retired command {retired} survived"

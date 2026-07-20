@@ -8,7 +8,16 @@ rust-version.workspace = true
 
 [dependencies]
 clap.workspace = true
+rusttable-app.workspace = true
+rusttable-catalog.workspace = true
+rusttable-catalog-store.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+rusttable-image-io.workspace = true
+rusttable-import.workspace = true
+rusttable-metadata.workspace = true
 rusttable-parity.workspace = true
+rusttable-render.workspace = true
 rusttable-testkit.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

@@ -2,6 +2,7 @@
 #![doc = "The GTK4 application composition root for `RustTable`."]
 
 mod composition;
+mod configuration;
 mod extensions;
 pub mod gtk_controller;
 pub mod gtk_export;
@@ -13,7 +14,12 @@ mod platform;
 mod preview;
 pub mod workspace;
 
-pub use composition::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, run};
+pub use composition::{
+    CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService,
+    CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError, CatalogPreviewSmokePorts,
+    CatalogPreviewSmokeReceipt, CatalogPreviewSmokeRequest, CatalogPreviewSmokeResult,
+    CatalogPreviewSmokeService, CatalogPreviewSmokeStage, CatalogPreviewSmokeStatus, run,
+};
 pub use extensions::ApplicationExtensions;
 pub use lifecycle::{
     AppServices, ApplicationService, CancellationReason, CancellationToken, LifecycleError,
