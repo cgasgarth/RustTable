@@ -1,9 +1,3 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "${RUSTTABLE_SKIP_PREPUSH:-0}" == "1" ]]; then
-  printf 'pre-push checks skipped by RUSTTABLE_SKIP_PREPUSH=1.\n' >&2
-  exit 0
-fi
-
-bash "$(git rev-parse --show-toplevel)/scripts/prepush-fast.sh"
+# Pre-commit is RustTable's complete local quality gate. Keep pre-push empty
+# so delivery is not duplicated by a second policy scheduler.

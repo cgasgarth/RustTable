@@ -13,6 +13,8 @@ rusttable-catalog-store.workspace = true
 rusttable-diagnostics.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
+rusttable-image-io.workspace = true
+rusttable-render.workspace = true
 rusttable-scripting.workspace = true
 rusttable-ui.workspace = true
 

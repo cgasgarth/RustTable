@@ -3240,6 +3240,8 @@ dependencies = [
  "rusttable-core",
  "rusttable-diagnostics",
  "rusttable-image",
+ "rusttable-image-io",
+ "rusttable-render",
  "rusttable-scripting",
  "rusttable-ui",
 ]
