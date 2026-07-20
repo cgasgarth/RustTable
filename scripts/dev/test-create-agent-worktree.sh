@@ -18,6 +18,23 @@ git -C "$fixture" commit -qm initial
 git -C "$fixture" remote add origin "$fixture"
 printf '%s\n' local >"$fixture/source/needed.txt"
 
+default_fixture="$fixture/management/RustTable"
+mkdir -p "$default_fixture/scripts/dev"
+cp "$script" "$default_fixture/scripts/dev/create-agent-worktree.sh"
+chmod +x "$default_fixture/scripts/dev/create-agent-worktree.sh"
+printf '%s\n' fixture >"$default_fixture/README"
+git -C "$default_fixture" init -q -b main
+git -C "$default_fixture" config user.email test@example.invalid
+git -C "$default_fixture" config user.name 'RustTable test'
+git -C "$default_fixture" add README scripts
+git -C "$default_fixture" commit -qm initial
+git -C "$default_fixture" remote add origin "$default_fixture"
+
+(cd "$default_fixture" && bash scripts/dev/create-agent-worktree.sh --issue 97 >/dev/null)
+default_target="$fixture/management/worktrees/issue-97"
+[[ "$(git -C "$default_target" branch --show-current)" == codex/issue-97-agent ]]
+[[ ! -e "$default_fixture/worktrees/issue-97" ]]
+
 worktrees="$fixture/worktrees"
 (cd "$fixture" && bash scripts/dev/create-agent-worktree.sh --issue 98 --worktrees "$worktrees" >/dev/null)
 empty_target="$worktrees/issue-98"
