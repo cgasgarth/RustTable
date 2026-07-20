@@ -2287,6 +2287,8 @@ dependencies = [
  "rusttable-core",
  "rusttable-input",
  "rusttable-processing",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

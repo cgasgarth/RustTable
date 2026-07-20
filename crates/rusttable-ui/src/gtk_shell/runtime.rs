@@ -17,6 +17,7 @@ use super::{
     ModuleControlKind, ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion,
     WorkspaceRole,
 };
+use crate::input_mapping::InputMappingEditor;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 
 type PhotoSelectedHandler = Box<dyn Fn(PhotoId)>;
@@ -34,6 +35,7 @@ pub struct GtkShell {
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
     collection_controls: CollectionControls,
+    input_mapping_editor: InputMappingEditor,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
 }
@@ -58,7 +60,12 @@ impl GtkShell {
             .title("RustTable")
             .build();
         let (workspace, lighttable, darkroom_preview) = workspace_stack(layout.initial_workspace());
-        let header = header_bar(&workspace);
+        let input_mapping_editor = InputMappingEditor::new(application);
+        let (header, preferences_button) = header_bar(&workspace);
+        preferences_button.connect_clicked({
+            let editor = input_mapping_editor.clone();
+            move |_| editor.present()
+        });
         let collection_controls = CollectionControls::new();
         let (left_panel, left_modules) = left_panel(&collection_controls);
         let (right_panel, right_modules, export_panel) = right_panel();
@@ -103,6 +110,7 @@ impl GtkShell {
             left_modules,
             right_modules,
             collection_controls,
+            input_mapping_editor,
             lighttable_workspace: Rc::new(RefCell::new(None)),
             photo_selected: Rc::new(RefCell::new(None)),
         }
@@ -154,6 +162,12 @@ impl GtkShell {
     #[must_use]
     pub fn collection_controls(&self) -> &CollectionControls {
         &self.collection_controls
+    }
+
+    /// Returns the GTK4 shortcut/device preferences editor.
+    #[must_use]
+    pub fn input_mapping_editor(&self) -> &InputMappingEditor {
+        &self.input_mapping_editor
     }
 
     /// Projects collection counts and rule values into the left-panel controls.
@@ -361,7 +375,7 @@ fn connect_photo_selection(
     });
 }
 
-fn header_bar(workspace: &gtk4::Stack) -> gtk4::HeaderBar {
+fn header_bar(workspace: &gtk4::Stack) -> (gtk4::HeaderBar, gtk4::Button) {
     let header = gtk4::HeaderBar::new();
     header.set_widget_name(ShellRegion::Header.identifier());
     header.set_show_title_buttons(true);
@@ -374,7 +388,8 @@ fn header_bar(workspace: &gtk4::Stack) -> gtk4::HeaderBar {
     let tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     tools.set_widget_name(PanelSlot::HeaderCenter.identifier());
     tools.append(&gtk4::Button::with_label("import"));
-    tools.append(&gtk4::Button::with_label("preferences"));
+    let preferences = gtk4::Button::with_label("preferences");
+    tools.append(&preferences);
     header.set_title_widget(Some(&tools));
 
     let modes = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
@@ -386,7 +401,7 @@ fn header_bar(workspace: &gtk4::Stack) -> gtk4::HeaderBar {
         modes.append(&button);
     }
     header.pack_end(&modes);
-    header
+    (header, preferences)
 }
 
 fn left_panel(collection_controls: &CollectionControls) -> (gtk4::Box, gtk4::Box) {

@@ -5,6 +5,7 @@ pub mod collection;
 pub mod gtk_shell;
 pub mod import;
 pub mod input;
+pub mod input_mapping;
 pub mod library;
 pub mod presentation;
 
@@ -17,6 +18,11 @@ pub use gtk_shell::{
 };
 pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use input::GtkInputAdapter;
+pub use input_mapping::{
+    ActionContext, ActionDefinition, ActionId, Binding, BindingSource, Curve, DeviceDescriptor,
+    DeviceKind, EditorMessage, EditorState, EditorStatus, InputMappingEditor, MappingConflict,
+    MappingProfile, MappingSnapshot, ResetScope, SoftTakeover,
+};
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
 pub use presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
