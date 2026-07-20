@@ -226,6 +226,36 @@ fn apply_operation(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::ColorOut { config } => {
+            let plan = crate::operations::colorout::ColorOutPlan::new(config.clone())
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let execution = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                execution.pixels(),
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::ColorCorrection { config } => {
+            let plan = crate::operations::colorcorrection::ColorCorrectionPlan::new(*config)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let execution = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                execution.pixels(),
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
     }
 }
 

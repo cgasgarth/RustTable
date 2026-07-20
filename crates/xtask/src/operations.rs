@@ -122,7 +122,7 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
         OperationRegistryCommand::Generate => {
             fs::write(&receipt_path, builtin_registry().receipt())
                 .map_err(|error| format!("operation registry: write failed: {error}"))?;
-            eprintln!("operation registry generated (definitions=7)");
+            eprintln!("operation registry generated (definitions=9)");
             Ok(())
         }
         OperationRegistryCommand::Check {
@@ -151,7 +151,7 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
                 execute_builtin_smoke()?;
             }
             eprintln!(
-                "operation registry check passed (definitions=7, snapshot={})",
+                "operation registry check passed (definitions=9, snapshot={})",
                 builtin_registry().identity_hash_hex()
             );
             Ok(())

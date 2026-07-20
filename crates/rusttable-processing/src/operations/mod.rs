@@ -5,7 +5,9 @@
 //! by the existing operation registry and pixelpipe; they are not a second
 //! pipeline.
 
+pub mod colorcorrection;
 pub mod colorin;
+pub mod colorout;
 pub mod colorreconstruction;
 mod common;
 pub mod highlights;

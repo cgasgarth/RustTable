@@ -206,6 +206,24 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
             let bytes = postcard::to_allocvec(config).expect("primaries config is serializable");
             hasher.update(bytes);
         }
+        ProcessingOperationKind::ColorOut { config } => {
+            hasher.update([7]);
+            let bytes = postcard::to_allocvec(config).expect("colorout config is serializable");
+            hasher.update(bytes);
+        }
+        ProcessingOperationKind::ColorCorrection { config } => {
+            hasher.update([8]);
+            for value in config.shadow().into_iter().chain(config.highlight()) {
+                hasher.update(value.get().to_bits().to_le_bytes());
+            }
+            hasher.update(config.saturation().get().to_bits().to_le_bytes());
+            hasher.update(config.tonal_range().get().to_bits().to_le_bytes());
+            hasher.update(config.balance().get().to_bits().to_le_bytes());
+            hasher.update([match config.mode() {
+                rusttable_processing::operations::colorcorrection::ColorCorrectionMode::TwoColor => 0,
+                rusttable_processing::operations::colorcorrection::ColorCorrectionMode::Axis => 1,
+            }]);
+        }
     }
 }
 
