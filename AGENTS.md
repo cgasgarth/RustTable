@@ -6,6 +6,8 @@
 - Build working import, catalog, edit, preview, save, processing, and export paths. At least one PR in every active batch must advance product behavior.
 - Keep the separate `/Users/cgas/Documents/RustTable/Darktable` clone as the read-only reference. Never copy, compile, link, or retain upstream C/C++/OpenCL in RustTable.
 - Port the desktop experience shift-in-place by responsibility: use Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` as navigation for Rust GTK4 modules, preserving workflows and layout where useful without copying C APIs, source, or build machinery.
+- Treat Darktable's visible GTK composition as the product reference, not as inspiration for a generic photo application. Before changing a GTK surface, inspect the matching upstream view, panel, and module sources; reproduce its information hierarchy, mode switching, panel placement, labels, and controls with GTK4 Rust widgets.
+- A desktop UI PR must name the Darktable source paths it maps and include a direct visual/behavioral comparison. Prefer a faithful GTK4 equivalent over a new layout or renamed workflow unless an upstream behavior is intentionally deferred in the linked issue.
 - When a capability is replaced, delete obsolete native payload from RustTable. Preserve behavior and formats, not the upstream file graph.
 - A GTK4 controller owns each migrated desktop workflow. Delete superseded UI source, tests, and dependency paths in the same migration slice; never maintain two live UI implementations for one workflow.
 - Follow the Rust crate/module structure while using `architecture/darktable-subsystems.toml` for broad upstream navigation.

@@ -10,7 +10,6 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "build-only parser for trusted Wayland protocol XML" },
     { id = "RUSTSEC-2026-0195", reason = "build-only parser for trusted Wayland protocol XML" },
     { id = "RUSTSEC-2023-0089", reason = "transitive Wasmtime/postcard dependency with no safe upgrade" },
-    { id = "RUSTSEC-2026-0192", reason = "transitive Iced font dependency with no safe upgrade" },
 ]
 
 [licenses]
@@ -52,8 +51,4 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = [
-    "https://github.com/iced-rs/cryoglyph.git",
-    "https://github.com/iced-rs/iced.git",
-    "https://github.com/iced-rs/winit.git",
-]
+allow-git = []
