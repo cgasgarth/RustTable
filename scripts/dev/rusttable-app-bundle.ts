@@ -38,6 +38,26 @@ type RequiredKey = (typeof REQUIRED_KEYS)[number];
 
 export type BundleManifest = Record<RequiredKey, string>;
 
+export interface BundleDocumentType {
+  role: 'Viewer';
+  contentTypes: readonly string[];
+  extensions: readonly string[];
+}
+
+/** Mirrors rusttable-image's standard decoder registry plus the explicit catalog-open policy. */
+export const RUSTTABLE_DOCUMENT_TYPES: readonly BundleDocumentType[] = [
+  {
+    role: 'Viewer',
+    contentTypes: ['public.image'],
+    extensions: ['jpg', 'jpeg', 'png', 'tif', 'tiff'],
+  },
+  {
+    role: 'Viewer',
+    contentTypes: ['com.cgasgarth.rusttable.catalog'],
+    extensions: ['redb'],
+  },
+];
+
 export interface MetadataCommandRequest {
   args: readonly string[];
   command: string;
@@ -118,28 +138,45 @@ export const renderBundlePlist = (manifest: BundleManifest): string => `<?xml ve
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 ${REQUIRED_KEYS.map((key) => `<key>${key}</key><string>${xmlEscape(manifest[key])}</string>`).join('\n')}
+<key>CFBundleDocumentTypes</key><array>
+${RUSTTABLE_DOCUMENT_TYPES.map((documentType) => `<dict><key>CFBundleTypeRole</key><string>${documentType.role}</string><key>LSItemContentTypes</key><array>${documentType.contentTypes.map((type) => `<string>${xmlEscape(type)}</string>`).join('')}</array><key>CFBundleTypeExtensions</key><array>${documentType.extensions.map((extension) => `<string>${xmlEscape(extension)}</string>`).join('')}</array></dict>`).join('\n')}
+</array>
 </dict></plist>
 `;
 
 const parseStringPairs = (plist: string): Map<string, string> => {
   const dictMatch = /<dict>([\s\S]*)<\/dict>/.exec(plist);
-  if (dictMatch?.[1] === undefined || /<dict>[\s\S]*<dict>/.test(dictMatch[1])) {
-    throw new Error('Bundle Info.plist must contain one flat dictionary.');
-  }
+  if (dictMatch?.[1] === undefined) throw new Error('Bundle Info.plist must contain a dictionary.');
   const body = dictMatch[1];
-  const keys = [...body.matchAll(/<key>([^<]*)<\/key>/g)];
   const pairs = [...body.matchAll(/<key>([^<]*)<\/key>\s*<string>([^<]*)<\/string>/g)];
-  if (keys.length !== pairs.length) throw new Error('Bundle Info.plist contains a non-string or malformed key.');
   const values = new Map<string, string>();
   for (const pair of pairs) {
     const key = pair[1];
     const value = pair[2];
     if (key === undefined || value === undefined) throw new Error('Bundle Info.plist contains a malformed entry.');
     const decodedKey = xmlUnescape(key);
+    if (decodedKey === 'CFBundleTypeRole') continue;
     if (values.has(decodedKey)) throw new Error(`Bundle Info.plist contains duplicate key ${decodedKey}.`);
     values.set(decodedKey, xmlUnescape(value));
   }
   return values;
+};
+
+const parseBundleDocumentTypes = (plist: string): BundleDocumentType[] => {
+  const section = /<key>CFBundleDocumentTypes<\/key>\s*<array>([\s\S]*)<\/array>\s*<\/dict>/.exec(plist);
+  if (section?.[1] === undefined) throw new Error('Bundle Info.plist is missing document declarations.');
+  return [...section[1].matchAll(/<dict>([\s\S]*?)<\/dict>/g)].map((match) => {
+    const body = match[1] ?? '';
+    const role = /<key>CFBundleTypeRole<\/key>\s*<string>([^<]*)<\/string>/.exec(body)?.[1];
+    const contentTypes = [...body.matchAll(/<key>LSItemContentTypes<\/key>\s*<array>([\s\S]*?)<\/array>/g)]
+      .flatMap((entry) => [...(entry[1] ?? '').matchAll(/<string>([^<]*)<\/string>/g)].map((value) => xmlUnescape(value[1] ?? '')));
+    const extensions = [...body.matchAll(/<key>CFBundleTypeExtensions<\/key>\s*<array>([\s\S]*?)<\/array>/g)]
+      .flatMap((entry) => [...(entry[1] ?? '').matchAll(/<string>([^<]*)<\/string>/g)].map((value) => xmlUnescape(value[1] ?? '')));
+    if (role !== 'Viewer' || contentTypes.length === 0 || extensions.length === 0) {
+      throw new Error('Bundle Info.plist contains an invalid document declaration.');
+    }
+    return { role, contentTypes, extensions };
+  });
 };
 
 export const parseBundleManifest = (
@@ -147,9 +184,10 @@ export const parseBundleManifest = (
   identity?: RustTableBundleIdentity,
 ): BundleManifest => {
   const values = parseStringPairs(plist);
-  if (values.size !== REQUIRED_KEYS.length) throw new Error('Bundle Info.plist has missing or unexpected keys.');
-  for (const key of values.keys()) {
-    if (!(REQUIRED_KEYS as readonly string[]).includes(key)) throw new Error(`Bundle Info.plist has unexpected key ${key}.`);
+  values.delete('CFBundleTypeRole');
+  if (values.size !== REQUIRED_KEYS.length) {
+    const unexpected = [...values.keys()].filter((key) => !(REQUIRED_KEYS as readonly string[]).includes(key));
+    if (unexpected.length > 0) throw new Error(`Bundle Info.plist has unexpected key ${unexpected[0]}.`);
   }
   const manifest = Object.fromEntries(REQUIRED_KEYS.map((key) => [key, values.get(key)])) as BundleManifest;
   const knownIdentity = identity ?? [RUSTTABLE_BUNDLE_IDENTITY, RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY].find(
@@ -159,6 +197,9 @@ export const parseBundleManifest = (
   const expected = expectedManifest(manifest.CFBundleShortVersionString, knownIdentity);
   for (const key of REQUIRED_KEYS) {
     if (manifest[key] !== expected[key]) throw new Error(`Bundle Info.plist has unexpected ${key}.`);
+  }
+  if (JSON.stringify(parseBundleDocumentTypes(plist)) !== JSON.stringify(RUSTTABLE_DOCUMENT_TYPES)) {
+    throw new Error('Bundle Info.plist document declarations are not canonical.');
   }
   assertVersion(manifest.CFBundleShortVersionString);
   return manifest;

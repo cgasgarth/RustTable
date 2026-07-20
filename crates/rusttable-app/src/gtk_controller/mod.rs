@@ -109,6 +109,12 @@ impl GtkCatalogController {
         }
     }
 
+    /// Returns whether the catalog-open operation produced a usable empty or ready state.
+    #[must_use]
+    pub fn opened_successfully(&self) -> bool {
+        !matches!(self.state, GtkCatalogState::Failed(_))
+    }
+
     /// Returns the current catalog state for GTK widget projection.
     #[must_use]
     pub fn state(&self) -> &GtkCatalogState {
@@ -159,13 +165,25 @@ impl GtkCatalogController {
         self.selected_photo.take().is_some()
     }
 
-    fn load_catalog_at(catalog_path: PathBuf) -> Self {
+    /// Opens an explicitly selected `RustTable` catalog using catalog-open policy.
+    #[must_use]
+    pub fn load_catalog_at(catalog_path: PathBuf) -> Self {
         match source_root(&catalog_path) {
             Ok(source_root) => {
                 let result = load_catalog(&catalog_path);
                 Self::from_load_result(catalog_path, source_root, result)
             }
             Err(kind) => Self::failed(Some(catalog_path), kind),
+        }
+    }
+
+    /// Returns the active catalog path, including empty and failed catalog states.
+    #[must_use]
+    pub fn catalog_path(&self) -> Option<&Path> {
+        match &self.state {
+            GtkCatalogState::Empty(location) => Some(location.catalog_path()),
+            GtkCatalogState::Ready(catalog) => Some(catalog.location().catalog_path()),
+            GtkCatalogState::Failed(failure) => failure.catalog_path(),
         }
     }
 

@@ -10,9 +10,14 @@ use crate::gtk_export::{
 };
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
 use crate::lifecycle::run_with_bootstrap;
-use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual, FileExt};
+use crate::macos::{
+    MacApplicationBridge, MacApplicationCommand, MacOpenRequest, MacTerminationDecision,
+};
+use gtk4::gio::prelude::{ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt};
 use gtk4::glib::{self, ControlFlow};
 use gtk4::prelude::GtkWindowExt;
+use gtk4::prelude::{GtkApplicationExt, RecentManagerExt, WidgetExt};
+use rusttable_import::{RasterImportBatch, RasterImportStatus};
 use rusttable_input::{
     ActionId, ActionInputService, ActionMapping, ActionMode, ActionPhase, Binding, InputSource,
     KeyCode, Modifiers,
@@ -23,6 +28,7 @@ use rusttable_ui::{
 };
 use std::cell::RefCell;
 use std::fmt;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
@@ -64,70 +70,19 @@ pub fn run() -> Result<(), DesktopRunError> {
             }
 
             let application = gtk4::Application::builder()
-                .application_id("com.cgasgarth.rusttable")
+                .application_id(crate::macos::BUNDLE_IDENTIFIER)
                 .build();
             let active_shell = Rc::new(RefCell::new(None::<rusttable_ui::GtkShell>));
-            application.connect_activate({
-                let active_shell = Rc::clone(&active_shell);
-                move |application| {
-                    if let Some(shell) = active_shell.borrow().as_ref() {
-                        shell.present();
-                        return;
-                    }
-
-                    if let Some(display) = gtk4::gdk::Display::default() {
-                        rusttable_ui::install_darktable_theme(&display);
-                    }
-                    let catalog_controller =
-                        Rc::new(RefCell::new(GtkCatalogController::load_persisted()));
-                    let collection_controller = Rc::new(RefCell::new(
-                        catalog_controller.borrow().collection_controller(),
-                    ));
-                    let shell = rusttable_ui::GtkShell::new(application);
-                    install_action_input(&shell);
-                    let export_panel = shell.export_panel().clone();
-                    let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
-                    let workspace = catalog_controller.borrow().state().workspace().cloned();
-                    if let Some(workspace) = workspace.as_ref() {
-                        shell.set_photo_workspace(workspace);
-                    }
-                    if let Some(controller) = collection_controller.borrow().as_ref() {
-                        shell.set_collection_filter_state(&collection_filter_state(
-                            &controller.snapshot(),
-                        ));
-                    }
-                    let collection_for_actions = Rc::clone(&collection_controller);
-                    shell.connect_collection_action(move |action| {
-                        let mut controller = collection_for_actions.borrow_mut();
-                        let Some(controller) = controller.as_mut() else {
-                            return empty_collection_filter_state();
-                        };
-                        apply_collection_action(controller, action);
-                        collection_filter_state(&controller.snapshot())
-                    });
-                    connect_export_actions(
-                        &shell,
-                        Rc::clone(&catalog_controller),
-                        Rc::clone(&export_lifecycle),
-                    );
-                    let selection_controller = Rc::clone(&catalog_controller);
-                    let preview = shell.darkroom_preview().clone();
-                    let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
-                    let export_selection = export_panel.clone();
-                    let export_selection_lifecycle = Rc::clone(&export_lifecycle);
-                    shell.set_photo_selected_handler(move |photo_id| {
-                        if !selection_controller.borrow_mut().select_photo(photo_id) {
-                            return;
-                        }
-                        export_selection_lifecycle.borrow_mut().invalidate();
-                        export_selection.set_selected(true);
-                        let catalog = selection_controller.borrow().clone();
-                        start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
-                    });
-                    shell.present();
-                    active_shell.replace(Some(shell));
-                }
-            });
+            let active_catalog = Rc::new(RefCell::new(None::<Rc<RefCell<GtkCatalogController>>>));
+            let active_collection = Rc::new(RefCell::new(None::<CollectionController>));
+            let native_bridge = Rc::new(RefCell::new(MacApplicationBridge::default()));
+            connect_application_signals(
+                &application,
+                Rc::clone(&active_shell),
+                Rc::clone(&active_catalog),
+                Rc::clone(&active_collection),
+                Rc::clone(&native_bridge),
+            );
             let exit_code = application.run();
             if exit_code == gtk4::glib::ExitCode::SUCCESS {
                 Ok(())
@@ -139,6 +94,111 @@ pub fn run() -> Result<(), DesktopRunError> {
         },
         |warning| eprintln!("{warning}"),
     )
+}
+
+fn connect_application_signals(
+    application: &gtk4::Application,
+    active_shell: Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
+    active_catalog: Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
+    active_collection: Rc<RefCell<Option<CollectionController>>>,
+    native_bridge: Rc<RefCell<MacApplicationBridge>>,
+) {
+    application.connect_startup({
+        let native_bridge = Rc::clone(&native_bridge);
+        let active_shell = Rc::clone(&active_shell);
+        move |application| install_application_menus(application, &native_bridge, &active_shell)
+    });
+    application.connect_open({
+        let active_shell = Rc::clone(&active_shell);
+        let active_catalog = Rc::clone(&active_catalog);
+        let active_collection = Rc::clone(&active_collection);
+        let native_bridge = Rc::clone(&native_bridge);
+        move |_, files, _hint| {
+            let delivery = native_bridge
+                .borrow_mut()
+                .receive_optional_paths(files.iter().map(FileExt::path));
+            if let Some(request) = delivery.request().cloned() {
+                dispatch_open_request(&request, &active_shell, &active_catalog, &active_collection);
+            }
+        }
+    });
+    application.connect_shutdown({
+        let native_bridge = Rc::clone(&native_bridge);
+        move |_| native_bridge.borrow_mut().mark_stopped()
+    });
+    application.connect_activate(move |application| {
+        activate_application(
+            application,
+            &active_shell,
+            &active_catalog,
+            &active_collection,
+            &native_bridge,
+        );
+    });
+}
+
+fn activate_application(
+    application: &gtk4::Application,
+    active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
+    active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
+    active_collection: &Rc<RefCell<Option<CollectionController>>>,
+    native_bridge: &Rc<RefCell<MacApplicationBridge>>,
+) {
+    if let Some(shell) = active_shell.borrow().as_ref() {
+        shell.present();
+        return;
+    }
+
+    if let Some(display) = gtk4::gdk::Display::default() {
+        rusttable_ui::install_darktable_theme(&display);
+    }
+    let catalog_controller = Rc::new(RefCell::new(GtkCatalogController::load_persisted()));
+    active_catalog.replace(Some(Rc::clone(&catalog_controller)));
+    active_collection.replace(catalog_controller.borrow().collection_controller());
+    let shell = rusttable_ui::GtkShell::new(application);
+    install_action_input(&shell);
+    let export_panel = shell.export_panel().clone();
+    let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
+    let workspace = catalog_controller.borrow().state().workspace().cloned();
+    if let Some(workspace) = workspace.as_ref() {
+        shell.set_photo_workspace(workspace);
+    }
+    if let Some(controller) = active_collection.borrow().as_ref() {
+        shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
+    }
+    let collection_for_actions = Rc::clone(active_collection);
+    shell.connect_collection_action(move |action| {
+        let mut controller = collection_for_actions.borrow_mut();
+        let Some(controller) = controller.as_mut() else {
+            return empty_collection_filter_state();
+        };
+        apply_collection_action(controller, action);
+        collection_filter_state(&controller.snapshot())
+    });
+    connect_export_actions(
+        &shell,
+        Rc::clone(&catalog_controller),
+        Rc::clone(&export_lifecycle),
+    );
+    let selection_controller = Rc::clone(&catalog_controller);
+    let preview = shell.darkroom_preview().clone();
+    let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
+    let export_selection = export_panel.clone();
+    let export_selection_lifecycle = Rc::clone(&export_lifecycle);
+    shell.set_photo_selected_handler(move |photo_id| {
+        if !selection_controller.borrow_mut().select_photo(photo_id) {
+            return;
+        }
+        export_selection_lifecycle.borrow_mut().invalidate();
+        export_selection.set_selected(true);
+        let catalog = selection_controller.borrow().clone();
+        start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
+    });
+    shell.present();
+    active_shell.replace(Some(shell));
+    if let Some(request) = native_bridge.borrow_mut().mark_ready() {
+        dispatch_open_request(&request, active_shell, active_catalog, active_collection);
+    }
 }
 
 fn install_action_input(shell: &rusttable_ui::GtkShell) {
@@ -188,6 +248,166 @@ fn install_action_input(shell: &rusttable_ui::GtkShell) {
             _ => {}
         }
     });
+}
+
+fn install_application_menus(
+    application: &gtk4::Application,
+    native_bridge: &Rc<RefCell<MacApplicationBridge>>,
+    active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
+) {
+    let actions = [
+        ("about", MacApplicationCommand::About),
+        ("preferences", MacApplicationCommand::Preferences),
+        ("services", MacApplicationCommand::Services),
+        ("hide", MacApplicationCommand::Hide),
+        ("hide-others", MacApplicationCommand::HideOthers),
+        ("show-all", MacApplicationCommand::ShowAll),
+        ("window", MacApplicationCommand::Window),
+        ("quit", MacApplicationCommand::Quit),
+    ];
+    for (name, command) in actions {
+        let action = gtk4::gio::SimpleAction::new(name, None);
+        let action_application = application.clone();
+        let native_bridge = Rc::clone(native_bridge);
+        let active_shell = Rc::clone(active_shell);
+        action.connect_activate(move |_, _| match command {
+            MacApplicationCommand::Quit => {
+                if native_bridge.borrow_mut().request_termination(false, true)
+                    == MacTerminationDecision::Proceed
+                {
+                    action_application.quit();
+                }
+            }
+            MacApplicationCommand::Hide => {
+                if let Some(shell) = active_shell.borrow().as_ref() {
+                    shell.window().set_visible(false);
+                }
+            }
+            MacApplicationCommand::ShowAll
+            | MacApplicationCommand::About
+            | MacApplicationCommand::Preferences
+            | MacApplicationCommand::Window => {
+                if let Some(shell) = active_shell.borrow().as_ref() {
+                    shell.present();
+                }
+            }
+            MacApplicationCommand::HideOthers | MacApplicationCommand::Services => {}
+        });
+        application.add_action(&action);
+    }
+    application.set_accels_for_action("app.preferences", &["<Primary>comma"]);
+    application.set_accels_for_action("app.hide", &["<Primary>h"]);
+    application.set_accels_for_action("app.quit", &["<Primary>q"]);
+
+    let application_menu = gtk4::gio::Menu::new();
+    application_menu.append(Some("About RustTable"), Some("app.about"));
+    application_menu.append(Some("Preferences…"), Some("app.preferences"));
+    application_menu.append(Some("Services"), Some("app.services"));
+    application_menu.append(Some("Hide RustTable"), Some("app.hide"));
+    application_menu.append(Some("Hide Others"), Some("app.hide-others"));
+    application_menu.append(Some("Show All"), Some("app.show-all"));
+    application_menu.append(Some("Quit RustTable"), Some("app.quit"));
+
+    let window_menu = gtk4::gio::Menu::new();
+    window_menu.append(Some("Window"), Some("app.window"));
+
+    let menubar = gtk4::gio::Menu::new();
+    menubar.append_submenu(Some("RustTable"), &application_menu);
+    menubar.append_submenu(Some("Window"), &window_menu);
+    application.set_menubar(Some(&menubar));
+}
+
+fn dispatch_open_request(
+    request: &MacOpenRequest,
+    active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
+    active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
+    active_collection: &Rc<RefCell<Option<CollectionController>>>,
+) {
+    let Some(catalog) = active_catalog.borrow().as_ref().cloned() else {
+        return;
+    };
+    let Some(shell) = active_shell.borrow().as_ref().cloned() else {
+        return;
+    };
+
+    if let Some(path) = request.catalog_path() {
+        *catalog.borrow_mut() = GtkCatalogController::load_catalog_at(path.to_path_buf());
+        refresh_catalog_shell(&shell, &catalog, active_collection);
+        if catalog.borrow().opened_successfully() {
+            record_recent_path(path);
+        }
+    }
+
+    let image_paths = request
+        .image_paths()
+        .map(Path::to_path_buf)
+        .collect::<Vec<_>>();
+    if image_paths.is_empty() {
+        return;
+    }
+    let Some(catalog_path) = catalog.borrow().catalog_path().map(Path::to_path_buf) else {
+        return;
+    };
+    let recent_paths = image_paths.clone();
+    let (sender, receiver) = mpsc::channel::<RasterImportBatch>();
+    let worker_catalog_path = catalog_path.clone();
+    thread::spawn(move || {
+        let batch = crate::workspace::run_raster_import(
+            &worker_catalog_path,
+            image_paths,
+            &rusttable_import::RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let _ = sender.send(batch);
+    });
+
+    let active_collection = Rc::clone(active_collection);
+    glib::timeout_add_local(Duration::from_millis(16), move || {
+        match receiver.try_recv() {
+            Ok(batch) => {
+                record_successful_recent_paths(&recent_paths, &batch);
+                *catalog.borrow_mut() = GtkCatalogController::load_catalog_at(catalog_path.clone());
+                refresh_catalog_shell(&shell, &catalog, &active_collection);
+                ControlFlow::Break
+            }
+            Err(TryRecvError::Empty) => ControlFlow::Continue,
+            Err(TryRecvError::Disconnected) => ControlFlow::Break,
+        }
+    });
+}
+
+fn record_successful_recent_paths(paths: &[std::path::PathBuf], batch: &RasterImportBatch) {
+    for (path, receipt) in paths.iter().zip(batch.receipts()) {
+        if matches!(
+            receipt.status,
+            RasterImportStatus::Imported
+                | RasterImportStatus::AlreadyImported
+                | RasterImportStatus::ImportedPreviewPending
+                | RasterImportStatus::ImportedPreviewFailed
+        ) {
+            record_recent_path(path);
+        }
+    }
+}
+
+fn record_recent_path(path: &Path) {
+    let file = gtk4::gio::File::for_path(path);
+    let _ = gtk4::RecentManager::default().add_item(file.uri().as_str());
+}
+
+fn refresh_catalog_shell(
+    shell: &rusttable_ui::GtkShell,
+    catalog: &Rc<RefCell<GtkCatalogController>>,
+    active_collection: &Rc<RefCell<Option<CollectionController>>>,
+) {
+    let controller = catalog.borrow();
+    active_collection.replace(controller.collection_controller());
+    if let Some(workspace) = controller.state().workspace() {
+        shell.set_photo_workspace(workspace);
+    }
+    if let Some(collection) = active_collection.borrow().as_ref() {
+        shell.set_collection_filter_state(&collection_filter_state(&collection.snapshot()));
+    }
 }
 
 #[derive(Debug, Default)]

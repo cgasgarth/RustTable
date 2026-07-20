@@ -8,6 +8,7 @@ pub mod gtk_export;
 pub mod gtk_preview_controller;
 pub mod library;
 pub mod lifecycle;
+pub mod macos;
 mod platform;
 mod preview;
 pub mod workspace;

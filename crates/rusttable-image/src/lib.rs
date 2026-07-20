@@ -6,7 +6,7 @@ mod image;
 mod input;
 mod output;
 
-pub use format::{InputFormat, SUPPORTED_INPUT_FORMATS};
+pub use format::{InputFormat, SUPPORTED_INPUT_EXTENSIONS, SUPPORTED_INPUT_FORMATS};
 pub use image::{
     ColorEncoding, DecodedImage, DecodedImageError, ImageDimensions, ImageDimensionsError,
     PixelLayout,
