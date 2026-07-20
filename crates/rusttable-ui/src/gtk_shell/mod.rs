@@ -4,11 +4,15 @@
 //! initializing a display server. `GtkShell` is the runtime adapter that maps
 //! those stable roles to GTK widgets.
 
+mod collection_controls;
 mod darktable_spec;
 mod model;
 mod photo_preview;
 mod runtime;
 
+pub use collection_controls::{
+    CollectionControlAction, CollectionControlState, CollectionControls,
+};
 pub use darktable_spec::{
     ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarktableColors,
     DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LayoutMetrics,

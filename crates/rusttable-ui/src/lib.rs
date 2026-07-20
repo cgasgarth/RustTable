@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 #![doc = "GTK4 UI components and presentation models for `RustTable`."]
 
+pub mod collection;
 pub mod gtk_shell;
 pub mod import;
 pub mod library;
 pub mod presentation;
 
+pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
 pub use gtk_shell::{GtkShell, ShellLayout, ShellRegion, WorkspaceRole};
 pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};

@@ -4,12 +4,16 @@
 //! loading and selection transitions here makes those interactions deterministic and testable
 //! without a display server.
 
+mod collection;
+
 use std::path::{Path, PathBuf};
 
 use rusttable_core::PhotoId;
 use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 
 use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root};
+
+pub use collection::{CollectionController, CollectionSnapshot};
 
 /// Persisted catalog state consumed by the GTK application shell.
 #[derive(Debug, Clone, PartialEq, Eq)]
