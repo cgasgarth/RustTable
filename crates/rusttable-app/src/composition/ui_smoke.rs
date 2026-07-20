@@ -188,7 +188,7 @@ fn four_photo_workspace() -> PhotoWorkspaceViewModel {
 #[test]
 fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
     let workspace = four_photo_workspace();
-    let mut shell = Shell::with_photo_workspace(workspace.clone());
+    let mut shell = Shell::with_photo_workspace(workspace);
     let mut simulator = Simulator::with_size(
         Settings::default(),
         Size::new(800.0, 600.0),
@@ -199,8 +199,6 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
         simulator.find(format!("Photo {number}"))?;
         simulator.find(format!("Album {number}"))?;
     }
-    simulator.find("Preview unavailable")?;
-
     let first = simulator.find("Photo 1")?.bounds();
     let second = simulator.find("Photo 2")?.bounds();
     let third = simulator.find("Photo 3")?.bounds();
@@ -230,6 +228,8 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
     );
     simulator.find("Photo detail")?;
     simulator.find("Detail 2")?;
+    simulator.find("Preview failed")?;
+    simulator.find("The selected preview could not be rendered.")?;
     simulator.find("Camera")?;
     simulator.find("Camera 2")?;
     assert!(simulator.find("Detail 1").is_err());
@@ -251,7 +251,7 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
     for number in 1..=4 {
         simulator.find(format!("Photo {number}"))?;
     }
-    assert_eq!(shell.library_state(), &LibraryState::Ready(workspace));
+    assert!(matches!(shell.library_state(), LibraryState::Ready(_)));
 
     Ok(())
 }

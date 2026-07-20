@@ -85,6 +85,18 @@ pub(crate) fn catalog_path() -> Result<PathBuf, LibraryFailureKind> {
     select_catalog_path(override_path.as_deref(), default_data_directory.as_deref())
 }
 
+pub(crate) fn source_root(catalog_path: &Path) -> Result<PathBuf, LibraryFailureKind> {
+    let override_path = std::env::var_os("RUSTTABLE_SOURCE_ROOT").map(PathBuf::from);
+    if let Some(path) = override_path.filter(|path| !path.as_os_str().is_empty()) {
+        return Ok(path);
+    }
+    catalog_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .ok_or(LibraryFailureKind::CatalogLocationUnavailable)
+}
+
 fn select_catalog_path(
     override_path: Option<&Path>,
     default_data_directory: Option<&Path>,
@@ -221,7 +233,7 @@ mod tests {
 
     use super::{
         CatalogPresentationError, LibraryLoadError, LibraryLoadRequestId, LibraryLoadResult,
-        format_file_size, load_catalog, present_records, select_catalog_path,
+        format_file_size, load_catalog, present_records, select_catalog_path, source_root,
     };
     use crate::library::LibraryFailureKind;
     use rusttable_ui::PhotoWorkspaceViewModelError;
@@ -295,6 +307,12 @@ mod tests {
             select_catalog_path(None, None),
             Err(LibraryFailureKind::CatalogLocationUnavailable)
         );
+    }
+
+    #[test]
+    fn source_root_uses_the_catalog_parent_without_an_override() {
+        let catalog = Path::new("/tmp/rusttable/catalog.redb");
+        assert_eq!(source_root(catalog), Ok(PathBuf::from("/tmp/rusttable")));
     }
 
     #[test]

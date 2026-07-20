@@ -9,6 +9,7 @@ mod lifecycle;
 mod platform;
 mod preview;
 mod ui_shell;
+mod workspace;
 
 pub use composition::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, run};
 pub use extensions::ApplicationExtensions;
