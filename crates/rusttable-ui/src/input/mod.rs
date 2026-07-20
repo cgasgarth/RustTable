@@ -28,6 +28,9 @@ pub enum FocusTarget {
     RemoveImportResult(u64),
     CloseImportPanel,
     SaveRenderedCopy(PhotoId),
+    ExportSize(PhotoId, ExportSize),
+    StartRenderedCopy(PhotoId),
+    CancelRenderedCopy(PhotoId),
     RetryLibrary,
     Preview(PhotoId),
     BasicEdit(BasicEditControl),
@@ -44,6 +47,36 @@ pub enum InputIntent {
     Activate,
     Escape,
     BasicEdit(BasicEditIntent),
+    Export(ExportIntent),
+}
+
+/// A bounded action from the rendered-PNG save controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportIntent {
+    SelectSize(ExportSize),
+    Start,
+    Cancel,
+}
+
+/// The only output-size presets exposed by the initial PNG save surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportSize {
+    Original,
+    Fit2048,
+    Fit4096,
+}
+
+impl ExportSize {
+    pub const ALL: [Self; 3] = [Self::Original, Self::Fit2048, Self::Fit4096];
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Original => "Original",
+            Self::Fit2048 => "Fit 2048",
+            Self::Fit4096 => "Fit 4096",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +115,9 @@ pub enum InputEffect {
     RemoveImportResult(u64),
     CloseImportPanel,
     SaveRenderedCopy(PhotoId),
+    ExportSize(PhotoId, ExportSize),
+    StartRenderedCopy(PhotoId),
+    CancelRenderedCopy(PhotoId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,13 +170,46 @@ impl InputState {
         library_state: &LibraryState,
         import_panel: &crate::ImportPanelViewModel,
     ) -> InputEffect {
+        self.apply_with_import_panel_and_export(
+            intent,
+            sidebar_visible,
+            route,
+            library_state,
+            import_panel,
+            false,
+        )
+    }
+
+    pub fn apply_with_import_panel_and_export(
+        &mut self,
+        intent: InputIntent,
+        sidebar_visible: bool,
+        route: WorkspaceRoute,
+        library_state: &LibraryState,
+        import_panel: &crate::ImportPanelViewModel,
+        export_in_progress: bool,
+    ) -> InputEffect {
         match intent {
             InputIntent::FocusNext => {
-                self.move_focus(1, sidebar_visible, route, library_state, import_panel);
+                self.move_focus(
+                    1,
+                    sidebar_visible,
+                    route,
+                    library_state,
+                    import_panel,
+                    export_in_progress,
+                );
                 InputEffect::None
             }
             InputIntent::FocusPrevious => {
-                self.move_focus(-1, sidebar_visible, route, library_state, import_panel);
+                self.move_focus(
+                    -1,
+                    sidebar_visible,
+                    route,
+                    library_state,
+                    import_panel,
+                    export_in_progress,
+                );
                 InputEffect::None
             }
             InputIntent::FocusNextPhoto => {
@@ -153,7 +222,7 @@ impl InputState {
             }
             InputIntent::Activate => self.activate(route, library_state),
             InputIntent::Escape => self.escape(route, library_state),
-            InputIntent::BasicEdit(_) => InputEffect::None,
+            InputIntent::BasicEdit(_) | InputIntent::Export(_) => InputEffect::None,
         }
     }
 
@@ -178,8 +247,30 @@ impl InputState {
         library_state: &LibraryState,
         import_panel: &crate::ImportPanelViewModel,
     ) {
-        let chain =
-            focus_chain_with_import_panel(sidebar_visible, route, library_state, import_panel);
+        self.reconcile_with_import_panel_and_export(
+            sidebar_visible,
+            route,
+            library_state,
+            import_panel,
+            false,
+        );
+    }
+
+    pub fn reconcile_with_import_panel_and_export(
+        &mut self,
+        sidebar_visible: bool,
+        route: WorkspaceRoute,
+        library_state: &LibraryState,
+        import_panel: &crate::ImportPanelViewModel,
+        export_in_progress: bool,
+    ) {
+        let chain = focus_chain_with_import_panel_and_export(
+            sidebar_visible,
+            route,
+            library_state,
+            import_panel,
+            export_in_progress,
+        );
         if !chain.contains(&self.focused) {
             self.focused = chain[0];
         }
@@ -205,9 +296,15 @@ impl InputState {
         route: WorkspaceRoute,
         library_state: &LibraryState,
         import_panel: &crate::ImportPanelViewModel,
+        export_in_progress: bool,
     ) {
-        let chain =
-            focus_chain_with_import_panel(sidebar_visible, route, library_state, import_panel);
+        let chain = focus_chain_with_import_panel_and_export(
+            sidebar_visible,
+            route,
+            library_state,
+            import_panel,
+            export_in_progress,
+        );
         let index = chain
             .iter()
             .position(|target| *target == self.focused)
@@ -276,12 +373,24 @@ impl InputState {
             {
                 InputEffect::SaveRenderedCopy(photo_id)
             }
+            FocusTarget::ExportSize(photo_id, size) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
+                InputEffect::ExportSize(photo_id, size)
+            }
+            FocusTarget::StartRenderedCopy(photo_id) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
+                InputEffect::StartRenderedCopy(photo_id)
+            }
+            FocusTarget::CancelRenderedCopy(photo_id) if matches!(route, WorkspaceRoute::PhotoDetail(selected) if selected == photo_id) => {
+                InputEffect::CancelRenderedCopy(photo_id)
+            }
             FocusTarget::PhotoCard(photo_id) => {
                 self.origin = Some(photo_id);
                 self.focused = FocusTarget::Preview(photo_id);
                 InputEffect::Navigate(NavigationIntent::ShowPhoto(photo_id))
             }
             FocusTarget::SaveRenderedCopy(_)
+            | FocusTarget::ExportSize(_, _)
+            | FocusTarget::StartRenderedCopy(_)
+            | FocusTarget::CancelRenderedCopy(_)
             | FocusTarget::Preview(_)
             | FocusTarget::BasicEdit(_) => InputEffect::None,
             FocusTarget::BackToLibrary => {
@@ -341,6 +450,22 @@ pub fn focus_chain_with_import_panel(
     library_state: &LibraryState,
     import_panel: &crate::ImportPanelViewModel,
 ) -> Vec<FocusTarget> {
+    focus_chain_with_import_panel_and_export(
+        sidebar_visible,
+        route,
+        library_state,
+        import_panel,
+        false,
+    )
+}
+
+fn focus_chain_with_import_panel_and_export(
+    sidebar_visible: bool,
+    route: WorkspaceRoute,
+    library_state: &LibraryState,
+    import_panel: &crate::ImportPanelViewModel,
+    export_in_progress: bool,
+) -> Vec<FocusTarget> {
     let mut chain = vec![FocusTarget::SidebarToggle];
     if sidebar_visible {
         chain.push(FocusTarget::Library);
@@ -393,7 +518,14 @@ pub fn focus_chain_with_import_panel(
                     FocusTarget::BasicEdit(BasicEditControl::Reload),
                     FocusTarget::BasicEdit(BasicEditControl::Reapply),
                 ]);
-                chain.push(FocusTarget::SaveRenderedCopy(photo_id));
+                if export_in_progress {
+                    chain.push(FocusTarget::CancelRenderedCopy(photo_id));
+                } else {
+                    for size in ExportSize::ALL {
+                        chain.push(FocusTarget::ExportSize(photo_id, size));
+                    }
+                    chain.push(FocusTarget::StartRenderedCopy(photo_id));
+                }
             }
             chain.push(FocusTarget::BackToLibrary);
         }
@@ -406,8 +538,8 @@ mod tests {
     use rusttable_core::PhotoId;
 
     use super::{
-        BasicEditControl, FocusTarget, InputEffect, InputIntent, InputState, focus_chain,
-        focus_chain_with_import_panel,
+        BasicEditControl, ExportSize, FocusTarget, InputEffect, InputIntent, InputState,
+        focus_chain, focus_chain_with_import_panel,
     };
     use crate::library::{LibraryFailureKind, LibraryState};
     use crate::presentation::{
@@ -566,9 +698,38 @@ mod tests {
                 FocusTarget::BasicEdit(BasicEditControl::Commit),
                 FocusTarget::BasicEdit(BasicEditControl::Reload),
                 FocusTarget::BasicEdit(BasicEditControl::Reapply),
-                FocusTarget::SaveRenderedCopy(photo_id),
+                FocusTarget::ExportSize(photo_id, ExportSize::Original),
+                FocusTarget::ExportSize(photo_id, ExportSize::Fit2048),
+                FocusTarget::ExportSize(photo_id, ExportSize::Fit4096),
+                FocusTarget::StartRenderedCopy(photo_id),
                 FocusTarget::BackToLibrary,
             ]
+        );
+    }
+
+    #[test]
+    fn keyboard_activation_projects_the_focused_png_export_control() {
+        let model = workspace();
+        let photo_id = PhotoId::new(2).expect("test photo ID is non-zero");
+        let route = crate::navigation::WorkspaceRoute::PhotoDetail(photo_id);
+        let mut state = InputState {
+            focused: FocusTarget::ExportSize(photo_id, ExportSize::Fit4096),
+            origin: Some(photo_id),
+        };
+
+        assert_eq!(
+            state.apply(InputIntent::Activate, true, route, &model),
+            InputEffect::ExportSize(photo_id, ExportSize::Fit4096)
+        );
+        state.focused = FocusTarget::StartRenderedCopy(photo_id);
+        assert_eq!(
+            state.apply(InputIntent::Activate, true, route, &model),
+            InputEffect::StartRenderedCopy(photo_id)
+        );
+        state.focused = FocusTarget::CancelRenderedCopy(photo_id);
+        assert_eq!(
+            state.apply(InputIntent::Activate, true, route, &model),
+            InputEffect::CancelRenderedCopy(photo_id)
         );
     }
 

@@ -1,6 +1,9 @@
 use rusttable_core::PhotoId;
 
-use crate::input::{BasicEditIntent, FocusTarget, InputEffect, InputIntent, InputState, UiMessage};
+use crate::input::{
+    BasicEditIntent, ExportIntent, ExportSize, FocusTarget, InputEffect, InputIntent, InputState,
+    UiMessage,
+};
 use crate::{LibraryState, NavigationState, WorkspaceRoute};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -12,6 +15,8 @@ pub struct UiState {
     import_panel: crate::ImportPanelViewModel,
     basic_edit: Option<crate::presentation::BasicEditInspectorViewModel>,
     export_status: Option<(PhotoId, crate::PresentationText)>,
+    export_size: ExportSize,
+    export_cancellation_requested: Option<PhotoId>,
 }
 
 impl Default for UiState {
@@ -24,6 +29,8 @@ impl Default for UiState {
             import_panel: crate::ImportPanelViewModel::default(),
             basic_edit: None,
             export_status: None,
+            export_size: ExportSize::Original,
+            export_cancellation_requested: None,
         }
     }
 }
@@ -88,7 +95,31 @@ impl UiState {
             self.export_status = crate::PresentationText::new(status)
                 .ok()
                 .map(|status| (photo_id, status));
+            if !self.export_is_active(photo_id) {
+                self.export_cancellation_requested = None;
+            }
+            self.reconcile_input();
         }
+    }
+
+    /// Returns the bounded output-size setting selected for the next PNG save.
+    #[must_use]
+    pub const fn export_size(&self) -> ExportSize {
+        self.export_size
+    }
+
+    /// Reports whether the save surface is waiting for its active task to finish.
+    #[must_use]
+    pub fn export_in_progress(&self, photo_id: PhotoId) -> bool {
+        self.selected_photo_detail(photo_id)
+            && self.export_status(photo_id).is_some()
+            && self.export_is_active(photo_id)
+    }
+
+    /// Reports whether the UI has requested cooperative cancellation.
+    #[must_use]
+    pub fn export_cancellation_requested(&self, photo_id: PhotoId) -> bool {
+        self.export_cancellation_requested == Some(photo_id)
     }
 
     #[must_use]
@@ -205,12 +236,19 @@ impl UiState {
                     self.reconcile_input();
                     return UiEffect::None;
                 }
-                let effect = self.input.apply_with_import_panel(
+                if let InputIntent::Export(export_intent) = intent {
+                    return self.apply_export_intent(export_intent);
+                }
+                let export_in_progress = self
+                    .selected_detail_id()
+                    .is_some_and(|photo_id| self.export_in_progress(photo_id));
+                let effect = self.input.apply_with_import_panel_and_export(
                     intent,
                     self.sidebar_visible,
                     self.route(),
                     &self.library_state,
                     &self.import_panel,
+                    export_in_progress,
                 );
                 match effect {
                     InputEffect::None => {}
@@ -234,6 +272,15 @@ impl UiState {
                     InputEffect::SaveRenderedCopy(photo_id) => {
                         return UiEffect::SaveRenderedCopy(photo_id);
                     }
+                    InputEffect::ExportSize(photo_id, size) => {
+                        let _ = self.select_export_size(photo_id, size);
+                    }
+                    InputEffect::StartRenderedCopy(photo_id) => {
+                        return self.start_export(photo_id);
+                    }
+                    InputEffect::CancelRenderedCopy(photo_id) => {
+                        self.request_export_cancellation(photo_id);
+                    }
                 }
             }
         }
@@ -242,11 +289,15 @@ impl UiState {
     }
 
     fn reconcile_input(&mut self) {
-        self.input.reconcile_with_import_panel(
+        let export_in_progress = self
+            .selected_detail_id()
+            .is_some_and(|photo_id| self.export_in_progress(photo_id));
+        self.input.reconcile_with_import_panel_and_export(
             self.sidebar_visible,
             self.route(),
             &self.library_state,
             &self.import_panel,
+            export_in_progress,
         );
         self.reconcile_basic_edit();
     }
@@ -264,6 +315,52 @@ impl UiState {
             | BasicEditIntent::Reapply => {}
             BasicEditIntent::Reset => inspector.reset(),
             BasicEditIntent::Commit => inspector.request_save(),
+        }
+    }
+
+    fn apply_export_intent(&mut self, intent: ExportIntent) -> UiEffect {
+        let Some(photo_id) = self.selected_detail_id() else {
+            return UiEffect::None;
+        };
+        match intent {
+            ExportIntent::SelectSize(size) => {
+                let _ = self.select_export_size(photo_id, size);
+                UiEffect::None
+            }
+            ExportIntent::Start => self.start_export(photo_id),
+            ExportIntent::Cancel => {
+                self.request_export_cancellation(photo_id);
+                UiEffect::None
+            }
+        }
+    }
+
+    fn select_export_size(&mut self, photo_id: PhotoId, size: ExportSize) -> bool {
+        if !self.selected_photo_detail(photo_id) || self.export_in_progress(photo_id) {
+            return false;
+        }
+        self.export_size = size;
+        true
+    }
+
+    fn start_export(&mut self, photo_id: PhotoId) -> UiEffect {
+        if !self.selected_photo_detail(photo_id) || self.export_in_progress(photo_id) {
+            return UiEffect::None;
+        }
+        self.export_status = crate::PresentationText::new("Choosing PNG destination…".to_owned())
+            .ok()
+            .map(|status| (photo_id, status));
+        self.reconcile_input();
+        UiEffect::SaveRenderedCopy(photo_id)
+    }
+
+    fn request_export_cancellation(&mut self, photo_id: PhotoId) {
+        if self.export_in_progress(photo_id) {
+            self.export_cancellation_requested = Some(photo_id);
+            self.export_status = crate::PresentationText::new("Cancelling PNG export…".to_owned())
+                .ok()
+                .map(|status| (photo_id, status));
+            self.reconcile_input();
         }
     }
 
@@ -299,6 +396,27 @@ impl UiState {
                 .is_some()
     }
 
+    fn selected_detail_id(&self) -> Option<PhotoId> {
+        match self.route() {
+            WorkspaceRoute::PhotoDetail(photo_id) if self.selected_photo_detail(photo_id) => {
+                Some(photo_id)
+            }
+            WorkspaceRoute::Library | WorkspaceRoute::PhotoDetail(_) => None,
+        }
+    }
+
+    fn export_is_active(&self, photo_id: PhotoId) -> bool {
+        let Some(status) = self.export_status(photo_id) else {
+            return false;
+        };
+        status.as_str().starts_with("Choosing PNG destination")
+            || status.as_str().starts_with("Rendering selected edit")
+            || status
+                .as_str()
+                .starts_with("Encoding, verifying, and publishing PNG")
+            || status.as_str().starts_with("Cancelling PNG export")
+    }
+
     #[must_use]
     pub fn focused_photo(&self) -> Option<PhotoId> {
         match self.input.focused() {
@@ -311,6 +429,9 @@ impl UiState {
             | FocusTarget::RemoveImportResult(_)
             | FocusTarget::CloseImportPanel
             | FocusTarget::SaveRenderedCopy(_)
+            | FocusTarget::ExportSize(_, _)
+            | FocusTarget::StartRenderedCopy(_)
+            | FocusTarget::CancelRenderedCopy(_)
             | FocusTarget::RetryLibrary
             | FocusTarget::Preview(_)
             | FocusTarget::BasicEdit(_)
@@ -423,6 +544,72 @@ mod tests {
                 .export_status(photo_id)
                 .map(crate::PresentationText::as_str),
             Some("Saved rendered.png")
+        );
+    }
+
+    #[test]
+    fn png_export_controls_project_bounded_settings_and_safe_cancellation() {
+        let photo_id = rusttable_core::PhotoId::new(1).expect("test photo ID is non-zero");
+        let workspace = crate::PhotoWorkspaceViewModel::new(
+            vec![crate::PhotoCardViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                None,
+            )],
+            vec![crate::PhotoDetailViewModel::new(
+                photo_id,
+                crate::PresentationText::new("Photo 1").expect("test text is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut state = UiState::with_photo_workspace(workspace);
+
+        assert_eq!(
+            state.handle(UiMessage::Input(InputIntent::Export(
+                crate::input::ExportIntent::SelectSize(crate::input::ExportSize::Fit2048),
+            ))),
+            UiEffect::None
+        );
+        assert_eq!(state.export_size(), crate::input::ExportSize::Original);
+
+        let _ = state.handle(UiMessage::Navigate(crate::NavigationIntent::ShowPhoto(
+            photo_id,
+        )));
+        assert_eq!(
+            state.handle(UiMessage::Input(InputIntent::Export(
+                crate::input::ExportIntent::SelectSize(crate::input::ExportSize::Fit2048),
+            ))),
+            UiEffect::None
+        );
+        assert_eq!(state.export_size(), crate::input::ExportSize::Fit2048);
+        assert_eq!(
+            state.handle(UiMessage::Input(InputIntent::Export(
+                crate::input::ExportIntent::Start,
+            ))),
+            UiEffect::SaveRenderedCopy(photo_id)
+        );
+        assert!(state.export_in_progress(photo_id));
+        assert_eq!(
+            state.handle(UiMessage::Input(InputIntent::Export(
+                crate::input::ExportIntent::SelectSize(crate::input::ExportSize::Fit4096),
+            ))),
+            UiEffect::None
+        );
+        assert_eq!(state.export_size(), crate::input::ExportSize::Fit2048);
+
+        assert_eq!(
+            state.handle(UiMessage::Input(InputIntent::Export(
+                crate::input::ExportIntent::Cancel,
+            ))),
+            UiEffect::None
+        );
+        assert!(state.export_cancellation_requested(photo_id));
+        assert_eq!(
+            state
+                .export_status(photo_id)
+                .map(crate::PresentationText::as_str),
+            Some("Cancelling PNG export…")
         );
     }
 

@@ -2,8 +2,8 @@ use rusttable_core::Edit;
 use rusttable_image::{ColorEncoding, DecodeLimits, DecodedImage, ImageInput};
 use rusttable_image_io::FileImageInput;
 use rusttable_pixelpipe::{
-    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeRequest, RgbaF32ColorEncoding,
-    RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{
     CompiledOperationGraph, FiniteF32, LinearRgb, RasterDimensions, WorkingRgbImage,
@@ -119,7 +119,12 @@ fn render_decoded_with_target(
     .map_err(PreviewError::PixelpipeInput)?;
     let graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
     let result = CpuPixelpipeExecutor
-        .execute(&CpuPixelpipeRequest::new(pixelpipe_input, graph))
+        .execute(&CpuPixelpipeRequest::new(
+            pixelpipe_input,
+            graph,
+            // The prepared-render boundary owns deterministic target encoding.
+            CpuPixelpipeOutputMode::FullExport,
+        ))
         .map_err(PreviewError::Pixelpipe)?;
     let pixels = result
         .image()

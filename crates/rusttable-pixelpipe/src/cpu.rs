@@ -2,7 +2,7 @@ use std::fmt;
 
 use rusttable_processing::{
     CompiledOperationGraph, EvaluationError, SourceRgb, SourceRgbImage, SrgbChannel,
-    evaluate_graph, to_linear_srgb,
+    encode_linear_srgb, evaluate_graph, to_linear_srgb,
 };
 
 use crate::{
@@ -10,17 +10,44 @@ use crate::{
     RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 
+/// The typed presentation boundary requested from a CPU pixelpipe execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CpuPixelpipeOutputMode {
+    /// Produce bounded transfer-encoded sRGB suitable for preview presentation.
+    Preview,
+    /// Retain linear sRGB for full-resolution file export.
+    FullExport,
+}
+
+impl CpuPixelpipeOutputMode {
+    const fn color_encoding(self) -> RgbaF32ColorEncoding {
+        match self {
+            Self::Preview => RgbaF32ColorEncoding::SrgbD65,
+            Self::FullExport => RgbaF32ColorEncoding::LinearSrgbD65,
+        }
+    }
+}
+
 /// Immutable prepared CPU execution input.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CpuPixelpipeRequest {
     input: RgbaF32Image,
     graph: CompiledOperationGraph,
+    output_mode: CpuPixelpipeOutputMode,
 }
 
 impl CpuPixelpipeRequest {
     #[must_use]
-    pub fn new(input: RgbaF32Image, graph: CompiledOperationGraph) -> Self {
-        Self { input, graph }
+    pub fn new(
+        input: RgbaF32Image,
+        graph: CompiledOperationGraph,
+        output_mode: CpuPixelpipeOutputMode,
+    ) -> Self {
+        Self {
+            input,
+            graph,
+            output_mode,
+        }
     }
 
     #[must_use]
@@ -31,6 +58,11 @@ impl CpuPixelpipeRequest {
     #[must_use]
     pub const fn graph(&self) -> &CompiledOperationGraph {
         &self.graph
+    }
+
+    #[must_use]
+    pub const fn output_mode(&self) -> CpuPixelpipeOutputMode {
+        self.output_mode
     }
 }
 
@@ -71,7 +103,8 @@ impl CpuPixelpipeExecutor {
     ///
     /// The executor accepts normalized transfer-encoded sRGB, converts it once
     /// to linear sRGB, delegates registered nodes to `rusttable-processing`,
-    /// and preserves straight alpha through the RGB-only operation boundary.
+    /// then applies the requested typed output boundary. Straight alpha is
+    /// preserved through each RGB-only boundary.
     ///
     /// # Errors
     ///
@@ -93,20 +126,9 @@ impl CpuPixelpipeExecutor {
             .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
         let output_descriptor = RgbaF32Descriptor::new(
             input_descriptor.dimensions(),
-            RgbaF32ColorEncoding::LinearSrgbD65,
+            request.output_mode().color_encoding(),
         );
-        let output_pixels = evaluated
-            .pixels()
-            .zip(request.input().pixels())
-            .map(|(rgb, source)| {
-                RgbaF32Pixel::new(
-                    rgb.red().get(),
-                    rgb.green().get(),
-                    rgb.blue().get(),
-                    source.alpha(),
-                )
-            })
-            .collect();
+        let output_pixels = output_pixels(request.output_mode(), &evaluated, request.input());
         let image = RgbaF32Image::new(output_descriptor, output_pixels)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
         let receipt = CpuPipelineReceipt::new(
@@ -114,6 +136,7 @@ impl CpuPixelpipeExecutor {
             output_descriptor,
             pixel_identity(request.input()),
             pixel_identity(&image),
+            request.output_mode(),
             request
                 .graph()
                 .nodes()
@@ -123,6 +146,40 @@ impl CpuPixelpipeExecutor {
                 .collect(),
         );
         Ok(CpuPixelpipeResult { image, receipt })
+    }
+}
+
+fn output_pixels(
+    mode: CpuPixelpipeOutputMode,
+    evaluated: &rusttable_processing::WorkingRgbImage,
+    input: &RgbaF32Image,
+) -> Vec<RgbaF32Pixel> {
+    match mode {
+        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(evaluated)
+            .image()
+            .pixels()
+            .zip(input.pixels())
+            .map(|(rgb, source)| {
+                RgbaF32Pixel::new(
+                    rgb.red().get(),
+                    rgb.green().get(),
+                    rgb.blue().get(),
+                    source.alpha(),
+                )
+            })
+            .collect(),
+        CpuPixelpipeOutputMode::FullExport => evaluated
+            .pixels()
+            .zip(input.pixels())
+            .map(|(rgb, source)| {
+                RgbaF32Pixel::new(
+                    rgb.red().get(),
+                    rgb.green().get(),
+                    rgb.blue().get(),
+                    source.alpha(),
+                )
+            })
+            .collect(),
     }
 }
 

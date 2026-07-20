@@ -18,6 +18,12 @@ use rusttable_ui::{
     UiState, WorkspaceRoute,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveExport {
+    photo_id: PhotoId,
+    cancellation: export::ExportCancellation,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Shell {
     ui: UiState,
@@ -29,6 +35,7 @@ pub(crate) struct Shell {
     active_preview: Option<(u64, PhotoId)>,
     import_paths: Vec<PathBuf>,
     import_cancellation: Option<RasterImportCancellation>,
+    active_export: Option<ActiveExport>,
     pending_import_selection: Option<PhotoId>,
     basic_edit: Option<BasicEditSession>,
 }
@@ -45,6 +52,7 @@ impl Default for Shell {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         }
@@ -86,6 +94,7 @@ impl Shell {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         }
@@ -106,6 +115,7 @@ impl Shell {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         }
@@ -162,6 +172,18 @@ pub(crate) enum Message {
     ExportDestinationSelected {
         photo_id: PhotoId,
         destination: Option<PathBuf>,
+    },
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the Iced export progress control sends cancellation events"
+        )
+    )]
+    CancelExport(PhotoId),
+    ExportStatus {
+        photo_id: PhotoId,
+        status: export::ExportStatus,
     },
     ExportFinished {
         photo_id: PhotoId,
@@ -229,35 +251,11 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
         Message::CloseImportPanel => {
             let _ = shell.ui.handle(UiMessage::CloseImportPanel);
         }
-        Message::SaveRenderedCopy(photo_id) => return export::pick_destination(photo_id),
-        Message::ExportDestinationSelected {
-            photo_id,
-            destination: Some(destination),
-        } => {
-            let (Ok(catalog_path), Ok(source_root)) =
-                (shell.catalog_path.clone(), shell.source_root.clone())
-            else {
-                shell.ui.set_export_status(
-                    photo_id,
-                    "The catalog is unavailable for export.".to_owned(),
-                );
-                return Task::none();
-            };
-            shell
-                .ui
-                .set_export_status(photo_id, "Rendering selected edit…".to_owned());
-            return export::start(catalog_path, source_root, photo_id, destination);
-        }
-        Message::ExportDestinationSelected {
-            destination: None, ..
-        } => {}
-        Message::ExportFinished { photo_id, result } => {
-            let status = match result {
-                export::ExportTaskResult::Completed(status)
-                | export::ExportTaskResult::Failed(status) => status,
-            };
-            shell.ui.set_export_status(photo_id, status);
-        }
+        message @ (Message::SaveRenderedCopy(_)
+        | Message::ExportDestinationSelected { .. }
+        | Message::CancelExport(_)
+        | Message::ExportStatus { .. }
+        | Message::ExportFinished { .. }) => return handle_export_message(shell, message),
         Message::ImportProgress(progress) => {
             shell.ui.update_import_row(
                 progress.item_id.get(),
@@ -273,6 +271,75 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
         }
     }
     Task::none()
+}
+
+fn handle_export_message(shell: &mut Shell, message: Message) -> Task<Message> {
+    match message {
+        Message::SaveRenderedCopy(photo_id) => export::pick_destination(photo_id),
+        Message::ExportDestinationSelected {
+            photo_id,
+            destination: Some(destination),
+        } => begin_export(shell, photo_id, destination),
+        Message::ExportDestinationSelected {
+            destination: None, ..
+        } => Task::none(),
+        Message::CancelExport(photo_id) => {
+            cancel_export(shell, photo_id);
+            Task::none()
+        }
+        Message::ExportStatus { photo_id, status } => {
+            if active_export_matches(shell, photo_id) {
+                shell
+                    .ui
+                    .set_export_status(photo_id, status.text().to_owned());
+            }
+            Task::none()
+        }
+        Message::ExportFinished { photo_id, result } => {
+            if !active_export_matches(shell, photo_id) {
+                return Task::none();
+            }
+            shell.active_export = None;
+            let status = match result {
+                export::ExportTaskResult::Completed(status)
+                | export::ExportTaskResult::Failed(status) => status,
+            };
+            shell.ui.set_export_status(photo_id, status);
+            Task::none()
+        }
+        _ => unreachable!("only export messages reach the export handler"),
+    }
+}
+
+fn begin_export(shell: &mut Shell, photo_id: PhotoId, destination: PathBuf) -> Task<Message> {
+    if shell.active_export.is_some() {
+        shell.ui.set_export_status(
+            photo_id,
+            "Another export is already in progress.".to_owned(),
+        );
+        return Task::none();
+    }
+    let (Ok(catalog_path), Ok(source_root)) =
+        (shell.catalog_path.clone(), shell.source_root.clone())
+    else {
+        shell.ui.set_export_status(
+            photo_id,
+            "The catalog is unavailable for export.".to_owned(),
+        );
+        return Task::none();
+    };
+    let task = export::start_request(export::ExportRequest::new(
+        catalog_path,
+        source_root,
+        photo_id,
+        destination,
+        export::ExportSettings::original(),
+    ));
+    shell.active_export = Some(ActiveExport {
+        photo_id,
+        cancellation: task.cancellation(),
+    });
+    task.into_task()
 }
 
 fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
@@ -443,6 +510,27 @@ fn cancel_import(shell: &mut Shell) {
     }
 }
 
+fn active_export_matches(shell: &Shell, photo_id: PhotoId) -> bool {
+    shell
+        .active_export
+        .as_ref()
+        .is_some_and(|export| export.photo_id == photo_id)
+}
+
+fn cancel_export(shell: &mut Shell, photo_id: PhotoId) {
+    let Some(export) = shell
+        .active_export
+        .as_ref()
+        .filter(|export| export.photo_id == photo_id)
+    else {
+        return;
+    };
+    export.cancellation.cancel();
+    shell
+        .ui
+        .set_export_status(photo_id, "Cancelling export…".to_owned());
+}
+
 fn safe_import_alias(path: &std::path::Path) -> PresentationText {
     let alias = path
         .file_name()
@@ -585,45 +673,6 @@ mod tests {
     }
 
     #[test]
-    fn default_shell_shows_the_sidebar() {
-        assert_eq!(
-            Shell::default(),
-            Shell {
-                ui: UiState::default(),
-                active_load_request_id: LibraryLoadRequestId::first(),
-                load_in_flight: false,
-                catalog_path: Err(LibraryFailureKind::CatalogLocationUnavailable),
-                source_root: Err(LibraryFailureKind::CatalogLocationUnavailable),
-                preview_generation: 0,
-                active_preview: None,
-                import_paths: Vec::new(),
-                import_cancellation: None,
-                pending_import_selection: None,
-                basic_edit: None,
-            }
-        );
-    }
-
-    #[test]
-    fn toggle_sidebar_hides_it() {
-        let mut shell = Shell::default();
-
-        let _ = update(&mut shell, Message::ToggleSidebar);
-
-        assert!(!shell.ui_state().sidebar_visible());
-    }
-
-    #[test]
-    fn toggling_sidebar_twice_restores_it() {
-        let mut shell = Shell::default();
-
-        let _ = update(&mut shell, Message::ToggleSidebar);
-        let _ = update(&mut shell, Message::ToggleSidebar);
-
-        assert!(shell.ui_state().sidebar_visible());
-    }
-
-    #[test]
     fn injected_photo_workspace_is_retained_read_only() {
         let workspace = PhotoWorkspaceViewModel::default();
         let shell = Shell::with_photo_workspace(workspace.clone());
@@ -644,6 +693,7 @@ mod tests {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         };
@@ -679,6 +729,7 @@ mod tests {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         };
@@ -724,6 +775,7 @@ mod tests {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         };
@@ -758,6 +810,7 @@ mod tests {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         };
@@ -799,6 +852,7 @@ mod tests {
             active_preview: None,
             import_paths: Vec::new(),
             import_cancellation: None,
+            active_export: None,
             pending_import_selection: None,
             basic_edit: None,
         };

@@ -6,7 +6,10 @@ mod image;
 pub mod purpose;
 mod receipt;
 
-pub use cpu::{CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeRequest, CpuPixelpipeResult};
+pub use cpu::{
+    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
+    CpuPixelpipeResult,
+};
 pub use image::{
     RgbaF32AlphaMode, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
     RgbaF32ImageError, RgbaF32Pixel,

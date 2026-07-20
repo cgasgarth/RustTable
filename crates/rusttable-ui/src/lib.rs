@@ -14,7 +14,9 @@ pub mod view;
 pub mod widgets;
 
 pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
-pub use input::{FocusTarget, InputEffect, InputIntent, InputState, UiMessage};
+pub use input::{
+    ExportIntent, ExportSize, FocusTarget, InputEffect, InputIntent, InputState, UiMessage,
+};
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
 pub use navigation::{NavigationIntent, NavigationState, WorkspaceRoute};
 pub use presentation::{
