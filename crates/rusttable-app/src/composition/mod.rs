@@ -6,7 +6,7 @@ use crate::lifecycle::run_with_bootstrap;
 use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual};
 use std::fmt;
 
-/// Error returned when GTK terminates RustTable unsuccessfully.
+/// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DesktopRunError {
     exit_code: u8,
@@ -24,7 +24,7 @@ impl fmt::Display for DesktopRunError {
 
 impl std::error::Error for DesktopRunError {}
 
-/// Starts the GTK4 RustTable desktop application.
+/// Starts the GTK4 `RustTable` desktop application.
 ///
 /// # Errors
 ///

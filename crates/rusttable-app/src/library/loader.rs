@@ -25,10 +25,14 @@ const GENERIC_PHOTO_TITLE: &str = "Image";
 pub struct LibraryLoadRequestId(NonZeroU64);
 
 impl LibraryLoadRequestId {
+    /// Returns the first valid request identifier.
+    #[must_use]
     pub const fn first() -> Self {
         Self(NonZeroU64::MIN)
     }
 
+    /// Returns the stable numeric value for this identifier.
+    #[must_use]
     pub const fn get(self) -> u64 {
         self.0.get()
     }
@@ -49,6 +53,8 @@ pub enum LibraryLoadResult {
 }
 
 impl LibraryLoadResult {
+    /// Converts a completed catalog load into its display-safe library state.
+    #[must_use]
     pub fn into_library_state(self) -> LibraryState {
         match self {
             Self::Empty => LibraryState::Empty,
@@ -92,6 +98,12 @@ impl LibraryLoadError {
     }
 }
 
+/// Resolves `RustTable`'s persisted catalog location.
+///
+/// # Errors
+///
+/// Returns [`LibraryFailureKind::CatalogLocationUnavailable`] when neither the
+/// configured override nor the platform data directory is usable.
 pub fn catalog_path() -> Result<PathBuf, LibraryFailureKind> {
     let override_path = std::env::var_os("RUSTTABLE_CATALOG_PATH").map(PathBuf::from);
     let default_data_directory = ProjectDirs::from("com", "cgasgarth", "RustTable")
@@ -99,6 +111,12 @@ pub fn catalog_path() -> Result<PathBuf, LibraryFailureKind> {
     select_catalog_path(override_path.as_deref(), default_data_directory.as_deref())
 }
 
+/// Resolves the root directory used to locate imported photo sources.
+///
+/// # Errors
+///
+/// Returns [`LibraryFailureKind::CatalogLocationUnavailable`] when no explicit
+/// source root exists and `catalog_path` has no parent directory.
 pub fn source_root(catalog_path: &Path) -> Result<PathBuf, LibraryFailureKind> {
     let override_path = std::env::var_os("RUSTTABLE_SOURCE_ROOT").map(PathBuf::from);
     if let Some(path) = override_path.filter(|path| !path.as_os_str().is_empty()) {
@@ -124,6 +142,8 @@ fn select_catalog_path(
         .ok_or(LibraryFailureKind::CatalogLocationUnavailable)
 }
 
+/// Loads the persisted catalog into the bounded library presentation model.
+#[must_use]
 pub fn load_catalog(path: &Path) -> LibraryLoadResult {
     match load_catalog_detailed(path) {
         Ok(workspace) if workspace.cards().next().is_none() => LibraryLoadResult::Empty,

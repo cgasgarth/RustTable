@@ -38,6 +38,12 @@ pub async fn pick_raster_files() -> Vec<PathBuf> {
         .collect()
 }
 
+/// Imports a validated nonempty raster batch into the supplied catalog.
+///
+/// # Panics
+///
+/// Panics when `paths` is empty or exceeds the import request's bounded input
+/// contract. Callers must validate that batch before invoking this operation.
 pub fn run_raster_import(
     catalog_path: &Path,
     paths: Vec<PathBuf>,
