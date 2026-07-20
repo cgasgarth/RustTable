@@ -9,7 +9,7 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
 use super::runtime::PhotoSelectedHandler;
-use super::thumbnail::{ThumbnailPair, ThumbnailSurface};
+use super::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 use super::{
     ExportPanel, LighttableContentState, LighttableInteractionState, LighttableSelectionAction,
     LighttableZoom, PhotoPreview, SelectionModifiers, THUMBNAIL_METRICS, ThemeRole, WorkspaceRole,
@@ -60,6 +60,13 @@ impl WorkspaceRenderHandle {
         view_model: &PhotoWorkspaceViewModel,
         matching_photo_ids: Option<&BTreeSet<PhotoId>>,
     ) {
+        let mut previous_thumbnail_states = self
+            .photo_tiles
+            .borrow()
+            .iter()
+            .map(|(photo_id, tile)| (*photo_id, tile.thumbnails.state()))
+            .collect::<BTreeMap<_, _>>();
+        let previous_details = self.photo_details.borrow().clone();
         clear_children(&self.lighttable);
         clear_children(&self.filmstrip);
         self.photo_tiles.borrow_mut().clear();
@@ -110,6 +117,16 @@ impl WorkspaceRenderHandle {
                 zoom,
             );
             let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo.id(), photo.title());
+            let thumbnail_state = retained_thumbnail_state(
+                photo.id(),
+                &detail,
+                &previous_details,
+                &mut previous_thumbnail_states,
+            );
+            let thumbnails = ThumbnailPair::new(card_thumbnail, filmstrip_thumbnail);
+            if thumbnails.set_state(&thumbnail_state).is_err() {
+                thumbnails.set_failed();
+            }
             connect_photo_selection(&card, photo.id(), detail.clone(), &selection);
             connect_photo_selection(&filmstrip_item, photo.id(), detail, &selection);
             self.lighttable.insert(&card, -1);
@@ -117,7 +134,7 @@ impl WorkspaceRenderHandle {
             self.photo_tiles.borrow_mut().insert(
                 photo.id(),
                 PhotoTilePair {
-                    thumbnails: ThumbnailPair::new(card_thumbnail, filmstrip_thumbnail),
+                    thumbnails,
                     lighttable_button: card,
                     filmstrip_button: filmstrip_item,
                 },
@@ -357,8 +374,104 @@ fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {
     preview.set_detail(detail);
 }
 
+fn retained_thumbnail_state(
+    photo_id: PhotoId,
+    detail: &PhotoDetailViewModel,
+    previous_details: &BTreeMap<PhotoId, PhotoDetailViewModel>,
+    previous_states: &mut BTreeMap<PhotoId, ThumbnailState>,
+) -> ThumbnailState {
+    if previous_details.get(&photo_id) == Some(detail) {
+        previous_states
+            .remove(&photo_id)
+            .unwrap_or(ThumbnailState::Loading)
+    } else {
+        ThumbnailState::Loading
+    }
+}
+
 fn clear_children(container: &impl IsA<gtk4::Widget>) {
     while let Some(child) = container.first_child() {
         child.unparent();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ThumbnailState, retained_thumbnail_state};
+    use crate::presentation::{
+        PhotoDetailViewModel, PresentationText, PreviewDimensions, Rgba8PreviewMetadata,
+    };
+    use rusttable_core::PhotoId;
+    use std::collections::BTreeMap;
+
+    fn id(value: u128) -> PhotoId {
+        PhotoId::new(value).expect("non-zero test photo ID")
+    }
+
+    fn text(value: &str) -> PresentationText {
+        PresentationText::new(value).expect("valid test text")
+    }
+
+    fn detail(photo_id: PhotoId, title: &str) -> PhotoDetailViewModel {
+        PhotoDetailViewModel::new(photo_id, text(title), Vec::new())
+    }
+
+    fn ready_thumbnail() -> ThumbnailState {
+        ThumbnailState::Ready(
+            Rgba8PreviewMetadata::new(
+                PreviewDimensions::new(2, 1).expect("non-zero dimensions"),
+                text("thumbnail ready"),
+                vec![0; 8],
+            )
+            .expect("valid RGBA8 thumbnail"),
+        )
+    }
+
+    #[test]
+    fn rerender_retains_completed_thumbnail_for_an_unchanged_detail() {
+        let photo_id = id(1);
+        let current = detail(photo_id, "photo.png");
+        let mut previous_states = BTreeMap::from([(photo_id, ready_thumbnail())]);
+        let previous_details = BTreeMap::from([(photo_id, current.clone())]);
+
+        assert_eq!(
+            retained_thumbnail_state(photo_id, &current, &previous_details, &mut previous_states,),
+            ready_thumbnail()
+        );
+        assert!(previous_states.is_empty());
+    }
+
+    #[test]
+    fn rerender_resets_thumbnail_when_catalog_detail_changes() {
+        let photo_id = id(1);
+        let current = detail(photo_id, "new-photo.png");
+        let previous_details = BTreeMap::from([(photo_id, detail(photo_id, "old-photo.png"))]);
+        let mut previous_states = BTreeMap::from([(photo_id, ready_thumbnail())]);
+
+        assert_eq!(
+            retained_thumbnail_state(photo_id, &current, &previous_details, &mut previous_states,),
+            ThumbnailState::Loading
+        );
+        assert_eq!(previous_states.get(&photo_id), Some(&ready_thumbnail()));
+    }
+
+    #[test]
+    fn rerender_retains_unavailable_and_failed_states() {
+        let photo_id = id(1);
+        let current = detail(photo_id, "photo.png");
+        let previous_details = BTreeMap::from([(photo_id, current.clone())]);
+
+        for state in [ThumbnailState::Unavailable, ThumbnailState::Failed] {
+            let mut previous_states = BTreeMap::from([(photo_id, state.clone())]);
+            assert_eq!(
+                retained_thumbnail_state(
+                    photo_id,
+                    &current,
+                    &previous_details,
+                    &mut previous_states,
+                ),
+                state
+            );
+        }
     }
 }

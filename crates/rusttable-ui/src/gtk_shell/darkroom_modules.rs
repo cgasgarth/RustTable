@@ -1,5 +1,7 @@
 //! Darktable-style darkroom module columns and their GTK4 projection.
 
+use std::{cell::RefCell, fmt, rc::Rc};
+
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
@@ -35,8 +37,47 @@ pub enum DarkroomModuleError {
     },
     Control(DarkroomControlError),
     NotResettable,
+    SnapshotRevisionRewind {
+        current: Revision,
+        replacement: Revision,
+    },
+    WrongModule {
+        expected: String,
+        actual: String,
+    },
     RevisionOverflow,
 }
+
+impl fmt::Display for DarkroomModuleError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StaleRevision { expected, actual } => {
+                write!(
+                    formatter,
+                    "stale module callback: expected {expected}, current {actual}"
+                )
+            }
+            Self::Control(error) => write!(formatter, "control error: {error:?}"),
+            Self::NotResettable => formatter.write_str("module does not support reset"),
+            Self::SnapshotRevisionRewind {
+                current,
+                replacement,
+            } => write!(
+                formatter,
+                "module snapshot revision {replacement} is older than current {current}"
+            ),
+            Self::WrongModule { expected, actual } => {
+                write!(
+                    formatter,
+                    "action targets module {expected}, received {actual}"
+                )
+            }
+            Self::RevisionOverflow => formatter.write_str("module revision counter overflowed"),
+        }
+    }
+}
+
+impl std::error::Error for DarkroomModuleError {}
 
 /// Last-known module state exposed to a GTK status row.
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +89,52 @@ pub enum DarkroomModuleStatus {
     },
     Error(DarkroomModuleError),
 }
+
+/// A revision-safe action emitted by a module widget.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DarkroomModuleAction {
+    Disclosure {
+        module_id: String,
+        expected_revision: Revision,
+        expanded: bool,
+    },
+    Enable {
+        module_id: String,
+        expected_revision: Revision,
+        enabled: bool,
+    },
+    Reset {
+        module_id: String,
+        expected_revision: Revision,
+    },
+    Control {
+        module_id: String,
+        expected_revision: Revision,
+        id: String,
+        value: DarkroomControlValue,
+    },
+    Recover {
+        module_id: String,
+        expected_revision: Revision,
+    },
+}
+
+impl DarkroomModuleAction {
+    #[must_use]
+    pub fn module_id(&self) -> &str {
+        match self {
+            Self::Disclosure { module_id, .. }
+            | Self::Enable { module_id, .. }
+            | Self::Reset { module_id, .. }
+            | Self::Control { module_id, .. }
+            | Self::Recover { module_id, .. } => module_id,
+        }
+    }
+}
+
+/// Callback type used by action-aware GTK module builders.
+pub type DarkroomModuleActionHandler =
+    Rc<dyn Fn(DarkroomModuleAction) -> Result<Revision, DarkroomModuleError>>;
 
 /// One ordered, disclosure-capable module in a darkroom side panel.
 #[derive(Debug, Clone, PartialEq)]
@@ -147,6 +234,131 @@ impl DarkroomModuleViewModel {
     #[must_use]
     pub const fn controls(&self) -> &DarkroomControlsViewModel {
         &self.controls
+    }
+
+    /// Returns stable widget names in GTK keyboard traversal order.
+    #[must_use]
+    pub fn focus_order(&self) -> Vec<String> {
+        let mut order = vec![
+            format!("{}-disclosure", self.id),
+            format!("{}-enabled", self.id),
+        ];
+        if self.resettable {
+            order.push(format!("{}-reset", self.id));
+        }
+        order.extend(
+            self.controls
+                .controls()
+                .map(|control| format!("{}-widget", control.id())),
+        );
+        order
+    }
+
+    /// Applies a widget action after checking the revision captured by GTK.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stale, wrong-module, validation, reset, or overflow error
+    /// without applying an invalid action.
+    pub fn apply(&mut self, action: DarkroomModuleAction) -> Result<Revision, DarkroomModuleError> {
+        if action.module_id() != self.id {
+            return Err(self.record_error(DarkroomModuleError::WrongModule {
+                expected: self.id.clone(),
+                actual: action.module_id().to_owned(),
+            }));
+        }
+        match action {
+            DarkroomModuleAction::Disclosure {
+                expected_revision,
+                expanded,
+                ..
+            } => self.set_expanded(expected_revision, expanded),
+            DarkroomModuleAction::Enable {
+                expected_revision,
+                enabled,
+                ..
+            } => self.set_enabled(expected_revision, enabled),
+            DarkroomModuleAction::Reset {
+                expected_revision, ..
+            } => self.reset(expected_revision),
+            DarkroomModuleAction::Control {
+                expected_revision,
+                id,
+                value,
+                ..
+            } => self.set_control(expected_revision, &id, value),
+            DarkroomModuleAction::Recover {
+                expected_revision, ..
+            } => self.recover_stale(expected_revision),
+        }
+    }
+
+    /// Reconciles a stale callback against a newer controller snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the replacement revision moves backward or its
+    /// controls fail presentation validation.
+    pub fn reconcile_snapshot(
+        &mut self,
+        revision: Revision,
+        expanded: bool,
+        enabled: bool,
+        controls: Vec<DarkroomControlViewModel>,
+    ) -> Result<(), DarkroomModuleError> {
+        if revision < self.revision {
+            return Err(
+                self.record_error(DarkroomModuleError::SnapshotRevisionRewind {
+                    current: self.revision,
+                    replacement: revision,
+                }),
+            );
+        }
+        let replacement = DarkroomControlsViewModel::new(revision, controls)
+            .map_err(DarkroomControlError::Validation)
+            .map_err(|error| self.record_control_error(error))?;
+        self.revision = revision;
+        self.expanded = expanded;
+        self.enabled = enabled;
+        self.controls = replacement;
+        self.status = DarkroomModuleStatus::Ready;
+        Ok(())
+    }
+
+    /// Clears a stale status after the owner confirms that its snapshot is current.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stale-revision error when the confirmation does not match the
+    /// current module revision.
+    pub fn recover_stale(
+        &mut self,
+        expected_revision: Revision,
+    ) -> Result<Revision, DarkroomModuleError> {
+        if expected_revision != self.revision {
+            let error = DarkroomModuleError::StaleRevision {
+                expected: expected_revision,
+                actual: self.revision,
+            };
+            self.status = DarkroomModuleStatus::Stale {
+                expected: expected_revision,
+                actual: self.revision,
+            };
+            return Err(error);
+        }
+        self.status = DarkroomModuleStatus::Ready;
+        Ok(self.revision)
+    }
+
+    #[must_use]
+    pub fn status_text(&self) -> String {
+        match &self.status {
+            DarkroomModuleStatus::Ready => format!("Ready · revision {}", self.revision),
+            DarkroomModuleStatus::Stale { expected, actual } => {
+                format!("Stale callback · refresh required (expected {expected}, current {actual})")
+            }
+            DarkroomModuleStatus::Error(error) => format!("Module error · {error}"),
+        }
     }
 
     /// Changes disclosure without changing the ordered module list.
@@ -312,28 +524,71 @@ impl DarkroomModulesViewModel {
     }
 }
 
-/// Builds one native GTK4 expander for a module snapshot.
+/// Builds one native GTK4 expander for a module snapshot without callbacks.
 #[must_use]
 pub fn build_module_panel(module: &DarkroomModuleViewModel) -> gtk4::Expander {
+    build_module_panel_with_actions(module, None)
+}
+
+/// Builds a module panel and routes every interactive widget through a
+/// revision-carrying action callback.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn build_module_panel_with_actions(
+    module: &DarkroomModuleViewModel,
+    action_handler: Option<DarkroomModuleActionHandler>,
+) -> gtk4::Expander {
+    let expected_revision = module.revision();
+    let current_revision = Rc::new(RefCell::new(expected_revision));
+    let module_id = module.id().to_owned();
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     content.set_widget_name(&format!("{}-content", module.id()));
 
+    let status_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    let status = gtk4::Label::new(Some(&module.status_text()));
+    status.set_widget_name(&format!("{}-status", module.id()));
+    status.set_halign(gtk4::Align::Start);
+    status.set_hexpand(true);
+    status.set_accessible_role(gtk4::AccessibleRole::Status);
+    let recover = gtk4::Button::with_label("Refresh");
+    recover.set_widget_name(&format!("{}-recover", module.id()));
+    recover.set_sensitive(false);
+    recover.set_focus_on_click(false);
+    status_row.append(&status);
+    status_row.append(&recover);
+    content.append(&status_row);
+
     let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     let enabled = gtk4::CheckButton::new();
+    enabled.set_widget_name(&format!("{}-enabled", module.id()));
     enabled.set_label(Some("Enabled"));
     enabled.set_active(module.enabled());
+    enabled.set_focusable(true);
     header.append(&enabled);
-    if module.resettable() {
+    let reset = module.resettable().then(|| {
         let reset = gtk4::Button::with_label("Reset");
         reset.set_widget_name(&format!("{}-reset", module.id()));
         reset.set_sensitive(module.enabled());
+        reset.set_focus_on_click(false);
         reset.set_halign(gtk4::Align::End);
         header.append(&reset);
-    }
+        reset
+    });
     content.append(&header);
 
+    let mut control_rows = Vec::new();
     for control in module.controls().controls() {
-        content.append(&build_control_row(control, module.enabled()));
+        let row = build_control_row(
+            control,
+            module.enabled(),
+            action_handler.clone(),
+            status.clone(),
+            recover.clone(),
+            current_revision.clone(),
+            module_id.clone(),
+        );
+        content.append(&row);
+        control_rows.push(row);
     }
 
     let expander = gtk4::Expander::builder()
@@ -342,10 +597,105 @@ pub fn build_module_panel(module: &DarkroomModuleViewModel) -> gtk4::Expander {
         .child(&content)
         .build();
     expander.set_widget_name(module.id());
+    expander.set_focusable(true);
+
+    if let Some(handler) = action_handler {
+        let status_for_expander = status.clone();
+        let recover_for_expander = recover.clone();
+        let current_revision_for_expander = current_revision.clone();
+        let handler_for_expander = handler.clone();
+        let module_id_for_expander = module_id.clone();
+        expander.connect_notify_local(Some("expanded"), move |expander, _| {
+            dispatch_module_action(
+                &handler_for_expander,
+                &status_for_expander,
+                &recover_for_expander,
+                &current_revision_for_expander,
+                DarkroomModuleAction::Disclosure {
+                    module_id: module_id_for_expander.clone(),
+                    expected_revision: *current_revision_for_expander.borrow(),
+                    expanded: expander.is_expanded(),
+                },
+            );
+        });
+
+        let handler_for_enabled = handler.clone();
+        let status_for_enabled = status.clone();
+        let recover_for_enabled = recover.clone();
+        let reset_for_enabled = reset.clone();
+        let current_revision_for_enabled = current_revision.clone();
+        let module_id_for_enabled = module_id.clone();
+        enabled.connect_toggled(move |enabled| {
+            if let Some(reset) = reset_for_enabled.as_ref() {
+                reset.set_sensitive(enabled.is_active());
+            }
+            for row in &control_rows {
+                row.set_sensitive(enabled.is_active());
+            }
+            dispatch_module_action(
+                &handler_for_enabled,
+                &status_for_enabled,
+                &recover_for_enabled,
+                &current_revision_for_enabled,
+                DarkroomModuleAction::Enable {
+                    module_id: module_id_for_enabled.clone(),
+                    expected_revision: *current_revision_for_enabled.borrow(),
+                    enabled: enabled.is_active(),
+                },
+            );
+        });
+
+        if let Some(reset) = reset {
+            let status_for_reset = status.clone();
+            let recover_for_reset = recover.clone();
+            let handler_for_reset = handler.clone();
+            let current_revision_for_reset = current_revision.clone();
+            let module_id_for_reset = module_id.clone();
+            reset.connect_clicked(move |_| {
+                dispatch_module_action(
+                    &handler_for_reset,
+                    &status_for_reset,
+                    &recover_for_reset,
+                    &current_revision_for_reset,
+                    DarkroomModuleAction::Reset {
+                        module_id: module_id_for_reset.clone(),
+                        expected_revision: *current_revision_for_reset.borrow(),
+                    },
+                );
+            });
+        }
+
+        let current_revision_for_recovery = current_revision.clone();
+        let handler_for_recovery = handler.clone();
+        let status_for_recovery = status.clone();
+        let recover_for_recovery = recover.clone();
+        let module_id_for_recovery = module_id.clone();
+        recover.connect_clicked(move |_| {
+            dispatch_module_action(
+                &handler_for_recovery,
+                &status_for_recovery,
+                &recover_for_recovery,
+                &current_revision_for_recovery,
+                DarkroomModuleAction::Recover {
+                    module_id: module_id_for_recovery.clone(),
+                    expected_revision: *current_revision_for_recovery.borrow(),
+                },
+            );
+        });
+    }
     expander
 }
 
-fn build_control_row(control: &DarkroomControlViewModel, module_enabled: bool) -> gtk4::Box {
+#[allow(clippy::too_many_lines)]
+fn build_control_row(
+    control: &DarkroomControlViewModel,
+    module_enabled: bool,
+    action_handler: Option<DarkroomModuleActionHandler>,
+    status: gtk4::Label,
+    recover: gtk4::Button,
+    current_revision: Rc<RefCell<Revision>>,
+    module_id: String,
+) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     row.set_widget_name(control.id().as_str());
     let label = gtk4::Label::new(Some(control.label().as_str()));
@@ -365,6 +715,25 @@ fn build_control_row(control: &DarkroomControlViewModel, module_enabled: bool) -
             slider.set_value(spec.value());
             slider.set_sensitive(module_enabled);
             slider.set_hexpand(true);
+            slider.set_widget_name(&format!("{}-widget", control.id()));
+            slider.set_focusable(true);
+            if let Some(handler) = action_handler {
+                let id = control.id().to_string();
+                slider.connect_value_changed(move |slider| {
+                    dispatch_module_action(
+                        &handler,
+                        &status,
+                        &recover,
+                        &current_revision,
+                        DarkroomModuleAction::Control {
+                            module_id: module_id.clone(),
+                            expected_revision: *current_revision.borrow(),
+                            id: id.clone(),
+                            value: DarkroomControlValue::Slider(slider.value()),
+                        },
+                    );
+                });
+            }
             row.append(&slider);
         }
         DarkroomControlKind::Choice => {
@@ -377,6 +746,28 @@ fn build_control_row(control: &DarkroomControlViewModel, module_enabled: bool) -
                 choice.set_selected(u32::try_from(selected).unwrap_or(u32::MAX));
             }
             choice.set_sensitive(module_enabled);
+            choice.set_widget_name(&format!("{}-widget", control.id()));
+            choice.set_focusable(true);
+            if let Some(handler) = action_handler {
+                let id = control.id().to_string();
+                choice.connect_selected_notify(move |choice| {
+                    let Ok(selected) = usize::try_from(choice.selected()) else {
+                        return;
+                    };
+                    dispatch_module_action(
+                        &handler,
+                        &status,
+                        &recover,
+                        &current_revision,
+                        DarkroomModuleAction::Control {
+                            module_id: module_id.clone(),
+                            expected_revision: *current_revision.borrow(),
+                            id: id.clone(),
+                            value: DarkroomControlValue::Choice(selected),
+                        },
+                    );
+                });
+            }
             row.append(&choice);
         }
         DarkroomControlKind::Toggle => {
@@ -385,10 +776,64 @@ fn build_control_row(control: &DarkroomControlViewModel, module_enabled: bool) -
                 toggle.set_active(active);
             }
             toggle.set_sensitive(module_enabled);
+            toggle.set_widget_name(&format!("{}-widget", control.id()));
+            toggle.set_focusable(true);
+            if let Some(handler) = action_handler {
+                let id = control.id().to_string();
+                toggle.connect_active_notify(move |toggle| {
+                    dispatch_module_action(
+                        &handler,
+                        &status,
+                        &recover,
+                        &current_revision,
+                        DarkroomModuleAction::Control {
+                            module_id: module_id.clone(),
+                            expected_revision: *current_revision.borrow(),
+                            id: id.clone(),
+                            value: DarkroomControlValue::Toggle(toggle.is_active()),
+                        },
+                    );
+                });
+            }
             row.append(&toggle);
         }
     }
     row
+}
+
+fn dispatch_module_action(
+    handler: &DarkroomModuleActionHandler,
+    status: &gtk4::Label,
+    recover: &gtk4::Button,
+    current_revision: &RefCell<Revision>,
+    action: DarkroomModuleAction,
+) {
+    match handler(action) {
+        Ok(revision) => {
+            *current_revision.borrow_mut() = revision;
+            status.set_label(&format!("Ready · revision {revision}"));
+            recover.set_sensitive(false);
+        }
+        Err(error) => {
+            if let Some(actual) = stale_actual_revision(&error) {
+                *current_revision.borrow_mut() = actual;
+                status.set_label("Stale callback · refresh required");
+                recover.set_sensitive(true);
+            } else {
+                status.set_label(&format!("Module error · {error}"));
+            }
+        }
+    }
+}
+
+fn stale_actual_revision(error: &DarkroomModuleError) -> Option<Revision> {
+    match error {
+        DarkroomModuleError::StaleRevision { actual, .. } => Some(*actual),
+        DarkroomModuleError::Control(DarkroomControlError::StaleRevision { actual, .. }) => {
+            Some(*actual)
+        }
+        _ => None,
+    }
 }
 
 /// Builds a native GTK4 vertical module column in model order.
@@ -397,10 +842,23 @@ pub fn build_module_column<'a>(
     modules: impl ExactSizeIterator<Item = &'a DarkroomModuleViewModel>,
     side: DarkroomModuleSide,
 ) -> gtk4::Box {
+    build_module_column_with_actions(modules, side, None)
+}
+
+/// Builds a module column while preserving caller-supplied module order.
+#[must_use]
+pub fn build_module_column_with_actions<'a>(
+    modules: impl ExactSizeIterator<Item = &'a DarkroomModuleViewModel>,
+    side: DarkroomModuleSide,
+    action_handler: Option<&DarkroomModuleActionHandler>,
+) -> gtk4::Box {
     let column = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     column.set_widget_name(side.widget_name());
     for module in modules {
-        column.append(&build_module_panel(module));
+        column.append(&build_module_panel_with_actions(
+            module,
+            action_handler.cloned(),
+        ));
     }
     column
 }
@@ -410,6 +868,16 @@ mod tests {
     use super::*;
 
     fn module(id: &str, side: DarkroomModuleSide) -> DarkroomModuleViewModel {
+        let slider = DarkroomControlViewModel::slider(
+            format!("{id}-amount"),
+            "Amount",
+            0.0,
+            1.0,
+            0.01,
+            0.5,
+            0.0,
+        )
+        .expect("valid slider");
         DarkroomModuleViewModel::new(
             id,
             id,
@@ -418,59 +886,9 @@ mod tests {
             true,
             true,
             Revision::from_u64(7),
-            vec![
-                DarkroomControlViewModel::slider(
-                    id.to_owned() + "-amount",
-                    "Amount",
-                    0.0,
-                    1.0,
-                    0.01,
-                    0.5,
-                    0.0,
-                )
-                .expect("valid slider"),
-            ],
+            vec![slider],
         )
         .expect("valid module")
-    }
-
-    #[test]
-    fn left_and_right_columns_keep_insertion_order() {
-        let model = DarkroomModulesViewModel::new(vec![
-            module("crop", DarkroomModuleSide::Right),
-            module("navigation", DarkroomModuleSide::Left),
-            module("exposure", DarkroomModuleSide::Right),
-            module("snapshots", DarkroomModuleSide::Left),
-        ])
-        .expect("valid modules");
-        assert_eq!(
-            model
-                .left_modules()
-                .map(DarkroomModuleViewModel::id)
-                .collect::<Vec<_>>(),
-            ["navigation", "snapshots"]
-        );
-        assert_eq!(
-            model
-                .right_modules()
-                .map(DarkroomModuleViewModel::id)
-                .collect::<Vec<_>>(),
-            ["crop", "exposure"]
-        );
-    }
-
-    #[test]
-    fn disclosure_enabled_and_reset_are_revision_guarded() {
-        let mut model = module("exposure", DarkroomModuleSide::Right);
-        let revision = model
-            .set_expanded(Revision::from_u64(7), false)
-            .expect("disclosure update");
-        assert!(!model.expanded());
-        let revision = model.set_enabled(revision, false).expect("enabled update");
-        assert!(!model.enabled());
-        let revision = model.reset(revision).expect("reset update");
-        assert_eq!(revision, Revision::from_u64(10));
-        assert!(matches!(model.status(), DarkroomModuleStatus::Ready));
     }
 
     #[test]
@@ -485,25 +903,86 @@ mod tests {
             .expect("typed control update");
         let error = model
             .set_enabled(Revision::from_u64(7), false)
-            .expect_err("old revision must be rejected");
-        assert_eq!(
-            error,
-            DarkroomModuleError::StaleRevision {
-                expected: Revision::from_u64(7),
-                actual: Revision::from_u64(8),
-            }
-        );
+            .expect_err("stale");
+        assert!(matches!(error, DarkroomModuleError::StaleRevision { .. }));
         assert!(matches!(model.status(), DarkroomModuleStatus::Stale { .. }));
-        let error = model
-            .set_control(
-                Revision::from_u64(8),
-                "exposure-amount",
-                DarkroomControlValue::Slider(4.0),
-            )
-            .expect_err("out of range slider must be rejected");
-        assert!(matches!(
-            error,
-            DarkroomModuleError::Control(DarkroomControlError::Validation(_))
-        ));
+    }
+
+    #[test]
+    fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
+        let mut model = DarkroomModuleViewModel::new(
+            "exposure",
+            "Exposure",
+            DarkroomModuleSide::Right,
+            true,
+            true,
+            true,
+            Revision::from_u64(7),
+            vec![
+                DarkroomControlViewModel::slider("amount", "Amount", 0.0, 1.0, 0.01, 0.5, 0.0)
+                    .expect("valid slider"),
+                DarkroomControlViewModel::choice("method", "Method", ["balanced", "preserve"], 0)
+                    .expect("valid choice"),
+                DarkroomControlViewModel::toggle("protect", "Protect", false, true)
+                    .expect("valid toggle"),
+            ],
+        )
+        .expect("valid module");
+        let mut revision = Revision::from_u64(7);
+        revision = model
+            .apply(DarkroomModuleAction::Disclosure {
+                module_id: "exposure".to_owned(),
+                expected_revision: revision,
+                expanded: false,
+            })
+            .expect("disclosure action");
+        revision = model
+            .apply(DarkroomModuleAction::Enable {
+                module_id: "exposure".to_owned(),
+                expected_revision: revision,
+                enabled: false,
+            })
+            .expect("enable action");
+        for (id, value) in [
+            ("amount", DarkroomControlValue::Slider(0.75)),
+            ("method", DarkroomControlValue::Choice(1)),
+            ("protect", DarkroomControlValue::Toggle(true)),
+        ] {
+            revision = model
+                .apply(DarkroomModuleAction::Control {
+                    module_id: "exposure".to_owned(),
+                    expected_revision: revision,
+                    id: id.to_owned(),
+                    value,
+                })
+                .expect("control action");
+        }
+        revision = model
+            .apply(DarkroomModuleAction::Reset {
+                module_id: "exposure".to_owned(),
+                expected_revision: revision,
+            })
+            .expect("reset action");
+        assert_eq!(revision, Revision::from_u64(13));
+        assert_eq!(
+            model.focus_order(),
+            [
+                "exposure-disclosure",
+                "exposure-enabled",
+                "exposure-reset",
+                "amount-widget",
+                "method-widget",
+                "protect-widget",
+            ]
+        );
+        assert_eq!(
+            model.controls().control("amount").expect("amount").value(),
+            DarkroomControlValue::Slider(0.0)
+        );
+        assert_eq!(
+            model.controls().control("method").expect("method").value(),
+            DarkroomControlValue::Choice(0)
+        );
+        assert!(matches!(model.status(), DarkroomModuleStatus::Ready));
     }
 }

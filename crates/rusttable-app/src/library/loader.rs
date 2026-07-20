@@ -13,7 +13,7 @@ use rusttable_import::decode_reference_source;
 use crate::library::{LibraryFailureKind, LibraryState};
 use rusttable_ui::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
-    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError,
+    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, SelectedPreviewState,
 };
 
 const CATALOG_FILENAME: &str = "catalog.redb";
@@ -201,7 +201,10 @@ fn present_records(
             title.clone(),
             Some(secondary),
         ));
-        details.push(PhotoDetailViewModel::new(photo_id, title, facts));
+        details.push(
+            PhotoDetailViewModel::new(photo_id, title, facts)
+                .with_selected_preview(SelectedPreviewState::Loading),
+        );
     }
 
     PhotoWorkspaceViewModel::new(cards, details).map_err(CatalogPresentationError::Workspace)
@@ -296,7 +299,7 @@ mod tests {
         source_root,
     };
     use crate::library::LibraryFailureKind;
-    use rusttable_ui::PhotoWorkspaceViewModelError;
+    use rusttable_ui::{PhotoWorkspaceViewModelError, SelectedPreviewState};
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -424,6 +427,10 @@ mod tests {
             "JPEG · 6000 × 4000"
         );
         let first_detail = workspace.detail(first_card.id()).expect("detail");
+        assert_eq!(
+            first_detail.selected_preview(),
+            &SelectedPreviewState::Loading
+        );
         assert_eq!(
             first_detail
                 .facts()
