@@ -9,6 +9,8 @@ use crate::external_editor::ExternalEditorPanel;
 use crate::import::ImportSessionPanel;
 use crate::neural_restore::NeuralRestorePanel;
 
+use super::darkroom::DarkroomModuleGroup;
+use super::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use super::lighttable::empty_collection_state;
 use super::{
     DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_RIGHT_MODULES, ModuleControlKind,
@@ -223,15 +225,30 @@ fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     let strip = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     strip.set_widget_name(ShellRegion::Filmstrip.identifier());
     apply_theme_role(&strip, ThemeRole::Filmstrip);
-    strip.set_height_request(i32::from(
-        DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px,
-    ));
+    let height = i32::from(DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px);
+    strip.set_height_request(height);
+    strip.set_vexpand(false);
     let photos = gtk4::FlowBox::builder()
-        .max_children_per_line(12)
+        .orientation(gtk4::Orientation::Horizontal)
+        .max_children_per_line(FILMSTRIP_MAX_CHILDREN_PER_LINE)
+        .min_children_per_line(1)
+        .column_spacing(u32::from(FILMSTRIP_ITEM_GAP_PX))
+        .row_spacing(0)
         .selection_mode(gtk4::SelectionMode::None)
+        .valign(gtk4::Align::Center)
         .build();
     photos.set_widget_name(PanelSlot::Bottom.identifier());
-    strip.append(&photos);
+    photos.set_halign(gtk4::Align::Start);
+    photos.set_vexpand(false);
+
+    let scroll = gtk4::ScrolledWindow::new();
+    scroll.set_widget_name("filmstrip-scroll");
+    scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Never);
+    scroll.set_hexpand(true);
+    scroll.set_vexpand(false);
+    scroll.set_height_request(height);
+    scroll.set_child(Some(&photos));
+    strip.append(&scroll);
     (strip, photos)
 }
 
@@ -268,10 +285,27 @@ fn append_panel_slots(panel: &gtk4::Box, top: &gtk4::Box, center: &gtk4::Box, bo
 pub(super) fn render_modules<'a>(
     container: &gtk4::Box,
     modules: impl ExactSizeIterator<Item = &'a ModulePanelViewModel>,
+    group: Option<DarkroomModuleGroup>,
 ) {
     clear_children(container);
+    let mut rendered = 0;
     for (index, module) in modules.enumerate() {
+        if group.is_some_and(|group| !group.matches_title(module.title().as_str())) {
+            continue;
+        }
         container.append(&module_expander(module, index));
+        rendered += 1;
+    }
+    if rendered == 0 {
+        let message = gtk4::Label::new(Some(match group {
+            Some(_) => "No modules in this group",
+            None => "No modules available",
+        }));
+        message.set_widget_name("darkroom-module-group-empty");
+        message.set_halign(gtk4::Align::Start);
+        message.add_css_class("dim-label");
+        message.set_accessible_role(gtk4::AccessibleRole::Status);
+        container.append(&message);
     }
 }
 
@@ -287,8 +321,10 @@ fn module_group(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
 
 fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expander {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    content.set_widget_name(&format!("module-{index}-controls"));
     for control in module.controls() {
         let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+        row.add_css_class("dt_module_row");
         let label = gtk4::Label::new(Some(control.label().as_str()));
         label.set_halign(gtk4::Align::Start);
         label.set_hexpand(true);
@@ -309,6 +345,8 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
         .child(&content)
         .build();
     expander.set_widget_name(&format!("module-{index}"));
+    expander.set_focusable(true);
+    expander.update_property(&[gtk4::accessible::Property::Label(module.title().as_str())]);
     apply_theme_role(&expander, ThemeRole::Module);
     expander
 }

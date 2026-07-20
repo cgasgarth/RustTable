@@ -42,6 +42,12 @@ use super::runtime_lighttable::{PhotoTilePair, WorkspaceRenderHandle};
 
 pub(super) type PhotoSelectedHandler = Box<dyn Fn(PhotoId)>;
 
+type DarkroomRuntime = (
+    DarkroomView,
+    PhotoPreview,
+    Rc<RefCell<Option<DarkroomWorkspaceViewModel>>>,
+);
+
 /// Reusable GTK4 window with Darktable-style lighttable and darkroom modes.
 #[derive(Clone)]
 pub struct GtkShell {
@@ -50,12 +56,14 @@ pub struct GtkShell {
     workspace: gtk4::Stack,
     lighttable: gtk4::FlowBox,
     lighttable_empty_state: gtk4::Stack,
+    darkroom: DarkroomView,
     darkroom_preview: PhotoPreview,
     export_panel: ExportPanel,
     external_editor_panel: ExternalEditorPanel,
     filmstrip: gtk4::FlowBox,
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
+    darkroom_workspace: Rc<RefCell<Option<DarkroomWorkspaceViewModel>>>,
     import_buttons: Vec<gtk4::Button>,
     collection_controls: CollectionControls,
     lighttable_toolbar: LighttableToolbar,
@@ -113,8 +121,9 @@ impl GtkShell {
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
         let panel_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
-        let darkroom = DarkroomView::new(panel_width);
-        let darkroom_preview = darkroom.preview().clone();
+        let (darkroom, darkroom_preview, darkroom_workspace) = build_darkroom(panel_width);
+        let darkroom_left_modules = darkroom.left_modules().clone();
+        let darkroom_right_modules = darkroom.right_modules().clone();
         let (workspace, lighttable, lighttable_empty_state) =
             workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
         let input_mapping_editor = InputMappingEditor::new(application);
@@ -172,12 +181,14 @@ impl GtkShell {
             workspace,
             lighttable,
             lighttable_empty_state,
+            darkroom,
             darkroom_preview,
             export_panel,
             external_editor_panel,
             filmstrip,
-            left_modules: darkroom.left_modules().clone(),
-            right_modules: darkroom.right_modules().clone(),
+            left_modules: darkroom_left_modules,
+            right_modules: darkroom_right_modules,
+            darkroom_workspace,
             import_buttons: vec![
                 header.import_button().clone(),
                 lighttable_left_panel.import_button().clone(),
@@ -507,9 +518,15 @@ impl GtkShell {
     /// This surface deliberately accepts only `rusttable-ui` presentation
     /// types, keeping the UI crate independent from application composition.
     pub fn set_darkroom_workspace(&self, view_model: &DarkroomWorkspaceViewModel) {
+        self.darkroom.set_detail(view_model.detail());
+        self.darkroom_workspace.replace(Some(view_model.clone()));
         self.darkroom_preview.set_detail(view_model.detail());
-        render_modules(&self.left_modules, view_model.left_modules());
-        render_modules(&self.right_modules, view_model.right_modules());
+        render_modules(&self.left_modules, view_model.left_modules(), None);
+        render_modules(
+            &self.right_modules,
+            view_model.right_modules(),
+            Some(self.darkroom.module_group_state().get()),
+        );
         self.show_workspace(WorkspaceRole::Darkroom);
     }
 
@@ -612,6 +629,27 @@ impl GtkShell {
         });
         self.lighttable.add_controller(controller);
     }
+}
+
+fn build_darkroom(panel_width: i32) -> DarkroomRuntime {
+    let darkroom = DarkroomView::new(panel_width);
+    let darkroom_preview = darkroom.preview().clone();
+    let darkroom_workspace = Rc::new(RefCell::new(None::<DarkroomWorkspaceViewModel>));
+    connect_darkroom_module_group(&darkroom, &darkroom_workspace);
+    (darkroom, darkroom_preview, darkroom_workspace)
+}
+
+fn connect_darkroom_module_group(
+    darkroom: &DarkroomView,
+    workspace: &Rc<RefCell<Option<DarkroomWorkspaceViewModel>>>,
+) {
+    let right_modules = darkroom.right_modules().clone();
+    let workspace = Rc::clone(workspace);
+    darkroom.connect_module_group(move |group| {
+        if let Some(view_model) = workspace.borrow().as_ref() {
+            render_modules(&right_modules, view_model.right_modules(), Some(group));
+        }
+    });
 }
 
 #[derive(Clone)]

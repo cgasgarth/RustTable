@@ -313,6 +313,13 @@ pub const THUMBNAIL_METRICS: ThumbnailMetrics = ThumbnailMetrics {
     filmstrip_height_px: 72,
 };
 
+/// A filmstrip is one horizontally scrolling thumbtable row, not a wrapped
+/// second gallery. `GtkFlowBox` uses this bound to keep all items on that row.
+pub const FILMSTRIP_MAX_CHILDREN_PER_LINE: u32 = u32::MAX;
+
+/// The compact gap between adjacent Darktable filmstrip thumbnails.
+pub const FILMSTRIP_ITEM_GAP_PX: u8 = 4;
+
 /// Bottom filmstrip height constraints from Darktable's GTK configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FilmstripHeights {
@@ -341,6 +348,8 @@ pub struct LayoutMetrics {
     pub window_height_px: u16,
     /// Width of the outer collapse-border controls.
     pub outer_border_px: u8,
+    /// Height of the persistent Darktable header chrome.
+    pub header_height_px: u8,
     /// Gap between adjacent modules in a side panel.
     pub panel_module_spacing_px: u8,
     /// Header and footer toolbar vertical padding in hundredths of an `em`.
@@ -468,6 +477,7 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     window_width_px: 900,
     window_height_px: 500,
     outer_border_px: 10,
+    header_height_px: 32,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
     toolbar_padding_horizontal: EmHundredths::new(28),
@@ -530,8 +540,9 @@ pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
 mod tests {
     use super::{
         ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DesktopRegion,
-        LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
-        PANEL_SLOTS, PanelRole, PanelSlot, THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ViewMode,
+        FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
+        LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, PANEL_SLOTS,
+        PanelRole, PanelSlot, THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ViewMode,
     };
 
     #[test]
@@ -578,6 +589,7 @@ mod tests {
     #[test]
     fn panel_metrics_preserve_darktable_resize_bounds() {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
+        assert_eq!(LAYOUT_METRICS.header_height_px, 32);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
         assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 150);
@@ -662,6 +674,8 @@ mod tests {
         assert_eq!(THUMBNAIL_METRICS.grid_height_px, 104);
         assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 92);
         assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 72);
+        assert_eq!(FILMSTRIP_ITEM_GAP_PX, 4);
+        assert_eq!(FILMSTRIP_MAX_CHILDREN_PER_LINE, u32::MAX);
     }
 
     #[test]

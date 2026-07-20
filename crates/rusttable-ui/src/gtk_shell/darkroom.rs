@@ -9,6 +9,7 @@ use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
 
 use super::{ExposurePanel, PhotoPreview, ThemeRole, apply_theme_role};
+use crate::presentation::PhotoDetailViewModel;
 use crate::viewport_presentation::{
     DarkroomViewportAction, DarkroomViewportCommand, DarkroomViewportState, DarkroomZoom,
     ViewportColorMode, ViewportComparison, ViewportGeneration,
@@ -30,6 +31,44 @@ pub const DARKROOM_WIDGET_IDS: [&str; 13] = [
     "darkroom-module-groups",
     "exposure",
 ];
+
+/// Stable left-to-right focus order for the darkroom rail controls.
+pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 8] = [
+    "darkroom-navigation",
+    "darkroom-snapshots",
+    "darkroom-history",
+    "darkroom-image-information",
+    "group-active",
+    "group-favorites",
+    "group-technical",
+    "group-grading",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum DarkroomModuleGroup {
+    Active,
+    Favorites,
+    Technical,
+    Grading,
+}
+
+impl DarkroomModuleGroup {
+    pub(super) fn matches_title(self, title: &str) -> bool {
+        let title = title.to_ascii_lowercase();
+        match self {
+            Self::Active => true,
+            Self::Favorites => title.contains("favorite"),
+            Self::Technical => ["balance", "denoise", "lens", "raw", "sharpen"]
+                .iter()
+                .any(|term| title.contains(term)),
+            Self::Grading => ["color", "contrast", "curve", "exposure", "tone"]
+                .iter()
+                .any(|term| title.contains(term)),
+        }
+    }
+}
+
+type DarkroomModuleGroupHandler = Box<dyn Fn(DarkroomModuleGroup)>;
 
 /// Stable identifiers for the darkroom viewport controls and filmstrip boundary.
 pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 9] = [
@@ -58,6 +97,7 @@ pub const DARKROOM_VIEWPORT_FOCUS_ORDER: [&str; 5] = [
 pub type DarkroomViewportActionHandler = Box<dyn Fn(DarkroomViewportCommand)>;
 
 /// Native GTK widgets owned by the darkroom view.
+#[derive(Clone)]
 pub struct DarkroomView {
     page: gtk4::Box,
     preview: PhotoPreview,
@@ -69,18 +109,24 @@ pub struct DarkroomView {
     right_panel: gtk4::Box,
     right_modules: gtk4::Box,
     exposure: ExposurePanel,
+    rail_status: DarkroomRailStatus,
+    histogram: gtk4::Stack,
+    module_group: Rc<Cell<DarkroomModuleGroup>>,
+    module_group_handler: Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
 }
 
 impl DarkroomView {
     /// Builds the initial Darktable darkroom around the immutable preview boundary.
     #[must_use]
     pub fn new(panel_width: i32) -> Self {
+        debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 8);
         let preview = PhotoPreview::new();
         let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
         let viewport_handler = Rc::new(RefCell::new(None));
         let (page, viewport_controls) = darkroom_page(&preview, &viewport_state, &viewport_handler);
-        let (left_panel, left_modules) = left_panel(panel_width);
-        let (right_panel, right_modules, exposure) = right_panel(panel_width);
+        let (left_panel, left_modules, rail_status) = left_panel(panel_width);
+        let (right_panel, right_modules, exposure, histogram, module_group, module_group_handler) =
+            right_panel(panel_width);
         Self {
             page,
             preview,
@@ -92,6 +138,10 @@ impl DarkroomView {
             right_panel,
             right_modules,
             exposure,
+            rail_status,
+            histogram,
+            module_group,
+            module_group_handler,
         }
     }
 
@@ -167,6 +217,61 @@ impl DarkroomView {
     pub fn exposure(&self) -> &ExposurePanel {
         &self.exposure
     }
+
+    pub(super) fn module_group_state(&self) -> Rc<Cell<DarkroomModuleGroup>> {
+        Rc::clone(&self.module_group)
+    }
+
+    pub(super) fn connect_module_group<F>(&self, handler: F)
+    where
+        F: Fn(DarkroomModuleGroup) + 'static,
+    {
+        self.module_group_handler.replace(Some(Box::new(handler)));
+    }
+
+    /// Projects a selected image into the side-rail states without inventing unavailable data.
+    pub fn set_detail(&self, detail: &PhotoDetailViewModel) {
+        self.rail_status
+            .navigation
+            .set_text("filmstrip navigation ready");
+        self.rail_status
+            .snapshots
+            .set_text("snapshot data unavailable");
+        self.rail_status
+            .history
+            .set_text("edit history unavailable");
+        self.rail_status.image_information.set_text(&format!(
+            "{} · {} metadata fields",
+            detail.title().as_str(),
+            detail.facts().count()
+        ));
+        self.histogram.set_visible_child_name("unavailable");
+    }
+
+    /// Restores the explicit no-selection state of every side-rail surface.
+    pub fn clear_detail(&self) {
+        self.rail_status
+            .navigation
+            .set_text("select a photo to navigate");
+        self.rail_status
+            .snapshots
+            .set_text("select a photo to view snapshots");
+        self.rail_status
+            .history
+            .set_text("select a photo to view edit history");
+        self.rail_status
+            .image_information
+            .set_text("image information unavailable");
+        self.histogram.set_visible_child_name("empty");
+    }
+}
+
+#[derive(Clone)]
+struct DarkroomRailStatus {
+    navigation: gtk4::Label,
+    snapshots: gtk4::Label,
+    history: gtk4::Label,
+    image_information: gtk4::Label,
 }
 
 fn darkroom_page(
@@ -594,17 +699,36 @@ fn find_image_canvas(widget: &gtk4::Widget) -> Option<gtk4::Picture> {
     None
 }
 
-fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box) {
+fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatus) {
     let panel = rail("darkroom-left-panel", width, "Darkroom left module rail");
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     modules.set_widget_name("darkroom-left-modules");
-    for (id, title, expanded) in [
-        ("darkroom-navigation", "navigation", true),
-        ("darkroom-snapshots", "snapshots", false),
-        ("darkroom-history", "history", false),
-        ("darkroom-image-information", "image information", false),
-    ] {
-        modules.append(&module(id, title, expanded));
+    let (navigation, navigation_state) = rail_module(
+        "darkroom-navigation",
+        "navigation",
+        true,
+        "select a photo to navigate",
+    );
+    let (snapshots, snapshots_state) = rail_module(
+        "darkroom-snapshots",
+        "snapshots",
+        false,
+        "select a photo to view snapshots",
+    );
+    let (history, history_state) = rail_module(
+        "darkroom-history",
+        "history",
+        false,
+        "select a photo to view edit history",
+    );
+    let (image_information, image_information_state) = rail_module(
+        "darkroom-image-information",
+        "image information",
+        false,
+        "image information unavailable",
+    );
+    for module in [navigation, snapshots, history, image_information] {
+        modules.append(&module);
     }
     let controller_modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     controller_modules.set_widget_name("darkroom-left-controller-modules");
@@ -615,34 +739,43 @@ fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box) {
         .vexpand(true)
         .build();
     panel.append(&scroll);
-    (panel, controller_modules)
+    (
+        panel,
+        controller_modules,
+        DarkroomRailStatus {
+            navigation: navigation_state,
+            snapshots: snapshots_state,
+            history: history_state,
+            image_information: image_information_state,
+        },
+    )
 }
 
-fn right_panel(width: i32) -> (gtk4::Box, gtk4::Box, ExposurePanel) {
+type DarkroomPanelBuild = (
+    gtk4::Box,
+    gtk4::Box,
+    ExposurePanel,
+    gtk4::Stack,
+    Rc<Cell<DarkroomModuleGroup>>,
+    Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
+);
+
+fn right_panel(width: i32) -> DarkroomPanelBuild {
     let panel = rail(
         "darkroom-right-panel",
         width,
         "Darkroom processing module rail",
     );
-    let histogram = gtk4::DrawingArea::new();
-    histogram.set_widget_name("darkroom-histogram");
-    histogram.set_height_request(92);
-    histogram.set_accessible_role(gtk4::AccessibleRole::Img);
-    histogram.update_property(&[Property::Label("Image histogram")]);
+    let histogram = histogram();
     panel.append(&histogram);
 
     let groups = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
     groups.set_widget_name("darkroom-module-groups");
     groups.set_accessible_role(gtk4::AccessibleRole::Toolbar);
     groups.update_property(&[Property::Label("Processing module groups")]);
-    for (id, icon, label) in [
-        ("group-active", "●", "Active modules"),
-        ("group-favorites", "★", "Favorite modules"),
-        ("group-technical", "○", "Technical modules"),
-        ("group-grading", "◐", "Grading modules"),
-    ] {
-        groups.append(&chrome_button(id, icon, label));
-    }
+    let module_group = Rc::new(Cell::new(DarkroomModuleGroup::Active));
+    let module_group_handler = Rc::new(RefCell::new(None));
+    add_group_buttons(&groups, &module_group, &module_group_handler);
     panel.append(&groups);
 
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -658,7 +791,100 @@ fn right_panel(width: i32) -> (gtk4::Box, gtk4::Box, ExposurePanel) {
         .vexpand(true)
         .build();
     panel.append(&scroll);
-    (panel, controller_modules, exposure)
+    (
+        panel,
+        controller_modules,
+        exposure,
+        histogram,
+        module_group,
+        module_group_handler,
+    )
+}
+
+fn histogram() -> gtk4::Stack {
+    let histogram = gtk4::Stack::new();
+    histogram.set_widget_name("darkroom-histogram");
+    histogram.set_height_request(92);
+    histogram.set_accessible_role(gtk4::AccessibleRole::Img);
+    histogram.update_property(&[Property::Label("Image histogram")]);
+    for (name, text) in [
+        ("empty", "select a photo to show the histogram"),
+        ("unavailable", "histogram unavailable for this preview"),
+    ] {
+        let state = gtk4::Label::new(Some(text));
+        state.set_widget_name(&format!("darkroom-histogram-{name}"));
+        state.set_halign(gtk4::Align::Center);
+        state.set_valign(gtk4::Align::Center);
+        state.add_css_class("dim-label");
+        state.set_hexpand(true);
+        state.set_vexpand(true);
+        state.set_accessible_role(gtk4::AccessibleRole::Status);
+        histogram.add_named(&state, Some(name));
+    }
+    histogram.set_visible_child_name("empty");
+    histogram
+}
+
+fn add_group_buttons(
+    groups: &gtk4::Box,
+    state: &Rc<Cell<DarkroomModuleGroup>>,
+    handler: &Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
+) {
+    let guard = Rc::new(Cell::new(false));
+    let buttons = [
+        (
+            DarkroomModuleGroup::Active,
+            "group-active",
+            "●",
+            "Active modules",
+        ),
+        (
+            DarkroomModuleGroup::Favorites,
+            "group-favorites",
+            "★",
+            "Favorite modules",
+        ),
+        (
+            DarkroomModuleGroup::Technical,
+            "group-technical",
+            "○",
+            "Technical modules",
+        ),
+        (
+            DarkroomModuleGroup::Grading,
+            "group-grading",
+            "◐",
+            "Grading modules",
+        ),
+    ]
+    .into_iter()
+    .map(|(group, id, icon, label)| {
+        let button = chrome_toggle(id, icon, label);
+        button.set_active(group == DarkroomModuleGroup::Active);
+        let state = Rc::clone(state);
+        let handler = Rc::clone(handler);
+        let guard_for_callback = Rc::clone(&guard);
+        button.connect_toggled(move |button| {
+            if guard_for_callback.get() {
+                return;
+            }
+            if !button.is_active() {
+                guard_for_callback.set(true);
+                button.set_active(true);
+                guard_for_callback.set(false);
+                return;
+            }
+            state.set(group);
+            if let Some(handler) = handler.borrow().as_ref() {
+                handler(group);
+            }
+        });
+        button
+    })
+    .collect::<Vec<_>>();
+    for button in buttons {
+        groups.append(&button);
+    }
 }
 
 fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
@@ -671,19 +897,29 @@ fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
     panel
 }
 
-fn module(id: &str, title: &str, expanded: bool) -> gtk4::Box {
-    let module = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    module.set_widget_name(id);
-    module.set_accessible_role(gtk4::AccessibleRole::Group);
-    module.update_property(&[Property::Label(title)]);
-    apply_theme_role(&module, ThemeRole::ModuleGroup);
-    let disclosure = if expanded { "⌄" } else { "›" };
-    let header = gtk4::Button::with_label(&format!("{disclosure} {title}"));
-    header.add_css_class("dt_darkroom_module_header");
-    header.set_focus_on_click(false);
-    header.update_property(&[Property::Label(title)]);
-    module.append(&header);
-    module
+fn rail_module(
+    id: &str,
+    title: &str,
+    initially_expanded: bool,
+    state_text: &str,
+) -> (gtk4::Expander, gtk4::Label) {
+    let state = gtk4::Label::new(Some(state_text));
+    state.set_widget_name(&format!("{id}-state"));
+    state.set_halign(gtk4::Align::Start);
+    state.add_css_class("dim-label");
+    state.set_accessible_role(gtk4::AccessibleRole::Status);
+    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    content.append(&state);
+    let expander = gtk4::Expander::builder()
+        .label(title)
+        .expanded(initially_expanded)
+        .child(&content)
+        .build();
+    expander.set_widget_name(id);
+    expander.set_focusable(true);
+    expander.update_property(&[Property::Label(title)]);
+    apply_theme_role(&expander, ThemeRole::ModuleGroup);
+    (expander, state)
 }
 
 fn chrome_button(id: &str, label: &str, accessible_name: &str) -> gtk4::Button {
@@ -697,7 +933,10 @@ fn chrome_button(id: &str, label: &str, accessible_name: &str) -> gtk4::Button {
 
 #[cfg(test)]
 mod tests {
-    use super::{DARKROOM_VIEWPORT_FOCUS_ORDER, DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS};
+    use super::{
+        DARKROOM_RAIL_FOCUS_ORDER, DARKROOM_VIEWPORT_FOCUS_ORDER, DARKROOM_VIEWPORT_WIDGET_IDS,
+        DARKROOM_WIDGET_IDS, DarkroomModuleGroup,
+    };
 
     #[test]
     fn darkroom_contract_has_stable_unique_roles_and_initial_exposure() {
@@ -708,6 +947,8 @@ mod tests {
         assert_eq!(unique.len(), DARKROOM_WIDGET_IDS.len());
         assert_eq!(DARKROOM_WIDGET_IDS[0], "darkroom-page");
         assert_eq!(DARKROOM_WIDGET_IDS.last(), Some(&"exposure"));
+        assert_eq!(DARKROOM_RAIL_FOCUS_ORDER[0], "darkroom-navigation");
+        assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.last(), Some(&"group-grading"));
     }
 
     #[test]
@@ -723,5 +964,14 @@ mod tests {
                 .iter()
                 .all(|id| unique.contains(id))
         );
+    }
+
+    #[test]
+    fn module_groups_have_stable_semantics_and_truthful_filtering() {
+        assert!(DarkroomModuleGroup::Active.matches_title("anything"));
+        assert!(DarkroomModuleGroup::Favorites.matches_title("Favorite presets"));
+        assert!(DarkroomModuleGroup::Technical.matches_title("Lens correction"));
+        assert!(DarkroomModuleGroup::Grading.matches_title("Color balance"));
+        assert!(!DarkroomModuleGroup::Technical.matches_title("Exposure"));
     }
 }

@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+use gtk4::accessible::{Property, State};
 use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
@@ -169,23 +170,7 @@ impl WorkspaceRenderHandle {
 
     pub(super) fn sync_selection_styles(&self) {
         let state = self.interaction.borrow();
-        let selected = state.selected().collect::<BTreeSet<_>>();
-        let focus = state.focus();
-        drop(state);
-        for (id, pair) in self.photo_tiles.borrow().iter() {
-            let css_classes = if selected.contains(id) {
-                vec![
-                    ThemeRole::PhotoCard.class_name(),
-                    ThemeRole::SelectedPhoto.class_name(),
-                ]
-            } else {
-                vec![ThemeRole::PhotoCard.class_name()]
-            };
-            for button in [&pair.lighttable_button, &pair.filmstrip_button] {
-                button.set_css_classes(&css_classes);
-                button.set_focusable(focus == Some(*id));
-            }
-        }
+        sync_photo_buttons(&self.photo_tiles.borrow(), &state);
     }
 
     pub(super) fn focus_selected(&self) {
@@ -193,7 +178,11 @@ impl WorkspaceRenderHandle {
             return;
         };
         if let Some(pair) = self.photo_tiles.borrow().get(&focus) {
-            pair.lighttable_button.grab_focus();
+            if pair.filmstrip_button.has_focus() {
+                pair.filmstrip_button.grab_focus();
+            } else {
+                pair.lighttable_button.grab_focus();
+            }
         }
     }
 
@@ -223,20 +212,37 @@ impl WorkspaceRenderHandle {
     }
 }
 
+fn sync_photo_buttons(
+    photo_tiles: &BTreeMap<PhotoId, PhotoTilePair>,
+    interaction: &LighttableInteractionState,
+) {
+    let selected = interaction.selected().collect::<BTreeSet<_>>();
+    let focus = interaction.focus();
+    for (id, pair) in photo_tiles {
+        for button in [&pair.lighttable_button, &pair.filmstrip_button] {
+            button.add_css_class(ThemeRole::PhotoCard.class_name());
+            if selected.contains(id) {
+                button.add_css_class(ThemeRole::SelectedPhoto.class_name());
+            } else {
+                button.remove_css_class(ThemeRole::SelectedPhoto.class_name());
+            }
+            button.set_focusable(focus == Some(*id));
+            button.update_state(&[State::Selected(Some(selected.contains(id)))]);
+        }
+    }
+}
+
 fn connect_photo_selection(
     button: &gtk4::Button,
     photo_id: PhotoId,
     _detail: PhotoDetailViewModel,
     context: &PhotoSelectionContext,
 ) {
-    let interaction = Rc::clone(&context.interaction);
-    let photo_tiles = Rc::clone(&context.photo_tiles);
     let photo_details = Rc::clone(&context.photo_details);
     let darkroom_preview = context.darkroom_preview.clone();
     let workspace = context.workspace.clone();
-    let handler = Rc::clone(&context.photo_selected);
-    let export_panel = context.export_panel.clone();
-    let external_editor_panel = context.external_editor_panel.clone();
+    let selection = context.clone();
+    let button_for_gesture = button.clone();
     let gesture = gtk4::GestureClick::new();
     gesture.set_button(1);
     gesture.connect_pressed(move |gesture, n_press, _, _| {
@@ -246,33 +252,7 @@ fn connect_photo_selection(
                 || state.contains(gdk::ModifierType::SUPER_MASK),
             state.contains(gdk::ModifierType::SHIFT_MASK),
         );
-        let _ = interaction
-            .borrow_mut()
-            .apply(LighttableSelectionAction::Select {
-                photo_id,
-                modifiers,
-            });
-        let selected = interaction.borrow().selected().collect::<BTreeSet<_>>();
-        let focus = interaction.borrow().focus();
-        for (id, pair) in photo_tiles.borrow().iter() {
-            let css_classes = if selected.contains(id) {
-                vec![
-                    ThemeRole::PhotoCard.class_name(),
-                    ThemeRole::SelectedPhoto.class_name(),
-                ]
-            } else {
-                vec![ThemeRole::PhotoCard.class_name()]
-            };
-            for button in [&pair.lighttable_button, &pair.filmstrip_button] {
-                button.set_css_classes(&css_classes);
-                button.set_focusable(focus == Some(*id));
-            }
-        }
-        export_panel.set_selected(!selected.is_empty());
-        external_editor_panel.set_selection(selected.len());
-        if let Some(handler) = handler.borrow().as_ref() {
-            handler(photo_id);
-        }
+        select_photo(&button_for_gesture, photo_id, modifiers, &selection);
         if n_press >= 2
             && let Some(detail) = photo_details.borrow().get(&photo_id)
         {
@@ -281,6 +261,56 @@ fn connect_photo_selection(
         }
     });
     button.add_controller(gesture);
+
+    let selection = context.clone();
+    let button_for_keyboard = button.clone();
+    let key = gtk4::EventControllerKey::new();
+    key.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    key.connect_key_pressed(move |_, key, _, modifiers| {
+        if !matches!(key, gdk::Key::space | gdk::Key::Return | gdk::Key::KP_Enter) {
+            return gtk4::glib::Propagation::Proceed;
+        }
+        select_photo(
+            &button_for_keyboard,
+            photo_id,
+            SelectionModifiers::new(
+                modifiers.contains(gdk::ModifierType::CONTROL_MASK)
+                    || modifiers.contains(gdk::ModifierType::SUPER_MASK),
+                modifiers.contains(gdk::ModifierType::SHIFT_MASK),
+            ),
+            &selection,
+        );
+        gtk4::glib::Propagation::Stop
+    });
+    button.add_controller(key);
+}
+
+fn select_photo(
+    button: &gtk4::Button,
+    photo_id: PhotoId,
+    modifiers: SelectionModifiers,
+    context: &PhotoSelectionContext,
+) {
+    let _ = context
+        .interaction
+        .borrow_mut()
+        .apply(LighttableSelectionAction::Select {
+            photo_id,
+            modifiers,
+        });
+    let state = context.interaction.borrow();
+    sync_photo_buttons(&context.photo_tiles.borrow(), &state);
+    context
+        .export_panel
+        .set_selected(state.selected_count() > 0);
+    context
+        .external_editor_panel
+        .set_selection(state.selected_count());
+    drop(state);
+    button.grab_focus();
+    if let Some(handler) = context.photo_selected.borrow().as_ref() {
+        handler(photo_id);
+    }
 }
 
 fn lighttable_card(
@@ -330,6 +360,8 @@ fn lighttable_card(
     button.set_child(Some(&card));
     button.set_tooltip_text(Some(title));
     button.set_accessible_role(gtk4::AccessibleRole::Button);
+    button.update_property(&[Property::Label(&format!("Select {title}"))]);
+    button.set_focus_on_click(true);
     (button, thumbnail)
 }
 
@@ -362,7 +394,13 @@ fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSur
     button.set_widget_name(&format!("filmstrip-photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
     button.add_css_class("dt_filmstrip_item");
+    button.set_size_request(
+        i32::from(THUMBNAIL_METRICS.filmstrip_width_px),
+        i32::from(THUMBNAIL_METRICS.filmstrip_height_px),
+    );
     button.set_tooltip_text(Some(title));
+    button.update_property(&[Property::Label(&format!("Select {title} in filmstrip"))]);
+    button.set_focus_on_click(true);
     button.set_child(Some(thumbnail.widget()));
     (button, thumbnail)
 }

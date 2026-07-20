@@ -40,7 +40,7 @@ fn external_editor_and_presentation_ui_keep_side_effects_behind_ports() {
         for forbidden in [
             "std::fs",
             "std::process",
-            "Command::new",
+            "std::process::Command::new",
             "rusttable_catalog",
             "rusttable_render",
             "rusttable_export",
@@ -87,7 +87,7 @@ fn camera_and_import_widgets_keep_native_work_behind_typed_ports() {
             "rusttable_catalog",
             "rusttable_import",
             "image::",
-            "Command::new",
+            "std::process::Command::new",
             "iced::",
         ] {
             assert!(
