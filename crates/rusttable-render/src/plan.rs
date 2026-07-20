@@ -1,5 +1,6 @@
 use std::fmt;
 
+use rusttable_core::{RenderSizeError, RenderSizeRequest};
 use rusttable_image::ImageDimensions;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,6 +77,38 @@ pub struct RenderPlan {
 }
 
 impl RenderPlan {
+    /// Builds a render plan from the shared export/render size contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source dimensions or requested output size is invalid.
+    pub fn for_source_with_size_request(
+        source_dimensions: ImageDimensions,
+        request: RenderSizeRequest,
+    ) -> Result<Self, RenderSizeError> {
+        let (width, height) =
+            request.resolve(source_dimensions.width(), source_dimensions.height())?;
+        let output_dimensions =
+            ImageDimensions::new(width, height).map_err(|_| RenderSizeError::ArithmeticOverflow)?;
+        let target = if output_dimensions == source_dimensions {
+            RenderTarget::FullResolution
+        } else {
+            PreviewBounds::new(width, height)
+                .map(RenderTarget::PreviewFit)
+                .map_err(|_| RenderSizeError::ArithmeticOverflow)?
+        };
+        Ok(Self {
+            source_dimensions,
+            target,
+            output_dimensions,
+            sampling: if output_dimensions == source_dimensions {
+                RenderSampling::Identity
+            } else {
+                RenderSampling::CenterPoint
+            },
+        })
+    }
+
     #[must_use]
     pub fn for_source(source_dimensions: ImageDimensions, target: RenderTarget) -> Self {
         let output_dimensions = match target {

@@ -12,6 +12,7 @@ rusttable-color.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
+rusttable-render.workspace = true
 sha2.workspace = true
 tiff.workspace = true
 

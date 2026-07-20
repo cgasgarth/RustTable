@@ -11,6 +11,7 @@ postcard.workspace = true
 rusttable-core.workspace = true
 rusttable-color.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 
 [[bench]]

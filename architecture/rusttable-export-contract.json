@@ -1,0 +1,34 @@
+{
+  "artifact": [
+    "buffer",
+    "metadata_packet",
+    "filename_context",
+    "content_hash",
+    "dependency_hash",
+    "request_hash",
+    "render_receipt"
+  ],
+  "publish_rule": "artifact must be complete and validated before publication",
+  "request": [
+    "photo_id",
+    "edit_id",
+    "edit_revision",
+    "style_hash",
+    "quality",
+    "size",
+    "interpolation",
+    "output_profile",
+    "rendering_intent",
+    "black_point_compensation",
+    "pixel_encoding",
+    "alpha_policy",
+    "dither_policy",
+    "metadata_policy",
+    "encoder_settings",
+    "destination",
+    "dependency_snapshot",
+    "priority"
+  ],
+  "schema": "rusttable.export-contract.v1",
+  "version": 1
+}

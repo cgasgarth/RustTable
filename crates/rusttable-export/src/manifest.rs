@@ -2,10 +2,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
 
-use rusttable_core::template::{
-    EncoderDescriptor, EvaluationError, EvaluationReceipt, LogicalArtifactName, Template,
-    TemplateContext,
-};
+use crate::contract::ExportRequest;
+use rusttable_core::template::{EvaluationError, EvaluationReceipt, LogicalArtifactName};
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -13,32 +11,6 @@ pub enum ArtifactKind {
     Image,
     Sidecar,
     BundleMember,
-}
-
-#[derive(Debug, Clone)]
-pub struct ExportRequest {
-    pub kind: ArtifactKind,
-    pub template: Template,
-    pub context: TemplateContext,
-    pub encoder: Option<EncoderDescriptor>,
-}
-
-impl ExportRequest {
-    #[must_use]
-    pub fn new(kind: ArtifactKind, template: Template, context: TemplateContext) -> Self {
-        Self {
-            kind,
-            template,
-            context,
-            encoder: None,
-        }
-    }
-
-    #[must_use]
-    pub fn with_encoder(mut self, encoder: EncoderDescriptor) -> Self {
-        self.encoder = Some(encoder);
-        self
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::{Result, codegen, fixtures, run_process};
+use crate::{Result, codegen, export_contract, fixtures, operations, run_process};
 use sha2::{Digest, Sha256};
 
 const FORBIDDEN_NATIVE_EXTENSIONS: &[&str] = &[
@@ -44,6 +44,8 @@ pub(crate) fn run(root: &Path) -> Result {
         ]),
     )?;
     codegen::verify_committed(root)?;
+    operations::verify_operation_manifest(root)?;
+    export_contract::run(root, true)?;
     fixtures::verify(root, Path::new("fixtures/manifest.toml"))?;
     dependency_checks(root)?;
     eprintln!("RustTable check passed");

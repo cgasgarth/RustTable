@@ -26,6 +26,7 @@ pub mod operation_stack;
 mod output;
 mod pipeline;
 pub mod registry;
+mod registry_closure;
 mod scalar;
 mod window;
 
@@ -59,6 +60,10 @@ pub use registry::{
     OperationCapability, OperationDefinition, OperationDefinitionFactory, PreparedCpuOperation,
     RegistryBuildError, RegistryLookupError, RegistrySnapshot, RegistryValidationError,
     builtin_registry,
+};
+pub use registry_closure::{
+    OperationClassification, REGISTRY_CLOSURE_SCHEMA, RegistryClosure, RegistryClosureEntry,
+    RegistryClosureError,
 };
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
