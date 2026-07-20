@@ -361,6 +361,393 @@ impl DisplayPresentationController {
     }
 }
 
+/// Monotonic identity for a selected-photo viewport projection.
+///
+/// The GTK controls attach this value to every command. An orchestrator can advance it when a
+/// new selected-photo/edit projection is published and discard commands from an older view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ViewportGeneration(u64);
+
+impl ViewportGeneration {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Darktable's navigation-box zoom choices, in display order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum DarkroomZoom {
+    Small,
+    #[default]
+    Fit,
+    Fill,
+    FiftyPercent,
+    OneHundredPercent,
+    TwoHundredPercent,
+    FourHundredPercent,
+    EightHundredPercent,
+    SixteenHundredPercent,
+}
+
+impl DarkroomZoom {
+    pub const ALL: [Self; 9] = [
+        Self::Small,
+        Self::Fit,
+        Self::Fill,
+        Self::FiftyPercent,
+        Self::OneHundredPercent,
+        Self::TwoHundredPercent,
+        Self::FourHundredPercent,
+        Self::EightHundredPercent,
+        Self::SixteenHundredPercent,
+    ];
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Small => "small",
+            Self::Fit => "fit",
+            Self::Fill => "fill",
+            Self::FiftyPercent => "50%",
+            Self::OneHundredPercent => "100%",
+            Self::TwoHundredPercent => "200%",
+            Self::FourHundredPercent => "400%",
+            Self::EightHundredPercent => "800%",
+            Self::SixteenHundredPercent => "1600%",
+        }
+    }
+
+    #[must_use]
+    pub const fn percent(self) -> Option<u16> {
+        match self {
+            Self::Small | Self::Fit | Self::Fill => None,
+            Self::FiftyPercent => Some(50),
+            Self::OneHundredPercent => Some(100),
+            Self::TwoHundredPercent => Some(200),
+            Self::FourHundredPercent => Some(400),
+            Self::EightHundredPercent => Some(800),
+            Self::SixteenHundredPercent => Some(1_600),
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        match self {
+            Self::Small => 0,
+            Self::Fit => 1,
+            Self::Fill => 2,
+            Self::FiftyPercent => 3,
+            Self::OneHundredPercent => 4,
+            Self::TwoHundredPercent => 5,
+            Self::FourHundredPercent => 6,
+            Self::EightHundredPercent => 7,
+            Self::SixteenHundredPercent => 8,
+        }
+    }
+
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Small => Self::Fit,
+            Self::Fit => Self::Fill,
+            Self::Fill => Self::FiftyPercent,
+            Self::FiftyPercent => Self::OneHundredPercent,
+            Self::OneHundredPercent => Self::TwoHundredPercent,
+            Self::TwoHundredPercent => Self::FourHundredPercent,
+            Self::FourHundredPercent => Self::EightHundredPercent,
+            Self::EightHundredPercent | Self::SixteenHundredPercent => Self::SixteenHundredPercent,
+        }
+    }
+
+    #[must_use]
+    pub const fn previous(self) -> Self {
+        match self {
+            Self::Small | Self::Fit => Self::Small,
+            Self::Fill => Self::Fit,
+            Self::FiftyPercent => Self::Fill,
+            Self::OneHundredPercent => Self::FiftyPercent,
+            Self::TwoHundredPercent => Self::OneHundredPercent,
+            Self::FourHundredPercent => Self::TwoHundredPercent,
+            Self::EightHundredPercent => Self::FourHundredPercent,
+            Self::SixteenHundredPercent => Self::EightHundredPercent,
+        }
+    }
+}
+
+/// Normalized pan offset used by the viewport projection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ViewportPan {
+    x: i16,
+    y: i16,
+}
+
+impl ViewportPan {
+    #[must_use]
+    pub fn new(x: i16, y: i16) -> Self {
+        Self {
+            x: clamp_pan(i32::from(x)),
+            y: clamp_pan(i32::from(y)),
+        }
+    }
+
+    #[must_use]
+    pub const fn x(self) -> i16 {
+        self.x
+    }
+
+    #[must_use]
+    pub const fn y(self) -> i16 {
+        self.y
+    }
+
+    #[must_use]
+    pub fn adjust(self, delta_x: i32, delta_y: i32) -> Self {
+        Self::new(
+            clamp_pan(i32::from(self.x) + delta_x),
+            clamp_pan(i32::from(self.y) + delta_y),
+        )
+    }
+}
+
+fn clamp_pan(value: i32) -> i16 {
+    let value = value.clamp(-1_000, 1_000);
+    i16::try_from(value).unwrap_or(0)
+}
+
+/// Before/after projection shown by the darkroom viewport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ViewportComparison {
+    #[default]
+    Edited,
+    Before,
+}
+
+impl ViewportComparison {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Edited => "edited",
+            Self::Before => "before",
+        }
+    }
+}
+
+/// Mutually exclusive Darktable soft-proof and gamut-check projection modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ViewportColorMode {
+    #[default]
+    Normal,
+    SoftProof,
+    GamutCheck,
+}
+
+impl ViewportColorMode {
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::SoftProof => "soft proof",
+            Self::GamutCheck => "gamut check",
+        }
+    }
+}
+
+/// Typed user intent emitted by the darkroom toolbar and navigation gestures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DarkroomViewportAction {
+    SetZoom(DarkroomZoom),
+    ZoomIn,
+    ZoomOut,
+    Fit,
+    Pan { delta_x: i32, delta_y: i32 },
+    ToggleBeforeAfter,
+    ToggleSoftProof,
+    ToggleGamutCheck,
+}
+
+/// A viewport action tagged with the selected-photo generation that produced it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DarkroomViewportCommand {
+    generation: ViewportGeneration,
+    action: DarkroomViewportAction,
+}
+
+impl DarkroomViewportCommand {
+    #[must_use]
+    pub const fn new(generation: ViewportGeneration, action: DarkroomViewportAction) -> Self {
+        Self { generation, action }
+    }
+
+    #[must_use]
+    pub const fn generation(self) -> ViewportGeneration {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn action(self) -> DarkroomViewportAction {
+        self.action
+    }
+}
+
+/// Revision-safe state for the selected darkroom photo and its viewport projection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DarkroomViewportState {
+    photo_id: Option<PhotoId>,
+    edit_revision: Option<Revision>,
+    generation: ViewportGeneration,
+    zoom: DarkroomZoom,
+    pan: ViewportPan,
+    comparison: ViewportComparison,
+    color_mode: ViewportColorMode,
+}
+
+impl DarkroomViewportState {
+    #[must_use]
+    pub const fn photo_id(self) -> Option<PhotoId> {
+        self.photo_id
+    }
+
+    #[must_use]
+    pub const fn edit_revision(self) -> Option<Revision> {
+        self.edit_revision
+    }
+
+    #[must_use]
+    pub const fn generation(self) -> ViewportGeneration {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn zoom(self) -> DarkroomZoom {
+        self.zoom
+    }
+
+    #[must_use]
+    pub const fn pan(self) -> ViewportPan {
+        self.pan
+    }
+
+    #[must_use]
+    pub const fn comparison(self) -> ViewportComparison {
+        self.comparison
+    }
+
+    #[must_use]
+    pub const fn color_mode(self) -> ViewportColorMode {
+        self.color_mode
+    }
+
+    /// Starts a new selected-photo projection and resets transient viewport state.
+    pub fn select(
+        &mut self,
+        photo_id: PhotoId,
+        edit_revision: Revision,
+        generation: ViewportGeneration,
+    ) {
+        self.photo_id = Some(photo_id);
+        self.edit_revision = Some(edit_revision);
+        self.generation = generation;
+        self.reset_view();
+    }
+
+    /// Clears selection while leaving a truthful empty/no-photo viewport.
+    pub fn clear_selection(&mut self) {
+        self.photo_id = None;
+        self.edit_revision = None;
+        self.reset_view();
+    }
+
+    /// Applies a command only when it belongs to the current selected-photo generation.
+    pub fn apply(&mut self, command: DarkroomViewportCommand) -> bool {
+        if command.generation != self.generation {
+            return false;
+        }
+        match command.action {
+            DarkroomViewportAction::SetZoom(zoom) => self.set_zoom(zoom),
+            DarkroomViewportAction::ZoomIn => self.set_zoom(self.zoom.next()),
+            DarkroomViewportAction::ZoomOut => self.set_zoom(self.zoom.previous()),
+            DarkroomViewportAction::Fit => self.set_zoom(DarkroomZoom::Fit),
+            DarkroomViewportAction::Pan { delta_x, delta_y } => {
+                let pan = self.pan.adjust(delta_x, delta_y);
+                if pan == self.pan {
+                    false
+                } else {
+                    self.pan = pan;
+                    true
+                }
+            }
+            DarkroomViewportAction::ToggleBeforeAfter => {
+                self.comparison = match self.comparison {
+                    ViewportComparison::Edited => ViewportComparison::Before,
+                    ViewportComparison::Before => ViewportComparison::Edited,
+                };
+                true
+            }
+            DarkroomViewportAction::ToggleSoftProof => {
+                self.color_mode = if self.color_mode == ViewportColorMode::SoftProof {
+                    ViewportColorMode::Normal
+                } else {
+                    ViewportColorMode::SoftProof
+                };
+                true
+            }
+            DarkroomViewportAction::ToggleGamutCheck => {
+                self.color_mode = if self.color_mode == ViewportColorMode::GamutCheck {
+                    ViewportColorMode::Normal
+                } else {
+                    ViewportColorMode::GamutCheck
+                };
+                true
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn projection_label(self) -> String {
+        let Some(_) = self.photo_id else {
+            return "no photo selected".to_owned();
+        };
+        let pan = if self.pan == ViewportPan::default() {
+            "centered"
+        } else {
+            "panned"
+        };
+        format!(
+            "{} · {} · {} · {pan}",
+            self.zoom.label(),
+            self.comparison.label(),
+            self.color_mode.label()
+        )
+    }
+
+    fn set_zoom(&mut self, zoom: DarkroomZoom) -> bool {
+        if self.zoom == zoom {
+            return false;
+        }
+        self.zoom = zoom;
+        if matches!(
+            zoom,
+            DarkroomZoom::Small | DarkroomZoom::Fit | DarkroomZoom::Fill
+        ) {
+            self.pan = ViewportPan::default();
+        }
+        true
+    }
+
+    fn reset_view(&mut self) {
+        self.zoom = DarkroomZoom::Fit;
+        self.pan = ViewportPan::default();
+        self.comparison = ViewportComparison::Edited;
+        self.color_mode = ViewportColorMode::Normal;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +847,57 @@ mod tests {
         }
         .label();
         assert_eq!(label, "Color-managed presentation: HDR · override profile");
+    }
+
+    #[test]
+    fn darkroom_viewport_actions_are_bounded_and_mutually_exclusive() {
+        let mut state = DarkroomViewportState::default();
+        let generation = ViewportGeneration::new(7);
+        state.select(
+            PhotoId::new(42).expect("photo"),
+            Revision::from_u64(3),
+            generation,
+        );
+
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::SetZoom(DarkroomZoom::OneHundredPercent),
+        )));
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::Pan {
+                delta_x: 9_999,
+                delta_y: -9_999,
+            },
+        )));
+        assert_eq!(state.pan(), ViewportPan::new(1_000, -1_000));
+
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::ToggleSoftProof,
+        )));
+        assert_eq!(state.color_mode(), ViewportColorMode::SoftProof);
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::ToggleGamutCheck,
+        )));
+        assert_eq!(state.color_mode(), ViewportColorMode::GamutCheck);
+        assert_eq!(state.comparison(), ViewportComparison::Edited);
+    }
+
+    #[test]
+    fn stale_darkroom_viewport_commands_cannot_mutate_new_selection() {
+        let mut state = DarkroomViewportState::default();
+        state.select(
+            PhotoId::new(42).expect("photo"),
+            Revision::from_u64(3),
+            ViewportGeneration::new(8),
+        );
+        assert!(!state.apply(DarkroomViewportCommand::new(
+            ViewportGeneration::new(7),
+            DarkroomViewportAction::ToggleBeforeAfter,
+        )));
+        assert_eq!(state.comparison(), ViewportComparison::Edited);
+        assert_eq!(state.projection_label(), "fit · edited · normal · centered");
     }
 }

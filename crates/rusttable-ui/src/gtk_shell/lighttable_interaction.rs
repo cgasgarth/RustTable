@@ -47,6 +47,19 @@ pub enum LighttableZoom {
 }
 
 impl LighttableZoom {
+    /// Number of cards per row in the file-manager lighttable layout.
+    ///
+    /// These are deliberately discrete bounds: changing thumbnail density must not
+    /// allow the grid to grow an unbounded number of layout variants.
+    #[must_use]
+    pub const fn columns(self) -> usize {
+        match self {
+            Self::Small => 8,
+            Self::Normal => 6,
+            Self::Large => 4,
+        }
+    }
+
     #[must_use]
     pub const fn scale(self) -> f64 {
         match self {
@@ -124,8 +137,9 @@ impl LighttableInteractionState {
 
     /// Reconciles the visible catalog order while retaining only live selection IDs.
     pub fn set_order(&mut self, ids: impl IntoIterator<Item = PhotoId>) {
-        self.ordered_ids = ids.into_iter().collect();
-        self.selected.retain(|id| self.ordered_ids.contains(id));
+        let mut seen = BTreeSet::new();
+        self.ordered_ids = ids.into_iter().filter(|id| seen.insert(*id)).collect();
+        self.selected.retain(|id| seen.contains(id));
         self.anchor = self.anchor.filter(|id| self.ordered_ids.contains(id));
         self.focus = self.focus.filter(|id| self.ordered_ids.contains(id));
         if self.focus.is_none() {
@@ -163,6 +177,27 @@ impl LighttableInteractionState {
     #[must_use]
     pub fn selected(&self) -> impl ExactSizeIterator<Item = PhotoId> + '_ {
         self.selected.iter().copied()
+    }
+
+    /// Returns the current selection in visible catalog order.
+    ///
+    /// `selected` remains ID-ordered for compatibility with controller snapshots;
+    /// the grid and filmstrip use this projection when an ordered photo is needed.
+    pub fn selected_in_order(&self) -> impl Iterator<Item = PhotoId> + '_ {
+        self.ordered_ids
+            .iter()
+            .copied()
+            .filter(|id| self.selected.contains(id))
+    }
+
+    #[must_use]
+    pub fn is_selected(&self, photo_id: PhotoId) -> bool {
+        self.selected.contains(&photo_id)
+    }
+
+    #[must_use]
+    pub fn selected_count(&self) -> usize {
+        self.selected.len()
     }
 
     #[must_use]
@@ -233,7 +268,7 @@ impl LighttableInteractionState {
             LighttableSelectionAction::OpenSelected => self
                 .focus
                 .filter(|focus| self.selected.contains(focus))
-                .or_else(|| self.selected.iter().next().copied()),
+                .or_else(|| self.selected_in_order().next()),
             LighttableSelectionAction::Clear => {
                 self.selected.clear();
                 self.anchor = None;
@@ -343,9 +378,31 @@ mod tests {
         let mut state = state();
         state.reconcile_selection([id(4), id(2)]);
         assert_eq!(state.selected().collect::<Vec<_>>(), vec![id(2), id(4)]);
+        assert_eq!(
+            state.selected_in_order().collect::<Vec<_>>(),
+            vec![id(2), id(4)]
+        );
         let _ = state.apply(LighttableSelectionAction::SetZoom(LighttableZoom::Large));
         assert_eq!(state.zoom(), LighttableZoom::Large);
+        assert_eq!(state.zoom().columns(), 4);
         assert_eq!(state.zoom().larger(), LighttableZoom::Large);
         assert_eq!(state.zoom().smaller(), LighttableZoom::Normal);
+    }
+
+    #[test]
+    fn catalog_refresh_deduplicates_ids_without_reordering_live_selection() {
+        let mut state = LighttableInteractionState::new(3);
+        state.set_order([id(9), id(2), id(9), id(5)]);
+        assert_eq!(
+            state.ordered().collect::<Vec<_>>(),
+            vec![id(9), id(2), id(5)]
+        );
+        let _ = state.apply(LighttableSelectionAction::Select {
+            photo_id: id(5),
+            modifiers: SelectionModifiers::default(),
+        });
+        state.set_order([id(5), id(2), id(5)]);
+        assert_eq!(state.selected_count(), 1);
+        assert!(state.is_selected(id(5)));
     }
 }

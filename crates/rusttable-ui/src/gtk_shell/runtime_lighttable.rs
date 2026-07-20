@@ -8,11 +8,12 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
+use super::lighttable::{LighttableCollectionState, LighttableGridSpec};
 use super::runtime::PhotoSelectedHandler;
 use super::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 use super::{
     ExportPanel, LighttableContentState, LighttableInteractionState, LighttableSelectionAction,
-    LighttableZoom, PhotoPreview, SelectionModifiers, THUMBNAIL_METRICS, ThemeRole, WorkspaceRole,
+    PhotoPreview, SelectionModifiers, THUMBNAIL_METRICS, ThemeRole, WorkspaceRole,
     apply_theme_role,
 };
 use crate::external_editor::ExternalEditorPanel;
@@ -72,7 +73,8 @@ impl WorkspaceRenderHandle {
         self.photo_tiles.borrow_mut().clear();
         self.photo_details.borrow_mut().clear();
         let zoom = self.interaction.borrow().zoom();
-        let columns = columns_for_zoom(zoom);
+        let grid = LighttableGridSpec::for_zoom(zoom);
+        let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
         self.lighttable.set_max_children_per_line(columns);
         let browser = super::LibraryBrowserModel::from_workspace(view_model);
         let visible_ids = browser
@@ -114,7 +116,7 @@ impl WorkspaceRenderHandle {
                 photo.title(),
                 photo.secondary(),
                 photo.indicators(),
-                zoom,
+                grid,
             );
             let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo.id(), photo.title());
             let thumbnail_state = retained_thumbnail_state(
@@ -141,8 +143,17 @@ impl WorkspaceRenderHandle {
             );
             rendered_photos += 1;
         }
+        let collection_state = if rendered_photos == 0 {
+            LighttableCollectionState::Empty
+        } else {
+            LighttableCollectionState::Ready(rendered_photos)
+        };
         self.lighttable_empty_state.set_visible_child_name(
-            LighttableContentState::from_rendered_count(rendered_photos).stack_name(),
+            LighttableContentState::from_rendered_count(collection_state.rendered_count())
+                .stack_name(),
+        );
+        self.lighttable_empty_state.set_tooltip_text(
+            (!collection_state.status_text().is_empty()).then_some(collection_state.status_text()),
         );
         self.sync_selection_styles();
     }
@@ -277,7 +288,7 @@ fn lighttable_card(
     title: &str,
     secondary: Option<&str>,
     indicators: crate::presentation::ThumbnailIndicators,
-    zoom: LighttableZoom,
+    grid: LighttableGridSpec,
 ) -> (gtk4::Button, ThumbnailSurface) {
     let card = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     card.set_margin_top(4);
@@ -287,8 +298,8 @@ fn lighttable_card(
     let thumbnail = ThumbnailSurface::new(
         &format!("photo-thumbnail-{photo_id}"),
         &format!("Thumbnail for {title}"),
-        scaled_thumbnail_dimension(THUMBNAIL_METRICS.grid_width_px, zoom),
-        scaled_thumbnail_dimension(THUMBNAIL_METRICS.grid_height_px, zoom),
+        i32::from(grid.thumbnail_width_px()),
+        i32::from(grid.thumbnail_height_px()),
     );
     apply_theme_role(thumbnail.widget(), ThemeRole::ThumbnailImage);
     let thumbnail_overlay = gtk4::Overlay::new();
@@ -320,20 +331,6 @@ fn lighttable_card(
     button.set_tooltip_text(Some(title));
     button.set_accessible_role(gtk4::AccessibleRole::Button);
     (button, thumbnail)
-}
-
-fn columns_for_zoom(zoom: LighttableZoom) -> u32 {
-    match zoom {
-        LighttableZoom::Small => 8,
-        LighttableZoom::Normal => 6,
-        LighttableZoom::Large => 4,
-    }
-}
-
-#[allow(clippy::cast_possible_truncation)]
-fn scaled_thumbnail_dimension(value: u16, zoom: LighttableZoom) -> i32 {
-    let scaled = f64::from(value) * zoom.scale();
-    scaled.round().clamp(1.0, f64::from(i32::MAX)) as i32
 }
 
 fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk4::Box {

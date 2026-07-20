@@ -2,7 +2,88 @@
 
 use gtk4::prelude::*;
 
-use super::{ThemeRole, apply_theme_role};
+use super::{
+    THUMBNAIL_METRICS, ThemeRole, apply_theme_role, lighttable_interaction::LighttableZoom,
+};
+
+/// Geometry shared by the collection grid and its focused layout tests.
+///
+/// The values originate in `darktable_spec`; this type only selects one of the
+/// bounded lighttable densities and never invents a second geometry contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct LighttableGridSpec {
+    zoom: LighttableZoom,
+    columns: usize,
+    thumbnail_width_px: u16,
+    thumbnail_height_px: u16,
+}
+
+impl LighttableGridSpec {
+    #[must_use]
+    pub(super) const fn for_zoom(zoom: LighttableZoom) -> Self {
+        Self {
+            zoom,
+            columns: zoom.columns(),
+            thumbnail_width_px: scale_dimension(THUMBNAIL_METRICS.grid_width_px, zoom),
+            thumbnail_height_px: scale_dimension(THUMBNAIL_METRICS.grid_height_px, zoom),
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn columns(self) -> usize {
+        self.columns
+    }
+
+    #[must_use]
+    pub(super) const fn thumbnail_width_px(self) -> u16 {
+        self.thumbnail_width_px
+    }
+
+    #[must_use]
+    pub(super) const fn thumbnail_height_px(self) -> u16 {
+        self.thumbnail_height_px
+    }
+}
+
+const fn scale_dimension(value: u16, zoom: LighttableZoom) -> u16 {
+    match zoom {
+        LighttableZoom::Small => value.saturating_mul(3) / 4,
+        LighttableZoom::Normal => value,
+        LighttableZoom::Large => value.saturating_mul(5) / 4,
+    }
+}
+
+/// Catalog states that the central lighttable can present without exposing
+/// filesystem or catalog-internal error details.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum LighttableCollectionState {
+    #[allow(dead_code)] // constructed when catalog loading becomes asynchronous
+    Loading,
+    Empty,
+    Ready(usize),
+    #[allow(dead_code)] // constructed when catalog failures reach the shell
+    Failed,
+}
+
+impl LighttableCollectionState {
+    #[must_use]
+    pub(super) const fn status_text(&self) -> &'static str {
+        match self {
+            Self::Loading => "loading collection…",
+            Self::Empty => "there are no images in this collection",
+            Self::Ready(_) => "",
+            Self::Failed => "unable to load this collection",
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn rendered_count(&self) -> usize {
+        match self {
+            Self::Ready(count) => *count,
+            Self::Loading | Self::Empty | Self::Failed => 0,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct EmptyStateRow {
@@ -151,7 +232,9 @@ fn attach_label(
 
 #[cfg(test)]
 mod tests {
-    use super::EMPTY_STATE_ROWS;
+    use super::super::lighttable_interaction::LighttableZoom;
+    use super::{EMPTY_STATE_ROWS, LighttableCollectionState, LighttableGridSpec};
+    use crate::gtk_shell::{LIGHTTABLE_COMPOSITION, THUMBNAIL_METRICS};
 
     #[test]
     fn guidance_keeps_darktable_two_column_sections() {
@@ -161,6 +244,41 @@ mod tests {
         assert_eq!(
             EMPTY_STATE_ROWS.last().map(|row| row.right),
             Some("camera's JPEG by applying a camera-specific style")
+        );
+    }
+
+    #[test]
+    fn grid_spec_uses_darktable_thumbnail_geometry_with_bounded_density() {
+        let normal = LighttableGridSpec::for_zoom(LighttableZoom::Normal);
+        assert_eq!(normal.columns(), 6);
+        assert_eq!(
+            (normal.thumbnail_width_px(), normal.thumbnail_height_px()),
+            (
+                THUMBNAIL_METRICS.grid_width_px,
+                THUMBNAIL_METRICS.grid_height_px
+            )
+        );
+
+        let large = LighttableGridSpec::for_zoom(LighttableZoom::Large);
+        assert_eq!(large.columns(), 4);
+        assert!(large.thumbnail_width_px() > normal.thumbnail_width_px());
+        assert!(large.thumbnail_height_px() > normal.thumbnail_height_px());
+        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_rows, 1);
+    }
+
+    #[test]
+    fn collection_states_are_safe_and_do_not_leak_catalog_errors() {
+        assert_eq!(LighttableCollectionState::Loading.rendered_count(), 0);
+        assert_eq!(LighttableCollectionState::Empty.rendered_count(), 0);
+        assert_eq!(LighttableCollectionState::Ready(3).rendered_count(), 3);
+        assert_eq!(
+            LighttableCollectionState::Failed.status_text(),
+            "unable to load this collection"
+        );
+        assert!(
+            !LighttableCollectionState::Failed
+                .status_text()
+                .contains('/')
         );
     }
 }
