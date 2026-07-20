@@ -26,13 +26,13 @@ impl DiagnosticEvent {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApplicationFailureCode {
-    IcedRun,
+    DesktopUiRun,
 }
 
 impl ApplicationFailureCode {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
-            Self::IcedRun => "iced_run",
+            Self::DesktopUiRun => "desktop_ui_run",
         }
     }
 }

@@ -3,25 +3,34 @@ mod catalog_preview;
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
 
 use crate::lifecycle::run_with_bootstrap;
-use crate::ui_shell::{DaemonState, boot, subscription, update, view as daemon_view};
+use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual};
+use std::fmt;
 
-#[cfg(test)]
-mod view {
-    use iced::Element;
+/// Error returned when GTK terminates RustTable unsuccessfully.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DesktopRunError {
+    exit_code: u8,
+}
 
-    use crate::application::{Message, Shell};
-
-    pub(super) fn view(shell: &Shell) -> Element<'_, Message> {
-        rusttable_ui::view::view(shell.ui_state()).map(Message::from)
+impl fmt::Display for DesktopRunError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "RustTable GTK4 exited with status {}",
+            self.exit_code
+        )
     }
 }
 
-/// Starts the `RustTable` desktop application.
+impl std::error::Error for DesktopRunError {}
+
+/// Starts the GTK4 RustTable desktop application.
 ///
 /// # Errors
 ///
-/// Returns an error if Iced cannot create or run the desktop window.
-pub fn run() -> iced::Result {
+/// Returns an error when GTK terminates the application with a failure exit
+/// code.
+pub fn run() -> Result<(), DesktopRunError> {
     let preflight = crate::platform::startup_preflight();
     run_with_bootstrap(
         rusttable_diagnostics::install,
@@ -29,15 +38,23 @@ pub fn run() -> iced::Result {
             if !preflight.is_supported() {
                 return Ok(());
             }
-            iced::daemon(boot, update, daemon_view)
-                .title("RustTable")
-                .theme(|state: &DaemonState, _window| rusttable_ui::tokens::theme(state.ui_theme()))
-                .subscription(subscription)
-                .run()
+
+            let application = gtk4::Application::builder()
+                .application_id("com.cgasgarth.rusttable")
+                .build();
+            application.connect_activate(|application| {
+                let shell = rusttable_ui::GtkShell::new(application);
+                shell.present();
+            });
+            let exit_code = application.run();
+            if exit_code == gtk4::glib::ExitCode::SUCCESS {
+                Ok(())
+            } else {
+                Err(DesktopRunError {
+                    exit_code: exit_code.get(),
+                })
+            }
         },
         |warning| eprintln!("{warning}"),
     )
 }
-
-#[cfg(test)]
-mod ui_smoke;

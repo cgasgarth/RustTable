@@ -22,18 +22,18 @@ const MAX_PHOTO_TITLE_BYTES: usize = 128;
 const GENERIC_PHOTO_TITLE: &str = "Image";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LibraryLoadRequestId(NonZeroU64);
+pub struct LibraryLoadRequestId(NonZeroU64);
 
 impl LibraryLoadRequestId {
-    pub(crate) const fn first() -> Self {
+    pub const fn first() -> Self {
         Self(NonZeroU64::MIN)
     }
 
-    pub(crate) const fn get(self) -> u64 {
+    pub const fn get(self) -> u64 {
         self.0.get()
     }
 
-    pub(crate) fn next(self) -> Option<Self> {
+    pub fn next(self) -> Option<Self> {
         self.get()
             .checked_add(1)
             .and_then(NonZeroU64::new)
@@ -42,14 +42,14 @@ impl LibraryLoadRequestId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LibraryLoadResult {
+pub enum LibraryLoadResult {
     Empty,
     Ready(PhotoWorkspaceViewModel),
     Failed(LibraryFailureKind),
 }
 
 impl LibraryLoadResult {
-    pub(crate) fn into_library_state(self) -> LibraryState {
+    pub fn into_library_state(self) -> LibraryState {
         match self {
             Self::Empty => LibraryState::Empty,
             Self::Ready(workspace) => LibraryState::Ready(workspace),
@@ -92,14 +92,14 @@ impl LibraryLoadError {
     }
 }
 
-pub(crate) fn catalog_path() -> Result<PathBuf, LibraryFailureKind> {
+pub fn catalog_path() -> Result<PathBuf, LibraryFailureKind> {
     let override_path = std::env::var_os("RUSTTABLE_CATALOG_PATH").map(PathBuf::from);
     let default_data_directory = ProjectDirs::from("com", "cgasgarth", "RustTable")
         .map(|project_dirs| project_dirs.data_local_dir().to_path_buf());
     select_catalog_path(override_path.as_deref(), default_data_directory.as_deref())
 }
 
-pub(crate) fn source_root(catalog_path: &Path) -> Result<PathBuf, LibraryFailureKind> {
+pub fn source_root(catalog_path: &Path) -> Result<PathBuf, LibraryFailureKind> {
     let override_path = std::env::var_os("RUSTTABLE_SOURCE_ROOT").map(PathBuf::from);
     if let Some(path) = override_path.filter(|path| !path.as_os_str().is_empty()) {
         return Ok(path);
@@ -124,7 +124,7 @@ fn select_catalog_path(
         .ok_or(LibraryFailureKind::CatalogLocationUnavailable)
 }
 
-pub(crate) fn load_catalog(path: &Path) -> LibraryLoadResult {
+pub fn load_catalog(path: &Path) -> LibraryLoadResult {
     match load_catalog_detailed(path) {
         Ok(workspace) if workspace.cards().next().is_none() => LibraryLoadResult::Empty,
         Ok(workspace) => LibraryLoadResult::Ready(workspace),

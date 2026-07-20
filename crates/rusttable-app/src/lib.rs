@@ -1,15 +1,13 @@
 #![forbid(unsafe_code)]
-#![doc = "The `RustTable` Iced application composition root."]
+#![doc = "The GTK4 application composition root for `RustTable`."]
 
-mod application;
 mod composition;
 mod extensions;
-mod library;
+pub mod library;
 mod lifecycle;
 mod platform;
 mod preview;
-mod ui_shell;
-mod workspace;
+pub mod workspace;
 
 pub use composition::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, run};
 pub use extensions::ApplicationExtensions;

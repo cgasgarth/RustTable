@@ -16,7 +16,7 @@ const PREVIEW_EDGE: u32 = 1_536;
 
 /// Immutable RGBA8 pixels ready for a presentation adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SelectedPreview {
+pub struct SelectedPreview {
     photo_id: PhotoId,
     dimensions: ImageDimensions,
     pixels: Vec<u8>,
@@ -24,13 +24,13 @@ pub(crate) struct SelectedPreview {
 
 impl SelectedPreview {
     #[must_use]
-    pub(crate) fn into_parts(self) -> (PhotoId, ImageDimensions, Vec<u8>) {
+    pub fn into_parts(self) -> (PhotoId, ImageDimensions, Vec<u8>) {
         (self.photo_id, self.dimensions, self.pixels)
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum WorkspacePreviewError {
+pub enum WorkspacePreviewError {
     Catalog(RepositoryError),
     MissingEdit { photo_id: PhotoId },
     Preview(CatalogPreviewError),
@@ -67,7 +67,7 @@ impl std::error::Error for WorkspacePreviewError {
 /// # Errors
 ///
 /// Returns a typed catalog, edit-selection, decode, or CPU-render failure.
-pub(crate) fn load_selected_preview(
+pub fn load_selected_preview(
     catalog_path: &Path,
     source_root: &Path,
     photo_id: PhotoId,
@@ -96,7 +96,7 @@ pub(crate) fn load_selected_preview(
 ///
 /// Returns the same typed catalog, edit-selection, source, decode, or render
 /// errors as [`load_selected_preview`].
-pub(crate) fn load_selected_export_render(
+pub fn load_selected_export_render(
     catalog_path: &Path,
     source_root: &Path,
     photo_id: PhotoId,
@@ -124,7 +124,7 @@ pub(crate) fn load_selected_export_render(
 /// # Errors
 ///
 /// Returns a typed catalog, source, ownership-validation, decode, or CPU-render failure.
-pub(crate) fn load_preview_for_edit(
+pub fn load_preview_for_edit(
     catalog_path: &Path,
     source_root: &Path,
     photo_id: PhotoId,

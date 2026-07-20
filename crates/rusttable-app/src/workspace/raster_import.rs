@@ -23,7 +23,7 @@ const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_DECODE_BYTES: u64 = 256 * 1024 * 1024;
 const THUMBNAIL_EDGE: u32 = 256;
 
-pub(crate) async fn pick_raster_files() -> Vec<PathBuf> {
+pub async fn pick_raster_files() -> Vec<PathBuf> {
     rfd::AsyncFileDialog::new()
         .add_filter(
             "Supported raster images",
@@ -38,7 +38,7 @@ pub(crate) async fn pick_raster_files() -> Vec<PathBuf> {
         .collect()
 }
 
-pub(crate) fn run_raster_import(
+pub fn run_raster_import(
     catalog_path: &Path,
     paths: Vec<PathBuf>,
     cancellation: &RasterImportCancellation,

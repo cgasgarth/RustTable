@@ -1,32 +1,17 @@
 #![forbid(unsafe_code)]
-#![doc = "Reusable Rust UI contracts, GTK4 shell components, and presentation models for `RustTable`."]
+#![doc = "GTK4 UI components and presentation models for `RustTable`."]
 
 pub mod gtk_shell;
 pub mod import;
-pub mod input;
 pub mod library;
-pub mod navigation;
 pub mod presentation;
-pub mod shell;
-pub mod state;
-pub mod theme;
-pub mod tokens;
-pub mod view;
-pub mod widgets;
 
 pub use gtk_shell::{GtkShell, ShellLayout, ShellRegion, WorkspaceRole};
 pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
-pub use input::{
-    CustomExportSizeAdjustment, ExportIntent, ExportPixelSize, ExportPixelSizeError, ExportSize,
-    FocusTarget, InputEffect, InputIntent, InputState, UiMessage,
-};
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
-pub use navigation::{NavigationIntent, NavigationState, WorkspaceRoute};
 pub use presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
     PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
     SelectedPreviewFailure, SelectedPreviewState,
 };
-pub use shell::{AppUiState, WindowKey, WindowRole};
-pub use state::{CustomExportSizeState, CustomExportSizeValidation, UiEffect, UiState};

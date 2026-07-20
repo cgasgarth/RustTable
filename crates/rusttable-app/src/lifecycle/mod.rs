@@ -45,7 +45,7 @@ where
     if let Some(ref guard) = guard {
         let event = result.as_ref().map_or(
             DiagnosticEvent::ApplicationFailure(
-                rusttable_diagnostics::ApplicationFailureCode::IcedRun,
+                rusttable_diagnostics::ApplicationFailureCode::DesktopUiRun,
             ),
             |()| DiagnosticEvent::Shutdown,
         );
@@ -157,7 +157,7 @@ mod tests {
             events.borrow().as_slice(),
             &[
                 DiagnosticEvent::Startup,
-                DiagnosticEvent::ApplicationFailure(ApplicationFailureCode::IcedRun),
+                DiagnosticEvent::ApplicationFailure(ApplicationFailureCode::DesktopUiRun),
             ]
         );
     }
