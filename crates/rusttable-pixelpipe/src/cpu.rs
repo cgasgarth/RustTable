@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc, clippy::match_same_arms)]
+
 use std::fmt;
 
 use rusttable_processing::{

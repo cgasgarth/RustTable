@@ -94,11 +94,9 @@ impl Drop for ConsumerRegistration {
 
 impl InFlight {
     fn release_consumer(&self, id: u64, reason: CancellationReason) {
-        let empty = self
-            .consumers
-            .lock()
-            .map(|mut consumers| consumers.active.remove(&id) && consumers.active.is_empty())
-            .unwrap_or(true);
+        let empty = self.consumers.lock().map_or(true, |mut consumers| {
+            consumers.active.remove(&id) && consumers.active.is_empty()
+        });
         if empty {
             self.token.cancel_with_reason(reason);
         }

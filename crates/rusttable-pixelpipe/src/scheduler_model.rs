@@ -4,7 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::{PipelineGeneration, PipelineSnapshotIdentity};
+use crate::{PipelineGeneration, PipelineSnapshotIdentity, RequestId};
 
 /// The scheduler's fixed priority classes. The order is also the deterministic
 /// tie-break order used by the reference model.
@@ -97,12 +97,12 @@ pub enum PublicationTargetKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PublicationTarget {
+pub struct SchedulerPublicationTarget {
     kind: PublicationTargetKind,
     identity: [u8; 32],
 }
 
-impl PublicationTarget {
+impl SchedulerPublicationTarget {
     #[must_use]
     pub const fn none() -> Self {
         Self {
@@ -135,24 +135,6 @@ impl TaskId {
     pub const fn new(value: u64) -> Result<Self, TaskError> {
         if value == 0 {
             Err(TaskError::ZeroId)
-        } else {
-            Ok(Self(value))
-        }
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RequestId(u64);
-
-impl RequestId {
-    pub const fn new(value: u64) -> Result<Self, TaskError> {
-        if value == 0 {
-            Err(TaskError::ZeroRequestId)
         } else {
             Ok(Self(value))
         }
@@ -275,7 +257,7 @@ pub struct TaskSpec {
     work_units: u32,
     dependencies: Vec<TaskId>,
     resources: ResourceClaim,
-    publication_target: PublicationTarget,
+    publication_target: SchedulerPublicationTarget,
     cancellation: Option<Arc<dyn CancellationBoundary>>,
 }
 
@@ -319,7 +301,7 @@ impl TaskSpec {
             work_units,
             dependencies: Vec::new(),
             resources,
-            publication_target: PublicationTarget::none(),
+            publication_target: SchedulerPublicationTarget::none(),
             cancellation: None,
         })
     }
@@ -339,7 +321,7 @@ impl TaskSpec {
     }
 
     #[must_use]
-    pub const fn with_publication_target(mut self, target: PublicationTarget) -> Self {
+    pub const fn with_publication_target(mut self, target: SchedulerPublicationTarget) -> Self {
         self.publication_target = target;
         self
     }
@@ -391,7 +373,7 @@ impl TaskSpec {
     }
 
     #[must_use]
-    pub const fn publication_target(&self) -> PublicationTarget {
+    pub const fn publication_target(&self) -> SchedulerPublicationTarget {
         self.publication_target
     }
 
@@ -496,7 +478,6 @@ pub enum SchedulerConfigError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskError {
     ZeroId,
-    ZeroRequestId,
     ZeroWorkUnits,
     InvalidDependencies,
     InvalidLeaseClaim,

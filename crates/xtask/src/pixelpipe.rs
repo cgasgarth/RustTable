@@ -83,6 +83,8 @@ pub(crate) enum PixelpipeCommand {
     ModeMatrix(crate::pixelpipe_mode::ModeMatrixArgs),
     /// Exercise generation cancellation, shared consumers, and stale publication rejection.
     CancellationMatrix(crate::pixelpipe_cancellation::CancellationMatrixArgs),
+    /// Exercise bounded priority admission, memory pressure, and fairness.
+    SchedulerMatrix(crate::pixelpipe_scheduler::SchedulerMatrixArgs),
 }
 
 pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
@@ -119,6 +121,9 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
         PixelpipeCommand::ModeMatrix(arguments) => crate::pixelpipe_mode::run(root, &arguments),
         PixelpipeCommand::CancellationMatrix(arguments) => {
             crate::pixelpipe_cancellation::run(root, &arguments)
+        }
+        PixelpipeCommand::SchedulerMatrix(arguments) => {
+            crate::pixelpipe_scheduler::run(root, &arguments)
         }
     }
 }

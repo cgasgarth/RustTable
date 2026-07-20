@@ -1,4 +1,10 @@
-#![allow(clippy::missing_errors_doc)]
+#![allow(
+    clippy::large_enum_variant,
+    clippy::missing_errors_doc,
+    clippy::missing_fields_in_debug,
+    clippy::result_large_err,
+    clippy::uninlined_format_args
+)]
 
 use std::fmt;
 use std::num::NonZeroU64;

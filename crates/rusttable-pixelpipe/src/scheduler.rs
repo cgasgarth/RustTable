@@ -164,7 +164,6 @@ impl CpuScheduler {
             return Err(SchedulerError::MemoryReservationUnavailable);
         }
         if !class.is_interactive()
-            && self.high_priority_queued()
             && self.admitted_memory_bytes + claim.memory_bytes()
                 > self
                     .config
@@ -207,17 +206,6 @@ impl CpuScheduler {
         (self.config.memory_limit() / 5).max(1)
     }
 
-    fn high_priority_queued(&self) -> bool {
-        self.queue.queues[CpuPriority::InteractivePreview.index()]
-            .iter()
-            .chain(self.queue.queues[CpuPriority::VisibleFullView.index()].iter())
-            .any(|task_id| {
-                self.tasks
-                    .get(task_id)
-                    .is_some_and(|task| task.state == TaskState::Queued && !task.cancel_requested)
-            })
-    }
-
     /// Starts the next runnable task when workers, pipelines, and admission
     /// memory all fit. The returned task is metadata only; #180 dispatches it.
     pub fn start_next(&mut self) -> Option<RunningTask> {
@@ -230,13 +218,16 @@ impl CpuScheduler {
         }
         self.refresh_queued(now);
         let priority = self.select_priority(now)?;
-        let task_id = self.queue.queues[priority.index()].front().copied()?;
+        let task_id = self.runnable_task_id(priority)?;
         let claim = self.tasks.get(&task_id)?.spec.resources().clone();
         if !self.fits_active(&claim) {
             self.record_resource_wait(&claim);
             return None;
         }
-        let _ = self.queue.queues[priority.index()].pop_front();
+        if !self.queue.remove(priority, task_id) {
+            self.degraded = true;
+            return None;
+        }
         let record = self.tasks.get_mut(&task_id)?;
         record.state = TaskState::Running;
         record.started_at = Some(now);
@@ -339,15 +330,12 @@ impl CpuScheduler {
         }
         let mut best: Option<(CpuPriority, i64, u64)> = None;
         for priority in CpuPriority::ALL {
-            let Some(task_id) = self.queue.queues[priority.index()].front() else {
+            let Some(task_id) = self.runnable_task_id(priority) else {
                 continue;
             };
-            if !self.dependencies_passed(*task_id) {
-                continue;
-            }
             let waited = self
                 .tasks
-                .get(task_id)
+                .get(&task_id)
                 .map_or(Duration::ZERO, |task| task.queue_wait(now));
             let age = if waited >= aging_after {
                 i64::try_from(waited.as_millis() / aging_after.as_millis().max(1))
@@ -358,7 +346,7 @@ impl CpuScheduler {
             let score = self.queue.deficits[priority.index()].saturating_add(age);
             let sequence = self
                 .tasks
-                .get(task_id)
+                .get(&task_id)
                 .map_or(u64::MAX, |task| task.enqueue_sequence);
             if best.is_none_or(|(_, best_score, best_sequence)| {
                 score > best_score || (score == best_score && sequence < best_sequence)
@@ -368,9 +356,16 @@ impl CpuScheduler {
         }
         let (priority, _, _) = best?;
         self.queue.deficits[priority.index()] =
-            self.queue.deficits[priority.index()].saturating_sub(1);
+            self.queue.deficits[priority.index()].saturating_sub(i64::from(priority.weight()));
         self.metrics.fairness_choices = self.metrics.fairness_choices.saturating_add(1);
         Some(priority)
+    }
+
+    fn runnable_task_id(&self, priority: CpuPriority) -> Option<TaskId> {
+        self.queue.queues[priority.index()]
+            .iter()
+            .find(|task_id| self.dependencies_passed(**task_id))
+            .copied()
     }
 
     pub fn cancel(&mut self, task_id: TaskId) -> Result<TaskState, SchedulerError> {
@@ -454,6 +449,9 @@ impl CpuScheduler {
                 return self.complete_cancelled(task_id, now);
             }
             if let Err(failure) = isolate_work_unit(|| work(unit)) {
+                if matches!(failure, TaskFailure::PanicIsolated) {
+                    self.degraded = true;
+                }
                 return self.complete_failure(task_id, now, failure);
             }
         }
@@ -506,7 +504,18 @@ impl CpuScheduler {
         if record.state != TaskState::Running {
             return Err(SchedulerError::NotRunning(task_id));
         }
-        let planned = record.spec.resources().memory_bytes();
+        let planned = record
+            .spec
+            .resources()
+            .leases()
+            .iter()
+            .map(|lease| lease.planned_bytes())
+            .sum::<u64>();
+        let planned = if planned == 0 {
+            record.spec.resources().memory_bytes()
+        } else {
+            planned
+        };
         if planned != actual_bytes {
             self.complete_failure(
                 task_id,

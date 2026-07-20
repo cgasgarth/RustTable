@@ -3,8 +3,9 @@ use std::time::{Duration, Instant};
 
 use rusttable_pixelpipe::{
     CancellationToken, CpuPriority, CpuScheduler, PipelineGeneration, PipelineSnapshotIdentity,
-    PublicationTarget, PublicationTargetKind, RequestId, ResourceClaim, SchedulerConfig,
-    SchedulerError, ShutdownMode, TaskFailure, TaskId, TaskSpec, TaskState, WorkUnitBoundary,
+    PublicationTargetKind, RequestId, ResourceClaim, SchedulerConfig, SchedulerError,
+    SchedulerPublicationTarget, ShutdownMode, TaskFailure, TaskId, TaskSpec, TaskState,
+    WorkUnitBoundary,
 };
 
 fn config() -> SchedulerConfig {
@@ -26,7 +27,7 @@ fn task(id: u64, priority: CpuPriority, memory: u64) -> TaskSpec {
         claim(memory, 1),
     )
     .expect("task")
-    .with_publication_target(PublicationTarget::new(
+    .with_publication_target(SchedulerPublicationTarget::new(
         PublicationTargetKind::Cache,
         [u8::try_from(id).expect("fixture ID fits"); 32],
     ))
@@ -139,7 +140,7 @@ fn memory_and_worker_limits_are_hard_and_lease_mismatch_fails() {
     let now = Instant::now();
     let mut scheduler = CpuScheduler::new(config());
     scheduler
-        .submit_at(task(1, CpuPriority::UserExport, 900), now)
+        .submit_at(task(1, CpuPriority::UserExport, 800), now)
         .expect("admitted");
     assert_eq!(
         scheduler.submit_at(task(2, CpuPriority::UserExport, 200), now),
@@ -147,10 +148,10 @@ fn memory_and_worker_limits_are_hard_and_lease_mismatch_fails() {
     );
     let id = scheduler.start_next_at(now).expect("starts").task_id();
     assert_eq!(
-        scheduler.confirm_leases(id, 899, now),
+        scheduler.confirm_leases(id, 799, now),
         Err(SchedulerError::LeaseMismatch {
-            planned_bytes: 900,
-            actual_bytes: 899
+            planned_bytes: 800,
+            actual_bytes: 799
         })
     );
     assert_eq!(scheduler.state(id), Some(TaskState::Failed));

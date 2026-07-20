@@ -1,6 +1,11 @@
-#![allow(clippy::missing_errors_doc)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::missing_fields_in_debug
+)]
 
 use std::collections::BTreeMap;
+
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
@@ -236,6 +241,7 @@ impl CancellationToken {
     }
 
     /// Waits for cancellation without depending on an async runtime.
+    #[must_use]
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
         let Ok(state) = self.0.state.lock() else {
             return true;

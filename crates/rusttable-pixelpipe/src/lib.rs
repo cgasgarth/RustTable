@@ -101,10 +101,10 @@ pub use scheduler_metrics::{
     ShutdownReport as SchedulerShutdownReport, WorkUnitReceipt,
 };
 pub use scheduler_model::{
-    AdmitReceipt, CancellationBoundary, CpuPriority, LeaseClaim, PublicationTarget,
-    PublicationTargetKind, RequestId, ResourceClaim, RunningTask, SchedulerConfig,
-    SchedulerConfigError, SchedulerError, SchedulerReceipt, ShutdownMode, TaskError, TaskFailure,
-    TaskId, TaskSpec, TaskState, WorkUnitBoundary,
+    AdmitReceipt, CancellationBoundary, CpuPriority, LeaseClaim, PublicationTargetKind,
+    ResourceClaim, RunningTask, SchedulerConfig, SchedulerConfigError, SchedulerError,
+    SchedulerPublicationTarget, SchedulerReceipt, ShutdownMode, TaskError, TaskFailure, TaskId,
+    TaskSpec, TaskState, WorkUnitBoundary,
 };
 pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};
