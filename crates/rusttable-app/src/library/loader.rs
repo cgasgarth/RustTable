@@ -8,6 +8,7 @@ use rusttable_catalog::{ImportRecord, ImportRepository, RepositoryError, SourceP
 use rusttable_catalog_store::RedbImportRepository;
 use rusttable_core::PhotoId;
 use rusttable_image::InputFormat;
+use rusttable_import::decode_reference_source;
 
 use crate::library::{LibraryFailureKind, LibraryState};
 use rusttable_ui::{
@@ -17,6 +18,8 @@ use rusttable_ui::{
 
 const CATALOG_FILENAME: &str = "catalog.redb";
 const MAX_BROWSER_PHOTOS: usize = 200;
+const MAX_PHOTO_TITLE_BYTES: usize = 128;
+const GENERIC_PHOTO_TITLE: &str = "Image";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LibraryLoadRequestId(NonZeroU64);
@@ -69,12 +72,22 @@ impl LibraryLoadError {
                 let _ = error_kind;
                 LibraryFailureKind::CatalogLocationUnavailable
             }
-            Self::Repository(RepositoryError::CorruptPersistedData)
-            | Self::Presentation(CatalogPresentationError::Corrupt) => {
+            Self::Repository(RepositoryError::CorruptPersistedData) => {
                 LibraryFailureKind::CorruptPersistedCatalog
             }
             Self::Repository(_) => LibraryFailureKind::RepositoryUnavailable,
-            Self::Presentation(_) => LibraryFailureKind::PresentationConversionFailed,
+            Self::Presentation(CatalogPresentationError::InvalidText {
+                photo_id,
+                source,
+                error,
+            }) => {
+                let _ = (photo_id, source, error);
+                LibraryFailureKind::PresentationConversionFailed
+            }
+            Self::Presentation(CatalogPresentationError::Workspace(error)) => {
+                let _ = error;
+                LibraryFailureKind::PresentationConversionFailed
+            }
         }
     }
 }
@@ -138,7 +151,6 @@ enum CatalogPresentationError {
         error: PresentationTextError,
     },
     Workspace(PhotoWorkspaceViewModelError),
-    Corrupt,
 }
 
 fn present_records(
@@ -152,14 +164,7 @@ fn present_records(
     for record in records {
         let photo_id = record.photo().id();
         let source = record.source().clone();
-        let title = presentation_text(
-            source
-                .components()
-                .last()
-                .ok_or(CatalogPresentationError::Corrupt)?,
-            photo_id,
-            &source,
-        )?;
+        let title = photo_title(&source);
         let format = format_label(record.probe().format());
         let dimensions = record.probe().dimensions();
         let dimension_text = format!("{} × {}", dimensions.width(), dimensions.height());
@@ -180,6 +185,37 @@ fn present_records(
     }
 
     PhotoWorkspaceViewModel::new(cards, details).map_err(CatalogPresentationError::Workspace)
+}
+
+fn photo_title(source: &SourcePath) -> PresentationText {
+    decode_reference_source(source)
+        .ok()
+        .and_then(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+        })
+        .as_deref()
+        .and_then(bounded_title)
+        .or_else(|| {
+            (!source.as_str().starts_with("reference-v1/"))
+                .then(|| source.components().last())
+                .flatten()
+                .and_then(bounded_title)
+        })
+        .unwrap_or_else(|| PresentationText::new(GENERIC_PHOTO_TITLE).expect("constant title"))
+}
+
+fn bounded_title(value: &str) -> Option<PresentationText> {
+    let mut bounded = String::new();
+    for character in value.chars().filter(|character| !character.is_control()) {
+        let next_length = bounded.len().checked_add(character.len_utf8())?;
+        if next_length > MAX_PHOTO_TITLE_BYTES {
+            break;
+        }
+        bounded.push(character);
+    }
+    PresentationText::new(bounded).ok()
 }
 
 fn presentation_text(
@@ -232,6 +268,7 @@ mod tests {
         Asset, AssetId, AssetRole, ByteLength, ContentHash, ImageMetadata, Photo, PhotoId,
     };
     use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
+    use rusttable_import::encode_reference_source;
 
     use super::{
         CatalogPresentationError, LibraryLoadError, LibraryLoadRequestId, LibraryLoadResult,
@@ -395,10 +432,6 @@ mod tests {
             LibraryFailureKind::CorruptPersistedCatalog
         );
         assert_eq!(
-            LibraryLoadError::Presentation(CatalogPresentationError::Corrupt).failure_kind(),
-            LibraryFailureKind::CorruptPersistedCatalog
-        );
-        assert_eq!(
             LibraryLoadError::Presentation(CatalogPresentationError::Workspace(
                 PhotoWorkspaceViewModelError::OrphanDetail {
                     id: PhotoId::new(1).expect("id"),
@@ -419,13 +452,32 @@ mod tests {
     }
 
     #[test]
-    fn presentation_failure_is_closed_without_partial_model() {
-        let invalid = record("album/\u{0007}.png", 4, 14, InputFormat::Png);
-        let error = present_records(vec![invalid]).expect_err("invalid title");
-        assert!(matches!(
-            error,
-            CatalogPresentationError::InvalidText { .. }
-        ));
+    fn reference_source_titles_use_the_original_filename_without_exposing_its_path() {
+        let source_path = Path::new("/private/photos/2026/long-name.png");
+        let source = encode_reference_source(source_path, [7; 32]).expect("opaque source");
+        let record = record(source.as_str(), 4, 14, InputFormat::Png);
+
+        let workspace = present_records(vec![record]).expect("safe title");
+        let card = workspace.cards().next().expect("card");
+
+        assert_eq!(card.title().as_str(), "long-name.png");
+        assert!(!card.title().as_str().contains("private"));
+        assert!(!card.title().as_str().contains("reference-v1"));
+    }
+
+    #[test]
+    fn malformed_reference_source_uses_a_safe_generic_title() {
+        let malformed = record(
+            "reference-v1/not-a-hash/not-a-path",
+            5,
+            15,
+            InputFormat::Png,
+        );
+        let workspace = present_records(vec![malformed]).expect("safe fallback title");
+        assert_eq!(
+            workspace.cards().next().expect("card").title().as_str(),
+            "Image"
+        );
     }
 
     #[test]
