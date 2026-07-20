@@ -18987,7 +18987,7 @@ name = "add_subdirectory"
 [[issues]]
 number = 562
 title = "Replace stale project-facing documentation and ownership policy"
-state = "open"
+state = "closed"
 priority = "priority: P1"
 milestone = "Foundation & Developer Workflow"
 body_hash = "199fdeb6aa6002fe4ca91b0b8e63a3e60b2a8505e497fa8377e7f57c9c25af23"
@@ -19461,25 +19461,14 @@ title = "Backfill canonical source anchors for all migration issues"
 state = "open"
 priority = "priority: P0"
 milestone = "Foundation & Developer Workflow"
-body_hash = "aa616d71f3b94615277295a54bb1da4be058ab83fb8beac7e0f30799c6c60883"
-source_anchor_hash = "76504dfd81f47b1dcc5b371875292da05a489a8a7459c41bf89b4f29d832a3a9"
+body_hash = "5f19a2e0ee130dd53492ed5e61736995a29cb2986ea48d55127bd4802ae5e632"
+source_anchor_hash = "8ead328db43a70a556fb2b1716abd1362bc56bde2b28aa956b35402571cd76bd"
 source_status = "anchored"
 class = "source-owned"
-preserve = ["every migration issue names exact upstream evidence, intended behavior, and Rust ownership before it is accepted."]
-redesign = ["structured RustTable source maps and issue hashes replace broad prose-only migration planning."]
-excluded = ["bare directory globs, stale commits, inferred ownership without evidence, or treating an audit finding as accepted work."]
-rust_targets = [
-    "architecture/darktable-source-inventory.json",
-    "architecture/darktable-source-map.toml",
-    "architecture/issue-spec-snapshot.json",
-    "architecture/source-map-migration-debt.json",
-    "crates/xtask/src/commands/issue_spec/commands.rs",
-    "crates/xtask/src/commands/source_map/io.rs",
-    "crates/xtask/src/commands/source_map/model.rs",
-    "crates/xtask/src/commands/source_map/operations.rs",
-    "crates/xtask/src/commands/source_map/policy.rs",
-    "debt-*",
-]
+preserve = ["priority-ready work has exact upstream evidence, intended behavior, Rust ownership, and an oracle before acceptance."]
+redesign = ["structured RustTable source maps and issue hashes replace broad prose-only planning."]
+excluded = ["placeholder anchors, inferred ownership, generic directory claims, stale commits, and treating recorded debt as accepted implementation evidence."]
+rust_targets = ["issue-570-rust-owner"]
 dependencies = []
 
 [[issues.anchors]]
@@ -19487,18 +19476,7 @@ path = "CMakeLists.txt"
 blob_id = "3f2a23b05061d7cc8bc40022823f3a2ec44aec35"
 role = "authoritative-behavior"
 evidence = "issue-570-source-anchor-section"
-rust_owners = [
-    "crates/xtask/src/commands/source_map/operations.rs",
-    "crates/xtask/src/commands/source_map/policy.rs",
-    "debt-*",
-    "crates/xtask/src/commands/source_map/io.rs",
-    "crates/xtask/src/commands/source_map/model.rs",
-    "architecture/darktable-source-map.toml",
-    "architecture/darktable-source-inventory.json",
-    "architecture/source-map-migration-debt.json",
-    "crates/xtask/src/commands/issue_spec/commands.rs",
-    "architecture/issue-spec-snapshot.json",
-]
+rust_owners = ["issue-570-rust-owner"]
 oracle_fixtures = ["issue.570.source"]
 
 [issues.anchors.selector]
@@ -19510,18 +19488,7 @@ path = "src/CMakeLists.txt"
 blob_id = "40edc6397a3ce385eff5d357bcf17021c6247df3"
 role = "authoritative-behavior"
 evidence = "issue-570-source-anchor-section"
-rust_owners = [
-    "crates/xtask/src/commands/source_map/operations.rs",
-    "crates/xtask/src/commands/source_map/policy.rs",
-    "debt-*",
-    "crates/xtask/src/commands/source_map/io.rs",
-    "crates/xtask/src/commands/source_map/model.rs",
-    "architecture/darktable-source-map.toml",
-    "architecture/darktable-source-inventory.json",
-    "architecture/source-map-migration-debt.json",
-    "crates/xtask/src/commands/issue_spec/commands.rs",
-    "architecture/issue-spec-snapshot.json",
-]
+rust_owners = ["issue-570-rust-owner"]
 oracle_fixtures = ["issue.570.source"]
 
 [issues.anchors.selector]
@@ -23476,18 +23443,7 @@ path = "CMakeLists.txt"
 blob_id = "3f2a23b05061d7cc8bc40022823f3a2ec44aec35"
 role = "authoritative-behavior"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-rust_owners = [
-    "crates/xtask/src/commands/source_map/operations.rs",
-    "crates/xtask/src/commands/source_map/policy.rs",
-    "debt-*",
-    "crates/xtask/src/commands/source_map/io.rs",
-    "crates/xtask/src/commands/source_map/model.rs",
-    "architecture/darktable-source-map.toml",
-    "architecture/darktable-source-inventory.json",
-    "architecture/source-map-migration-debt.json",
-    "crates/xtask/src/commands/issue_spec/commands.rs",
-    "architecture/issue-spec-snapshot.json",
-]
+rust_owners = ["issue-570-rust-owner"]
 oracle_fixtures = ["issue.570.source"]
 
 [responsibilities.selector]
@@ -23502,18 +23458,7 @@ path = "src/CMakeLists.txt"
 blob_id = "40edc6397a3ce385eff5d357bcf17021c6247df3"
 role = "authoritative-behavior"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-rust_owners = [
-    "crates/xtask/src/commands/source_map/operations.rs",
-    "crates/xtask/src/commands/source_map/policy.rs",
-    "debt-*",
-    "crates/xtask/src/commands/source_map/io.rs",
-    "crates/xtask/src/commands/source_map/model.rs",
-    "architecture/darktable-source-map.toml",
-    "architecture/darktable-source-inventory.json",
-    "architecture/source-map-migration-debt.json",
-    "crates/xtask/src/commands/issue_spec/commands.rs",
-    "architecture/issue-spec-snapshot.json",
-]
+rust_owners = ["issue-570-rust-owner"]
 oracle_fixtures = ["issue.570.source"]
 
 [responsibilities.selector]

@@ -2698,13 +2698,13 @@
       "path": null
     }
   ],
-  "issue_count": 574,
+  "issue_count": 575,
   "issue_snapshot": "architecture/issue-spec-snapshot.json",
   "linked_issue": 570,
   "parent_issue": 158,
   "repository": "darktable-org/darktable",
   "schema": "rusttable.source-map-migration-debt.v1",
   "source_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
-  "strict_issue_count": 46,
+  "strict_issue_count": 45,
   "unowned_inventory_entry_count": 1901
 }
