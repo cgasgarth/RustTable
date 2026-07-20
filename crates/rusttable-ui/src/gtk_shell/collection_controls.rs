@@ -1,6 +1,7 @@
 //! GTK4 controls for a single Darktable collection rule.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use gtk4::prelude::*;
@@ -23,16 +24,84 @@ pub struct CollectionControlState {
 pub struct CollectionFilterState {
     controls: CollectionControlState,
     matching_photo_ids: Vec<PhotoId>,
+    photo_states: BTreeMap<PhotoId, LighttablePhotoState>,
+    toolbar: LighttableToolbarState,
+}
+
+use super::{LighttableColorLabel, LighttableRating, LighttableToolbarState};
+
+/// Controller-owned organization and selection state for one visible thumbnail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LighttablePhotoState {
+    photo_id: PhotoId,
+    selected: bool,
+    rating: LighttableRating,
+    color_labels: BTreeSet<LighttableColorLabel>,
+}
+
+impl LighttablePhotoState {
+    #[must_use]
+    pub fn new(
+        photo_id: PhotoId,
+        selected: bool,
+        rating: LighttableRating,
+        color_labels: impl IntoIterator<Item = LighttableColorLabel>,
+    ) -> Self {
+        Self {
+            photo_id,
+            selected,
+            rating,
+            color_labels: color_labels.into_iter().collect(),
+        }
+    }
+
+    #[must_use]
+    pub const fn photo_id(&self) -> PhotoId {
+        self.photo_id
+    }
+    #[must_use]
+    pub const fn selected(&self) -> bool {
+        self.selected
+    }
+    #[must_use]
+    pub const fn rating(&self) -> LighttableRating {
+        self.rating
+    }
+    #[must_use]
+    pub fn color_labels(&self) -> impl ExactSizeIterator<Item = LighttableColorLabel> + '_ {
+        self.color_labels.iter().copied()
+    }
 }
 
 impl CollectionFilterState {
     /// Creates a filter projection from its control state and matching catalog IDs.
     #[must_use]
     pub fn new(controls: CollectionControlState, matching_photo_ids: Vec<PhotoId>) -> Self {
+        let toolbar = LighttableToolbarState::new(controls.total_count()).with_filter(
+            controls.property(),
+            controls.search_text(),
+            controls.result_count(),
+        );
         Self {
             controls,
             matching_photo_ids,
+            photo_states: BTreeMap::new(),
+            toolbar,
         }
+    }
+
+    #[must_use]
+    pub fn with_lighttable_state(
+        mut self,
+        photo_states: impl IntoIterator<Item = LighttablePhotoState>,
+        toolbar: LighttableToolbarState,
+    ) -> Self {
+        self.photo_states = photo_states
+            .into_iter()
+            .map(|state| (state.photo_id(), state))
+            .collect();
+        self.toolbar = toolbar;
+        self
     }
 
     /// Returns the values shown by the collection controls.
@@ -45,6 +114,16 @@ impl CollectionFilterState {
     #[must_use]
     pub fn matching_photo_ids(&self) -> &[PhotoId] {
         &self.matching_photo_ids
+    }
+
+    #[must_use]
+    pub fn photo_state(&self, photo_id: PhotoId) -> Option<&LighttablePhotoState> {
+        self.photo_states.get(&photo_id)
+    }
+
+    #[must_use]
+    pub const fn toolbar(&self) -> &LighttableToolbarState {
+        &self.toolbar
     }
 }
 
@@ -115,6 +194,7 @@ pub struct CollectionControls {
     result_count: gtk4::Label,
     locale: Rc<RefCell<I18n>>,
     state: Rc<RefCell<CollectionControlState>>,
+    projecting: Rc<Cell<bool>>,
 }
 
 impl CollectionControls {
@@ -201,6 +281,7 @@ impl CollectionControls {
                 CollectionProperty::default(),
                 0,
             ))),
+            projecting: Rc::new(Cell::new(false)),
         }
     }
 
@@ -212,6 +293,7 @@ impl CollectionControls {
 
     /// Projects controller state into the GTK controls.
     pub fn set_state(&self, state: &CollectionControlState) {
+        self.projecting.set(true);
         self.state.replace(state.clone());
         self.property_dropdown
             .set_selected(state.property().index());
@@ -230,6 +312,7 @@ impl CollectionControls {
                     ),
             ),
         );
+        self.projecting.set(false);
     }
 
     /// Applies a locale change to ordinary collection UI state without changing the rule.
@@ -257,18 +340,24 @@ impl CollectionControls {
         let callback = Rc::new(callback);
 
         let property_callback = Rc::clone(&callback);
+        let projecting = Rc::clone(&self.projecting);
         self.property_dropdown
             .connect_selected_notify(move |dropdown| {
-                if let Some(property) = CollectionProperty::from_index(dropdown.selected()) {
+                if !projecting.get()
+                    && let Some(property) = CollectionProperty::from_index(dropdown.selected())
+                {
                     property_callback(CollectionControlAction::SetProperty(property));
                 }
             });
 
         let search_callback = Rc::clone(&callback);
+        let projecting = Rc::clone(&self.projecting);
         self.search_entry.connect_search_changed(move |entry| {
-            search_callback(CollectionControlAction::SetSearchText(
-                entry.text().to_string(),
-            ));
+            if !projecting.get() {
+                search_callback(CollectionControlAction::SetSearchText(
+                    entry.text().to_string(),
+                ));
+            }
         });
 
         self.clear_button.connect_clicked(move |_| {

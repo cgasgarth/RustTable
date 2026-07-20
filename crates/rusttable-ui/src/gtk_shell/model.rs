@@ -173,6 +173,7 @@ pub struct LibraryPhoto {
     id: PhotoId,
     title: String,
     secondary: Option<String>,
+    thumbnail: Option<crate::presentation::PhotoThumbnailViewModel>,
 }
 
 impl LibraryPhoto {
@@ -189,6 +190,11 @@ impl LibraryPhoto {
     #[must_use]
     pub fn secondary(&self) -> Option<&str> {
         self.secondary.as_deref()
+    }
+
+    #[must_use]
+    pub const fn thumbnail(&self) -> Option<&crate::presentation::PhotoThumbnailViewModel> {
+        self.thumbnail.as_ref()
     }
 }
 
@@ -208,6 +214,7 @@ impl LibraryBrowserModel {
                 id: card.id(),
                 title: card.title().as_str().to_owned(),
                 secondary: card.secondary().map(|text| text.as_str().to_owned()),
+                thumbnail: card.thumbnail().cloned(),
             })
             .collect();
         Self { photos }

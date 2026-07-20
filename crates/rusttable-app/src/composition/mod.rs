@@ -34,7 +34,7 @@ use rusttable_input::{
 };
 use rusttable_ui::{
     CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
-    ExportAction, ExportSize as UiExportSize, ImportAction,
+    ExportAction, ExportSize as UiExportSize, ImportAction, LighttableToolbarAction,
 };
 use std::cell::RefCell;
 use std::fmt;
@@ -44,6 +44,7 @@ use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+use crate::library::{ThumbnailLoadRequest, load_lighttable_thumbnails};
 use preview_lifecycle::{PreviewLifecycle, PreviewSelectionToken};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
@@ -199,18 +200,7 @@ fn activate_application(
     if let Some(workspace) = workspace.as_ref() {
         shell.set_photo_workspace(workspace);
     }
-    if let Some(controller) = active_collection.borrow().as_ref() {
-        shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
-    }
-    let collection_for_actions = Rc::clone(active_collection);
-    shell.connect_collection_action(move |action| {
-        let mut controller = collection_for_actions.borrow_mut();
-        let Some(controller) = controller.as_mut() else {
-            return empty_collection_filter_state();
-        };
-        apply_collection_action(controller, action);
-        collection_filter_state(&controller.snapshot())
-    });
+    connect_lighttable_catalog_controls(&shell, active_collection);
     let import_shell = shell.clone();
     let import_bridge = Rc::clone(native_bridge);
     let import_active_shell = Rc::clone(active_shell);
@@ -244,11 +234,90 @@ fn activate_application(
         let catalog = selection_controller.borrow().clone();
         start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
     });
+    if let Some(workspace) = workspace
+        && let Some(catalog_path) = catalog_controller
+            .borrow()
+            .catalog_path()
+            .map(Path::to_path_buf)
+        && let Ok(source_root) = crate::library::source_root(&catalog_path)
+    {
+        start_lighttable_thumbnail_load(
+            &shell,
+            Rc::clone(active_collection),
+            ThumbnailLoadRequest::new(catalog_path, source_root, workspace),
+        );
+    }
     shell.present();
     active_shell.replace(Some(shell));
     if let Some(request) = native_bridge.borrow_mut().mark_ready() {
         dispatch_open_request(&request, active_shell, active_catalog, active_collection);
     }
+}
+
+fn connect_lighttable_catalog_controls(
+    shell: &rusttable_ui::GtkShell,
+    active_collection: &Rc<RefCell<Option<CollectionController>>>,
+) {
+    if let Some(controller) = active_collection.borrow().as_ref() {
+        shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
+    }
+    let collection_for_actions = Rc::clone(active_collection);
+    shell.connect_collection_action(move |action| {
+        let mut controller = collection_for_actions.borrow_mut();
+        let Some(controller) = controller.as_mut() else {
+            return empty_collection_filter_state();
+        };
+        apply_collection_action(controller, action);
+        collection_filter_state(&controller.snapshot())
+    });
+    let lighttable_for_actions = Rc::clone(active_collection);
+    shell.connect_lighttable_toolbar_action(move |action| {
+        let mut controller = lighttable_for_actions.borrow_mut();
+        let Some(controller) = controller.as_mut() else {
+            return empty_collection_filter_state();
+        };
+        apply_lighttable_toolbar_action(controller, action);
+        collection_filter_state(&controller.snapshot())
+    });
+    let selection_collection = Rc::clone(active_collection);
+    let selection_shell = shell.clone();
+    shell.set_lighttable_selection_handler(move |photo_id| {
+        let mut controller = selection_collection.borrow_mut();
+        let Some(controller) = controller.as_mut() else {
+            return;
+        };
+        if controller.select_only(photo_id) {
+            selection_shell
+                .set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
+        }
+    });
+}
+
+fn start_lighttable_thumbnail_load(
+    shell: &rusttable_ui::GtkShell,
+    collection: Rc<RefCell<Option<CollectionController>>>,
+    request: ThumbnailLoadRequest,
+) {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let _ = sender.send(load_lighttable_thumbnails(request));
+    });
+    let shell = shell.clone();
+    glib::timeout_add_local(Duration::from_millis(16), move || {
+        match receiver.try_recv() {
+            Ok(workspace) => {
+                shell.set_photo_workspace(&workspace);
+                if let Some(controller) = collection.borrow().as_ref() {
+                    shell.set_collection_filter_state(&collection_filter_state(
+                        &controller.snapshot(),
+                    ));
+                }
+                ControlFlow::Break
+            }
+            Err(TryRecvError::Empty) => ControlFlow::Continue,
+            Err(TryRecvError::Disconnected) => ControlFlow::Break,
+        }
+    });
 }
 
 fn open_import_dialog(
@@ -764,10 +833,29 @@ fn apply_collection_action(controller: &mut CollectionController, action: Collec
     }
 }
 
+fn apply_lighttable_toolbar_action(
+    controller: &mut CollectionController,
+    action: LighttableToolbarAction,
+) {
+    match action {
+        LighttableToolbarAction::SetProperty(property) => controller.set_property(property),
+        LighttableToolbarAction::SetSearchText(search_text) => {
+            controller.set_search_text(search_text);
+        }
+        LighttableToolbarAction::SetSort(sort) => controller.set_sort(sort),
+        LighttableToolbarAction::SetRating(rating) => controller.set_selected_rating(rating),
+        LighttableToolbarAction::ToggleColorLabel(label) => {
+            controller.toggle_selected_color_label(label);
+        }
+        LighttableToolbarAction::ClearReset => controller.clear_reset(),
+    }
+}
+
 fn collection_filter_state(snapshot: &CollectionSnapshot) -> CollectionFilterState {
     let controls = CollectionControlState::new(snapshot.property(), snapshot.total_count())
         .with_results(snapshot.search_text(), snapshot.result_count());
     CollectionFilterState::new(controls, snapshot.matching_photo_ids().collect())
+        .with_lighttable_state(snapshot.photo_states().cloned(), snapshot.toolbar().clone())
 }
 
 fn empty_collection_filter_state() -> CollectionFilterState {

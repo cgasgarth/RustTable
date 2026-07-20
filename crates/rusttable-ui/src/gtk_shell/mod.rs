@@ -11,6 +11,7 @@ mod exposure_panel;
 mod header;
 mod left_panel;
 mod lighttable;
+mod lighttable_toolbar;
 mod model;
 mod photo_preview;
 mod runtime;
@@ -20,6 +21,7 @@ pub use crate::display_profile::DisplayProfileBanner;
 pub use crate::import::ImportAction;
 pub use collection_controls::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
+    LighttablePhotoState,
 };
 pub use darktable_spec::{
     ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarktableColors,
@@ -30,6 +32,10 @@ pub use darktable_spec::{
 };
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;
+pub use lighttable_toolbar::{
+    LighttableColorLabel, LighttableRating, LighttableSort, LighttableToolbar,
+    LighttableToolbarAction, LighttableToolbarState,
+};
 pub use model::{
     DarkroomWorkspaceViewModel, LibraryBrowserModel, LibraryPhoto, LighttableContentState,
     ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel, PanelSlot, ShellLayout,

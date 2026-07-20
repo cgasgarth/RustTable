@@ -5,7 +5,7 @@ use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
 use super::{
-    DARKTABLE_DESKTOP_SPEC, LIGHTTABLE_TOOLBAR, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
+    DARKTABLE_DESKTOP_SPEC, LighttableToolbar, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
     apply_theme_role,
 };
 
@@ -25,6 +25,7 @@ pub(super) struct HeaderChrome {
     root: gtk4::Box,
     preferences: gtk4::Button,
     import: gtk4::Button,
+    lighttable_toolbar: LighttableToolbar,
 }
 
 impl HeaderChrome {
@@ -38,7 +39,8 @@ impl HeaderChrome {
         apply_theme_role(&root, ThemeRole::Header);
 
         root.append(&brand(i18n));
-        let (toolbar, import, preferences) = lighttable_toolbar(i18n, display_profile);
+        let (toolbar, import, preferences, lighttable_toolbar) =
+            header_toolbar(i18n, display_profile);
         let center = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         center.set_widget_name(PanelSlot::HeaderCenter.identifier());
         center.set_hexpand(true);
@@ -50,6 +52,7 @@ impl HeaderChrome {
             root,
             preferences,
             import,
+            lighttable_toolbar,
         }
     }
 
@@ -63,6 +66,10 @@ impl HeaderChrome {
 
     pub(super) const fn import_button(&self) -> &gtk4::Button {
         &self.import
+    }
+
+    pub(super) const fn lighttable_toolbar(&self) -> &LighttableToolbar {
+        &self.lighttable_toolbar
     }
 }
 
@@ -135,12 +142,12 @@ fn aperture_mark() -> gtk4::DrawingArea {
     mark
 }
 
-fn lighttable_toolbar(
+fn header_toolbar(
     i18n: &I18n,
     display_profile: &DisplayProfileBanner,
-) -> (gtk4::Box, gtk4::Button, gtk4::Button) {
+) -> (gtk4::Box, gtk4::Button, gtk4::Button, LighttableToolbar) {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
-    toolbar.set_widget_name(LIGHTTABLE_TOOLBAR.widget_name);
+    toolbar.set_widget_name("header-toolbar");
     toolbar.set_hexpand(true);
     toolbar.set_valign(gtk4::Align::Center);
     apply_theme_role(&toolbar, ThemeRole::Toolbar);
@@ -153,40 +160,8 @@ fn lighttable_toolbar(
     import.add_css_class("dt_header_icon");
     toolbar.append(&import);
 
-    let property =
-        gtk4::DropDown::from_strings(&["filter all images", "filename", "folder", "capture date"]);
-    property.set_widget_name("lighttable-filter-property");
-    toolbar.append(&property);
-
-    let filter = gtk4::SearchEntry::new();
-    filter.set_widget_name(LIGHTTABLE_TOOLBAR.filter_entry_name);
-    filter.set_placeholder_text(Some("search"));
-    filter.set_hexpand(true);
-    filter.set_max_width_chars(18);
-    toolbar.append(&filter);
-
-    for (index, label) in ["●", "●", "●", "●", "●", "○", "★", "★", "★", "★", "★"]
-        .into_iter()
-        .enumerate()
-    {
-        let button = gtk4::Button::with_label(label);
-        button.set_widget_name(&format!("lighttable-rating-{index}"));
-        button.add_css_class("dt_filter_button");
-        button.add_css_class(if index < 6 {
-            "dt_color_filter"
-        } else {
-            "dt_rating_filter"
-        });
-        toolbar.append(&button);
-    }
-
-    let sort = gtk4::DropDown::from_strings(&["filename", "capture date", "rating"]);
-    sort.set_widget_name("lighttable-sort");
-    toolbar.append(&sort);
-    let count = gtk4::Label::new(Some("0 images selected of 0"));
-    count.set_widget_name("lighttable-selection-count");
-    count.add_css_class("dim-label");
-    toolbar.append(&count);
+    let lighttable_toolbar = LighttableToolbar::new();
+    toolbar.append(lighttable_toolbar.widget());
 
     let profile = display_profile.widget();
     profile.set_width_chars(2);
@@ -199,7 +174,7 @@ fn lighttable_toolbar(
     ));
     preferences.add_css_class("dt_header_icon");
     toolbar.append(&preferences);
-    (toolbar, import, preferences)
+    (toolbar, import, preferences, lighttable_toolbar)
 }
 
 fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
