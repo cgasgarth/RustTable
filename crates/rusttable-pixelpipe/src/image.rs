@@ -31,11 +31,6 @@ impl SourceRasterIdentity {
     }
 
     #[must_use]
-    pub(crate) const fn from_digest(digest: [u8; 32]) -> Self {
-        Self(digest)
-    }
-
-    #[must_use]
     pub const fn as_bytes(self) -> [u8; 32] {
         self.0
     }

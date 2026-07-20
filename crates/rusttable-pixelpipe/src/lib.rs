@@ -5,11 +5,12 @@ mod cpu;
 mod image;
 pub mod purpose;
 mod receipt;
+mod snapshot;
 mod tile;
 
 pub use cpu::{
-    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
-    CpuPixelpipeResult, CpuTileAssemblyError,
+    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
+    CpuTileAssemblyError,
 };
 pub use image::{
     RgbaF32AlphaMode, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
@@ -18,4 +19,8 @@ pub use image::{
 pub use receipt::{
     CpuImplementation, CpuNodeReceipt, CpuPipelineReceipt, CpuPipelineReceiptError, PixelIdentity,
 };
+pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};
+
+/// Compatibility name for callers not yet migrated to explicit snapshots.
+pub type CpuPixelpipeRequest = CpuPixelpipeSnapshot;
