@@ -2,7 +2,6 @@
 
 use std::any::Any;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::RgbaF32Image;
 use crate::cache::CacheError;
@@ -183,22 +182,4 @@ impl CacheValue for PlanValue {
     }
 }
 
-/// Independent cancellation state for one caller of a single-flight build.
-#[derive(Debug, Clone, Default)]
-pub struct CancellationToken(Arc<AtomicBool>);
-
-impl CancellationToken {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn cancel(&self) {
-        self.0.store(true, Ordering::Release);
-    }
-
-    #[must_use]
-    pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Acquire)
-    }
-}
+pub use crate::cancellation::CancellationToken;

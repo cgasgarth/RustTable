@@ -32,16 +32,28 @@ impl PipelineGeneration {
     pub const fn get(self) -> u64 {
         self.0.get()
     }
+
+    /// Advances a request generation without wrapping into an older request.
+    pub fn next(self) -> Result<Self, GenerationError> {
+        self.get()
+            .checked_add(1)
+            .ok_or(GenerationError::Overflow)
+            .and_then(Self::new)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenerationError {
     Zero,
+    Overflow,
 }
 
 impl fmt::Display for GenerationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("pipeline generations must be nonzero")
+        formatter.write_str(match self {
+            Self::Zero => "pipeline generations must be nonzero",
+            Self::Overflow => "pipeline generation overflowed",
+        })
     }
 }
 

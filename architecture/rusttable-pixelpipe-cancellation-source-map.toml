@@ -1,0 +1,116 @@
+schema = "rusttable.pixelpipe-cancellation-source-map.v1"
+issue = 272
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+id = "generation-authority"
+upstream_path = "src/develop/pixelpipe.h"
+upstream_symbol = "dt_dev_pixelpipe_t generation/status"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+status = "replaced"
+owner = "PipelineGeneration::next"
+
+[[responsibility]]
+id = "scope-tree"
+upstream_path = "src/control/jobs.c"
+upstream_symbol = "dt_control_job_cancel"
+rust_path = "crates/rusttable-pixelpipe/src/cancellation.rs"
+status = "replaced"
+owner = "CancellationScope"
+
+[[responsibility]]
+id = "source-decode"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_dev_pixelpipe_process source/decode boundary"
+rust_path = "crates/rusttable-pixelpipe/src/cancellation.rs"
+status = "replaced"
+owner = "CancellationStage::SourceDecode"
+
+[[responsibility]]
+id = "preparation-node"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_dev_pixelpipe_process node preparation"
+rust_path = "crates/rusttable-pixelpipe/src/cancellation.rs"
+status = "replaced"
+owner = "CancellationStage::Preparation/Node"
+
+[[responsibility]]
+id = "tile-boundary"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_dev_pixelpipe_process tile rows"
+rust_path = "crates/rusttable-pixelpipe/src/cpu.rs"
+status = "replaced"
+owner = "CpuPixelpipeExecutor::execute_tiled_with_cancellation"
+
+[[responsibility]]
+id = "cache-build"
+upstream_path = "src/common/cache.c"
+upstream_symbol = "dt_cache_get_with_caller build/wait"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+status = "replaced"
+owner = "Cache::get_or_build"
+
+[[responsibility]]
+id = "shared-consumer"
+upstream_path = "src/common/mipmap_cache.h"
+upstream_symbol = "DT_MIPMAP_BLOCKING shared request interest"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+status = "replaced"
+owner = "ConsumerRegistration"
+
+[[responsibility]]
+id = "host-lease"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "pixelpipe buffer acquisition/release"
+rust_path = "crates/rusttable-pixelpipe/src/host_pool.rs"
+status = "delegated"
+owner = "rusttable-image HostBufferPool RAII lease"
+
+[[responsibility]]
+id = "gpu-retirement"
+upstream_path = "src/common/opencl.c"
+upstream_symbol = "dt_opencl_events_reset"
+rust_path = "crates/rusttable-pixelpipe/src/publication.rs"
+status = "replaced"
+owner = "GpuRetirement"
+
+[[responsibility]]
+id = "publication-gate"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "result publication stale-generation checks"
+rust_path = "crates/rusttable-pixelpipe/src/publication.rs"
+status = "replaced"
+owner = "PublicationGate"
+
+[[responsibility]]
+id = "cache-publication"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "cache lookup and result publication"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+status = "replaced"
+owner = "CachePublicationPermit"
+
+[[responsibility]]
+id = "ui-file-publication"
+upstream_path = "src/views/darkroom.c"
+upstream_symbol = "expose and export result handoff"
+rust_path = "crates/rusttable-pixelpipe/src/publication.rs"
+status = "replaced"
+owner = "ProductPublicationPermit"
+
+[[responsibility]]
+id = "shutdown-retirement"
+upstream_path = "src/control/jobs.c"
+upstream_symbol = "job cancellation and bounded shutdown"
+rust_path = "crates/rusttable-pixelpipe/src/cancellation.rs"
+status = "replaced"
+owner = "CancellationReason::Shutdown"
+
+[[responsibility]]
+id = "status-invalidation"
+upstream_path = "src/develop/develop.c"
+upstream_symbol = "DT_DEV_PIPE_SYNCH source/edit invalidation"
+rust_path = "crates/rusttable-pixelpipe/src/cache.rs"
+status = "replaced"
+owner = "CacheScope and CancellationReason"

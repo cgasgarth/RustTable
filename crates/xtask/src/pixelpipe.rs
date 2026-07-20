@@ -81,6 +81,8 @@ pub(crate) enum PixelpipeCommand {
     },
     /// Emit the complete purpose/quality mode matrix for the real raster fixture.
     ModeMatrix(crate::pixelpipe_mode::ModeMatrixArgs),
+    /// Exercise generation cancellation, shared consumers, and stale publication rejection.
+    CancellationMatrix(crate::pixelpipe_cancellation::CancellationMatrixArgs),
 }
 
 pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
@@ -115,6 +117,9 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
             verify_estimates,
         } => tiling(root, &fixtures, &budgets, verify_cover, verify_estimates),
         PixelpipeCommand::ModeMatrix(arguments) => crate::pixelpipe_mode::run(root, &arguments),
+        PixelpipeCommand::CancellationMatrix(arguments) => {
+            crate::pixelpipe_cancellation::run(root, &arguments)
+        }
     }
 }
 

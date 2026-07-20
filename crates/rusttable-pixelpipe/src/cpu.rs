@@ -6,9 +6,9 @@ use rusttable_processing::{
 };
 
 use crate::{
-    CpuNodeReceipt, CpuPipelineReceipt, CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError,
-    PixelIdentity, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel,
+    CancellationError, CancellationScope, CancellationStage, CpuNodeReceipt, CpuPipelineReceipt,
+    CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError, PixelIdentity, RgbaF32Channel,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 
 /// The typed presentation boundary requested from a CPU pixelpipe execution.
@@ -51,6 +51,7 @@ impl CpuPixelpipeResult {
 /// Failure from the narrow scalar CPU pixelpipe executor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CpuPixelpipeError {
+    Cancelled(CancellationError),
     UnsupportedInputEncoding { actual: RgbaF32ColorEncoding },
     InputBridge { source: RgbaF32ImageError },
     Evaluation { source: EvaluationError },
@@ -94,6 +95,26 @@ impl CpuPixelpipeExecutor {
         Ok(Self::result_for(request, image))
     }
 
+    /// Executes with a generation-owned cancellation scope. The scope is
+    /// checked before allocation, after evaluation, and before the result is
+    /// constructed, so no partial image can escape.
+    pub fn execute_with_cancellation(
+        &self,
+        request: &CpuPixelpipeSnapshot,
+        scope: &CancellationScope,
+    ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
+        scope
+            .child(CancellationStage::Allocation)
+            .check()
+            .map_err(CpuPixelpipeError::Cancelled)?;
+        let image = Self::execute_image(request, request.input())?;
+        scope
+            .child(CancellationStage::Publication)
+            .check()
+            .map_err(CpuPixelpipeError::Cancelled)?;
+        Ok(Self::result_for(request, image))
+    }
+
     /// Executes a point-operation graph in deterministic, row-major tiles.
     ///
     /// Each tile is evaluated through the same scalar operation path as a
@@ -133,6 +154,53 @@ impl CpuPixelpipeExecutor {
             )?;
         }
 
+        let output_descriptor = RgbaF32Descriptor::new(
+            request.input().descriptor().dimensions(),
+            request.output_mode().color_encoding(),
+        );
+        let image = RgbaF32Image::new(output_descriptor, assembled)
+            .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
+        Ok(Self::result_for(request, image))
+    }
+
+    /// Executes row-major tiles with a mandatory check before every tile and
+    /// before final assembly/publication.
+    pub fn execute_tiled_with_cancellation(
+        &self,
+        request: &CpuPixelpipeSnapshot,
+        tile_plan: CpuTilePlan,
+        scope: &CancellationScope,
+    ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
+        validate_input_encoding(request.input())?;
+        let grid = tile_plan
+            .grid_for(request.input().descriptor().dimensions())
+            .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
+        let mut assembled = request.input().pixels().to_vec();
+
+        for tile_index in 0..grid.tile_count() {
+            scope
+                .child(CancellationStage::Tile)
+                .check()
+                .map_err(CpuPixelpipeError::Cancelled)?;
+            let tile = grid
+                .tile_at(tile_index)
+                .map_err(|source| CpuPixelpipeError::TilePlan { source })?
+                .ok_or(CpuPixelpipeError::TileAssembly {
+                    source: CpuTileAssemblyError::TileUnavailable,
+                })?;
+            let tile_input = tile_input(request.input(), tile)?;
+            let tile_output = Self::execute_image(request, &tile_input)?;
+            assemble_tile(
+                &mut assembled,
+                request.input().descriptor(),
+                tile,
+                &tile_output,
+            )?;
+        }
+        scope
+            .child(CancellationStage::Publication)
+            .check()
+            .map_err(CpuPixelpipeError::Cancelled)?;
         let output_descriptor = RgbaF32Descriptor::new(
             request.input().descriptor().dimensions(),
             request.output_mode().color_encoding(),
@@ -369,6 +437,7 @@ fn pixel_identity(image: &RgbaF32Image) -> PixelIdentity {
 impl fmt::Display for CpuPixelpipeError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Cancelled(error) => error.fmt(formatter),
             Self::UnsupportedInputEncoding { actual } => {
                 write!(formatter, "CPU pixelpipe does not accept {actual:?} input")
             }
@@ -390,6 +459,7 @@ impl fmt::Display for CpuPixelpipeError {
 impl std::error::Error for CpuPixelpipeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Cancelled(_) => None,
             Self::UnsupportedInputEncoding { .. } => None,
             Self::InputBridge { source } | Self::OutputBoundary { source } => Some(source),
             Self::Evaluation { source } => Some(source),

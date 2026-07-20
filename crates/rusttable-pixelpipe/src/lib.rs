@@ -4,6 +4,7 @@
 mod cache;
 mod cache_key;
 mod cache_value;
+mod cancellation;
 mod cpu;
 mod host_pool;
 mod image;
@@ -11,6 +12,7 @@ mod mode;
 mod pipeline_contracts;
 mod pipeline_snapshot;
 mod preparation;
+mod publication;
 pub mod purpose;
 mod receipt;
 mod roi;
@@ -30,8 +32,17 @@ pub use cache_key::{
     CacheQuality, NodeBoundary, OutputIdentity,
 };
 pub use cache_value::{
-    AnalysisValue, CacheValue, CancellationToken, CreationCost, PlanValue, ValueDescriptor,
-    ValueKind,
+    AnalysisValue, CacheValue, CreationCost, PlanValue, ValueDescriptor, ValueKind,
+};
+pub use cancellation::{
+    CancellationDeadline, CancellationError, CancellationReason, CancellationScope,
+    CancellationStage, CancellationToken, CleanupRegistration, GenerationClock,
+    GenerationClockError,
+};
+pub use publication::{
+    CachePublicationPermit, GpuRetirement, ProductPublicationPermit, PublicationContext,
+    PublicationError, PublicationGate, PublicationIdentity, PublicationPermit, PublicationTarget,
+    RequestId, ResourceRetirementReceipt,
 };
 
 pub use cpu::{
