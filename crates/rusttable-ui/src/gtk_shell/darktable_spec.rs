@@ -202,6 +202,27 @@ impl SidePanelWidths {
     }
 }
 
+/// The stable lighttable toolbar contract.
+///
+/// Darktable presents the collection/filter controls as one center-top row;
+/// the lighttable layout controls do not get a second row above it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LighttableToolbarSpec {
+    /// Stable GTK widget name for the single lighttable top toolbar.
+    pub widget_name: &'static str,
+    /// Stable GTK widget name for the collection filter entry.
+    pub filter_entry_name: &'static str,
+    /// Number of top toolbar rows visible in lighttable.
+    pub row_count: u8,
+}
+
+/// The single top toolbar retained by the `RustTable` lighttable.
+pub const LIGHTTABLE_TOOLBAR: LighttableToolbarSpec = LighttableToolbarSpec {
+    widget_name: "lighttable-collection-toolbar",
+    filter_entry_name: "lighttable-filter-entry",
+    row_count: 1,
+};
+
 /// Bottom filmstrip height constraints from Darktable's GTK configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FilmstripHeights {
@@ -244,6 +265,28 @@ pub struct LayoutMetrics {
     pub side_panel_widths: SidePanelWidths,
     /// Resizable filmstrip heights.
     pub filmstrip_heights: FilmstripHeights,
+}
+
+impl LayoutMetrics {
+    /// Width available to the panel grid after Darktable's outer rails.
+    #[must_use]
+    pub const fn content_width_px(self, window_width_px: u16) -> u16 {
+        window_width_px.saturating_sub(self.outer_border_px as u16 * 2)
+    }
+
+    /// Center-column width at the preferred side-panel sizes.
+    #[must_use]
+    pub const fn preferred_center_width_px(self, window_width_px: u16) -> u16 {
+        self.content_width_px(window_width_px)
+            .saturating_sub(self.side_panel_widths.preferred_px * 2)
+    }
+
+    /// Position of the right rail divider within the outer-border-adjusted grid.
+    #[must_use]
+    pub const fn preferred_right_panel_position_px(self, window_width_px: u16) -> u16 {
+        self.content_width_px(window_width_px)
+            .saturating_sub(self.side_panel_widths.preferred_px)
+    }
 }
 
 /// An opaque sRGB color token from Darktable's default theme.
@@ -397,7 +440,8 @@ pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
 mod tests {
     use super::{
         ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DesktopRegion,
-        LAYOUT_METRICS, PANEL_SLOTS, PanelRole, PanelSlot, TOP_BAR_SECTIONS, ViewMode,
+        LAYOUT_METRICS, LIGHTTABLE_TOOLBAR, PANEL_SLOTS, PanelRole, PanelSlot, TOP_BAR_SECTIONS,
+        ViewMode,
     };
 
     #[test]
@@ -453,6 +497,33 @@ mod tests {
         assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 104);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
+    }
+
+    #[test]
+    fn baseline_rail_geometry_leaves_a_stable_center_column() {
+        assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_204);
+        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 896);
+        assert_eq!(
+            LAYOUT_METRICS.preferred_right_panel_position_px(1_224),
+            1_050
+        );
+        assert!(
+            LAYOUT_METRICS.preferred_center_width_px(1_224)
+                >= LAYOUT_METRICS.center_minimum_width_px
+        );
+    }
+
+    #[test]
+    fn lighttable_keeps_one_filter_toolbar_row() {
+        assert_eq!(
+            LIGHTTABLE_TOOLBAR.widget_name,
+            "lighttable-collection-toolbar"
+        );
+        assert_eq!(
+            LIGHTTABLE_TOOLBAR.filter_entry_name,
+            "lighttable-filter-entry"
+        );
+        assert_eq!(LIGHTTABLE_TOOLBAR.row_count, 1);
     }
 
     #[test]
