@@ -5,6 +5,7 @@
 //! without a display server.
 
 mod collection;
+mod collection_service;
 
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,7 @@ use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root};
 
 pub use collection::{CollectionController, CollectionSnapshot};
+pub use collection_service::LibraryCollectionService;
 
 /// Persisted catalog state consumed by the GTK application shell.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,6 +154,13 @@ impl GtkCatalogController {
             records.iter(),
             locale,
         ))
+    }
+
+    /// Opens the saved/recent/active library-view service for this catalog.
+    #[must_use]
+    pub fn collection_service(&self) -> Option<LibraryCollectionService> {
+        self.catalog_path()
+            .and_then(|path| LibraryCollectionService::open(path).ok())
     }
 
     /// Selects a photo present in the ready workspace.

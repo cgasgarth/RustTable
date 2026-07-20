@@ -7,6 +7,7 @@
 pub const fn dependency_direction() -> &'static str {
     "rusttable-catalog -> rusttable-core"
 }
+mod collections;
 mod command;
 mod develop;
 mod durable_edit;
@@ -21,6 +22,12 @@ mod snapshot;
 mod source_path;
 mod state;
 
+pub use collections::{
+    ActiveLibraryView, CollectionCommand, CollectionError, CollectionField, CollectionId,
+    CollectionProvenance, CollectionQuery, CollectionRepository, CollectionRepositoryError,
+    CollectionSort, CollectionState, CollectionValidationError, CollectionViewDefinition,
+    GroupCollapsePolicy, MAX_RECENT_QUERIES, RecentQuery, SavedCollection,
+};
 pub use command::CatalogCommand;
 pub use develop::{DevelopInput, DevelopInputError, DevelopSelection};
 pub use durable_edit::{DurableEditError, DurableEditOutcome, DurableEditService};

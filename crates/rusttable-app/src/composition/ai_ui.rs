@@ -3,10 +3,30 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ai_services::{UnavailableAiModelsService, UnavailableNeuralRestoreService};
-use rusttable_ui::{
-    AiModelsAction, AiModelsController, NeuralRestoreAction, NeuralRestoreController,
+use crate::ai_services::{
+    UnavailableAiBatchService, UnavailableAiModelsService, UnavailableNeuralRestoreService,
 };
+use rusttable_ui::{
+    AiBatchAction, AiBatchController, AiModelsAction, AiModelsController, NeuralRestoreAction,
+    NeuralRestoreController,
+};
+
+pub(super) fn install_ai_batch_ui_bridge(
+    shell: &rusttable_ui::GtkShell,
+) -> Rc<RefCell<AiBatchController<UnavailableAiBatchService>>> {
+    let controller = Rc::new(RefCell::new(AiBatchController::new(
+        UnavailableAiBatchService,
+    )));
+    shell.set_ai_batch_state(controller.borrow().state());
+    let controller_for_actions = Rc::clone(&controller);
+    let action_shell = shell.clone();
+    shell.connect_ai_batch_action(move |action: AiBatchAction| {
+        let mut controller = controller_for_actions.borrow_mut();
+        let _ = controller.dispatch(action);
+        action_shell.set_ai_batch_state(controller.state());
+    });
+    controller
+}
 
 pub(super) fn install_ai_ui_bridges(
     shell: &rusttable_ui::GtkShell,

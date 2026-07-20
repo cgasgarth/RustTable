@@ -24,6 +24,7 @@ use super::{
     apply_theme_role,
 };
 use super::{header::HeaderChrome, left_panel::LeftPanel};
+use crate::ai_batch::AiBatchPanel;
 use crate::ai_models::AiModelsPanel;
 use crate::external_editor::{ExternalEditorAction, ExternalEditorPanel, ExternalEditorViewModel};
 use crate::input_mapping::InputMappingEditor;
@@ -53,6 +54,7 @@ pub struct GtkShell {
     input_mapping_editor: InputMappingEditor,
     pub(super) ai_models_panel: AiModelsPanel,
     pub(super) neural_restore_panel: NeuralRestorePanel,
+    pub(super) ai_batch_panel: AiBatchPanel,
     i18n: Rc<RefCell<I18n>>,
     display_profile_banner: DisplayProfileBanner,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
@@ -120,8 +122,13 @@ impl GtkShell {
             I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
         );
         let lighttable_left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
-        let (lighttable_right_panel, export_panel, external_editor_panel, neural_restore_panel) =
-            right_panel();
+        let (
+            lighttable_right_panel,
+            export_panel,
+            external_editor_panel,
+            neural_restore_panel,
+            ai_batch_panel,
+        ) = right_panel();
         let left_panel = mode_panel_stack(
             "left-panel-stack",
             lighttable_left_panel.widget(),
@@ -165,6 +172,7 @@ impl GtkShell {
             input_mapping_editor,
             ai_models_panel,
             neural_restore_panel,
+            ai_batch_panel,
             i18n: Rc::clone(&i18n),
             display_profile_banner,
             lighttable_workspace: Rc::new(RefCell::new(None)),
@@ -605,6 +613,7 @@ fn right_panel() -> (
     ExportPanel,
     ExternalEditorPanel,
     NeuralRestorePanel,
+    AiBatchPanel,
 ) {
     let panel = panel_column(
         ShellRegion::RightPanel,
@@ -614,6 +623,7 @@ fn right_panel() -> (
     let export_panel = ExportPanel::new();
     let external_editor_panel = ExternalEditorPanel::new();
     let neural_restore_panel = NeuralRestorePanel::new();
+    let ai_batch_panel = AiBatchPanel::new();
     let center = panel_slot(PanelSlot::RightCenter);
     for module in &LIGHTTABLE_RIGHT_MODULES[..LIGHTTABLE_RIGHT_MODULES.len() - 1] {
         center.append(&module_group(module.widget_name, module.title, false));
@@ -621,6 +631,7 @@ fn right_panel() -> (
     center.append(export_panel.widget());
     center.append(external_editor_panel.widget());
     center.append(neural_restore_panel.widget());
+    center.append(ai_batch_panel.widget());
     let bottom = panel_slot(PanelSlot::RightBottom);
     let search = gtk4::SearchEntry::new();
     search.set_widget_name("right-module-search");
@@ -631,6 +642,7 @@ fn right_panel() -> (
         export_panel,
         external_editor_panel,
         neural_restore_panel,
+        ai_batch_panel,
     )
 }
 
