@@ -12,7 +12,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use rusttable_catalog_store::{
+use crate::queue_store::{
     ExportJobId, ExportJobPriority, ExportJobRecord, ExportJobStage, ExportJobState,
     ExportQueueError, RedbExportQueueStore, queue_now_millis,
 };

@@ -9,6 +9,7 @@ use rusttable_catalog::{
 use rusttable_core::{AssetId, ContentHash, Edit, EditId, PhotoId, Revision};
 
 use crate::edit_repository::RedbEditRepository;
+use crate::recipe_repository::RedbRecipeRepository;
 use crate::repository::RedbImportRepository;
 use crate::schema;
 
@@ -17,6 +18,7 @@ pub struct RedbCatalogRepository {
     database: Arc<Database>,
     imports: RedbImportRepository,
     edits: RedbEditRepository,
+    recipes: RedbRecipeRepository,
     before_commit: Option<BeforeCommitHook>,
 }
 
@@ -88,9 +90,16 @@ impl RedbCatalogRepository {
         Ok(Self {
             database: Arc::clone(&database),
             imports: RedbImportRepository::from_database(Arc::clone(&database)),
-            edits: RedbEditRepository::from_database(database),
+            edits: RedbEditRepository::from_database(Arc::clone(&database)),
+            recipes: RedbRecipeRepository::from_database(Arc::clone(&database)),
             before_commit,
         })
+    }
+
+    /// Returns versioned export recipes backed by this same catalog database.
+    #[must_use]
+    pub const fn recipes(&self) -> &RedbRecipeRepository {
+        &self.recipes
     }
 
     /// Finds an exact-content import and its current persisted edit.

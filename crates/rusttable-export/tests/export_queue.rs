@@ -96,10 +96,7 @@ fn queue_snapshots_opaque_source_and_commits_one_idempotent_bundle() {
         .unwrap();
     assert_eq!(duplicate.id(), job.id());
     let record = queue.get(job.id()).unwrap().unwrap();
-    assert_eq!(
-        record.state(),
-        rusttable_catalog_store::ExportJobState::Queued
-    );
+    assert_eq!(record.state(), rusttable_export::ExportJobState::Queued);
     assert!(
         !String::from_utf8_lossy(record.snapshot())
             .contains(source_path.to_string_lossy().as_ref())
@@ -114,7 +111,7 @@ fn queue_snapshots_opaque_source_and_commits_one_idempotent_bundle() {
     assert_eq!(receipt.primary_bytes, 35);
     assert_eq!(
         queue.get(job.id()).unwrap().unwrap().state(),
-        rusttable_catalog_store::ExportJobState::Succeeded
+        rusttable_export::ExportJobState::Succeeded
     );
     assert_eq!(
         fs::read(destination_root.join("photo/primary.jpg")).unwrap(),
