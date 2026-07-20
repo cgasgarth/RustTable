@@ -6,10 +6,8 @@ repos:
         entry: bash .githooks/pre-commit-guard
         language: system
         pass_filenames: false
-        stages: [pre-commit]
-      - id: fast-validation
-        name: Run fast validation in parallel
-        entry: bash scripts/precommit-fast.sh
+      - id: rusttable-check
+        name: RustTable complete local gate
+        entry: cargo xtask check
         language: system
         pass_filenames: false
-        stages: [pre-commit]

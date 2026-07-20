@@ -1,0 +1,100 @@
+# Human navigation map for the pinned darktable reference. This is not an issue
+# ownership database and is never used to calculate implementation readiness.
+schema = "rusttable.darktable-subsystems.v1"
+repository = "darktable-org/darktable"
+commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[subsystems]]
+name = "application"
+upstream = ["src/darktable.c", "src/control"]
+rust = ["crates/rusttable-app", "crates/rusttable-diagnostics"]
+
+[[subsystems]]
+name = "desktop-ui"
+upstream = ["src/gui", "src/views", "src/libs"]
+rust = ["crates/rusttable-ui", "crates/rusttable-app"]
+
+[[subsystems]]
+name = "catalog"
+upstream = ["src/common/database.c", "src/common/collection.c"]
+rust = ["crates/rusttable-catalog", "crates/rusttable-catalog-store"]
+
+[[subsystems]]
+name = "import"
+upstream = ["src/common/imageio.c", "src/common/import_session.c"]
+rust = ["crates/rusttable-import"]
+
+[[subsystems]]
+name = "image-model"
+upstream = ["src/common/image.c", "src/common/image.h"]
+rust = ["crates/rusttable-core", "crates/rusttable-image"]
+
+[[subsystems]]
+name = "image-io"
+upstream = ["src/imageio"]
+rust = ["crates/rusttable-image-io"]
+
+[[subsystems]]
+name = "metadata"
+upstream = ["src/common/exif.cc", "src/common/tags.c"]
+rust = ["crates/rusttable-metadata"]
+
+[[subsystems]]
+name = "processing"
+upstream = ["src/develop", "src/iop"]
+rust = ["crates/rusttable-processing", "crates/rusttable-pixelpipe"]
+
+[[subsystems]]
+name = "render"
+upstream = ["src/common/mipmap_cache.c", "src/develop/pixelpipe_hb.c"]
+rust = ["crates/rusttable-render"]
+
+[[subsystems]]
+name = "color"
+upstream = ["src/common/colorspaces.c", "src/iop/color*"]
+rust = ["crates/rusttable-color"]
+
+[[subsystems]]
+name = "masks"
+upstream = ["src/develop/masks"]
+rust = ["crates/rusttable-masks"]
+
+[[subsystems]]
+name = "gpu"
+upstream = ["src/common/opencl.c", "data/kernels"]
+rust = ["crates/rusttable-gpu"]
+
+[[subsystems]]
+name = "simd"
+upstream = ["src/common/sse.h", "src/common/fast_guided_filter.h"]
+rust = ["crates/rusttable-simd"]
+
+[[subsystems]]
+name = "export"
+upstream = ["src/imageio/format", "src/imageio/storage"]
+rust = ["crates/rusttable-export"]
+
+[[subsystems]]
+name = "camera"
+upstream = ["src/common/camera_control.c", "src/views/tethering.c"]
+rust = ["crates/rusttable-camera"]
+
+[[subsystems]]
+name = "scripting"
+upstream = ["src/lua"]
+rust = ["crates/rusttable-scripting", "crates/rusttable-plugin-api"]
+
+[[subsystems]]
+name = "compatibility"
+upstream = ["src/common/history.c", "src/common/styles.c"]
+rust = ["crates/rusttable-compat", "crates/rusttable-parity"]
+
+[[subsystems]]
+name = "fixtures-reference"
+upstream = ["src/tests", "data/kernels"]
+rust = ["crates/rusttable-testkit", "fixtures"]
+
+[[subsystems]]
+name = "packaging"
+upstream = ["packaging", "tools"]
+rust = ["scripts/macos-distribution-smoke.sh", "scripts/linux-distribution-smoke.sh"]

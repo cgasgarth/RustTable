@@ -1,30 +1,17 @@
-# RustTable is maintained as a single-owner migration while the Rust rewrite
-# establishes its component maintainers. Review from @cgasgarth is required
-# for the boundaries below.
-
-# Application and workspace crates.
+# RustTable currently has one maintainer; keep high-impact changes visible.
 /crates/ @cgasgarth
 /Cargo.toml @cgasgarth
 /Cargo.lock @cgasgarth
-/.cargo/ @cgasgarth
 /rust-toolchain.toml @cgasgarth
-
-# Architecture, migration evidence, compiler and dependency policy.
 /architecture/ @cgasgarth
-/quality/ @cgasgarth
-
-# Automation, hosted validation, packaging, and distribution.
-/.github/actions/ @cgasgarth
 /.github/workflows/ @cgasgarth
 /.github/dependabot.yml @cgasgarth
 /scripts/ @cgasgarth
 /package.json @cgasgarth
 /bun.lock @cgasgarth
 
-# Security-sensitive execution and extension boundaries.
+# Security-sensitive runtime boundaries.
 /crates/rusttable-scripting/ @cgasgarth
 /crates/rusttable-plugin-api/ @cgasgarth
 /crates/rusttable-diagnostics/ @cgasgarth
-/crates/xtask/ @cgasgarth
-/security/ @cgasgarth
-/SECURITY.md @cgasgarth
+/crates/rusttable-testkit/src/reference/ @cgasgarth

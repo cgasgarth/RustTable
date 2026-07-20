@@ -3,11 +3,11 @@ use std::fmt::Write as _;
 
 use sha2::{Digest, Sha256};
 
+use crate::ScanError;
 use crate::operation_model::{
     AbiLayout, CallbackResult, Evidence, Operation, OperationManifest, ParameterCodec,
     ParameterVersion,
 };
-use crate::scan::ScanError;
 
 /// Parses an operation manifest from TOML.
 ///
@@ -78,10 +78,10 @@ fn validate_operation(
     manifest: &OperationManifest,
     operation: &Operation,
 ) -> Result<(), ScanError> {
-    if operation.reference_path.trim().is_empty() || operation.owning_issue_number == 0 {
+    if operation.reference_path.trim().is_empty() {
         return Err(ScanError::OperationValidation {
             operation: operation.name.clone(),
-            message: "reference path and positive owning GitHub issue are required".to_owned(),
+            message: "reference path is required".to_owned(),
         });
     }
     if ![
@@ -480,23 +480,34 @@ fn validate_opencl(operation: &Operation) -> Result<(), ScanError> {
             reference: "missing resolved program registry record".to_owned(),
         });
     }
+    let mut resolved_kernels = BTreeSet::new();
     for resolution in &operation.opencl_resolution {
         if !programs.contains(&resolution.program)
-            || std::path::Path::new(&resolution.source_path)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("c"))
+            || std::path::Path::new(&resolution.source_path).extension()
+                != Some(std::ffi::OsStr::new("cl"))
             || resolution.source_path.trim().is_empty()
             || resolution.kernels.is_empty()
-            || operation
-                .opencl_kernels
+            || resolution
+                .kernels
                 .iter()
-                .any(|kernel| !resolution.kernels.contains(kernel))
+                .any(|kernel| !operation.opencl_kernels.contains(kernel))
         {
             return Err(ScanError::UnknownOpenclProgram {
                 operation: operation.name.clone(),
                 reference: resolution.program.clone(),
             });
         }
+        resolved_kernels.extend(resolution.kernels.iter());
+    }
+    if operation
+        .opencl_kernels
+        .iter()
+        .any(|kernel| !resolved_kernels.contains(kernel))
+    {
+        return Err(ScanError::UnknownOpenclKernel {
+            operation: operation.name.clone(),
+            reference: "kernel missing from resolved program registry".to_owned(),
+        });
     }
     Ok(())
 }
@@ -628,7 +639,7 @@ fn validate_operation_evidence(
             evidence.field.as_str(),
         )?;
     }
-    for field in ["registration", "layout", "contract", "ownership"] {
+    for field in ["registration", "layout", "contract"] {
         if !fields.contains(field) {
             return Err(ScanError::OperationValidation {
                 operation: operation.name.clone(),

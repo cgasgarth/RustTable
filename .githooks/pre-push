@@ -1,3 +1,2 @@
 #!/usr/bin/env bash
-# Pre-commit is RustTable's complete local quality gate. Keep pre-push empty
-# so delivery is not duplicated by a second policy scheduler.
+# Pull-request CI is authoritative. Pre-commit owns the optional full local gate.

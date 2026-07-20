@@ -366,6 +366,9 @@ fn probe_cli(
 
 fn source_commit(path: &Path) -> Result<String, ReferenceProbeError> {
     let status = Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .args(["-C", &path.display().to_string(), "status", "--porcelain"])
         .output()
         .map_err(|error| ReferenceProbeError::SourceIo(error.to_string()))?;
@@ -381,6 +384,9 @@ fn source_commit(path: &Path) -> Result<String, ReferenceProbeError> {
         });
     }
     let output = Command::new("git")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .args(["-C", &path.display().to_string(), "rev-parse", "HEAD"])
         .output()
         .map_err(|error| ReferenceProbeError::SourceIo(error.to_string()))?;

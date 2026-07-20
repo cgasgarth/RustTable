@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  linux:
+    name: Linux / fmt, Clippy, tests, product data
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-linux-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --all-targets --all-features --locked
+      - name: Verify generated operations
+        run: cargo xtask codegen operations --check
+      - name: Verify fixture corpus
+        run: cargo xtask fixtures verify
+
+  macos:
+    name: macOS 15 Apple Silicon / check and tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-macos-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain
+      - name: Check workspace
+        run: cargo check --workspace --all-targets --all-features --locked
+      - name: Test platform behavior
+        run: cargo test --workspace --all-targets --all-features --locked
+
+  windows:
+    name: Windows 2025 MSVC / check and tests
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-windows-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain
+      - name: Check workspace
+        run: cargo check --workspace --all-targets --all-features --locked
+      - name: Test platform behavior
+        run: cargo test --workspace --all-targets --all-features --locked
+
+  dependencies:
+    name: Dependencies / advisories, licenses, sources
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: rust-dependencies-deny-0.19.8-${{ hashFiles('Cargo.lock', 'deny.toml') }}
+      - name: Install standard dependency tools
+        shell: bash
+        run: |
+          cargo deny --version 2>/dev/null | grep -F '0.19.8' ||
+            cargo install cargo-deny --version 0.19.8 --locked
+      - name: Check advisories, licenses, and sources
+        run: cargo deny check --hide-inclusion-graph advisories bans licenses sources

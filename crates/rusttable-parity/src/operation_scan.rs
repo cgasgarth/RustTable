@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
+use crate::ScanError;
 use crate::operation_model::{
     AbiLayout, CallbackResult, CapabilityContract, CodecField, ColorContract, Evidence,
     FieldLayout, HistoryCompatibility, Operation, OperationManifest, OperationOverride,
@@ -9,7 +10,6 @@ use crate::operation_model::{
 };
 use crate::operation_reference::{manifest_reference, reference_commit, reference_identity};
 use crate::operation_validate::validate_operation_manifest;
-use crate::scan::ScanError;
 
 /// Extracts the registered IOPs and their persisted compatibility metadata.
 ///
@@ -117,16 +117,6 @@ pub fn scan_operations_with_overrides(
             apply_override(&mut operation, override_entry);
         }
         complete_generated_metadata(&mut operation, source);
-        if let Some(program) = operation
-            .opencl_programs
-            .iter()
-            .find(|program| !programs.contains(program))
-        {
-            return Err(ScanError::UnknownOpenclProgram {
-                operation: operation.name,
-                reference: program.clone(),
-            });
-        }
         resolve_opencl_references(&mut operation, source)?;
         operations.push(operation);
     }
@@ -359,7 +349,6 @@ fn extract_operation(
         parameter_versions: Vec::new(),
         migrations: Vec::new(),
         preset_sources: preset_sources(content),
-        owning_issue_number: 0,
         evidence: Vec::new(),
         tolerance_class,
         abi_layouts: Vec::new(),
@@ -861,9 +850,6 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     }
     if let Some(value) = &entry.preset_sources {
         operation.preset_sources.clone_from(value);
-    }
-    if let Some(value) = &entry.owning_issue_number {
-        operation.owning_issue_number = *value;
     }
     if let Some(value) = &entry.evidence {
         operation.evidence.clone_from(value);
