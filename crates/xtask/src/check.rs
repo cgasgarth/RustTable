@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::{Result, codegen, fixtures, run_process};
+use sha2::{Digest, Sha256};
 
 const FORBIDDEN_NATIVE_EXTENSIONS: &[&str] = &[
     "c", "cc", "cl", "cmake", "cpp", "cxx", "h", "hh", "hpp", "m", "mm", "s",
@@ -65,6 +66,11 @@ fn dependency_checks(root: &Path) -> Result {
 }
 
 fn verify_sources(root: &Path) -> Result {
+    run_process(
+        "source policy",
+        Command::new("bash").arg(root.join("scripts/check-source-policy.sh")),
+    )?;
+    verify_asset_provenance(root)?;
     let output = Command::new("git")
         .current_dir(root)
         .args([
@@ -109,6 +115,71 @@ fn verify_sources(root: &Path) -> Result {
                 ));
             }
         }
+    }
+    Ok(())
+}
+
+fn verify_asset_provenance(root: &Path) -> Result {
+    let manifest_path = root.join("architecture/rusttable-assets.toml");
+    let manifest = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("asset policy: read {}: {error}", manifest_path.display()))?;
+    let document = toml::from_str::<toml::Value>(&manifest)
+        .map_err(|error| format!("asset policy: invalid manifest: {error}"))?;
+    if document.get("schema").and_then(toml::Value::as_str) != Some("rusttable.asset-provenance.v1")
+    {
+        return Err("asset policy: unsupported manifest schema".to_owned());
+    }
+    let assets = document
+        .get("assets")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "asset policy: manifest has no assets".to_owned())?;
+    if assets.len() != 1 {
+        return Err(format!(
+            "asset policy: expected one retained data asset, found {}",
+            assets.len()
+        ));
+    }
+    let asset = assets[0]
+        .as_table()
+        .ok_or_else(|| "asset policy: asset entry is not a table".to_owned())?;
+    for key in [
+        "path",
+        "consumer",
+        "source_repository",
+        "source_commit",
+        "source_path",
+        "sha256",
+    ] {
+        if asset.get(key).and_then(toml::Value::as_str).is_none() {
+            return Err(format!("asset policy: asset is missing {key}"));
+        }
+    }
+    let path = asset["path"].as_str().expect("validated path");
+    if path != "data/shortcutsrc" {
+        return Err(format!("asset policy: unexpected retained asset {path}"));
+    }
+    if asset["source_repository"].as_str() != Some("darktable-org/darktable")
+        || asset["source_commit"].as_str() != Some(crate::PINNED_DARKTABLE_COMMIT)
+        || asset["source_path"].as_str() != Some("data/shortcutsrc")
+    {
+        return Err("asset policy: shortcutsrc provenance is not pinned".to_owned());
+    }
+    let asset_path = root.join(path);
+    let bytes =
+        fs::read(&asset_path).map_err(|error| format!("asset policy: read {path}: {error}"))?;
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    if asset["sha256"].as_str() != Some(digest.as_str()) {
+        return Err(format!(
+            "asset policy: {path} hash does not match its manifest"
+        ));
+    }
+    let consumer = root.join("crates/rusttable-input/src/persistence.rs");
+    let source = fs::read_to_string(&consumer)
+        .map_err(|error| format!("asset policy: read {}: {error}", consumer.display()))?;
+    if !source.contains("include_str!(\"../../../data/shortcutsrc\")")
+        || !source.contains("bundled_darktable_shortcuts_have_pinned_provenance")
+    {
+        return Err("asset policy: shortcutsrc consumer/provenance test is missing".to_owned());
     }
     Ok(())
 }

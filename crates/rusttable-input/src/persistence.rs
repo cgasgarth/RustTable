@@ -228,8 +228,13 @@ fn binding_text(binding: &Binding) -> String {
 
 #[cfg(test)]
 mod tests {
+    use sha2::{Digest, Sha256};
+
     use super::*;
     use crate::types::{ActionMode, Binding, MidiControl, Scope};
+
+    const BUNDLED_SHORTCUTS_SOURCE_SHA256: &str =
+        "86448c5385557fabc7952decad5d060293110dbb55387f820ed3db91d92262f6";
 
     #[test]
     fn imports_darktable_keyboard_midi_and_relative_lines() {
@@ -263,9 +268,12 @@ mod tests {
     }
 
     #[test]
-    fn bundled_darktable_shortcuts_are_importable() {
-        let (mappings, _) = parse_darktable_shortcuts(include_str!("../../../data/shortcutsrc"))
-            .expect("bundled shortcutsrc remains representable");
+    fn bundled_darktable_shortcuts_have_pinned_provenance() {
+        let source = include_str!("../../../data/shortcutsrc");
+        let digest = format!("{:x}", Sha256::digest(source.as_bytes()));
+        assert_eq!(digest, BUNDLED_SHORTCUTS_SOURCE_SHA256);
+        let (mappings, _) =
+            parse_darktable_shortcuts(source).expect("bundled shortcutsrc remains representable");
         assert!(mappings.len() > 50);
     }
 }

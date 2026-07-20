@@ -7,19 +7,8 @@
 //! this file intentionally has no GTK dependency so the contract stays easy to
 //! test without a display server.
 //!
-//! Reference mapping:
-//! - `Darktable/src/views/view.c`: stable lighttable/darkroom view ordering.
-//! - `Darktable/src/views/lighttable.c`: thumbnail-grid, culling, preview, and
-//!   filmstrip behavior in the lighttable workspace.
-//! - `Darktable/src/views/darkroom.c`: single-image workspace and filmstrip
-//!   behavior in the darkroom workspace.
-//! - `Darktable/src/gui/gtk.h` and `Darktable/src/gui/gtk.c`: header slots,
-//!   panel slots, central overlay, borders, and panel dimensions.
-//! - `Darktable/src/libs/collect.c`: collection controls in the left module
-//!   panel.
-//! - `Darktable/src/libs/filtering.c`: collection filter controls promoted to
-//!   the top toolbar.
-//! - `Darktable/data/themes/darktable.css`: the grey palette and view colors.
+//! The pinned Darktable checkout remains the behavioral and visual reference;
+//! all implementation and palette values in this module are Rust-owned.
 
 #![forbid(unsafe_code)]
 
