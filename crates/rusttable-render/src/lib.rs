@@ -11,6 +11,7 @@ use rusttable_processing::{
     evaluate, to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 
+pub mod diagnostics;
 mod plan;
 mod prepared_pixelpipe;
 mod provenance;
@@ -19,6 +20,13 @@ mod thumbnail_cache;
 mod thumbnail_lifecycle;
 mod thumbnail_scheduler;
 
+pub use diagnostics::{
+    DiagnosticBackend, DiagnosticDescriptor, DiagnosticFinding, DiagnosticFrame,
+    DiagnosticFrameError, DiagnosticGeometry, DiagnosticPath, OverexposedColorScheme,
+    OverexposedMode, OverexposedPlan, OverexposedReceipt, OverexposedResult, OverexposedState,
+    RawOverexposedPlan, RawOverexposedReceipt, RawOverexposedResult, RawOverexposedState,
+    RawOverlayMode, RawSolidColor, RgbaPixel,
+};
 pub use plan::{PreviewBounds, PreviewBoundsError, RenderPlan, RenderSampling, RenderTarget};
 pub use prepared_pixelpipe::{
     PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, render_prepared_cpu_pixelpipe,
