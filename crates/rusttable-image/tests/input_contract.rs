@@ -143,4 +143,8 @@ fn image_input_is_object_safe() {
         input.decode_path(Path::new("ignored")).unwrap().pixels(),
         &[9, 8, 7, 6]
     );
+    let result = input.decode_result_bytes(&[1]).expect("decode receipt");
+    assert_eq!(result.receipt().format(), InputFormat::Png);
+    assert_eq!(result.receipt().source_bytes(), 1);
+    assert_eq!(result.image().descriptor().dimensions(), dimensions);
 }

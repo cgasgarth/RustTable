@@ -277,7 +277,9 @@ fn source_color_decision(
     policy: SourceColorPolicy,
 ) -> Result<SourceColorDecision, RenderError> {
     match (actual, policy) {
-        (ColorEncoding::Srgb, _) => Ok(SourceColorDecision::DeclaredSrgb),
+        (ColorEncoding::Srgb | ColorEncoding::LinearSrgb, _) => {
+            Ok(SourceColorDecision::DeclaredSrgb)
+        }
         (ColorEncoding::DisplayP3, SourceColorPolicy::RequireDeclaredSrgb) => {
             Err(RenderError::SourceColor { actual })
         }
@@ -330,7 +332,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
                 alpha,
             )
         }
-        ColorEncoding::Unspecified | ColorEncoding::Srgb => {
+        ColorEncoding::Unspecified | ColorEncoding::Srgb | ColorEncoding::LinearSrgb => {
             let mut source_pixels = Vec::with_capacity(pixel_count);
             for pixel in input.pixels().as_chunks::<4>().0 {
                 source_pixels.push(SourceRgb::new(

@@ -1,10 +1,12 @@
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use rusttable_import::{
     FileSourceSnapshotReader, ImportSourceLimits, ImportSourceLimitsError, SourceReadStage,
-    SourceSnapshotError, SourceSnapshotReader,
+    SourceSnapshotError, SourceSnapshotReader, StableCopyError, StableCopyOptions,
 };
+use sha2::{Digest, Sha256};
 
 fn path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
@@ -253,4 +255,116 @@ fn materialization_requires_an_explicit_byte_limit() {
         )
     ));
     fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn stable_copy_publishes_one_bounded_verified_snapshot_and_private_receipt() {
+    let file = path("stable-copy-source");
+    let cache = path("stable-copy-cache");
+    let bytes = b"stable source bytes";
+    fs::write(&file, bytes).expect("fixture writes");
+    fs::create_dir(&cache).expect("cache creates");
+    let limits = ImportSourceLimits::new(64).unwrap();
+    let options = StableCopyOptions::new(&cache, limits)
+        .with_chunk_bytes(3)
+        .expect("chunk size is valid");
+
+    let result = FileSourceSnapshotReader
+        .read_stable_copy(&file, &options)
+        .expect("stable copy publishes");
+    assert!(
+        result
+            .receipt()
+            .source_alias
+            .starts_with("rusttable-source-snapshot-stable-copy-source-")
+    );
+    assert_eq!(
+        result.receipt().hash_status,
+        rusttable_import::SourceHashStatus::Verified
+    );
+    assert_eq!(
+        result.receipt().identity_class,
+        rusttable_import::SourceIdentityClass::FileId
+    );
+    assert_eq!(
+        result.receipt().source_length,
+        u64::try_from(bytes.len()).unwrap()
+    );
+    assert_eq!(
+        result.receipt().copy_length,
+        u64::try_from(bytes.len()).unwrap()
+    );
+    assert_eq!(
+        result.receipt().bytes_read,
+        u64::try_from(bytes.len()).unwrap()
+    );
+    assert!(!format!("{:?}", result.receipt()).contains(cache.to_str().unwrap()));
+    assert_eq!(
+        result
+            .snapshot()
+            .materialize(limits)
+            .expect("published snapshot reads"),
+        bytes
+    );
+    assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
+
+    fs::remove_dir_all(cache).expect("cache removes");
+    fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn stable_copy_reuses_matching_cache_and_rejects_a_collision() {
+    let file = path("stable-copy-collision-source");
+    let cache = path("stable-copy-collision-cache");
+    let bytes = b"collision source";
+    fs::write(&file, bytes).expect("fixture writes");
+    fs::create_dir(&cache).expect("cache creates");
+    let limits = ImportSourceLimits::new(64).unwrap();
+    let options = StableCopyOptions::new(&cache, limits);
+
+    let first = FileSourceSnapshotReader
+        .read_stable_copy(&file, &options)
+        .expect("first copy publishes");
+    let second = FileSourceSnapshotReader
+        .read_stable_copy(&file, &options)
+        .expect("matching copy reuses");
+    assert_eq!(
+        first.snapshot().content_sha256(),
+        second.snapshot().content_sha256()
+    );
+
+    let mut digest = Sha256::new();
+    digest.update(bytes);
+    let digest: [u8; 32] = digest.finalize().into();
+    let mut digest_hex = String::with_capacity(64);
+    for byte in digest {
+        write!(&mut digest_hex, "{byte:02x}").expect("writing to a string cannot fail");
+    }
+    let destination = cache.join(format!("rusttable-source-{digest_hex}.bin"));
+    fs::write(&destination, b"wrong content").expect("collision writes");
+    assert!(matches!(
+        FileSourceSnapshotReader.read_stable_copy(&file, &options),
+        Err(StableCopyError::CacheCollision { .. })
+    ));
+
+    fs::remove_dir_all(cache).expect("cache removes");
+    fs::remove_file(file).expect("fixture removes");
+}
+
+#[test]
+fn darktable_source_accounting_assigns_each_issue_anchor() {
+    let table = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../architecture/source-snapshot-accounting.toml");
+    let contents = fs::read_to_string(table).expect("source accounting reads");
+    for anchor in [
+        "src/common/image.h",
+        "src/common/film.h",
+        "src/imageio/imageio_common.h",
+        "src/common/mipmap_cache.h",
+        "src/common/exif.cc",
+    ] {
+        assert!(contents.contains(anchor), "missing source anchor {anchor}");
+    }
+    assert_eq!(contents.matches("status = \"replaced\"").count(), 5);
+    assert!(!contents.contains("status = \"unmapped\""));
 }

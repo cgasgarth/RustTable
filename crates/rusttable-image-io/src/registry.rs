@@ -2,56 +2,14 @@ use std::io::Cursor;
 
 use image::{ImageFormat, ImageReader};
 use rusttable_image::{
-    DecodeLimits, DecodedImage, ImageDimensions, ImageInputError, ImageProbe, InputFormat,
-    UnsupportedImageFeature,
+    DecodeLimits, DecodedImage, DecoderDescriptor, DecoderIdentity, ImageDimensions,
+    ImageInputError, ImageProbe, InputFormat, UnsupportedImageFeature,
 };
 
 use crate::input::{enforce_limits, malformed, probe_tiff, validate_tiff};
 
 /// Maximum amount of a source that any format probe may inspect.
 pub const PROBE_BUDGET_BYTES: usize = 64 * 1024;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DecoderIdentity {
-    id: &'static str,
-    version: u32,
-    implementation: &'static str,
-}
-
-impl DecoderIdentity {
-    #[must_use]
-    pub const fn id(self) -> &'static str {
-        self.id
-    }
-
-    #[must_use]
-    pub const fn version(self) -> u32 {
-        self.version
-    }
-
-    #[must_use]
-    pub const fn implementation(self) -> &'static str {
-        self.implementation
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DecoderDescriptor {
-    identity: DecoderIdentity,
-    format: InputFormat,
-}
-
-impl DecoderDescriptor {
-    #[must_use]
-    pub const fn identity(self) -> DecoderIdentity {
-        self.identity
-    }
-
-    #[must_use]
-    pub const fn format(self) -> InputFormat {
-        self.format
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProbeOutcome {
@@ -88,26 +46,18 @@ macro_rules! builtin_decoders {
         ),+ $(,)?
     ) => {
         static STANDARD_DESCRIPTORS: [DecoderDescriptor; $count] = [
-            $(DecoderDescriptor {
-                identity: DecoderIdentity {
-                    id: $id,
-                    version: 1,
-                    implementation: $implementation,
-                },
-                format: InputFormat::$format,
-            }),+
+            $(DecoderDescriptor::new(
+                DecoderIdentity::new($id, 1, $implementation),
+                InputFormat::$format,
+            )),+
         ];
 
         static STANDARD_DECODERS: [DecoderEntry; $count] = [
             $(DecoderEntry {
-                descriptor: DecoderDescriptor {
-                    identity: DecoderIdentity {
-                        id: $id,
-                        version: 1,
-                        implementation: $implementation,
-                    },
-                    format: InputFormat::$format,
-                },
+                descriptor: DecoderDescriptor::new(
+                    DecoderIdentity::new($id, 1, $implementation),
+                    InputFormat::$format,
+                ),
                 matches: $matches,
                 probe: $probe,
                 decode: $decode,

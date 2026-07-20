@@ -5,6 +5,7 @@ mod raster;
 mod request;
 mod service;
 mod snapshot;
+mod stable_copy;
 
 pub use raster::{
     AtomicRasterCatalog, AtomicRasterCatalogError, MAX_RASTER_IMPORT_ITEMS,
@@ -18,7 +19,11 @@ pub use raster::{
 pub use request::SourceImportRequest;
 pub use service::{SourceImportError, SourceImportService};
 pub use snapshot::{
-    FileSourceSnapshotReader, ImportSourceLimits, ImportSourceLimitsError, SourceReadStage,
-    SourceSnapshot, SourceSnapshotError, SourceSnapshotReadError, SourceSnapshotReader,
-    SourceSnapshotSequentialReader,
+    FileSourceSnapshotReader, ImportSourceLimits, ImportSourceLimitsError, SourceHashStatus,
+    SourceIdentityClass, SourceReadStage, SourceSnapshot, SourceSnapshotError,
+    SourceSnapshotReadError, SourceSnapshotReader, SourceSnapshotSequentialReader,
+};
+pub use stable_copy::{
+    StableCopyError, StableCopyOptions, StableCopyOptionsError, StableCopyReceipt,
+    StableCopyResult, StableCopyStage,
 };

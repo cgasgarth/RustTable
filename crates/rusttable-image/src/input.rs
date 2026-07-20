@@ -1,7 +1,8 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::{ImageDimensions, InputFormat};
+use crate::{DecodeError, DecodeReceipt, DecodeResult};
+use crate::{ImageDescriptor, ImageDimensions, InputFormat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DecodeLimitsError {
@@ -87,6 +88,46 @@ impl DecodeLimits {
     pub const fn max_decoded_bytes(self) -> u64 {
         self.decoded_bytes
     }
+
+    /// Validates an arbitrary typed image descriptor against these limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed limit error when dimensions, pixel count, or all-plane
+    /// byte storage exceeds the configured envelope.
+    pub fn validate_descriptor(self, descriptor: &ImageDescriptor) -> Result<(), ImageInputError> {
+        let dimensions = descriptor.dimensions();
+        if dimensions.width() > self.max_width() {
+            return Err(ImageInputError::WidthLimit {
+                actual: dimensions.width(),
+                limit: self.max_width(),
+            });
+        }
+        if dimensions.height() > self.max_height() {
+            return Err(ImageInputError::HeightLimit {
+                actual: dimensions.height(),
+                limit: self.max_height(),
+            });
+        }
+        let pixels = dimensions
+            .pixel_count()
+            .map_err(|_| ImageInputError::ArithmeticOverflow)?;
+        if pixels > self.max_pixel_count() {
+            return Err(ImageInputError::PixelLimit {
+                actual: pixels,
+                limit: self.max_pixel_count(),
+            });
+        }
+        let bytes = u64::try_from(descriptor.byte_length())
+            .map_err(|_| ImageInputError::ArithmeticOverflow)?;
+        if bytes > self.max_decoded_bytes() {
+            return Err(ImageInputError::DecodedByteLimit {
+                actual: bytes,
+                limit: self.max_decoded_bytes(),
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,6 +198,9 @@ pub enum ImageInputError {
         expected: u64,
         actual: u64,
     },
+    DecodeContract {
+        reason: DecodeError,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,6 +255,9 @@ impl fmt::Display for ImageInputError {
                 formatter,
                 "decoded buffer has {actual} bytes, expected {expected}"
             ),
+            Self::DecodeContract { reason } => {
+                write!(formatter, "decode contract failed: {reason}")
+            }
         }
     }
 }
@@ -231,6 +278,24 @@ pub trait ImageInput: Send + Sync {
     ///
     /// Returns a typed error for unsupported signatures, malformed bytes, or limits.
     fn decode_bytes(&self, bytes: &[u8]) -> Result<crate::DecodedImage, ImageInputError>;
+
+    /// Decodes bytes and publishes the storage-neutral owned image plus a
+    /// receipt binding it to the probed format and source length.
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying input failure or a typed contract failure.
+    fn decode_result_bytes(&self, bytes: &[u8]) -> Result<DecodeResult, ImageInputError> {
+        let probe = self.probe_bytes(bytes)?;
+        let image = self.decode_bytes(bytes)?;
+        let source_bytes =
+            u64::try_from(bytes.len()).map_err(|_| ImageInputError::ArithmeticOverflow)?;
+        let owned = image.into_owned();
+        let receipt = DecodeReceipt::new(probe.format(), source_bytes, owned.descriptor().clone())
+            .map_err(|reason| ImageInputError::DecodeContract { reason })?;
+        DecodeResult::new(owned, receipt)
+            .map_err(|reason| ImageInputError::DecodeContract { reason })
+    }
 
     /// Probes a path using the bounded, signature-selected input contract.
     ///
