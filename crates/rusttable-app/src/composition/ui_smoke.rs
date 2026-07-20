@@ -199,6 +199,7 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
         simulator.find(format!("Photo {number}"))?;
         simulator.find(format!("Album {number}"))?;
     }
+    simulator.find("4 catalog photos")?;
     let first = simulator.find("Photo 1")?.bounds();
     let second = simulator.find("Photo 2")?.bounds();
     let third = simulator.find("Photo 3")?.bounds();

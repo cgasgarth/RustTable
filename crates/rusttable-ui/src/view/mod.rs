@@ -113,7 +113,13 @@ fn ready_library_content<'a>(
         .width(Fill)
         .height(Fill);
 
-    column![text("Library"), grid].into()
+    column![
+        text("Library"),
+        text(format!("{} catalog photos", cards.len())),
+        grid
+    ]
+    .spacing(REGION_SPACING)
+    .into()
 }
 
 fn photo_card<'a>(state: &UiState, card: &'a PhotoCardViewModel) -> Element<'a, UiMessage> {
