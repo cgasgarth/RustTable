@@ -3388,6 +3388,11 @@ dependencies = [
 [[package]]
 name = "rusttable-pixelpipe"
 version = "0.1.0"
+dependencies = [
+ "rusttable-core",
+ "rusttable-processing",
+ "sha2",
+]
 
 [[package]]
 name = "rusttable-plugin-api"

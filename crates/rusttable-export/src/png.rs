@@ -1,4 +1,5 @@
 use std::fmt;
+use std::fmt::Write;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -9,6 +10,7 @@ use rusttable_image::{
     ImageOutputError, OutputLimits, OutputLimitsError, OutputOptions, OutputReceipt,
 };
 use rusttable_image_io::{FileImageInput, FileImageOutput};
+use sha2::{Digest, Sha256};
 
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -19,6 +21,76 @@ pub enum CollisionPolicy {
     CreateNew,
     /// Atomically replace the destination when the platform supports it.
     ReplaceExisting,
+}
+
+/// The result of publishing at the destination collision boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PngCollisionResult {
+    /// A new destination was created without replacing any existing file.
+    CreatedNew,
+    /// A complete, verified staging file atomically replaced the destination.
+    ReplacedExisting,
+}
+
+/// A cancellation-aware PNG publication stage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PngPublishStage {
+    /// Validating the request, destination, dimensions, and collision policy.
+    Preparing,
+    /// Encoding the rendered pixels into an owned staging file.
+    Encoding,
+    /// Independently decoding and hashing the owned staging file.
+    Verifying,
+    /// Crossing the irreversible create-new or replace publication boundary.
+    Publishing,
+    /// The final destination was verified and the receipt is ready.
+    Completed,
+}
+
+/// A progress notification emitted by [`PngPublisher`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PngPublishProgress {
+    stage: PngPublishStage,
+}
+
+impl PngPublishProgress {
+    #[must_use]
+    pub const fn stage(self) -> PngPublishStage {
+        self.stage
+    }
+}
+
+/// The action requested by a [`PngPublishObserver`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PngPublishControl {
+    /// Continue publication into the next stage.
+    Continue,
+    /// Stop before any irreversible publication work begins.
+    Cancel,
+}
+
+/// Receives explicit PNG publication progress and may request cancellation.
+pub trait PngPublishObserver {
+    /// Observes the next publication stage.
+    fn observe(&mut self, progress: PngPublishProgress) -> PngPublishControl;
+}
+
+impl<Observer> PngPublishObserver for Observer
+where
+    Observer: FnMut(PngPublishProgress) -> PngPublishControl,
+{
+    fn observe(&mut self, progress: PngPublishProgress) -> PngPublishControl {
+        self(progress)
+    }
+}
+
+/// How a publication completed when cancellation was requested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PngPublishCompletion {
+    /// No cancellation was requested after final verification.
+    Completed,
+    /// Cancellation arrived after the irreversible publication boundary.
+    CompletedAfterCancellation,
 }
 
 /// Bounds applied to every PNG export.
@@ -85,11 +157,38 @@ pub enum PngExportLimitsError {
     DimensionOverflow,
 }
 
+/// Cryptographic evidence from independently checking a published PNG.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PngVerificationReceipt {
+    dimensions: ImageDimensions,
+    artifact_sha256: String,
+    pixel_sha256: String,
+}
+
+impl PngVerificationReceipt {
+    #[must_use]
+    pub const fn dimensions(&self) -> ImageDimensions {
+        self.dimensions
+    }
+
+    #[must_use]
+    pub fn artifact_sha256(&self) -> &str {
+        &self.artifact_sha256
+    }
+
+    #[must_use]
+    pub fn pixel_sha256(&self) -> &str {
+        &self.pixel_sha256
+    }
+}
+
 /// Receipt returned after a PNG was published and independently decoded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PngExportReceipt {
     output: OutputReceipt,
-    verified_dimensions: ImageDimensions,
+    verification: PngVerificationReceipt,
+    collision: PngCollisionResult,
+    completion: PngPublishCompletion,
 }
 
 impl PngExportReceipt {
@@ -115,7 +214,22 @@ impl PngExportReceipt {
 
     #[must_use]
     pub const fn verified_dimensions(&self) -> ImageDimensions {
-        self.verified_dimensions
+        self.verification.dimensions()
+    }
+
+    #[must_use]
+    pub const fn verification(&self) -> &PngVerificationReceipt {
+        &self.verification
+    }
+
+    #[must_use]
+    pub const fn collision(&self) -> PngCollisionResult {
+        self.collision
+    }
+
+    #[must_use]
+    pub const fn completion(&self) -> PngPublishCompletion {
+        self.completion
     }
 }
 
@@ -127,6 +241,9 @@ pub enum PngPublishError {
     },
     DestinationExists {
         path: PathBuf,
+    },
+    Cancelled {
+        stage: PngPublishStage,
     },
     DimensionLimit {
         actual: ImageDimensions,
@@ -173,6 +290,9 @@ impl fmt::Display for PngPublishError {
                     "PNG destination already exists: {}",
                     path.display()
                 )
+            }
+            Self::Cancelled { stage } => {
+                write!(formatter, "PNG publication cancelled during {stage:?}")
             }
             Self::DimensionLimit {
                 actual,
@@ -221,6 +341,7 @@ impl std::error::Error for PngPublishError {
             Self::Io { source, .. } => Some(source),
             Self::InvalidDestination { .. }
             | Self::DestinationExists { .. }
+            | Self::Cancelled { .. }
             | Self::DimensionLimit { .. }
             | Self::Output(_)
             | Self::VerificationMismatch { .. }
@@ -261,6 +382,34 @@ impl PngPublisher {
         destination: &Path,
         collision: CollisionPolicy,
     ) -> Result<PngExportReceipt, PngPublishError> {
+        self.publish_with_observer(image, destination, collision, |_: PngPublishProgress| {
+            PngPublishControl::Continue
+        })
+    }
+
+    /// Encodes, verifies, and publishes one PNG while reporting each boundary.
+    ///
+    /// A cancellation request through [`PngPublishObserver`] before
+    /// [`PngPublishStage::Publishing`] removes the owned staging file and
+    /// leaves the destination unchanged. Cancellation reported at
+    /// [`PngPublishStage::Completed`] is recorded in the receipt because an
+    /// atomic create or replacement cannot be rolled back safely.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PngPublishError::Cancelled`] before the publication boundary,
+    /// or another typed publication error.
+    pub fn publish_with_observer<Observer>(
+        &self,
+        image: &DecodedImage,
+        destination: &Path,
+        collision: CollisionPolicy,
+        mut observer: Observer,
+    ) -> Result<PngExportReceipt, PngPublishError>
+    where
+        Observer: PngPublishObserver,
+    {
+        observe(&mut observer, PngPublishStage::Preparing)?;
         validate_destination(destination)?;
         self.validate_dimensions(image.dimensions())?;
         if collision == CollisionPolicy::CreateNew && destination.exists() {
@@ -271,6 +420,7 @@ impl PngPublisher {
 
         let staging = staging_path(destination);
         let output = FileImageOutput::new(self.limits.output);
+        observe(&mut observer, PngPublishStage::Encoding)?;
         let staged_receipt = match output.write_new(image, &staging, OutputOptions::Png) {
             Ok(receipt) => receipt,
             Err(error) => {
@@ -278,22 +428,24 @@ impl PngPublisher {
                 return Err(PngPublishError::Output(error));
             }
         };
-        let verification = self.verify(image, &staging);
+        let verification = observe(&mut observer, PngPublishStage::Verifying)
+            .and_then(|()| self.verify(image, &staging));
         if let Err(error) = verification {
             remove_staging(&staging);
             return Err(error);
         }
 
-        let publication = match collision {
-            CollisionPolicy::CreateNew => publish_new(&staging, destination),
-            CollisionPolicy::ReplaceExisting => publish_replace(&staging, destination),
-        };
+        let publication =
+            observe(&mut observer, PngPublishStage::Publishing).and_then(|()| match collision {
+                CollisionPolicy::CreateNew => publish_new(&staging, destination),
+                CollisionPolicy::ReplaceExisting => publish_replace(&staging, destination),
+            });
         if let Err(error) = publication {
             remove_staging(&staging);
             return Err(error);
         }
 
-        self.verify(image, destination)?;
+        let verification = self.verify(image, destination)?;
         let output = OutputReceipt::new(
             destination.to_owned(),
             staged_receipt.format(),
@@ -307,7 +459,17 @@ impl PngPublisher {
         })?;
         Ok(PngExportReceipt {
             output,
-            verified_dimensions: image.dimensions(),
+            verification,
+            collision: match collision {
+                CollisionPolicy::CreateNew => PngCollisionResult::CreatedNew,
+                CollisionPolicy::ReplaceExisting => PngCollisionResult::ReplacedExisting,
+            },
+            completion: match observer.observe(PngPublishProgress {
+                stage: PngPublishStage::Completed,
+            }) {
+                PngPublishControl::Continue => PngPublishCompletion::Completed,
+                PngPublishControl::Cancel => PngPublishCompletion::CompletedAfterCancellation,
+            },
         })
     }
 
@@ -328,7 +490,7 @@ impl PngPublisher {
         &self,
         expected: &DecodedImage,
         path: &Path,
-    ) -> Result<ImageDimensions, PngPublishError> {
+    ) -> Result<PngVerificationReceipt, PngPublishError> {
         let input = FileImageInput::new(self.limits.decode);
         let decoded = input
             .decode_path(path)
@@ -342,7 +504,26 @@ impl PngPublisher {
         if decoded.pixels() != expected.pixels() {
             return Err(PngPublishError::VerificationPixelsMismatch);
         }
-        Ok(decoded.dimensions())
+        let artifact = fs::read(path).map_err(|source| PngPublishError::Io {
+            operation: "hash verified PNG",
+            path: path.to_owned(),
+            source,
+        })?;
+        Ok(PngVerificationReceipt {
+            dimensions: decoded.dimensions(),
+            artifact_sha256: hash_hex(&artifact),
+            pixel_sha256: hash_hex(decoded.pixels()),
+        })
+    }
+}
+
+fn observe<Observer>(observer: &mut Observer, stage: PngPublishStage) -> Result<(), PngPublishError>
+where
+    Observer: PngPublishObserver,
+{
+    match observer.observe(PngPublishProgress { stage }) {
+        PngPublishControl::Continue => Ok(()),
+        PngPublishControl::Cancel => Err(PngPublishError::Cancelled { stage }),
     }
 }
 
@@ -398,4 +579,13 @@ fn publish_replace(staging: &Path, destination: &Path) -> Result<(), PngPublishE
 
 fn remove_staging(staging: &Path) {
     let _ = fs::remove_file(staging);
+}
+
+fn hash_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
 }
