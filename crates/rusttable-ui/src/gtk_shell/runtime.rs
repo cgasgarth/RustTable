@@ -15,9 +15,9 @@ use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, ExportPanel, LibraryBrowserModel,
-    ModuleControlKind, ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion,
-    ThemeRole, WorkspaceRole, apply_theme_role,
+    DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, ExportPanel, LIGHTTABLE_TOOLBAR,
+    LibraryBrowserModel, ModuleControlKind, ModulePanelViewModel, PanelSlot, PhotoPreview,
+    ShellLayout, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use crate::input_mapping::InputMappingEditor;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
@@ -98,29 +98,32 @@ impl GtkShell {
         let (left_panel, left_modules) = left_panel(&collection_controls, &initial_i18n);
         let (right_panel, right_modules, export_panel) = right_panel(&initial_i18n);
         let center = central_workspace(&workspace, &initial_i18n);
+        let layout_metrics = DARKTABLE_DESKTOP_SPEC.layout;
         let split = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .start_child(&left_panel)
             .end_child(&center)
             .resize_start_child(false)
-            .shrink_start_child(false)
-            .position(i32::from(
-                DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px,
-            ))
+            .shrink_start_child(true)
+            .position(i32::from(layout_metrics.side_panel_widths.preferred_px))
             .build();
         let workspace_with_right_panel = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .start_child(&split)
             .end_child(&right_panel)
             .resize_end_child(false)
-            .shrink_end_child(false)
-            .position(
-                i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_width_px)
-                    - i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
-            )
+            .shrink_end_child(true)
+            .position(i32::from(layout_metrics.preferred_right_panel_position_px(
+                layout_metrics.window_width_px,
+            )))
             .build();
         let filmstrip = filmstrip(&initial_i18n);
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        let outer_border = i32::from(layout_metrics.outer_border_px);
+        content.set_margin_top(outer_border);
+        content.set_margin_bottom(outer_border);
+        content.set_margin_start(outer_border);
+        content.set_margin_end(outer_border);
         content.append(&workspace_with_right_panel);
         content.append(&filmstrip.0);
 
@@ -591,19 +594,6 @@ fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     center.set_vexpand(true);
     center.set_widget_name("workspace");
     apply_theme_role(&center, ThemeRole::Workspace);
-    let top_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    top_tools.set_widget_name(PanelSlot::CenterTop.identifier());
-    apply_theme_role(&top_tools, ThemeRole::Toolbar);
-    for message_id in [
-        MessageId::WorkspaceGrid,
-        MessageId::WorkspaceZoomable,
-        MessageId::WorkspaceCulling,
-        MessageId::WorkspaceOverlay,
-    ] {
-        top_tools.append(&gtk4::Button::with_label(
-            &i18n.text(message_id, &MessageArgs::new()),
-        ));
-    }
     let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
@@ -617,7 +607,6 @@ fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
         ));
     }
     bottom_tools.insert_child_after(&gtk4::Button::with_label("100%"), None::<&gtk4::Widget>);
-    center.append(&top_tools);
     center.append(workspace);
     center.append(&bottom_tools);
     center
@@ -712,7 +701,7 @@ fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
 
 fn lighttable_toolbar(i18n: &I18n) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    toolbar.set_widget_name("lighttable-collection-toolbar");
+    toolbar.set_widget_name(LIGHTTABLE_TOOLBAR.widget_name);
     apply_theme_role(&toolbar, ThemeRole::Toolbar);
 
     let import =
@@ -724,7 +713,7 @@ fn lighttable_toolbar(i18n: &I18n) -> gtk4::Box {
     property.set_widget_name("lighttable-filter-property");
     toolbar.append(&property);
     let filter = gtk4::SearchEntry::new();
-    filter.set_widget_name("lighttable-filter-entry");
+    filter.set_widget_name(LIGHTTABLE_TOOLBAR.filter_entry_name);
     filter.set_placeholder_text(Some("filter all images"));
     filter.set_hexpand(true);
     toolbar.append(&filter);
@@ -761,14 +750,13 @@ fn filmstrip_toolbar(i18n: &I18n) -> gtk4::Box {
 }
 
 fn panel_column(region: ShellRegion, width: i32) -> gtk4::Box {
-    let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    let panel = gtk4::Box::new(
+        gtk4::Orientation::Vertical,
+        i32::from(DARKTABLE_DESKTOP_SPEC.layout.panel_module_spacing_px),
+    );
     panel.set_widget_name(region.identifier());
     apply_theme_role(&panel, ThemeRole::Panel);
     panel.set_width_request(width);
-    panel.set_margin_top(8);
-    panel.set_margin_bottom(8);
-    panel.set_margin_start(8);
-    panel.set_margin_end(8);
     panel
 }
 
