@@ -10,7 +10,6 @@ version.workspace = true
 directories.workspace = true
 futures.workspace = true
 gtk4.workspace = true
-rfd.workspace = true
 rusttable-catalog.workspace = true
 rusttable-catalog-store.workspace = true
 rusttable-diagnostics.workspace = true

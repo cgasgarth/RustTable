@@ -483,6 +483,23 @@ mod tests {
     }
 
     #[test]
+    fn ready_image_import_is_delivered_as_a_typed_request() {
+        let files = TempFiles::new();
+        let image = files.file("import.JPG");
+        let mut bridge = MacApplicationBridge::default();
+        assert!(bridge.mark_ready().is_none());
+
+        let delivery = bridge.receive_paths([image.clone()]);
+        let request = delivery.request().expect("ready import request");
+        assert_eq!(
+            request.image_paths().collect::<Vec<_>>(),
+            vec![image.as_path()]
+        );
+        assert_eq!(request.catalog_path(), None);
+        assert!(!delivery.queued());
+    }
+
+    #[test]
     fn invalid_items_do_not_hide_valid_items_and_symlinks_are_rejected() {
         let files = TempFiles::new();
         let image = files.file("valid.png");

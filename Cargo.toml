@@ -61,7 +61,6 @@ postcard = { version = "=1.1.3", features = ["alloc"] }
 process-wrap = { version = "=9.1.0", default-features = false, features = ["std", "process-session", "job-object", "creation-flags", "kill-on-drop"] }
 redb = "=4.1.0"
 rand = "=0.10.2"
-rfd = "=0.17.2"
 rusttable-app = { path = "crates/rusttable-app", version = "=0.1.0" }
 rusttable-ai = { path = "crates/rusttable-ai", version = "=0.1.0" }
 rusttable-camera = { path = "crates/rusttable-camera", version = "=0.1.0" }

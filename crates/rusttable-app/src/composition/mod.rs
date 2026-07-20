@@ -19,7 +19,10 @@ use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
     MacApplicationBridge, MacApplicationCommand, MacOpenRequest, MacTerminationDecision,
 };
-use gtk4::gio::prelude::{ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt};
+use gtk4::gio::prelude::{
+    ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt, ListModelExt,
+};
+use gtk4::glib::object::CastNone;
 use gtk4::glib::{self, ControlFlow};
 use gtk4::prelude::GtkWindowExt;
 use gtk4::prelude::{GtkApplicationExt, RecentManagerExt, WidgetExt};
@@ -31,7 +34,7 @@ use rusttable_input::{
 };
 use rusttable_ui::{
     CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
-    ExportAction, ExportSize as UiExportSize,
+    ExportAction, ExportSize as UiExportSize, ImportAction,
 };
 use std::cell::RefCell;
 use std::fmt;
@@ -208,6 +211,20 @@ fn activate_application(
         apply_collection_action(controller, action);
         collection_filter_state(&controller.snapshot())
     });
+    let import_shell = shell.clone();
+    let import_bridge = Rc::clone(native_bridge);
+    let import_active_shell = Rc::clone(active_shell);
+    let import_active_catalog = Rc::clone(active_catalog);
+    let import_active_collection = Rc::clone(active_collection);
+    shell.connect_import_action(move |action| match action {
+        ImportAction::ChooseFiles => open_import_dialog(
+            &import_shell,
+            &import_bridge,
+            &import_active_shell,
+            &import_active_catalog,
+            &import_active_collection,
+        ),
+    });
     connect_export_actions(
         &shell,
         Rc::clone(&catalog_controller),
@@ -232,6 +249,45 @@ fn activate_application(
     if let Some(request) = native_bridge.borrow_mut().mark_ready() {
         dispatch_open_request(&request, active_shell, active_catalog, active_collection);
     }
+}
+
+fn open_import_dialog(
+    shell: &rusttable_ui::GtkShell,
+    native_bridge: &Rc<RefCell<MacApplicationBridge>>,
+    active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
+    active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
+    active_collection: &Rc<RefCell<Option<CollectionController>>>,
+) {
+    let dialog = gtk4::FileDialog::builder()
+        .title("Import images")
+        .accept_label("Import")
+        .modal(true)
+        .build();
+    let filter = gtk4::FileFilter::new();
+    filter.set_name(Some("Supported raster images"));
+    for suffix in ["jpg", "jpeg", "png", "tif", "tiff"] {
+        filter.add_suffix(suffix);
+    }
+    dialog.set_default_filter(Some(&filter));
+    let native_bridge = Rc::clone(native_bridge);
+    let active_shell = Rc::clone(active_shell);
+    let active_catalog = Rc::clone(active_catalog);
+    let active_collection = Rc::clone(active_collection);
+    dialog.open_multiple(
+        Some(shell.window()),
+        None::<&gtk4::gio::Cancellable>,
+        move |result| {
+            let Ok(files) = result else { return };
+            let paths = (0..files.n_items())
+                .filter_map(|index| files.item(index).and_downcast::<gtk4::gio::File>())
+                .filter_map(|file| file.path())
+                .collect::<Vec<_>>();
+            let delivery = native_bridge.borrow_mut().receive_paths(paths);
+            if let Some(request) = delivery.request().cloned() {
+                dispatch_open_request(&request, &active_shell, &active_catalog, &active_collection);
+            }
+        },
+    );
 }
 
 fn install_action_input(shell: &rusttable_ui::GtkShell) {
@@ -796,5 +852,51 @@ fn install_preview_state(preview: &rusttable_ui::gtk_shell::PhotoPreview, state:
     };
     if preview.set_rgba8(&metadata).is_err() {
         preview.set_failure(GtkPreviewFailureKind::InvalidRgba8.message());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rusttable_core::PhotoId;
+    use rusttable_ui::{CollectionItem, CollectionProperty};
+
+    use super::{
+        CollectionControlAction, CollectionController, apply_collection_action,
+        collection_filter_state,
+    };
+
+    fn id(value: u128) -> PhotoId {
+        PhotoId::new(value).expect("non-zero test photo identifier")
+    }
+
+    #[test]
+    fn collection_actions_project_filter_transitions_for_the_lighttable() {
+        let mut controller = CollectionController::new([
+            CollectionItem::new(id(1), "/photos/2026/holiday/IMG_0001.CR3"),
+            CollectionItem::new(id(2), "/photos/2026/portraits/portrait.jpg"),
+        ]);
+
+        let initial = collection_filter_state(&controller.snapshot());
+        assert_eq!(initial.controls().total_count(), 2);
+        assert_eq!(initial.matching_photo_ids(), &[id(1), id(2)]);
+
+        apply_collection_action(
+            &mut controller,
+            CollectionControlAction::SetSearchText("portrait".to_owned()),
+        );
+        let filtered = collection_filter_state(&controller.snapshot());
+        assert_eq!(filtered.controls().result_count(), 1);
+        assert_eq!(filtered.controls().search_text(), "portrait");
+        assert_eq!(filtered.matching_photo_ids(), &[id(2)]);
+
+        apply_collection_action(
+            &mut controller,
+            CollectionControlAction::SetProperty(CollectionProperty::Folders),
+        );
+        apply_collection_action(&mut controller, CollectionControlAction::Clear);
+        let cleared = collection_filter_state(&controller.snapshot());
+        assert_eq!(cleared.controls().property(), CollectionProperty::Folders);
+        assert_eq!(cleared.controls().result_count(), 2);
+        assert_eq!(cleared.matching_photo_ids(), &[id(1), id(2)]);
     }
 }

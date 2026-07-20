@@ -219,6 +219,32 @@ impl LibraryBrowserModel {
     }
 }
 
+/// The two render states of the lighttable canvas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LighttableContentState {
+    /// The collection has no visible photos.
+    Empty,
+    /// The collection has at least one visible photo.
+    Grid,
+}
+
+impl LighttableContentState {
+    /// Converts a rendered-photo count into the stack child used by GTK.
+    #[must_use]
+    pub const fn from_rendered_count(count: usize) -> Self {
+        if count == 0 { Self::Empty } else { Self::Grid }
+    }
+
+    /// Returns the stable GTK stack child name for this state.
+    #[must_use]
+    pub const fn stack_name(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::Grid => "grid",
+        }
+    }
+}
+
 /// The GTK control shape requested by one darkroom module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModuleControlKind {
@@ -321,8 +347,9 @@ mod tests {
     use rusttable_core::PhotoId;
 
     use super::{
-        DarkroomWorkspaceViewModel, LibraryBrowserModel, ModuleControlKind, ModuleControlViewModel,
-        ModulePanelViewModel, PanelSlot, ShellLayout, ShellRegion, WorkspaceRole,
+        DarkroomWorkspaceViewModel, LibraryBrowserModel, LighttableContentState, ModuleControlKind,
+        ModuleControlViewModel, ModulePanelViewModel, PanelSlot, ShellLayout, ShellRegion,
+        WorkspaceRole,
     };
     use crate::presentation::{
         PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
@@ -390,6 +417,18 @@ mod tests {
         assert_eq!(entries[1].id(), id(1));
         assert_eq!(entries[1].title(), "First");
         assert_eq!(entries[1].secondary(), Some("RAW · 24 MP"));
+    }
+
+    #[test]
+    fn lighttable_empty_state_uses_empty_stack_child_only_without_visible_photos() {
+        assert_eq!(
+            LighttableContentState::from_rendered_count(0).stack_name(),
+            "empty"
+        );
+        assert_eq!(
+            LighttableContentState::from_rendered_count(1).stack_name(),
+            "grid"
+        );
     }
 
     #[test]

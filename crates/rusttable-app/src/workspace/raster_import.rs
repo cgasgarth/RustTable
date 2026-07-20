@@ -23,21 +23,6 @@ const MAX_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_DECODE_BYTES: u64 = 256 * 1024 * 1024;
 const THUMBNAIL_EDGE: u32 = 256;
 
-pub async fn pick_raster_files() -> Vec<PathBuf> {
-    rfd::AsyncFileDialog::new()
-        .add_filter(
-            "Supported raster images",
-            &["png", "jpg", "jpeg", "tif", "tiff"],
-        )
-        .set_title("Import raster files")
-        .pick_files()
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|handle| handle.path().to_path_buf())
-        .collect()
-}
-
 /// Imports a validated nonempty raster batch into the supplied catalog.
 ///
 /// # Panics
