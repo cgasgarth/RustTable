@@ -4,6 +4,9 @@ use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
 
+use crate::operations::{
+    colorreconstruction::ColorReconstructionConfig, highlights::HighlightsConfig,
+};
 use crate::{FiniteF32, ScalarNarrowingError};
 
 const EXPOSURE_PARAMETER: &str = "stops";
@@ -30,6 +33,12 @@ pub enum ProcessingOperationKind {
         red: FiniteF32,
         green: FiniteF32,
         blue: FiniteF32,
+    },
+    Highlights {
+        config: HighlightsConfig,
+    },
+    ColorReconstruction {
+        config: ColorReconstructionConfig,
     },
 }
 
@@ -71,6 +80,11 @@ pub enum OperationCompileError {
         operation_id: OperationId,
         key: OperationKey,
         parameter: ParameterName,
+    },
+    InvalidParameters {
+        operation_id: OperationId,
+        key: OperationKey,
+        reason: String,
     },
 }
 
@@ -125,6 +139,16 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_rgb_gain(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_rgb_gain(operation)
+    }
+
+    pub(crate) fn compile_highlights(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_highlights(operation)
+    }
+
+    pub(crate) fn compile_color_reconstruction(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_color_reconstruction(operation)
     }
 
     #[must_use]
@@ -290,6 +314,161 @@ fn compile_gain_parameter(
     Ok(value)
 }
 
+const HIGHLIGHTS_PARAMETERS: [&str; 12] = [
+    "method",
+    "blend_l",
+    "blend_c",
+    "strength",
+    "clip",
+    "noise_level",
+    "iterations",
+    "scales",
+    "candidating",
+    "combine",
+    "recovery",
+    "solid_color",
+];
+
+const COLOR_RECONSTRUCTION_PARAMETERS: [&str; 5] =
+    ["threshold", "spatial", "range", "hue", "precedence"];
+
+fn compile_highlights(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &HIGHLIGHTS_PARAMETERS)?;
+    let method = parameter_integer(operation, "method", 5.0)?;
+    let scales = parameter_integer(operation, "scales", 6.0)?;
+    let recovery = parameter_integer(operation, "recovery", 0.0)?;
+    let iterations = parameter_integer(operation, "iterations", 30.0)?;
+    let iterations = u16::try_from(iterations)
+        .map_err(|_| invalid_parameters(operation, "iterations must be between 1 and 256"))?;
+    let config = HighlightsConfig::new(
+        crate::operations::highlights::HighlightsMethod::from_id(method)
+            .map_err(|error| invalid_parameters(operation, error))?,
+        parameter_f32(operation, "strength", 0.0)?,
+        parameter_f32(operation, "clip", 1.0)?,
+        parameter_f32(operation, "noise_level", 0.0)?,
+        iterations,
+        crate::operations::highlights::WaveletScale::new(
+            u8::try_from(scales)
+                .map_err(|_| invalid_parameters(operation, "scales must be between 0 and 11"))?,
+        )
+        .map_err(|error| invalid_parameters(operation, error))?,
+        parameter_f32(operation, "candidating", 0.4)?,
+        parameter_f32(operation, "combine", 2.0)?,
+        crate::operations::highlights::RecoveryMode::from_id(recovery)
+            .map_err(|error| invalid_parameters(operation, error))?,
+        parameter_f32(operation, "solid_color", 0.0)?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::Highlights { config },
+    })
+}
+
+fn compile_color_reconstruction(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &COLOR_RECONSTRUCTION_PARAMETERS)?;
+    let precedence = parameter_integer(operation, "precedence", 0.0)?;
+    let config = ColorReconstructionConfig::new(
+        parameter_f32(operation, "threshold", 100.0)?,
+        parameter_f32(operation, "spatial", 400.0)?,
+        parameter_f32(operation, "range", 10.0)?,
+        parameter_f32(operation, "hue", 0.66)?,
+        crate::operations::colorreconstruction::ColorReconstructionPrecedence::from_id(precedence)
+            .map_err(|error| invalid_parameters(operation, error))?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::ColorReconstruction { config },
+    })
+}
+
+fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), OperationCompileError> {
+    if let Some((parameter, _)) = operation
+        .parameters()
+        .find(|(name, _)| !allowed.iter().any(|allowed| *allowed == name.as_str()))
+    {
+        return Err(OperationCompileError::UnexpectedParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter: parameter.clone(),
+        });
+    }
+    Ok(())
+}
+
+fn parameter_f32(
+    operation: &Operation,
+    name: &'static str,
+    default: f64,
+) -> Result<f32, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    let value = match operation.parameter(&parameter) {
+        None => default,
+        Some(ParameterValue::Scalar(value)) => value.get(),
+        Some(_) => {
+            return Err(OperationCompileError::WrongParameterType {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            });
+        }
+    };
+    match FiniteF32::try_from(FiniteF64::new(value).expect("core scalar is finite")) {
+        Ok(value) => Ok(value.get()),
+        Err(ScalarNarrowingError::Overflow) => {
+            Err(OperationCompileError::ScalarNarrowingOverflow {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            })
+        }
+        Err(ScalarNarrowingError::Underflow) => {
+            Err(OperationCompileError::ScalarNarrowingUnderflow {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            })
+        }
+    }
+}
+
+fn parameter_integer(
+    operation: &Operation,
+    name: &'static str,
+    default: f64,
+) -> Result<i32, OperationCompileError> {
+    let value = parameter_f32(operation, name, default)?;
+    if !value.is_finite()
+        || value.fract() != 0.0
+        || value < f32::from(i16::MIN)
+        || value > f32::from(i16::MAX)
+    {
+        return Err(invalid_parameters(
+            operation,
+            format!("{name} must be an exact small integer"),
+        ));
+    }
+    #[allow(clippy::cast_possible_truncation, reason = "range checked above")]
+    Ok(value as i32)
+}
+
+fn invalid_parameters<E: fmt::Display>(operation: &Operation, error: E) -> OperationCompileError {
+    OperationCompileError::InvalidParameters {
+        operation_id: operation.id(),
+        key: operation.key().clone(),
+        reason: error.to_string(),
+    }
+}
+
 fn compile_opacity(operation: &Operation) -> Result<FiniteF32, OperationCompileError> {
     match FiniteF32::try_from(
         FiniteF64::new(operation.opacity().get()).expect("core opacity is finite"),
@@ -366,6 +545,14 @@ impl fmt::Display for OperationCompileError {
             } => write!(
                 formatter,
                 "operation {operation_id} with key {key} has negative parameter {parameter}"
+            ),
+            Self::InvalidParameters {
+                operation_id,
+                key,
+                reason,
+            } => write!(
+                formatter,
+                "operation {operation_id} with key {key} has invalid parameters: {reason}"
             ),
         }
     }

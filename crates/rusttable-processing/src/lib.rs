@@ -23,10 +23,12 @@ mod exposure;
 mod graph;
 mod operation;
 pub mod operation_stack;
+pub mod operations;
 mod output;
 mod pipeline;
 pub mod registry;
 mod registry_closure;
+mod registry_reconstruction;
 mod scalar;
 mod window;
 
@@ -36,7 +38,10 @@ pub use color::{
     SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingRgbImage,
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
-pub use descriptor::{exposure_descriptor, linear_offset_descriptor, rgb_gain_descriptor};
+pub use descriptor::{
+    color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,
+    linear_offset_descriptor, rgb_gain_descriptor,
+};
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,

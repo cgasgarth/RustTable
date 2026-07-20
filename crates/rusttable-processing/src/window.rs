@@ -248,6 +248,7 @@ pub fn evaluate_graph(
             .nodes()
             .map(|node| (node.pipeline_step_index(), node.prepared())),
         input.pixel_slice(),
+        input.dimensions(),
         0,
     )?;
     Ok(WorkingRgbImage::from_validated_parts(
@@ -322,6 +323,7 @@ pub fn evaluate_graph_window(
             .nodes()
             .map(|node| (node.pipeline_step_index(), node.prepared())),
         source,
+        input.dimensions(),
         start_index,
     )
     .map_err(|source| GraphWindowEvaluationError::Evaluation {

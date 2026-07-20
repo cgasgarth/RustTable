@@ -171,6 +171,31 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
             hasher.update(green.get().to_bits().to_le_bytes());
             hasher.update(blue.get().to_bits().to_le_bytes());
         }
+        ProcessingOperationKind::Highlights { config } => {
+            hasher.update([3]);
+            hasher.update(config.method().id().to_le_bytes());
+            hasher.update(config.strength().get().to_bits().to_le_bytes());
+            hasher.update(config.clip().get().to_bits().to_le_bytes());
+            hasher.update(config.noise_level().get().to_bits().to_le_bytes());
+            hasher.update(config.iterations().to_le_bytes());
+            hasher.update([
+                config.scales().id(),
+                u8::try_from(config.recovery().id()).expect("recovery mode IDs fit in u8"),
+            ]);
+            hasher.update(config.candidating().get().to_bits().to_le_bytes());
+            hasher.update(config.combine().get().to_bits().to_le_bytes());
+            hasher.update(config.solid_color().get().to_bits().to_le_bytes());
+        }
+        ProcessingOperationKind::ColorReconstruction { config } => {
+            hasher.update([4]);
+            hasher.update(config.threshold().get().to_bits().to_le_bytes());
+            hasher.update(config.spatial().get().to_bits().to_le_bytes());
+            hasher.update(config.range().get().to_bits().to_le_bytes());
+            hasher.update(config.hue().get().to_bits().to_le_bytes());
+            hasher.update([
+                u8::try_from(config.precedence().id()).expect("precedence IDs fit in u8")
+            ]);
+        }
     }
 }
 

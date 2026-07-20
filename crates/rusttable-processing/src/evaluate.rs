@@ -1,12 +1,17 @@
 use std::fmt;
 
+use crate::operations::{
+    OperationExecutionError,
+    colorreconstruction::ColorReconstructionPlan,
+    highlights::{HighlightsInputClass, HighlightsPlan},
+};
 use crate::{
     CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, PreparedCpuOperation,
-    ProcessingOperation, ProcessingOperationKind, RgbChannel, WorkingRgbImage,
+    ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
     NonFiniteExposureMultiplier {
         step_index: PipelineStepIndex,
@@ -24,6 +29,11 @@ pub enum EvaluationError {
         pixel_index: usize,
         channel: RgbChannel,
         stage: BlendArithmeticStage,
+    },
+    OperationExecution {
+        step_index: PipelineStepIndex,
+        operation_id: OperationId,
+        reason: String,
     },
 }
 
@@ -50,6 +60,7 @@ pub fn evaluate(
     let output = evaluate_steps(
         pipeline.steps().map(|step| (step.index(), step.prepared())),
         input.pixel_slice(),
+        input.dimensions(),
         0,
     )?;
     Ok(WorkingRgbImage::from_validated_parts(
@@ -61,6 +72,7 @@ pub fn evaluate(
 pub(crate) fn evaluate_steps<'a, I>(
     steps: I,
     input: &[LinearRgb],
+    dimensions: RasterDimensions,
     pixel_index_offset: usize,
 ) -> Result<Vec<LinearRgb>, EvaluationError>
 where
@@ -68,7 +80,7 @@ where
 {
     let mut output = input.to_vec();
     for (step_index, operation) in steps {
-        operation.execute(step_index, &mut output, pixel_index_offset)?;
+        operation.execute(step_index, &mut output, dimensions, pixel_index_offset)?;
     }
     Ok(output)
 }
@@ -77,12 +89,14 @@ pub(crate) fn execute_prepared_operation(
     operation: &PreparedCpuOperation,
     step_index: PipelineStepIndex,
     pixels: &mut [LinearRgb],
+    dimensions: RasterDimensions,
     pixel_index_offset: usize,
 ) -> Result<(), EvaluationError> {
     apply_operation(
         step_index,
         operation.operation(),
         pixels,
+        dimensions,
         pixel_index_offset,
     )
 }
@@ -91,6 +105,7 @@ fn apply_operation(
     step_index: PipelineStepIndex,
     operation: &ProcessingOperation,
     pixels: &mut [LinearRgb],
+    dimensions: RasterDimensions,
     pixel_index_offset: usize,
 ) -> Result<(), EvaluationError> {
     let operation_id = operation.operation_id();
@@ -138,7 +153,106 @@ fn apply_operation(
                 value * gain.get()
             },
         ),
+        ProcessingOperationKind::Highlights { config } => {
+            let plan = HighlightsPlan::new(
+                *config,
+                dimensions,
+                HighlightsInputClass::Rgb,
+                crate::operations::ReconstructionBudget::default(),
+            )
+            .map_err(|error| operation_error(step_index, operation_id, error))?;
+            let execution = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                execution.pixels(),
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::ColorReconstruction { config } => {
+            let plan = ColorReconstructionPlan::new(
+                *config,
+                dimensions,
+                crate::operations::ReconstructionBudget::default(),
+            )
+            .map_err(|error| operation_error(step_index, operation_id, error))?;
+            let execution = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                execution.pixels(),
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
     }
+}
+
+fn operation_error(
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    error: OperationExecutionError,
+) -> EvaluationError {
+    EvaluationError::OperationExecution {
+        step_index,
+        operation_id,
+        reason: error.to_string(),
+    }
+}
+
+fn apply_reconstruction(
+    pixels: &mut [LinearRgb],
+    candidates: &[LinearRgb],
+    opacity: f32,
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    pixel_index_offset: usize,
+) -> Result<(), EvaluationError> {
+    for (local_index, (pixel, candidate)) in pixels.iter_mut().zip(candidates).enumerate() {
+        let pixel_index = pixel_index_offset + local_index;
+        if opacity.to_bits() == 1.0f32.to_bits() {
+            *pixel = *candidate;
+        } else {
+            let current = *pixel;
+            *pixel = LinearRgb::new(
+                blend(
+                    current.red().get(),
+                    candidate.red().get(),
+                    opacity,
+                    step_index,
+                    operation_id,
+                    pixel_index,
+                    RgbChannel::Red,
+                )?,
+                blend(
+                    current.green().get(),
+                    candidate.green().get(),
+                    opacity,
+                    step_index,
+                    operation_id,
+                    pixel_index,
+                    RgbChannel::Green,
+                )?,
+                blend(
+                    current.blue().get(),
+                    candidate.blue().get(),
+                    opacity,
+                    step_index,
+                    operation_id,
+                    pixel_index,
+                    RgbChannel::Blue,
+                )?,
+            );
+        }
+    }
+    Ok(())
 }
 
 fn apply_channels<F>(
@@ -317,6 +431,15 @@ impl fmt::Display for EvaluationError {
                 "operation {operation_id} at pipeline step {} produced a non-finite {stage:?} blend value for {channel:?} at pixel {pixel_index}",
                 step_index.get()
             ),
+            Self::OperationExecution {
+                step_index,
+                operation_id,
+                reason,
+            } => write!(
+                formatter,
+                "operation {operation_id} at pipeline step {} failed during reconstruction: {reason}",
+                step_index.get()
+            ),
         }
     }
 }
@@ -355,8 +478,14 @@ mod tests {
         let capacity = pixels.capacity();
 
         for step in pipeline.active_steps() {
-            apply_operation(step.index(), step.operation(), &mut pixels, 0)
-                .expect("finite operation");
+            apply_operation(
+                step.index(),
+                step.operation(),
+                &mut pixels,
+                RasterDimensions::new(1, 1).expect("test dimensions"),
+                0,
+            )
+            .expect("finite operation");
         }
 
         assert_eq!(pixels.as_ptr(), pointer);

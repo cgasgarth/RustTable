@@ -791,6 +791,169 @@ pub fn linear_offset_descriptor() -> OperationDescriptor {
     descriptor
 }
 
+#[must_use]
+#[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
+pub fn highlights_descriptor() -> OperationDescriptor {
+    let mut descriptor = exposure_descriptor();
+    descriptor.id =
+        DescriptorId::new("highlights", "rusttable.highlights", 4, 4, 1).expect("static ID");
+    descriptor.parameters = vec![
+        scalar_parameter("method", 0.0, 5.0, 5.0, ParameterRole::Processing),
+        scalar_parameter("blend_l", 0.0, 2.0, 1.0, ParameterRole::Color),
+        scalar_parameter("blend_c", 0.0, 2.0, 0.0, ParameterRole::Color),
+        scalar_parameter("strength", 0.0, 1.0, 0.0, ParameterRole::Processing),
+        scalar_parameter("clip", 0.0, 2.0, 1.0, ParameterRole::Processing),
+        scalar_parameter("noise_level", 0.0, 0.5, 0.0, ParameterRole::Processing),
+        scalar_parameter("iterations", 1.0, 256.0, 30.0, ParameterRole::Processing),
+        scalar_parameter("scales", 0.0, 11.0, 6.0, ParameterRole::Geometry),
+        scalar_parameter("candidating", 0.0, 1.0, 0.4, ParameterRole::Mask),
+        scalar_parameter("combine", 0.0, 8.0, 2.0, ParameterRole::Mask),
+        scalar_parameter("recovery", 0.0, 6.0, 0.0, ParameterRole::Processing),
+        scalar_parameter("solid_color", 0.0, 1.0, 0.0, ParameterRole::Color),
+    ];
+    descriptor.id.schema_version = 4;
+    descriptor.id.parameter_version = 4;
+    descriptor.flags = OperationFlags::DETERMINISTIC_CPU
+        .insert(OperationFlags::DETERMINISTIC_GPU)
+        .insert(OperationFlags::FULL_IMAGE)
+        .insert(OperationFlags::COLOR)
+        .insert(OperationFlags::MASKS)
+        .insert(OperationFlags::BLENDING)
+        .insert(OperationFlags::ANALYSIS);
+    descriptor.stage = "raw-highlight-reconstruction".to_owned();
+    descriptor.roi = RoiKind::FullImage;
+    descriptor.tiling.overlap_pixels = 2048;
+    descriptor.tiling.preferred_tile_edge = 1024;
+    descriptor.capability = reconstruction_capability();
+    descriptor.io = reconstruction_io();
+    descriptor.mask_blend = MaskBlendContract {
+        consumes_mask: false,
+        publishes_mask: true,
+        blend_if: true,
+        geometry: false,
+        analysis: true,
+    };
+    descriptor.migration = MigrationContract {
+        source_versions: vec![1, 2, 3, 4],
+        target_version: 4,
+        opaque_unknown_allowed: true,
+    };
+    descriptor.ui = Some(UiHint {
+        label_key: "operation.highlights".to_owned(),
+        group_key: "group.basic".to_owned(),
+        control: "highlights-reconstruction".to_owned(),
+    });
+    descriptor
+}
+
+#[must_use]
+#[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
+pub fn color_reconstruction_descriptor() -> OperationDescriptor {
+    let mut descriptor = exposure_descriptor();
+    descriptor.id = DescriptorId::new(
+        "colorreconstruction",
+        "rusttable.colorreconstruction",
+        3,
+        3,
+        1,
+    )
+    .expect("static ID");
+    descriptor.parameters = vec![
+        scalar_parameter("threshold", 50.0, 150.0, 100.0, ParameterRole::Mask),
+        scalar_parameter("spatial", 0.0, 1000.0, 400.0, ParameterRole::Geometry),
+        scalar_parameter("range", 0.0, 50.0, 10.0, ParameterRole::Color),
+        scalar_parameter("hue", 0.0, 1.0, 0.66, ParameterRole::Color),
+        scalar_parameter("precedence", 0.0, 2.0, 0.0, ParameterRole::Color),
+    ];
+    descriptor.flags = OperationFlags::DETERMINISTIC_CPU
+        .insert(OperationFlags::DETERMINISTIC_GPU)
+        .insert(OperationFlags::FULL_IMAGE)
+        .insert(OperationFlags::COLOR)
+        .insert(OperationFlags::MASKS)
+        .insert(OperationFlags::BLENDING)
+        .insert(OperationFlags::ANALYSIS);
+    descriptor.stage = "post-demosaic-color-reconstruction".to_owned();
+    descriptor.roi = RoiKind::FullImage;
+    descriptor.tiling.overlap_pixels = 1000;
+    descriptor.tiling.preferred_tile_edge = 1024;
+    descriptor.capability = reconstruction_capability();
+    descriptor.io = reconstruction_io();
+    descriptor.mask_blend = MaskBlendContract {
+        consumes_mask: false,
+        publishes_mask: true,
+        blend_if: true,
+        geometry: false,
+        analysis: true,
+    };
+    descriptor.migration = MigrationContract {
+        source_versions: vec![1, 2, 3],
+        target_version: 3,
+        opaque_unknown_allowed: true,
+    };
+    descriptor.ui = Some(UiHint {
+        label_key: "operation.colorreconstruction".to_owned(),
+        group_key: "group.basic".to_owned(),
+        control: "color-reconstruction".to_owned(),
+    });
+    descriptor
+}
+
+fn scalar_parameter(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    default: f64,
+    role: ParameterRole,
+) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Scalar { minimum, maximum },
+        default: ParameterDefault::Scalar(default),
+        required: false,
+        introduced_version: 1,
+        removed_version: None,
+        unit: None,
+        step: Some(0.001),
+        precision: 3,
+        role,
+        cache_affecting: true,
+        animatable: true,
+        ui_hint: Some("slider".to_owned()),
+        condition: None,
+    }
+}
+
+fn reconstruction_capability() -> CapabilityContract {
+    CapabilityContract {
+        cpu_supported: true,
+        gpu_tier: Some(1),
+        required_features: vec![
+            "f32-storage".to_owned(),
+            "deterministic-row-major".to_owned(),
+        ],
+        required_formats: vec!["rgba32float".to_owned()],
+        deterministic_cpu: true,
+        deterministic_gpu: true,
+        fallback_to_cpu: true,
+        precision: "f32".to_owned(),
+        modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
+    }
+}
+
+fn reconstruction_io() -> InputOutputContract {
+    let image = ImagePredicate {
+        channels: 3,
+        alpha: AlphaPolicy::Preserve,
+        encodings: vec![ColorEncoding::LinearSrgbD65],
+        nonfinite: NonFinitePolicy::Reject,
+    };
+    InputOutputContract {
+        input: image.clone(),
+        output: image,
+        derives_output_encoding: false,
+    }
+}
+
 fn default_io_contract() -> InputOutputContract {
     let image = ImagePredicate {
         channels: 3,
@@ -816,32 +979,5 @@ fn default_mask_blend() -> MaskBlendContract {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn representative_descriptors_are_valid_and_canonical() {
-        let exposure = exposure_descriptor();
-        let gain = rgb_gain_descriptor();
-        exposure.validate().expect("exposure schema");
-        gain.validate().expect("gain schema");
-        assert_eq!(exposure.canonical_hash(), exposure.canonical_hash());
-        assert_eq!(diff_schema(&exposure, &exposure), SchemaDiff::Identical);
-    }
-
-    #[test]
-    fn invalid_default_and_duplicate_parameter_are_rejected() {
-        let mut descriptor = exposure_descriptor();
-        descriptor.parameters.push(descriptor.parameters[0].clone());
-        assert!(matches!(
-            descriptor.validate(),
-            Err(DescriptorError::DuplicateParameter(_))
-        ));
-        descriptor.parameters.truncate(1);
-        descriptor.parameters[0].default = ParameterDefault::Bool(true);
-        assert!(matches!(
-            descriptor.validate(),
-            Err(DescriptorError::InvalidDefault(_))
-        ));
-    }
-}
+#[path = "descriptor_tests.rs"]
+mod descriptor_tests;

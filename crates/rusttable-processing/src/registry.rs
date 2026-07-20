@@ -29,6 +29,7 @@ pub type CpuExecute = fn(
     operation: &PreparedCpuOperation,
     step_index: PipelineStepIndex,
     pixels: &mut [LinearRgb],
+    dimensions: crate::RasterDimensions,
     pixel_index_offset: usize,
 ) -> Result<(), EvaluationError>;
 
@@ -515,9 +516,10 @@ impl PreparedCpuOperation {
         &self,
         step_index: PipelineStepIndex,
         pixels: &mut [LinearRgb],
+        dimensions: crate::RasterDimensions,
         pixel_index_offset: usize,
     ) -> Result<(), EvaluationError> {
-        (self.execute)(self, step_index, pixels, pixel_index_offset)
+        (self.execute)(self, step_index, pixels, dimensions, pixel_index_offset)
     }
 
     pub(crate) fn prepare(
@@ -879,11 +881,7 @@ fn hex(bytes: &[u8; 32]) -> String {
 }
 
 fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
-    match operation.kind() {
-        crate::ProcessingOperationKind::Exposure { .. } => exposure_descriptor().id,
-        crate::ProcessingOperationKind::LinearOffset { .. } => linear_offset_descriptor().id,
-        crate::ProcessingOperationKind::RgbGain { .. } => rgb_gain_descriptor().id,
-    }
+    crate::registry_reconstruction::operation_descriptor_for(operation)
 }
 
 fn prepare_exposure(
@@ -978,6 +976,8 @@ macro_rules! builtin_operations {
             $crate::registry::exposure_definition as $crate::registry::OperationDefinitionFactory,
             $crate::registry::linear_offset_definition,
             $crate::registry::rgb_gain_definition,
+            $crate::registry_reconstruction::highlights_definition,
+            $crate::registry_reconstruction::color_reconstruction_definition,
         ]
     };
     ($($factory:path),+ $(,)?) => {
