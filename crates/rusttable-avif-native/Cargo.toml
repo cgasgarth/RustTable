@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-avif-native"
+description = "Safe RustTable boundary for the pinned Rust AV1/AVIF encoder."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+ravif.workspace = true
+
+[lints]
+workspace = true

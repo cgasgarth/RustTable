@@ -960,6 +960,9 @@ pub(crate) fn format_from_encoder(value: &str) -> Option<OutputFormat> {
         "jpeg-xl" | "jxl" => Some(OutputFormat::JpegXl),
         "tiff" | "tif" => Some(OutputFormat::Tiff),
         "webp" => Some(OutputFormat::Webp),
+        "avif" => Some(OutputFormat::Avif),
+        "heif" => Some(OutputFormat::Heif),
+        "heic" => Some(OutputFormat::Heic),
         _ => None,
     }
 }
