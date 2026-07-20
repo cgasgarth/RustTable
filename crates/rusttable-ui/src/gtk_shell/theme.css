@@ -3,8 +3,8 @@
  *
  * The placeholders are populated from darktable_spec::DARKTABLE_COLORS so the
  * palette remains a single Rust-owned source of truth. The selectors mirror
- * the widget names established by the darktable GTK shell and the dt_* class
- * convention used by Darktable's data/themes/darktable.css.
+ * the stable visual roles of the reference desktop and the dt_* class
+ * convention used by the RustTable shell.
  */
 
 * {

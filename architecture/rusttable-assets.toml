@@ -1,0 +1,10 @@
+# RustTable-owned payload with an executable consumer and immutable provenance.
+schema = "rusttable.asset-provenance.v1"
+
+[[assets]]
+path = "data/shortcutsrc"
+consumer = "crates/rusttable-input/src/persistence.rs"
+source_repository = "darktable-org/darktable"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+source_path = "data/shortcutsrc"
+sha256 = "86448c5385557fabc7952decad5d060293110dbb55387f820ed3db91d92262f6"

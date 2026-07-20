@@ -7,8 +7,6 @@
 /*.yml text eol=lf
 /*.json text eol=lf
 /*.lock text eol=lf
-/*.mailmap text eol=lf
-/AUTHORS text eol=lf
 /LICENSE text eol=lf
 /crates/rusttable-*/** text eol=lf
 /crates/xtask/** text eol=lf

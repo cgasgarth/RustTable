@@ -2524,6 +2524,9 @@ dependencies = [
 [[package]]
 name = "rusttable-input"
 version = "0.1.0"
+dependencies = [
+ "sha2",
+]
 
 [[package]]
 name = "rusttable-masks"
@@ -2614,8 +2617,8 @@ version = "0.1.0"
 dependencies = [
  "gtk4",
  "rusttable-core",
- "rusttable-i18n",
  "rusttable-display-profile",
+ "rusttable-i18n",
  "rusttable-input",
  "rusttable-processing",
  "serde",
