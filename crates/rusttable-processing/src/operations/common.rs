@@ -11,6 +11,7 @@ pub enum OperationExecutionError {
     DimensionsMismatch { expected: usize, actual: usize },
     NonFiniteResult { pixel: usize, channel: RgbChannel },
     NoReconstructionEvidence,
+    GeometryRequiresFrameBoundary,
 }
 
 impl fmt::Display for OperationExecutionError {
@@ -38,6 +39,8 @@ impl fmt::Display for OperationExecutionError {
             Self::NoReconstructionEvidence => {
                 formatter.write_str("operation found no trustworthy reconstruction evidence")
             }
+            Self::GeometryRequiresFrameBoundary => formatter
+                .write_str("geometry operation requires a frame-boundary pixelpipe execution"),
         }
     }
 }

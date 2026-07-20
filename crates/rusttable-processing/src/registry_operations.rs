@@ -7,8 +7,8 @@ use super::{
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, exposure_descriptor,
-    linear_offset_descriptor, rgb_gain_descriptor, temperature_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, crop_descriptor, exposure_descriptor,
+    flip_descriptor, linear_offset_descriptor, rgb_gain_descriptor, temperature_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -197,6 +197,28 @@ fn prepare_temperature(
     )
 }
 
+fn prepare_crop(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_crop(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_flip(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_flip(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
@@ -281,6 +303,59 @@ pub fn temperature_definition() -> OperationDefinition {
     )
 }
 
+fn geometry_definition(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+    roi: RoiKind,
+    migrations: impl IntoIterator<Item = MigrationBinding>,
+) -> OperationDefinition {
+    let compatibility = descriptor.id.compatibility_name.clone();
+    let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
+    OperationDefinition::new(
+        descriptor,
+        Some(CpuFactory::new(
+            prepare,
+            crate::evaluate::execute_prepared_operation,
+            roi,
+            tileable,
+            false,
+        )),
+        None,
+        migrations.into_iter().collect(),
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+        ),
+        evidence.iter().map(|id| (*id).to_owned()).collect(),
+    )
+}
+
+pub fn crop_definition() -> OperationDefinition {
+    geometry_definition(
+        crop_descriptor(),
+        prepare_crop,
+        &["iop.crop.descriptor", "iop.crop.cpu", "iop.crop.geometry"],
+        RoiKind::Crop,
+        (1..3).map(|version| {
+            MigrationBinding::new(version, version + 1, format!("crop.migration.v{version}"))
+        }),
+    )
+}
+
+pub fn flip_definition() -> OperationDefinition {
+    geometry_definition(
+        flip_descriptor(),
+        prepare_flip,
+        &["iop.flip.descriptor", "iop.flip.cpu", "iop.flip.geometry"],
+        RoiKind::Distortion,
+        (1..2).map(|version| {
+            MigrationBinding::new(version, version + 1, format!("flip.migration.v{version}"))
+        }),
+    )
+}
+
 /// Defines the static built-in factory slice used by startup and xtask.
 #[macro_export]
 macro_rules! builtin_operations {
@@ -290,6 +365,8 @@ macro_rules! builtin_operations {
             $crate::registry::linear_offset_definition,
             $crate::registry::rgb_gain_definition,
             $crate::registry::temperature_definition,
+            $crate::registry::crop_definition,
+            $crate::registry::flip_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,

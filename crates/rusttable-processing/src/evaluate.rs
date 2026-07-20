@@ -274,6 +274,13 @@ fn apply_operation(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::Crop { .. } | ProcessingOperationKind::Flip { .. } => {
+            Err(operation_error(
+                step_index,
+                operation_id,
+                OperationExecutionError::GeometryRequiresFrameBoundary,
+            ))
+        }
     }
 }
 

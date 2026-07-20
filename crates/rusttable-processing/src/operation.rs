@@ -9,6 +9,8 @@ use crate::operations::{
     colorin::ColorInConfig,
     colorout::ColorOutConfig,
     colorreconstruction::ColorReconstructionConfig,
+    crop::CropConfig,
+    flip::{FlipConfig, FlipMode, OrientationBits},
     highlights::HighlightsConfig,
     primaries::PrimariesConfig,
     temperature::{TemperatureConfig, WhiteBalanceSource},
@@ -18,6 +20,8 @@ use crate::{FiniteF32, ScalarNarrowingError};
 const EXPOSURE_PARAMETER: &str = "stops";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
 const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
+const CROP_PARAMETERS: [&str; 6] = ["cx", "cy", "cw", "ch", "ratio_n", "ratio_d"];
+const FLIP_PARAMETERS: [&str; 2] = ["mode", "orientation"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessingOperation {
@@ -39,6 +43,12 @@ pub enum ProcessingOperationKind {
         red: FiniteF32,
         green: FiniteF32,
         blue: FiniteF32,
+    },
+    Crop {
+        config: CropConfig,
+    },
+    Flip {
+        config: FlipConfig,
     },
     Highlights {
         config: HighlightsConfig,
@@ -194,6 +204,14 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_temperature(operation)
+    }
+
+    pub(crate) fn compile_crop(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_crop(operation)
+    }
+
+    pub(crate) fn compile_flip(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_flip(operation)
     }
 
     #[must_use]
@@ -690,6 +708,45 @@ fn source_from_legacy_preset(
             "named white-balance presets require immutable preset provenance",
         )),
     }
+}
+
+fn compile_crop(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &CROP_PARAMETERS)?;
+    let config = CropConfig::new(
+        parameter_f32(operation, "cx", 0.0)?,
+        parameter_f32(operation, "cy", 0.0)?,
+        parameter_f32(operation, "cw", 1.0)?,
+        parameter_f32(operation, "ch", 1.0)?,
+        parameter_integer(operation, "ratio_n", -1.0)?,
+        parameter_integer(operation, "ratio_d", -1.0)?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Crop { config },
+    })
+}
+
+fn compile_flip(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &FLIP_PARAMETERS)?;
+    let mode = match parameter_integer(operation, "mode", 0.0)? {
+        0 => FlipMode::Automatic,
+        1 => FlipMode::Explicit,
+        _ => return Err(invalid_parameters(operation, "flip mode is invalid")),
+    };
+    let orientation_value = parameter_integer(operation, "orientation", 0.0)?;
+    let orientation = OrientationBits::try_from(orientation_value)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    let config =
+        FlipConfig::new(mode, orientation).map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Flip { config },
+    })
 }
 
 fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), OperationCompileError> {

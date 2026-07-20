@@ -242,6 +242,43 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
                 hasher.update(provenance.source_table_revision().to_le_bytes());
             }
         }
+        ProcessingOperationKind::Crop { config } => {
+            write_crop_operation(hasher, config);
+        }
+        ProcessingOperationKind::Flip { config } => {
+            write_flip_operation(hasher, config);
+        }
+    }
+}
+
+fn write_crop_operation(
+    hasher: &mut Sha256,
+    config: &rusttable_processing::operations::crop::CropConfig,
+) {
+    hasher.update([10]);
+    hasher.update(config.cx().get().to_bits().to_le_bytes());
+    hasher.update(config.cy().get().to_bits().to_le_bytes());
+    hasher.update(config.cw().get().to_bits().to_le_bytes());
+    hasher.update(config.ch().get().to_bits().to_le_bytes());
+    hasher.update(config.ratio_n().to_le_bytes());
+    hasher.update(config.ratio_d().to_le_bytes());
+}
+
+fn write_flip_operation(
+    hasher: &mut Sha256,
+    config: &rusttable_processing::operations::flip::FlipConfig,
+) {
+    hasher.update([11]);
+    hasher.update([match config.mode() {
+        rusttable_processing::operations::flip::FlipMode::Automatic => 0,
+        rusttable_processing::operations::flip::FlipMode::Explicit => 1,
+    }]);
+    hasher.update([config.orientation().bits()]);
+    if let Some(source) = config.opaque_source() {
+        hasher.update([1]);
+        hasher.update(source);
+    } else {
+        hasher.update([0]);
     }
 }
 

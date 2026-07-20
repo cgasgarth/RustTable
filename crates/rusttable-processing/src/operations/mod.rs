@@ -10,6 +10,8 @@ pub mod colorin;
 pub mod colorout;
 pub mod colorreconstruction;
 mod common;
+pub mod crop;
+pub mod flip;
 pub mod highlights;
 pub mod primaries;
 pub mod temperature;
