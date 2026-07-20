@@ -48,16 +48,24 @@ pub enum InputIntent {
 pub enum BasicEditIntent {
     Increment(BasicEditField),
     Decrement(BasicEditField),
+    Undo,
+    Redo,
     Reset,
     Commit,
+    Reload,
+    Reapply,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BasicEditControl {
     Decrement(BasicEditField),
     Increment(BasicEditField),
+    Undo,
+    Redo,
     Reset,
     Commit,
+    Reload,
+    Reapply,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -364,8 +372,12 @@ pub fn focus_chain_with_import_panel(
                     FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::GreenGain)),
                     FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::BlueGain)),
                     FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::BlueGain)),
+                    FocusTarget::BasicEdit(BasicEditControl::Undo),
+                    FocusTarget::BasicEdit(BasicEditControl::Redo),
                     FocusTarget::BasicEdit(BasicEditControl::Reset),
                     FocusTarget::BasicEdit(BasicEditControl::Commit),
+                    FocusTarget::BasicEdit(BasicEditControl::Reload),
+                    FocusTarget::BasicEdit(BasicEditControl::Reapply),
                 ]);
             }
             chain.push(FocusTarget::BackToLibrary);
@@ -533,8 +545,12 @@ mod tests {
                 FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::GreenGain)),
                 FocusTarget::BasicEdit(BasicEditControl::Decrement(BasicEditField::BlueGain)),
                 FocusTarget::BasicEdit(BasicEditControl::Increment(BasicEditField::BlueGain)),
+                FocusTarget::BasicEdit(BasicEditControl::Undo),
+                FocusTarget::BasicEdit(BasicEditControl::Redo),
                 FocusTarget::BasicEdit(BasicEditControl::Reset),
                 FocusTarget::BasicEdit(BasicEditControl::Commit),
+                FocusTarget::BasicEdit(BasicEditControl::Reload),
+                FocusTarget::BasicEdit(BasicEditControl::Reapply),
                 FocusTarget::BackToLibrary,
             ]
         );

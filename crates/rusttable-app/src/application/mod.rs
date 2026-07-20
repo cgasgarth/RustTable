@@ -4,7 +4,7 @@ mod edit;
 mod preview;
 
 use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
-use crate::workspace::{BasicEditDraft, SelectedPreview, pick_raster_files, run_raster_import};
+use crate::workspace::{BasicEditSession, SelectedPreview, pick_raster_files, run_raster_import};
 use rusttable_core::PhotoId;
 use rusttable_import::{
     RasterImportBatch, RasterImportCancellation, RasterImportProgress, RasterImportStage,
@@ -28,7 +28,7 @@ pub(crate) struct Shell {
     import_paths: Vec<PathBuf>,
     import_cancellation: Option<RasterImportCancellation>,
     pending_import_selection: Option<PhotoId>,
-    basic_edit: Option<BasicEditDraft>,
+    basic_edit: Option<BasicEditSession>,
 }
 
 impl Default for Shell {

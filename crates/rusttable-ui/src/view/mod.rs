@@ -275,15 +275,40 @@ fn basic_edit_inspector(
         BasicEditSaveState::Unsaved => "Unsaved edit",
         BasicEditSaveState::Saving => "Saving edit",
         BasicEditSaveState::Failed => "Save failed; unsaved edit retained",
+        BasicEditSaveState::Conflict => "Edit changed elsewhere; reload or reapply your draft",
     };
     column![
         text("Basic edit inspector"),
         text("Exposure and RGB gain"),
         column(fields).spacing(REGION_SPACING),
+        basic_edit_control(
+            state,
+            BasicEditControl::Undo,
+            "Undo edit".to_owned(),
+            BasicEditIntent::Undo,
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Redo,
+            "Redo edit".to_owned(),
+            BasicEditIntent::Redo,
+        ),
         action_button(
             text("Reset edit"),
             UiMessage::Input(InputIntent::BasicEdit(BasicEditIntent::Reset)),
             state.is_focused(FocusTarget::BasicEdit(BasicEditControl::Reset)),
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Reload,
+            "Reload edit".to_owned(),
+            BasicEditIntent::Reload,
+        ),
+        basic_edit_control(
+            state,
+            BasicEditControl::Reapply,
+            "Reapply draft".to_owned(),
+            BasicEditIntent::Reapply,
         ),
         action_button(
             text("Save edit"),

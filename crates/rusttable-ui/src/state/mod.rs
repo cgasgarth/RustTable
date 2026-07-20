@@ -116,6 +116,16 @@ impl UiState {
         }
     }
 
+    pub fn conflict_basic_edit_save(&mut self, photo_id: PhotoId) {
+        if let Some(inspector) = self
+            .basic_edit
+            .as_mut()
+            .filter(|inspector| inspector.photo_id() == photo_id)
+        {
+            inspector.mark_save_conflicted();
+        }
+    }
+
     #[must_use]
     pub fn is_focused(&self, target: FocusTarget) -> bool {
         self.input.is_focused(target)
@@ -223,6 +233,10 @@ impl UiState {
         match intent {
             BasicEditIntent::Increment(field) => inspector.increment(field),
             BasicEditIntent::Decrement(field) => inspector.decrement(field),
+            BasicEditIntent::Undo
+            | BasicEditIntent::Redo
+            | BasicEditIntent::Reload
+            | BasicEditIntent::Reapply => {}
             BasicEditIntent::Reset => inspector.reset(),
             BasicEditIntent::Commit => inspector.request_save(),
         }

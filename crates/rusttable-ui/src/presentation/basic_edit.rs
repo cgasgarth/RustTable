@@ -157,6 +157,7 @@ pub enum BasicEditSaveState {
     Unsaved,
     Saving,
     Failed,
+    Conflict,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -236,6 +237,10 @@ impl BasicEditInspectorViewModel {
 
     pub fn mark_save_failed(&mut self) {
         self.save_state = BasicEditSaveState::Failed;
+    }
+
+    pub fn mark_save_conflicted(&mut self) {
+        self.save_state = BasicEditSaveState::Conflict;
     }
 
     pub fn request_save(&mut self) {

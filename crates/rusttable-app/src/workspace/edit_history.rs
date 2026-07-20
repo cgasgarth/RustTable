@@ -18,18 +18,20 @@ pub enum BasicEditMutation {
 }
 
 impl BasicEditMutation {
-    fn apply_to(self, draft: BasicEditDraft) -> Result<BasicEditDraft, BasicEditValueError> {
+    fn apply_to(self, mut draft: BasicEditDraft) -> Result<BasicEditDraft, BasicEditValueError> {
         match self {
-            Self::SetExposureStops(value) => draft.with_exposure_stops(value),
-            Self::SetRgbRed(value) => draft.with_rgb_red(value),
-            Self::SetRgbGreen(value) => draft.with_rgb_green(value),
-            Self::SetRgbBlue(value) => draft.with_rgb_blue(value),
-            Self::Reset => draft
-                .with_exposure_stops(0.0)?
-                .with_rgb_red(1.0)?
-                .with_rgb_green(1.0)?
-                .with_rgb_blue(1.0),
+            Self::SetExposureStops(value) => draft.set_exposure_stops(value)?,
+            Self::SetRgbRed(value) => draft.set_rgb_red(value)?,
+            Self::SetRgbGreen(value) => draft.set_rgb_green(value)?,
+            Self::SetRgbBlue(value) => draft.set_rgb_blue(value)?,
+            Self::Reset => {
+                draft.set_exposure_stops(0.0)?;
+                draft.set_rgb_red(1.0)?;
+                draft.set_rgb_green(1.0)?;
+                draft.set_rgb_blue(1.0)?;
+            }
         }
+        Ok(draft)
     }
 }
 
@@ -72,40 +74,18 @@ impl BasicEditSession {
         &self.current
     }
 
-    /// Consumes the session and returns its current draft.
-    #[must_use]
-    pub fn into_draft(self) -> BasicEditDraft {
-        self.current
-    }
-
-    /// Returns the configured maximum number of retained undo entries.
-    #[must_use]
-    pub const fn capacity(&self) -> usize {
-        self.capacity
-    }
-
     /// Returns the number of currently available undo operations.
+    #[cfg(test)]
     #[must_use]
     pub fn undo_len(&self) -> usize {
         self.undo.len()
     }
 
     /// Returns the number of currently available redo operations.
+    #[cfg(test)]
     #[must_use]
     pub fn redo_len(&self) -> usize {
         self.redo.len()
-    }
-
-    /// Returns whether an undo operation is available.
-    #[must_use]
-    pub fn can_undo(&self) -> bool {
-        !self.undo.is_empty()
-    }
-
-    /// Returns whether a redo operation is available.
-    #[must_use]
-    pub fn can_redo(&self) -> bool {
-        !self.redo.is_empty()
     }
 
     /// Applies a mutation and returns whether it changed the draft.
@@ -158,12 +138,6 @@ impl BasicEditSession {
             let _ = self.undo.pop_front();
         }
         true
-    }
-
-    /// Drops all undo and redo entries while keeping the current draft.
-    pub fn clear_history(&mut self) {
-        self.undo.clear();
-        self.redo.clear();
     }
 }
 
@@ -241,15 +215,22 @@ mod tests {
     }
 
     fn assert_values(session: &BasicEditSession, exposure: f64, red: f64) {
-        assert_eq!(session.draft().exposure_stops(), exposure);
-        assert_eq!(session.draft().rgb_red(), red);
+        assert_scalar(session.draft().exposure_stops(), exposure);
+        assert_scalar(session.draft().rgb_red(), red);
+    }
+
+    fn assert_scalar(actual: f64, expected: f64) {
+        assert_eq!(
+            FiniteF64::new(actual).expect("draft value is finite"),
+            FiniteF64::new(expected).expect("test value is finite")
+        );
     }
 
     #[test]
     fn applies_typed_mutations_and_undoes_and_redoes_them() {
         let mut session = session(4);
-        assert!(!session.can_undo());
-        assert!(!session.can_redo());
+        assert_eq!(session.undo_len(), 0);
+        assert_eq!(session.redo_len(), 0);
 
         assert!(
             session
@@ -285,10 +266,10 @@ mod tests {
         session
             .apply(BasicEditMutation::SetRgbGreen(1.5))
             .expect("valid green gain");
-        assert!(!session.can_redo());
+        assert_eq!(session.redo_len(), 0);
         assert!(!session.redo());
         assert_values(&session, 1.0, 1.0);
-        assert_eq!(session.draft().rgb_green(), 1.5);
+        assert_scalar(session.draft().rgb_green(), 1.5);
     }
 
     #[test]
@@ -304,7 +285,7 @@ mod tests {
         assert!(session.undo());
         assert!(session.undo());
         assert!(!session.undo());
-        assert_eq!(session.draft().exposure_stops(), 1.0);
+        assert_scalar(session.draft().exposure_stops(), 1.0);
     }
 
     #[test]
@@ -314,12 +295,12 @@ mod tests {
             .apply(BasicEditMutation::SetExposureStops(1.0))
             .expect("valid exposure");
         assert!(session.undo());
-        assert!(session.can_redo());
+        assert_eq!(session.redo_len(), 1);
 
         let result = session.apply(BasicEditMutation::SetExposureStops(f64::NAN));
         assert!(result.is_err());
         assert_values(&session, 0.0, 1.0);
-        assert!(session.can_redo());
+        assert_eq!(session.redo_len(), 1);
     }
 
     #[test]
@@ -336,7 +317,7 @@ mod tests {
                 .expect("valid no-op")
         );
         assert_eq!(session.undo_len(), 0);
-        assert!(session.can_redo());
+        assert_eq!(session.redo_len(), 1);
     }
 
     #[test]
@@ -347,7 +328,7 @@ mod tests {
                 .apply(BasicEditMutation::SetRgbBlue(0.25))
                 .expect("valid blue gain")
         );
-        assert_eq!(session.draft().rgb_blue(), 0.25);
+        assert_scalar(session.draft().rgb_blue(), 0.25);
         assert_eq!(session.undo_len(), 0);
         assert!(!session.undo());
         assert!(!session.redo());
@@ -371,11 +352,11 @@ mod tests {
 
         assert!(session.apply(BasicEditMutation::Reset).expect("reset"));
         assert_values(&session, 0.0, 1.0);
-        assert_eq!(session.draft().rgb_green(), 1.0);
-        assert_eq!(session.draft().rgb_blue(), 1.0);
+        assert_scalar(session.draft().rgb_green(), 1.0);
+        assert_scalar(session.draft().rgb_blue(), 1.0);
         assert!(session.undo());
         assert_values(&session, -2.0, 0.25);
-        assert_eq!(session.draft().rgb_green(), 1.5);
-        assert_eq!(session.draft().rgb_blue(), 1.75);
+        assert_scalar(session.draft().rgb_green(), 1.5);
+        assert_scalar(session.draft().rgb_blue(), 1.75);
     }
 }

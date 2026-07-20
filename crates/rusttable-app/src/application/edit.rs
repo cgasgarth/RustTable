@@ -8,8 +8,8 @@ use rusttable_ui::{
 };
 
 use crate::workspace::{
-    BasicEditDraft, BasicEditValueError, commit_basic_edit_at_path,
-    preview_loader::load_selected_edit,
+    BasicEditCommitError, BasicEditDraft, BasicEditMutation, BasicEditSession, BasicEditValueError,
+    commit_basic_edit_at_path, preview_loader::load_selected_edit,
 };
 
 use super::{Message, Shell, WorkspaceRoute, preview};
@@ -23,6 +23,7 @@ pub(crate) enum EditLoadResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum EditCommitResult {
     Ready(BasicEditDraft),
+    Conflict,
     Failed,
 }
 
@@ -44,7 +45,7 @@ pub(super) fn apply_loaded(shell: &mut Shell, photo_id: PhotoId, result: &EditLo
         return;
     };
     if draft.photo_id() == photo_id && shell.ui.route() == WorkspaceRoute::PhotoDetail(photo_id) {
-        shell.basic_edit = Some(draft.clone());
+        shell.basic_edit = Some(BasicEditSession::new(draft.clone(), 128));
         shell.ui.set_basic_edit_values(photo_id, values(draft));
     }
 }
@@ -53,26 +54,50 @@ pub(super) fn handle_intent(shell: &mut Shell, intent: BasicEditIntent) -> Task<
     let Some(draft) = shell.basic_edit.as_ref() else {
         return Task::none();
     };
-    let photo_id = draft.photo_id();
+    let photo_id = draft.draft().photo_id();
     if shell.ui.route() != WorkspaceRoute::PhotoDetail(photo_id) {
         return Task::none();
     }
-    if matches!(intent, BasicEditIntent::Commit) {
-        shell.ui.begin_basic_edit_save(photo_id);
-        return start_commit(
-            shell.catalog_path.as_ref().ok().cloned(),
-            photo_id,
-            draft.clone(),
-        );
+    match intent {
+        BasicEditIntent::Commit => {
+            shell.ui.begin_basic_edit_save(photo_id);
+            return start_commit(
+                shell.catalog_path.as_ref().ok().cloned(),
+                photo_id,
+                draft.draft().clone(),
+            );
+        }
+        BasicEditIntent::Reload => {
+            return Task::batch([
+                preview::start_persisted(shell, photo_id),
+                start_load(shell.catalog_path.as_ref().ok().cloned(), photo_id),
+            ]);
+        }
+        BasicEditIntent::Reapply => {
+            shell.ui.begin_basic_edit_save(photo_id);
+            return start_reapply(
+                shell.catalog_path.as_ref().ok().cloned(),
+                photo_id,
+                draft.draft().clone(),
+            );
+        }
+        BasicEditIntent::Increment(_)
+        | BasicEditIntent::Decrement(_)
+        | BasicEditIntent::Undo
+        | BasicEditIntent::Redo
+        | BasicEditIntent::Reset => {}
     }
     let (draft_values, draft_preview) = {
-        let Some(draft) = shell.basic_edit.as_mut() else {
+        let Some(session) = shell.basic_edit.as_mut() else {
             return Task::none();
         };
-        if adjust(draft, intent).is_err() {
+        if adjust(session, intent).is_err() {
             return Task::none();
         }
-        (values(draft), draft.replacement_edit().ok())
+        (
+            values(session.draft()),
+            session.draft().replacement_edit().ok(),
+        )
     };
     shell.ui.set_basic_edit_draft_values(photo_id, draft_values);
     draft_preview.map_or_else(Task::none, |edit| preview::start_draft(shell, &edit))
@@ -83,14 +108,21 @@ pub(super) fn apply_committed(
     photo_id: PhotoId,
     result: &EditCommitResult,
 ) -> Task<Message> {
-    let EditCommitResult::Ready(draft) = result else {
-        shell.ui.fail_basic_edit_save(photo_id);
-        return Task::none();
+    let draft = match result {
+        EditCommitResult::Ready(draft) => draft,
+        EditCommitResult::Conflict => {
+            shell.ui.conflict_basic_edit_save(photo_id);
+            return Task::none();
+        }
+        EditCommitResult::Failed => {
+            shell.ui.fail_basic_edit_save(photo_id);
+            return Task::none();
+        }
     };
     if draft.photo_id() != photo_id || shell.ui.route() != WorkspaceRoute::PhotoDetail(photo_id) {
         return Task::none();
     }
-    shell.basic_edit = Some(draft.clone());
+    shell.basic_edit = Some(BasicEditSession::new(draft.clone(), 128));
     shell.ui.set_basic_edit_values(photo_id, values(draft));
     preview::start_persisted(shell, photo_id)
 }
@@ -101,36 +133,79 @@ fn start_commit(
     draft: BasicEditDraft,
 ) -> Task<Message> {
     Task::perform(
+        async move { commit_at_path(catalog_path.as_deref(), &draft) },
+        move |result| Message::EditCommitted { photo_id, result },
+    )
+}
+
+fn start_reapply(
+    catalog_path: Option<PathBuf>,
+    photo_id: PhotoId,
+    draft: BasicEditDraft,
+) -> Task<Message> {
+    Task::perform(
         async move {
-            catalog_path
-                .as_deref()
-                .and_then(|path| commit_basic_edit_at_path(path, &draft).ok())
-                .and_then(|edit| BasicEditDraft::from_edit(&edit).ok())
-                .map_or(EditCommitResult::Failed, EditCommitResult::Ready)
+            let Some(path) = catalog_path.as_deref() else {
+                return EditCommitResult::Failed;
+            };
+            let Ok(current) = load_selected_edit(path, photo_id) else {
+                return EditCommitResult::Failed;
+            };
+            let Ok(mut reloaded) = BasicEditDraft::from_edit(&current) else {
+                return EditCommitResult::Failed;
+            };
+            if apply_values(&mut reloaded, &draft).is_err() {
+                return EditCommitResult::Failed;
+            }
+            commit_at_path(Some(path), &reloaded)
         },
         move |result| Message::EditCommitted { photo_id, result },
     )
 }
 
-fn adjust(draft: &mut BasicEditDraft, intent: BasicEditIntent) -> Result<(), BasicEditValueError> {
-    match intent {
-        BasicEditIntent::Increment(field) => adjust_field(draft, field, true),
-        BasicEditIntent::Decrement(field) => adjust_field(draft, field, false),
-        BasicEditIntent::Reset => {
-            draft.set_exposure_stops(0.0)?;
-            draft.set_rgb_red(1.0)?;
-            draft.set_rgb_green(1.0)?;
-            draft.set_rgb_blue(1.0)
-        }
-        BasicEditIntent::Commit => Ok(()),
+fn commit_at_path(
+    catalog_path: Option<&std::path::Path>,
+    draft: &BasicEditDraft,
+) -> EditCommitResult {
+    let Some(path) = catalog_path else {
+        return EditCommitResult::Failed;
+    };
+    match commit_basic_edit_at_path(path, draft) {
+        Ok(edit) => BasicEditDraft::from_edit(&edit)
+            .map_or(EditCommitResult::Failed, EditCommitResult::Ready),
+        Err(BasicEditCommitError::RevisionConflict { .. }) => EditCommitResult::Conflict,
+        Err(_) => EditCommitResult::Failed,
     }
 }
 
-fn adjust_field(
-    draft: &mut BasicEditDraft,
-    field: BasicEditField,
-    increase: bool,
+fn adjust(
+    session: &mut BasicEditSession,
+    intent: BasicEditIntent,
+) -> Result<bool, BasicEditValueError> {
+    let mutation = match intent {
+        BasicEditIntent::Increment(field) => adjustment(session.draft(), field, true),
+        BasicEditIntent::Decrement(field) => adjustment(session.draft(), field, false),
+        BasicEditIntent::Undo => return Ok(session.undo()),
+        BasicEditIntent::Redo => return Ok(session.redo()),
+        BasicEditIntent::Reset => BasicEditMutation::Reset,
+        BasicEditIntent::Commit | BasicEditIntent::Reload | BasicEditIntent::Reapply => {
+            return Ok(false);
+        }
+    };
+    session.apply(mutation)
+}
+
+fn apply_values(
+    target: &mut BasicEditDraft,
+    source: &BasicEditDraft,
 ) -> Result<(), BasicEditValueError> {
+    target.set_exposure_stops(source.exposure_stops())?;
+    target.set_rgb_red(source.rgb_red())?;
+    target.set_rgb_green(source.rgb_green())?;
+    target.set_rgb_blue(source.rgb_blue())
+}
+
+fn adjustment(draft: &BasicEditDraft, field: BasicEditField, increase: bool) -> BasicEditMutation {
     let (current, minimum, maximum, step) = match field {
         BasicEditField::Exposure => (draft.exposure_stops(), -5.0, 5.0, 0.01),
         BasicEditField::RedGain => (draft.rgb_red(), 0.0, 2.0, 0.001),
@@ -139,10 +214,10 @@ fn adjust_field(
     };
     let next = (current + if increase { step } else { -step }).clamp(minimum, maximum);
     match field {
-        BasicEditField::Exposure => draft.set_exposure_stops(next),
-        BasicEditField::RedGain => draft.set_rgb_red(next),
-        BasicEditField::GreenGain => draft.set_rgb_green(next),
-        BasicEditField::BlueGain => draft.set_rgb_blue(next),
+        BasicEditField::Exposure => BasicEditMutation::SetExposureStops(next),
+        BasicEditField::RedGain => BasicEditMutation::SetRgbRed(next),
+        BasicEditField::GreenGain => BasicEditMutation::SetRgbGreen(next),
+        BasicEditField::BlueGain => BasicEditMutation::SetRgbBlue(next),
     }
 }
 
@@ -167,11 +242,14 @@ mod tests {
     };
     use rusttable_ui::{
         NavigationIntent, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
-        PresentationText, WorkspaceRoute, input::BasicEditIntent, presentation::BasicEditField,
+        PresentationText, WorkspaceRoute,
+        input::BasicEditIntent,
+        presentation::{BasicEditField, BasicEditSaveState},
     };
 
     use super::{
-        BasicEditDraft, EditLoadResult, Shell, adjust, apply_loaded, handle_intent, values,
+        BasicEditDraft, BasicEditSession, EditCommitResult, EditLoadResult, Shell, adjust,
+        apply_committed, apply_loaded, handle_intent, values,
     };
 
     fn draft(photo_id: PhotoId) -> BasicEditDraft {
@@ -246,15 +324,16 @@ mod tests {
         draft
             .set_exposure_stops(4.999)
             .expect("test exposure is in range");
+        let mut session = BasicEditSession::new(draft, 4);
 
         adjust(
-            &mut draft,
+            &mut session,
             BasicEditIntent::Increment(BasicEditField::Exposure),
         )
         .expect("increment remains in range");
 
         assert_eq!(
-            values(&draft).display_value(BasicEditField::Exposure),
+            values(session.draft()).display_value(BasicEditField::Exposure),
             "5.00"
         );
     }
@@ -266,10 +345,11 @@ mod tests {
         draft.set_rgb_red(0.5).expect("in range");
         draft.set_rgb_green(1.5).expect("in range");
         draft.set_rgb_blue(0.25).expect("in range");
+        let mut session = BasicEditSession::new(draft, 4);
 
-        adjust(&mut draft, BasicEditIntent::Reset).expect("defaults are valid");
+        adjust(&mut session, BasicEditIntent::Reset).expect("defaults are valid");
 
-        let projected = values(&draft);
+        let projected = values(session.draft());
         assert_eq!(projected.display_value(BasicEditField::Exposure), "0.00");
         assert_eq!(projected.display_value(BasicEditField::RedGain), "1.000");
         assert_eq!(projected.display_value(BasicEditField::GreenGain), "1.000");
@@ -295,7 +375,7 @@ mod tests {
             shell
                 .basic_edit
                 .as_ref()
-                .map(|draft| values(draft).display_value(BasicEditField::Exposure)),
+                .map(|session| values(session.draft()).display_value(BasicEditField::Exposure)),
             Some("0.01".to_owned())
         );
         assert_eq!(
@@ -317,5 +397,62 @@ mod tests {
 
         assert_eq!(shell.ui.route(), WorkspaceRoute::PhotoDetail(photo_id));
         assert!(shell.basic_edit.is_none());
+    }
+
+    #[test]
+    fn undo_and_redo_reproject_the_session_draft() {
+        let photo_id = PhotoId::new(2).expect("test photo ID is non-zero");
+        let mut shell = shell(photo_id);
+        apply_loaded(
+            &mut shell,
+            photo_id,
+            &EditLoadResult::Ready(draft(photo_id)),
+        );
+        let _ = handle_intent(
+            &mut shell,
+            BasicEditIntent::Increment(BasicEditField::Exposure),
+        );
+        let _ = handle_intent(&mut shell, BasicEditIntent::Undo);
+
+        assert_eq!(
+            shell
+                .ui
+                .basic_edit()
+                .map(|inspector| inspector.values().display_value(BasicEditField::Exposure)),
+            Some("0.00".to_owned())
+        );
+
+        let _ = handle_intent(&mut shell, BasicEditIntent::Redo);
+        assert_eq!(
+            shell
+                .ui
+                .basic_edit()
+                .map(|inspector| inspector.values().display_value(BasicEditField::Exposure)),
+            Some("0.01".to_owned())
+        );
+    }
+
+    #[test]
+    fn conflict_retains_the_unsaved_draft_and_exposes_recovery_actions() {
+        let photo_id = PhotoId::new(2).expect("test photo ID is non-zero");
+        let mut shell = shell(photo_id);
+        apply_loaded(
+            &mut shell,
+            photo_id,
+            &EditLoadResult::Ready(draft(photo_id)),
+        );
+        let _ = handle_intent(
+            &mut shell,
+            BasicEditIntent::Increment(BasicEditField::Exposure),
+        );
+
+        let _ = apply_committed(&mut shell, photo_id, &EditCommitResult::Conflict);
+
+        let inspector = shell.ui.basic_edit().expect("selected edit inspector");
+        assert_eq!(inspector.save_state(), BasicEditSaveState::Conflict);
+        assert_eq!(
+            inspector.values().display_value(BasicEditField::Exposure),
+            "0.01"
+        );
     }
 }
