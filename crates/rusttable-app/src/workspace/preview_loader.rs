@@ -93,15 +93,17 @@ fn current_edit(
     repository: &RedbCatalogRepository,
     photo_id: PhotoId,
 ) -> Result<Edit, WorkspacePreviewError> {
-    repository
-        .list()
-        .map_err(|error| {
-            WorkspacePreviewError::Preview(CatalogPreviewError::EditRepository(error))
-        })?
+    let edits = repository.list().map_err(|error| {
+        WorkspacePreviewError::Preview(CatalogPreviewError::EditRepository(error))
+    })?;
+    select_current_edit(edits, photo_id).ok_or(WorkspacePreviewError::MissingEdit { photo_id })
+}
+
+fn select_current_edit(edits: Vec<Edit>, photo_id: PhotoId) -> Option<Edit> {
+    edits
         .into_iter()
         .filter(|edit| edit.photo_id() == photo_id)
         .max_by_key(|edit| (edit.revision().get(), edit.id().get()))
-        .ok_or(WorkspacePreviewError::MissingEdit { photo_id })
 }
 
 fn preview_service() -> PreviewService {
@@ -117,4 +119,58 @@ fn preview_service() -> PreviewService {
         PreviewBounds::new(PREVIEW_EDGE, PREVIEW_EDGE)
             .expect("constant workspace preview bounds are valid"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use rusttable_core::{EditId, Revision};
+
+    use super::{Edit, PhotoId, select_current_edit};
+
+    fn photo_id(value: u128) -> PhotoId {
+        PhotoId::new(value).expect("test photo ID is non-zero")
+    }
+
+    fn edit(id: u128, photo_id: PhotoId, revision: u64) -> Edit {
+        Edit::from_parts(
+            EditId::new(id).expect("test edit ID is non-zero"),
+            photo_id,
+            Revision::ZERO,
+            Revision::from_u64(revision),
+            [],
+        )
+        .expect("empty test edit is valid")
+    }
+
+    #[test]
+    fn current_edit_prefers_the_highest_revision_for_the_selected_photo() {
+        let selected = photo_id(1);
+        let current = select_current_edit(
+            vec![
+                edit(10, selected, 2),
+                edit(11, photo_id(2), 99),
+                edit(12, selected, 3),
+            ],
+            selected,
+        );
+
+        assert_eq!(current.map(|edit| edit.id().get()), Some(12));
+    }
+
+    #[test]
+    fn current_edit_breaks_equal_revision_ties_by_edit_id() {
+        let selected = photo_id(1);
+        let current =
+            select_current_edit(vec![edit(12, selected, 3), edit(13, selected, 3)], selected);
+
+        assert_eq!(current.map(|edit| edit.id().get()), Some(13));
+    }
+
+    #[test]
+    fn current_edit_does_not_select_an_edit_for_another_photo() {
+        assert_eq!(
+            select_current_edit(vec![edit(1, photo_id(1), 1)], photo_id(2)),
+            None
+        );
+    }
 }
