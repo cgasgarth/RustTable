@@ -45,6 +45,7 @@ pub enum PhotoPreviewTextureError {
     WidthTooLarge,
     HeightTooLarge,
     StrideOverflow,
+    PixelPayloadTooLarge,
 }
 
 impl PhotoPreview {
@@ -287,21 +288,24 @@ impl PhotoPreview {
     fn render_preview_state(&self, state: &SelectedPreviewState) {
         match state {
             SelectedPreviewState::Loading => {
+                self.clear_texture();
                 self.status.set_text("loading preview");
                 self.dimensions.set_text("");
                 self.placeholder.set_text("loading preview");
             }
             SelectedPreviewState::Ready(metadata) => {
-                self.status.set_text(metadata.status().as_str());
-                self.dimensions.set_text(&format_dimensions(metadata));
-                self.placeholder.set_text("rendering preview");
+                if self.set_rgba8(metadata).is_err() {
+                    self.set_failure("preview failed");
+                }
             }
             SelectedPreviewState::Unavailable => {
+                self.clear_texture();
                 self.status.set_text("preview unavailable");
                 self.dimensions.set_text("");
                 self.placeholder.set_text("preview unavailable");
             }
             SelectedPreviewState::Failed(failure) => {
+                self.clear_texture();
                 self.status.set_text(failure.detail().as_str());
                 self.dimensions.set_text("");
                 self.placeholder.set_text("preview failed");
