@@ -3,14 +3,11 @@
 * {
   color: {{foreground}};
   font-family: Sans;
-  /* Keep one readable base size; recursive em scaling makes nested GTK
-     controls shrink exponentially and diverges from Darktable's chrome. */
-  font-size: 1em;
+  font-size: 12px;
   font-weight: normal;
 }
 
 window,
-headerbar,
 #header,
 .dt_shell,
 .dt_header,
@@ -19,10 +16,9 @@ headerbar,
   color: {{foreground}};
 }
 
-#header,
-headerbar {
-  min-height: 2.1em;
-  padding: 0.12em 0.28em;
+#header {
+  min-height: 36px;
+  padding: 0 4px;
   border-bottom: 1px solid {{border}};
 }
 
@@ -33,19 +29,65 @@ headerbar {
   background-color: transparent;
 }
 
-.dt_view_switcher {
-  margin: 0;
-  padding: 0;
+#header-left {
+  min-width: 154px;
+  padding: 3px 7px 3px 2px;
 }
 
-.dt_view_switcher button,
+#rusttable-aperture-mark {
+  min-width: 27px;
+  min-height: 27px;
+}
+
+.dt_brand_title {
+  color: {{foreground}};
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.dt_brand_version {
+  color: {{foreground}};
+  font-size: 8px;
+}
+
+#header-center {
+  min-width: 0;
+}
+
+.dt_view_switcher {
+  margin: 0;
+  padding: 0 4px;
+}
+
+.dt_view_switcher button {
+  min-height: 26px;
+  padding: 1px 7px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+.dt_mode_separator {
+  color: {{border}};
+}
+
+.dt_view_switcher button.active {
+  color: #ffffffff;
+  font-weight: bold;
+}
+
 .dt_toolbar button,
 .dt_button {
-  min-height: 1.65em;
-  padding: 0.12em 0.55em;
-  border: 1px solid {{border}};
-  border-radius: 2px;
-  background-color: {{button_background}};
+  min-height: 22px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 1px;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
   color: {{foreground}};
 }
 
@@ -59,14 +101,14 @@ button:hover,
 
 .dt_view_switcher button:checked,
 .dt_view_switcher .active {
-  background-color: {{selected_thumbnail}};
-  color: {{background}};
-  border-color: {{active_image_marker}};
+  background-color: transparent;
+  color: #ffffffff;
+  border-color: transparent;
 }
 
 #left-panel,
 #right-panel {
-  min-width: 150px;
+  min-width: 154px;
   background-color: {{background}};
   border: 0;
 }
@@ -80,7 +122,67 @@ button:hover,
 }
 
 .dt_panel_slot {
-  padding: 0.25em 0.35em;
+  padding: 0;
+}
+
+#left-center,
+#left-bottom {
+  min-width: 154px;
+}
+
+#left-module-scroll {
+  min-width: 154px;
+  background-color: {{background}};
+}
+
+#left-panel expander {
+  margin: 0;
+  padding: 2px 4px;
+  min-width: 146px;
+  background-image: none;
+  box-shadow: none;
+}
+
+#left-panel expander > title {
+  min-height: 19px;
+  padding: 0;
+}
+
+#left-panel expander > box {
+  padding: 3px 0 5px 12px;
+}
+
+#collection-controls,
+#collection-rule,
+#collection-search-row,
+#collection-property,
+#collection-search {
+  min-width: 0;
+}
+
+#left-panel entry,
+#left-panel dropdown,
+#left-panel button {
+  min-width: 0;
+  background-image: none;
+  box-shadow: none;
+}
+
+#collection-property,
+#collection-search-row {
+  margin-right: 2px;
+}
+
+#collection-clear {
+  min-width: 24px;
+  padding: 0;
+}
+
+.dt_background_jobs {
+  min-height: 18px;
+  padding: 1px 6px;
+  font-size: 10px;
+  border-top: 1px solid {{border}};
 }
 
 #workspace,
@@ -141,16 +243,16 @@ expander:hover {
 }
 
 .dt_toolbar {
-  min-height: 1.8em;
-  padding: 0.12em 0.28em;
+  min-height: 28px;
+  padding: 1px 3px;
   background-color: {{background}};
   color: {{foreground}};
 }
 
 #lighttable-collection-toolbar,
 #filmstrip-toolbar {
-  min-height: 2em;
-  padding: 0.08em 0.28em;
+  min-height: 30px;
+  padding: 1px 2px;
   background-color: {{background}};
   border-bottom: 1px solid {{border}};
 }
@@ -159,16 +261,44 @@ expander:hover {
 #lighttable-collection-toolbar dropdown,
 .dt_filter_button,
 .dt_filmstrip_button {
-  min-height: 1.5em;
-  padding: 0.08em 0.4em;
-  border: 1px solid {{border}};
-  border-radius: 2px;
-  background-color: {{button_background}};
+  min-height: 21px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 1px;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
   color: {{foreground}};
 }
 
 #lighttable-collection-toolbar entry {
-  min-width: 12em;
+  min-width: 70px;
+}
+
+#lighttable-filter-property,
+#lighttable-sort {
+  min-width: 82px;
+}
+
+#lighttable-selection-count,
+#display-profile-status {
+  font-size: 10px;
+}
+
+.dt_filter_button {
+  min-width: 14px;
+  padding: 0 1px;
+}
+
+#lighttable-rating-0 { color: #d94b45ff; }
+#lighttable-rating-1 { color: #d0a933ff; }
+#lighttable-rating-2 { color: #4b9f58ff; }
+#lighttable-rating-3 { color: #4c7fb4ff; }
+#lighttable-rating-4 { color: #8f5aa8ff; }
+
+.dt_header_icon {
+  min-width: 22px;
+  font-size: 13px;
 }
 
 #lighttable-collection-toolbar button:hover,

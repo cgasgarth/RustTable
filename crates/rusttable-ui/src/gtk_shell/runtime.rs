@@ -16,10 +16,10 @@ use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LIGHTTABLE_TOOLBAR, LibraryBrowserModel, LighttableContentState, ModuleControlKind,
-    ModulePanelViewModel, PanelSlot, PhotoPreview, ShellLayout, ShellRegion, ThemeRole,
-    WorkspaceRole, apply_theme_role,
+    LibraryBrowserModel, LighttableContentState, ModuleControlKind, ModulePanelViewModel,
+    PanelSlot, PhotoPreview, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role,
 };
+use super::{header::HeaderChrome, left_panel::LeftPanel};
 use crate::input_mapping::InputMappingEditor;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 
@@ -84,37 +84,40 @@ impl GtkShell {
             .build();
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
-        let (workspace, lighttable, lighttable_empty_state, darkroom_preview, lighttable_import) =
+        let (workspace, lighttable, lighttable_empty_state, darkroom_preview) =
             workspace_stack(layout.initial_workspace(), &initial_i18n);
         let input_mapping_editor = InputMappingEditor::new(application);
         let display_profile_banner = DisplayProfileBanner::new();
-        let (header, preferences_button, header_import) =
-            header_bar(&workspace, &initial_i18n, &display_profile_banner);
-        preferences_button.connect_clicked({
+        let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
+        header.preferences_button().connect_clicked({
             let editor = input_mapping_editor.clone();
             move |_| editor.present()
         });
         let collection_controls = CollectionControls::with_i18n(
             I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
         );
-        let (left_panel, left_modules) = left_panel(&collection_controls, &initial_i18n);
+        let left_panel = LeftPanel::new(&collection_controls, &initial_i18n);
         let (right_panel, right_modules, export_panel) = right_panel(&initial_i18n);
         let center = central_workspace(&workspace, &initial_i18n);
         let layout_metrics = DARKTABLE_DESKTOP_SPEC.layout;
         let split = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
-            .start_child(&left_panel)
+            .start_child(left_panel.widget())
             .end_child(&center)
             .resize_start_child(false)
             .shrink_start_child(true)
             .position(i32::from(layout_metrics.side_panel_widths.preferred_px))
             .build();
+        split.connect_map({
+            let preferred_width = i32::from(layout_metrics.side_panel_widths.preferred_px);
+            move |paned| paned.set_position(preferred_width)
+        });
         let workspace_with_right_panel = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .start_child(&split)
             .end_child(&right_panel)
             .resize_end_child(false)
-            .shrink_end_child(true)
+            .shrink_end_child(false)
             .position(i32::from(layout_metrics.preferred_right_panel_position_px(
                 layout_metrics.window_width_px,
             )))
@@ -129,8 +132,11 @@ impl GtkShell {
         content.append(&workspace_with_right_panel);
         content.append(&filmstrip.0);
 
-        window.set_titlebar(Some(&header));
-        window.set_child(Some(&content));
+        let shell = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        apply_theme_role(&shell, ThemeRole::Shell);
+        shell.append(header.widget());
+        shell.append(&content);
+        window.set_child(Some(&shell));
 
         Self {
             window,
@@ -141,9 +147,12 @@ impl GtkShell {
             darkroom_preview,
             export_panel,
             filmstrip: filmstrip.1,
-            left_modules,
+            left_modules: left_panel.modules().clone(),
             right_modules,
-            import_buttons: vec![header_import, lighttable_import],
+            import_buttons: vec![
+                header.import_button().clone(),
+                left_panel.import_button().clone(),
+            ],
             collection_controls,
             input_mapping_editor,
             i18n: Rc::clone(&i18n),
@@ -454,109 +463,6 @@ fn connect_photo_selection(
     });
 }
 
-fn header_bar(
-    workspace: &gtk4::Stack,
-    i18n: &I18n,
-    display_profile_banner: &DisplayProfileBanner,
-) -> (gtk4::HeaderBar, gtk4::Button, gtk4::Button) {
-    let header = gtk4::HeaderBar::new();
-    header.set_widget_name(ShellRegion::Header.identifier());
-    apply_theme_role(&header, ThemeRole::Header);
-    header.set_show_title_buttons(true);
-
-    let brand = gtk4::Label::new(Some(&i18n.text(MessageId::AppTitle, &MessageArgs::new())));
-    brand.set_widget_name(PanelSlot::HeaderLeft.identifier());
-    apply_theme_role(&brand, ThemeRole::Toolbar);
-    brand.add_css_class("title-3");
-    header.pack_start(&brand);
-
-    let tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    tools.set_widget_name(PanelSlot::HeaderCenter.identifier());
-    apply_theme_role(&tools, ThemeRole::Toolbar);
-    let import =
-        gtk4::Button::with_label(&i18n.text(MessageId::ToolbarImport, &MessageArgs::new()));
-    import.set_widget_name("header-import");
-    tools.append(&import);
-    let preferences =
-        gtk4::Button::with_label(&i18n.text(MessageId::ToolbarPreferences, &MessageArgs::new()));
-    tools.append(display_profile_banner.widget());
-    tools.append(&preferences);
-    header.set_title_widget(Some(&tools));
-
-    let modes = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    modes.set_widget_name(PanelSlot::HeaderRight.identifier());
-    apply_theme_role(&modes, ThemeRole::ViewSwitcher);
-    let lighttable_button =
-        gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceLighttable, &MessageArgs::new()));
-    lighttable_button.set_widget_name("view-lighttable");
-    lighttable_button.add_css_class("active");
-    let darkroom_button =
-        gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()));
-    darkroom_button.set_widget_name("view-darkroom");
-    let darkroom_stack = workspace.clone();
-    let darkroom_lighttable_button = lighttable_button.clone();
-    let darkroom_button_handle = darkroom_button.clone();
-    darkroom_button.connect_clicked(move |_| {
-        darkroom_stack.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
-        darkroom_lighttable_button.remove_css_class("active");
-        darkroom_button_handle.add_css_class("active");
-    });
-    let lighttable_stack = workspace.clone();
-    let lighttable_darkroom_button = darkroom_button.clone();
-    let lighttable_button_handle = lighttable_button.clone();
-    lighttable_button.connect_clicked(move |_| {
-        lighttable_stack.set_visible_child_name(WorkspaceRole::Lighttable.stack_name());
-        lighttable_darkroom_button.remove_css_class("active");
-        lighttable_button_handle.add_css_class("active");
-    });
-    modes.append(&lighttable_button);
-    modes.append(&darkroom_button);
-    let other = gtk4::Button::with_label("other ▾");
-    other.set_widget_name("view-other");
-    modes.append(&other);
-    header.pack_end(&modes);
-    (header, preferences, import)
-}
-
-fn left_panel(collection_controls: &CollectionControls, i18n: &I18n) -> (gtk4::Box, gtk4::Box) {
-    let panel = panel_column(
-        ShellRegion::LeftPanel,
-        i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
-    );
-    apply_theme_role(&panel, ThemeRole::Panel);
-    let top = panel_slot(PanelSlot::LeftTop);
-    top.append(&panel_heading(i18n, MessageId::PanelNavigation));
-    top.append(&module_group("import", "import", false));
-    top.append(&module_group_with_child(
-        "collections",
-        "collections",
-        collection_controls.widget(),
-        true,
-    ));
-    let center = panel_slot(PanelSlot::LeftCenter);
-    center.append(&module_group(
-        "collection-filters",
-        "collection filters",
-        false,
-    ));
-    let image_information = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    image_information.append(&gtk4::Label::new(Some("selected image")));
-    image_information.append(&gtk4::Label::new(Some("rating · color label · tags")));
-    center.append(&module_group_with_child(
-        "image-information",
-        "image information",
-        &image_information,
-        false,
-    ));
-    let bottom = panel_slot(PanelSlot::LeftBottom);
-    bottom.append(&module_group("scripts", "scripts", false));
-    bottom.append(&gtk4::Label::new(Some(
-        &i18n.text(MessageId::PanelBackgroundJobs, &MessageArgs::new()),
-    )));
-    append_panel_slots(&panel, &top, &center, &bottom);
-    (panel, center)
-}
-
 fn right_panel(i18n: &I18n) -> (gtk4::Box, gtk4::Box, ExportPanel) {
     let panel = panel_column(
         ShellRegion::RightPanel,
@@ -628,13 +534,7 @@ fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
 fn workspace_stack(
     initial_workspace: WorkspaceRole,
     i18n: &I18n,
-) -> (
-    gtk4::Stack,
-    gtk4::FlowBox,
-    gtk4::Stack,
-    PhotoPreview,
-    gtk4::Button,
-) {
+) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Stack, PhotoPreview) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -652,8 +552,6 @@ fn workspace_stack(
     apply_theme_role(&lighttable, ThemeRole::Lighttable);
     let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
     lighttable_page.set_widget_name("lighttable-page");
-    let (toolbar, import) = lighttable_toolbar(i18n);
-    lighttable_page.append(&toolbar);
     let lighttable_scroll = gtk4::ScrolledWindow::builder()
         .child(&lighttable)
         .hexpand(true)
@@ -695,13 +593,7 @@ fn workspace_stack(
         &i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()),
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
-    (
-        workspace,
-        lighttable,
-        lighttable_canvas,
-        darkroom_preview,
-        import,
-    )
+    (workspace, lighttable, lighttable_canvas, darkroom_preview)
 }
 
 fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
@@ -723,40 +615,6 @@ fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     photos.set_widget_name(PanelSlot::Bottom.identifier());
     strip.append(&photos);
     (strip, photos)
-}
-
-fn lighttable_toolbar(i18n: &I18n) -> (gtk4::Box, gtk4::Button) {
-    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    toolbar.set_widget_name(LIGHTTABLE_TOOLBAR.widget_name);
-    apply_theme_role(&toolbar, ThemeRole::Toolbar);
-
-    let import =
-        gtk4::Button::with_label(&i18n.text(MessageId::ToolbarImport, &MessageArgs::new()));
-    import.set_widget_name("lighttable-import");
-    toolbar.append(&import);
-
-    let property = gtk4::DropDown::from_strings(&["filename", "folder", "capture date"]);
-    property.set_widget_name("lighttable-filter-property");
-    toolbar.append(&property);
-    let filter = gtk4::SearchEntry::new();
-    filter.set_widget_name(LIGHTTABLE_TOOLBAR.filter_entry_name);
-    filter.set_placeholder_text(Some("filter all images"));
-    filter.set_hexpand(true);
-    toolbar.append(&filter);
-    for (index, color) in ["★", "●", "●", "●", "●", "●"].into_iter().enumerate() {
-        let button = gtk4::Button::with_label(color);
-        button.set_widget_name(&format!("lighttable-rating-{index}"));
-        button.add_css_class("dt_filter_button");
-        toolbar.append(&button);
-    }
-    let sort = gtk4::DropDown::from_strings(&["filename", "capture date", "rating"]);
-    sort.set_widget_name("lighttable-sort");
-    toolbar.append(&sort);
-    let count = gtk4::Label::new(Some("0 images selected of 0"));
-    count.set_widget_name("lighttable-selection-count");
-    count.add_css_class("dim-label");
-    toolbar.append(&count);
-    (toolbar, import)
 }
 
 fn filmstrip_toolbar(i18n: &I18n) -> gtk4::Box {

@@ -65,9 +65,10 @@ pub struct DisplayProfileBanner {
 impl DisplayProfileBanner {
     #[must_use]
     pub fn new() -> Self {
-        let label = gtk4::Label::new(Some("Display profile: waiting for monitor evidence"));
+        let label = gtk4::Label::new(Some("▣"));
         label.set_widget_name("display-profile-status");
         label.add_css_class("dim-label");
+        label.set_tooltip_text(Some("Display profile: waiting for monitor evidence"));
         Self { label }
     }
 
@@ -93,7 +94,7 @@ impl DisplayProfileBanner {
                 )
             },
         );
-        self.label.set_label(&text);
+        self.label.set_tooltip_text(Some(&text));
         self.label.remove_css_class("warning");
         if snapshot.is_none_or(|snapshot| {
             !matches!(
