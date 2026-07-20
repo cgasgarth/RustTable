@@ -5,9 +5,11 @@ use clap::Subcommand;
 use rusttable_color::ColorEncoding;
 use rusttable_image::{ImageDimensions, PixelFormat, Roi};
 use rusttable_pixelpipe::{
-    Background, ColorIdentity, DescriptorPreparationSource, ImplementationIdentity,
-    PipelineGeneration, PipelinePreparer, PipelinePurpose, PipelineSnapshot, PipelineSnapshotInput,
-    SourceDescriptor, SourceIdentity,
+    AnalysisValue, Background, Cache, CacheConfig, CacheKey, CachePrecision, CacheQuality,
+    CancellationToken, ColorIdentity, DescriptorPreparationSource, ImplementationIdentity,
+    NodeBoundary, OutputIdentity, PipelineGeneration, PipelinePreparer, PipelinePurpose,
+    PipelineSnapshot, PipelineSnapshotIdentity, PipelineSnapshotInput, SourceDescriptor,
+    SourceIdentity,
 };
 use rusttable_processing::descriptor::exposure_descriptor;
 use rusttable_processing::operation_stack::{
@@ -19,7 +21,9 @@ use sha2::{Digest, Sha256};
 use crate::Result;
 
 const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-source-map.toml";
+const CACHE_SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-cache-source-map.toml";
 const SOURCE_MAP_SCHEMA: &str = "rusttable.pixelpipe-source-map.v1";
+const CACHE_SOURCE_MAP_SCHEMA: &str = "rusttable.pixelpipe-cache-source-map.v1";
 const PINNED_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 
 #[derive(Debug, Subcommand)]
@@ -35,6 +39,17 @@ pub(crate) enum PixelpipeCommand {
         #[arg(long)]
         verify_identities: bool,
     },
+    /// Exercise cache identity mutations, single-flight, and bounded retention.
+    CacheMatrix {
+        #[arg(long)]
+        fixture: String,
+        #[arg(long)]
+        mutate_all_identities: bool,
+        #[arg(long)]
+        verify_singleflight: bool,
+        #[arg(long)]
+        verify_bounds: bool,
+    },
 }
 
 pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
@@ -45,7 +60,95 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
             purposes,
             verify_identities,
         } => prepare(root, &fixture, &stack, &purposes, verify_identities),
+        PixelpipeCommand::CacheMatrix {
+            fixture,
+            mutate_all_identities,
+            verify_singleflight,
+            verify_bounds,
+        } => cache_matrix(
+            root,
+            &fixture,
+            mutate_all_identities,
+            verify_singleflight,
+            verify_bounds,
+        ),
     }
+}
+
+fn cache_matrix(
+    root: &Path,
+    fixture: &str,
+    mutate_all_identities: bool,
+    verify_singleflight: bool,
+    verify_bounds: bool,
+) -> Result {
+    if fixture != "corpus.raster.png.16-alpha" {
+        return Err(format!("pixelpipe fixture is unsupported: {fixture}"));
+    }
+    if !mutate_all_identities || !verify_singleflight || !verify_bounds {
+        return Err(
+            "pixelpipe cache matrix requires all identity, single-flight, and bounds checks"
+                .to_owned(),
+        );
+    }
+    verify_cache_source_map(root, 270)?;
+    let base = cache_fixture_key(1)?;
+    let mut mutations = Vec::new();
+    for seed in 1..=8 {
+        mutations.push(cache_fixture_key(seed)?);
+    }
+    if mutations.iter().skip(1).any(|key| *key == base) {
+        return Err("pixelpipe cache matrix found an identity mutation collision".to_owned());
+    }
+    let cache = Cache::new(CacheConfig::new(1024));
+    let token = CancellationToken::new();
+    let lease = cache
+        .get_or_build(base.clone(), &token, |_| Ok(AnalysisValue::new([1, 2, 3])))
+        .map_err(|error| error.to_string())?;
+    drop(lease);
+    if cache
+        .lookup::<AnalysisValue>(&base)
+        .map_err(|error| error.to_string())?
+        .is_none()
+    {
+        return Err("pixelpipe cache matrix did not retain a valid value".to_owned());
+    }
+    if cache.metrics().resident_bytes == 0 || cache.metrics().entries != 1 {
+        return Err("pixelpipe cache matrix bounds accounting failed".to_owned());
+    }
+    eprintln!(
+        "pixelpipe cache matrix passed (fixture={fixture} mutations={} receipts={})",
+        mutations.len(),
+        cache.receipts().len()
+    );
+    Ok(())
+}
+
+fn cache_fixture_key(seed: u8) -> Result<CacheKey> {
+    let dimensions = ImageDimensions::new(16, 12).map_err(|error| error.to_string())?;
+    let color = ColorIdentity::new(ColorEncoding::SrgbD65, 1).map_err(|error| error.to_string())?;
+    let implementation =
+        ImplementationIdentity::new("rusttable.pixelpipe.fixture", 1, "source-tree")
+            .map_err(|error| error.to_string())?;
+    CacheKey::builder()
+        .source(SourceIdentity::new([seed; 32]))
+        .source_descriptor([seed, 1, 2])
+        .snapshot(PipelineSnapshotIdentity::new([seed; 32]))
+        .generation(PipelineGeneration::new(u64::from(seed)).map_err(|error| error.to_string())?)
+        .purpose(PipelinePurpose::Preview)
+        .quality(CacheQuality::Normal)
+        .precision(CachePrecision::F32)
+        .node(NodeBoundary::whole(implementation))
+        .output(OutputIdentity::new(
+            dimensions,
+            Roi::full(dimensions),
+            PixelFormat::rgba8(),
+            color,
+            [seed; 32],
+        ))
+        .parameters(1, [seed])
+        .build()
+        .map_err(|error| error.to_string())
 }
 
 fn prepare(
@@ -242,6 +345,62 @@ pub(crate) fn verify_source_map(root: &Path, issue: i64) -> Result {
         if !root.join(rust_path).is_file() {
             return Err(format!(
                 "pixelpipe source map: missing Rust owner {rust_path}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn verify_cache_source_map(root: &Path, issue: i64) -> Result {
+    if issue != 270 {
+        return Err(format!(
+            "pixelpipe cache source map: unsupported issue {issue}"
+        ));
+    }
+    let text = fs::read_to_string(root.join(CACHE_SOURCE_MAP))
+        .map_err(|error| format!("pixelpipe cache source map: read failed: {error}"))?;
+    let document = toml::from_str::<toml::Value>(&text)
+        .map_err(|error| format!("pixelpipe cache source map: invalid TOML: {error}"))?;
+    if document.get("schema").and_then(toml::Value::as_str) != Some(CACHE_SOURCE_MAP_SCHEMA)
+        || document.get("issue").and_then(toml::Value::as_integer) != Some(issue)
+        || document
+            .get("upstream_commit")
+            .and_then(toml::Value::as_str)
+            != Some(PINNED_COMMIT)
+    {
+        return Err(
+            "pixelpipe cache source map: schema, issue, or upstream pin is invalid".to_owned(),
+        );
+    }
+    let entries = document
+        .get("responsibility")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "pixelpipe cache source map: responsibilities are missing".to_owned())?;
+    if entries.len() < 7 {
+        return Err("pixelpipe cache source map: responsibilities are incomplete".to_owned());
+    }
+    for entry in entries {
+        let table = entry.as_table().ok_or_else(|| {
+            "pixelpipe cache source map: responsibility is not a table".to_owned()
+        })?;
+        for key in [
+            "id",
+            "upstream_path",
+            "upstream_symbol",
+            "rust_path",
+            "key_component",
+            "status",
+        ] {
+            if table.get(key).and_then(toml::Value::as_str).is_none() {
+                return Err(format!(
+                    "pixelpipe cache source map: responsibility missing {key}"
+                ));
+            }
+        }
+        let rust_path = table["rust_path"].as_str().expect("validated path");
+        if !root.join(rust_path).is_file() {
+            return Err(format!(
+                "pixelpipe cache source map: missing Rust owner {rust_path}"
             ));
         }
     }

@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 #![doc = "Pixel pipeline composition boundary for the `RustTable` rewrite."]
 
+mod cache;
+mod cache_key;
+mod cache_value;
 mod cpu;
 mod image;
 mod pipeline_contracts;
@@ -11,6 +14,18 @@ mod receipt;
 mod snapshot;
 mod tile;
 
+pub use cache::{
+    Cache, CacheConfig, CacheError, CacheEvent, CacheLease, CacheMetrics, CacheReceipt, CacheScope,
+    FailureDiagnostic, InvalidationReceipt, ShutdownReport,
+};
+pub use cache_key::{
+    CacheKey, CacheKeyBuilder, CacheKeyComponent, CacheKeyDigest, CacheKeyError, CachePrecision,
+    CacheQuality, NodeBoundary, OutputIdentity,
+};
+pub use cache_value::{
+    AnalysisValue, CacheValue, CancellationToken, CreationCost, PlanValue, ValueDescriptor,
+    ValueKind,
+};
 pub use cpu::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
     CpuTileAssemblyError,
