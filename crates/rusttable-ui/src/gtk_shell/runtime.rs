@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
+use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
@@ -36,6 +37,7 @@ pub struct GtkShell {
     right_modules: gtk4::Box,
     collection_controls: CollectionControls,
     input_mapping_editor: InputMappingEditor,
+    i18n: Rc<RefCell<I18n>>,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
 }
@@ -47,29 +49,48 @@ impl GtkShell {
     /// [`ShellLayout`] API can be used in tests without that runtime setup.
     #[must_use]
     pub fn new(application: &gtk4::Application) -> Self {
-        Self::with_layout(application, ShellLayout::default())
+        Self::with_i18n(application, I18n::default())
+    }
+
+    /// Creates the shell with an explicit locale service.
+    #[must_use]
+    pub fn with_i18n(application: &gtk4::Application, i18n: I18n) -> Self {
+        Self::with_layout_and_i18n(application, ShellLayout::default(), i18n)
     }
 
     /// Creates the shell with an explicit initial workspace.
     #[must_use]
     pub fn with_layout(application: &gtk4::Application, layout: ShellLayout) -> Self {
+        Self::with_layout_and_i18n(application, layout, I18n::default())
+    }
+
+    fn with_layout_and_i18n(
+        application: &gtk4::Application,
+        layout: ShellLayout,
+        i18n: I18n,
+    ) -> Self {
+        let i18n = Rc::new(RefCell::new(i18n));
+        let initial_i18n = i18n.borrow();
         let window = gtk4::ApplicationWindow::builder()
             .application(application)
             .default_width(i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_width_px))
             .default_height(i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_height_px))
-            .title("RustTable")
+            .title(initial_i18n.text(MessageId::AppTitle, &MessageArgs::new()))
             .build();
-        let (workspace, lighttable, darkroom_preview) = workspace_stack(layout.initial_workspace());
+        let (workspace, lighttable, darkroom_preview) =
+            workspace_stack(layout.initial_workspace(), &initial_i18n);
         let input_mapping_editor = InputMappingEditor::new(application);
-        let (header, preferences_button) = header_bar(&workspace);
+        let (header, preferences_button) = header_bar(&workspace, &initial_i18n);
         preferences_button.connect_clicked({
             let editor = input_mapping_editor.clone();
             move |_| editor.present()
         });
-        let collection_controls = CollectionControls::new();
-        let (left_panel, left_modules) = left_panel(&collection_controls);
-        let (right_panel, right_modules, export_panel) = right_panel();
-        let center = central_workspace(&workspace);
+        let collection_controls = CollectionControls::with_i18n(
+            I18n::new(initial_i18n.locale().clone()).unwrap_or_default(),
+        );
+        let (left_panel, left_modules) = left_panel(&collection_controls, &initial_i18n);
+        let (right_panel, right_modules, export_panel) = right_panel(&initial_i18n);
+        let center = central_workspace(&workspace, &initial_i18n);
         let split = gtk4::Paned::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .start_child(&left_panel)
@@ -91,7 +112,7 @@ impl GtkShell {
                     - i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
             )
             .build();
-        let filmstrip = filmstrip();
+        let filmstrip = filmstrip(&initial_i18n);
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         content.append(&workspace_with_right_panel);
         content.append(&filmstrip.0);
@@ -111,9 +132,22 @@ impl GtkShell {
             right_modules,
             collection_controls,
             input_mapping_editor,
+            i18n: Rc::clone(&i18n),
             lighttable_workspace: Rc::new(RefCell::new(None)),
             photo_selected: Rc::new(RefCell::new(None)),
         }
+    }
+
+    /// Applies a locale and GTK text direction to the live shell controls.
+    pub fn set_locale(&self, i18n: I18n) {
+        let direction = i18n.direction();
+        self.window.set_direction(match direction {
+            Direction::Ltr => gtk4::TextDirection::Ltr,
+            Direction::Rtl => gtk4::TextDirection::Rtl,
+        });
+        self.collection_controls
+            .set_locale(I18n::new(i18n.locale().clone()).unwrap_or_default());
+        self.i18n.replace(i18n);
     }
 
     /// Presents the application window without taking ownership of GTK's loop.
@@ -375,27 +409,34 @@ fn connect_photo_selection(
     });
 }
 
-fn header_bar(workspace: &gtk4::Stack) -> (gtk4::HeaderBar, gtk4::Button) {
+fn header_bar(workspace: &gtk4::Stack, i18n: &I18n) -> (gtk4::HeaderBar, gtk4::Button) {
     let header = gtk4::HeaderBar::new();
     header.set_widget_name(ShellRegion::Header.identifier());
     header.set_show_title_buttons(true);
 
-    let brand = gtk4::Label::new(Some("RustTable"));
+    let brand = gtk4::Label::new(Some(&i18n.text(MessageId::AppTitle, &MessageArgs::new())));
     brand.set_widget_name(PanelSlot::HeaderLeft.identifier());
     brand.add_css_class("title-3");
     header.pack_start(&brand);
 
     let tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     tools.set_widget_name(PanelSlot::HeaderCenter.identifier());
-    tools.append(&gtk4::Button::with_label("import"));
-    let preferences = gtk4::Button::with_label("preferences");
+    tools.append(&gtk4::Button::with_label(
+        &i18n.text(MessageId::ToolbarImport, &MessageArgs::new()),
+    ));
+    let preferences =
+        gtk4::Button::with_label(&i18n.text(MessageId::ToolbarPreferences, &MessageArgs::new()));
     tools.append(&preferences);
     header.set_title_widget(Some(&tools));
 
     let modes = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     modes.set_widget_name(PanelSlot::HeaderRight.identifier());
     for role in [WorkspaceRole::Lighttable, WorkspaceRole::Darkroom] {
-        let button = gtk4::Button::with_label(role.title());
+        let message_id = match role {
+            WorkspaceRole::Lighttable => MessageId::WorkspaceLighttable,
+            WorkspaceRole::Darkroom => MessageId::WorkspaceDarkroom,
+        };
+        let button = gtk4::Button::with_label(&i18n.text(message_id, &MessageArgs::new()));
         let stack = workspace.clone();
         button.connect_clicked(move |_| stack.set_visible_child_name(role.stack_name()));
         modes.append(&button);
@@ -404,29 +445,38 @@ fn header_bar(workspace: &gtk4::Stack) -> (gtk4::HeaderBar, gtk4::Button) {
     (header, preferences)
 }
 
-fn left_panel(collection_controls: &CollectionControls) -> (gtk4::Box, gtk4::Box) {
+fn left_panel(collection_controls: &CollectionControls, i18n: &I18n) -> (gtk4::Box, gtk4::Box) {
     let panel = panel_column(
         ShellRegion::LeftPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
     );
     let top = panel_slot(PanelSlot::LeftTop);
-    top.append(&panel_heading("navigation"));
+    top.append(&panel_heading(i18n, MessageId::PanelNavigation));
     top.append(collection_controls.widget());
     let center = panel_slot(PanelSlot::LeftCenter);
     let bottom = panel_slot(PanelSlot::LeftBottom);
-    bottom.append(&gtk4::Label::new(Some("background jobs")));
+    bottom.append(&gtk4::Label::new(Some(
+        &i18n.text(MessageId::PanelBackgroundJobs, &MessageArgs::new()),
+    )));
     append_panel_slots(&panel, &top, &center, &bottom);
     (panel, center)
 }
 
-fn right_panel() -> (gtk4::Box, gtk4::Box, ExportPanel) {
+fn right_panel(i18n: &I18n) -> (gtk4::Box, gtk4::Box, ExportPanel) {
     let panel = panel_column(
         ShellRegion::RightPanel,
         i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
     );
     let top = panel_slot(PanelSlot::RightTop);
-    top.append(&panel_heading("module groups"));
-    let group_selector = gtk4::DropDown::from_strings(&["favorites", "active", "tone", "color"]);
+    top.append(&panel_heading(i18n, MessageId::PanelModuleGroups));
+    let groups = [
+        i18n.text(MessageId::PanelFavorites, &MessageArgs::new()),
+        i18n.text(MessageId::PanelActive, &MessageArgs::new()),
+        i18n.text(MessageId::PanelTone, &MessageArgs::new()),
+        i18n.text(MessageId::PanelColor, &MessageArgs::new()),
+    ];
+    let group_labels = groups.iter().map(String::as_str).collect::<Vec<_>>();
+    let group_selector = gtk4::DropDown::from_strings(&group_labels);
     top.append(&group_selector);
     let export_panel = ExportPanel::new();
     top.append(export_panel.widget());
@@ -437,27 +487,44 @@ fn right_panel() -> (gtk4::Box, gtk4::Box, ExportPanel) {
     (panel, center, export_panel)
 }
 
-fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
+fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     let center = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
     center.set_hexpand(true);
     center.set_vexpand(true);
     let top_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     top_tools.set_widget_name(PanelSlot::CenterTop.identifier());
-    for label in ["grid", "zoomable", "culling", "overlay"] {
-        top_tools.append(&gtk4::Button::with_label(label));
+    for message_id in [
+        MessageId::WorkspaceGrid,
+        MessageId::WorkspaceZoomable,
+        MessageId::WorkspaceCulling,
+        MessageId::WorkspaceOverlay,
+    ] {
+        top_tools.append(&gtk4::Button::with_label(
+            &i18n.text(message_id, &MessageArgs::new()),
+        ));
     }
     let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
-    for label in ["fit", "100%", "before/after", "soft proof"] {
-        bottom_tools.append(&gtk4::Button::with_label(label));
+    for message_id in [
+        MessageId::WorkspaceFit,
+        MessageId::WorkspaceBeforeAfter,
+        MessageId::WorkspaceSoftProof,
+    ] {
+        bottom_tools.append(&gtk4::Button::with_label(
+            &i18n.text(message_id, &MessageArgs::new()),
+        ));
     }
+    bottom_tools.insert_child_after(&gtk4::Button::with_label("100%"), None::<&gtk4::Widget>);
     center.append(&top_tools);
     center.append(workspace);
     center.append(&bottom_tools);
     center
 }
 
-fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::FlowBox, PhotoPreview) {
+fn workspace_stack(
+    initial_workspace: WorkspaceRole,
+    i18n: &I18n,
+) -> (gtk4::Stack, gtk4::FlowBox, PhotoPreview) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -476,7 +543,7 @@ fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::Flow
     lighttable_page.set_margin_bottom(16);
     lighttable_page.set_margin_start(16);
     lighttable_page.set_margin_end(16);
-    lighttable_page.append(&panel_heading("lighttable"));
+    lighttable_page.append(&panel_heading(i18n, MessageId::WorkspaceLighttable));
     let lighttable_scroll = gtk4::ScrolledWindow::builder()
         .child(&lighttable)
         .hexpand(true)
@@ -490,24 +557,24 @@ fn workspace_stack(initial_workspace: WorkspaceRole) -> (gtk4::Stack, gtk4::Flow
     darkroom_page.set_margin_bottom(16);
     darkroom_page.set_margin_start(16);
     darkroom_page.set_margin_end(16);
-    darkroom_page.append(&panel_heading("darkroom"));
+    darkroom_page.append(&panel_heading(i18n, MessageId::WorkspaceDarkroom));
     darkroom_page.append(darkroom_preview.widget());
 
     workspace.add_titled(
         &lighttable_page,
         Some(WorkspaceRole::Lighttable.stack_name()),
-        "lighttable",
+        &i18n.text(MessageId::WorkspaceLighttable, &MessageArgs::new()),
     );
     workspace.add_titled(
         &darkroom_page,
         Some(WorkspaceRole::Darkroom.stack_name()),
-        "darkroom",
+        &i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()),
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
     (workspace, lighttable, darkroom_preview)
 }
 
-fn filmstrip() -> (gtk4::Box, gtk4::FlowBox) {
+fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     let strip = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     strip.set_widget_name(ShellRegion::Filmstrip.identifier());
     strip.set_margin_top(6);
@@ -517,7 +584,9 @@ fn filmstrip() -> (gtk4::Box, gtk4::FlowBox) {
     strip.set_height_request(i32::from(
         DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px,
     ));
-    strip.append(&gtk4::Label::new(Some("filmstrip")));
+    strip.append(&gtk4::Label::new(Some(
+        &i18n.text(MessageId::PanelFilmstrip, &MessageArgs::new()),
+    )));
     let photos = gtk4::FlowBox::builder()
         .max_children_per_line(12)
         .selection_mode(gtk4::SelectionMode::None)
@@ -624,8 +693,8 @@ fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {
     preview.set_detail(detail);
 }
 
-fn panel_heading(title: &str) -> gtk4::Label {
-    let label = gtk4::Label::new(Some(title));
+fn panel_heading(i18n: &I18n, message_id: MessageId) -> gtk4::Label {
+    let label = gtk4::Label::new(Some(&i18n.text(message_id, &MessageArgs::new())));
     label.set_halign(gtk4::Align::Start);
     label.add_css_class("title-3");
     label

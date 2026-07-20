@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 gtk4.workspace = true
+rusttable-i18n.workspace = true
 rusttable-core.workspace = true
 rusttable-input.workspace = true
 rusttable-processing.workspace = true

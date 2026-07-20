@@ -13,6 +13,7 @@ members = [
     "crates/rusttable-image",
     "crates/rusttable-image-io",
     "crates/rusttable-input",
+    "crates/rusttable-i18n",
     "crates/rusttable-metadata",
     "crates/rusttable-masks",
     "crates/rusttable-import",
@@ -41,6 +42,15 @@ directories = "=6.0.0"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 futures = "=0.3.32"
 gtk4 = { version = "=0.11.4", features = ["v4_10"] }
+fluent-bundle = "=0.16.0"
+fluent-syntax = "=0.12.0"
+fixed_decimal = "=0.7.2"
+icu_collator = "=2.2.0"
+icu_datetime = "=2.2.0"
+icu_decimal = "=2.2.0"
+icu_list = "=2.2.0"
+icu_locale = "=2.2.0"
+icu_plurals = "=2.2.0"
 image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
 kamadak-exif = { version = "=0.6.1", default-features = false }
 mlua = { version = "=0.11.4", default-features = false, features = ["async", "serialize"] }
@@ -62,6 +72,7 @@ rusttable-gpu = { path = "crates/rusttable-gpu", version = "=0.1.0" }
 rusttable-image = { path = "crates/rusttable-image", version = "=0.1.0" }
 rusttable-image-io = { path = "crates/rusttable-image-io", version = "=0.1.0" }
 rusttable-input = { path = "crates/rusttable-input", version = "=0.1.0" }
+rusttable-i18n = { path = "crates/rusttable-i18n", version = "=0.1.0" }
 rusttable-import = { path = "crates/rusttable-import", version = "=0.1.0" }
 rusttable-masks = { path = "crates/rusttable-masks", version = "=0.1.0" }
 rusttable-metadata = { path = "crates/rusttable-metadata", version = "=0.1.0" }

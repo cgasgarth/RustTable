@@ -1,9 +1,11 @@
 //! GTK4 controls for a single Darktable collection rule.
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
+use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
 use crate::collection::CollectionProperty;
 
@@ -107,39 +109,71 @@ pub enum CollectionControlAction {
 pub struct CollectionControls {
     root: gtk4::Box,
     property_dropdown: gtk4::DropDown,
+    property_model: gtk4::StringList,
     search_entry: gtk4::SearchEntry,
     clear_button: gtk4::Button,
     result_count: gtk4::Label,
+    locale: Rc<RefCell<I18n>>,
+    state: Rc<RefCell<CollectionControlState>>,
 }
 
 impl CollectionControls {
     /// Builds one Darktable-shaped collection rule row.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_i18n(I18n::default())
+    }
+
+    /// Builds collection controls with an explicit initial locale.
+    #[must_use]
+    pub fn with_i18n(i18n: I18n) -> Self {
+        let locale = Rc::new(RefCell::new(i18n));
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         root.set_widget_name("collection-controls");
 
         let rule_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
         rule_row.set_widget_name("collection-rule");
 
+        let property_model = gtk4::StringList::new(&[]);
+        let property_labels = CollectionProperty::ALL.map(|property| {
+            locale
+                .borrow()
+                .text(property.message_id(), &MessageArgs::new())
+        });
+        let property_label_refs = property_labels
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        property_model.splice(0, 0, &property_label_refs);
         let property_dropdown =
-            gtk4::DropDown::from_strings(&CollectionProperty::ALL.map(CollectionProperty::label));
+            gtk4::DropDown::new(Some(property_model.clone()), None::<&gtk4::Expression>);
         property_dropdown.set_widget_name("collection-property");
         property_dropdown.set_selected(CollectionProperty::default().index());
 
         let search_entry = gtk4::SearchEntry::new();
         search_entry.set_widget_name("collection-search");
         search_entry.set_hexpand(true);
-        search_entry.set_placeholder_text(Some("search collection"));
+        search_entry.set_placeholder_text(Some(
+            &locale
+                .borrow()
+                .text(MessageId::CollectionSearch, &MessageArgs::new()),
+        ));
 
-        let clear_button = gtk4::Button::with_label("clear");
+        let clear_button = gtk4::Button::with_label(
+            &locale
+                .borrow()
+                .text(MessageId::CollectionClear, &MessageArgs::new()),
+        );
         clear_button.set_widget_name("collection-clear");
 
         rule_row.append(&property_dropdown);
         rule_row.append(&search_entry);
         rule_row.append(&clear_button);
 
-        let result_count = gtk4::Label::new(Some("0 of 0"));
+        let result_count = gtk4::Label::new(Some(&locale.borrow().text(
+            MessageId::CollectionResults,
+            &MessageArgs::new().integer("result", 0).integer("total", 0),
+        )));
         result_count.set_widget_name("collection-result-count");
         result_count.set_xalign(0.0);
 
@@ -149,9 +183,15 @@ impl CollectionControls {
         Self {
             root,
             property_dropdown,
+            property_model,
             search_entry,
             clear_button,
             result_count,
+            locale: Rc::clone(&locale),
+            state: Rc::new(RefCell::new(CollectionControlState::new(
+                CollectionProperty::default(),
+                0,
+            ))),
         }
     }
 
@@ -163,14 +203,40 @@ impl CollectionControls {
 
     /// Projects controller state into the GTK controls.
     pub fn set_state(&self, state: &CollectionControlState) {
+        self.state.replace(state.clone());
         self.property_dropdown
             .set_selected(state.property().index());
         self.search_entry.set_text(state.search_text());
-        self.result_count.set_text(&format!(
-            "{} of {}",
-            state.result_count(),
-            state.total_count()
+        self.result_count.set_text(
+            &self.locale.borrow().text(
+                MessageId::CollectionResults,
+                &MessageArgs::new()
+                    .integer(
+                        "result",
+                        i64::try_from(state.result_count()).unwrap_or(i64::MAX),
+                    )
+                    .integer(
+                        "total",
+                        i64::try_from(state.total_count()).unwrap_or(i64::MAX),
+                    ),
+            ),
+        );
+    }
+
+    /// Applies a locale change to ordinary collection UI state without changing the rule.
+    pub fn set_locale(&self, i18n: I18n) {
+        self.locale.replace(i18n);
+        let i18n = self.locale.borrow();
+        let labels = CollectionProperty::ALL.map(|property| property.localized_label(&i18n));
+        let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        self.property_model
+            .splice(0, self.property_model.n_items(), &label_refs);
+        self.search_entry.set_placeholder_text(Some(
+            &i18n.text(MessageId::CollectionSearch, &MessageArgs::new()),
         ));
+        self.clear_button
+            .set_label(&i18n.text(MessageId::CollectionClear, &MessageArgs::new()));
+        self.set_state(&self.state.borrow().clone());
     }
 
     /// Connects all user actions to one typed callback.

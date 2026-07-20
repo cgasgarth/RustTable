@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use rusttable_catalog::ImportRecord;
 use rusttable_core::PhotoId;
+use rusttable_i18n::{CollationProfile, LocaleCollator, LocaleTag};
 use rusttable_import::decode_reference_source;
 use rusttable_ui::{CollectionItem, CollectionProperty, CollectionRule};
 
@@ -41,7 +42,7 @@ impl CollectionSnapshot {
         self.matching_photo_ids.len()
     }
 
-    /// Returns matching photo IDs in catalog order.
+    /// Returns matching photo IDs in deterministic locale-aware display order.
     #[must_use = "use the matching IDs to refresh the lighttable"]
     pub fn matching_photo_ids(&self) -> impl ExactSizeIterator<Item = PhotoId> + '_ {
         self.matching_photo_ids.iter().copied()
@@ -53,6 +54,7 @@ impl CollectionSnapshot {
 pub struct CollectionController {
     items: Vec<CollectionItem>,
     rule: CollectionRule,
+    collation_profile: CollationProfile,
 }
 
 impl CollectionController {
@@ -62,7 +64,16 @@ impl CollectionController {
         Self {
             items: items.into_iter().collect(),
             rule: CollectionRule::new(CollectionProperty::Filename),
+            collation_profile: CollationProfile::new(LocaleTag::default_locale()),
         }
+    }
+
+    /// Creates a controller with a locale-aware display ordering profile.
+    #[must_use]
+    pub fn with_locale(items: impl IntoIterator<Item = CollectionItem>, locale: LocaleTag) -> Self {
+        let mut controller = Self::new(items);
+        controller.collation_profile = CollationProfile::new(locale);
+        controller
     }
 
     /// Projects imported records into a collection controller.
@@ -77,7 +88,7 @@ impl CollectionController {
         &self.rule
     }
 
-    /// Returns all searchable items in stable input order.
+    /// Returns all searchable items in stable input order before display sorting.
     #[must_use = "refresh the collection controller from the catalog"]
     pub fn items(&self) -> impl ExactSizeIterator<Item = &CollectionItem> {
         self.items.iter()
@@ -101,10 +112,23 @@ impl CollectionController {
     /// Produces the typed result projection consumed by GTK refresh code.
     #[must_use]
     pub fn snapshot(&self) -> CollectionSnapshot {
-        let matching_photo_ids = self
+        let mut matching_items = self
             .items
             .iter()
             .filter(|item| self.rule.matches(item))
+            .collect::<Vec<_>>();
+        if let Ok(collator) = LocaleCollator::new(self.collation_profile.clone()) {
+            matching_items.sort_by(|left, right| {
+                collator
+                    .compare(
+                        left.value(self.rule.property()),
+                        right.value(self.rule.property()),
+                    )
+                    .then_with(|| left.photo_id().cmp(&right.photo_id()))
+            });
+        }
+        let matching_photo_ids = matching_items
+            .into_iter()
             .map(CollectionItem::photo_id)
             .collect();
         CollectionSnapshot {
@@ -116,7 +140,7 @@ impl CollectionController {
     }
 }
 
-fn collection_item(record: &ImportRecord) -> CollectionItem {
+pub(super) fn collection_item(record: &ImportRecord) -> CollectionItem {
     let path = decode_reference_source(record.source())
         .map_or_else(|_| record.source().as_str().to_owned(), path_string);
     CollectionItem::new(record.photo().id(), path)
@@ -131,6 +155,7 @@ mod tests {
     use std::path::Path;
 
     use rusttable_core::PhotoId;
+    use rusttable_i18n::LocaleTag;
     use rusttable_ui::{CollectionItem, CollectionProperty};
 
     use super::CollectionController;
@@ -156,7 +181,26 @@ mod tests {
         assert_eq!(snapshot.result_count(), 3);
         assert_eq!(
             snapshot.matching_photo_ids().collect::<Vec<_>>(),
-            vec![id(1), id(2), id(3)]
+            vec![id(1), id(3), id(2)]
+        );
+    }
+
+    #[test]
+    fn locale_profile_controls_collection_display_order() {
+        let controller = CollectionController::with_locale(
+            [
+                CollectionItem::new(id(1), "/photos/IMG10.CR3"),
+                CollectionItem::new(id(2), "/photos/IMG2.CR3"),
+            ],
+            LocaleTag::parse("en-US").expect("valid locale"),
+        );
+
+        assert_eq!(
+            controller
+                .snapshot()
+                .matching_photo_ids()
+                .collect::<Vec<_>>(),
+            vec![id(2), id(1)]
         );
     }
 
