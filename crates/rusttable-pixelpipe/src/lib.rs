@@ -7,6 +7,7 @@ mod cache_value;
 mod cancellation;
 mod cpu;
 mod failure_policy;
+mod histogram;
 mod host_pool;
 mod image;
 mod mode;
@@ -62,6 +63,12 @@ pub use failure_policy::{
     OutputCandidate, OutputExpectation, OutputValidationError, OutputValidationReceipt,
     OutputValidator, PolicyAction, PolicyError, PolicyRequest, PublicationAction, QuarantineHint,
     ReceiptBuilder, integrate_failure,
+};
+pub use histogram::{
+    HistogramAggregationError, HistogramAggregator, HistogramChannel, HistogramChannelModel,
+    HistogramChannelResult, HistogramMaskPolicy, HistogramMergeError, HistogramNonFinitePolicy,
+    HistogramRange, HistogramRangeError, HistogramRaster, HistogramRasterError, HistogramRequest,
+    HistogramRequestError, HistogramResult,
 };
 pub use host_pool::temporary_buffer_request;
 pub use image::{

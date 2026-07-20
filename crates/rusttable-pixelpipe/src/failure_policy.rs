@@ -2,11 +2,17 @@
 
 use std::fmt;
 
-use rusttable_image::ImageDimensions;
-
 use crate::{
     ApproximationId, BackendPolicy, CacheError, CancellationError, CancellationStage,
     DegradationPolicy, PipelinePurpose, PipelineSnapshotIdentity, PublicationError, RequestId,
+};
+
+#[path = "failure_receipts.rs"]
+mod failure_receipts;
+
+pub use failure_receipts::{
+    AttemptReceipt, OutputCandidate, OutputExpectation, OutputValidationError,
+    OutputValidationReceipt, OutputValidator,
 };
 
 pub const MAX_ATTEMPTS: u8 = 6;
@@ -328,6 +334,7 @@ impl Failure {
         &self.detail
     }
 
+    #[must_use]
     pub fn from_cancellation(error: CancellationError, backend: FailureBackend) -> Self {
         let stage = match error.stage().unwrap_or(CancellationStage::Node) {
             CancellationStage::SourceDecode => FailureStage::SourceDecode,
@@ -349,6 +356,7 @@ impl Failure {
         )
     }
 
+    #[must_use]
     pub fn from_cache(error: &CacheError) -> Self {
         let category = match error {
             CacheError::Cancelled | CacheError::Cancellation(_) => {
@@ -373,6 +381,7 @@ impl Failure {
         )
     }
 
+    #[must_use]
     pub fn from_publication(error: &PublicationError) -> Self {
         let category = match error {
             PublicationError::Cancelled(error) => {
@@ -472,12 +481,16 @@ pub struct FailureLedger {
 }
 
 impl FailureLedger {
+    /// Records a failure, promoting higher-precedence failures to the primary slot.
     pub fn record(&mut self, failure: Failure) {
         match &self.primary {
             None => self.primary = Some(failure),
             Some(primary) if failure.category.precedence() < primary.category.precedence() => {
-                let old = self.primary.replace(failure).expect("primary exists");
-                self.push_secondary(old);
+                let old = self.primary.take();
+                self.primary = Some(failure);
+                if let Some(old) = old {
+                    self.push_secondary(old);
+                }
             }
             Some(primary)
                 if failure.category.precedence() == primary.category.precedence()
@@ -521,17 +534,13 @@ impl PolicyRequest {
         purpose: PipelinePurpose,
         backend: FailureBackend,
         policy: BackendPolicy,
-        degradation: DegradationPolicy,
+        _degradation: DegradationPolicy,
     ) -> Self {
         Self {
             purpose,
             backend,
             cpu_fallback_allowed: matches!(policy, BackendPolicy::CpuFallbackAllowed),
-            approximation: if degradation.allows_approximation(purpose) {
-                None
-            } else {
-                None
-            },
+            approximation: None,
             smaller_tile_available: false,
             clean_rebuild_available: false,
         }
@@ -730,164 +739,6 @@ impl Default for FailurePolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AttemptReceipt {
-    number: u8,
-    backend: FailureBackend,
-    action: PolicyAction,
-    failure: Failure,
-    cleaned: bool,
-    cache_action: CacheAction,
-    publication_action: PublicationAction,
-}
-
-impl AttemptReceipt {
-    #[must_use]
-    pub fn new(
-        number: u8,
-        backend: FailureBackend,
-        action: PolicyAction,
-        failure: Failure,
-    ) -> Self {
-        Self {
-            number,
-            backend,
-            action,
-            cache_action: failure.cache_action(),
-            publication_action: failure.publication_action(),
-            failure,
-            cleaned: false,
-        }
-    }
-    #[must_use]
-    pub const fn number(&self) -> u8 {
-        self.number
-    }
-    #[must_use]
-    pub const fn backend(&self) -> FailureBackend {
-        self.backend
-    }
-    #[must_use]
-    pub const fn action(&self) -> &PolicyAction {
-        &self.action
-    }
-    #[must_use]
-    pub const fn failure(&self) -> &Failure {
-        &self.failure
-    }
-    #[must_use]
-    pub const fn cleaned(&self) -> bool {
-        self.cleaned
-    }
-    #[must_use]
-    pub const fn cache_action(&self) -> CacheAction {
-        self.cache_action
-    }
-    #[must_use]
-    pub const fn publication_action(&self) -> PublicationAction {
-        self.publication_action
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OutputExpectation {
-    dimensions: ImageDimensions,
-    pixel_len: u64,
-}
-
-impl OutputExpectation {
-    #[must_use]
-    pub const fn new(dimensions: ImageDimensions, pixel_len: u64) -> Self {
-        Self {
-            dimensions,
-            pixel_len,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OutputCandidate {
-    dimensions: ImageDimensions,
-    pixel_len: u64,
-    finite: bool,
-    lease_valid: bool,
-    cancelled: bool,
-}
-
-impl OutputCandidate {
-    #[must_use]
-    pub const fn new(
-        dimensions: ImageDimensions,
-        pixel_len: u64,
-        finite: bool,
-        lease_valid: bool,
-        cancelled: bool,
-    ) -> Self {
-        Self {
-            dimensions,
-            pixel_len,
-            finite,
-            lease_valid,
-            cancelled,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OutputValidationReceipt {
-    dimensions: ImageDimensions,
-    pixel_len: u64,
-}
-
-impl OutputValidationReceipt {
-    #[must_use]
-    pub const fn dimensions(self) -> ImageDimensions {
-        self.dimensions
-    }
-    #[must_use]
-    pub const fn pixel_len(self) -> u64 {
-        self.pixel_len
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OutputValidationError {
-    DimensionsMismatch,
-    LengthMismatch,
-    NonFinite,
-    LeaseInvalid,
-    Cancelled,
-}
-
-pub struct OutputValidator;
-
-impl OutputValidator {
-    pub fn validate(
-        expected: OutputExpectation,
-        actual: OutputCandidate,
-    ) -> Result<OutputValidationReceipt, OutputValidationError> {
-        if actual.cancelled {
-            return Err(OutputValidationError::Cancelled);
-        }
-        if !actual.lease_valid {
-            return Err(OutputValidationError::LeaseInvalid);
-        }
-        if actual.dimensions != expected.dimensions {
-            return Err(OutputValidationError::DimensionsMismatch);
-        }
-        if actual.pixel_len != expected.pixel_len {
-            return Err(OutputValidationError::LengthMismatch);
-        }
-        if !actual.finite {
-            return Err(OutputValidationError::NonFinite);
-        }
-        Ok(OutputValidationReceipt {
-            dimensions: actual.dimensions,
-            pixel_len: actual.pixel_len,
-        })
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FinalImplementation {
     CpuExact,
@@ -975,6 +826,7 @@ impl ReceiptBuilder {
         Ok(())
     }
 
+    #[must_use]
     pub fn finish_failure(self) -> FinalReceipt {
         FinalReceipt {
             request: self.request,
@@ -989,6 +841,7 @@ impl ReceiptBuilder {
         }
     }
 
+    #[must_use]
     pub fn finish_success(
         self,
         implementation: FinalImplementation,
