@@ -1,33 +1,64 @@
-# Contributing to darktable
+# Contributing to RustTable
 
-The darktable project welcomes contributions:
+RustTable is a complete Rust rewrite of darktable. The original C/C++ project
+is a read-only behavioral reference, not a source tree to extend or merge
+back into. New product work belongs in the Rust workspace and uses Iced for UI
+surfaces.
 
-* [Code](https://www.darktable.org/development/)
-* [Documentation](https://www.darktable.org/resources/)
-* Testing (and any backtraces if you happen to crash darktable)
-* Translations
-* [Camera profiles](https://www.darktable.org/resources/camera-support/).
-* Tutorials, screencasts, etc.
+## Start with an issue
 
-See the [darktable development page](https://www.darktable.org/development/) for
-more information.
+Use an existing GitHub issue, or discuss and create one before beginning a
+meaningful change. The issue defines scope, acceptance evidence, source-map
+accounting where applicable, and the milestone. A ready pull request closes
+one issue; do not mix unrelated work into it.
 
-## Code
+## Local setup
 
-Before you spend a lot of time working on a new feature, it's always best to
-discuss your proposed changes with us first. The best place to do that is in
-our dev support [matrix channel](https://matrix.to/#/#darktable-dev:matrix.org), 
-or just create a Github Issue (Make sure to check back to answer follow up questions).
-This will dramatically improve your chances of having your code merged, especially if we think you'll
-hang around to maintain it.
+Install the exact Rust toolchain declared by `rust-toolchain.toml` (currently
+the dated Rust 1.98 beta baseline) and the Bun version pinned by `package.json`.
+Then configure hooks and use an isolated worktree:
 
-For more places to discuss darktable, [see here for more information](https://www.darktable.org/contact/). 
+```sh
+git config core.hooksPath .githooks
+bash scripts/dev/create-agent-worktree.sh --issue ISSUE_NUMBER
+cd /Users/cgas/Documents/RustTable/worktrees/issue-ISSUE_NUMBER
+bash scripts/dev/doctor.sh
+```
 
-### Coding style
+`origin` and `upstream` point to `cgasgarth/RustTable`; the `darktable` remote
+is reference-only. Never push to `darktable-org/darktable`, and never commit
+directly to `main`.
 
-We like our code to be properly formatted, and we have a well-defined coding style that is enforced at
-PR review time.
+## Implementation expectations
 
-See the [Coding Style](https://github.com/darktable-org/darktable/wiki/Developer's-guide#coding-style)
-section in the [Developer's Guide](https://github.com/darktable-org/darktable/wiki/Developer's-guide)
-on our GitHub wiki.
+- Prefer small, test-driven, deterministic changes. Add a focused regression
+  test for a defect and the appropriate unit, integration, or end-to-end
+  evidence for behavior changes.
+- Use workspace dependencies and workspace lints. Warnings are errors and
+  `unsafe_code` is forbidden unless a narrowly justified, documented, and
+  tested exception is approved.
+- Keep handwritten source files at or below 1,000 lines. Generated files must
+  be clearly identified; split handwritten modules before they reach the cap.
+- Reuse established Rust crates when they improve the result, otherwise prefer
+  standard library and framework facilities. Do not introduce parallel C/C++,
+  GTK, CMake, or native build paths into RustTable.
+
+## Validate and submit
+
+Run the complete local merge-readiness gate before every commit and again
+before opening a pull request:
+
+```sh
+bash scripts/precommit-fast.sh
+bash scripts/prepush-fast.sh
+```
+
+The checks intentionally have no elapsed-time cap: correctness and early
+feedback take precedence over an arbitrary per-command deadline. GitHub
+Actions run only after pushes to `main`; they repeat local checks and run the
+heavier merge validation.
+
+Open pull requests ready for review, with `Why`, `How`, and `Validation`
+sections plus `Closes #ISSUE_NUMBER`. After required review and successful
+local validation, enable squash auto-merge. Do not open a draft PR unless the
+issue explicitly requires one.
