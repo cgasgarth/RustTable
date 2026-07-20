@@ -258,6 +258,54 @@ fn photo_grid_opens_detail_and_returns() -> Result<(), iced_test::Error> {
 }
 
 #[test]
+fn arrow_keys_focus_a_photo_before_enter_opens_its_detail() {
+    let mut shell = Shell::with_photo_workspace(four_photo_workspace());
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::ArrowDown));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(rusttable_ui::InputIntent::FocusNextPhoto)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(rusttable_ui::InputIntent::FocusNextPhoto),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::ArrowDown));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Input(rusttable_ui::InputIntent::FocusNextPhoto)]
+    );
+    let _ = update(
+        &mut shell,
+        Message::Input(rusttable_ui::InputIntent::FocusNextPhoto),
+    );
+
+    let mut simulator = Simulator::with_size(
+        Settings::default(),
+        Size::new(800.0, 600.0),
+        view::view(&shell),
+    );
+    simulator.tap_key(Key::Named(Named::Enter));
+    assert_eq!(
+        simulator.into_messages().collect::<Vec<_>>(),
+        [Message::Navigate(NavigationIntent::ShowPhoto(
+            PhotoId::new(2).expect("test photo ID is non-zero"),
+        ))]
+    );
+}
+
+#[test]
 #[expect(
     clippy::too_many_lines,
     reason = "the keyboard scenario intentionally covers the complete interaction sequence"

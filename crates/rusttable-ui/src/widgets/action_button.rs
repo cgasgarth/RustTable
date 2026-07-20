@@ -224,6 +224,10 @@ fn key_message(key: &Key, modifiers: Modifiers, action: UiMessage) -> Option<UiM
             return Some(action);
         }
         Key::Character(value) if value == " " => return Some(action),
+        Key::Named(Named::ArrowDown | Named::ArrowRight) => InputIntent::FocusNextPhoto,
+        Key::Character(value) if value == "]" => InputIntent::FocusNextPhoto,
+        Key::Named(Named::ArrowUp | Named::ArrowLeft) => InputIntent::FocusPreviousPhoto,
+        Key::Character(value) if value == "[" => InputIntent::FocusPreviousPhoto,
         Key::Named(Named::Escape) => InputIntent::Escape,
         _ => return None,
     };
@@ -255,6 +259,14 @@ mod tests {
         assert_eq!(
             key_message(&Key::Named(Named::Escape), Modifiers::default(), action),
             Some(UiMessage::Input(InputIntent::Escape))
+        );
+        assert_eq!(
+            key_message(&Key::Named(Named::ArrowDown), Modifiers::default(), action),
+            Some(UiMessage::Input(InputIntent::FocusNextPhoto))
+        );
+        assert_eq!(
+            key_message(&Key::Named(Named::ArrowUp), Modifiers::default(), action),
+            Some(UiMessage::Input(InputIntent::FocusPreviousPhoto))
         );
         assert_eq!(
             key_message(&Key::Named(Named::Tab), Modifiers::CTRL, action),
