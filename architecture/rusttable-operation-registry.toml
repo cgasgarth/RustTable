@@ -1,10 +1,26 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "204e0b48cea5a536bcd18da6661bff09bc55208d873b6134368c39d831d687d9"
+snapshot_hash = "10a15ec18719b6027ffcd63ba5c9b40aa482e4babdc09d0c4376db54379e9864"
+
+[[operation]]
+rust_id = "rusttable.colorcorrection"
+compatibility_name = "colorcorrection"
+descriptor_version = 5
+parameter_version = 5
+implementation_version = 1
+status = "available"
 
 [[operation]]
 rust_id = "rusttable.colorin"
 compatibility_name = "colorin"
+descriptor_version = 7
+parameter_version = 7
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.colorout"
+compatibility_name = "colorout"
 descriptor_version = 7
 parameter_version = 7
 implementation_version = 1

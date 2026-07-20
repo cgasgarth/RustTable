@@ -108,6 +108,92 @@ pub fn primaries_descriptor() -> OperationDescriptor {
     }
 }
 
+/// Returns the typed legacy color-correction descriptor.
+///
+/// # Panics
+///
+/// Panics only if the checked-in descriptor identity is malformed.
+#[must_use]
+pub fn colorcorrection_descriptor() -> OperationDescriptor {
+    let parameters = [
+        scalar("shadow_l", -4.0, 4.0, 0.0),
+        scalar("shadow_a", -4.0, 4.0, 0.0),
+        scalar("shadow_b", -4.0, 4.0, 0.0),
+        scalar("highlight_l", -4.0, 4.0, 0.0),
+        scalar("highlight_a", -4.0, 4.0, 0.0),
+        scalar("highlight_b", -4.0, 4.0, 0.0),
+        scalar("saturation", 0.0, 4.0, 1.0),
+        scalar("tonal_range", 0.001, 1.0, 0.5),
+        scalar("balance", -1.0, 1.0, 0.0),
+        integer("mode", 0, 1, 0),
+    ];
+    OperationDescriptor {
+        id: DescriptorId::new("colorcorrection", "rusttable.colorcorrection", 5, 5, 1)
+            .expect("static ID"),
+        parameters: parameters.into_iter().collect(),
+        flags: OperationFlags::DETERMINISTIC_CPU
+            .insert(OperationFlags::DETERMINISTIC_GPU)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::BLENDING),
+        stage: "scene-linear".to_owned(),
+        roi: RoiKind::Identity,
+        tiling: tiling(),
+        capability: capability(&["colorcorrection_opponent"]),
+        io: color_io(false),
+        mask_blend: mask_blend(),
+        migration: MigrationContract {
+            source_versions: (1..=5).collect(),
+            target_version: 5,
+            opaque_unknown_allowed: true,
+        },
+        ui: None,
+    }
+}
+
+/// Returns the typed output-profile transform descriptor.
+///
+/// # Panics
+///
+/// Panics only if the checked-in descriptor identity is malformed.
+#[must_use]
+pub fn colorout_descriptor() -> OperationDescriptor {
+    OperationDescriptor {
+        id: DescriptorId::new("colorout", "rusttable.colorout", 7, 7, 1).expect("static ID"),
+        parameters: vec![
+            text("profile", "builtin:srgb"),
+            integer("intent", 0, 3, 1),
+            boolean("black_point_compensation", false),
+            text("proof_profile", ""),
+            integer("gamut", 0, 2, 0),
+        ],
+        flags: OperationFlags::DETERMINISTIC_CPU
+            .insert(OperationFlags::DETERMINISTIC_GPU)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::FORMAT)
+            .insert(OperationFlags::ANALYSIS),
+        stage: "output-color".to_owned(),
+        roi: RoiKind::Identity,
+        tiling: tiling(),
+        capability: capability(&["colorout_matrix", "colorout_transfer"]),
+        io: color_io(true),
+        mask_blend: super::MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: true,
+            blend_if: false,
+            geometry: false,
+            analysis: true,
+        },
+        migration: MigrationContract {
+            source_versions: (1..=7).collect(),
+            target_version: 7,
+            opaque_unknown_allowed: true,
+        },
+        ui: None,
+    }
+}
+
 fn text(id: &str, default: &str) -> ParameterDescriptor {
     ParameterDescriptor {
         id: id.to_owned(),
@@ -137,6 +223,25 @@ fn integer(id: &str, minimum: i64, maximum: i64, default: i64) -> ParameterDescr
         removed_version: None,
         unit: None,
         step: Some(1.0),
+        precision: 0,
+        role: ParameterRole::Color,
+        cache_affecting: true,
+        animatable: false,
+        ui_hint: None,
+        condition: None,
+    }
+}
+
+fn boolean(id: &str, default: bool) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Bool,
+        default: ParameterDefault::Bool(default),
+        required: true,
+        introduced_version: 1,
+        removed_version: None,
+        unit: None,
+        step: None,
         precision: 0,
         role: ParameterRole::Color,
         cache_affecting: true,

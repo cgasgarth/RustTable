@@ -6,7 +6,9 @@ use std::fmt;
 
 #[path = "descriptor_color.rs"]
 mod descriptor_color;
-pub use descriptor_color::{colorin_descriptor, primaries_descriptor};
+pub use descriptor_color::{
+    colorcorrection_descriptor, colorin_descriptor, colorout_descriptor, primaries_descriptor,
+};
 
 const MAX_ID: usize = 96;
 const MAX_PARAMETERS: usize = 256;

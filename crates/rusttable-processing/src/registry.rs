@@ -977,15 +977,15 @@ macro_rules! builtin_operations {
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,
             $crate::registry_color::primaries_definition,
+            $crate::registry_color::colorout_definition,
+            $crate::registry_color::colorcorrection_definition,
         ]
     };
     ($($factory:path),+ $(,)?) => {
         &[$($factory as $crate::registry::OperationDefinitionFactory),+]
     };
 }
-
 pub static BUILTIN_OPERATIONS: &[OperationDefinitionFactory] = crate::builtin_operations!();
-
 /// Returns the process-wide immutable first-party registry snapshot.
 ///
 /// # Panics

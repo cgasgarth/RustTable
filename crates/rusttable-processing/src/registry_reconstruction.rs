@@ -29,6 +29,12 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Primaries { .. } => {
             crate::descriptor::primaries_descriptor().id
         }
+        crate::ProcessingOperationKind::ColorOut { .. } => {
+            crate::descriptor::colorout_descriptor().id
+        }
+        crate::ProcessingOperationKind::ColorCorrection { .. } => {
+            crate::descriptor::colorcorrection_descriptor().id
+        }
     }
 }
 

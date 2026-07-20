@@ -5,8 +5,9 @@ use rusttable_core::{
 };
 
 use crate::operations::{
-    colorin::ColorInConfig, colorreconstruction::ColorReconstructionConfig,
-    highlights::HighlightsConfig, primaries::PrimariesConfig,
+    colorcorrection::ColorCorrectionConfig, colorin::ColorInConfig, colorout::ColorOutConfig,
+    colorreconstruction::ColorReconstructionConfig, highlights::HighlightsConfig,
+    primaries::PrimariesConfig,
 };
 use crate::{FiniteF32, ScalarNarrowingError};
 
@@ -46,6 +47,12 @@ pub enum ProcessingOperationKind {
     },
     Primaries {
         config: PrimariesConfig,
+    },
+    ColorOut {
+        config: ColorOutConfig,
+    },
+    ColorCorrection {
+        config: ColorCorrectionConfig,
     },
 }
 
@@ -164,6 +171,16 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_primaries(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_primaries(operation)
+    }
+
+    pub(crate) fn compile_colorout(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_colorout(operation)
+    }
+
+    pub(crate) fn compile_colorcorrection(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_colorcorrection(operation)
     }
 
     #[must_use]
@@ -363,6 +380,25 @@ const PRIMARIES_PARAMETERS: [&str; 8] = [
     "blue_hue",
     "blue_purity",
 ];
+const COLOROUT_PARAMETERS: [&str; 5] = [
+    "profile",
+    "intent",
+    "black_point_compensation",
+    "proof_profile",
+    "gamut",
+];
+const COLORCORRECTION_PARAMETERS: [&str; 10] = [
+    "shadow_l",
+    "shadow_a",
+    "shadow_b",
+    "highlight_l",
+    "highlight_a",
+    "highlight_b",
+    "saturation",
+    "tonal_range",
+    "balance",
+    "mode",
+];
 
 fn compile_highlights(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &HIGHLIGHTS_PARAMETERS)?;
@@ -469,6 +505,61 @@ fn compile_primaries(operation: &Operation) -> Result<ProcessingOperation, Opera
         enabled: operation.is_enabled(),
         opacity,
         kind: ProcessingOperationKind::Primaries { config },
+    })
+}
+
+fn compile_colorout(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &COLOROUT_PARAMETERS)?;
+    let config = crate::operations::colorout::migrate(
+        7,
+        &crate::operations::colorout::ColorOutLegacyParameters {
+            output_profile: parameter_text(operation, "profile")?,
+            intent: i64::from(parameter_integer(operation, "intent", 1.0)?),
+            black_point_compensation: parameter_bool(operation, "black_point_compensation")?,
+            proof_profile: Some(parameter_text(operation, "proof_profile")?),
+            gamut: i64::from(parameter_integer(operation, "gamut", 0.0)?),
+        },
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::ColorOut { config },
+    })
+}
+
+fn compile_colorcorrection(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &COLORCORRECTION_PARAMETERS)?;
+    let config = crate::operations::colorcorrection::migrate(
+        5,
+        &crate::operations::colorcorrection::ColorCorrectionLegacyParameters {
+            shadow: [
+                parameter_f32(operation, "shadow_l", 0.0)?,
+                parameter_f32(operation, "shadow_a", 0.0)?,
+                parameter_f32(operation, "shadow_b", 0.0)?,
+            ],
+            highlight: [
+                parameter_f32(operation, "highlight_l", 0.0)?,
+                parameter_f32(operation, "highlight_a", 0.0)?,
+                parameter_f32(operation, "highlight_b", 0.0)?,
+            ],
+            saturation: parameter_f32(operation, "saturation", 1.0)?,
+            tonal_range: parameter_f32(operation, "tonal_range", 0.5)?,
+            balance: parameter_f32(operation, "balance", 0.0)?,
+            mode: i64::from(parameter_integer(operation, "mode", 0.0)?),
+        },
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    let opacity = compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: ProcessingOperationKind::ColorCorrection { config },
     })
 }
 

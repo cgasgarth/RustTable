@@ -25,6 +25,7 @@ pub(crate) fn colorin_definition() -> OperationDefinition {
             "iop.colorin.cpu",
             "iop.colorin.wgsl",
         ],
+        false,
     )
 }
 
@@ -39,6 +40,55 @@ pub(crate) fn primaries_definition() -> OperationDefinition {
             "iop.primaries.cpu",
             "iop.primaries.wgsl",
         ],
+        false,
+    )
+}
+
+pub(crate) fn colorout_definition() -> OperationDefinition {
+    definition(
+        crate::descriptor::colorout_descriptor(),
+        prepare_colorout,
+        &crate::operations::colorout::wgpu_passes(),
+        (1..7)
+            .map(|version| {
+                MigrationBinding::new(
+                    version,
+                    version + 1,
+                    format!("colorout.migration.v{version}"),
+                )
+            })
+            .collect(),
+        &[
+            "iop.colorout.profile-resolution",
+            "iop.colorout.cpu",
+            "iop.colorout.wgsl",
+            "iop.colorout.receipt",
+        ],
+        true,
+    )
+}
+
+pub(crate) fn colorcorrection_definition() -> OperationDefinition {
+    definition(
+        crate::descriptor::colorcorrection_descriptor(),
+        prepare_colorcorrection,
+        &crate::operations::colorcorrection::wgpu_passes(),
+        (1..5)
+            .map(|version| {
+                MigrationBinding::new(
+                    version,
+                    version + 1,
+                    format!("colorcorrection.migration.v{version}"),
+                )
+            })
+            .collect(),
+        &[
+            "iop.colorcorrection.legacy-parameters",
+            "iop.colorcorrection.cpu",
+            "iop.colorcorrection.wgsl",
+            "iop.colorcorrection.receipt",
+        ],
+        false,
     )
 }
 
@@ -64,12 +114,35 @@ fn prepare_primaries(
     )
 }
 
+fn prepare_colorout(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_colorout(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_colorcorrection(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_colorcorrection(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn definition(
     descriptor: OperationDescriptor,
     prepare: crate::registry::CpuPrepare,
     passes: &[&str],
     migrations: Vec<MigrationBinding>,
     evidence: &[&str],
+    full_image_analysis: bool,
 ) -> OperationDefinition {
     let compatibility = descriptor.id.compatibility_name.clone();
     OperationDefinition::new(
@@ -79,7 +152,7 @@ fn definition(
             crate::evaluate::execute_prepared_operation,
             RoiKind::Identity,
             true,
-            false,
+            full_image_analysis,
         )),
         Some(GpuBinding::new(
             format!("rusttable.{compatibility}.wgsl"),
