@@ -16,6 +16,7 @@ use rusttable_ui::{
 };
 
 const CATALOG_FILENAME: &str = "catalog.redb";
+const MAX_BROWSER_PHOTOS: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LibraryLoadRequestId(NonZeroU64);
@@ -144,6 +145,7 @@ fn present_records(
     mut records: Vec<ImportRecord>,
 ) -> Result<PhotoWorkspaceViewModel, CatalogPresentationError> {
     records.sort_by(|left, right| left.source().cmp(right.source()));
+    records.truncate(MAX_BROWSER_PHOTOS);
     let mut cards = Vec::with_capacity(records.len());
     let mut details = Vec::with_capacity(records.len());
 
@@ -233,7 +235,8 @@ mod tests {
 
     use super::{
         CatalogPresentationError, LibraryLoadError, LibraryLoadRequestId, LibraryLoadResult,
-        format_file_size, load_catalog, present_records, select_catalog_path, source_root,
+        MAX_BROWSER_PHOTOS, format_file_size, load_catalog, present_records, select_catalog_path,
+        source_root,
     };
     use crate::library::LibraryFailureKind;
     use rusttable_ui::PhotoWorkspaceViewModelError;
@@ -423,6 +426,37 @@ mod tests {
             error,
             CatalogPresentationError::InvalidText { .. }
         ));
+    }
+
+    #[test]
+    fn presentation_is_bounded_to_the_first_two_hundred_sorted_sources() {
+        let records = (1..=201)
+            .map(|number| {
+                record(
+                    &format!("collection/{number:03}.png"),
+                    number,
+                    number + 1_000,
+                    InputFormat::Png,
+                )
+            })
+            .rev()
+            .collect();
+
+        let workspace = present_records(records).expect("bounded presentation");
+
+        assert_eq!(workspace.cards().len(), MAX_BROWSER_PHOTOS);
+        assert_eq!(
+            workspace
+                .cards()
+                .map(|card| card.id().get())
+                .collect::<Vec<_>>(),
+            (1..=u128::try_from(MAX_BROWSER_PHOTOS).expect("fits test IDs")).collect::<Vec<_>>()
+        );
+        assert!(
+            workspace
+                .detail(PhotoId::new(201).expect("test photo ID"))
+                .is_none()
+        );
     }
 
     #[test]
