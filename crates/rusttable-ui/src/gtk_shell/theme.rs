@@ -152,6 +152,8 @@ mod tests {
         assert!(css.contains("#ffbb00ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
+        assert!(css.contains("font-size: 1em"));
+        assert!(!css.contains("font-size: 0.85em"));
         assert!(css.contains(".dt_view_switcher"));
     }
 

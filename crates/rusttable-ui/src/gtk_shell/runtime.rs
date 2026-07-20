@@ -31,7 +31,7 @@ pub struct GtkShell {
     layout: ShellLayout,
     workspace: gtk4::Stack,
     lighttable: gtk4::FlowBox,
-    lighttable_empty_state: gtk4::Box,
+    lighttable_empty_state: gtk4::Stack,
     darkroom_preview: PhotoPreview,
     export_panel: ExportPanel,
     filmstrip: gtk4::FlowBox,
@@ -161,6 +161,9 @@ impl GtkShell {
 
     /// Presents the application window without taking ownership of GTK's loop.
     pub fn present(&self) {
+        if self.lighttable.first_child().is_none() {
+            self.lighttable_empty_state.set_visible_child_name("empty");
+        }
         self.window.present();
     }
 
@@ -351,7 +354,7 @@ impl CollectionRefreshHandle {
 #[derive(Clone)]
 struct WorkspaceRenderHandle {
     lighttable: gtk4::FlowBox,
-    lighttable_empty_state: gtk4::Box,
+    lighttable_empty_state: gtk4::Stack,
     filmstrip: gtk4::FlowBox,
     darkroom_preview: PhotoPreview,
     workspace: gtk4::Stack,
@@ -403,7 +406,11 @@ impl WorkspaceRenderHandle {
             rendered_photos += 1;
         }
         self.lighttable_empty_state
-            .set_visible(rendered_photos == 0);
+            .set_visible_child_name(if rendered_photos == 0 {
+                "empty"
+            } else {
+                "grid"
+            });
     }
 }
 
@@ -619,7 +626,7 @@ fn central_workspace(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
 fn workspace_stack(
     initial_workspace: WorkspaceRole,
     i18n: &I18n,
-) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Box, PhotoPreview) {
+) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Stack, PhotoPreview) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -644,14 +651,19 @@ fn workspace_stack(
         .vexpand(true)
         .build();
     let empty_state = empty_collection_state();
+    empty_state.set_halign(gtk4::Align::Fill);
+    empty_state.set_valign(gtk4::Align::Fill);
     empty_state.set_hexpand(true);
     empty_state.set_vexpand(true);
-    let lighttable_overlay = gtk4::Overlay::new();
-    lighttable_overlay.set_hexpand(true);
-    lighttable_overlay.set_vexpand(true);
-    lighttable_overlay.set_child(Some(&lighttable_scroll));
-    lighttable_overlay.add_overlay(&empty_state);
-    lighttable_page.append(&lighttable_overlay);
+    empty_state.set_visible(true);
+    let lighttable_canvas = gtk4::Stack::new();
+    lighttable_canvas.set_hexpand(true);
+    lighttable_canvas.set_vexpand(true);
+    apply_theme_role(&lighttable_canvas, ThemeRole::Lighttable);
+    lighttable_canvas.add_named(&lighttable_scroll, Some("grid"));
+    lighttable_canvas.add_named(&empty_state, Some("empty"));
+    lighttable_canvas.set_visible_child_name("empty");
+    lighttable_page.append(&lighttable_canvas);
 
     let darkroom_preview = PhotoPreview::new();
     let darkroom_page = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
@@ -674,7 +686,7 @@ fn workspace_stack(
         &i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()),
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
-    (workspace, lighttable, empty_state, darkroom_preview)
+    (workspace, lighttable, lighttable_canvas, darkroom_preview)
 }
 
 fn filmstrip(i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
@@ -891,7 +903,6 @@ fn empty_collection_state() -> gtk4::Box {
     root.set_margin_end(48);
     root.set_margin_top(28);
     root.set_margin_bottom(28);
-    root.set_can_target(false);
     apply_theme_role(&root, ThemeRole::EmptyState);
 
     let collection = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
