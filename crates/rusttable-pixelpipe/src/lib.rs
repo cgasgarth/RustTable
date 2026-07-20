@@ -6,6 +6,7 @@ mod cache_key;
 mod cache_value;
 mod cancellation;
 mod cpu;
+mod failure_policy;
 mod host_pool;
 mod image;
 mod mode;
@@ -53,17 +54,27 @@ pub use cpu::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
     CpuTileAssemblyError,
 };
+pub use failure_policy::{
+    AttemptReceipt, CacheAction, CleanupAction, Failure, FailureBackend, FailureCacheHook,
+    FailureCategory, FailureCleanupHook, FailureError, FailureLedger, FailurePolicy,
+    FailurePrecedence, FailurePublicationHook, FailureRetryability, FailureScope, FailureStage,
+    FinalImplementation, FinalReceipt, HookError, MAX_ATTEMPTS, MAX_SECONDARY_FAILURES,
+    OutputCandidate, OutputExpectation, OutputValidationError, OutputValidationReceipt,
+    OutputValidator, PolicyAction, PolicyError, PolicyRequest, PublicationAction, QuarantineHint,
+    ReceiptBuilder, integrate_failure,
+};
 pub use host_pool::temporary_buffer_request;
 pub use image::{
     RgbaF32AlphaMode, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
     RgbaF32ImageError, RgbaF32Pixel, SourceRasterIdentity,
 };
 pub use mode::{
-    AnalysisRequest, ApproximationId, BackendPolicy, BasicStackFixture, DegradationPolicy,
-    EmbeddedPreviewProvenance, Interpolation, LatencyClass, MODE_SCHEMA_VERSION, MaskRequest,
-    ModeFinding, ModeOperationCapability, ModePlan, ModePlanner, ModePlanningError, ModeQuality,
-    ModeReceipt, ModeRequest, ModeRequestError, OperationInclusion, PipelineModePlan,
-    PipelineModePlanner, PipelineModeRequest, QualityPreset, Synchronization, TargetIdentity,
+    AnalysisRequest, ApproximationId, ApproximationId as FailureApproximationId, BackendPolicy,
+    BasicStackFixture, DegradationPolicy, EmbeddedPreviewProvenance, Interpolation, LatencyClass,
+    MODE_SCHEMA_VERSION, MaskRequest, ModeFinding, ModeOperationCapability, ModePlan, ModePlanner,
+    ModePlanningError, ModeQuality, ModeReceipt, ModeRequest, ModeRequestError, OperationInclusion,
+    PipelineModePlan, PipelineModePlanner, PipelineModeRequest, QualityPreset, Synchronization,
+    TargetIdentity,
 };
 pub use pipeline_contracts::{
     Background, BlendStatus, ColorIdentity, ContractError, GenerationError, ImplementationIdentity,
