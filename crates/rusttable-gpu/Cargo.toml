@@ -9,6 +9,8 @@ version.workspace = true
 [dependencies]
 naga.workspace = true
 postcard.workspace = true
+rusttable-color.workspace = true
+rusttable-image.workspace = true
 serde.workspace = true
 sha2.workspace = true
 tokio.workspace = true

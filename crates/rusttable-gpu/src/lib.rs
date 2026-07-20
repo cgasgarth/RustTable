@@ -5,8 +5,10 @@
 mod cache;
 mod contracts;
 pub mod purpose;
+mod resource;
 mod runtime;
 pub mod shader;
+pub mod transfer;
 
 pub use contracts::{
     AdapterCandidate, AdapterIdentity, AdapterSelection, AdvertisedFeatures, Backend,
@@ -16,4 +18,10 @@ pub use contracts::{
 };
 
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
+pub use resource::{
+    DeviceGeneration, GpuResourcePool, InitializationPolicy, PoolError, PoolEvent,
+    ResourceAccounting, ResourceClass, ResourceFormat, ResourceId, ResourceKind, ResourceLease,
+    ResourceMetrics, ResourcePoolConfig, ResourcePriority, ResourceRequest, ResourceState,
+    SubmissionId, SubmissionToken,
+};
 pub use runtime::{GpuInitError, GpuRuntime, GpuRuntimeConfig};

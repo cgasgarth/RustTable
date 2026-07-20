@@ -35,6 +35,18 @@ pub(crate) fn run(root: &Path, command: MigrationCommand) -> Result {
                 eprintln!("migration source map passed (issue={issue})");
                 Ok(())
             }
+            SourceMapCommand::Verify { issue } if issue == 293 => {
+                gpu::verify_resource_source_map(root, issue)?;
+                gpu::verify_resource_architecture(root)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
+            SourceMapCommand::Verify { issue } if issue == 294 => {
+                gpu::verify_transfer_source_map(root, issue)?;
+                gpu::verify_transfer_architecture(root)?;
+                eprintln!("migration source map passed (issue={issue})");
+                Ok(())
+            }
             SourceMapCommand::Verify { issue } if issue == 292 => {
                 shaders::verify_source_map(root)?;
                 eprintln!("migration source map passed (issue={issue})");
