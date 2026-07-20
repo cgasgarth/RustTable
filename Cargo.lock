@@ -2079,6 +2079,7 @@ name = "rusttable-app"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "futures",
  "gtk4",
  "rfd",
  "rusttable-catalog",
@@ -2097,6 +2098,7 @@ dependencies = [
  "rusttable-testkit",
  "rusttable-ui",
  "sha2",
+ "tokio",
 ]
 
 [[package]]

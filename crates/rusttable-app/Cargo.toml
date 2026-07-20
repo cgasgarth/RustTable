@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 directories.workspace = true
+futures.workspace = true
 gtk4.workspace = true
 rfd.workspace = true
 rusttable-catalog.workspace = true
@@ -25,6 +26,7 @@ rusttable-render.workspace = true
 rusttable-scripting.workspace = true
 rusttable-ui.workspace = true
 sha2.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 rusttable-testkit.workspace = true
