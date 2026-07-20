@@ -8,7 +8,9 @@ use crate::{DecodedImage, ImageDimensions};
 pub enum OutputFormat {
     Png,
     Jpeg,
+    JpegXl,
     Tiff,
+    Webp,
 }
 
 pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 3] =

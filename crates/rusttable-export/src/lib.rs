@@ -14,6 +14,7 @@ pub use contract::{
     ExportArtifact, ExportContractError, ExportPriority, ExportRequest, ExportValidationError,
     Interpolation, MetadataAction, MetadataPolicy, OutputProfile, PipelineQuality, PixelEncoding,
 };
+pub use encoders::resource::{EncodeBudget, EncodeCancellation, NeverCancel};
 pub use manifest::{
     ArtifactKind, CollisionGroup, DestinationCapabilities, ExportPlan, ExportPlanError,
     LogicalArtifact,
