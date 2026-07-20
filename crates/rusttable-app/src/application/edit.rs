@@ -12,7 +12,7 @@ use crate::workspace::{
     preview_loader::load_selected_edit,
 };
 
-use super::{Message, Shell, WorkspaceRoute, start_preview};
+use super::{Message, Shell, WorkspaceRoute, preview};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum EditLoadResult {
@@ -58,19 +58,24 @@ pub(super) fn handle_intent(shell: &mut Shell, intent: BasicEditIntent) -> Task<
         return Task::none();
     }
     if matches!(intent, BasicEditIntent::Commit) {
+        shell.ui.begin_basic_edit_save(photo_id);
         return start_commit(
             shell.catalog_path.as_ref().ok().cloned(),
             photo_id,
             draft.clone(),
         );
     }
-    let Some(draft) = shell.basic_edit.as_mut() else {
-        return Task::none();
+    let (draft_values, draft_preview) = {
+        let Some(draft) = shell.basic_edit.as_mut() else {
+            return Task::none();
+        };
+        if adjust(draft, intent).is_err() {
+            return Task::none();
+        }
+        (values(draft), draft.replacement_edit().ok())
     };
-    if adjust(draft, intent).is_ok() {
-        shell.ui.set_basic_edit_values(photo_id, values(draft));
-    }
-    Task::none()
+    shell.ui.set_basic_edit_draft_values(photo_id, draft_values);
+    draft_preview.map_or_else(Task::none, |edit| preview::start_draft(shell, &edit))
 }
 
 pub(super) fn apply_committed(
@@ -79,6 +84,7 @@ pub(super) fn apply_committed(
     result: &EditCommitResult,
 ) -> Task<Message> {
     let EditCommitResult::Ready(draft) = result else {
+        shell.ui.fail_basic_edit_save(photo_id);
         return Task::none();
     };
     if draft.photo_id() != photo_id || shell.ui.route() != WorkspaceRoute::PhotoDetail(photo_id) {
@@ -86,7 +92,7 @@ pub(super) fn apply_committed(
     }
     shell.basic_edit = Some(draft.clone());
     shell.ui.set_basic_edit_values(photo_id, values(draft));
-    start_preview(shell, photo_id)
+    preview::start_persisted(shell, photo_id)
 }
 
 fn start_commit(
@@ -159,15 +165,20 @@ mod tests {
         Edit, EditId, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
         ParameterValue, PhotoId, Revision,
     };
-    use rusttable_ui::{input::BasicEditIntent, presentation::BasicEditField};
+    use rusttable_ui::{
+        NavigationIntent, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
+        PresentationText, WorkspaceRoute, input::BasicEditIntent, presentation::BasicEditField,
+    };
 
-    use super::{BasicEditDraft, adjust, values};
+    use super::{
+        BasicEditDraft, EditLoadResult, Shell, adjust, apply_loaded, handle_intent, values,
+    };
 
-    fn draft() -> BasicEditDraft {
+    fn draft(photo_id: PhotoId) -> BasicEditDraft {
         let scalar = |value| ParameterValue::Scalar(super::finite(value));
         let edit = Edit::from_parts(
             EditId::new(1).expect("test edit ID is non-zero"),
-            PhotoId::new(2).expect("test photo ID is non-zero"),
+            photo_id,
             Revision::ZERO,
             Revision::ZERO,
             [
@@ -185,6 +196,28 @@ mod tests {
         )
         .expect("test edit is valid");
         BasicEditDraft::from_edit(&edit).expect("test edit has a basic draft")
+    }
+
+    fn shell(photo_id: PhotoId) -> Shell {
+        let workspace = PhotoWorkspaceViewModel::new(
+            vec![PhotoCardViewModel::new(
+                photo_id,
+                PresentationText::new("Test photo").expect("test title is valid"),
+                None,
+            )],
+            vec![PhotoDetailViewModel::new(
+                photo_id,
+                PresentationText::new("Test photo").expect("test title is valid"),
+                Vec::new(),
+            )],
+        )
+        .expect("test workspace is valid");
+        let mut shell = Shell::with_photo_workspace(workspace);
+        let _ = super::super::update(
+            &mut shell,
+            super::super::Message::Navigate(NavigationIntent::ShowPhoto(photo_id)),
+        );
+        shell
     }
 
     fn operation<const N: usize>(
@@ -209,7 +242,7 @@ mod tests {
 
     #[test]
     fn adjustment_clamps_at_the_domain_bounds() {
-        let mut draft = draft();
+        let mut draft = draft(PhotoId::new(2).expect("test photo ID is non-zero"));
         draft
             .set_exposure_stops(4.999)
             .expect("test exposure is in range");
@@ -228,7 +261,7 @@ mod tests {
 
     #[test]
     fn reset_projects_the_full_domain_draft_back_to_defaults() {
-        let mut draft = draft();
+        let mut draft = draft(PhotoId::new(2).expect("test photo ID is non-zero"));
         draft.set_exposure_stops(2.5).expect("in range");
         draft.set_rgb_red(0.5).expect("in range");
         draft.set_rgb_green(1.5).expect("in range");
@@ -241,5 +274,48 @@ mod tests {
         assert_eq!(projected.display_value(BasicEditField::RedGain), "1.000");
         assert_eq!(projected.display_value(BasicEditField::GreenGain), "1.000");
         assert_eq!(projected.display_value(BasicEditField::BlueGain), "1.000");
+    }
+
+    #[test]
+    fn editor_intents_mutate_the_app_owned_draft_not_only_the_ui_mirror() {
+        let photo_id = PhotoId::new(2).expect("test photo ID is non-zero");
+        let mut shell = shell(photo_id);
+        apply_loaded(
+            &mut shell,
+            photo_id,
+            &EditLoadResult::Ready(draft(photo_id)),
+        );
+
+        let _ = handle_intent(
+            &mut shell,
+            BasicEditIntent::Increment(BasicEditField::Exposure),
+        );
+
+        assert_eq!(
+            shell
+                .basic_edit
+                .as_ref()
+                .map(|draft| values(draft).display_value(BasicEditField::Exposure)),
+            Some("0.01".to_owned())
+        );
+        assert_eq!(
+            shell
+                .ui
+                .basic_edit()
+                .map(|inspector| inspector.values().display_value(BasicEditField::Exposure)),
+            Some("0.01".to_owned())
+        );
+    }
+
+    #[test]
+    fn stale_loaded_draft_cannot_replace_the_current_photo() {
+        let photo_id = PhotoId::new(2).expect("test photo ID is non-zero");
+        let mut shell = shell(photo_id);
+        let stale = PhotoId::new(3).expect("test photo ID is non-zero");
+
+        apply_loaded(&mut shell, stale, &EditLoadResult::Ready(draft(stale)));
+
+        assert_eq!(shell.ui.route(), WorkspaceRoute::PhotoDetail(photo_id));
+        assert!(shell.basic_edit.is_none());
     }
 }

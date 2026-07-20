@@ -94,13 +94,6 @@ pub(crate) fn load_selected_preview(
 /// # Errors
 ///
 /// Returns a typed catalog, source, ownership-validation, decode, or CPU-render failure.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the paired editor application change wires transient preview loading"
-    )
-)]
 pub(crate) fn load_preview_for_edit(
     catalog_path: &Path,
     source_root: &Path,

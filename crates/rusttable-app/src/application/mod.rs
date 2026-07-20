@@ -1,11 +1,10 @@
 use iced::Task;
 use std::path::PathBuf;
 mod edit;
+mod preview;
 
 use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
-use crate::workspace::{
-    BasicEditDraft, SelectedPreview, load_selected_preview, pick_raster_files, run_raster_import,
-};
+use crate::workspace::{BasicEditDraft, SelectedPreview, pick_raster_files, run_raster_import};
 use rusttable_core::PhotoId;
 use rusttable_import::{
     RasterImportBatch, RasterImportCancellation, RasterImportProgress, RasterImportStage,
@@ -13,8 +12,7 @@ use rusttable_import::{
 };
 use rusttable_ui::{
     ImportPanelViewModel, ImportRowState, ImportRowViewModel, InputIntent, LibraryFailureKind,
-    LibraryState, NavigationIntent, PhotoWorkspaceViewModel, PresentationText, PreviewDimensions,
-    Rgba8PreviewMetadata, SelectedPreviewFailure, SelectedPreviewState, UiEffect, UiMessage,
+    LibraryState, NavigationIntent, PhotoWorkspaceViewModel, PresentationText, UiEffect, UiMessage,
     UiState, WorkspaceRoute,
 };
 
@@ -165,6 +163,7 @@ pub(crate) enum Message {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PreviewLoadResult {
     Ready(SelectedPreview),
+    Draft(SelectedPreview),
     Failed,
 }
 
@@ -197,7 +196,7 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
             generation,
             photo_id,
             result,
-        } => handle_preview_loaded(shell, generation, photo_id, result),
+        } => preview::handle_loaded(shell, generation, photo_id, result),
         Message::EditLoaded {
             photo_id,
             ref result,
@@ -247,13 +246,13 @@ fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
         UiEffect::RetryImport(item_id) => return retry_import(shell, item_id),
         UiEffect::None => {}
     }
-    reconcile_preview_route(shell, previous_route);
+    preview::reconcile_route(shell, previous_route);
     if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route()
         && previous_route != shell.ui.route()
     {
         shell.basic_edit = None;
         return Task::batch([
-            start_preview(shell, photo_id),
+            preview::start_persisted(shell, photo_id),
             edit::start_load(shell.catalog_path.as_ref().ok().cloned(), photo_id),
         ]);
     }
@@ -278,7 +277,7 @@ fn handle_library_loaded(
             .ready_workspace()
             .is_some_and(|workspace| workspace.detail(photo_id).is_some())
         {
-            return start_preview(shell, photo_id);
+            return preview::start_persisted(shell, photo_id);
         }
         let _ = shell
             .ui
@@ -294,27 +293,9 @@ fn handle_library_loaded(
         let _ = shell
             .ui
             .handle(UiMessage::Navigate(NavigationIntent::ShowPhoto(photo_id)));
-        return start_preview(shell, photo_id);
+        return preview::start_persisted(shell, photo_id);
     }
     Task::none()
-}
-
-fn handle_preview_loaded(
-    shell: &mut Shell,
-    generation: u64,
-    photo_id: PhotoId,
-    result: PreviewLoadResult,
-) {
-    if shell.active_preview != Some((generation, photo_id))
-        || shell.ui.route() != WorkspaceRoute::PhotoDetail(photo_id)
-    {
-        return;
-    }
-    shell.active_preview = None;
-    match result {
-        PreviewLoadResult::Ready(preview) => publish_preview(shell, photo_id, preview),
-        PreviewLoadResult::Failed => replace_preview(shell, photo_id, preview_failed_state()),
-    }
 }
 
 fn import_picker_task() -> Task<Message> {
@@ -510,84 +491,6 @@ fn retry_library(shell: &mut Shell) -> Task<Message> {
     start_load(request_id, shell.catalog_path.clone())
 }
 
-fn reconcile_preview_route(shell: &mut Shell, previous_route: WorkspaceRoute) {
-    if previous_route != shell.ui.route() && matches!(shell.ui.route(), WorkspaceRoute::Library) {
-        shell.active_preview = None;
-    }
-}
-
-fn start_preview(shell: &mut Shell, photo_id: PhotoId) -> Task<Message> {
-    let Some(generation) = shell.preview_generation.checked_add(1) else {
-        replace_preview(shell, photo_id, preview_failed_state());
-        return Task::none();
-    };
-    shell.preview_generation = generation;
-    shell.active_preview = Some((generation, photo_id));
-    if !has_rendered_preview(shell, photo_id) {
-        replace_preview(shell, photo_id, SelectedPreviewState::Loading);
-    }
-    let (Ok(catalog_path), Ok(source_root)) = (&shell.catalog_path, &shell.source_root) else {
-        shell.active_preview = None;
-        replace_preview(shell, photo_id, preview_failed_state());
-        return Task::none();
-    };
-    let catalog_path = catalog_path.clone();
-    let source_root = source_root.clone();
-    Task::perform(
-        async move {
-            load_selected_preview(&catalog_path, &source_root, photo_id)
-                .map_or(PreviewLoadResult::Failed, PreviewLoadResult::Ready)
-        },
-        move |result| Message::PreviewLoaded {
-            generation,
-            photo_id,
-            result,
-        },
-    )
-}
-
-fn has_rendered_preview(shell: &Shell, photo_id: PhotoId) -> bool {
-    shell
-        .ui
-        .library_state()
-        .ready_workspace()
-        .and_then(|workspace| workspace.detail(photo_id))
-        .is_some_and(|detail| matches!(detail.selected_preview(), SelectedPreviewState::Ready(_)))
-}
-
-fn replace_preview(shell: &mut Shell, photo_id: PhotoId, preview: SelectedPreviewState) {
-    let Some(workspace) = shell.ui.library_state().ready_workspace().cloned() else {
-        return;
-    };
-    let Some(workspace) = workspace.with_selected_preview(photo_id, preview) else {
-        return;
-    };
-    shell.ui.set_library_state(LibraryState::Ready(workspace));
-}
-
-fn publish_preview(shell: &mut Shell, photo_id: PhotoId, preview: SelectedPreview) {
-    let (_, dimensions, pixels) = preview.into_parts();
-    let ready = PreviewDimensions::new(dimensions.width(), dimensions.height())
-        .ok()
-        .and_then(|dimensions| {
-            Rgba8PreviewMetadata::new(
-                dimensions,
-                PresentationText::new("Current persisted edit").expect("constant status is valid"),
-                pixels,
-            )
-            .ok()
-        })
-        .map_or_else(preview_failed_state, SelectedPreviewState::Ready);
-    replace_preview(shell, photo_id, ready);
-}
-
-fn preview_failed_state() -> SelectedPreviewState {
-    SelectedPreviewState::Failed(SelectedPreviewFailure::new(
-        PresentationText::new("The selected preview could not be rendered.")
-            .expect("constant failure text is valid"),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -602,7 +505,7 @@ mod tests {
         PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState, UiState, WorkspaceRoute,
     };
 
-    use super::{Message, PreviewLoadResult, Shell, preview_failed_state, update};
+    use super::{Message, PreviewLoadResult, Shell, preview::failed_state, update};
 
     fn photo_id() -> PhotoId {
         PhotoId::new(1).expect("test photo ID is non-zero")
@@ -837,7 +740,7 @@ mod tests {
                 .ready_workspace()
                 .and_then(|workspace| workspace.detail(photo_id))
                 .map(PhotoDetailViewModel::selected_preview),
-            Some(&preview_failed_state())
+            Some(&failed_state())
         );
     }
 
