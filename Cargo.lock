@@ -2960,10 +2960,12 @@ version = "0.1.0"
 dependencies = [
  "mozjpeg-rs",
  "png",
+ "rusttable-catalog-store",
  "rusttable-color",
  "rusttable-core",
  "rusttable-image",
  "rusttable-image-io",
+ "rusttable-import",
  "rusttable-jxl-native",
  "rusttable-pixelpipe",
  "rusttable-render",
