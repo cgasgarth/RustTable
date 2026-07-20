@@ -60,6 +60,19 @@ impl UiState {
         self.basic_edit.as_ref()
     }
 
+    pub fn set_basic_edit_values(
+        &mut self,
+        photo_id: PhotoId,
+        values: crate::presentation::BasicEditValues,
+    ) {
+        if matches!(self.route(), WorkspaceRoute::PhotoDetail(current) if current == photo_id) {
+            self.basic_edit = Some(
+                crate::presentation::BasicEditInspectorViewModel::with_values(photo_id, values),
+            );
+            self.reconcile_input();
+        }
+    }
+
     #[must_use]
     pub fn is_focused(&self, target: FocusTarget) -> bool {
         self.input.is_focused(target)

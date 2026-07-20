@@ -1,6 +1,8 @@
 use iced::Task;
 use std::path::PathBuf;
 
+mod edit;
+
 use crate::library::{self, LibraryLoadRequestId, LibraryLoadResult};
 use crate::workspace::{
     SelectedPreview, load_selected_preview, pick_raster_files, run_raster_import,
@@ -138,6 +140,10 @@ pub(crate) enum Message {
         photo_id: PhotoId,
         result: PreviewLoadResult,
     },
+    EditLoaded {
+        photo_id: PhotoId,
+        result: edit::EditLoadResult,
+    },
     ImportFiles,
     ImportPickerCompleted(Vec<PathBuf>),
     FilesDropped(Vec<PathBuf>),
@@ -185,6 +191,10 @@ pub(crate) fn update(shell: &mut Shell, message: Message) -> Task<Message> {
             photo_id,
             result,
         } => handle_preview_loaded(shell, generation, photo_id, result),
+        Message::EditLoaded {
+            photo_id,
+            ref result,
+        } => edit::apply_loaded(shell, photo_id, result),
         Message::ImportFiles => return import_picker_task(),
         Message::ImportPickerCompleted(paths) | Message::FilesDropped(paths) => {
             return begin_import(shell, paths);
@@ -227,7 +237,10 @@ fn handle_ui_message(shell: &mut Shell, message: UiMessage) -> Task<Message> {
     if let WorkspaceRoute::PhotoDetail(photo_id) = shell.ui.route()
         && previous_route != shell.ui.route()
     {
-        return start_preview(shell, photo_id);
+        return Task::batch([
+            start_preview(shell, photo_id),
+            edit::start_load(shell.catalog_path.as_ref().ok().cloned(), photo_id),
+        ]);
     }
     Task::none()
 }

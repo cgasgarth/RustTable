@@ -76,6 +76,21 @@ pub struct BasicEditValues {
 
 impl BasicEditValues {
     #[must_use]
+    pub const fn from_finite(
+        exposure: FiniteF64,
+        red_gain: FiniteF64,
+        green_gain: FiniteF64,
+        blue_gain: FiniteF64,
+    ) -> Self {
+        Self {
+            exposure,
+            red_gain,
+            green_gain,
+            blue_gain,
+        }
+    }
+
+    #[must_use]
     pub fn defaults() -> Self {
         Self::from_defaults()
     }
@@ -155,6 +170,11 @@ impl BasicEditInspectorViewModel {
     #[must_use]
     pub fn new(photo_id: PhotoId) -> Self {
         let values = BasicEditValues::defaults();
+        Self::with_values(photo_id, values)
+    }
+
+    #[must_use]
+    pub const fn with_values(photo_id: PhotoId, values: BasicEditValues) -> Self {
         Self {
             photo_id,
             saved: values,
