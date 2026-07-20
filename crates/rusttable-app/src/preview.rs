@@ -44,10 +44,27 @@ impl PreviewService {
         source: &[u8],
         edit: &Edit,
     ) -> Result<RenderOutput, PreviewError> {
+        self.render_bytes_for_target(source, edit, RenderTarget::FullResolution)
+    }
+
+    /// Decodes immutable snapshot bytes and renders them through one target.
+    ///
+    /// Export callers use this to keep final scaling in the production render
+    /// plan instead of applying a second resize after processing.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed decode or CPU-render failure.
+    pub fn render_bytes_for_target(
+        &self,
+        source: &[u8],
+        edit: &Edit,
+        target: RenderTarget,
+    ) -> Result<RenderOutput, PreviewError> {
         let input = FileImageInput::new(self.limits)
             .decode_bytes(source)
             .map_err(PreviewError::Decode)?;
-        render_full_resolution(&input, edit)
+        render_with_target(&input, edit, target)
     }
 
     fn render_preview_decoded(
@@ -67,11 +84,12 @@ impl PreviewService {
     }
 }
 
-fn render_full_resolution(
+fn render_with_target(
     input: &rusttable_image::DecodedImage,
     edit: &Edit,
+    target: RenderTarget,
 ) -> Result<RenderOutput, PreviewError> {
-    let plan = RenderPlan::for_source(input.dimensions(), RenderTarget::FullResolution);
+    let plan = RenderPlan::for_source(input.dimensions(), target);
     render_edit_with_plan(
         edit,
         input,

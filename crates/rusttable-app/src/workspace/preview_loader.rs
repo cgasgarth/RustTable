@@ -4,7 +4,7 @@ use rusttable_catalog::{EditRepository, RepositoryError};
 use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::{Edit, PhotoId};
 use rusttable_image::{DecodeLimits, ImageDimensions};
-use rusttable_render::PreviewBounds;
+use rusttable_render::{PreviewBounds, RenderTarget};
 
 use crate::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, PreviewService};
 
@@ -100,15 +100,17 @@ pub(crate) fn load_selected_export_render(
     catalog_path: &Path,
     source_root: &Path,
     photo_id: PhotoId,
+    target: RenderTarget,
 ) -> Result<rusttable_render::RenderOutput, WorkspacePreviewError> {
     let edit = load_selected_edit(catalog_path, photo_id)?;
     let repository =
         RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
     CatalogPreviewService::new(preview_service())
-        .render_full_resolution(
+        .render_for_target(
             CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
             &repository,
             &repository,
+            target,
         )
         .map_err(WorkspacePreviewError::Preview)
 }
@@ -348,13 +350,54 @@ mod tests {
             .and_then(|receipt| receipt.photo_id)
             .expect("fixture import photo");
 
-        let output =
-            load_selected_export_render(&catalog, Path::new("unused-source-root"), selected)
-                .expect("full export render");
+        let output = load_selected_export_render(
+            &catalog,
+            Path::new("unused-source-root"),
+            selected,
+            rusttable_render::RenderTarget::FullResolution,
+        )
+        .expect("full export render");
 
         assert_eq!(output.image().dimensions().width(), 2);
         assert_eq!(output.image().dimensions().height(), 1);
         assert_eq!(output.provenance().source_photo_id(), selected);
+    }
+
+    #[test]
+    fn selected_export_render_applies_fit_size_in_the_render_plan() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("selected.png");
+        let catalog = directory.0.join("catalog.redb");
+        let bytes = decode_base64(include_str!(
+            "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+        ));
+        fs::write(&source, bytes).expect("fixture source");
+        let batch = crate::workspace::raster_import::run_raster_import(
+            &catalog,
+            vec![source],
+            &rusttable_import::RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let selected = batch
+            .receipts()
+            .next()
+            .and_then(|receipt| receipt.photo_id)
+            .expect("fixture import photo");
+
+        let target = rusttable_render::RenderTarget::PreviewFit(
+            rusttable_render::PreviewBounds::new(1, 1).expect("nonzero fit bound"),
+        );
+        let output = load_selected_export_render(
+            &catalog,
+            Path::new("unused-source-root"),
+            selected,
+            target,
+        )
+        .expect("fit export render");
+
+        assert_eq!(output.image().dimensions().width(), 1);
+        assert_eq!(output.image().dimensions().height(), 1);
+        assert_eq!(output.plan().target(), target);
     }
 
     #[test]
