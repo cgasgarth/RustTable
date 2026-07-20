@@ -161,7 +161,7 @@ fn render_decoded_with_target(
 
 fn source_color_decision(encoding: ColorEncoding) -> Result<SourceColorDecision, PreviewError> {
     match encoding {
-        ColorEncoding::Srgb => Ok(SourceColorDecision::DeclaredSrgb),
+        ColorEncoding::Srgb | ColorEncoding::LinearSrgb => Ok(SourceColorDecision::DeclaredSrgb),
         ColorEncoding::Unspecified => Ok(SourceColorDecision::AssumedSrgb),
         ColorEncoding::DisplayP3 => {
             Err(PreviewError::UnsupportedPixelpipeColor { actual: encoding })

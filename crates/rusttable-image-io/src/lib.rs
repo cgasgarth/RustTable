@@ -7,6 +7,5 @@ mod registry;
 
 pub use input::FileImageInput;
 pub use output::FileImageOutput;
-pub use registry::{
-    DecoderDescriptor, DecoderIdentity, ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome,
-};
+pub use registry::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
+pub use rusttable_image::{DecoderDescriptor, DecoderIdentity};

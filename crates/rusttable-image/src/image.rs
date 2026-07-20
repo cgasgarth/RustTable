@@ -1,6 +1,8 @@
 use std::fmt;
 use std::num::NonZeroU32;
 
+use crate::{ImageDescriptor, Orientation, OwnedImage, PixelFormat};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageDimensionsError {
     ZeroWidth,
@@ -57,6 +59,12 @@ impl ImageDimensions {
             .checked_mul(4)
             .ok_or(ImageDimensionsError::ArithmeticOverflow)
     }
+
+    pub(crate) fn from_nonzero_parts(width: u32, height: u32) -> Self {
+        let width = NonZeroU32::new(width).expect("orientation swaps nonzero dimensions");
+        let height = NonZeroU32::new(height).expect("orientation swaps nonzero dimensions");
+        Self { width, height }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,14 +97,13 @@ pub enum ColorEncoding {
     Unspecified,
     Srgb,
     DisplayP3,
+    LinearSrgb,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedImage {
-    dimensions: ImageDimensions,
+    owned: OwnedImage,
     layout: PixelLayout,
-    color_encoding: ColorEncoding,
-    pixels: Vec<u8>,
 }
 
 impl DecodedImage {
@@ -121,25 +128,31 @@ impl DecodedImage {
         pixels: Vec<u8>,
         color_encoding: ColorEncoding,
     ) -> Result<Self, DecodedImageError> {
-        let expected = dimensions
-            .decoded_byte_count()
+        let descriptor = ImageDescriptor::new(
+            dimensions,
+            PixelFormat::rgba8(),
+            color_encoding,
+            Orientation::Normal,
+        )
+        .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
+        let expected = u64::try_from(descriptor.byte_length())
             .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
         let actual =
             u64::try_from(pixels.len()).map_err(|_| DecodedImageError::ArithmeticOverflow)?;
         if actual != expected {
             return Err(DecodedImageError::ByteLengthMismatch { expected, actual });
         }
+        let owned = OwnedImage::new(descriptor, pixels)
+            .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
         Ok(Self {
-            dimensions,
+            owned,
             layout: PixelLayout::Rgba8StraightAlpha,
-            color_encoding,
-            pixels,
         })
     }
 
     #[must_use]
     pub const fn dimensions(&self) -> ImageDimensions {
-        self.dimensions
+        self.owned.descriptor().dimensions()
     }
 
     #[must_use]
@@ -149,12 +162,27 @@ impl DecodedImage {
 
     #[must_use]
     pub const fn color_encoding(&self) -> ColorEncoding {
-        self.color_encoding
+        self.owned.descriptor().color_encoding()
     }
 
     #[must_use]
     pub fn pixels(&self) -> &[u8] {
-        &self.pixels
+        self.owned.bytes()
+    }
+
+    #[must_use]
+    pub const fn descriptor(&self) -> &ImageDescriptor {
+        self.owned.descriptor()
+    }
+
+    #[must_use]
+    pub const fn as_owned(&self) -> &OwnedImage {
+        &self.owned
+    }
+
+    #[must_use]
+    pub fn into_owned(self) -> OwnedImage {
+        self.owned
     }
 }
 

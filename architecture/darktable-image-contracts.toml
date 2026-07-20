@@ -1,0 +1,42 @@
+reference = "darktable-org/darktable"
+commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[responsibility]]
+source = "src/common/image.h"
+rust = "rusttable-image::ImageDescriptor, Orientation, ColorEncoding, RawMosaic"
+fields = ["dimensions", "orientation", "colorspace", "profile", "raw levels", "load status"]
+
+[[responsibility]]
+source = "src/develop/imageop.h"
+rust = "rusttable-image::Roi"
+fields = ["x", "y", "width", "height", "scale delegated to pipeline planning"]
+
+[[responsibility]]
+source = "src/common/mipmap_cache.h"
+rust = "rusttable-image::ImageView, ImageViewMut, OwnedImage, ImageDescriptor"
+fields = ["width", "height", "stride", "buffer ownership", "color space", "loader status"]
+
+[[responsibility]]
+source = "src/imageio/imageio_common.h"
+rust = "rusttable-image::DecodeRequest, DecodeResult, DecodeReceipt, DecodeError"
+fields = ["typed loader outcomes", "bounded source", "decode descriptor"]
+
+[[responsibility]]
+source = "src/imageio/imageio_module.h"
+rust = "rusttable-image::DecoderCapabilities"
+fields = ["format capabilities", "sample types", "channel layouts", "plane count"]
+
+[[responsibility]]
+source = "src/develop/pixelpipe.h"
+rust = "rusttable-image::Roi"
+fields = ["checked operation region", "empty-region propagation"]
+
+[[responsibility]]
+source = "src/common/imagebuf.c"
+rust = "rusttable-image::ImageDescriptor::pixel_offset and checked views"
+fields = ["checked row and pixel offsets", "padded rows", "exclusive writable views"]
+
+[[responsibility]]
+source = "src/common/mipmap_cache.c"
+rust = "rusttable-image::OwnedImage"
+fields = ["owned plane storage", "validated byte lengths"]
