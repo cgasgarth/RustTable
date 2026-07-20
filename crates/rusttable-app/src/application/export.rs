@@ -49,21 +49,13 @@ impl ExportSize {
 
 /// A typed size choice supplied by the Iced export surface.
 ///
-/// Existing preset controls map directly through [`Self::from_ui`]. A future
-/// custom-size input must construct [`Self::custom_maximum`] first, so app
-/// orchestration never receives a zero or unbounded maximum edge.
+/// Every Iced choice maps directly through [`Self::from_ui`], preserving the
+/// UI's bounded typed custom-size contract in the immutable app request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExportSizeSelection {
     Original,
     Fit2048,
     Fit4096,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the future custom-size control enters through custom_maximum"
-        )
-    )]
     CustomMaximum(CustomMaximumEdge),
 }
 
@@ -78,6 +70,9 @@ impl ExportSizeSelection {
             UiExportSize::Original => Self::Original,
             UiExportSize::Fit2048 => Self::Fit2048,
             UiExportSize::Fit4096 => Self::Fit4096,
+            UiExportSize::Custom(size) => {
+                Self::CustomMaximum(CustomMaximumEdge(size.value() as u32))
+            }
         }
     }
 
