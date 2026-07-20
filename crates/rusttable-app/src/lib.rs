@@ -7,6 +7,7 @@ mod extensions;
 pub mod gtk_controller;
 pub mod gtk_export;
 pub mod gtk_preview_controller;
+pub mod gtk_thumbnail_controller;
 pub mod library;
 pub mod lifecycle;
 pub mod macos;

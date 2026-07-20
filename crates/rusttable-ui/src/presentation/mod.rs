@@ -64,6 +64,15 @@ pub struct PhotoCardViewModel {
     id: PhotoId,
     title: PresentationText,
     secondary: Option<PresentationText>,
+    indicators: ThumbnailIndicators,
+}
+
+/// Optional Darktable thumbnail badges supplied by catalog organization state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ThumbnailIndicators {
+    pub grouped: bool,
+    pub local_copy: bool,
+    pub altered: bool,
 }
 
 impl PhotoCardViewModel {
@@ -73,7 +82,14 @@ impl PhotoCardViewModel {
             id,
             title,
             secondary,
+            indicators: ThumbnailIndicators::default(),
         }
+    }
+
+    #[must_use]
+    pub const fn with_indicators(mut self, indicators: ThumbnailIndicators) -> Self {
+        self.indicators = indicators;
+        self
     }
 
     #[must_use]
@@ -89,6 +105,11 @@ impl PhotoCardViewModel {
     #[must_use]
     pub fn secondary(&self) -> Option<&PresentationText> {
         self.secondary.as_ref()
+    }
+
+    #[must_use]
+    pub const fn indicators(&self) -> ThumbnailIndicators {
+        self.indicators
     }
 }
 

@@ -26,6 +26,15 @@ pub struct PhotoPreview {
     facts: gtk4::Grid,
     texture: Rc<RefCell<Option<gtk4::gdk::Texture>>>,
     photo_id: Rc<RefCell<Option<PhotoId>>>,
+    selection_state: Rc<RefCell<DarkroomSelectionState>>,
+}
+
+/// Closed selected-photo state rendered by the darkroom viewport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DarkroomSelectionState {
+    #[default]
+    NoSelection,
+    Selected(PhotoId),
 }
 
 /// Errors raised while adapting validated RGBA8 presentation data to a GTK texture.
@@ -59,7 +68,7 @@ impl PhotoPreview {
         title.set_hexpand(true);
         title.add_css_class("title-3");
 
-        let status = gtk4::Label::new(Some("preview unavailable"));
+        let status = gtk4::Label::new(Some("no photo selected"));
         status.set_widget_name("darkroom-preview-status");
         status.set_halign(gtk4::Align::End);
         status.add_css_class("dim-label");
@@ -81,7 +90,7 @@ impl PhotoPreview {
         canvas.set_can_shrink(true);
         canvas.set_content_fit(gtk4::ContentFit::Contain);
 
-        let placeholder = gtk4::Label::new(Some("preview unavailable"));
+        let placeholder = gtk4::Label::new(Some("select a photo to edit"));
         placeholder.set_widget_name("darkroom-preview-placeholder");
         placeholder.add_css_class("dim-label");
         placeholder.set_halign(gtk4::Align::Center);
@@ -125,6 +134,7 @@ impl PhotoPreview {
             facts,
             texture: Rc::new(RefCell::new(None)),
             photo_id: Rc::new(RefCell::new(None)),
+            selection_state: Rc::new(RefCell::new(DarkroomSelectionState::NoSelection)),
         }
     }
 
@@ -140,6 +150,8 @@ impl PhotoPreview {
             self.clear_texture();
         }
         self.photo_id.replace(Some(detail.id()));
+        self.selection_state
+            .replace(DarkroomSelectionState::Selected(detail.id()));
         self.title.set_text(detail.title().as_str());
         self.render_preview_state(detail.selected_preview());
         self.render_facts(detail);
@@ -227,6 +239,12 @@ impl PhotoPreview {
         &self.status
     }
 
+    /// Returns the typed selection state backing the darkroom placeholder or preview.
+    #[must_use]
+    pub fn selection_state(&self) -> DarkroomSelectionState {
+        *self.selection_state.borrow()
+    }
+
     fn render_preview_state(&self, state: &SelectedPreviewState) {
         match state {
             SelectedPreviewState::Loading => {
@@ -284,7 +302,7 @@ fn format_dimensions(metadata: &presentation::Rgba8PreviewMetadata) -> String {
     )
 }
 
-fn texture_parameters(
+pub(super) fn texture_parameters(
     dimensions: presentation::PreviewDimensions,
 ) -> Result<(i32, i32, usize), PhotoPreviewTextureError> {
     let width =
@@ -306,7 +324,9 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{PhotoPreviewTextureError, format_dimensions, texture_parameters};
+    use super::{
+        DarkroomSelectionState, PhotoPreviewTextureError, format_dimensions, texture_parameters,
+    };
     use crate::presentation::{
         PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState,
     };
@@ -326,6 +346,18 @@ mod tests {
             SelectedPreviewState::Ready(metadata),
             SelectedPreviewState::Ready(_)
         ));
+    }
+
+    #[test]
+    fn darkroom_no_selection_is_a_closed_typed_state() {
+        assert_eq!(
+            DarkroomSelectionState::default(),
+            DarkroomSelectionState::NoSelection
+        );
+        assert_ne!(
+            DarkroomSelectionState::Selected(rusttable_core::PhotoId::new(1).unwrap()),
+            DarkroomSelectionState::NoSelection
+        );
     }
 
     #[test]

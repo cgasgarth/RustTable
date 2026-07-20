@@ -2,7 +2,9 @@
 
 use rusttable_core::PhotoId;
 
-use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText};
+use crate::presentation::{
+    PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText, ThumbnailIndicators,
+};
 
 /// Persistent regions in the Darktable desktop composition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,6 +175,7 @@ pub struct LibraryPhoto {
     id: PhotoId,
     title: String,
     secondary: Option<String>,
+    indicators: ThumbnailIndicators,
 }
 
 impl LibraryPhoto {
@@ -189,6 +192,11 @@ impl LibraryPhoto {
     #[must_use]
     pub fn secondary(&self) -> Option<&str> {
         self.secondary.as_deref()
+    }
+
+    #[must_use]
+    pub const fn indicators(&self) -> ThumbnailIndicators {
+        self.indicators
     }
 }
 
@@ -208,6 +216,7 @@ impl LibraryBrowserModel {
                 id: card.id(),
                 title: card.title().as_str().to_owned(),
                 secondary: card.secondary().map(|text| text.as_str().to_owned()),
+                indicators: card.indicators(),
             })
             .collect();
         Self { photos }

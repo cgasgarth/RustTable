@@ -30,5 +30,5 @@ pub use presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
     PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
-    SelectedPreviewFailure, SelectedPreviewState,
+    SelectedPreviewFailure, SelectedPreviewState, ThumbnailIndicators,
 };
