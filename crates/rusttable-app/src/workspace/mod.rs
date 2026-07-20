@@ -1,6 +1,6 @@
 mod edit_commit;
 mod edit_draft;
-mod preview_loader;
+pub(crate) mod preview_loader;
 mod raster_import;
 
 pub use edit_commit::{BasicEditCommitError, commit_basic_edit, commit_basic_edit_at_path};

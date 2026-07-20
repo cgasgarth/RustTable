@@ -72,9 +72,9 @@ pub(crate) fn load_selected_preview(
     source_root: &Path,
     photo_id: PhotoId,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
+    let edit = load_selected_edit(catalog_path, photo_id)?;
     let repository =
         RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
-    let edit = current_edit(&repository, photo_id)?;
     let output = CatalogPreviewService::new(preview_service())
         .render(
             CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
@@ -87,6 +87,20 @@ pub(crate) fn load_selected_preview(
         dimensions: output.image().dimensions(),
         pixels: output.image().pixels().to_vec(),
     })
+}
+
+/// Loads the exact current persisted edit for one selected catalog photo.
+///
+/// # Errors
+///
+/// Returns the same typed catalog and edit-selection failures used by selected-preview loading.
+pub(crate) fn load_selected_edit(
+    catalog_path: &Path,
+    photo_id: PhotoId,
+) -> Result<Edit, WorkspacePreviewError> {
+    let repository =
+        RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
+    current_edit(&repository, photo_id)
 }
 
 fn current_edit(
