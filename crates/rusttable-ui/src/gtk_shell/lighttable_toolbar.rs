@@ -4,6 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
+use gtk4::accessible::Property;
 use gtk4::prelude::*;
 
 use crate::CollectionProperty;
@@ -37,6 +38,17 @@ impl LighttableColorLabel {
             Self::Purple => 4,
         }
     }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Red => "red",
+            Self::Yellow => "yellow",
+            Self::Green => "green",
+            Self::Blue => "blue",
+            Self::Purple => "purple",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -63,6 +75,19 @@ impl LighttableRating {
             Self::Three => Some(3),
             Self::Four => Some(4),
             Self::Five => Some(5),
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Rejected => "rejected",
+            Self::Zero => "zero stars",
+            Self::One => "one star",
+            Self::Two => "two stars",
+            Self::Three => "three stars",
+            Self::Four => "four stars",
+            Self::Five => "five stars",
         }
     }
 }
@@ -139,7 +164,7 @@ impl LighttableToolbarState {
     ) -> Self {
         self.property = property;
         self.search_text = search_text.into();
-        self.visible_count = visible_count;
+        self.visible_count = visible_count.min(self.total_count);
         self
     }
 
@@ -156,7 +181,7 @@ impl LighttableToolbarState {
         rating: Option<LighttableRating>,
         labels: impl IntoIterator<Item = LighttableColorLabel>,
     ) -> Self {
-        self.selected_count = selected_count;
+        self.selected_count = selected_count.min(self.total_count);
         self.selected_rating = rating;
         self.selected_labels = labels.into_iter().collect();
         self
@@ -185,6 +210,29 @@ impl LighttableToolbarState {
     #[must_use]
     pub const fn total_count(&self) -> usize {
         self.total_count
+    }
+
+    #[must_use]
+    pub const fn selected_rating(&self) -> Option<LighttableRating> {
+        self.selected_rating
+    }
+
+    #[must_use]
+    pub fn selected_labels(&self) -> impl ExactSizeIterator<Item = LighttableColorLabel> + '_ {
+        self.selected_labels.iter().copied()
+    }
+
+    #[must_use]
+    pub fn has_active_filter(&self) -> bool {
+        !self.search_text.is_empty() || self.visible_count != self.total_count
+    }
+
+    #[must_use]
+    pub fn selection_summary(&self) -> String {
+        format!(
+            "{} selected · {} of {}",
+            self.selected_count, self.visible_count, self.total_count
+        )
     }
 }
 
@@ -232,13 +280,9 @@ impl LighttableToolbar {
             button.set_widget_name(&format!("lighttable-color-{}", label.index()));
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_color_filter");
-            button.set_tooltip_text(Some(match label {
-                LighttableColorLabel::Red => "toggle red label on selected images",
-                LighttableColorLabel::Yellow => "toggle yellow label on selected images",
-                LighttableColorLabel::Green => "toggle green label on selected images",
-                LighttableColorLabel::Blue => "toggle blue label on selected images",
-                LighttableColorLabel::Purple => "toggle purple label on selected images",
-            }));
+            let tooltip = format!("toggle {} label on selected images", label.label());
+            button.update_property(&[Property::Label(&tooltip)]);
+            button.set_tooltip_text(Some(&tooltip));
             root.append(&button);
             label_buttons.push((label, button));
         }
@@ -247,6 +291,7 @@ impl LighttableToolbar {
         let rejected = gtk4::Button::with_label("×");
         rejected.set_widget_name("lighttable-rating-rejected");
         rejected.add_css_class("dt_filter_button");
+        rejected.update_property(&[Property::Label("set rejected rating on selected images")]);
         rejected.set_tooltip_text(Some("reject selected images"));
         root.append(&rejected);
         rating_buttons.push((LighttableRating::Rejected, rejected));
@@ -258,10 +303,9 @@ impl LighttableToolbar {
             ));
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_rating_filter");
-            button.set_tooltip_text(Some(&format!(
-                "set selected images to {} stars",
-                rating.stars().unwrap_or(0)
-            )));
+            let tooltip = format!("set {} on selected images", rating.label());
+            button.update_property(&[Property::Label(&tooltip)]);
+            button.set_tooltip_text(Some(&tooltip));
             root.append(&button);
             rating_buttons.push((rating, button));
         }
@@ -274,10 +318,14 @@ impl LighttableToolbar {
         let count = gtk4::Label::new(Some("0 selected · 0 of 0"));
         count.set_widget_name("lighttable-selection-count");
         count.add_css_class("dim-label");
+        count.set_accessible_role(gtk4::AccessibleRole::Status);
         root.append(&count);
         let reset = gtk4::Button::with_label("reset");
         reset.set_widget_name("lighttable-reset");
         reset.add_css_class("dt_filter_button");
+        reset.update_property(&[Property::Label(
+            "clear collection filter, sort, and selection",
+        )]);
         reset.set_tooltip_text(Some("clear filter, sort, and selection"));
         root.append(&reset);
 
@@ -298,6 +346,11 @@ impl LighttableToolbar {
     #[must_use]
     pub const fn widget(&self) -> &gtk4::Box {
         &self.root
+    }
+
+    #[must_use]
+    pub fn state(&self) -> LighttableToolbarState {
+        self.state.borrow().clone()
     }
 
     pub fn set_state(&self, state: &LighttableToolbarState) {
@@ -415,6 +468,13 @@ mod tests {
         assert_eq!(state.selected_count(), 2);
         assert_eq!(state.visible_count(), 4);
         assert_eq!(state.total_count(), 12);
+        assert_eq!(state.selected_rating(), Some(LighttableRating::Four));
+        assert_eq!(
+            state.selected_labels().collect::<Vec<_>>(),
+            vec![LighttableColorLabel::Blue]
+        );
+        assert!(state.has_active_filter());
+        assert_eq!(state.selection_summary(), "2 selected · 4 of 12");
     }
 
     #[test]
@@ -431,7 +491,19 @@ mod tests {
         }
         assert!(source.contains("AccessibleRole::Toolbar"));
         assert!(source.contains("AccessibleRole::SearchBox"));
+        assert!(source.contains("AccessibleRole::Status"));
+        assert!(source.contains("clear collection filter"));
         assert_eq!(LighttableColorLabel::ALL.len(), 5);
         assert_eq!(LighttableRating::STARS.len(), 5);
+    }
+
+    #[test]
+    fn toolbar_state_clamps_counts_to_the_catalog_boundary() {
+        let state = LighttableToolbarState::new(3)
+            .with_filter(CollectionProperty::Filename, "", 9)
+            .with_selection(8, None, []);
+        assert_eq!(state.visible_count(), 3);
+        assert_eq!(state.selected_count(), 3);
+        assert!(!state.has_active_filter());
     }
 }
