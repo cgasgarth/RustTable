@@ -6,6 +6,7 @@ pub mod heif;
 pub mod jpeg;
 pub mod jpeg2000;
 pub mod jpegxl;
+pub mod openexr;
 pub mod pdf;
 pub mod png;
 pub mod portable_anymap;

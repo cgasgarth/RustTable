@@ -67,6 +67,7 @@ impl EncoderCapabilityDescriptor {
             OutputFormat::Heic,
             OutputFormat::Jpeg2000,
             OutputFormat::Jp2,
+            OutputFormat::OpenExr,
         ]);
         self
     }
@@ -392,5 +393,6 @@ pub(crate) fn format_id(format: OutputFormat) -> &'static str {
         OutputFormat::Heic => "heic",
         OutputFormat::Jpeg2000 => "j2k",
         OutputFormat::Jp2 => "jp2",
+        OutputFormat::OpenExr => "openexr",
     }
 }

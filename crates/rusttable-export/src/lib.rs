@@ -4,6 +4,7 @@
 mod artifact;
 mod capabilities;
 mod contract;
+pub mod destinations;
 pub mod encoders;
 mod errors;
 mod hash_helpers;

@@ -899,6 +899,10 @@ fn collision_id(value: crate::CollisionPolicy) -> &'static str {
     match value {
         crate::CollisionPolicy::CreateNew => "create_new",
         crate::CollisionPolicy::ReplaceExisting => "replace_existing",
+        crate::CollisionPolicy::Fail => "fail",
+        crate::CollisionPolicy::SkipIfSame => "skip_if_same",
+        crate::CollisionPolicy::UniqueSuffix => "unique_suffix",
+        crate::CollisionPolicy::VersionRevision => "version_revision",
     }
 }
 fn quality_id(value: PipelineQuality) -> &'static str {
@@ -967,6 +971,7 @@ pub(crate) fn format_from_encoder(value: &str) -> Option<OutputFormat> {
         "heic" => Some(OutputFormat::Heic),
         "j2k" | "j2c" => Some(OutputFormat::Jpeg2000),
         "jp2" => Some(OutputFormat::Jp2),
+        "openexr" | "exr" => Some(OutputFormat::OpenExr),
         _ => None,
     }
 }

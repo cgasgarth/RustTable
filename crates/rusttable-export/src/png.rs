@@ -21,6 +21,14 @@ pub enum CollisionPolicy {
     CreateNew,
     /// Atomically replace the destination when the platform supports it.
     ReplaceExisting,
+    /// Fail when the destination already exists.
+    Fail,
+    /// Reuse a destination whose `RustTable` commit manifest has the same artifact hash.
+    SkipIfSame,
+    /// Allocate the first deterministic `-01`, `-02`, ... suffix.
+    UniqueSuffix,
+    /// Use the queued revision as a deterministic version suffix.
+    VersionRevision,
 }
 
 /// The result of publishing at the destination collision boundary.
@@ -412,7 +420,11 @@ impl PngPublisher {
         observe(&mut observer, PngPublishStage::Preparing)?;
         validate_destination(destination)?;
         self.validate_dimensions(image.dimensions())?;
-        if collision == CollisionPolicy::CreateNew && destination.exists() {
+        if matches!(
+            collision,
+            CollisionPolicy::CreateNew | CollisionPolicy::Fail
+        ) && destination.exists()
+        {
             return Err(PngPublishError::DestinationExists {
                 path: destination.to_owned(),
             });
@@ -437,8 +449,15 @@ impl PngPublisher {
 
         let publication =
             observe(&mut observer, PngPublishStage::Publishing).and_then(|()| match collision {
-                CollisionPolicy::CreateNew => publish_new(&staging, destination),
+                CollisionPolicy::CreateNew | CollisionPolicy::Fail => {
+                    publish_new(&staging, destination)
+                }
                 CollisionPolicy::ReplaceExisting => publish_replace(&staging, destination),
+                CollisionPolicy::SkipIfSame
+                | CollisionPolicy::UniqueSuffix
+                | CollisionPolicy::VersionRevision => Err(PngPublishError::DestinationExists {
+                    path: destination.to_owned(),
+                }),
             });
         if let Err(error) = publication {
             remove_staging(&staging);
@@ -461,8 +480,13 @@ impl PngPublisher {
             output,
             verification,
             collision: match collision {
-                CollisionPolicy::CreateNew => PngCollisionResult::CreatedNew,
+                CollisionPolicy::CreateNew | CollisionPolicy::Fail => {
+                    PngCollisionResult::CreatedNew
+                }
                 CollisionPolicy::ReplaceExisting => PngCollisionResult::ReplacedExisting,
+                CollisionPolicy::SkipIfSame
+                | CollisionPolicy::UniqueSuffix
+                | CollisionPolicy::VersionRevision => PngCollisionResult::CreatedNew,
             },
             completion: match observer.observe(PngPublishProgress {
                 stage: PngPublishStage::Completed,
