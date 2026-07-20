@@ -962,6 +962,9 @@ pub(crate) fn format_from_encoder(value: &str) -> Option<OutputFormat> {
         "webp" => Some(OutputFormat::Webp),
         "pdf" => Some(OutputFormat::Pdf),
         "xcf" => Some(OutputFormat::Xcf),
+        "avif" => Some(OutputFormat::Avif),
+        "heif" => Some(OutputFormat::Heif),
+        "heic" => Some(OutputFormat::Heic),
         _ => None,
     }
 }

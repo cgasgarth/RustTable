@@ -7,6 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+avif-parse = "=2.1.0"
 mozjpeg-rs.workspace = true
 flate2.workspace = true
 pdf-writer.workspace = true
@@ -20,6 +21,8 @@ rusttable-image-io.workspace = true
 rusttable-import.workspace = true
 rusttable-render.workspace = true
 rusttable-jxl-native.workspace = true
+rusttable-avif-native.workspace = true
+rusttable-heif-native.workspace = true
 rusttable-webp-native.workspace = true
 rusttable-pixelpipe.workspace = true
 sha2.workspace = true

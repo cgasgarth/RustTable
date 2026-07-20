@@ -291,7 +291,10 @@ fn insert_metadata(
         | OutputFormat::JpegXl
         | OutputFormat::Webp
         | OutputFormat::Pdf
-        | OutputFormat::Xcf => {
+        | OutputFormat::Xcf
+        | OutputFormat::Avif
+        | OutputFormat::Heif
+        | OutputFormat::Heic => {
             return Err(image_output_error(ImageOutputError::EncodeFailure {
                 format,
             }));
@@ -313,14 +316,16 @@ fn insert_metadata(
     match format {
         OutputFormat::Jpeg => insert_jpeg(encoded, exif, final_length),
         OutputFormat::Png => insert_png(encoded, exif, final_length),
-        OutputFormat::Tiff => Err(image_output_error(ImageOutputError::EncodeFailure {
+        OutputFormat::Tiff
+        | OutputFormat::JpegXl
+        | OutputFormat::Webp
+        | OutputFormat::Avif
+        | OutputFormat::Heif
+        | OutputFormat::Heic
+        | OutputFormat::Pdf
+        | OutputFormat::Xcf => Err(image_output_error(ImageOutputError::EncodeFailure {
             format,
         })),
-        OutputFormat::JpegXl | OutputFormat::Webp | OutputFormat::Pdf | OutputFormat::Xcf => {
-            Err(image_output_error(ImageOutputError::EncodeFailure {
-                format,
-            }))
-        }
     }
 }
 

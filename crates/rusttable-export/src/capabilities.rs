@@ -62,6 +62,9 @@ impl EncoderCapabilityDescriptor {
             OutputFormat::Webp,
             OutputFormat::Pdf,
             OutputFormat::Xcf,
+            OutputFormat::Avif,
+            OutputFormat::Heif,
+            OutputFormat::Heic,
         ]);
         self
     }
@@ -382,5 +385,8 @@ pub(crate) fn format_id(format: OutputFormat) -> &'static str {
         OutputFormat::Webp => "webp",
         OutputFormat::Pdf => "pdf",
         OutputFormat::Xcf => "xcf",
+        OutputFormat::Avif => "avif",
+        OutputFormat::Heif => "heif",
+        OutputFormat::Heic => "heic",
     }
 }

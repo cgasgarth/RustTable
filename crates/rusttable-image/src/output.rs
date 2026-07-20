@@ -13,10 +13,21 @@ pub enum OutputFormat {
     Webp,
     Pdf,
     Xcf,
+    Avif,
+    Heif,
+    Heic,
 }
 
-pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 3] =
-    [OutputFormat::Png, OutputFormat::Jpeg, OutputFormat::Tiff];
+pub const SUPPORTED_OUTPUT_FORMATS: [OutputFormat; 8] = [
+    OutputFormat::Png,
+    OutputFormat::Jpeg,
+    OutputFormat::JpegXl,
+    OutputFormat::Tiff,
+    OutputFormat::Webp,
+    OutputFormat::Avif,
+    OutputFormat::Heif,
+    OutputFormat::Heic,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JpegQualityError {
