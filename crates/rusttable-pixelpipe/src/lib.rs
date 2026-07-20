@@ -4,6 +4,7 @@
 mod cache;
 mod cache_key;
 mod cache_value;
+mod cancellation;
 mod cpu;
 mod host_pool;
 mod image;
@@ -11,9 +12,14 @@ mod mode;
 mod pipeline_contracts;
 mod pipeline_snapshot;
 mod preparation;
+mod publication;
 pub mod purpose;
 mod receipt;
 mod roi;
+mod scheduler;
+mod scheduler_executor;
+mod scheduler_metrics;
+mod scheduler_model;
 mod snapshot;
 mod tile;
 mod tile_geometry;
@@ -30,8 +36,17 @@ pub use cache_key::{
     CacheQuality, NodeBoundary, OutputIdentity,
 };
 pub use cache_value::{
-    AnalysisValue, CacheValue, CancellationToken, CreationCost, PlanValue, ValueDescriptor,
-    ValueKind,
+    AnalysisValue, CacheValue, CreationCost, PlanValue, ValueDescriptor, ValueKind,
+};
+pub use cancellation::{
+    CancellationDeadline, CancellationError, CancellationReason, CancellationScope,
+    CancellationStage, CancellationToken, CleanupRegistration, GenerationClock,
+    GenerationClockError,
+};
+pub use publication::{
+    CachePublicationPermit, GpuRetirement, ProductPublicationPermit, PublicationContext,
+    PublicationError, PublicationGate, PublicationIdentity, PublicationPermit, PublicationTarget,
+    RequestId, ResourceRetirementReceipt,
 };
 
 pub use cpu::{
@@ -78,6 +93,18 @@ pub use rusttable_image::{
     HostImageView, HostPoolError, InitializationPolicy, LeaseState, PoolAccounting, PoolBudgets,
     PoolEvent, PriorityClass, ReturnReceipt, SharedBufferLease,
     ShutdownReport as HostPoolShutdownReport,
+};
+pub use scheduler::CpuScheduler;
+pub use scheduler_executor::{CpuWorkerPoolBoundary, WorkUnitCancellationBoundary};
+pub use scheduler_metrics::{
+    FairnessReceipt, SchedulerMetrics, SchedulerSnapshot,
+    ShutdownReport as SchedulerShutdownReport, WorkUnitReceipt,
+};
+pub use scheduler_model::{
+    AdmitReceipt, CancellationBoundary, CpuPriority, LeaseClaim, PublicationTargetKind,
+    ResourceClaim, RunningTask, SchedulerConfig, SchedulerConfigError, SchedulerError,
+    SchedulerPublicationTarget, SchedulerReceipt, ShutdownMode, TaskError, TaskFailure, TaskId,
+    TaskSpec, TaskState, WorkUnitBoundary,
 };
 pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
 pub use tile::{CpuPixelpipeTile, CpuTileGrid, CpuTilePlan, CpuTilePlanError};

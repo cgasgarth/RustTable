@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use std::any::{Any, TypeId};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fmt;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use crate::cache_value::{CacheValue, CancellationToken, ValueDescriptor};
 use crate::{CacheKey, CacheKeyDigest, ImplementationIdentity};
+use crate::{CancellationError, CancellationReason, CancellationStage, CleanupRegistration};
 
 const DEFAULT_BUDGET: u64 = 64 * 1024 * 1024;
 const DEFAULT_FAILURE_WINDOW: Duration = Duration::from_millis(250);
@@ -46,6 +47,60 @@ struct InFlight {
     token: CancellationToken,
     state: Mutex<FlightState>,
     wake: Condvar,
+    consumers: Mutex<Consumers>,
+}
+
+struct Consumers {
+    next_id: u64,
+    active: BTreeSet<u64>,
+}
+
+struct ConsumerRegistration {
+    flight: Arc<InFlight>,
+    id: u64,
+    hook: Option<CleanupRegistration>,
+}
+
+impl ConsumerRegistration {
+    fn register(flight: &Arc<InFlight>, token: &CancellationToken) -> Result<Self, CacheError> {
+        let id = {
+            let mut consumers = flight.consumers.lock().map_err(|_| CacheError::Poisoned)?;
+            let id = consumers.next_id;
+            consumers.next_id = consumers.next_id.saturating_add(1);
+            consumers.active.insert(id);
+            id
+        };
+        let weak = Arc::downgrade(flight);
+        let hook = token.register_cleanup(move |reason| {
+            if let Some(flight) = weak.upgrade() {
+                flight.release_consumer(id, reason);
+            }
+        });
+        Ok(Self {
+            flight: flight.clone(),
+            id,
+            hook: Some(hook),
+        })
+    }
+}
+
+impl Drop for ConsumerRegistration {
+    fn drop(&mut self) {
+        self.hook.take();
+        self.flight
+            .release_consumer(self.id, CancellationReason::NoConsumers);
+    }
+}
+
+impl InFlight {
+    fn release_consumer(&self, id: u64, reason: CancellationReason) {
+        let empty = self.consumers.lock().map_or(true, |mut consumers| {
+            consumers.active.remove(&id) && consumers.active.is_empty()
+        });
+        if empty {
+            self.token.cancel_with_reason(reason);
+        }
+    }
 }
 
 struct Inner {
@@ -220,25 +275,33 @@ impl Cache {
                 (flight.clone(), false, inner.invalidation_sequence)
             } else {
                 let flight = Arc::new(InFlight {
-                    token: CancellationToken::new(),
+                    token: CancellationToken::for_generation(key.generation()),
                     state: Mutex::new(FlightState {
                         completed: false,
                         error: None,
                     }),
                     wake: Condvar::new(),
+                    consumers: Mutex::new(Consumers {
+                        next_id: 1,
+                        active: BTreeSet::new(),
+                    }),
                 });
                 inner.in_flight.insert(key.clone(), flight.clone());
                 (flight, true, inner.invalidation_sequence)
             }
         };
         if !owner {
-            return self.wait_for_flight::<T>(&key, &flight, cancellation);
+            let registration = ConsumerRegistration::register(&flight, cancellation)?;
+            return self.wait_for_flight::<T>(&key, &flight, cancellation, registration);
         }
+
+        let registration = ConsumerRegistration::register(&flight, cancellation)?;
 
         let result = catch_unwind(AssertUnwindSafe(|| builder(&flight.token)))
             .map_err(|_| CacheError::BuilderPanicked)
             .and_then(std::convert::identity)
-            .and_then(|value| self.publish(key.clone(), value, started_at));
+            .and_then(|value| self.publish(key.clone(), value, started_at, &flight.token));
+        drop(registration);
         {
             let mut inner = self.lock_inner()?;
             inner.in_flight.remove(&key);
@@ -272,6 +335,7 @@ impl Cache {
         key: &CacheKey,
         flight: &Arc<InFlight>,
         cancellation: &CancellationToken,
+        _registration: ConsumerRegistration,
     ) -> Result<CacheLease<T>, CacheError> {
         loop {
             if cancellation.is_cancelled() {
@@ -302,7 +366,11 @@ impl Cache {
         key: CacheKey,
         value: T,
         started_at: u64,
+        shared_token: &CancellationToken,
     ) -> Result<CacheLease<T>, CacheError> {
+        shared_token
+            .check(CancellationStage::CachePromotion)
+            .map_err(CacheError::Cancellation)?;
         value.validate().map_err(CacheError::InvalidValue)?;
         let descriptor = value.descriptor();
         let cost = descriptor.total_bytes()?;
@@ -631,6 +699,7 @@ impl<T: CacheValue> CacheLease<T> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CacheError {
     Cancelled,
+    Cancellation(CancellationError),
     Shutdown,
     CostOverflow,
     OverBudgetPinned,
