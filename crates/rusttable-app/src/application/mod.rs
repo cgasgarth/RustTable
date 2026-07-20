@@ -235,7 +235,9 @@ fn start_preview(shell: &mut Shell, photo_id: PhotoId) -> Task<Message> {
     };
     shell.preview_generation = generation;
     shell.active_preview = Some((generation, photo_id));
-    replace_preview(shell, photo_id, SelectedPreviewState::Loading);
+    if !has_rendered_preview(shell, photo_id) {
+        replace_preview(shell, photo_id, SelectedPreviewState::Loading);
+    }
     let (Ok(catalog_path), Ok(source_root)) = (&shell.catalog_path, &shell.source_root) else {
         shell.active_preview = None;
         replace_preview(shell, photo_id, preview_failed_state());
@@ -254,6 +256,15 @@ fn start_preview(shell: &mut Shell, photo_id: PhotoId) -> Task<Message> {
             result,
         },
     )
+}
+
+fn has_rendered_preview(shell: &Shell, photo_id: PhotoId) -> bool {
+    shell
+        .ui
+        .library_state()
+        .ready_workspace()
+        .and_then(|workspace| workspace.detail(photo_id))
+        .is_some_and(|detail| matches!(detail.selected_preview(), SelectedPreviewState::Ready(_)))
 }
 
 fn replace_preview(shell: &mut Shell, photo_id: PhotoId, preview: SelectedPreviewState) {
@@ -298,7 +309,8 @@ mod tests {
     use rusttable_core::PhotoId;
     use rusttable_ui::{
         NavigationIntent, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
-        PresentationText, SelectedPreviewState, UiState, WorkspaceRoute,
+        PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState, UiState,
+        WorkspaceRoute,
     };
 
     use super::{Message, PreviewLoadResult, Shell, update};
@@ -322,6 +334,17 @@ mod tests {
             )],
         )
         .expect("test workspace is valid")
+    }
+
+    fn rendered_preview() -> SelectedPreviewState {
+        SelectedPreviewState::Ready(
+            Rgba8PreviewMetadata::new(
+                PreviewDimensions::new(1, 1).expect("test dimensions are valid"),
+                PresentationText::new("Current persisted edit").expect("test status is valid"),
+                vec![0, 0, 0, 255],
+            )
+            .expect("test preview is valid"),
+        )
     }
 
     #[test]
@@ -433,6 +456,40 @@ mod tests {
                 .map(PhotoDetailViewModel::selected_preview),
             Some(&SelectedPreviewState::Loading)
         );
+    }
+
+    #[test]
+    fn refreshing_a_photo_keeps_its_last_successful_preview_visible() {
+        let photo_id = photo_id();
+        let preview = rendered_preview();
+        let workspace = workspace()
+            .with_selected_preview(photo_id, preview.clone())
+            .expect("test detail exists");
+        let mut shell = Shell {
+            ui: UiState::with_photo_workspace(workspace),
+            active_load_request_id: LibraryLoadRequestId::first(),
+            load_in_flight: false,
+            catalog_path: Ok(PathBuf::from("/tmp/catalog.redb")),
+            source_root: Ok(PathBuf::from("/tmp")),
+            preview_generation: 0,
+            active_preview: None,
+        };
+
+        let task = update(
+            &mut shell,
+            Message::Navigate(NavigationIntent::ShowPhoto(photo_id)),
+        );
+
+        assert_eq!(shell.active_preview, Some((1, photo_id)));
+        assert_eq!(
+            shell
+                .library_state()
+                .ready_workspace()
+                .and_then(|workspace| workspace.detail(photo_id))
+                .map(PhotoDetailViewModel::selected_preview),
+            Some(&preview)
+        );
+        let _ = task;
     }
 
     #[test]
