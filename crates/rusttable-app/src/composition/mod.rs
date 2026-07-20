@@ -4,12 +4,17 @@ mod preview_lifecycle;
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
 
 use crate::gtk_controller::{CollectionController, CollectionSnapshot, GtkCatalogController};
+use crate::gtk_export::{
+    ExportCancellation, ExportCollisionSelection, ExportCompletion, ExportRequest, ExportRunError,
+    ExportSettings, ExportSizeSelection, ExportStage, ExportStatus, run_with_progress,
+};
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
 use crate::lifecycle::run_with_bootstrap;
-use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual};
+use gtk4::gio::prelude::{ApplicationExt, ApplicationExtManual, FileExt};
 use gtk4::glib::{self, ControlFlow};
 use rusttable_ui::{
     CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
+    ExportAction, ExportSize as UiExportSize,
 };
 use std::cell::RefCell;
 use std::fmt;
@@ -74,6 +79,8 @@ pub fn run() -> Result<(), DesktopRunError> {
                         catalog_controller.borrow().collection_controller(),
                     ));
                     let shell = rusttable_ui::GtkShell::new(application);
+                    let export_panel = shell.export_panel().clone();
+                    let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
                     let workspace = catalog_controller.borrow().state().workspace().cloned();
                     if let Some(workspace) = workspace.as_ref() {
                         shell.set_photo_workspace(workspace);
@@ -92,13 +99,22 @@ pub fn run() -> Result<(), DesktopRunError> {
                         apply_collection_action(controller, action);
                         collection_filter_state(&controller.snapshot())
                     });
+                    connect_export_actions(
+                        &shell,
+                        Rc::clone(&catalog_controller),
+                        Rc::clone(&export_lifecycle),
+                    );
                     let selection_controller = Rc::clone(&catalog_controller);
                     let preview = shell.darkroom_preview().clone();
                     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
+                    let export_selection = export_panel.clone();
+                    let export_selection_lifecycle = Rc::clone(&export_lifecycle);
                     shell.set_photo_selected_handler(move |photo_id| {
                         if !selection_controller.borrow_mut().select_photo(photo_id) {
                             return;
                         }
+                        export_selection_lifecycle.borrow_mut().invalidate();
+                        export_selection.set_selected(true);
                         let catalog = selection_controller.borrow().clone();
                         start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
                     });
@@ -117,6 +133,261 @@ pub fn run() -> Result<(), DesktopRunError> {
         },
         |warning| eprintln!("{warning}"),
     )
+}
+
+#[derive(Debug, Default)]
+struct ExportLifecycle {
+    generation: u64,
+    active: Option<(u64, ExportCancellation)>,
+    pending_collision: Option<(u64, ExportRequest)>,
+}
+
+impl ExportLifecycle {
+    fn invalidate(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        if let Some((_, cancellation)) = self.active.take() {
+            cancellation.cancel();
+        }
+        self.pending_collision = None;
+    }
+
+    fn begin(&mut self, cancellation: ExportCancellation) -> u64 {
+        self.invalidate();
+        self.active = Some((self.generation, cancellation));
+        self.generation
+    }
+
+    fn is_current(&self, token: u64) -> bool {
+        self.generation == token
+    }
+}
+
+enum ExportWorkerMessage {
+    Status {
+        status: ExportStatus,
+    },
+    Finished {
+        request: ExportRequest,
+        result: Result<ExportCompletion, ExportRunError>,
+    },
+}
+
+fn connect_export_actions(
+    shell: &rusttable_ui::GtkShell,
+    catalog: Rc<RefCell<GtkCatalogController>>,
+    lifecycle: Rc<RefCell<ExportLifecycle>>,
+) {
+    let panel = shell.export_panel().clone();
+    let window = shell.window().clone();
+    shell
+        .export_panel()
+        .connect_action(move |action| match action {
+            ExportAction::SelectSize(_) => {}
+            ExportAction::Start => {
+                let Some(photo_id) = catalog.borrow().selected_photo() else {
+                    panel.set_finished("Select a photo to export.", false);
+                    return;
+                };
+                let size = panel.size();
+                let catalog_snapshot = catalog.borrow().clone();
+                let (catalog_path, source_root, edit_id) =
+                    match export_snapshot(&catalog_snapshot, photo_id) {
+                        Ok(snapshot) => snapshot,
+                        Err(message) => {
+                            panel.set_finished(&message, false);
+                            return;
+                        }
+                    };
+                let token = lifecycle.borrow_mut().generation.wrapping_add(1);
+                lifecycle.borrow_mut().generation = token;
+                panel.set_idle("Choose a PNG destination…");
+                let panel = panel.clone();
+                let lifecycle = Rc::clone(&lifecycle);
+                let window = window.clone();
+                let dialog = gtk4::FileDialog::builder()
+                    .title("Save selected edit as PNG")
+                    .accept_label("Save")
+                    .modal(true)
+                    .build();
+                let filter = gtk4::FileFilter::new();
+                filter.set_name(Some("PNG image"));
+                filter.add_suffix("png");
+                dialog.set_default_filter(Some(&filter));
+                dialog.set_initial_name(Some("RustTable export.png"));
+                dialog.save(
+                    Some(&window),
+                    None::<&gtk4::gio::Cancellable>,
+                    move |result| {
+                        if !lifecycle.borrow().is_current(token) {
+                            return;
+                        }
+                        let Ok(file) = result else {
+                            panel.set_idle("PNG export cancelled.");
+                            return;
+                        };
+                        let Some(destination) = file.path() else {
+                            panel.set_finished("The destination is not a local file.", false);
+                            return;
+                        };
+                        let request = match export_request(
+                            photo_id,
+                            edit_id,
+                            catalog_path,
+                            source_root,
+                            destination,
+                            size,
+                            ExportCollisionSelection::CreateNew,
+                        ) {
+                            Ok(request) => request,
+                            Err(message) => {
+                                panel.set_finished(&message, false);
+                                return;
+                            }
+                        };
+                        start_export(panel, lifecycle, &request);
+                    },
+                );
+            }
+            ExportAction::Cancel => {
+                if let Some((_, cancellation)) = lifecycle.borrow().active.as_ref() {
+                    cancellation.cancel();
+                    panel.set_running("Cancelling PNG export…");
+                }
+            }
+            ExportAction::ReplaceExisting => {
+                let request = lifecycle.borrow_mut().pending_collision.take();
+                if let Some((token, request)) = request
+                    && lifecycle.borrow().is_current(token)
+                {
+                    let replacement =
+                        request.with_collision(ExportCollisionSelection::ReplaceExisting);
+                    start_export(panel.clone(), Rc::clone(&lifecycle), &replacement);
+                }
+            }
+        });
+}
+
+fn start_export(
+    panel: rusttable_ui::ExportPanel,
+    lifecycle: Rc<RefCell<ExportLifecycle>>,
+    request: &ExportRequest,
+) {
+    let cancellation = ExportCancellation::default();
+    let token = lifecycle.borrow_mut().begin(cancellation.clone());
+    panel.set_running(ExportStage::Preparing.label());
+    let (sender, receiver) = mpsc::channel();
+    let worker_request = request.clone();
+    let worker_cancellation = cancellation;
+    let worker = thread::Builder::new()
+        .name("rusttable-png-export".to_owned())
+        .spawn(move || {
+            let result = run_with_progress(&worker_request, &worker_cancellation, |status| {
+                let _ = sender.send(ExportWorkerMessage::Status { status });
+            });
+            let _ = sender.send(ExportWorkerMessage::Finished {
+                request: worker_request,
+                result,
+            });
+        });
+    if worker.is_err() {
+        panel.set_finished("Could not start PNG export.", false);
+        lifecycle.borrow_mut().active = None;
+        return;
+    }
+
+    glib::source::timeout_add_local(Duration::from_millis(16), move || {
+        loop {
+            let message = match receiver.try_recv() {
+                Ok(message) => message,
+                Err(TryRecvError::Empty) => return ControlFlow::Continue,
+                Err(TryRecvError::Disconnected) => {
+                    if lifecycle.borrow().is_current(token) {
+                        panel.set_finished("PNG export stopped unexpectedly.", false);
+                    }
+                    return ControlFlow::Break;
+                }
+            };
+            if !lifecycle.borrow().is_current(token) {
+                return ControlFlow::Break;
+            }
+            match message {
+                ExportWorkerMessage::Status { status } => {
+                    panel.set_running(status.text());
+                }
+                ExportWorkerMessage::Finished { request, result } => {
+                    lifecycle.borrow_mut().active = None;
+                    match result {
+                        Ok(completion) => panel.set_finished(&completion.summary(), true),
+                        Err(ExportRunError::DestinationExists(path)) => {
+                            let alias = path.file_name().map_or_else(
+                                || "the selected destination".to_owned(),
+                                |name| name.to_string_lossy().into_owned(),
+                            );
+                            lifecycle.borrow_mut().pending_collision = Some((token, request));
+                            panel.set_collision(&format!(
+                                "{alias} already exists. Choose replace or save elsewhere."
+                            ));
+                        }
+                        Err(ExportRunError::Cancelled) => {
+                            panel.set_finished("PNG export cancelled.", true);
+                        }
+                        Err(error) => panel.set_finished(&error.to_string(), false),
+                    }
+                    return ControlFlow::Break;
+                }
+            }
+        }
+    });
+}
+
+fn export_snapshot(
+    catalog: &GtkCatalogController,
+    photo_id: rusttable_core::PhotoId,
+) -> Result<
+    (
+        std::path::PathBuf,
+        std::path::PathBuf,
+        rusttable_core::EditId,
+    ),
+    String,
+> {
+    let crate::gtk_controller::GtkCatalogState::Ready(ready) = catalog.state() else {
+        return Err("The library is unavailable.".to_owned());
+    };
+    let edit_id = crate::workspace::selected_edit_id(ready.location().catalog_path(), photo_id)
+        .map_err(|error| format!("Could not snapshot the selected edit: {error}"))?;
+    Ok((
+        ready.location().catalog_path().to_owned(),
+        ready.location().source_root().to_owned(),
+        edit_id,
+    ))
+}
+
+fn export_request(
+    photo_id: rusttable_core::PhotoId,
+    edit_id: rusttable_core::EditId,
+    catalog_path: std::path::PathBuf,
+    source_root: std::path::PathBuf,
+    destination: std::path::PathBuf,
+    size: rusttable_ui::ExportSize,
+    collision: ExportCollisionSelection,
+) -> Result<ExportRequest, String> {
+    let size = match size {
+        UiExportSize::Original => ExportSizeSelection::Original,
+        UiExportSize::Fit2048 => ExportSizeSelection::Fit2048,
+        UiExportSize::Fit4096 => ExportSizeSelection::Fit4096,
+        UiExportSize::Custom(value) => {
+            ExportSizeSelection::custom_maximum(value).map_err(|error| error.to_string())?
+        }
+    };
+    Ok(ExportRequest::new(
+        catalog_path,
+        source_root,
+        photo_id,
+        edit_id,
+        destination,
+        ExportSettings::from_selection(size, collision),
+    ))
 }
 
 fn apply_collection_action(controller: &mut CollectionController, action: CollectionControlAction) {

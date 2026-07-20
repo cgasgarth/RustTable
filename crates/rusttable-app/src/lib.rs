@@ -4,15 +4,23 @@
 mod composition;
 mod extensions;
 pub mod gtk_controller;
+pub mod gtk_export;
 pub mod gtk_preview_controller;
 pub mod library;
-mod lifecycle;
+pub mod lifecycle;
 mod platform;
 mod preview;
 pub mod workspace;
 
 pub use composition::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, run};
 pub use extensions::ApplicationExtensions;
+pub use lifecycle::{
+    AppServices, ApplicationService, CancellationReason, CancellationToken, LifecycleError,
+    LifecycleEvent, LifecycleReceipt, ServiceContext, ServiceCriticality, ServiceDescriptor,
+    ServiceError, ServiceErrorKind, ServiceHealth, ServiceHealthFinding, ServiceHealthSnapshot,
+    ServiceHealthStatus, ServiceId, ServiceRegistry, ServiceState, ServiceTaskGroup,
+    TaskDrainReceipt, TaskGroupError, TaskGroupId, TaskReceipt,
+};
 pub use preview::{PreviewError, PreviewService};
 pub use workspace::{
     BasicEditCommand, BasicEditCommandError, BasicEditCommitError, BasicEditDraft, BasicEditValues,

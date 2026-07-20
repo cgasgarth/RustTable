@@ -103,16 +103,43 @@ pub fn load_selected_export_render(
     target: RenderTarget,
 ) -> Result<rusttable_render::RenderOutput, WorkspacePreviewError> {
     let edit = load_selected_edit(catalog_path, photo_id)?;
+    load_selected_export_render_for_edit(catalog_path, source_root, photo_id, edit.id(), target)
+}
+
+/// Renders the exact edit captured by a GTK export request.
+///
+/// # Errors
+///
+/// Returns a typed catalog, source, edit, decode, or CPU-render failure.
+pub fn load_selected_export_render_for_edit(
+    catalog_path: &Path,
+    source_root: &Path,
+    photo_id: PhotoId,
+    edit_id: rusttable_core::EditId,
+    target: RenderTarget,
+) -> Result<rusttable_render::RenderOutput, WorkspacePreviewError> {
     let repository =
         RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
     CatalogPreviewService::new(preview_service())
         .render_for_target(
-            CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
+            CatalogPreviewRequest::new(source_root, photo_id, edit_id),
             &repository,
             &repository,
             target,
         )
         .map_err(WorkspacePreviewError::Preview)
+}
+
+/// Returns the edit identity that should be captured before a GTK save dialog opens.
+///
+/// # Errors
+///
+/// Returns a typed catalog or missing-edit failure.
+pub fn selected_edit_id(
+    catalog_path: &Path,
+    photo_id: PhotoId,
+) -> Result<rusttable_core::EditId, WorkspacePreviewError> {
+    load_selected_edit(catalog_path, photo_id).map(|edit| edit.id())
 }
 
 /// Renders a supplied, non-persisted edit for one selected catalog photo.
