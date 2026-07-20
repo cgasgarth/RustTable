@@ -18,7 +18,7 @@ pub use gtk_shell::{
     ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css,
     install_darktable_theme,
 };
-pub use import::{ImportPanelViewModel, ImportRowState, ImportRowViewModel};
+pub use import::{ImportAction, ImportPanelViewModel, ImportRowState, ImportRowViewModel};
 pub use input::GtkInputAdapter;
 pub use input_mapping::{
     ActionContext, ActionDefinition, ActionId, Binding, BindingSource, Curve, DeviceDescriptor,

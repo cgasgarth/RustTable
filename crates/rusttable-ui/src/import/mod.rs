@@ -1,5 +1,12 @@
 use crate::PresentationText;
 
+/// Typed command emitted by GTK import controls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportAction {
+    /// Open the GTK file chooser for one or more supported images.
+    ChooseFiles,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportRowState {
     Queued,

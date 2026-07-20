@@ -14,6 +14,7 @@ mod runtime;
 mod theme;
 
 pub use crate::display_profile::DisplayProfileBanner;
+pub use crate::import::ImportAction;
 pub use collection_controls::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
 };
@@ -26,9 +27,9 @@ pub use darktable_spec::{
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;
 pub use model::{
-    DarkroomWorkspaceViewModel, LibraryBrowserModel, LibraryPhoto, ModuleControlKind,
-    ModuleControlViewModel, ModulePanelViewModel, PanelSlot, ShellLayout, ShellRegion,
-    WorkspaceRole,
+    DarkroomWorkspaceViewModel, LibraryBrowserModel, LibraryPhoto, LighttableContentState,
+    ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel, PanelSlot, ShellLayout,
+    ShellRegion, WorkspaceRole,
 };
 pub use photo_preview::{PhotoPreview, PhotoPreviewTextureError};
 pub use runtime::GtkShell;
