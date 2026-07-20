@@ -3,6 +3,7 @@
 use std::rc::Rc;
 
 use gtk4::prelude::*;
+use rusttable_core::PhotoId;
 
 use crate::collection::CollectionProperty;
 
@@ -13,6 +14,36 @@ pub struct CollectionControlState {
     search_text: String,
     total_count: usize,
     result_count: usize,
+}
+
+/// Complete collection projection used to refresh controls and the lighttable together.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CollectionFilterState {
+    controls: CollectionControlState,
+    matching_photo_ids: Vec<PhotoId>,
+}
+
+impl CollectionFilterState {
+    /// Creates a filter projection from its control state and matching catalog IDs.
+    #[must_use]
+    pub fn new(controls: CollectionControlState, matching_photo_ids: Vec<PhotoId>) -> Self {
+        Self {
+            controls,
+            matching_photo_ids,
+        }
+    }
+
+    /// Returns the values shown by the collection controls.
+    #[must_use]
+    pub const fn controls(&self) -> &CollectionControlState {
+        &self.controls
+    }
+
+    /// Returns matching photo IDs in catalog order.
+    #[must_use]
+    pub fn matching_photo_ids(&self) -> &[PhotoId] {
+        &self.matching_photo_ids
+    }
 }
 
 impl CollectionControlState {

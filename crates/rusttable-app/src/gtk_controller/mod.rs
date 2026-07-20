@@ -8,6 +8,8 @@ mod collection;
 
 use std::path::{Path, PathBuf};
 
+use rusttable_catalog::ImportRepository;
+use rusttable_catalog_store::RedbImportRepository;
 use rusttable_core::PhotoId;
 use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 
@@ -117,6 +119,20 @@ impl GtkCatalogController {
     #[must_use]
     pub const fn selected_photo(&self) -> Option<PhotoId> {
         self.selected_photo
+    }
+
+    /// Reopens the ready catalog's import records for collection filtering.
+    ///
+    /// The browser workspace remains the display projection; collection rules use the persisted
+    /// source records so filmroll, folder, and filename values are not reconstructed from labels.
+    #[must_use]
+    pub fn collection_controller(&self) -> Option<CollectionController> {
+        let GtkCatalogState::Ready(catalog) = &self.state else {
+            return None;
+        };
+        let repository = RedbImportRepository::open(catalog.location().catalog_path()).ok()?;
+        let records = repository.list().ok()?;
+        Some(CollectionController::from_import_records(&records))
     }
 
     /// Selects a photo present in the ready workspace.

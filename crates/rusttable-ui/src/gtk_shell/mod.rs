@@ -12,7 +12,7 @@ mod runtime;
 mod theme;
 
 pub use collection_controls::{
-    CollectionControlAction, CollectionControlState, CollectionControls,
+    CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
 };
 pub use darktable_spec::{
     ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarktableColors,
