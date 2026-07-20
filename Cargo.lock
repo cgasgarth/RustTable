@@ -2606,8 +2606,8 @@ version = "0.1.0"
 dependencies = [
  "gtk4",
  "rusttable-core",
- "rusttable-input",
  "rusttable-i18n",
+ "rusttable-input",
  "rusttable-processing",
  "serde",
  "serde_json",
