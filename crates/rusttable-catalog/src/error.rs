@@ -67,9 +67,14 @@ pub enum CatalogError {
         expected: Revision,
         actual: Revision,
     },
+    EmptyOrganizationBatch,
+    DuplicatePhotoInOrganizationBatch {
+        photo_id: PhotoId,
+    },
 }
 
 impl fmt::Display for CatalogError {
+    #[allow(clippy::too_many_lines)]
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CatalogRevisionConflict { expected, actual } => {
@@ -163,6 +168,13 @@ impl fmt::Display for CatalogError {
             } => write!(
                 formatter,
                 "edit {edit_id} for photo {photo_id} has base revision {actual}, expected {expected}"
+            ),
+            Self::EmptyOrganizationBatch => {
+                formatter.write_str("organization command selected no photos")
+            }
+            Self::DuplicatePhotoInOrganizationBatch { photo_id } => write!(
+                formatter,
+                "organization command selects photo {photo_id} more than once"
             ),
         }
     }
