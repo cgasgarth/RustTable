@@ -121,7 +121,7 @@ fn maximum_representable_values_and_oversized_values_are_bounded() {
         Err(MetadataOutputLimitsError::NotRepresentable { .. })
     ));
     assert!(matches!(
-        MetadataOutputLimits::new(64, u16::MAX as u32 + 1, 16, 64),
+        MetadataOutputLimits::new(64, u32::from(u16::MAX) + 1, 16, 64),
         Err(MetadataOutputLimitsError::NotRepresentable { .. })
     ));
 }

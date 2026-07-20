@@ -9,6 +9,12 @@ use crate::error::MetadataInputError;
 use crate::limits::MetadataLimits;
 
 pub trait MetadataInput: Send + Sync {
+    /// Reads bounded metadata from an image container.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetadataInputError`] when the input, container, or EXIF payload
+    /// is malformed, exceeds a configured limit, or cannot become canonical metadata.
     fn read_bytes(
         &self,
         format: InputFormat,
@@ -36,9 +42,9 @@ impl MetadataInput for ExifMetadataInput {
     ) -> Result<ImageMetadata, MetadataInputError> {
         let actual =
             u64::try_from(source.len()).map_err(|_| MetadataInputError::ArithmeticOverflow)?;
-        if actual > self.limits.max_source_bytes {
+        if actual > self.limits.source_bytes {
             return Err(MetadataInputError::SourceTooLarge {
-                limit: self.limits.max_source_bytes,
+                limit: self.limits.source_bytes,
                 actual,
             });
         }
@@ -57,57 +63,66 @@ fn parse_payload(
     let exif = Reader::new()
         .read_raw(payload.to_vec())
         .map_err(|_| MetadataInputError::MalformedExif)?;
+    validate_exif(&exif, limits)?;
+    canonical_entries(&exif)
+}
+
+fn validate_exif(exif: &exif::Exif, limits: MetadataLimits) -> Result<(), MetadataInputError> {
     let field_count =
         u32::try_from(exif.fields().len()).map_err(|_| MetadataInputError::ArithmeticOverflow)?;
-    if field_count > limits.max_ifd_entries {
+    if field_count > limits.ifd_entries {
         return Err(MetadataInputError::IfdEntryLimit {
-            limit: limits.max_ifd_entries,
+            limit: limits.ifd_entries,
         });
     }
     for field in exif.fields() {
         let value_bytes = value_bytes(&field.value)?;
-        if value_bytes > limits.max_value_bytes {
+        if value_bytes > limits.value_bytes {
             return Err(MetadataInputError::ValueTooLarge {
-                limit: limits.max_value_bytes,
+                limit: limits.value_bytes,
                 actual: value_bytes,
             });
         }
-        if u32::from(field.ifd_num.index()) >= limits.max_ifd_nesting {
+        if u32::from(field.ifd_num.index()) >= limits.ifd_nesting {
             return Err(MetadataInputError::IfdNestingLimit {
-                limit: limits.max_ifd_nesting,
+                limit: limits.ifd_nesting,
             });
         }
     }
+    Ok(())
+}
+
+fn canonical_entries(exif: &exif::Exif) -> Result<ImageMetadata, MetadataInputError> {
     let mut entries = Vec::new();
     text_entry(
-        &exif,
+        exif,
         Tag::Make,
         "camera make",
         MetadataEntry::CameraMake,
         &mut entries,
     )?;
     text_entry(
-        &exif,
+        exif,
         Tag::Model,
         "camera model",
         MetadataEntry::CameraModel,
         &mut entries,
     )?;
     text_entry(
-        &exif,
+        exif,
         Tag::LensModel,
         "lens model",
         MetadataEntry::LensModel,
         &mut entries,
     )?;
     text_entry(
-        &exif,
+        exif,
         Tag::DateTimeOriginal,
         "capture date time",
         MetadataEntry::CaptureDateTimeOriginal,
         &mut entries,
     )?;
-    if let Some(field) = unique_field(&exif, Tag::Orientation, "orientation")? {
+    if let Some(field) = unique_field(exif, Tag::Orientation, "orientation")? {
         let code = field
             .value
             .get_uint(0)
@@ -122,21 +137,21 @@ fn parse_payload(
         entries.push(MetadataEntry::Orientation(orientation));
     }
     rational_entry(
-        &exif,
+        exif,
         Tag::ExposureTime,
         "exposure time",
         MetadataEntry::ExposureTime,
         &mut entries,
     )?;
     rational_entry(
-        &exif,
+        exif,
         Tag::FNumber,
         "f-number",
         MetadataEntry::FNumber,
         &mut entries,
     )?;
-    let iso = unique_field(&exif, Tag::ISOSpeed, "ISO speed")?.or(unique_field(
-        &exif,
+    let iso = unique_field(exif, Tag::ISOSpeed, "ISO speed")?.or(unique_field(
+        exif,
         Tag::PhotographicSensitivity,
         "ISO speed",
     )?);
@@ -149,7 +164,7 @@ fn parse_payload(
         entries.push(MetadataEntry::IsoSpeed(value));
     }
     rational_entry(
-        &exif,
+        exif,
         Tag::FocalLength,
         "focal length",
         MetadataEntry::FocalLength,
@@ -177,18 +192,18 @@ fn preflight_tiff(payload: &[u8], limits: MetadataLimits) -> Result<(), Metadata
         if offset == 0 {
             continue;
         }
-        if depth >= limits.max_ifd_nesting {
+        if depth >= limits.ifd_nesting {
             return Err(MetadataInputError::IfdNestingLimit {
-                limit: limits.max_ifd_nesting,
+                limit: limits.ifd_nesting,
             });
         }
         let count = u32::from(read_u16(payload, offset, little)?);
         entries_seen = entries_seen
             .checked_add(count)
             .ok_or(MetadataInputError::ArithmeticOverflow)?;
-        if entries_seen > limits.max_ifd_entries {
+        if entries_seen > limits.ifd_entries {
             return Err(MetadataInputError::IfdEntryLimit {
-                limit: limits.max_ifd_entries,
+                limit: limits.ifd_entries,
             });
         }
         let entries_start = offset
@@ -218,9 +233,9 @@ fn preflight_tiff(payload: &[u8], limits: MetadataLimits) -> Result<(), Metadata
             let value_bytes = u64::from(count)
                 .checked_mul(u64::from(unit))
                 .ok_or(MetadataInputError::ArithmeticOverflow)?;
-            if value_bytes > limits.max_value_bytes {
+            if value_bytes > limits.value_bytes {
                 return Err(MetadataInputError::ValueTooLarge {
-                    limit: limits.max_value_bytes,
+                    limit: limits.value_bytes,
                     actual: value_bytes,
                 });
             }

@@ -1,16 +1,20 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetadataLimits {
-    pub(crate) max_source_bytes: u64,
-    pub(crate) max_exif_bytes: u64,
-    pub(crate) max_jpeg_segments: u32,
-    pub(crate) max_png_chunks: u32,
-    pub(crate) max_ifd_nesting: u32,
-    pub(crate) max_ifd_entries: u32,
-    pub(crate) max_value_bytes: u64,
+    pub(crate) source_bytes: u64,
+    pub(crate) exif_bytes: u64,
+    pub(crate) jpeg_segments: u32,
+    pub(crate) png_chunks: u32,
+    pub(crate) ifd_nesting: u32,
+    pub(crate) ifd_entries: u32,
+    pub(crate) value_bytes: u64,
 }
 
 impl MetadataLimits {
     /// Creates nonzero source, payload, container, IFD, and value caps.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::MetadataLimitsError::ZeroLimit`] when any cap is zero.
     pub const fn new(
         max_source_bytes: u64,
         max_exif_bytes: u64,
@@ -31,62 +35,67 @@ impl MetadataLimits {
             return Err(crate::MetadataLimitsError::ZeroLimit);
         }
         Ok(Self {
-            max_source_bytes,
-            max_exif_bytes,
-            max_jpeg_segments,
-            max_png_chunks,
-            max_ifd_nesting,
-            max_ifd_entries,
-            max_value_bytes,
+            source_bytes: max_source_bytes,
+            exif_bytes: max_exif_bytes,
+            jpeg_segments: max_jpeg_segments,
+            png_chunks: max_png_chunks,
+            ifd_nesting: max_ifd_nesting,
+            ifd_entries: max_ifd_entries,
+            value_bytes: max_value_bytes,
         })
     }
 
     #[must_use]
     pub const fn max_source_bytes(self) -> u64 {
-        self.max_source_bytes
+        self.source_bytes
     }
 
     #[must_use]
     pub const fn max_exif_bytes(self) -> u64 {
-        self.max_exif_bytes
+        self.exif_bytes
     }
 
     #[must_use]
     pub const fn max_jpeg_segments(self) -> u32 {
-        self.max_jpeg_segments
+        self.jpeg_segments
     }
 
     #[must_use]
     pub const fn max_png_chunks(self) -> u32 {
-        self.max_png_chunks
+        self.png_chunks
     }
 
     #[must_use]
     pub const fn max_ifd_nesting(self) -> u32 {
-        self.max_ifd_nesting
+        self.ifd_nesting
     }
 
     #[must_use]
     pub const fn max_ifd_entries(self) -> u32 {
-        self.max_ifd_entries
+        self.ifd_entries
     }
 
     #[must_use]
     pub const fn max_value_bytes(self) -> u64 {
-        self.max_value_bytes
+        self.value_bytes
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetadataOutputLimits {
-    pub(crate) max_payload_bytes: u64,
-    pub(crate) max_ifd_entries: u32,
-    pub(crate) max_value_bytes: u64,
-    pub(crate) max_allocation_bytes: u64,
+    pub(crate) payload_bytes: u64,
+    pub(crate) ifd_entries: u32,
+    pub(crate) value_bytes: u64,
+    pub(crate) allocation_bytes: u64,
 }
 
 impl MetadataOutputLimits {
     /// Creates explicit, bounded limits for canonical EXIF output.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetadataOutputLimitsError`] when a limit is zero, inconsistent,
+    /// or cannot be represented by the output format.
     pub const fn new(
         max_payload_bytes: u64,
         max_ifd_entries: u32,
@@ -137,30 +146,30 @@ impl MetadataOutputLimits {
             });
         }
         Ok(Self {
-            max_payload_bytes,
-            max_ifd_entries,
-            max_value_bytes,
-            max_allocation_bytes,
+            payload_bytes: max_payload_bytes,
+            ifd_entries: max_ifd_entries,
+            value_bytes: max_value_bytes,
+            allocation_bytes: max_allocation_bytes,
         })
     }
 
     #[must_use]
     pub const fn max_payload_bytes(self) -> u64 {
-        self.max_payload_bytes
+        self.payload_bytes
     }
 
     #[must_use]
     pub const fn max_ifd_entries(self) -> u32 {
-        self.max_ifd_entries
+        self.ifd_entries
     }
 
     #[must_use]
     pub const fn max_value_bytes(self) -> u64 {
-        self.max_value_bytes
+        self.value_bytes
     }
 
     #[must_use]
     pub const fn max_allocation_bytes(self) -> u64 {
-        self.max_allocation_bytes
+        self.allocation_bytes
     }
 }

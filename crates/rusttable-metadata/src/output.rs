@@ -15,6 +15,12 @@ const TAG_FOCAL_LENGTH: u16 = 0x920a;
 const TAG_LENS_MODEL: u16 = 0xa434;
 
 pub trait MetadataOutput: Send + Sync {
+    /// Encodes canonical metadata as a bounded TIFF EXIF payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetadataOutputError`] when metadata cannot be represented or
+    /// an output limit or internal layout invariant is violated.
     fn encode_exif(
         &self,
         metadata: &ImageMetadata,
@@ -128,9 +134,9 @@ impl MetadataOutput for CanonicalExifOutput {
                 context: "IFD entry count",
             },
         )?;
-        if total_count > self.limits.max_ifd_entries {
+        if total_count > self.limits.ifd_entries {
             return Err(MetadataOutputError::IfdEntryLimit {
-                limit: self.limits.max_ifd_entries,
+                limit: self.limits.ifd_entries,
                 actual: total_count,
             });
         }
@@ -179,50 +185,68 @@ impl MetadataOutput for CanonicalExifOutput {
             u64::try_from(payload_len).map_err(|_| MetadataOutputError::ArithmeticOverflow {
                 context: "EXIF payload length",
             })?;
-        if actual > self.limits.max_payload_bytes {
-            return Err(MetadataOutputError::PayloadLimit {
-                limit: self.limits.max_payload_bytes,
-                actual,
-            });
-        }
-        if actual > self.limits.max_allocation_bytes {
-            return Err(MetadataOutputError::AllocationLimit {
-                limit: self.limits.max_allocation_bytes,
-                actual,
-            });
-        }
-
-        let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(payload_len)
-            .map_err(|_| MetadataOutputError::AllocationFailure { requested: actual })?;
-        bytes.extend_from_slice(b"II*\0");
-        put_u32(&mut bytes, 8);
-        write_ifd(&mut bytes, &primary, 0)?;
-        write_external_values(&mut bytes, &primary)?;
-        if exif_count != 0 {
-            let exif_offset = primary
-                .iter()
-                .flatten()
-                .find(|entry| entry.tag == TAG_EXIF_IFD)
-                .and_then(|entry| match entry.value {
-                    Value::Long(offset) => Some(offset),
-                    _ => None,
-                })
-                .ok_or(MetadataOutputError::InternalInvariant {
-                    context: "EXIF pointer entry",
-                })?;
-            pad_to(&mut bytes, exif_offset)?;
-            write_ifd(&mut bytes, &exif, 0)?;
-            write_external_values(&mut bytes, &exif)?;
-        }
-        if bytes.len() != payload_len {
-            return Err(MetadataOutputError::InternalInvariant {
-                context: "EXIF payload layout",
-            });
-        }
-        EncodedExif::new(bytes).map(Some)
+        encode_payload(
+            &primary,
+            &exif,
+            exif_count,
+            payload_len,
+            actual,
+            self.limits,
+        )
+        .map(Some)
     }
+}
+
+fn encode_payload(
+    primary: &[Option<Entry<'_>>; 4],
+    exif: &[Option<Entry<'_>>; 6],
+    exif_count: u32,
+    payload_len: usize,
+    actual: u64,
+    limits: MetadataOutputLimits,
+) -> Result<EncodedExif, MetadataOutputError> {
+    if actual > limits.payload_bytes {
+        return Err(MetadataOutputError::PayloadLimit {
+            limit: limits.payload_bytes,
+            actual,
+        });
+    }
+    if actual > limits.allocation_bytes {
+        return Err(MetadataOutputError::AllocationLimit {
+            limit: limits.allocation_bytes,
+            actual,
+        });
+    }
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(payload_len)
+        .map_err(|_| MetadataOutputError::AllocationFailure { requested: actual })?;
+    bytes.extend_from_slice(b"II*\0");
+    put_u32(&mut bytes, 8);
+    write_ifd(&mut bytes, primary, 0)?;
+    write_external_values(&mut bytes, primary)?;
+    if exif_count != 0 {
+        let exif_offset = primary
+            .iter()
+            .flatten()
+            .find(|entry| entry.tag == TAG_EXIF_IFD)
+            .and_then(|entry| match entry.value {
+                Value::Long(offset) => Some(offset),
+                _ => None,
+            })
+            .ok_or(MetadataOutputError::InternalInvariant {
+                context: "EXIF pointer entry",
+            })?;
+        pad_to(&mut bytes, exif_offset)?;
+        write_ifd(&mut bytes, exif, 0)?;
+        write_external_values(&mut bytes, exif)?;
+    }
+    if bytes.len() != payload_len {
+        return Err(MetadataOutputError::InternalInvariant {
+            context: "EXIF payload layout",
+        });
+    }
+    EncodedExif::new(bytes)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -241,11 +265,11 @@ enum Value<'a> {
     Rational { value: PositiveRational },
 }
 
-fn text_entry<'a>(
-    metadata: &'a ImageMetadata,
+fn text_entry(
+    metadata: &ImageMetadata,
     field: MetadataField,
     tag: u16,
-) -> Result<Option<Entry<'a>>, MetadataOutputError> {
+) -> Result<Option<Entry<'_>>, MetadataOutputError> {
     let Some(entry) = metadata.get(field) else {
         return Ok(None);
     };
@@ -269,9 +293,7 @@ fn text_entry<'a>(
     }))
 }
 
-fn orientation_entry<'a>(
-    metadata: &'a ImageMetadata,
-) -> Result<Option<Entry<'a>>, MetadataOutputError> {
+fn orientation_entry(metadata: &ImageMetadata) -> Result<Option<Entry<'_>>, MetadataOutputError> {
     let Some(entry) = metadata.get(MetadataField::Orientation) else {
         return Ok(None);
     };
@@ -288,11 +310,11 @@ fn orientation_entry<'a>(
     }))
 }
 
-fn rational_entry<'a>(
-    metadata: &'a ImageMetadata,
+fn rational_entry(
+    metadata: &ImageMetadata,
     field: MetadataField,
     tag: u16,
-) -> Result<Option<Entry<'a>>, MetadataOutputError> {
+) -> Result<Option<Entry<'_>>, MetadataOutputError> {
     let Some(entry) = metadata.get(field) else {
         return Ok(None);
     };
@@ -321,7 +343,7 @@ fn rational_entry<'a>(
     }))
 }
 
-fn iso_entry<'a>(metadata: &'a ImageMetadata) -> Result<Option<Entry<'a>>, MetadataOutputError> {
+fn iso_entry(metadata: &ImageMetadata) -> Result<Option<Entry<'_>>, MetadataOutputError> {
     let Some(entry) = metadata.get(MetadataField::IsoSpeed) else {
         return Ok(None);
     };
@@ -346,8 +368,8 @@ fn count_entries<T>(entries: &[Option<T>]) -> Result<u32, MetadataOutputError> {
     })
 }
 
-fn assign_offsets<'a>(
-    entries: &mut [Option<Entry<'a>>],
+fn assign_offsets(
+    entries: &mut [Option<Entry<'_>>],
     cursor: &mut u64,
     limits: MetadataOutputLimits,
 ) -> Result<(), MetadataOutputError> {
@@ -367,7 +389,7 @@ fn check_value_limit(
     limits: MetadataOutputLimits,
 ) -> Result<(), MetadataOutputError> {
     let actual = entry.value.encoded_len()?;
-    if actual > limits.max_value_bytes {
+    if actual > limits.value_bytes {
         let Some(field) = entry.field() else {
             return Err(MetadataOutputError::InternalInvariant {
                 context: "unattributed EXIF value",
@@ -375,7 +397,7 @@ fn check_value_limit(
         };
         return Err(MetadataOutputError::ValueLimit {
             field,
-            limit: limits.max_value_bytes,
+            limit: limits.value_bytes,
             actual,
         });
     }
@@ -566,7 +588,6 @@ impl Entry<'_> {
             TAG_DATE_TIME_ORIGINAL => Some(MetadataField::CaptureDateTimeOriginal),
             TAG_FOCAL_LENGTH => Some(MetadataField::FocalLength),
             TAG_LENS_MODEL => Some(MetadataField::LensModel),
-            TAG_EXIF_IFD => None,
             _ => None,
         }
     }
