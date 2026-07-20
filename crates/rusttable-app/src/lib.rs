@@ -4,6 +4,7 @@
 mod composition;
 mod extensions;
 pub mod gtk_controller;
+pub mod gtk_preview_controller;
 pub mod library;
 mod lifecycle;
 mod platform;
