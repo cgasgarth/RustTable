@@ -3,7 +3,9 @@
 * {
   color: {{foreground}};
   font-family: Sans;
-  font-size: 0.85em;
+  /* Keep one readable base size; recursive em scaling makes nested GTK
+     controls shrink exponentially and diverges from Darktable's chrome. */
+  font-size: 1em;
   font-weight: normal;
 }
 
@@ -97,6 +99,7 @@ button:hover,
 
 .dt_empty_state {
   min-width: 38em;
+  min-height: 14em;
   padding: 2.5em 3.5em;
   color: {{foreground}};
 }
