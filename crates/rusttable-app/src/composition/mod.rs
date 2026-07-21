@@ -96,10 +96,7 @@ pub fn run() -> Result<(), DesktopRunError> {
                 return Ok(());
             }
 
-            let application_id = crate::macos::runtime_bundle_identifier();
-            let application = gtk4::Application::builder()
-                .application_id(application_id)
-                .build();
+            let application = create_application();
             let active_shell = Rc::new(RefCell::new(None::<rusttable_ui::GtkShell>));
             let active_catalog = Rc::new(RefCell::new(None::<Rc<RefCell<GtkCatalogController>>>));
             let active_collection = Rc::new(RefCell::new(None::<CollectionController>));
@@ -122,6 +119,13 @@ pub fn run() -> Result<(), DesktopRunError> {
         },
         |warning| eprintln!("{warning}"),
     )
+}
+
+fn create_application() -> gtk4::Application {
+    gtk4::Application::builder()
+        .application_id(crate::macos::runtime_bundle_identifier())
+        .flags(crate::macos::application_flags())
+        .build()
 }
 
 fn connect_application_signals(
@@ -889,6 +893,7 @@ fn export_request(
 
 #[cfg(test)]
 mod tests {
+    use gtk4::gio::prelude::ApplicationExt;
     use rusttable_core::PhotoId;
     use rusttable_ui::{CollectionControlAction, CollectionItem, CollectionProperty};
 
@@ -936,5 +941,15 @@ mod tests {
         assert_eq!(cleared.controls().property(), CollectionProperty::Folders);
         assert_eq!(cleared.controls().result_count(), 2);
         assert_eq!(cleared.matching_photo_ids(), &[id(1), id(2)]);
+    }
+
+    #[test]
+    fn gtk_application_advertises_native_file_open_events() {
+        let application = super::create_application();
+        assert!(
+            application
+                .flags()
+                .contains(gtk4::gio::ApplicationFlags::HANDLES_OPEN)
+        );
     }
 }

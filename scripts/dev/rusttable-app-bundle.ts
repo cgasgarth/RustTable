@@ -56,7 +56,11 @@ export const RUSTTABLE_DOCUMENT_TYPES: readonly BundleDocumentType[] = [
   {
     role: 'Viewer',
     contentTypes: ['public.image'],
-    extensions: ['jpg', 'jpeg', 'png', 'tif', 'tiff'],
+    extensions: [
+      'jpg', 'jpeg', 'png', 'tif', 'tiff',
+      'arw', 'cr2', 'crw', 'dng', 'erf', 'kdc', 'nef', 'nrw', 'orf', 'pef',
+      'raf', 'raw', 'rw2', 'sr2', 'srf', 'x3f',
+    ],
   },
   {
     role: 'Viewer',
