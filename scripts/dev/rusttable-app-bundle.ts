@@ -47,6 +47,10 @@ export interface BundleDocumentType {
   extensions: readonly string[];
 }
 
+export interface BundleValidationOptions {
+  allowLegacyIcon?: boolean;
+}
+
 /** Mirrors rusttable-image's standard decoder registry plus the explicit catalog-open policy. */
 export const RUSTTABLE_DOCUMENT_TYPES: readonly BundleDocumentType[] = [
   {
@@ -186,20 +190,34 @@ const parseBundleDocumentTypes = (plist: string): BundleDocumentType[] => {
 export const parseBundleManifest = (
   plist: string,
   identity?: RustTableBundleIdentity,
+): BundleManifest => parseBundleManifestWithOptions(plist, identity, {});
+
+const parseBundleManifestWithOptions = (
+  plist: string,
+  identity: RustTableBundleIdentity | undefined,
+  options: BundleValidationOptions,
 ): BundleManifest => {
   const values = parseStringPairs(plist);
   values.delete('CFBundleTypeRole');
-  if (values.size !== REQUIRED_KEYS.length) {
-    const unexpected = [...values.keys()].filter((key) => !(REQUIRED_KEYS as readonly string[]).includes(key));
-    if (unexpected.length > 0) throw new Error(`Bundle Info.plist has unexpected key ${unexpected[0]}.`);
+  const legacyIconMissing = options.allowLegacyIcon === true && !values.has('CFBundleIconFile');
+  const unexpected = [...values.keys()].filter((key) => !(REQUIRED_KEYS as readonly string[]).includes(key));
+  if (unexpected.length > 0) {
+    throw new Error(`Bundle Info.plist has unexpected key ${unexpected[0]}.`);
   }
-  const manifest = Object.fromEntries(REQUIRED_KEYS.map((key) => [key, values.get(key)])) as BundleManifest;
+  const missing = REQUIRED_KEYS.find((key) => !values.has(key));
+  if (missing !== undefined && !(missing === 'CFBundleIconFile' && legacyIconMissing)) {
+    throw new Error(`Bundle Info.plist has unexpected ${missing}.`);
+  }
+  const manifest = Object.fromEntries(
+    REQUIRED_KEYS.map((key) => [key, values.get(key) ?? RUSTTABLE_ICON_FILE]),
+  ) as BundleManifest;
   const knownIdentity = identity ?? [RUSTTABLE_BUNDLE_IDENTITY, RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY].find(
     (candidate) => candidate.bundleIdentifier === manifest.CFBundleIdentifier,
   );
   if (knownIdentity === undefined) throw new Error('Bundle Info.plist has an unexpected bundle identifier.');
   const expected = expectedManifest(manifest.CFBundleShortVersionString, knownIdentity);
   for (const key of REQUIRED_KEYS) {
+    if (key === 'CFBundleIconFile' && legacyIconMissing) continue;
     if (manifest[key] !== expected[key]) throw new Error(`Bundle Info.plist has unexpected ${key}.`);
   }
   if (JSON.stringify(parseBundleDocumentTypes(plist)) !== JSON.stringify(RUSTTABLE_DOCUMENT_TYPES)) {
@@ -209,8 +227,15 @@ export const parseBundleManifest = (
   return manifest;
 };
 
-export const readBundleManifest = async (bundlePath: string): Promise<BundleManifest> =>
-  parseBundleManifest(await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8'));
+export const readBundleManifest = async (
+  bundlePath: string,
+  options: BundleValidationOptions = {},
+): Promise<BundleManifest> =>
+  parseBundleManifestWithOptions(
+    await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8'),
+    undefined,
+    options,
+  );
 
 export const parseBundleIdentifier = (plist: string): string => {
   const match = /<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/.exec(plist);
@@ -248,13 +273,17 @@ export const validateBundle = async (
   bundlePath: string,
   rootLicensePath?: string,
   identity?: RustTableBundleIdentity,
+  options: BundleValidationOptions = {},
 ): Promise<BundleManifest> => {
-  const manifest = await parseBundleManifest(
-    await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8'),
-    identity,
-  );
+  const plist = await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8');
+  const manifest = parseBundleManifestWithOptions(plist, identity, options);
+  const iconPresent = parseStringPairs(plist).has('CFBundleIconFile');
   const actualPayload = new Set(await listPayload(bundlePath));
-  if (actualPayload.size !== expectedPayload.size || [...expectedPayload].some((path) => !actualPayload.has(path))) {
+  const requiredPayload = new Set(expectedPayload);
+  if (options.allowLegacyIcon === true && !iconPresent) {
+    requiredPayload.delete(`Contents/Resources/${RUSTTABLE_ICON_FILE}`);
+  }
+  if (actualPayload.size !== requiredPayload.size || [...requiredPayload].some((path) => !actualPayload.has(path))) {
     throw new Error('RustTable.app contains an unexpected or missing payload entry.');
   }
   const executable = await stat(join(bundlePath, 'Contents/MacOS/RustTable'));
@@ -268,9 +297,11 @@ export const validateBundle = async (
     ]);
     if (!bytesEqual(rootLicense, bundleLicense)) throw new Error('RustTable.app LICENSE differs from root LICENSE.');
   }
-  const icon = await readFile(join(bundlePath, 'Contents/Resources', RUSTTABLE_ICON_FILE));
-  if (!bytesEqual(icon.subarray(0, 4), Uint8Array.from([0x69, 0x63, 0x6e, 0x73]))) {
-    throw new Error('RustTable.app icon is not a valid ICNS file.');
+  if (iconPresent) {
+    const icon = await readFile(join(bundlePath, 'Contents/Resources', RUSTTABLE_ICON_FILE));
+    if (!bytesEqual(icon.subarray(0, 4), Uint8Array.from([0x69, 0x63, 0x6e, 0x73]))) {
+      throw new Error('RustTable.app icon is not a valid ICNS file.');
+    }
   }
   return manifest;
 };
