@@ -640,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn clahe_imported_values_project_through_history_but_stay_unqualified() {
+    fn clahe_imported_values_project_through_history_and_accept_controls() {
         let original = Edit::from_parts(
             EditId::new(40).expect("edit id"),
             PhotoId::new(2).expect("photo id"),
@@ -666,11 +666,11 @@ mod tests {
         )
         .expect("edit");
 
-        let modules = project_edit(&original).expect("history projection");
-        let clahe = modules.module("clahe").expect("CLAHE module");
+        let mut modules = project_edit(&original).expect("history projection");
+        let clahe = modules.module_mut("clahe").expect("CLAHE module");
         assert_eq!(clahe.title(), "Old Local Contrast");
-        assert!(clahe.availability().is_unsupported());
-        assert!(!clahe.enabled());
+        assert!(!clahe.availability().is_unsupported());
+        assert!(clahe.enabled());
         assert_eq!(
             clahe
                 .controls()
@@ -687,15 +687,13 @@ mod tests {
                 .value(),
             DarkroomControlValue::Slider(2.5)
         );
-        let error = clahe
-            .clone()
+        clahe
             .apply(DarkroomModuleAction::Control {
                 module_id: "clahe".to_owned(),
                 expected_revision: original.revision(),
                 id: "clahe-radius".to_owned(),
                 value: DarkroomControlValue::Slider(64.0),
             })
-            .expect_err("unqualified backend must reject actions");
-        assert!(matches!(error, DarkroomModuleError::Unsupported { .. }));
+            .expect("qualified backend accepts actions");
     }
 }

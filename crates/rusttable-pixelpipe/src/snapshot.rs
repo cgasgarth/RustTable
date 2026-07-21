@@ -413,6 +413,10 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update([23]);
             hasher.update(config.parameters().to_bytes());
         }
+        ProcessingOperationKind::Clahe { config } => {
+            hasher.update([24]);
+            hasher.update(config.parameters().to_bytes());
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

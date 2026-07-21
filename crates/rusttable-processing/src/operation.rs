@@ -1,8 +1,7 @@
-use std::fmt;
-
 use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
+use std::fmt;
 
 use crate::operations::{
     basicadj::BasicAdjConfig,
@@ -48,6 +47,8 @@ pub(crate) use operation_geometry::{
 };
 #[path = "operation_censorize.rs"]
 mod operation_censorize;
+#[path = "operation_clahe.rs"]
+mod operation_clahe;
 #[path = "operation_defringe.rs"]
 mod operation_defringe;
 #[path = "operation_effects.rs"]
@@ -60,18 +61,17 @@ mod operation_legacy;
 mod operation_spatial;
 pub(crate) use operation_basicadj::compile_basicadj;
 pub(crate) use operation_censorize::compile_censorize;
+pub(crate) use operation_clahe::compile_clahe;
 pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_defringe::compile_defringe;
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
+pub(crate) use operation_error::compile_opacity;
 pub(crate) use operation_grain::compile_grain;
 pub(crate) use operation_legacy::{compile_relight, compile_shadhi};
 pub(crate) use operation_parameters::{
-    compile_scalar, compile_scalar_parameter, parameter_integer, parameter_u32,
+    compile_scalar, compile_scalar_parameter, parameter_f64, parameter_integer, parameter_u32,
 };
 pub(crate) use operation_spatial::{compile_graduatednd, compile_vignette};
-
-pub(crate) use operation_error::compile_opacity;
-
 const EXPOSURE_PARAMETER: &str = "stops";
 const EXPOSURE_BLACK_PARAMETER: &str = "black";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -79,7 +79,6 @@ const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
 const CROP_PARAMETERS: [&str; 6] = ["cx", "cy", "cw", "ch", "ratio_n", "ratio_d"];
 const FLIP_PARAMETERS: [&str; 2] = ["mode", "orientation"];
 const ROTATEPIXELS_PARAMETERS: [&str; 3] = ["rx", "ry", "angle"];
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessingOperation {
     pub(crate) operation_id: OperationId,
@@ -87,7 +86,6 @@ pub struct ProcessingOperation {
     pub(crate) opacity: FiniteF32,
     pub(crate) kind: ProcessingOperationKind,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProcessingOperationKind {
     BasicAdj {
@@ -182,6 +180,9 @@ pub enum ProcessingOperationKind {
     },
     Defringe {
         config: crate::operations::defringe::DefringeConfig,
+    },
+    Clahe {
+        config: crate::operations::clahe::ClaheConfig,
     },
 }
 

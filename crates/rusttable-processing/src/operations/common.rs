@@ -10,6 +10,83 @@ use sha2::{Digest, Sha256};
 
 use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel};
 
+pub(crate) fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {
+    let [red, green, blue] = rgb;
+    let maximum = red.max(green).max(blue);
+    let minimum = red.min(green).min(blue);
+    let delta = maximum - minimum;
+    let lightness = f32::midpoint(minimum, maximum);
+    if delta.to_bits() == 0.0_f32.to_bits() {
+        return (0.0, 0.0, lightness);
+    }
+    let denominator = if lightness < 0.5 {
+        (maximum + minimum).max(1.525_878_9e-5)
+    } else {
+        (2.0 - maximum - minimum).max(1.525_878_9e-5)
+    };
+    let saturation = delta / denominator;
+    let mut hue = if maximum.to_bits() == red.to_bits() {
+        (green - blue) / delta
+    } else if maximum.to_bits() == green.to_bits() {
+        2.0 + (blue - red) / delta
+    } else {
+        4.0 + (red - green) / delta
+    } / 6.0;
+    if hue < 0.0 {
+        hue += 1.0;
+    } else if hue > 1.0 {
+        hue -= 1.0;
+    }
+    (hue, saturation, lightness)
+}
+
+#[must_use]
+pub(crate) fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> [f32; 3] {
+    if saturation.to_bits() == 0.0_f32.to_bits() {
+        return [lightness; 3];
+    }
+    let second = if lightness < 0.5 {
+        lightness * (1.0 + saturation)
+    } else {
+        lightness + saturation - lightness * saturation
+    };
+    let first = 2.0 * lightness - second;
+    let angle = hue * 6.0;
+    [
+        hue_to_rgb(
+            first,
+            second,
+            if angle < 4.0 {
+                angle + 2.0
+            } else {
+                angle - 4.0
+            },
+        ),
+        hue_to_rgb(first, second, angle),
+        hue_to_rgb(
+            first,
+            second,
+            if angle > 2.0 {
+                angle - 2.0
+            } else {
+                angle + 4.0
+            },
+        ),
+    ]
+}
+
+fn hue_to_rgb(first: f32, second: f32, hue: f32) -> f32 {
+    if hue < 1.0 {
+        first + (second - first) * hue
+    } else if hue < 3.0 {
+        second
+    } else if hue < 4.0 {
+        first + (second - first) * (4.0 - hue)
+    } else {
+        first
+    }
+}
+
 /// Returns the center-sampled normalized full-image coordinate for a pixel.
 ///
 /// The coordinate is independent of a tile or row window. Callers pass the

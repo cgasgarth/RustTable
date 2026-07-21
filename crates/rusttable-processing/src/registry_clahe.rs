@@ -1,29 +1,47 @@
-//! Unavailable registry definition for imported-history-only CLAHE.
+//! Registry binding for the deprecated full-image CLAHE compatibility node.
 
-use crate::clahe_compatibility::CLAHE_OPERATION_KEY;
+use crate::descriptor::{DescriptorId, clahe_descriptor};
 use crate::registry::{
-    DefinitionAvailability, ImplementationIdentity, OperationDefinition, REGISTRY_BUILD_ID,
+    CpuFactory, FactoryError, ImplementationIdentity, OperationDefinition, PreparedCpuOperation,
+    REGISTRY_BUILD_ID, RoiKind,
 };
+use rusttable_core::Operation;
 
-/// Publishes the v1 descriptor without an executor until #473 qualifies the CPU backend.
-#[must_use]
+fn prepare_clahe(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_clahe(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 pub fn clahe_definition() -> OperationDefinition {
-    let identity = format!("{REGISTRY_BUILD_ID}.clahe");
     OperationDefinition::new(
-        crate::descriptor::clahe_descriptor(),
-        None,
+        clahe_descriptor(),
+        Some(CpuFactory::new(
+            prepare_clahe,
+            crate::evaluate::execute_prepared_operation,
+            RoiKind::FullImage,
+            false,
+            true,
+        )),
         None,
         Vec::new(),
-        ImplementationIdentity::new(identity.clone(), 1, identity),
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.clahe"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.clahe"),
+        ),
         vec![
             "iop.clahe.params.v1".to_owned(),
-            "iop.clahe.deprecated-visibility".to_owned(),
-            "iop.clahe.typed-seam".to_owned(),
+            "iop.clahe.cpu.scalar-reference".to_owned(),
+            "iop.clahe.hsl-shared".to_owned(),
+            "iop.clahe.full-image-plan".to_owned(),
+            "iop.clahe.mask-blend".to_owned(),
+            "iop.clahe.receipt".to_owned(),
         ],
     )
-    .with_availability(DefinitionAvailability::Unavailable {
-        reason: format!(
-            "backend qualification is pending #473; {CLAHE_OPERATION_KEY} is read-only"
-        ),
-    })
 }

@@ -195,7 +195,7 @@ fn censorize_is_registry_visible_and_cpu_qualified() {
 }
 
 #[test]
-fn clahe_registry_is_descriptor_visible_but_truthfully_unavailable() {
+fn clahe_registry_is_descriptor_visible_and_cpu_qualified() {
     let registry = builtin_registry();
     let definition = registry
         .definition("rusttable.clahe")
@@ -217,11 +217,8 @@ fn clahe_registry_is_descriptor_visible_but_truthfully_unavailable() {
             .flags
             .contains(rusttable_processing::descriptor::OperationFlags::STYLE_ELIGIBLE)
     );
-    assert!(definition.cpu().is_none());
-    assert_eq!(
-        definition.availability().reason(),
-        Some("backend qualification is pending #473; rusttable.clahe is read-only")
-    );
+    assert!(definition.cpu().is_some());
+    assert!(definition.availability().is_available());
     let radius = descriptor
         .parameters
         .iter()
@@ -238,7 +235,7 @@ fn clahe_registry_is_descriptor_visible_but_truthfully_unavailable() {
         radius.default,
         rusttable_processing::descriptor::ParameterDefault::Scalar(64.0)
     );
-    assert_eq!(
+    assert!(
         registry
             .capability(
                 "rusttable.clahe",
@@ -246,7 +243,6 @@ fn clahe_registry_is_descriptor_visible_but_truthfully_unavailable() {
                 rusttable_color::ColorEncoding::LinearSrgbD65,
                 Some("full"),
             )
-            .and_then(|capability| capability.reason),
-        Some("backend qualification is pending #473; rusttable.clahe is read-only".to_owned())
+            .is_some_and(|capability| capability.available)
     );
 }

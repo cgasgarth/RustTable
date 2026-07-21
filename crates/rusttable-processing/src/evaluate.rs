@@ -389,6 +389,61 @@ fn apply_operation_with_plans(
                 "defringe requires the four-channel Lab execution seam",
             ),
         )),
+        ProcessingOperationKind::Clahe { config } => {
+            let plan = crate::operations::clahe::ClahePlan::new(*config, dimensions, 1.0, 1.0)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let rgba = pixels
+                .iter()
+                .copied()
+                .map(|pixel| {
+                    crate::operations::clahe::ClahePixel::new(
+                        pixel.red().get(),
+                        pixel.green().get(),
+                        pixel.blue().get(),
+                        1.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let candidate = plan
+                .execute(&rgba, || false)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let candidate = candidate
+                .into_iter()
+                .enumerate()
+                .map(|(index, pixel)| {
+                    let channels = pixel.channels();
+                    Ok(LinearRgb::new(
+                        FiniteF32::new(channels[0]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Red,
+                            }
+                        })?,
+                        FiniteF32::new(channels[1]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Green,
+                            }
+                        })?,
+                        FiniteF32::new(channels[2]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Blue,
+                            }
+                        })?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, OperationExecutionError>>()
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Temperature { config } => {
             let multipliers = config.multipliers();
             apply_channels(
