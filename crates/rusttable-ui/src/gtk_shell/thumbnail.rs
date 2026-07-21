@@ -31,9 +31,29 @@ pub(super) enum ThumbnailState {
     Failed,
 }
 
+#[allow(dead_code)] // status helpers are consumed by the accessibility adapter
+impl ThumbnailState {
+    #[must_use]
+    pub(super) const fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready(_))
+    }
+
+    #[must_use]
+    pub(super) const fn status_text(&self) -> &'static str {
+        match self {
+            Self::Loading => "loading…",
+            Self::Ready(_) => "thumbnail ready",
+            Self::Unavailable => "preview unavailable",
+            Self::Failed => "preview failed",
+        }
+    }
+}
+
 impl ThumbnailSurface {
     #[must_use]
     pub fn new(id: &str, accessible_name: &str, width: i32, height: i32) -> Self {
+        let width = width.max(1);
+        let height = height.max(1);
         let picture = gtk4::Picture::new();
         picture.set_widget_name(&format!("{id}-image"));
         picture.set_content_fit(gtk4::ContentFit::Contain);
@@ -92,6 +112,24 @@ impl ThumbnailSurface {
         Ok(())
     }
 
+    pub(super) fn set_state(&self, state: &ThumbnailState) -> Result<(), PhotoPreviewTextureError> {
+        match state {
+            ThumbnailState::Loading => {
+                self.set_loading();
+                Ok(())
+            }
+            ThumbnailState::Ready(metadata) => self.set_rgba8(metadata),
+            ThumbnailState::Unavailable => {
+                self.set_unavailable();
+                Ok(())
+            }
+            ThumbnailState::Failed => {
+                self.set_failed();
+                Ok(())
+            }
+        }
+    }
+
     pub fn set_loading(&self) {
         self.picture.set_paintable(None::<&gtk4::gdk::Texture>);
         self.placeholder.set_text("loading…");
@@ -147,23 +185,8 @@ impl ThumbnailPair {
     }
 
     pub(super) fn set_state(&self, state: &ThumbnailState) -> Result<(), PhotoPreviewTextureError> {
-        match state {
-            ThumbnailState::Loading => {
-                self.lighttable.set_loading();
-                self.filmstrip.set_loading();
-                Ok(())
-            }
-            ThumbnailState::Ready(metadata) => self.set_rgba8(metadata),
-            ThumbnailState::Unavailable => {
-                self.lighttable.set_unavailable();
-                self.filmstrip.set_unavailable();
-                Ok(())
-            }
-            ThumbnailState::Failed => {
-                self.set_failed();
-                Ok(())
-            }
-        }
+        self.lighttable.set_state(state)?;
+        self.filmstrip.set_state(state)
     }
 
     #[must_use]
@@ -174,5 +197,21 @@ impl ThumbnailPair {
     pub fn set_failed(&self) {
         self.lighttable.set_failed();
         self.filmstrip.set_failed();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ThumbnailState;
+
+    #[test]
+    fn thumbnail_states_have_truthful_status_contracts() {
+        assert_eq!(ThumbnailState::Loading.status_text(), "loading…");
+        assert_eq!(
+            ThumbnailState::Unavailable.status_text(),
+            "preview unavailable"
+        );
+        assert_eq!(ThumbnailState::Failed.status_text(), "preview failed");
+        assert!(!ThumbnailState::Loading.is_ready());
     }
 }

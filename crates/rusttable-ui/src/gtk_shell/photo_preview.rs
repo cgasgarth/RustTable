@@ -242,6 +242,7 @@ impl PhotoPreview {
 
     /// Shows a typed presentation failure while keeping the source/edit untouched.
     pub fn set_presentation_status(&self, status: PresentationStatus) {
+        self.clear_texture();
         self.status.set_text(&status.label());
         self.status.remove_css_class("warning");
         if matches!(
@@ -252,6 +253,20 @@ impl PhotoPreview {
         }
         self.placeholder.set_text(&status.label());
         self.placeholder.set_visible(true);
+    }
+
+    /// Restores the closed no-selection projection without retaining pixels or metadata.
+    pub fn clear_selection(&self) {
+        self.photo_id.replace(None);
+        self.selection_state
+            .replace(DarkroomSelectionState::NoSelection);
+        self.clear_texture();
+        self.title.set_text("darkroom");
+        self.status.set_text("no photo selected");
+        self.dimensions.set_text("");
+        self.placeholder.set_text("select a photo to edit");
+        self.placeholder.set_visible(true);
+        clear_children(&self.facts);
     }
 
     /// Removes the rendered texture while retaining the typed status presentation.

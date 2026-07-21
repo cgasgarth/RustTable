@@ -2,9 +2,10 @@
 
 use gtk4::prelude::*;
 
-use super::{
-    THUMBNAIL_METRICS, ThemeRole, apply_theme_role, lighttable_interaction::LighttableZoom,
+use super::darktable_spec::{
+    FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, THUMBNAIL_METRICS,
 };
+use super::{ThemeRole, apply_theme_role, lighttable_interaction::LighttableZoom};
 
 /// Geometry shared by the collection grid and its focused layout tests.
 ///
@@ -18,6 +19,7 @@ pub(super) struct LighttableGridSpec {
     thumbnail_height_px: u16,
 }
 
+#[allow(dead_code)] // geometry helpers are consumed by the future viewport adapter
 impl LighttableGridSpec {
     #[must_use]
     pub(super) const fn for_zoom(zoom: LighttableZoom) -> Self {
@@ -43,6 +45,96 @@ impl LighttableGridSpec {
     pub(super) const fn thumbnail_height_px(self) -> u16 {
         self.thumbnail_height_px
     }
+
+    #[must_use]
+    pub(super) const fn rows_for(self, photo_count: usize) -> usize {
+        photo_count.saturating_add(self.columns.saturating_sub(1)) / self.columns
+    }
+
+    #[must_use]
+    pub(super) const fn position_for(self, index: usize) -> GridPosition {
+        GridPosition {
+            row: index / self.columns,
+            column: index % self.columns,
+        }
+    }
+
+    #[must_use]
+    pub(super) fn visible_range(
+        self,
+        first_row: usize,
+        row_count: usize,
+        photo_count: usize,
+    ) -> std::ops::Range<usize> {
+        let start = first_row.saturating_mul(self.columns).min(photo_count);
+        let end = first_row
+            .saturating_add(row_count)
+            .saturating_mul(self.columns)
+            .min(photo_count);
+        start..end
+    }
+}
+
+#[allow(dead_code)] // constructed by focused geometry tests and the viewport adapter
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct GridPosition {
+    pub(super) row: usize,
+    pub(super) column: usize,
+}
+
+/// Geometry for the single horizontally scrolling filmstrip row.
+#[allow(dead_code)] // consumed by the filmstrip viewport adapter
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct FilmstripSpec {
+    width_px: u16,
+    height_px: u16,
+    gap_px: u8,
+    max_children_per_line: u32,
+}
+
+#[allow(dead_code)] // consumed by the filmstrip viewport adapter
+impl FilmstripSpec {
+    #[must_use]
+    pub(super) const fn darktable() -> Self {
+        Self {
+            width_px: THUMBNAIL_METRICS.filmstrip_width_px,
+            height_px: THUMBNAIL_METRICS.filmstrip_height_px,
+            gap_px: FILMSTRIP_ITEM_GAP_PX,
+            max_children_per_line: FILMSTRIP_MAX_CHILDREN_PER_LINE,
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn width_px(self) -> u16 {
+        self.width_px
+    }
+
+    #[must_use]
+    pub(super) const fn height_px(self) -> u16 {
+        self.height_px
+    }
+
+    #[must_use]
+    pub(super) const fn gap_px(self) -> u8 {
+        self.gap_px
+    }
+
+    #[must_use]
+    pub(super) const fn max_children_per_line(self) -> u32 {
+        self.max_children_per_line
+    }
+
+    #[must_use]
+    pub(super) fn content_width_px(self, item_count: usize) -> u32 {
+        let items = u32::try_from(item_count).unwrap_or(u32::MAX);
+        u32::from(self.width_px)
+            .saturating_mul(items)
+            .saturating_add(
+                items
+                    .saturating_sub(1)
+                    .saturating_mul(u32::from(self.gap_px)),
+            )
+    }
 }
 
 const fn scale_dimension(value: u16, zoom: LighttableZoom) -> u16 {
@@ -66,6 +158,16 @@ pub(super) enum LighttableCollectionState {
 }
 
 impl LighttableCollectionState {
+    #[allow(dead_code)] // consumed by the asynchronous runtime projection
+    #[must_use]
+    pub(super) const fn from_rendered_count(count: usize) -> Self {
+        if count == 0 {
+            Self::Empty
+        } else {
+            Self::Ready(count)
+        }
+    }
+
     #[must_use]
     pub(super) const fn status_text(&self) -> &'static str {
         match self {
@@ -82,6 +184,12 @@ impl LighttableCollectionState {
             Self::Ready(count) => *count,
             Self::Loading | Self::Empty | Self::Failed => 0,
         }
+    }
+
+    #[allow(dead_code)] // consumed by loading/error projections
+    #[must_use]
+    pub(super) const fn is_terminal(&self) -> bool {
+        matches!(self, Self::Empty | Self::Ready(_) | Self::Failed)
     }
 }
 
@@ -264,6 +372,28 @@ mod tests {
         assert!(large.thumbnail_width_px() > normal.thumbnail_width_px());
         assert!(large.thumbnail_height_px() > normal.thumbnail_height_px());
         assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_rows, 1);
+    }
+
+    #[test]
+    fn grid_geometry_culls_rows_without_reordering_items() {
+        let spec = LighttableGridSpec::for_zoom(LighttableZoom::Normal);
+        assert_eq!(spec.rows_for(7), 2);
+        assert_eq!(
+            spec.position_for(7),
+            super::GridPosition { row: 1, column: 1 }
+        );
+        assert_eq!(spec.visible_range(1, 1, 20), 6..12);
+        assert_eq!(spec.visible_range(8, 2, 20), 20..20);
+    }
+
+    #[test]
+    fn filmstrip_geometry_is_one_unwrapped_row() {
+        let spec = super::FilmstripSpec::darktable();
+        assert_eq!(spec.width_px(), THUMBNAIL_METRICS.filmstrip_width_px);
+        assert_eq!(spec.height_px(), THUMBNAIL_METRICS.filmstrip_height_px);
+        assert_eq!(spec.gap_px(), 4);
+        assert_eq!(spec.max_children_per_line(), u32::MAX);
+        assert_eq!(spec.content_width_px(3), 284);
     }
 
     #[test]

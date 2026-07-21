@@ -9,6 +9,8 @@ use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
 
 use super::darkroom_modules::{DarkroomModuleActionHandler, DarkroomModulesViewModel};
+#[path = "darkroom_interaction.rs"]
+mod darkroom_interaction;
 #[path = "darkroom_controls/panel_widgets.rs"]
 mod panel_widgets;
 use super::{ExposurePanel, PhotoPreview, ThemeRole, apply_theme_role};
@@ -16,6 +18,10 @@ use crate::presentation::PhotoDetailViewModel;
 use crate::viewport_presentation::{
     DarkroomViewportAction, DarkroomViewportCommand, DarkroomViewportState, DarkroomZoom,
     ViewportColorMode, ViewportComparison, ViewportGeneration,
+};
+use darkroom_interaction::{
+    FilmstripState, HistogramView, connect_filmstrip_button, install_filmstrip_keyboard,
+    sync_filmstrip_buttons,
 };
 use panel_widgets::{left_panel, render_typed_modules_into, right_panel};
 
@@ -85,6 +91,7 @@ impl DarkroomModuleGroup {
 }
 
 type DarkroomModuleGroupHandler = Box<dyn Fn(DarkroomModuleGroup)>;
+type DarkroomFilmstripHandler = Box<dyn Fn(PhotoId, ViewportGeneration)>;
 
 /// Stable identifiers for the darkroom viewport controls and filmstrip boundary.
 pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 9] = [
@@ -126,12 +133,15 @@ pub struct DarkroomView {
     right_modules: gtk4::Box,
     exposure: ExposurePanel,
     rail_status: DarkroomRailStatus,
-    histogram: gtk4::Stack,
+    histogram: HistogramView,
     module_search: gtk4::SearchEntry,
     module_group: Rc<Cell<DarkroomModuleGroup>>,
     module_group_handler: Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
     typed_modules: Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     module_action_handler: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    filmstrip_state: Rc<RefCell<FilmstripState>>,
+    filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
+    filmstrip_widget: Rc<RefCell<Option<gtk4::FlowBox>>>,
 }
 
 impl DarkroomView {
@@ -154,8 +164,12 @@ impl DarkroomView {
             module_group,
             module_group_handler,
         ) = right_panel(panel_width);
+        let histogram = HistogramView::new(histogram);
         let typed_modules = Rc::new(RefCell::new(None));
         let module_action_handler = Rc::new(RefCell::new(None));
+        let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
+        let filmstrip_handler = Rc::new(RefCell::new(None));
+        let filmstrip_widget = Rc::new(RefCell::new(None));
         let view = Self {
             page,
             preview,
@@ -174,6 +188,9 @@ impl DarkroomView {
             module_group_handler,
             typed_modules,
             module_action_handler,
+            filmstrip_state,
+            filmstrip_handler,
+            filmstrip_widget,
         };
         view.install_module_search();
         view
@@ -205,12 +222,14 @@ impl DarkroomView {
         self.viewport_state
             .borrow_mut()
             .select(photo_id, edit_revision, generation);
+        self.filmstrip_state.borrow_mut().set_generation(generation);
         self.sync_viewport_projection();
     }
 
     /// Restores truthful no-photo state and resets transient viewport controls.
     pub fn clear_viewport_selection(&self) {
         self.viewport_state.borrow_mut().clear_selection();
+        self.filmstrip_state.borrow_mut().clear_selection();
         self.sync_viewport_projection();
     }
 
@@ -225,6 +244,101 @@ impl DarkroomView {
     /// Reapplies the current projection after the orchestrator installs a new texture.
     pub fn sync_viewport_projection(&self) {
         sync_viewport_controls(&self.viewport_controls, &self.preview, &self.viewport_state);
+    }
+
+    /// Publishes validated RGB histogram bins without coupling GTK to the pixelpipe.
+    ///
+    /// Returns `false` for malformed, non-finite, negative, mismatched, or oversized input and
+    /// leaves the visible surface in the explicit unavailable state.
+    #[must_use]
+    pub fn set_histogram(&self, red: &[f32], green: &[f32], blue: &[f32]) -> bool {
+        self.histogram.set_bins(red, green, blue)
+    }
+
+    /// Returns whether a rendered histogram is currently available for the selected preview.
+    #[must_use]
+    pub fn histogram_available(&self) -> bool {
+        self.histogram.is_ready()
+    }
+
+    /// Reconciles the filmstrip order and selected photo with a new viewport generation.
+    pub fn set_filmstrip_items(
+        &self,
+        photo_ids: impl IntoIterator<Item = PhotoId>,
+        selected: Option<PhotoId>,
+        generation: ViewportGeneration,
+    ) {
+        self.filmstrip_state
+            .borrow_mut()
+            .set_items(photo_ids, selected, generation);
+        self.sync_filmstrip_selection();
+    }
+
+    /// Returns the selected filmstrip photo, if the selection is still in the ordered strip.
+    #[must_use]
+    pub fn filmstrip_selection(&self) -> Option<PhotoId> {
+        self.filmstrip_state.borrow().selected()
+    }
+
+    /// Connects filmstrip selection to the application-owned photo/detail controller.
+    pub fn connect_filmstrip_selection<F>(&self, handler: F)
+    where
+        F: Fn(PhotoId, ViewportGeneration) + 'static,
+    {
+        self.filmstrip_handler.replace(Some(Box::new(handler)));
+    }
+
+    /// Attaches darkroom keyboard and click routing to the shell-owned filmstrip `FlowBox`.
+    ///
+    /// The existing filmstrip remains the single visual owner. This method only adds a
+    /// generation-tagged darkroom selection boundary and synchronizes its selected styling.
+    pub fn install_filmstrip_interaction(&self, filmstrip: &gtk4::FlowBox) {
+        self.filmstrip_widget.replace(Some(filmstrip.clone()));
+        let current = self.filmstrip_state.borrow();
+        let selected = current.selected();
+        let generation = current.generation();
+        drop(current);
+        self.filmstrip_state.borrow_mut().set_items(
+            darkroom_interaction::filmstrip_ids(filmstrip),
+            selected,
+            generation,
+        );
+        install_filmstrip_keyboard(
+            filmstrip,
+            &self.filmstrip_state,
+            &self.internal_filmstrip_handler(),
+        );
+        let handler = self.internal_filmstrip_handler();
+        let buttons = darkroom_interaction::filmstrip_buttons(filmstrip);
+        for (photo_id, button) in buttons {
+            connect_filmstrip_button(
+                &button,
+                photo_id,
+                filmstrip,
+                &self.filmstrip_state,
+                &handler,
+            );
+        }
+        self.sync_filmstrip_selection();
+    }
+
+    fn internal_filmstrip_handler(&self) -> darkroom_interaction::FilmstripHandler {
+        let handler = Rc::clone(&self.filmstrip_handler);
+        let filmstrip = Rc::clone(&self.filmstrip_widget);
+        Rc::new(RefCell::new(Some(Box::new(move |selection| {
+            if let Some(filmstrip) = filmstrip.borrow().as_ref() {
+                sync_filmstrip_buttons(filmstrip, Some(selection.photo_id));
+            }
+            if let Some(handler) = handler.borrow().as_ref() {
+                handler(selection.photo_id, selection.generation);
+            }
+        }))))
+    }
+
+    fn sync_filmstrip_selection(&self) {
+        if let Some(filmstrip) = self.filmstrip_widget.borrow().as_ref() {
+            sync_filmstrip_buttons(filmstrip, self.filmstrip_selection());
+        }
     }
 
     #[must_use]
@@ -350,7 +464,7 @@ impl DarkroomView {
             detail.title().as_str(),
             detail.facts().count()
         ));
-        self.histogram.set_visible_child_name("unavailable");
+        self.histogram.unavailable();
     }
 
     /// Restores the explicit no-selection state of every side-rail surface.
@@ -367,7 +481,8 @@ impl DarkroomView {
         self.rail_status
             .image_information
             .set_text("image information unavailable");
-        self.histogram.set_visible_child_name("empty");
+        self.histogram.clear();
+        self.preview.clear_selection();
     }
 }
 

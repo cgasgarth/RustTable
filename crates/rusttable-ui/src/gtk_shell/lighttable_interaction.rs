@@ -37,6 +37,207 @@ pub enum NavigationDirection {
     RowNext,
 }
 
+/// Surface selected by the lighttable layout control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LighttableLayout {
+    #[default]
+    FileManager,
+    Zoomable,
+    Culling,
+    CullingDynamic,
+    Preview,
+}
+
+impl LighttableLayout {
+    #[must_use]
+    pub const fn shows_grid(self) -> bool {
+        matches!(self, Self::FileManager | Self::Zoomable)
+    }
+
+    #[must_use]
+    pub const fn shows_culling(self) -> bool {
+        matches!(self, Self::Culling | Self::CullingDynamic | Self::Preview)
+    }
+
+    #[must_use]
+    pub const fn shows_filmstrip(self) -> bool {
+        matches!(
+            self,
+            Self::FileManager
+                | Self::Zoomable
+                | Self::Culling
+                | Self::CullingDynamic
+                | Self::Preview
+        )
+    }
+}
+
+/// Image set used by a culling surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CullingRestriction {
+    #[default]
+    Automatic,
+    Collection,
+    Selection,
+}
+
+/// Bounded integer pan offset and inclusive viewport bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PanOffset {
+    x: i32,
+    y: i32,
+}
+
+impl PanOffset {
+    #[must_use]
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    #[must_use]
+    pub const fn x(self) -> i32 {
+        self.x
+    }
+
+    #[must_use]
+    pub const fn y(self) -> i32 {
+        self.y
+    }
+
+    #[must_use]
+    pub const fn saturating_add(self, delta: Self) -> Self {
+        Self {
+            x: self.x.saturating_add(delta.x),
+            y: self.y.saturating_add(delta.y),
+        }
+    }
+
+    #[must_use]
+    pub const fn clamp(self, bounds: PanBounds) -> Self {
+        Self {
+            x: clamp_i32(self.x, bounds.min_x, bounds.max_x),
+            y: clamp_i32(self.y, bounds.min_y, bounds.max_y),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanBounds {
+    min_x: i32,
+    max_x: i32,
+    min_y: i32,
+    max_y: i32,
+}
+
+impl PanBounds {
+    #[must_use]
+    pub fn new(min_x: i32, max_x: i32, min_y: i32, max_y: i32) -> Self {
+        Self {
+            min_x: min_x.min(max_x),
+            max_x: min_x.max(max_x),
+            min_y: min_y.min(max_y),
+            max_y: min_y.max(max_y),
+        }
+    }
+}
+
+const fn clamp_i32(value: i32, minimum: i32, maximum: i32) -> i32 {
+    if value < minimum {
+        minimum
+    } else if value > maximum {
+        maximum
+    } else {
+        value
+    }
+}
+
+/// Fixed-point culling zoom expressed as a percentage of fit size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CullingZoom(u16);
+
+impl CullingZoom {
+    pub const FIT_PERCENT: u16 = 100;
+    pub const MAX_PERCENT: u16 = 800;
+
+    #[must_use]
+    pub const fn new(percent: u16) -> Self {
+        Self(if percent < Self::FIT_PERCENT {
+            Self::FIT_PERCENT
+        } else if percent > Self::MAX_PERCENT {
+            Self::MAX_PERCENT
+        } else {
+            percent
+        })
+    }
+
+    #[must_use]
+    pub const fn fit() -> Self {
+        Self(Self::FIT_PERCENT)
+    }
+
+    #[must_use]
+    pub const fn percent(self) -> u16 {
+        self.0
+    }
+
+    #[must_use]
+    pub fn add_percent(self, delta: i16) -> Self {
+        let percent = i32::from(self.0)
+            .saturating_add(i32::from(delta))
+            .clamp(i32::from(Self::FIT_PERCENT), i32::from(Self::MAX_PERCENT));
+        Self::new(match u16::try_from(percent) {
+            Ok(value) => value,
+            Err(_) => Self::MAX_PERCENT,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CullingViewport {
+    zoom: CullingZoom,
+    pan: PanOffset,
+}
+
+impl Default for CullingViewport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CullingViewport {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            zoom: CullingZoom::fit(),
+            pan: PanOffset::new(0, 0),
+        }
+    }
+
+    #[must_use]
+    pub const fn zoom(self) -> CullingZoom {
+        self.zoom
+    }
+
+    #[must_use]
+    pub const fn pan(self) -> PanOffset {
+        self.pan
+    }
+
+    pub fn zoom_by(&mut self, delta_percent: i16, bounds: PanBounds) {
+        self.zoom = self.zoom.add_percent(delta_percent);
+        self.pan = self.pan.clamp(bounds);
+    }
+
+    pub fn pan_by(&mut self, delta: PanOffset, bounds: PanBounds) {
+        self.pan = self.pan.saturating_add(delta).clamp(bounds);
+    }
+
+    pub fn fit(&mut self) {
+        self.zoom = CullingZoom::fit();
+        self.pan = PanOffset::new(0, 0);
+    }
+}
+
 /// User-visible lighttable thumbnail density.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum LighttableZoom {
@@ -109,6 +310,18 @@ pub enum LighttableSelectionAction {
     OpenSelected,
     Clear,
     SetZoom(LighttableZoom),
+    SetLayout(LighttableLayout),
+    SetCullingRestriction(CullingRestriction),
+    SetCullingActive(PhotoId),
+    PanCulling {
+        delta: PanOffset,
+        bounds: PanBounds,
+    },
+    ZoomCulling {
+        delta_percent: i16,
+        bounds: PanBounds,
+    },
+    FitCulling,
 }
 
 /// Deterministic selection state shared by the grid and filmstrip projections.
@@ -120,6 +333,9 @@ pub struct LighttableInteractionState {
     focus: Option<PhotoId>,
     columns: usize,
     zoom: LighttableZoom,
+    layout: LighttableLayout,
+    culling_restriction: CullingRestriction,
+    culling_viewport: CullingViewport,
 }
 
 impl LighttableInteractionState {
@@ -132,6 +348,9 @@ impl LighttableInteractionState {
             focus: None,
             columns: columns.max(1),
             zoom: LighttableZoom::default(),
+            layout: LighttableLayout::default(),
+            culling_restriction: CullingRestriction::default(),
+            culling_viewport: CullingViewport::new(),
         }
     }
 
@@ -157,8 +376,7 @@ impl LighttableInteractionState {
             .ordered_ids
             .iter()
             .find(|id| self.selected.contains(id))
-            .copied()
-            .or(self.anchor);
+            .copied();
         if self.focus.is_none() {
             self.focus = self.anchor.or_else(|| self.ordered_ids.first().copied());
         }
@@ -220,6 +438,28 @@ impl LighttableInteractionState {
         self.zoom
     }
 
+    #[must_use]
+    pub const fn layout(&self) -> LighttableLayout {
+        self.layout
+    }
+
+    #[must_use]
+    pub const fn culling_viewport(&self) -> CullingViewport {
+        self.culling_viewport
+    }
+
+    pub fn culling_ids(&self) -> impl Iterator<Item = PhotoId> + '_ {
+        let selection_only = match self.culling_restriction {
+            CullingRestriction::Collection => false,
+            CullingRestriction::Selection => true,
+            CullingRestriction::Automatic => !self.selected.is_empty(),
+        };
+        self.ordered_ids
+            .iter()
+            .copied()
+            .filter(move |id| !selection_only || self.selected.contains(id))
+    }
+
     pub fn apply(&mut self, action: LighttableSelectionAction) -> Option<PhotoId> {
         match action {
             LighttableSelectionAction::Select {
@@ -276,6 +516,38 @@ impl LighttableInteractionState {
             }
             LighttableSelectionAction::SetZoom(zoom) => {
                 self.zoom = zoom;
+                self.columns = zoom.columns();
+                None
+            }
+            LighttableSelectionAction::SetLayout(layout) => {
+                self.layout = layout;
+                None
+            }
+            LighttableSelectionAction::SetCullingRestriction(restriction) => {
+                self.culling_restriction = restriction;
+                None
+            }
+            LighttableSelectionAction::SetCullingActive(photo_id) => {
+                if self.culling_ids().any(|id| id == photo_id) {
+                    self.focus = Some(photo_id);
+                    Some(photo_id)
+                } else {
+                    None
+                }
+            }
+            LighttableSelectionAction::PanCulling { delta, bounds } => {
+                self.culling_viewport.pan_by(delta, bounds);
+                None
+            }
+            LighttableSelectionAction::ZoomCulling {
+                delta_percent,
+                bounds,
+            } => {
+                self.culling_viewport.zoom_by(delta_percent, bounds);
+                None
+            }
+            LighttableSelectionAction::FitCulling => {
+                self.culling_viewport.fit();
                 None
             }
         }
@@ -404,5 +676,68 @@ mod tests {
         state.set_order([id(5), id(2), id(5)]);
         assert_eq!(state.selected_count(), 1);
         assert!(state.is_selected(id(5)));
+    }
+
+    #[test]
+    fn layout_and_culling_projection_keep_surfaces_typed() {
+        let mut state = state();
+        assert!(LighttableLayout::FileManager.shows_grid());
+        assert!(LighttableLayout::Culling.shows_culling());
+        assert!(LighttableLayout::Preview.shows_filmstrip());
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(4),
+            modifiers: SelectionModifiers::default(),
+        });
+        state.apply(LighttableSelectionAction::SetCullingRestriction(
+            CullingRestriction::Selection,
+        ));
+        assert_eq!(state.culling_ids().collect::<Vec<_>>(), vec![id(4)]);
+        assert_eq!(
+            state.apply(LighttableSelectionAction::SetCullingActive(id(3))),
+            None
+        );
+        assert_eq!(
+            state.apply(LighttableSelectionAction::SetCullingActive(id(4))),
+            Some(id(4))
+        );
+    }
+
+    #[test]
+    fn grid_zoom_and_culling_viewport_are_bounded() {
+        let mut state = state();
+        state.apply(LighttableSelectionAction::SetZoom(LighttableZoom::Large));
+        state.apply(LighttableSelectionAction::SetLayout(
+            LighttableLayout::Zoomable,
+        ));
+        assert_eq!(state.columns(), 4);
+        assert_eq!(state.layout(), LighttableLayout::Zoomable);
+
+        let bounds = PanBounds::new(-10, 20, -5, 15);
+        state.apply(LighttableSelectionAction::PanCulling {
+            delta: PanOffset::new(100, -100),
+            bounds,
+        });
+        assert_eq!(state.culling_viewport().pan(), PanOffset::new(20, -5));
+        state.apply(LighttableSelectionAction::ZoomCulling {
+            delta_percent: 10_000,
+            bounds,
+        });
+        assert_eq!(
+            state.culling_viewport().zoom(),
+            CullingZoom::new(CullingZoom::MAX_PERCENT)
+        );
+        state.apply(LighttableSelectionAction::FitCulling);
+        assert_eq!(state.culling_viewport(), CullingViewport::new());
+    }
+
+    #[test]
+    fn authoritative_empty_selection_clears_the_range_anchor() {
+        let mut state = state();
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(3),
+            modifiers: SelectionModifiers::default(),
+        });
+        state.reconcile_selection([]);
+        assert_eq!(state.anchor(), None);
     }
 }
