@@ -237,7 +237,7 @@ pub struct LighttableModuleSpec {
 /// `modulegroups.c` is intentionally absent: Darktable exposes that selector
 /// only in darkroom. Export is listed once because its GTK controller owns its
 /// own disclosure widget.
-pub const LIGHTTABLE_RIGHT_MODULES: [LighttableModuleSpec; 9] = [
+pub const LIGHTTABLE_RIGHT_MODULES: [LighttableModuleSpec; 8] = [
     LighttableModuleSpec {
         widget_name: "selection",
         title: "selection",
@@ -265,10 +265,6 @@ pub const LIGHTTABLE_RIGHT_MODULES: [LighttableModuleSpec; 9] = [
     LighttableModuleSpec {
         widget_name: "geotagging",
         title: "geotagging",
-    },
-    LighttableModuleSpec {
-        widget_name: "neural-restore",
-        title: "neural restore",
     },
     LighttableModuleSpec {
         widget_name: "export",
@@ -842,7 +838,6 @@ mod tests {
                 "metadata-editor",
                 "tagging",
                 "geotagging",
-                "neural-restore",
                 "export",
             ]
         );
@@ -857,6 +852,20 @@ mod tests {
             LIGHTTABLE_RIGHT_MODULES
                 .iter()
                 .all(|module| module.widget_name != "module-groups")
+        );
+    }
+
+    #[test]
+    fn lighttable_rail_excludes_obsolete_neural_restore_surface() {
+        assert!(
+            LIGHTTABLE_RIGHT_MODULES
+                .iter()
+                .all(|module| module.widget_name != "neural-restore")
+        );
+        assert!(
+            LIGHTTABLE_RIGHT_MODULES
+                .iter()
+                .all(|module| !module.title.eq_ignore_ascii_case("neural restore"))
         );
     }
 

@@ -160,13 +160,26 @@ fn lighttable_contract_has_one_filter_row_and_plain_bottom_filmstrip() {
             "metadata-editor",
             "tagging",
             "geotagging",
-            "neural-restore",
             "export",
         ]
     );
     assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 92);
     assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 72);
     assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
+}
+
+#[test]
+fn lighttable_contract_cannot_reintroduce_obsolete_neural_restore_text() {
+    assert!(
+        LIGHTTABLE_RIGHT_MODULES
+            .iter()
+            .all(|module| module.widget_name != "neural-restore")
+    );
+    assert!(
+        LIGHTTABLE_RIGHT_MODULES
+            .iter()
+            .all(|module| !module.title.eq_ignore_ascii_case("neural restore"))
+    );
 }
 
 #[test]
