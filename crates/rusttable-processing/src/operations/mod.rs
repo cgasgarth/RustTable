@@ -10,6 +10,7 @@ pub mod basicadj_analysis;
 pub mod bloom;
 pub mod censorize;
 pub mod clahe;
+pub mod clipping;
 pub mod colorcorrection;
 pub mod colorin;
 pub mod colorout;

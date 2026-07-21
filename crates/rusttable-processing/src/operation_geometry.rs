@@ -5,6 +5,7 @@ use super::{
     invalid_parameters, parameter_f32, parameter_integer, parameter_u32, reject_unexpected,
 };
 use crate::operations::{
+    clipping::{ClippingConfig, ClippingParametersV5},
     enlargecanvas::{CanvasColor, EnlargeCanvasConfig},
     finalscale::{
         FinalScaleConfig, FinalScaleKernel, RenderQuality, RenderQualityKind, RenderSizeRequest,
@@ -15,6 +16,29 @@ use crate::operations::{
 };
 
 const SCALEPIXELS_PARAMETERS: [&str; 1] = ["pixel_aspect_ratio"];
+const CLIPPING_PARAMETERS: [&str; 21] = [
+    "angle",
+    "cx",
+    "cy",
+    "cw",
+    "ch",
+    "k_h",
+    "k_v",
+    "kxa",
+    "kya",
+    "kxb",
+    "kyb",
+    "kxc",
+    "kyc",
+    "kxd",
+    "kyd",
+    "k_type",
+    "k_sym",
+    "k_apply",
+    "crop_auto",
+    "ratio_n",
+    "ratio_d",
+];
 
 pub(crate) fn compile_scalepixels(
     operation: &Operation,
@@ -78,6 +102,43 @@ const LENSCORRECTION_PARAMETERS: [&str; 8] = [
     "aperture",
     "distance",
 ];
+
+pub(crate) fn compile_clipping(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    super::reject_unexpected(operation, &CLIPPING_PARAMETERS)?;
+    let parameters = ClippingParametersV5 {
+        angle: super::parameter_f32(operation, "angle", 0.0)?,
+        cx: super::parameter_f32(operation, "cx", 0.0)?,
+        cy: super::parameter_f32(operation, "cy", 0.0)?,
+        cw: super::parameter_f32(operation, "cw", 1.0)?,
+        ch: super::parameter_f32(operation, "ch", 1.0)?,
+        k_h: super::parameter_f32(operation, "k_h", 0.0)?,
+        k_v: super::parameter_f32(operation, "k_v", 0.0)?,
+        kxa: super::parameter_f32(operation, "kxa", 0.2)?,
+        kya: super::parameter_f32(operation, "kya", 0.2)?,
+        kxb: super::parameter_f32(operation, "kxb", 0.8)?,
+        kyb: super::parameter_f32(operation, "kyb", 0.2)?,
+        kxc: super::parameter_f32(operation, "kxc", 0.8)?,
+        kyc: super::parameter_f32(operation, "kyc", 0.8)?,
+        kxd: super::parameter_f32(operation, "kxd", 0.2)?,
+        kyd: super::parameter_f32(operation, "kyd", 0.8)?,
+        k_type: super::parameter_integer(operation, "k_type", 0.0)?,
+        k_sym: super::parameter_integer(operation, "k_sym", 0.0)?,
+        k_apply: super::parameter_integer(operation, "k_apply", 0.0)?,
+        crop_auto: super::parameter_bool(operation, "crop_auto")?,
+        ratio_n: super::parameter_integer(operation, "ratio_n", -1.0)?,
+        ratio_d: super::parameter_integer(operation, "ratio_d", -1.0)?,
+    };
+    let config = ClippingConfig::new(parameters)
+        .map_err(|error| super::invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: super::compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Clipping { config },
+    })
+}
 
 pub(crate) fn compile_finalscale(
     operation: &Operation,
