@@ -1,14 +1,8 @@
 #![allow(clippy::cast_precision_loss, clippy::default_trait_access)]
 
 use rusttable_image::Roi;
+use rusttable_processing::operations::perspective;
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-#[path = "../src/operations/perspective/mod.rs"]
-pub mod perspective;
 
 use perspective::{
     AnalysisStatus, AutoMethod, BoundaryMode, FitAxis, Interpolation, LineSegment, LuminanceFrame,

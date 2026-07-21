@@ -378,7 +378,7 @@ fn verify_pool_manifest(root: &Path) -> Result {
         }
     }
     for file in [
-        "crates/rusttable-gpu/src/resource.rs",
+        "crates/rusttable-gpu/src/resource/mod.rs",
         "crates/rusttable-gpu/src/transfer.rs",
     ] {
         if !root.join(file).is_file() {
@@ -420,7 +420,7 @@ fn gpu_source_files(root: &Path) -> Result<Vec<(String, String)>> {
 fn verify_no_direct_wgpu_creation(root: &Path, owner: &str) -> Result {
     let _ = owner;
     let allowed = [
-        "crates/rusttable-gpu/src/resource.rs",
+        "crates/rusttable-gpu/src/resource/mod.rs",
         "crates/rusttable-gpu/src/runtime.rs",
     ];
     let forbidden = [

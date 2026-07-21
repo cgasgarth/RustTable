@@ -1,22 +1,22 @@
 #![forbid(unsafe_code)]
 #![doc = "The GTK4 application composition root for `RustTable`."]
 
-mod ai_services;
 mod composition;
 mod configuration;
-mod darkroom_services;
 mod extensions;
 pub mod gtk_controller;
-pub mod gtk_export;
-pub mod gtk_preview_controller;
-pub mod gtk_thumbnail_controller;
 pub mod library;
 pub mod lifecycle;
-pub mod macos;
 mod platform;
-mod preview;
 pub mod workspace;
 
+use composition::services::{ai as ai_services, darkroom as darkroom_services};
+pub use gtk_controller::{
+    export as gtk_export, preview as gtk_preview_controller, thumbnail as gtk_thumbnail_controller,
+};
+pub use platform::macos;
+
+pub use composition::services::preview::{PreviewError, PreviewService};
 pub use composition::{
     CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService,
     CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError, CatalogPreviewSmokePorts,
@@ -31,7 +31,6 @@ pub use lifecycle::{
     ServiceHealthStatus, ServiceId, ServiceRegistry, ServiceState, ServiceTaskGroup,
     TaskDrainReceipt, TaskGroupError, TaskGroupId, TaskReceipt,
 };
-pub use preview::{PreviewError, PreviewService};
 pub use workspace::{
     BasicEditCommand, BasicEditCommandError, BasicEditCommitError, BasicEditDraft, BasicEditValues,
     commit_basic_edit, commit_basic_edit_at_path,

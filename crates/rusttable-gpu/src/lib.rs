@@ -64,7 +64,3 @@ pub use tiling::{
     ResidencyPlan, ResidentIntermediate, ResourceAllocationEstimate, TileAlignment, TileArea,
     TileMemoryBudget, TileMemoryEstimate, TileResourceSpec, TilingError, TilingReceipt,
 };
-
-#[cfg(test)]
-#[path = "tiling_tests.rs"]
-mod gpu_tiling_tests;

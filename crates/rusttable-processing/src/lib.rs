@@ -30,11 +30,6 @@ mod output;
 mod pipeline;
 pub mod rawprepare;
 pub mod registry;
-mod registry_borders_overlay;
-mod registry_closure;
-mod registry_color;
-mod registry_reconstruction;
-mod registry_watermark;
 mod scalar;
 mod window;
 
@@ -69,15 +64,15 @@ pub use graph::{
     OperationGraphNodeIndex, OperationGraphOutput,
 };
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
+pub use operations::basicadj::analysis::{
+    BASICADJ_HISTOGRAM_BINS, BASICADJ_HISTOGRAM_MAXIMUM, BASICADJ_HISTOGRAM_MINIMUM,
+    BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
+    BasicAdjAnalysisRaster, BasicAdjAnalysisResult, BasicAdjAnalysisRoi, BasicAdjResolvedValues,
+};
 pub use operations::basicadj::{
     BasicAdjAutoControls, BasicAdjConfig, BasicAdjConfigError, BasicAdjExecutionReceipt,
     BasicAdjGpuParameters, BasicAdjParametersV1, BasicAdjParametersV2, BasicAdjPlan,
     BasicAdjPlanError, BasicAdjustmentsPlan, PreserveColors, migrate_v1_to_v2,
-};
-pub use operations::basicadj_analysis::{
-    BASICADJ_HISTOGRAM_BINS, BASICADJ_HISTOGRAM_MAXIMUM, BASICADJ_HISTOGRAM_MINIMUM,
-    BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
-    BasicAdjAnalysisRaster, BasicAdjAnalysisResult, BasicAdjAnalysisRoi, BasicAdjResolvedValues,
 };
 pub use operations::borders::{
     BORDERS_WGSL, BordersAspect, BordersBasis, BordersCodecError, BordersColor, BordersConfig,
@@ -158,16 +153,16 @@ pub use output::{
 };
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
 pub use rawprepare::{NormalizedRaw, RawPrepareConfig, RawPrepareError, RawPreparePlan};
+pub use registry::closure::{
+    OperationClassification, REGISTRY_CLOSURE_SCHEMA, RegistryClosure, RegistryClosureEntry,
+    RegistryClosureError,
+};
 pub use registry::{
     BUILTIN_OPERATIONS, CpuFactory, DefinitionAvailability, DeviceCapabilitySnapshot,
     ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
     OperationCapability, OperationDefinition, OperationDefinitionFactory, PreparedCpuOperation,
     RegistryBuildError, RegistryLookupError, RegistrySnapshot, RegistryValidationError,
     builtin_registry,
-};
-pub use registry_closure::{
-    OperationClassification, REGISTRY_CLOSURE_SCHEMA, RegistryClosure, RegistryClosureEntry,
-    RegistryClosureError,
 };
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{

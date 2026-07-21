@@ -1,15 +1,8 @@
 #![allow(clippy::float_cmp)]
 #![forbid(unsafe_code)]
 
+use rusttable_processing::operations::finalscale;
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-#[path = "../src/operations/finalscale/mod.rs"]
-#[allow(dead_code)]
-mod finalscale;
 
 use finalscale::{
     FinalScaleConfig, FinalScaleHistory, FinalScaleKernel, FinalScaleLimits,

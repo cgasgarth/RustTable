@@ -8,6 +8,7 @@ mod darkroom_ui;
 mod import_bridge;
 mod preview_bridge;
 mod preview_lifecycle;
+pub(crate) mod services;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
 pub use catalog_preview_smoke::{

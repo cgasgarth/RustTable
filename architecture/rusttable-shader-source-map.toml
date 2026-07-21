@@ -43,7 +43,7 @@ status = "Replaced"
 id = "host-exposure-binding"
 upstream_path = "src/iop/exposure.c"
 upstream_symbol = "kernel_exposure/process_cl"
-rust_owner = "crates/rusttable-processing/src/registry.rs"
+rust_owner = "crates/rusttable-processing/src/registry/mod.rs"
 status = "Replaced"
 
 [[responsibility]]

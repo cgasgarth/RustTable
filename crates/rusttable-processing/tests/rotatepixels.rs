@@ -1,11 +1,5 @@
-pub use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-#[path = "../src/operations/rotatepixels.rs"]
-pub mod rotatepixels;
+use rusttable_processing::operations::rotatepixels;
+use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
 
 use rotatepixels::{
     ROTATEPIXELS_PARAMETER_BYTES, ROTATEPIXELS_WGSL, RotatePixelsConfig, RotatePixelsInterpolation,

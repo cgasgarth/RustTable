@@ -6,7 +6,6 @@
 //! pipeline.
 
 pub mod basicadj;
-pub mod basicadj_analysis;
 pub mod bloom;
 pub mod borders;
 pub mod censorize;
@@ -37,7 +36,6 @@ pub mod primaries;
 pub mod rasterfile;
 pub mod relight;
 pub mod retouch;
-mod retouch_pixel;
 pub mod rotatepixels;
 pub mod scalepixels;
 pub mod shadhi;

@@ -7,21 +7,21 @@ upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 id = "pixelpipe-aggregate"
 upstream_path = "src/develop/pixelpipe.h"
 upstream_symbol = "dt_dev_pixelpipe_t"
-rust_path = "crates/rusttable-pixelpipe/src/pipeline_snapshot.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/snapshot.rs"
 status = "replaced"
 
 [[responsibility]]
 id = "pixelpipe-piece"
 upstream_path = "src/develop/pixelpipe_hb.c"
 upstream_symbol = "dt_dev_pixelpipe_process"
-rust_path = "crates/rusttable-pixelpipe/src/preparation.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/preparation.rs"
 status = "replaced"
 
 [[responsibility]]
 id = "pixelpipe-profile"
 upstream_path = "src/develop/develop.h"
 upstream_symbol = "dt_develop_t"
-rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/contracts.rs"
 status = "delegated"
 delegated_issue = 257
 
@@ -37,7 +37,7 @@ delegated_issue = 264
 id = "pixelpipe-mask"
 upstream_path = "src/develop/pixelpipe.h"
 upstream_symbol = "dt_dev_pixelpipe_t::raster_mask"
-rust_path = "crates/rusttable-pixelpipe/src/preparation.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/preparation.rs"
 status = "deferred"
 deferred_issue = 271
 
@@ -45,14 +45,14 @@ deferred_issue = 271
 id = "pixelpipe-caller-purpose"
 upstream_path = "src/develop/develop.h"
 upstream_symbol = "dt_dev_pixelpipe_t::type"
-rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/contracts.rs"
 status = "replaced"
 
 [[responsibility]]
 id = "pixelpipe-roi"
 upstream_path = "src/develop/pixelpipe.h"
 upstream_symbol = "dt_iop_roi_t"
-rust_path = "crates/rusttable-pixelpipe/src/pipeline_contracts.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/contracts.rs"
 status = "delegated"
 delegated_issue = 263
 
@@ -60,5 +60,5 @@ delegated_issue = 263
 id = "pixelpipe-publication"
 upstream_path = "src/develop/pixelpipe_hb.c"
 upstream_symbol = "pipe->shutdown"
-rust_path = "crates/rusttable-pixelpipe/src/pipeline_snapshot.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/snapshot.rs"
 status = "replaced"

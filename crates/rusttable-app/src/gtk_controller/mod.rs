@@ -8,6 +8,9 @@ mod collection;
 mod collection_service;
 mod darkroom_edit;
 mod darkroom_panels;
+pub mod export;
+pub mod preview;
+pub mod thumbnail;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
