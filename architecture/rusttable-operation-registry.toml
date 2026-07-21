@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "1b5c603522579f20e3a1034bde4e684cc762c97c35c5a01de133865136cd775c"
+snapshot_hash = "a1d4a8d7ebd2776e1f8729541934f09e0fa0735fd00b9c32abea8db71ca833f5"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -139,6 +139,14 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.relight"
+compatibility_name = "relight"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.rgb_gain"
 compatibility_name = "rgbgain"
 descriptor_version = 1
@@ -159,6 +167,14 @@ rust_id = "rusttable.scalepixels"
 compatibility_name = "scalepixels"
 descriptor_version = 1
 parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.shadhi"
+compatibility_name = "shadhi"
+descriptor_version = 5
+parameter_version = 5
 implementation_version = 1
 status = "available"
 

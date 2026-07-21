@@ -230,6 +230,35 @@ fn apply_operation(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::Relight { config } => {
+            let plan = crate::operations::relight::RelightPlan::new(*config, dimensions);
+            let candidate = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::Shadhi { config } => {
+            let plan = crate::operations::shadhi::ShadhiPlan::new(*config, dimensions)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            let candidate = plan
+                .execute(pixels)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Highlights { config } => {
             let plan = HighlightsPlan::new(
                 *config,

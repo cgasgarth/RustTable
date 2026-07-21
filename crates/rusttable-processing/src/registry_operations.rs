@@ -9,8 +9,9 @@ use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, crop_descriptor,
     dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
-    flip_descriptor, invert_descriptor, linear_offset_descriptor, rgb_gain_descriptor,
-    rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor, temperature_descriptor,
+    flip_descriptor, invert_descriptor, linear_offset_descriptor, relight_descriptor,
+    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
+    soften_descriptor, temperature_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -205,6 +206,28 @@ fn prepare_dither(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_dither(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_relight(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_relight(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_shadhi(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_shadhi(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -405,11 +428,69 @@ pub fn dither_definition() -> OperationDefinition {
     )
 }
 
+pub fn relight_definition() -> OperationDefinition {
+    compatibility_definition_with_migrations(
+        relight_descriptor(),
+        prepare_relight,
+        &[
+            "iop.relight.params.v1",
+            "iop.relight.cpu.rgb-boundary",
+            "iop.relight.presets",
+            "iop.relight.deprecated-visibility",
+        ],
+        false,
+        std::iter::empty(),
+    )
+}
+
+pub fn shadhi_definition() -> OperationDefinition {
+    compatibility_definition_with_migrations(
+        shadhi_descriptor(),
+        prepare_shadhi,
+        &[
+            "iop.shadhi.params.v1-v5",
+            "iop.shadhi.migrations.v1-v5",
+            "iop.shadhi.cpu.rgb-gaussian",
+            "iop.shadhi.shared-gaussian-plan",
+            "iop.shadhi.alpha-preserve",
+        ],
+        true,
+        (1..5).map(|from| {
+            MigrationBinding::new(
+                from,
+                from + 1,
+                format!("shadhi.migration.v{from}-v{}", from + 1),
+            )
+        }),
+    )
+}
+
 fn compatibility_definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
     evidence: &'static [&'static str],
     full_image_analysis: bool,
+) -> OperationDefinition {
+    let compatibility = descriptor.id.compatibility_name.clone();
+    compatibility_definition_with_migrations(
+        descriptor,
+        prepare,
+        evidence,
+        full_image_analysis,
+        [MigrationBinding::new(
+            1,
+            2,
+            format!("{compatibility}.migration.v1-v2"),
+        )],
+    )
+}
+
+fn compatibility_definition_with_migrations(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+    full_image_analysis: bool,
+    migrations: impl IntoIterator<Item = MigrationBinding>,
 ) -> OperationDefinition {
     let compatibility = descriptor.id.compatibility_name.clone();
     let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
@@ -424,11 +505,7 @@ fn compatibility_definition(
             full_image_analysis,
         )),
         None,
-        vec![MigrationBinding::new(
-            1,
-            2,
-            format!("{compatibility}.migration.v1-v2"),
-        )],
+        migrations.into_iter().collect(),
         ImplementationIdentity::new(
             format!("{REGISTRY_BUILD_ID}.{compatibility}"),
             1,
@@ -751,6 +828,8 @@ macro_rules! builtin_operations {
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
             $crate::registry::dither_definition,
+            $crate::registry::relight_definition,
+            $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,
             $crate::registry::soften_definition,

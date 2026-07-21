@@ -22,8 +22,10 @@ pub use crate::operations::flip::flip_descriptor;
 pub use crate::operations::invert::invert_descriptor;
 pub use crate::operations::lenscorrection::lenscorrection_descriptor;
 pub use crate::operations::perspective::perspective_descriptor;
+pub use crate::operations::relight::relight_descriptor;
 pub use crate::operations::rotatepixels::rotatepixels_descriptor;
 pub use crate::operations::scalepixels::scalepixels_descriptor;
+pub use crate::operations::shadhi::shadhi_descriptor;
 pub use descriptor_effects::{bloom_descriptor, soften_descriptor};
 pub use descriptor_operations::{
     color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,

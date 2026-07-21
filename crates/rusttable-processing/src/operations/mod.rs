@@ -22,8 +22,10 @@ pub mod invert;
 pub mod lenscorrection;
 pub mod perspective;
 pub mod primaries;
+pub mod relight;
 pub mod rotatepixels;
 pub mod scalepixels;
+pub mod shadhi;
 pub mod soften;
 pub mod temperature;
 

@@ -603,6 +603,8 @@ fn verify_registry_operations(root: &Path, document: &toml::Value) -> Result {
         "rusttable.rgb_gain",
         "rusttable.invert",
         "rusttable.dither",
+        "rusttable.relight",
+        "rusttable.shadhi",
         "rusttable.colorin",
         "rusttable.primaries",
     ];
