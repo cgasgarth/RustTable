@@ -16,6 +16,7 @@ mod header;
 mod left_panel;
 mod lighttable;
 mod lighttable_interaction;
+mod lighttable_layout_controls;
 mod lighttable_toolbar;
 mod model;
 mod photo_preview;
@@ -43,8 +44,8 @@ pub use darkroom_controls::{
     ParameterValidationError,
 };
 pub use darkroom_modules::{
-    DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel,
-    DarkroomModulesViewModel, build_module_column, build_module_panel,
+    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus,
+    DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column, build_module_panel,
 };
 pub use darktable_spec::{
     ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarktableColors,
@@ -57,9 +58,10 @@ pub use darktable_spec::{
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;
 pub use lighttable_interaction::{
-    LighttableInteractionState, LighttableSelectionAction, LighttableZoom, NavigationDirection,
-    SelectionModifiers,
+    CullingRestriction, LighttableInteractionState, LighttableLayout, LighttableSelectionAction,
+    LighttableZoom, NavigationDirection, PanBounds, SelectionModifiers,
 };
+pub use lighttable_layout_controls::LighttableLayoutControls;
 pub use lighttable_toolbar::{
     LighttableColorLabel, LighttableRating, LighttableSort, LighttableToolbar,
     LighttableToolbarAction, LighttableToolbarState,

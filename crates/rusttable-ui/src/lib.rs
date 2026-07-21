@@ -45,14 +45,16 @@ pub use external_editor::{
 };
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel,
-    DarkroomModulesViewModel, DarkroomWorkspaceViewModel, DarktableTheme, ExportAction,
-    ExportPanel, ExportSize, ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
-    LighttableInteractionState, LighttablePhotoState, LighttableRating, LighttableSelectionAction,
-    LighttableSort, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
-    LighttableZoom, ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel,
-    NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole,
-    apply_theme_role, darktable_theme_css, install_darktable_theme,
+    CullingRestriction, DarkroomModuleAvailability, DarkroomModuleError, DarkroomModuleSide,
+    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
+    DarkroomWorkspaceViewModel, DarktableTheme, ExportAction, ExportPanel, ExportSize,
+    ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
+    LighttableInteractionState, LighttableLayout, LighttableLayoutControls, LighttablePhotoState,
+    LighttableRating, LighttableSelectionAction, LighttableSort, LighttableToolbar,
+    LighttableToolbarAction, LighttableToolbarState, LighttableZoom, ModuleControlKind,
+    ModuleControlViewModel, ModulePanelViewModel, NavigationDirection, SelectionModifiers,
+    ShellLayout, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css,
+    install_darktable_theme,
 };
 pub use import::{
     IMPORT_SESSION_FOCUS_ORDER, ImportAction, ImportItemOutcome, ImportPanelViewModel,

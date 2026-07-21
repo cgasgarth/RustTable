@@ -50,6 +50,17 @@ pub enum LighttableLayout {
 
 impl LighttableLayout {
     #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::FileManager => "file manager",
+            Self::Zoomable => "zoomable",
+            Self::Culling => "culling",
+            Self::CullingDynamic => "dynamic culling",
+            Self::Preview => "preview",
+        }
+    }
+
+    #[must_use]
     pub const fn shows_grid(self) -> bool {
         matches!(self, Self::FileManager | Self::Zoomable)
     }
@@ -454,6 +465,12 @@ impl LighttableInteractionState {
             .filter(move |id| !selection_only || self.selected.contains(id))
     }
 
+    /// Returns the full ordered collection used by the persistent filmstrip.
+    #[must_use]
+    pub fn filmstrip_ids(&self) -> impl ExactSizeIterator<Item = PhotoId> + '_ {
+        self.ordered_ids.iter().copied()
+    }
+
     pub fn apply(&mut self, action: LighttableSelectionAction) -> Option<PhotoId> {
         match action {
             LighttableSelectionAction::Select {
@@ -731,6 +748,8 @@ mod tests {
     #[test]
     fn layout_and_culling_projection_keep_surfaces_typed() {
         let mut state = state();
+        assert_eq!(LighttableLayout::FileManager.label(), "file manager");
+        assert_eq!(LighttableLayout::CullingDynamic.label(), "dynamic culling");
         assert!(LighttableLayout::FileManager.shows_grid());
         assert!(LighttableLayout::Culling.shows_culling());
         assert!(!LighttableLayout::FileManager.shows_filmstrip());
@@ -751,6 +770,27 @@ mod tests {
         assert_eq!(
             state.apply(LighttableSelectionAction::SetCullingActive(id(4))),
             Some(id(4))
+        );
+    }
+
+    #[test]
+    fn culling_surface_keeps_collection_filmstrip_and_restricts_grid_ids() {
+        let mut state = state();
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(2),
+            modifiers: SelectionModifiers::default(),
+        });
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(4),
+            modifiers: SelectionModifiers::new(true, false),
+        });
+        state.apply(LighttableSelectionAction::SetLayout(
+            LighttableLayout::CullingDynamic,
+        ));
+        assert_eq!(state.culling_ids().collect::<Vec<_>>(), vec![id(2), id(4)]);
+        assert_eq!(
+            state.filmstrip_ids().collect::<Vec<_>>(),
+            vec![id(1), id(2), id(3), id(4), id(5)]
         );
     }
 

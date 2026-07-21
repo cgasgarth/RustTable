@@ -7,7 +7,9 @@ use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
 use rusttable_display_profile::{DisplayProfileReceipt, DisplayProfileSnapshot};
 
-use super::darkroom_modules::{DarkroomModuleActionHandler, DarkroomModulesViewModel};
+use super::darkroom_modules::{
+    DarkroomModuleActionHandler, DarkroomModulesViewModel, reference_modules,
+};
 #[path = "darkroom_interaction.rs"]
 mod darkroom_interaction;
 #[path = "darkroom_viewport.rs"]
@@ -180,7 +182,7 @@ impl DarkroomView {
         ) = right_panel(panel_width);
         let histogram = HistogramView::new(histogram);
         let histogram_generation = Rc::new(Cell::new(None));
-        let typed_modules = Rc::new(RefCell::new(None));
+        let typed_modules = Rc::new(RefCell::new(reference_modules().ok()));
         let module_action_handler = Rc::new(RefCell::new(None));
         let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
         let filmstrip_handler = Rc::new(RefCell::new(None));
@@ -210,6 +212,7 @@ impl DarkroomView {
             profile_diagnostic,
         };
         view.install_module_search();
+        view.render_typed_modules();
         view
     }
 

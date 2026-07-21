@@ -261,6 +261,30 @@ button:disabled:hover,
   padding: 6px;
 }
 
+#lighttable-layout-controls {
+  margin-left: 6px;
+}
+
+#lighttable-layout-controls button {
+  min-height: 20px;
+  padding: 0 4px;
+  background-color: transparent;
+  color: {{foreground}};
+}
+
+#lighttable-layout-controls button:checked {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+}
+
+#lighttable-grid.dt_culling_surface {
+  padding: 12px;
+}
+
+#lighttable-grid.dt_culling_surface > flowboxchild {
+  margin: 6px;
+}
+
 #lighttable-grid > flowboxchild {
   margin: 3px;
   padding: 0;

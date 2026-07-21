@@ -22,8 +22,9 @@ use super::runtime_layout::{
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomView, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LighttablePhotoState, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
-    LighttableZoom, PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole, apply_theme_role,
+    LighttableLayout, LighttablePhotoState, LighttableToolbar, LighttableToolbarAction,
+    LighttableToolbarState, LighttableZoom, PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole,
+    apply_theme_role,
 };
 use super::{
     LighttableInteractionState, LighttableSelectionAction, NavigationDirection, SelectionModifiers,
@@ -62,6 +63,8 @@ pub struct GtkShell {
     export_panel: ExportPanel,
     external_editor_panel: ExternalEditorPanel,
     filmstrip: gtk4::FlowBox,
+    filmstrip_root: gtk4::Box,
+    lighttable_layout_controls: super::LighttableLayoutControls,
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
     darkroom_workspace: Rc<RefCell<Option<DarkroomWorkspaceViewModel>>>,
@@ -106,6 +109,7 @@ impl GtkShell {
         Self::with_layout_and_i18n(application, layout, I18n::default())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn with_layout_and_i18n(
         application: &gtk4::Application,
         layout: ShellLayout,
@@ -125,7 +129,7 @@ impl GtkShell {
         let (darkroom, darkroom_preview, darkroom_workspace) = build_darkroom(panel_width);
         let darkroom_left_modules = darkroom.left_modules().clone();
         let darkroom_right_modules = darkroom.right_modules().clone();
-        let (workspace, lighttable, lighttable_empty_state) =
+        let (workspace, lighttable, lighttable_empty_state, lighttable_layout_controls) =
             workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
         let input_mapping_editor = InputMappingEditor::new(application);
         let ai_models_panel = AiModelsPanel::new();
@@ -162,7 +166,7 @@ impl GtkShell {
             &darkroom,
             layout.initial_workspace(),
         );
-        let (content, filmstrip) =
+        let (content, filmstrip, filmstrip_root) =
             desktop_body(&workspace, &left_panel, &right_panel, &initial_i18n);
 
         let shell = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -182,6 +186,8 @@ impl GtkShell {
             export_panel,
             external_editor_panel,
             filmstrip,
+            filmstrip_root,
+            lighttable_layout_controls,
             left_modules: darkroom_left_modules,
             right_modules: darkroom_right_modules,
             darkroom_workspace,
@@ -207,6 +213,23 @@ impl GtkShell {
             photo_details: Rc::new(RefCell::new(BTreeMap::new())),
         };
         shell.install_lighttable_keyboard();
+        let filmstrip_root = shell.filmstrip_root.clone();
+        let interaction = Rc::clone(&shell.lighttable_interaction);
+        shell
+            .workspace
+            .connect_visible_child_name_notify(move |workspace| {
+                let darkroom_visible = workspace.visible_child_name().as_deref()
+                    == Some(WorkspaceRole::Darkroom.stack_name());
+                filmstrip_root.set_visible(
+                    darkroom_visible || interaction.borrow().layout().shows_filmstrip(),
+                );
+            });
+        let shell_for_layout = shell.clone();
+        shell
+            .lighttable_layout_controls
+            .connect_layout(move |layout| {
+                shell_for_layout.set_lighttable_layout(layout);
+            });
         shell
     }
 
@@ -349,6 +372,23 @@ impl GtkShell {
             .apply(LighttableSelectionAction::SetZoom(zoom));
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
+            return;
+        };
+        let filter = self.lighttable_filter.borrow();
+        self.workspace_render_handle()
+            .render(view_model, filter.as_ref());
+    }
+
+    /// Switches the visible lighttable surface and reconciles its culling set.
+    pub fn set_lighttable_layout(&self, layout: LighttableLayout) {
+        let _ = self
+            .lighttable_interaction
+            .borrow_mut()
+            .apply(LighttableSelectionAction::SetLayout(layout));
+        self.lighttable_layout_controls.set_layout(layout);
+        let workspace = self.lighttable_workspace.borrow();
+        let Some(view_model) = workspace.as_ref() else {
+            self.filmstrip_root.set_visible(layout.shows_filmstrip());
             return;
         };
         let filter = self.lighttable_filter.borrow();
@@ -553,6 +593,7 @@ impl GtkShell {
             lighttable: self.lighttable.clone(),
             lighttable_empty_state: self.lighttable_empty_state.clone(),
             filmstrip: self.filmstrip.clone(),
+            filmstrip_root: self.filmstrip_root.clone(),
             darkroom_preview: self.darkroom_preview.clone(),
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
@@ -571,60 +612,73 @@ impl GtkShell {
         controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let render = self.workspace_render_handle();
         controller.connect_key_pressed(move |_, key, _, modifiers| {
-            let modifiers = SelectionModifiers::new(
-                modifiers.contains(gdk::ModifierType::CONTROL_MASK)
-                    || modifiers.contains(gdk::ModifierType::SUPER_MASK),
-                modifiers.contains(gdk::ModifierType::SHIFT_MASK),
-            );
-            let action = match key {
-                gdk::Key::Left => Some(LighttableSelectionAction::Move {
-                    direction: NavigationDirection::Previous,
-                    modifiers,
-                }),
-                gdk::Key::Right => Some(LighttableSelectionAction::Move {
-                    direction: NavigationDirection::Next,
-                    modifiers,
-                }),
-                gdk::Key::Up => Some(LighttableSelectionAction::Move {
-                    direction: NavigationDirection::RowPrevious,
-                    modifiers,
-                }),
-                gdk::Key::Down => Some(LighttableSelectionAction::Move {
-                    direction: NavigationDirection::RowNext,
-                    modifiers,
-                }),
-                gdk::Key::Escape => Some(LighttableSelectionAction::Clear),
-                gdk::Key::Return | gdk::Key::KP_Enter => {
-                    render.open_focused();
-                    return gtk4::glib::Propagation::Stop;
-                }
-                gdk::Key::minus | gdk::Key::KP_Subtract => {
-                    let zoom = render.interaction.borrow().zoom().smaller();
-                    Some(LighttableSelectionAction::SetZoom(zoom))
-                }
-                gdk::Key::plus | gdk::Key::KP_Add => {
-                    let zoom = render.interaction.borrow().zoom().larger();
-                    Some(LighttableSelectionAction::SetZoom(zoom))
-                }
-                _ => None,
-            };
-            let Some(action) = action else {
-                return gtk4::glib::Propagation::Proceed;
-            };
-            let zoom_changed = matches!(action, LighttableSelectionAction::SetZoom(_));
-            let selected = render.interaction.borrow_mut().apply(action);
-            if zoom_changed {
-                render.rerender_current();
-            } else {
-                render.sync_selection_styles();
-                if selected.is_some() {
-                    render.focus_selected();
-                }
-            }
-            gtk4::glib::Propagation::Stop
+            handle_lighttable_key(&render, key, modifiers)
         });
         self.lighttable.add_controller(controller);
+        let controller = gtk4::EventControllerKey::new();
+        controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let render = self.workspace_render_handle();
+        controller.connect_key_pressed(move |_, key, _, modifiers| {
+            handle_lighttable_key(&render, key, modifiers)
+        });
+        self.filmstrip.add_controller(controller);
     }
+}
+
+fn handle_lighttable_key(
+    render: &WorkspaceRenderHandle,
+    key: gdk::Key,
+    modifiers: gdk::ModifierType,
+) -> gtk4::glib::Propagation {
+    let modifiers = SelectionModifiers::new(
+        modifiers.contains(gdk::ModifierType::CONTROL_MASK)
+            || modifiers.contains(gdk::ModifierType::SUPER_MASK),
+        modifiers.contains(gdk::ModifierType::SHIFT_MASK),
+    );
+    let action = match key {
+        gdk::Key::Left => Some(LighttableSelectionAction::Move {
+            direction: NavigationDirection::Previous,
+            modifiers,
+        }),
+        gdk::Key::Right => Some(LighttableSelectionAction::Move {
+            direction: NavigationDirection::Next,
+            modifiers,
+        }),
+        gdk::Key::Up => Some(LighttableSelectionAction::Move {
+            direction: NavigationDirection::RowPrevious,
+            modifiers,
+        }),
+        gdk::Key::Down => Some(LighttableSelectionAction::Move {
+            direction: NavigationDirection::RowNext,
+            modifiers,
+        }),
+        gdk::Key::Escape => Some(LighttableSelectionAction::Clear),
+        gdk::Key::Return | gdk::Key::KP_Enter => {
+            render.open_focused();
+            return gtk4::glib::Propagation::Stop;
+        }
+        gdk::Key::minus | gdk::Key::KP_Subtract => Some(LighttableSelectionAction::SetZoom(
+            render.interaction.borrow().zoom().smaller(),
+        )),
+        gdk::Key::plus | gdk::Key::KP_Add => Some(LighttableSelectionAction::SetZoom(
+            render.interaction.borrow().zoom().larger(),
+        )),
+        _ => None,
+    };
+    let Some(action) = action else {
+        return gtk4::glib::Propagation::Proceed;
+    };
+    let zoom_changed = matches!(action, LighttableSelectionAction::SetZoom(_));
+    let selected = render.interaction.borrow_mut().apply(action);
+    if zoom_changed {
+        render.rerender_current();
+    } else {
+        render.sync_selection_styles();
+        if selected.is_some() {
+            render.focus_selected();
+        }
+    }
+    gtk4::glib::Propagation::Stop
 }
 
 fn build_mode_panels(
