@@ -28,7 +28,6 @@ install() {
 }
 
 install
-install --no-build
 
 [[ -x "$bundle/Contents/MacOS/RustTable" ]] || {
   printf 'canonical computer-use executable is missing\n' >&2

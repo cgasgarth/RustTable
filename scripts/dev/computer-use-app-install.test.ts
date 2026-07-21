@@ -98,13 +98,26 @@ describe('computer-use installer parsing', () => {
             path: '/repo/worktrees/one/target/release/bundle/macos/rusttable - latest.app',
           },
           { bundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER, path: '/Users/test/Applications/RustTable.app' },
+          {
+            bundleIdentifier: RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+            path: '/Users/test/.Trash/rusttable - latest-123.app',
+          },
+          {
+            bundleIdentifier: RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+            path: '/repo/fork/target/release/bundle/macos/rusttable - latest.app',
+          },
           { bundleIdentifier: 'com.example.other', path: '/repo/target/debug/bundle/macos/Other.app' },
+          { bundleIdentifier: 'com.example.other', path: '/Users/test/.Trash/Photos.app' },
           { bundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER, path: '/tmp/RustTable.app' },
         ],
+        managedDirectories: ['/Users/test/.Trash'],
+        managedRepositoryRoots: ['/repo/fork'],
         worktreePaths,
       }),
     ).toEqual([
+      '/Users/test/.Trash/rusttable - latest-123.app',
       '/Users/test/Applications/RustTable.app',
+      '/repo/fork/target/release/bundle/macos/rusttable - latest.app',
       '/repo/worktrees/one/target/release/bundle/macos/rusttable - latest.app',
     ]);
   });
