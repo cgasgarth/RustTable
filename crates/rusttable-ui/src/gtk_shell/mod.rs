@@ -8,6 +8,7 @@ mod ai_surfaces;
 mod collection_controls;
 mod darkroom;
 mod darkroom_controls;
+mod darkroom_module_actions;
 mod darkroom_modules;
 mod darkroom_status;
 mod darktable_spec;
@@ -48,9 +49,10 @@ pub use darkroom_controls::{
     ParameterValidationError,
 };
 pub use darkroom_modules::{
-    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide,
-    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column,
-    build_module_panel,
+    DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleAvailability,
+    DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide, DarkroomModuleStatus,
+    DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column, build_module_panel,
+    reference_modules,
 };
 pub use darktable_spec::{
     ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_RAIL_SCROLL_WIDGET_IDS,

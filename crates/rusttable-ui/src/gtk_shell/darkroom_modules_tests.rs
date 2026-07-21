@@ -142,6 +142,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             .map(DarkroomModuleViewModel::id)
             .collect::<Vec<_>>(),
         vec![
+            "exposure",
             "bloom",
             "soften",
             "invert",

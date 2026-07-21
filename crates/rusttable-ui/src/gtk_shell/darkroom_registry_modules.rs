@@ -16,7 +16,8 @@ use super::super::{
 
 // This is presentation order only; descriptors, parameters, ranges, and flags all come from the
 // processing registry below.
-const RAIL_OPERATION_IDS: [&str; 4] = [
+const RAIL_OPERATION_IDS: [&str; 5] = [
+    "rusttable.exposure",
     "rusttable.bloom",
     "rusttable.soften",
     "rusttable.invert",

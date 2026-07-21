@@ -2,6 +2,7 @@ mod ai_ui;
 mod catalog_preview;
 mod catalog_preview_smoke;
 mod collection_bridge;
+mod darkroom_edit;
 mod import_bridge;
 mod preview_lifecycle;
 
@@ -260,8 +261,13 @@ fn activate_application(
     let selection_collection = Rc::clone(active_collection);
     let preview = shell.darkroom_preview().clone();
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
+    let darkroom_bridge =
+        darkroom_edit::install(&shell, &catalog_controller, &preview, &preview_lifecycle);
     let export_selection = export_panel.clone();
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
+    let darkroom_selection_controller = Rc::clone(&darkroom_bridge.controller);
+    let darkroom_selection_shell = shell.clone();
+    let darkroom_selection_handler = darkroom_bridge.handler.clone();
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
         let catalog_changed = selection_controller.borrow_mut().select_photo(photo_id);
         let collection_changed = selection_collection
@@ -270,6 +276,22 @@ fn activate_application(
             .is_some_and(|collection| apply_photo_selection(collection, photo_id, modifiers));
         if !catalog_changed && !collection_changed {
             return;
+        }
+        let darkroom_modules = {
+            let mut controller = darkroom_selection_controller.borrow_mut();
+            controller.select_photo(photo_id).cloned()
+        };
+        match darkroom_modules {
+            Ok(modules) => {
+                darkroom_selection_shell
+                    .set_darkroom_module_stack(&modules, Some(darkroom_selection_handler.clone()));
+            }
+            Err(error) => {
+                darkroom_selection_shell.set_darkroom_status(&error.to_string());
+                if let Ok(modules) = rusttable_ui::reference_modules() {
+                    darkroom_selection_shell.set_darkroom_module_stack(&modules, None);
+                }
+            }
         }
         export_selection_lifecycle.borrow_mut().invalidate();
         export_selection.set_selected(true);

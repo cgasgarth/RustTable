@@ -325,6 +325,20 @@ impl GtkShell {
         &self.darkroom_preview
     }
 
+    /// Projects a controller-owned selected-photo operation stack into GTK.
+    pub fn set_darkroom_module_stack(
+        &self,
+        modules: &super::DarkroomModulesViewModel,
+        action_handler: Option<super::DarkroomModuleActionHandler>,
+    ) {
+        self.darkroom.set_module_stack(modules, action_handler);
+    }
+
+    /// Projects a controller-owned darkroom status or typed error.
+    pub fn set_darkroom_status(&self, text: &str) {
+        self.darkroom.set_status(text);
+    }
+
     /// Returns the Darktable-shaped selected-photo PNG export module.
     #[must_use]
     pub fn export_panel(&self) -> &ExportPanel {

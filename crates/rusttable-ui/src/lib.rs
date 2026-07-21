@@ -45,8 +45,9 @@ pub use external_editor::{
 };
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    CullingRestriction, DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset,
-    DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
+    CullingRestriction, DarkroomModuleAction, DarkroomModuleActionHandler,
+    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide,
+    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
     DarkroomWorkspaceViewModel, DarktableTheme, ExportAction, ExportPanel, ExportSize,
     ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
     LighttableInteractionState, LighttableLayout, LighttableLayoutAction, LighttableLayoutControls,
@@ -54,7 +55,7 @@ pub use gtk_shell::{
     LighttableSort, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
     LighttableZoom, ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel,
     NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole,
-    apply_theme_role, darktable_theme_css, install_darktable_theme,
+    apply_theme_role, darktable_theme_css, install_darktable_theme, reference_modules,
 };
 pub use import::{
     IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, IMPORT_SESSION_FOCUS_ORDER, ImportAction,
