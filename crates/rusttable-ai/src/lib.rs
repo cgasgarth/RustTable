@@ -32,7 +32,10 @@ mod workflow;
 /// Color/profile and model-space boundary used by AI workflows.
 pub mod rgb {
     pub use crate::color::{ColorProfile, ColorProfileError, ProfileKind, RgbMatrix};
+    pub use crate::rgb_service::*;
 }
+
+mod rgb_service;
 
 /// Workflow namespaces kept stable as later AI tasks are added.
 pub mod workflows;
