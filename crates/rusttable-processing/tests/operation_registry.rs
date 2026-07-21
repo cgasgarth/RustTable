@@ -150,3 +150,25 @@ fn operation_registry_reports_factory_errors_with_operation_context() {
         } if matches!(source.as_ref(), FactoryError::Operation(_))
     ));
 }
+
+#[test]
+fn operation_registry_preserves_darktable_declaration_order_for_ui_projections() {
+    let ids = builtin_registry()
+        .definitions_in_declaration_order()
+        .into_iter()
+        .map(|definition| definition.descriptor().id.compatibility_name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(ids.len(), builtin_registry().definitions().len());
+    assert_eq!(
+        &ids[..6],
+        [
+            "exposure",
+            "basicadj",
+            "linear-offset",
+            "rgbgain",
+            "invert",
+            "dither"
+        ]
+    );
+    assert_eq!(ids.last(), Some(&"colorcorrection"));
+}

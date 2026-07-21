@@ -2,8 +2,7 @@
 
 use rusttable_core::Revision;
 use rusttable_processing::descriptor::{
-    OperationDescriptor, OperationFlags, ParameterDefault, ParameterKind, graduatednd_descriptor,
-    vignette_descriptor,
+    OperationDescriptor, OperationFlags, ParameterDefault, ParameterKind,
 };
 use rusttable_processing::{DefinitionAvailability, builtin_registry};
 
@@ -14,40 +13,13 @@ use super::super::{
     DarkroomModuleViewModel, DarkroomModulesViewModel,
 };
 
-// This is presentation order only; descriptors, parameters, ranges, and flags all come from the
-// processing registry below.
-const RAIL_OPERATION_IDS: [&str; 5] = [
-    "rusttable.exposure",
-    "rusttable.bloom",
-    "rusttable.soften",
-    "rusttable.invert",
-    "rusttable.dither",
-];
-
-const DARKTABLE_OPERATION_IDS: [&str; 2] = ["graduatednd", "vignette"];
-
 pub(super) fn modules_from_registry() -> Result<DarkroomModulesViewModel, DarkroomModuleError> {
-    debug_assert_eq!(DARKTABLE_OPERATION_IDS.len(), 2);
     let registry = builtin_registry();
-    let mut modules = RAIL_OPERATION_IDS
-        .iter()
-        .filter_map(|id| registry.definition(id))
+    let modules = registry
+        .definitions_in_declaration_order()
+        .into_iter()
         .map(module_from_definition)
         .collect::<Vec<_>>();
-    modules.extend([
-        module_from_descriptor(
-            &graduatednd_descriptor(),
-            DarkroomModuleAvailability::Unsupported {
-                reason: "processing evaluator is not included in this UI slice".to_owned(),
-            },
-        ),
-        module_from_descriptor(
-            &vignette_descriptor(),
-            DarkroomModuleAvailability::Unsupported {
-                reason: "processing evaluator is not included in this UI slice".to_owned(),
-            },
-        ),
-    ]);
     DarkroomModulesViewModel::new(modules)
 }
 
@@ -81,6 +53,12 @@ fn module_from_descriptor(
         controls.extend(control_from_parameter(id, parameter));
     }
     let title = operation_title(descriptor);
+    let group_key = descriptor
+        .ui
+        .as_ref()
+        .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
+    let favorite = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
+    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN);
     let module = DarkroomModuleViewModel::new(
         id,
         title,
@@ -92,34 +70,13 @@ fn module_from_descriptor(
         controls,
     )
     .expect("registry descriptor projects to a valid darkroom module")
-    .with_availability(availability);
-    if id == "graduatednd" {
-        module.with_presets(graduatednd_presets())
-    } else if id == "vignette" {
-        module.with_presets(vec![DarkroomModulePreset::new(
-            "lomo",
-            "lomo",
-            vec![
-                (
-                    "vignette-scale".to_owned(),
-                    DarkroomControlValue::Slider(40.0),
-                ),
-                (
-                    "vignette-falloff-scale".to_owned(),
-                    DarkroomControlValue::Slider(100.0),
-                ),
-                (
-                    "vignette-brightness".to_owned(),
-                    DarkroomControlValue::Slider(-1.0),
-                ),
-                (
-                    "vignette-saturation".to_owned(),
-                    DarkroomControlValue::Slider(0.5),
-                ),
-            ],
-        )])
-    } else {
-        module
+    .with_availability(availability)
+    .with_registry_metadata(group_key, favorite, hidden);
+    match id {
+        "graduatednd" => module.with_presets(graduatednd_presets()),
+        "relight" => module.with_presets(relight_presets()),
+        "vignette" => module.with_presets(vignette_presets()),
+        _ => module,
     }
 }
 
@@ -197,6 +154,15 @@ fn control_from_parameter(
                 )
             })
             .collect(),
+        (ParameterKind::Text { maximum_bytes }, ParameterDefault::Text(default)) => {
+            vec![DarkroomControlViewModel::text(
+                control_id,
+                label,
+                default.clone(),
+                default.clone(),
+                usize::from(*maximum_bytes),
+            )]
+        }
         _ => Vec::new(),
     };
     result.into_iter().filter_map(Result::ok).collect()
@@ -207,108 +173,116 @@ fn ui_parameter_id(parameter_id: &str) -> String {
 }
 
 fn graduatednd_presets() -> Vec<DarkroomModulePreset> {
-    [
-        ("nd2-soft", "neutral gray | ND2 (soft)", 1.0, 0.0, 0.0, 0.0),
-        ("nd4-soft", "neutral gray | ND4 (soft)", 2.0, 0.0, 0.0, 0.0),
-        ("nd8-soft", "neutral gray | ND8 (soft)", 3.0, 0.0, 0.0, 0.0),
-        ("nd2-hard", "neutral gray | ND2 (hard)", 1.0, 75.0, 0.0, 0.0),
-        ("nd4-hard", "neutral gray | ND4 (hard)", 2.0, 75.0, 0.0, 0.0),
-        ("nd8-hard", "neutral gray | ND8 (hard)", 3.0, 75.0, 0.0, 0.0),
-        (
-            "orange-nd2-soft",
-            "tinted | orange ND2 (soft)",
-            1.0,
-            0.0,
-            0.102_439,
-            0.8,
-        ),
-        (
-            "yellow-nd2-soft",
-            "tinted | yellow ND2 (soft)",
-            1.0,
-            0.0,
-            0.151_220,
-            0.5,
-        ),
-        (
-            "purple-nd2-soft",
-            "tinted | purple ND2 (soft)",
-            1.0,
-            0.0,
-            0.824_390,
-            0.5,
-        ),
-        (
-            "green-nd2-soft",
-            "tinted | green ND2 (soft)",
-            1.0,
-            0.0,
-            0.302_439,
-            0.5,
-        ),
-        (
-            "red-nd2-soft",
-            "tinted | red ND2 (soft)",
-            1.0,
-            0.0,
-            0.0,
-            0.5,
-        ),
-        (
-            "blue-nd2-soft",
-            "tinted | blue ND2 (soft)",
-            1.0,
-            0.0,
-            0.663_415,
-            0.5,
-        ),
-        (
-            "brown-nd4-soft",
-            "tinted | brown ND4 (soft)",
-            2.0,
-            0.0,
-            0.082_927,
-            0.25,
-        ),
-    ]
-    .into_iter()
-    .map(|(id, label, density, hardness, hue, saturation)| {
-        DarkroomModulePreset::new(
-            id,
-            label,
-            vec![
-                (
-                    "graduatednd-density".to_owned(),
-                    DarkroomControlValue::Slider(density),
-                ),
-                (
-                    "graduatednd-hardness".to_owned(),
-                    DarkroomControlValue::Slider(hardness),
-                ),
-                (
-                    "graduatednd-rotation".to_owned(),
-                    DarkroomControlValue::Slider(0.0),
-                ),
-                (
-                    "graduatednd-offset".to_owned(),
-                    DarkroomControlValue::Slider(50.0),
-                ),
-                (
-                    "graduatednd-hue".to_owned(),
-                    DarkroomControlValue::Slider(hue),
-                ),
-                (
-                    "graduatednd-saturation".to_owned(),
-                    DarkroomControlValue::Slider(saturation),
-                ),
-            ],
-        )
-    })
-    .collect()
+    rusttable_processing::operations::graduatednd::presets()
+        .iter()
+        .map(|preset| {
+            let parameters = preset.parameters;
+            DarkroomModulePreset::new(
+                preset.name,
+                preset.name,
+                [
+                    ("graduatednd-density", parameters.density),
+                    ("graduatednd-hardness", parameters.hardness),
+                    ("graduatednd-rotation", parameters.rotation),
+                    ("graduatednd-offset", parameters.offset),
+                    ("graduatednd-hue", parameters.hue),
+                    ("graduatednd-saturation", parameters.saturation),
+                ]
+                .into_iter()
+                .map(|(id, value)| {
+                    (
+                        id.to_owned(),
+                        DarkroomControlValue::Slider(f64::from(value)),
+                    )
+                })
+                .collect(),
+            )
+        })
+        .collect()
+}
+
+fn relight_presets() -> Vec<DarkroomModulePreset> {
+    rusttable_processing::operations::relight::presets()
+        .iter()
+        .map(|preset| {
+            let parameters = preset.parameters;
+            DarkroomModulePreset::new(
+                preset.name,
+                preset.name,
+                [
+                    ("relight-ev", parameters.ev),
+                    ("relight-center", parameters.center),
+                    ("relight-width", parameters.width),
+                ]
+                .into_iter()
+                .map(|(id, value)| {
+                    (
+                        id.to_owned(),
+                        DarkroomControlValue::Slider(f64::from(value)),
+                    )
+                })
+                .collect(),
+            )
+        })
+        .collect()
+}
+
+fn vignette_presets() -> Vec<DarkroomModulePreset> {
+    rusttable_processing::operations::vignette::presets()
+        .iter()
+        .map(|preset| {
+            let parameters = preset.parameters;
+            DarkroomModulePreset::new(
+                preset.name,
+                preset.name,
+                [
+                    ("vignette-scale", parameters.scale),
+                    ("vignette-falloff-scale", parameters.falloff_scale),
+                    ("vignette-brightness", parameters.brightness),
+                    ("vignette-saturation", parameters.saturation),
+                    ("vignette-center-x", parameters.center[0]),
+                    ("vignette-center-y", parameters.center[1]),
+                    ("vignette-whratio", parameters.whratio),
+                    ("vignette-shape", parameters.shape),
+                ]
+                .into_iter()
+                .map(|(id, value)| {
+                    (
+                        id.to_owned(),
+                        DarkroomControlValue::Slider(f64::from(value)),
+                    )
+                })
+                .chain([
+                    (
+                        "vignette-autoratio".to_owned(),
+                        DarkroomControlValue::Toggle(parameters.autoratio),
+                    ),
+                    (
+                        "vignette-unbound".to_owned(),
+                        DarkroomControlValue::Toggle(parameters.unbound),
+                    ),
+                    (
+                        "vignette-dithering".to_owned(),
+                        DarkroomControlValue::Slider(f64::from(parameters.dithering as u8)),
+                    ),
+                ])
+                .collect(),
+            )
+        })
+        .collect()
 }
 
 fn operation_title(descriptor: &OperationDescriptor) -> String {
-    let mut title = title_case(&descriptor.id.compatibility_name);
+    let mut title = descriptor.ui.as_ref().map_or_else(
+        || title_case(&descriptor.id.compatibility_name),
+        |ui| {
+            title_case(
+                ui.label_key
+                    .strip_prefix("operation.")
+                    .unwrap_or(&ui.label_key),
+            )
+        },
+    );
     if descriptor
         .capability
         .modes
@@ -317,10 +291,21 @@ fn operation_title(descriptor: &OperationDescriptor) -> String {
     {
         title.push_str(" or posterize");
     }
-    if descriptor.id.compatibility_name == "invert" {
-        title.push_str(" / fill light");
-    }
     title
+}
+
+fn fallback_group_key(descriptor: &OperationDescriptor) -> String {
+    if descriptor.flags.contains(OperationFlags::GEOMETRY) {
+        "group.corrective".to_owned()
+    } else if descriptor.flags.contains(OperationFlags::COLOR) {
+        "group.color".to_owned()
+    } else {
+        match descriptor.stage.as_str() {
+            "input-color" | "output-color" => "group.color".to_owned(),
+            "display-linear" => "group.effects".to_owned(),
+            _ => "group.basic".to_owned(),
+        }
+    }
 }
 
 fn parameter_label(id: &str) -> String {
@@ -344,7 +329,9 @@ fn title_case(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use rusttable_processing::builtin_registry;
-    use rusttable_processing::descriptor::OperationFlags;
+    use rusttable_processing::descriptor::{OperationFlags, exposure_descriptor};
+
+    use crate::presentation::darkroom_controls::{DarkroomControlKind, DarkroomControlValue};
 
     use super::modules_from_registry;
 
@@ -358,7 +345,30 @@ mod tests {
         assert!(modules.module("dither").is_some());
         let invert = modules.module("invert").expect("invert");
         assert!(invert.availability().is_deprecated());
-        assert_eq!(invert.title(), "Invert / fill light");
+        assert_eq!(invert.title(), "Invert");
+        assert!(modules.module("temperature").is_some());
+        assert!(modules.module("lenscorrection").is_some());
+        assert!(modules.module("colorin").is_some());
+        assert!(modules.module("colorout").is_some());
+        let colorin = modules.module("colorin").expect("colorin");
+        let input_profile = colorin
+            .controls()
+            .control("colorin-input-profile")
+            .expect("input profile");
+        assert_eq!(input_profile.kind(), DarkroomControlKind::Text);
+        assert_eq!(
+            input_profile.value(),
+            DarkroomControlValue::Text("builtin:srgb".to_owned())
+        );
+        assert!(modules.module("graduatednd").is_some());
+        assert!(modules.module("vignette").is_some());
+        assert!(modules.module("grain").expect("grain").is_favorite());
+        assert!(
+            modules
+                .module("finalscale")
+                .expect("finalscale")
+                .is_hidden()
+        );
     }
 
     #[test]
@@ -368,9 +378,23 @@ mod tests {
             .iter()
             .map(|definition| definition.descriptor().id.rust_id.as_str())
             .collect::<Vec<_>>();
-        for id in super::RAIL_OPERATION_IDS {
-            assert!(registry_ids.contains(&id));
-        }
+        let module_ids = modules_from_registry()
+            .expect("modules")
+            .right_modules()
+            .map(|module| {
+                *registry_ids
+                    .iter()
+                    .find(|rust_id| {
+                        builtin_registry()
+                            .definition(rust_id)
+                            .is_some_and(|definition| {
+                                definition.descriptor().id.compatibility_name == module.id()
+                            })
+                    })
+                    .expect("module has registry identity")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(module_ids.len(), registry_ids.len());
         assert!(
             builtin_registry()
                 .definition("rusttable.invert")
@@ -378,6 +402,22 @@ mod tests {
                 .descriptor()
                 .flags
                 .contains(OperationFlags::HIDDEN)
+        );
+    }
+
+    #[test]
+    fn registry_projection_keeps_unavailable_operations_truthful() {
+        let module = super::module_from_descriptor(
+            &exposure_descriptor(),
+            super::DarkroomModuleAvailability::Unsupported {
+                reason: "CPU backend unavailable".to_owned(),
+            },
+        );
+        assert!(!module.enabled());
+        assert!(module.availability().is_unsupported());
+        assert_eq!(
+            module.status_text(),
+            "Unavailable · CPU backend unavailable"
         );
     }
 }

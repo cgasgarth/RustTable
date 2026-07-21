@@ -245,6 +245,9 @@ fn parameter_value_to_control(
             };
             DarkroomControlValue::Choice(index)
         }
+        (DarkroomControlKind::Text, ParameterValue::Text(value)) => {
+            DarkroomControlValue::Text(value.as_str().to_owned())
+        }
         _ => {
             return Err(persistence_error(
                 "persisted parameter type mismatches the control",
@@ -324,6 +327,9 @@ fn parameter_from_control(
             .nth(value)
             .and_then(|choice| ParameterText::new(choice.as_str()).ok())
             .map(ParameterValue::Text),
+        (DarkroomControlValue::Text(value), ParameterValue::Text(_)) => {
+            ParameterText::new(value).ok().map(ParameterValue::Text)
+        }
         _ => None,
     }
 }
@@ -412,6 +418,71 @@ mod tests {
             operation.parameter(&ParameterName::new("stops").expect("parameter")),
             Some(&ParameterValue::Scalar(
                 FiniteF64::new(2.0).expect("finite")
+            ))
+        );
+    }
+
+    #[test]
+    fn registry_modules_project_and_persist_non_exposure_actions_through_history() {
+        let original = Edit::from_parts(
+            EditId::new(4).expect("edit id"),
+            PhotoId::new(2).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(4),
+            [Operation::new_with_opacity(
+                OperationId::new(9).expect("operation id"),
+                OperationKey::new("rusttable.bloom").expect("operation key"),
+                true,
+                OperationOpacity::ONE,
+                [
+                    (
+                        ParameterName::new("size").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(20.0).expect("finite")),
+                    ),
+                    (
+                        ParameterName::new("threshold").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(90.0).expect("finite")),
+                    ),
+                    (
+                        ParameterName::new("strength").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(25.0).expect("finite")),
+                    ),
+                ],
+            )
+            .expect("operation")],
+        )
+        .expect("edit");
+        let mut modules = project_edit(&original).expect("registry projection");
+        assert_eq!(
+            modules.right_modules().len(),
+            builtin_registry().definitions().len()
+        );
+        let module = modules.module_mut("bloom").expect("bloom module");
+        module
+            .apply(DarkroomModuleAction::Control {
+                module_id: "bloom".to_owned(),
+                expected_revision: Revision::from_u64(4),
+                id: "bloom-strength".to_owned(),
+                value: DarkroomControlValue::Slider(50.0),
+            })
+            .expect("bloom action");
+        let operations = rewrite_operations(
+            &original,
+            module,
+            &DarkroomModuleAction::Control {
+                module_id: "bloom".to_owned(),
+                expected_revision: Revision::from_u64(4),
+                id: "bloom-strength".to_owned(),
+                value: DarkroomControlValue::Slider(50.0),
+            },
+        )
+        .expect("rewrite");
+        let replacement = original.revised(operations).expect("history revision");
+        let operation = replacement.operations().next().expect("operation");
+        assert_eq!(
+            operation.parameter(&ParameterName::new("strength").expect("parameter")),
+            Some(&ParameterValue::Scalar(
+                FiniteF64::new(50.0).expect("finite")
             ))
         );
     }

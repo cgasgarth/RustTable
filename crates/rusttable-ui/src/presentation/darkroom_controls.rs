@@ -85,23 +85,26 @@ pub enum DarkroomControlKind {
     Slider,
     Choice,
     Toggle,
+    Text,
 }
 
 /// Typed value carried by one GTK control.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DarkroomControlValue {
     Slider(f64),
     Choice(usize),
     Toggle(bool),
+    Text(String),
 }
 
 impl DarkroomControlValue {
     #[must_use]
-    pub const fn kind(self) -> DarkroomControlKind {
+    pub const fn kind(&self) -> DarkroomControlKind {
         match self {
             Self::Slider(_) => DarkroomControlKind::Slider,
             Self::Choice(_) => DarkroomControlKind::Choice,
             Self::Toggle(_) => DarkroomControlKind::Toggle,
+            Self::Text(_) => DarkroomControlKind::Text,
         }
     }
 }
@@ -153,6 +156,7 @@ pub struct DarkroomControlViewModel {
     default: DarkroomControlValue,
     slider: Option<SliderSpec>,
     choices: Vec<PresentationText>,
+    text_max_bytes: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -171,6 +175,10 @@ pub enum ControlValidationError {
     ChoiceIndexOutOfRange {
         index: usize,
         choices: usize,
+    },
+    TextTooLong {
+        byte_length: usize,
+        maximum: usize,
     },
     ControlValueTypeMismatch {
         expected: DarkroomControlKind,
@@ -204,6 +212,13 @@ impl fmt::Display for ControlValidationError {
                     "choice index {index} is outside {choices} options"
                 )
             }
+            Self::TextTooLong {
+                byte_length,
+                maximum,
+            } => write!(
+                formatter,
+                "text is {byte_length} bytes, maximum is {maximum}"
+            ),
             Self::ControlValueTypeMismatch { expected, actual } => {
                 write!(
                     formatter,
@@ -250,6 +265,7 @@ impl DarkroomControlViewModel {
                 default,
             }),
             choices: Vec::new(),
+            text_max_bytes: None,
         })
     }
 
@@ -293,6 +309,7 @@ impl DarkroomControlViewModel {
             default: DarkroomControlValue::Choice(selected),
             slider: None,
             choices,
+            text_max_bytes: None,
         })
     }
 
@@ -317,6 +334,37 @@ impl DarkroomControlViewModel {
             default: DarkroomControlValue::Toggle(default),
             slider: None,
             choices: Vec::new(),
+            text_max_bytes: None,
+        })
+    }
+
+    /// Builds a bounded text control for registry parameters such as color profiles.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the id, label, or either text value is invalid.
+    pub fn text(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        value: impl Into<String>,
+        default: impl Into<String>,
+        maximum_bytes: usize,
+    ) -> Result<Self, ControlValidationError> {
+        let id = ControlId::new(id).map_err(ControlValidationError::InvalidId)?;
+        let label = PresentationText::new(label).map_err(ControlValidationError::InvalidLabel)?;
+        let value = value.into();
+        let default = default.into();
+        validate_text(&value, maximum_bytes)?;
+        validate_text(&default, maximum_bytes)?;
+        Ok(Self {
+            id,
+            label,
+            kind: DarkroomControlKind::Text,
+            value: DarkroomControlValue::Text(value),
+            default: DarkroomControlValue::Text(default),
+            slider: None,
+            choices: Vec::new(),
+            text_max_bytes: Some(maximum_bytes),
         })
     }
 
@@ -336,13 +384,13 @@ impl DarkroomControlViewModel {
     }
 
     #[must_use]
-    pub const fn value(&self) -> DarkroomControlValue {
-        self.value
+    pub fn value(&self) -> DarkroomControlValue {
+        self.value.clone()
     }
 
     #[must_use]
-    pub const fn default_value(&self) -> DarkroomControlValue {
-        self.default
+    pub fn default_value(&self) -> DarkroomControlValue {
+        self.default.clone()
     }
 
     #[must_use]
@@ -375,23 +423,30 @@ impl DarkroomControlViewModel {
                 actual: value.kind(),
             });
         }
-        if let DarkroomControlValue::Slider(value) = value {
+        if let DarkroomControlValue::Slider(value) = &value {
             let slider = self.slider.expect("slider controls carry slider metadata");
-            validate_slider(slider.minimum, slider.maximum, slider.step, value)?;
+            validate_slider(slider.minimum, slider.maximum, slider.step, *value)?;
         }
-        if let DarkroomControlValue::Choice(index) = value
-            && index >= self.choices.len()
+        if let DarkroomControlValue::Choice(index) = &value
+            && *index >= self.choices.len()
         {
             return Err(ControlValidationError::ChoiceIndexOutOfRange {
-                index,
+                index: *index,
                 choices: self.choices.len(),
             });
+        }
+        if let DarkroomControlValue::Text(value) = &value {
+            validate_text(
+                value,
+                self.text_max_bytes
+                    .expect("text controls carry a byte bound"),
+            )?;
         }
         let changed = self.value != value;
         self.value = value;
         if let Some(slider) = &mut self.slider {
-            slider.value = match value {
-                DarkroomControlValue::Slider(value) => value,
+            slider.value = match &self.value {
+                DarkroomControlValue::Slider(value) => *value,
                 _ => slider.value,
             };
         }
@@ -401,7 +456,7 @@ impl DarkroomControlViewModel {
     /// Restores the control's construction-time default.
     pub fn reset(&mut self) -> bool {
         let changed = self.value != self.default;
-        self.value = self.default;
+        self.value = self.default.clone();
         if let Some(slider) = &mut self.slider {
             slider.value = slider.default;
         }
@@ -428,6 +483,16 @@ fn validate_slider(
         return Err(ControlValidationError::SliderValueOutOfRange {
             value,
             minimum,
+            maximum,
+        });
+    }
+    Ok(())
+}
+
+fn validate_text(value: &str, maximum: usize) -> Result<(), ControlValidationError> {
+    if value.len() > maximum {
+        return Err(ControlValidationError::TextTooLong {
+            byte_length: value.len(),
             maximum,
         });
     }
@@ -756,6 +821,30 @@ mod tests {
         assert!(matches!(
             duplicate,
             Err(ControlValidationError::DuplicateControlId(_))
+        ));
+    }
+
+    #[test]
+    fn text_controls_keep_registry_values_typed_and_bounded() {
+        let mut control = DarkroomControlViewModel::text(
+            "profile",
+            "Profile",
+            "builtin:srgb",
+            "builtin:srgb",
+            32,
+        )
+        .expect("valid text control");
+        assert_eq!(control.kind(), DarkroomControlKind::Text);
+        control
+            .set_value(DarkroomControlValue::Text("builtin:display".to_owned()))
+            .expect("text edit");
+        assert_eq!(
+            control.value(),
+            DarkroomControlValue::Text("builtin:display".to_owned())
+        );
+        assert!(matches!(
+            control.set_value(DarkroomControlValue::Text("x".repeat(33))),
+            Err(ControlValidationError::TextTooLong { .. })
         ));
     }
 }

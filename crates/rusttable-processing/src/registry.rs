@@ -548,6 +548,7 @@ impl PreparedCpuOperation {
 pub struct RegistrySnapshot {
     definitions: Vec<OperationDefinition>,
     by_rust_id: BTreeMap<String, usize>,
+    declaration_order: Vec<String>,
     identity_hash: [u8; 32],
 }
 
@@ -559,6 +560,10 @@ impl RegistrySnapshot {
     /// Returns all deterministic definition validation findings when publication is invalid.
     pub fn try_new(factories: &[OperationDefinitionFactory]) -> Result<Self, RegistryBuildError> {
         let mut definitions: Vec<_> = factories.iter().map(|factory| factory()).collect();
+        let declaration_order = definitions
+            .iter()
+            .map(|definition| definition.descriptor.id.rust_id.clone())
+            .collect::<Vec<_>>();
         definitions.sort_by(|left, right| left.descriptor.id.cmp(&right.descriptor.id));
         let mut findings = Vec::new();
         let mut identities = BTreeSet::new();
@@ -583,6 +588,7 @@ impl RegistrySnapshot {
         Ok(Self {
             definitions,
             by_rust_id,
+            declaration_order,
             identity_hash,
         })
     }
@@ -607,6 +613,18 @@ impl RegistrySnapshot {
         self.by_rust_id
             .get(rust_id)
             .map(|index| &self.definitions[*index])
+    }
+
+    /// Returns definitions in the registry's declared darktable processing order.
+    ///
+    /// The canonical definition slice remains identity-sorted for stable lookup and hashing;
+    /// this projection preserves the separate order used by darkroom module discovery.
+    #[must_use]
+    pub fn definitions_in_declaration_order(&self) -> Vec<&OperationDefinition> {
+        self.declaration_order
+            .iter()
+            .filter_map(|rust_id| self.definition(rust_id))
+            .collect()
     }
 
     /// Prepares an operation using the definition selected by its permanent identity.

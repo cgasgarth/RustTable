@@ -50,9 +50,9 @@ pub use darkroom_controls::{
 };
 pub use darkroom_modules::{
     DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleAvailability,
-    DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide, DarkroomModuleStatus,
-    DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column, build_module_panel,
-    reference_modules,
+    DarkroomModuleError, DarkroomModuleGroup, DarkroomModulePreset, DarkroomModuleSide,
+    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column,
+    build_module_panel, reference_modules,
 };
 pub use darktable_spec::{
     ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_RAIL_SCROLL_WIDGET_IDS,

@@ -51,8 +51,8 @@ pub use external_editor::{
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     CullingRestriction, DarkroomModuleAction, DarkroomModuleActionHandler,
-    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide,
-    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
+    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModuleGroup, DarkroomModulePreset,
+    DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
     DarkroomWorkspaceViewModel, DarktableTheme, ExportAction, ExportPanel, ExportSize,
     ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
     LighttableInteractionState, LighttableLayout, LighttableLayoutAction, LighttableLayoutControls,

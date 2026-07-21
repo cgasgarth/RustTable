@@ -135,6 +135,34 @@ pub(super) fn build_control_row(
             }
             row.append(&toggle);
         }
+        DarkroomControlKind::Text => {
+            let entry = gtk4::Entry::new();
+            if let DarkroomControlValue::Text(value) = control.value() {
+                entry.set_text(&value);
+            }
+            entry.set_sensitive(module_enabled);
+            entry.set_hexpand(true);
+            entry.set_tooltip_text(Some(control.label().as_str()));
+            identify_control(&entry, control, "Edit text");
+            if let Some(handler) = action_handler {
+                let id = control.id().to_string();
+                entry.connect_changed(move |entry| {
+                    dispatch_module_action(
+                        &handler,
+                        &status,
+                        &recover,
+                        &current_revision,
+                        DarkroomModuleAction::Control {
+                            module_id: module_id.clone(),
+                            expected_revision: *current_revision.borrow(),
+                            id: id.clone(),
+                            value: DarkroomControlValue::Text(entry.text().to_string()),
+                        },
+                    );
+                });
+            }
+            row.append(&entry);
+        }
     }
     row
 }

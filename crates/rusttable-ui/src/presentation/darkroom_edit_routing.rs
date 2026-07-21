@@ -83,8 +83,8 @@ impl DarkroomEditCommand {
     }
 
     #[must_use]
-    pub const fn value(&self) -> DarkroomControlValue {
-        self.value
+    pub fn value(&self) -> DarkroomControlValue {
+        self.value.clone()
     }
 }
 

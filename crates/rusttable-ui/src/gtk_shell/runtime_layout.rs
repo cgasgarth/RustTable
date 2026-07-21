@@ -9,7 +9,7 @@ use crate::external_editor::ExternalEditorPanel;
 use crate::import::ImportSessionPanel;
 use crate::neural_restore::NeuralRestorePanel;
 
-use super::darkroom::DarkroomModuleGroup;
+use super::darkroom_modules::DarkroomModuleGroup;
 use super::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use super::lighttable::empty_collection_state;
 use super::{
@@ -320,9 +320,7 @@ pub(super) fn render_modules<'a>(
     clear_children(container);
     let mut rendered = 0;
     for (index, module) in modules.enumerate() {
-        if group.is_some_and(|group| !group.matches_title(module.title().as_str())) {
-            continue;
-        }
+        let _ = group;
         container.append(&module_expander(module, index));
         rendered += 1;
     }
