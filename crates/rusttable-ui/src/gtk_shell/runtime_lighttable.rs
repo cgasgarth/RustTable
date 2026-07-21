@@ -59,6 +59,12 @@ struct PhotoSelectionContext {
     photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PhotoSurface {
+    Grid,
+    Filmstrip,
+}
+
 impl WorkspaceRenderHandle {
     #[allow(clippy::too_many_lines)]
     pub(super) fn render(
@@ -162,8 +168,20 @@ impl WorkspaceRenderHandle {
             if thumbnails.set_state(&thumbnail_state).is_err() {
                 thumbnails.set_failed();
             }
-            connect_photo_selection(&card, photo.id(), detail.clone(), &selection);
-            connect_photo_selection(&filmstrip_item, photo.id(), detail, &selection);
+            connect_photo_selection(
+                &card,
+                photo.id(),
+                detail.clone(),
+                PhotoSurface::Grid,
+                &selection,
+            );
+            connect_photo_selection(
+                &filmstrip_item,
+                photo.id(),
+                detail,
+                PhotoSurface::Filmstrip,
+                &selection,
+            );
             if display_ids.contains(&photo.id()) {
                 self.lighttable.insert(&card, -1);
                 rendered_photos += 1;
@@ -228,20 +246,57 @@ impl WorkspaceRenderHandle {
         else {
             return;
         };
-        self.open_photo(photo_id);
-    }
-
-    fn open_photo(&self, photo_id: PhotoId) {
         let Some(detail) = self.photo_details.borrow().get(&photo_id).cloned() else {
             return;
         };
-        show_photo_detail(&self.darkroom_preview, &detail);
+        self.open_photo(photo_id, &detail);
+    }
+
+    pub(super) fn move_focus(
+        &self,
+        direction: super::NavigationDirection,
+        modifiers: SelectionModifiers,
+    ) -> Option<PhotoId> {
+        let previous_focus = self.interaction.borrow().focus();
+        let photo_id = self
+            .interaction
+            .borrow_mut()
+            .apply(LighttableSelectionAction::Move {
+                direction,
+                modifiers,
+            })?;
+        self.sync_selection_styles();
+        self.focus_selected();
+
+        let darkroom_visible = self.workspace.visible_child_name().as_deref()
+            == Some(WorkspaceRole::Darkroom.stack_name());
+        if darkroom_visible && previous_focus != Some(photo_id) {
+            let _ = self
+                .interaction
+                .borrow_mut()
+                .apply(LighttableSelectionAction::Select {
+                    photo_id,
+                    modifiers: SelectionModifiers::default(),
+                });
+            self.sync_selection_styles();
+            if let Some(detail) = self.photo_details.borrow().get(&photo_id).cloned() {
+                self.open_photo(photo_id, &detail);
+            }
+        }
+        Some(photo_id)
+    }
+
+    fn open_photo(&self, photo_id: PhotoId, detail: &PhotoDetailViewModel) {
+        show_photo_detail(&self.darkroom_preview, detail);
+        self.darkroom.set_detail(detail);
+        self.darkroom
+            .set_status(&format!("selected · {}", detail.title().as_str()));
         self.export_panel.set_selected(true);
         self.external_editor_panel.set_selection(1);
         self.workspace
             .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
         if let Some(handler) = self.photo_selected.borrow().as_ref() {
-            handler(photo_id);
+            handler(photo_id, SelectionModifiers::default());
         }
     }
 }
@@ -270,6 +325,7 @@ fn connect_photo_selection(
     button: &gtk4::Button,
     photo_id: PhotoId,
     _detail: PhotoDetailViewModel,
+    surface: PhotoSurface,
     context: &PhotoSelectionContext,
 ) {
     let photo_details = Rc::clone(&context.photo_details);
@@ -284,8 +340,15 @@ fn connect_photo_selection(
                 || state.contains(gdk::ModifierType::SUPER_MASK),
             state.contains(gdk::ModifierType::SHIFT_MASK),
         );
-        select_photo(&button_for_gesture, photo_id, modifiers, &selection);
-        if n_press >= 2
+        select_photo(
+            &button_for_gesture,
+            photo_id,
+            modifiers,
+            surface,
+            &selection,
+        );
+        if surface == PhotoSurface::Grid
+            && n_press >= 2
             && let Some(detail) = photo_details.borrow().get(&photo_id)
         {
             open_photo(&selection, photo_id, detail);
@@ -309,6 +372,7 @@ fn connect_photo_selection(
                     || modifiers.contains(gdk::ModifierType::SUPER_MASK),
                 modifiers.contains(gdk::ModifierType::SHIFT_MASK),
             ),
+            surface,
             &selection,
         );
         gtk4::glib::Propagation::Stop
@@ -328,7 +392,7 @@ fn open_photo(context: &PhotoSelectionContext, photo_id: PhotoId, detail: &Photo
     context.export_panel.set_selected(true);
     context.external_editor_panel.set_selection(1);
     if let Some(handler) = context.photo_selected.borrow().as_ref() {
-        handler(photo_id);
+        handler(photo_id, SelectionModifiers::default());
     }
 }
 
@@ -336,6 +400,7 @@ fn select_photo(
     button: &gtk4::Button,
     photo_id: PhotoId,
     modifiers: SelectionModifiers,
+    surface: PhotoSurface,
     context: &PhotoSelectionContext,
 ) {
     let _ = context
@@ -347,7 +412,9 @@ fn select_photo(
         });
     let state = context.interaction.borrow();
     sync_photo_buttons(&context.photo_tiles.borrow(), &state);
-    if let Some(detail) = context.photo_details.borrow().get(&photo_id) {
+    let detail = context.photo_details.borrow().get(&photo_id).cloned();
+    if let Some(detail) = detail.as_ref() {
+        show_photo_detail(&context.darkroom_preview, detail);
         context.darkroom.set_detail(detail);
         context
             .darkroom
@@ -361,8 +428,14 @@ fn select_photo(
         .set_selection(state.selected_count());
     drop(state);
     button.grab_focus();
-    if let Some(handler) = context.photo_selected.borrow().as_ref() {
-        handler(photo_id);
+    let darkroom_visible = context.workspace.visible_child_name().as_deref()
+        == Some(WorkspaceRole::Darkroom.stack_name());
+    if surface == PhotoSurface::Filmstrip && darkroom_visible {
+        if let Some(detail) = detail.as_ref() {
+            open_photo(context, photo_id, detail);
+        }
+    } else if let Some(handler) = context.photo_selected.borrow().as_ref() {
+        handler(photo_id, modifiers);
     }
 }
 

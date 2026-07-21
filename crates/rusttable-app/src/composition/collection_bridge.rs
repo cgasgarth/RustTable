@@ -1,6 +1,6 @@
 use rusttable_ui::{
     CollectionControlAction, CollectionControlState, CollectionFilterState, CollectionProperty,
-    LighttableToolbarAction,
+    LighttableToolbarAction, SelectionModifiers,
 };
 
 use crate::gtk_controller::{CollectionController, CollectionSnapshot};
@@ -41,6 +41,20 @@ pub(super) fn apply_lighttable_toolbar_action(
             controller.toggle_selected_color_label(label);
         }
         LighttableToolbarAction::ClearReset => controller.clear_reset(),
+    }
+}
+
+pub(super) fn apply_photo_selection(
+    controller: &mut CollectionController,
+    photo_id: rusttable_core::PhotoId,
+    modifiers: SelectionModifiers,
+) -> bool {
+    if modifiers.range() {
+        controller.select_range(photo_id, modifiers.extend())
+    } else if modifiers.extend() {
+        controller.toggle_selection(photo_id)
+    } else {
+        controller.select_only(photo_id)
     }
 }
 

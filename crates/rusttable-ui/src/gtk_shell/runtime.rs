@@ -44,7 +44,7 @@ use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus}
 
 use super::runtime_lighttable::{PhotoTilePair, WorkspaceRenderHandle};
 
-pub(super) type PhotoSelectedHandler = Box<dyn Fn(PhotoId)>;
+pub(super) type PhotoSelectedHandler = Box<dyn Fn(PhotoId, SelectionModifiers)>;
 
 type DarkroomRuntime = (
     DarkroomView,
@@ -561,7 +561,7 @@ impl GtkShell {
     /// receive the selected photo with the appropriate workspace already shown.
     pub fn set_photo_selected_handler<F>(&self, handler: F)
     where
-        F: Fn(PhotoId) + 'static,
+        F: Fn(PhotoId, SelectionModifiers) + 'static,
     {
         self.photo_selected.replace(Some(Box::new(handler)));
     }
@@ -786,7 +786,13 @@ fn handle_lighttable_key(
         return gtk4::glib::Propagation::Proceed;
     };
     let zoom_changed = matches!(action, LighttableSelectionAction::SetZoom(_));
-    let selected = render.interaction.borrow_mut().apply(action);
+    let selected = match action {
+        LighttableSelectionAction::Move {
+            direction,
+            modifiers,
+        } => render.move_focus(direction, modifiers),
+        action => render.interaction.borrow_mut().apply(action),
+    };
     if zoom_changed {
         render.rerender_current();
     } else {

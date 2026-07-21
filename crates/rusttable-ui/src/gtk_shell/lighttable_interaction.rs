@@ -541,9 +541,12 @@ impl LighttableInteractionState {
                     Some(photo_id)
                 }
             }
-            LighttableSelectionAction::OpenSelected => self
-                .focus
-                .filter(|focus| self.selected.contains(focus))
+            // Enter opens the active thumb, just as Darktable opens the image
+            // under the keyboard/mouse focus after lighttable navigation.  A
+            // focus move must not silently reopen the previous selection.
+            LighttableSelectionAction::OpenSelected => (!self.selected.is_empty())
+                .then_some(self.focus)
+                .flatten()
                 .or_else(|| self.selected_in_order().next()),
             LighttableSelectionAction::Clear => {
                 self.selected.clear();
@@ -735,6 +738,26 @@ mod tests {
         state.set_order([id(1), id(2)]);
         assert!(state.selected().next().is_none());
         assert_eq!(state.apply(LighttableSelectionAction::OpenSelected), None);
+    }
+
+    #[test]
+    fn enter_opens_the_focused_photo_after_keyboard_navigation() {
+        let mut state = state();
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(1),
+            modifiers: SelectionModifiers::default(),
+        });
+        state.apply(LighttableSelectionAction::Move {
+            direction: NavigationDirection::Next,
+            modifiers: SelectionModifiers::default(),
+        });
+
+        assert_eq!(state.focus(), Some(id(2)));
+        assert_eq!(state.selected().collect::<Vec<_>>(), vec![id(1)]);
+        assert_eq!(
+            state.apply(LighttableSelectionAction::OpenSelected),
+            Some(id(2))
+        );
     }
 
     #[test]
