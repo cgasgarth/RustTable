@@ -353,8 +353,11 @@ fn gpu_plan(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlan> {
             return None;
         }
         let gpu_operation = match operation.kind() {
-            rusttable_processing::ProcessingOperationKind::Exposure { stops } => {
-                BasicPointOperation::Exposure { stops: stops.get() }
+            rusttable_processing::ProcessingOperationKind::Exposure { stops, black } => {
+                BasicPointOperation::Exposure {
+                    stops: stops.get(),
+                    black: black.get(),
+                }
             }
             rusttable_processing::ProcessingOperationKind::LinearOffset { value } => {
                 BasicPointOperation::LinearOffset { value: value.get() }

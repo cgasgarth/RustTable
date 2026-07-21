@@ -52,6 +52,25 @@ fn exposure(id: u128, enabled: bool, stops: f64) -> Operation {
     operation(id, "rusttable.exposure", enabled, ("stops", stops))
 }
 
+fn exposure_with_black(id: u128, enabled: bool, stops: f64, black: f64) -> Operation {
+    Operation::new(
+        OperationId::new(id).expect("nonzero operation ID"),
+        OperationKey::new("rusttable.exposure").expect("valid operation key"),
+        enabled,
+        [
+            (
+                ParameterName::new("stops").expect("valid parameter name"),
+                ParameterValue::Scalar(FiniteF64::new(stops).expect("finite parameter")),
+            ),
+            (
+                ParameterName::new("black").expect("valid parameter name"),
+                ParameterValue::Scalar(FiniteF64::new(black).expect("finite parameter")),
+            ),
+        ],
+    )
+    .expect("valid operation")
+}
+
 fn offset(id: u128, enabled: bool, value: f64) -> Operation {
     operation(id, "rusttable.linear_offset", enabled, ("value", value))
 }
@@ -168,14 +187,14 @@ fn pipeline_order_is_execution_order() {
 }
 
 #[test]
-fn reports_non_finite_exposure_multiplier() {
+fn reports_invalid_exposure_scale() {
     let source = image(vec![pixel(0.5, 0.5, 0.5)]);
-    let pipeline = CompiledPipeline::compile(&edit(vec![exposure(7, true, 1024.0)]))
+    let pipeline = CompiledPipeline::compile(&edit(vec![exposure_with_black(7, true, 0.0, 1.0)]))
         .expect("finite extreme exposure compiles");
 
     assert_eq!(
         evaluate(&pipeline, &source),
-        Err(EvaluationError::NonFiniteExposureMultiplier {
+        Err(EvaluationError::InvalidExposureScale {
             step_index: PipelineStepIndex::new(0),
             operation_id: OperationId::new(7).unwrap(),
         })

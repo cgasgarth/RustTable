@@ -175,9 +175,10 @@ fn write_operation_kind(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
 
 fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
-        ProcessingOperationKind::Exposure { stops } => {
+        ProcessingOperationKind::Exposure { stops, black } => {
             hasher.update([0]);
             hasher.update(stops.get().to_bits().to_le_bytes());
+            hasher.update(black.get().to_bits().to_le_bytes());
         }
         ProcessingOperationKind::LinearOffset { value } => {
             hasher.update([1]);

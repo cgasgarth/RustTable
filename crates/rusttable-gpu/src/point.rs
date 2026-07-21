@@ -10,7 +10,7 @@ const POINT_PARAMS_BYTES: usize = 64;
 /// One operation in the basic linear-light point pipeline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BasicPointOperation {
-    Exposure { stops: f32 },
+    Exposure { stops: f32, black: f32 },
     LinearOffset { value: f32 },
     RgbGain { red: f32, green: f32, blue: f32 },
 }
@@ -28,9 +28,9 @@ impl BasicPointOperation {
         let mut bytes = [0_u8; POINT_PARAMS_BYTES];
         bytes[0..4].copy_from_slice(&pixel_count.to_le_bytes());
         let values = match self {
-            Self::Exposure { stops } => [stops, 0.0, 1.0, 1.0, 1.0, 2.2],
-            Self::LinearOffset { value } => [0.0, value, 1.0, 1.0, 1.0, 2.2],
-            Self::RgbGain { red, green, blue } => [0.0, 0.0, red, green, blue, 2.2],
+            Self::Exposure { stops, black } => [stops, 0.0, 1.0, 1.0, 1.0, 2.2, black],
+            Self::LinearOffset { value } => [0.0, value, 1.0, 1.0, 1.0, 2.2, 0.0],
+            Self::RgbGain { red, green, blue } => [0.0, 0.0, red, green, blue, 2.2, 0.0],
         };
         for (index, value) in values.into_iter().enumerate() {
             let offset = 28 + index * 4;
@@ -333,8 +333,8 @@ fn validate_request(
         return Err(BasicPointError::NonFiniteInput { component });
     }
     if request.operations.iter().any(|operation| match operation {
-        BasicPointOperation::Exposure { stops }
-        | BasicPointOperation::LinearOffset { value: stops } => !stops.is_finite(),
+        BasicPointOperation::Exposure { stops, black } => !stops.is_finite() || !black.is_finite(),
+        BasicPointOperation::LinearOffset { value } => !value.is_finite(),
         BasicPointOperation::RgbGain { red, green, blue } => {
             !red.is_finite() || !green.is_finite() || !blue.is_finite()
         }
@@ -372,6 +372,7 @@ mod tests {
         assert_eq!(&bytes[36..40], &1.0_f32.to_le_bytes());
         assert_eq!(&bytes[40..44], &2.0_f32.to_le_bytes());
         assert_eq!(&bytes[44..48], &3.0_f32.to_le_bytes());
+        assert_eq!(&bytes[52..56], &0.0_f32.to_le_bytes());
         assert_eq!(bytes.len(), 64);
     }
 
@@ -385,7 +386,10 @@ mod tests {
         }
         let input = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
         let operations = [
-            BasicPointOperation::Exposure { stops: 1.0 },
+            BasicPointOperation::Exposure {
+                stops: 1.0,
+                black: 0.0,
+            },
             BasicPointOperation::LinearOffset { value: 0.1 },
             BasicPointOperation::RgbGain {
                 red: 0.5,
@@ -407,5 +411,34 @@ mod tests {
             );
         }
         assert_eq!(result.dispatches(), 3);
+    }
+
+    #[tokio::test]
+    async fn exposure_black_level_dispatch_matches_darktable_formula() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let input = [0.5, 0.25, 0.75, 0.4];
+        let operations = [BasicPointOperation::Exposure {
+            stops: 1.0,
+            black: 0.125,
+        }];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &operations,
+            })
+            .expect("black-level point dispatch");
+        let expected = [1.0, 1.0 / 3.0, 5.0 / 3.0, 0.4];
+        for (actual, expected) in result.pixels().iter().zip(expected) {
+            assert!(
+                (actual - expected).abs() < 0.00001,
+                "{actual} != {expected}"
+            );
+        }
+        assert_eq!(result.dispatches(), 1);
     }
 }

@@ -13,7 +13,7 @@ use rusttable_core::OperationId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
-    NonFiniteExposureMultiplier {
+    InvalidExposureScale {
         step_index: PipelineStepIndex,
         operation_id: OperationId,
     },
@@ -115,20 +115,21 @@ fn apply_operation(
         return Ok(());
     }
     match operation.kind() {
-        ProcessingOperationKind::Exposure { stops } => {
-            let multiplier = FiniteF32::new(stops.get().exp2()).map_err(|_| {
-                EvaluationError::NonFiniteExposureMultiplier {
+        ProcessingOperationKind::Exposure { stops, black } => {
+            let white = (-stops.get()).exp2();
+            let scale = 1.0 / (white - black.get());
+            let scale =
+                FiniteF32::new(scale).map_err(|_| EvaluationError::InvalidExposureScale {
                     step_index,
                     operation_id,
-                }
-            })?;
+                })?;
             apply_channels(
                 pixels,
                 step_index,
                 operation_id,
                 opacity,
                 pixel_index_offset,
-                |_, value| value * multiplier.get(),
+                |_, value| (value - black.get()) * scale.get(),
             )
         }
         ProcessingOperationKind::LinearOffset { value } => apply_channels(
@@ -644,12 +645,12 @@ fn checked_channel(
 impl fmt::Display for EvaluationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NonFiniteExposureMultiplier {
+            Self::InvalidExposureScale {
                 step_index,
                 operation_id,
             } => write!(
                 formatter,
-                "operation {operation_id} at pipeline step {} has a non-finite exposure multiplier",
+                "operation {operation_id} at pipeline step {} has an invalid exposure scale",
                 step_index.get()
             ),
             Self::NonFiniteChannelResult {

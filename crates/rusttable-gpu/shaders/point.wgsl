@@ -21,7 +21,9 @@ fn exposure(@builtin(global_invocation_id) id: vec3<u32>) {
     if (!in_bounds(id.x)) { return; }
     let pixel = input_pixels[id.x];
     let multiplier = exp2(params.exposure_stops);
-    output_pixels[id.x] = preserve_alpha(pixel.rgb * multiplier, pixel.a);
+    let white = 1.0 / multiplier;
+    let scale = 1.0 / (white - params.black_level);
+    output_pixels[id.x] = preserve_alpha((pixel.rgb - vec3<f32>(params.black_level)) * scale, pixel.a);
 }
 
 @compute @workgroup_size(${WORKGROUP_SIZE}, 1, 1)

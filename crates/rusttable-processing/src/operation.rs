@@ -55,12 +55,15 @@ pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
 pub(crate) use operation_grain::compile_grain;
 pub(crate) use operation_legacy::{compile_relight, compile_shadhi};
-pub(crate) use operation_parameters::{parameter_integer, parameter_u32};
+pub(crate) use operation_parameters::{
+    compile_scalar, compile_scalar_parameter, parameter_integer, parameter_u32,
+};
 pub(crate) use operation_spatial::{compile_graduatednd, compile_vignette};
 
 pub(crate) use operation_error::compile_opacity;
 
 const EXPOSURE_PARAMETER: &str = "stops";
+const EXPOSURE_BLACK_PARAMETER: &str = "black";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
 const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
 const CROP_PARAMETERS: [&str; 6] = ["cx", "cy", "cw", "ch", "ratio_n", "ratio_d"];
@@ -79,6 +82,7 @@ pub struct ProcessingOperation {
 pub enum ProcessingOperationKind {
     Exposure {
         stops: FiniteF32,
+        black: FiniteF32,
     },
     LinearOffset {
         value: FiniteF32,
@@ -244,8 +248,36 @@ impl ProcessingOperation {
     }
 
     pub(crate) fn compile_exposure(operation: &Operation) -> Result<Self, OperationCompileError> {
-        compile_scalar(operation, EXPOSURE_PARAMETER, |stops| {
-            ProcessingOperationKind::Exposure { stops }
+        let stops_parameter = ParameterName::new(EXPOSURE_PARAMETER).expect("schema name");
+        if operation.parameter(&stops_parameter).is_none() {
+            return Err(OperationCompileError::MissingParameter {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter: stops_parameter,
+            });
+        }
+        if let Some((unexpected, _)) = operation.parameters().find(|(name, _)| {
+            name.as_str() != EXPOSURE_PARAMETER && name.as_str() != EXPOSURE_BLACK_PARAMETER
+        }) {
+            return Err(OperationCompileError::UnexpectedParameter {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter: unexpected.clone(),
+            });
+        }
+        let stops = compile_scalar_parameter(operation, EXPOSURE_PARAMETER)?;
+        let black = operation
+            .parameter(&ParameterName::new(EXPOSURE_BLACK_PARAMETER).expect("schema name"))
+            .map_or_else(
+                || Ok(FiniteF32::new(0.0).expect("zero is finite")),
+                |_| compile_scalar_parameter(operation, EXPOSURE_BLACK_PARAMETER),
+            )?;
+        let opacity = compile_opacity(operation)?;
+        Ok(ProcessingOperation {
+            operation_id: operation.id(),
+            enabled: operation.is_enabled(),
+            opacity,
+            kind: ProcessingOperationKind::Exposure { stops, black },
         })
     }
 
@@ -334,69 +366,6 @@ impl ProcessingOperation {
     pub const fn kind(&self) -> &ProcessingOperationKind {
         &self.kind
     }
-}
-
-fn compile_scalar<F>(
-    operation: &Operation,
-    required_name: &str,
-    build: F,
-) -> Result<ProcessingOperation, OperationCompileError>
-where
-    F: FnOnce(FiniteF32) -> ProcessingOperationKind,
-{
-    let required = ParameterName::new(required_name).expect("processing schema names are valid");
-    if operation.parameter(&required).is_none() {
-        return Err(OperationCompileError::MissingParameter {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter: required,
-        });
-    }
-    if let Some((unexpected, _)) = operation
-        .parameters()
-        .find(|(name, _)| name.as_str() != required_name)
-    {
-        return Err(OperationCompileError::UnexpectedParameter {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter: unexpected.clone(),
-        });
-    }
-    let value = match operation.parameter(&required) {
-        Some(ParameterValue::Scalar(value)) => *value,
-        Some(_) => {
-            return Err(OperationCompileError::WrongParameterType {
-                operation_id: operation.id(),
-                key: operation.key().clone(),
-                parameter: required,
-            });
-        }
-        None => unreachable!("required parameter was checked above"),
-    };
-    let value = match FiniteF32::try_from(value) {
-        Ok(value) => value,
-        Err(ScalarNarrowingError::Overflow) => {
-            return Err(OperationCompileError::ScalarNarrowingOverflow {
-                operation_id: operation.id(),
-                key: operation.key().clone(),
-                parameter: required,
-            });
-        }
-        Err(ScalarNarrowingError::Underflow) => {
-            return Err(OperationCompileError::ScalarNarrowingUnderflow {
-                operation_id: operation.id(),
-                key: operation.key().clone(),
-                parameter: required,
-            });
-        }
-    };
-    let opacity = compile_opacity(operation)?;
-    Ok(ProcessingOperation {
-        operation_id: operation.id(),
-        enabled: operation.is_enabled(),
-        opacity,
-        kind: build(value),
-    })
 }
 
 fn compile_rgb_gain(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
