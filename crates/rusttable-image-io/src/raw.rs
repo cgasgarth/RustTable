@@ -2,7 +2,9 @@
 
 use std::io::Cursor;
 
-use rawloader::{RawImage, RawImageData};
+use rawler::rawsource::RawSource;
+use rawler::{RawImage as RawlerImage, RawImageData as RawlerImageData};
+use rawloader::{RawImage as RawLoaderImage, RawImageData as RawLoaderImageData};
 use rusttable_image::{
     DecodeLimits, DecodedImage, ImageDimensions, ImageInputError, ImageProbe, InputFormat,
 };
@@ -53,12 +55,31 @@ pub(crate) fn decode_raw(
         })
 }
 
-fn decode_dummy(bytes: &[u8]) -> Result<RawImage, ImageInputError> {
-    rawloader::decode_dummy(&mut Cursor::new(bytes)).map_err(|error| raw_error(&error))
+fn decode_dummy(bytes: &[u8]) -> Result<DecodedRaw, ImageInputError> {
+    if is_fujifilm_raf(bytes) {
+        rawler::decode_dummy(&RawSource::new_from_slice(bytes))
+            .map(convert_rawler_image)
+            .map_err(|error| rawler_error(&error))
+    } else {
+        rawloader::decode_dummy(&mut Cursor::new(bytes))
+            .map(convert_rawloader_image)
+            .map_err(|error| raw_error(&error))
+    }
 }
 
-fn decode_full(bytes: &[u8]) -> Result<RawImage, ImageInputError> {
-    rawloader::decode(&mut Cursor::new(bytes)).map_err(|error| raw_error(&error))
+fn decode_full(bytes: &[u8]) -> Result<DecodedRaw, ImageInputError> {
+    if is_fujifilm_raf(bytes) {
+        rawler::decode(
+            &RawSource::new_from_slice(bytes),
+            &rawler::decoders::RawDecodeParams::default(),
+        )
+        .map(convert_rawler_image)
+        .map_err(|error| rawler_error(&error))
+    } else {
+        rawloader::decode(&mut Cursor::new(bytes))
+            .map(convert_rawloader_image)
+            .map_err(|error| raw_error(&error))
+    }
 }
 
 fn raw_error(error: &rawloader::RawLoaderError) -> ImageInputError {
@@ -68,10 +89,131 @@ fn raw_error(error: &rawloader::RawLoaderError) -> ImageInputError {
     }
 }
 
-fn rendered_dimensions(image: &RawImage) -> Result<ImageDimensions, ImageInputError> {
+fn rawler_error(error: &rawler::RawlerError) -> ImageInputError {
+    ImageInputError::MalformedInput {
+        format: InputFormat::Raw,
+        message: error.to_string(),
+    }
+}
+
+fn is_fujifilm_raf(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"FUJIFILMCCD-RAW") || bytes.starts_with(b"Fujifilm")
+}
+
+struct DecodedRaw {
+    width: usize,
+    height: usize,
+    cpp: usize,
+    wb_coeffs: [f32; 4],
+    blacklevels: [f32; 4],
+    whitelevels: [f32; 4],
+    cfa: CfaPattern,
+    orientation: (bool, bool, bool),
+    data: RawData,
+}
+
+enum RawData {
+    Integer(Vec<u16>),
+    Float(Vec<f32>),
+}
+
+struct CfaPattern {
+    width: usize,
+    height: usize,
+    colors: Vec<usize>,
+}
+
+impl CfaPattern {
+    fn from_rawloader(cfa: &rawloader::CFA) -> Self {
+        Self {
+            width: cfa.width,
+            height: cfa.height,
+            colors: (0..cfa.height)
+                .flat_map(|row| (0..cfa.width).map(move |column| cfa.color_at(row, column)))
+                .collect(),
+        }
+    }
+
+    fn from_rawler(cfa: &rawler::CFA) -> Self {
+        Self {
+            width: cfa.width,
+            height: cfa.height,
+            colors: (0..cfa.height)
+                .flat_map(|row| (0..cfa.width).map(move |column| cfa.color_at(row, column)))
+                .collect(),
+        }
+    }
+
+    fn color_at(&self, row: usize, column: usize) -> usize {
+        if self.width == 0 || self.height == 0 {
+            return 0;
+        }
+        self.colors[(row % self.height) * self.width + (column % self.width)]
+    }
+}
+
+fn convert_rawloader_image(image: RawLoaderImage) -> DecodedRaw {
+    let RawLoaderImage {
+        width,
+        height,
+        cpp,
+        wb_coeffs,
+        whitelevels,
+        blacklevels,
+        cfa,
+        orientation,
+        data,
+        ..
+    } = image;
+    DecodedRaw {
+        width,
+        height,
+        cpp,
+        wb_coeffs,
+        blacklevels: blacklevels.map(f32::from),
+        whitelevels: whitelevels.map(f32::from),
+        cfa: CfaPattern::from_rawloader(&cfa),
+        orientation: orientation.to_flips(),
+        data: match data {
+            RawLoaderImageData::Integer(data) => RawData::Integer(data),
+            RawLoaderImageData::Float(data) => RawData::Float(data),
+        },
+    }
+}
+
+fn convert_rawler_image(image: RawlerImage) -> DecodedRaw {
+    let RawlerImage {
+        camera,
+        width,
+        height,
+        cpp,
+        wb_coeffs,
+        whitelevel,
+        blacklevel,
+        orientation,
+        data,
+        ..
+    } = image;
+    DecodedRaw {
+        width,
+        height,
+        cpp,
+        wb_coeffs,
+        blacklevels: blacklevel.as_bayer_array(),
+        whitelevels: whitelevel.as_bayer_array(),
+        cfa: CfaPattern::from_rawler(&camera.cfa),
+        orientation: orientation.to_flips(),
+        data: match data {
+            RawlerImageData::Integer(data) => RawData::Integer(data),
+            RawlerImageData::Float(data) => RawData::Float(data),
+        },
+    }
+}
+
+fn rendered_dimensions(image: &DecodedRaw) -> Result<ImageDimensions, ImageInputError> {
     let width = u32::try_from(image.width).map_err(|_| ImageInputError::ArithmeticOverflow)?;
     let height = u32::try_from(image.height).map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    let (transpose, _, _) = image.orientation.to_flips();
+    let (transpose, _, _) = image.orientation;
     ImageDimensions::new(
         if transpose { height } else { width },
         if transpose { width } else { height },
@@ -125,13 +267,13 @@ fn enforce_limits(
     Ok(())
 }
 
-fn demosaic(image: &RawImage, dimensions: ImageDimensions) -> Vec<u8> {
+fn demosaic(image: &DecodedRaw, dimensions: ImageDimensions) -> Vec<u8> {
     let source_width = image.width;
     let source_height = image.height;
-    let (transpose, horizontal, vertical) = image.orientation.to_flips();
+    let (transpose, horizontal, vertical) = image.orientation;
     let data = match &image.data {
-        RawImageData::Integer(data) => data,
-        RawImageData::Float(data) => return demosaic_float(image, dimensions, data),
+        RawData::Integer(data) => data,
+        RawData::Float(data) => return demosaic_float(image, dimensions, data),
     };
     let mut output =
         Vec::with_capacity(dimensions.width() as usize * dimensions.height() as usize * 4);
@@ -160,10 +302,10 @@ fn demosaic(image: &RawImage, dimensions: ImageDimensions) -> Vec<u8> {
     output
 }
 
-fn demosaic_float(image: &RawImage, dimensions: ImageDimensions, data: &[f32]) -> Vec<u8> {
+fn demosaic_float(image: &DecodedRaw, dimensions: ImageDimensions, data: &[f32]) -> Vec<u8> {
     let source_width = image.width;
     let source_height = image.height;
-    let (transpose, horizontal, vertical) = image.orientation.to_flips();
+    let (transpose, horizontal, vertical) = image.orientation;
     let mut output =
         Vec::with_capacity(dimensions.width() as usize * dimensions.height() as usize * 4);
     for output_y in 0..dimensions.height() as usize {
@@ -209,12 +351,12 @@ fn source_coordinate(
     )
 }
 
-fn interleaved_sample(image: &RawImage, data: &[u16], x: usize, y: usize, channel: usize) -> u16 {
+fn interleaved_sample(image: &DecodedRaw, data: &[u16], x: usize, y: usize, channel: usize) -> u16 {
     let index = (y * image.width + x) * image.cpp + channel.min(image.cpp.saturating_sub(1));
     data.get(index).copied().unwrap_or_default()
 }
 
-fn mosaic_sample(image: &RawImage, data: &[u16], x: usize, y: usize, channel: usize) -> u16 {
+fn mosaic_sample(image: &DecodedRaw, data: &[u16], x: usize, y: usize, channel: usize) -> u16 {
     let radius = image.cfa.width.max(image.cfa.height).max(2);
     let mut total = 0_u64;
     let mut count = 0_u64;
@@ -236,12 +378,10 @@ fn mosaic_sample(image: &RawImage, data: &[u16], x: usize, y: usize, channel: us
     u16::try_from(total / count.max(1)).unwrap_or(u16::MAX)
 }
 
-#[allow(clippy::cast_precision_loss)]
-fn normalize_integer(value: u16, image: &RawImage, channel: usize) -> u8 {
-    let black = u32::from(image.blacklevels[channel]);
-    let white = u32::from(image.whitelevels[channel]).max(black + 1);
-    let normalized =
-        (u32::from(value).saturating_sub(black) as f32 / (white - black) as f32).clamp(0.0, 1.0);
+fn normalize_integer(value: u16, image: &DecodedRaw, channel: usize) -> u8 {
+    let black = image.blacklevels[channel];
+    let white = image.whitelevels[channel].max(black + 1.0);
+    let normalized = (f32::from(value) - black).max(0.0) / (white - black);
     let gain = image.wb_coeffs[channel];
     let balanced = if gain.is_finite() && gain > 0.0 {
         normalized * gain
