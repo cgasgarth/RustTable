@@ -401,6 +401,10 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update(config.parameters().to_bytes());
             hasher.update(config.seed().to_le_bytes());
         }
+        ProcessingOperationKind::Censorize { config } => {
+            hasher.update([22]);
+            hasher.update(config.parameters().to_bytes());
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

@@ -233,7 +233,7 @@ fn apply_operation_with_plans(
                 .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             let candidate = plan
                 .execute(pixels, pixel_index_offset)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             apply_reconstruction(
                 pixels,
                 &candidate,
@@ -313,9 +313,65 @@ fn apply_operation_with_plans(
         }
         ProcessingOperationKind::Grain { config } => {
             let plan = crate::operations::grain::GrainPlan::new(*config, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             let candidate = plan
                 .execute_window(pixels, pixel_index_offset)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::Censorize { config } => {
+            let plan =
+                crate::operations::censorize::CensorizePlan::new(*config, dimensions, 1.0, 1.0)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let rgba = pixels
+                .iter()
+                .copied()
+                .map(|pixel| {
+                    crate::operations::censorize::CensorizePixel::new(
+                        pixel.red().get(),
+                        pixel.green().get(),
+                        pixel.blue().get(),
+                        1.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let candidate = plan
+                .execute(&rgba, || false)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let candidate = candidate
+                .into_iter()
+                .enumerate()
+                .map(|(index, pixel)| {
+                    let channels = pixel.channels();
+                    Ok(LinearRgb::new(
+                        FiniteF32::new(channels[0]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Red,
+                            }
+                        })?,
+                        FiniteF32::new(channels[1]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Green,
+                            }
+                        })?,
+                        FiniteF32::new(channels[2]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Blue,
+                            }
+                        })?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, OperationExecutionError>>()
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
             apply_reconstruction(
                 pixels,

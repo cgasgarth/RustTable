@@ -75,6 +75,13 @@ pub use operations::basicadj_analysis::{
     BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
     BasicAdjAnalysisRaster, BasicAdjAnalysisResult, BasicAdjAnalysisRoi, BasicAdjResolvedValues,
 };
+pub use operations::censorize::{
+    CENSORIZE_COMPATIBILITY_ID, CENSORIZE_PARAMETER_BYTES, CENSORIZE_RNG_VERSION,
+    CENSORIZE_SCHEMA_VERSION, CensorizeBackend, CensorizeBlend, CensorizeCodecError,
+    CensorizeConfig, CensorizeExecutionError, CensorizeHistory, CensorizeMask,
+    CensorizeParameterError, CensorizeParametersV1, CensorizePixel, CensorizePlan,
+    CensorizeReceipt, CensorizeRng, CensorizeStages, gaussian_noise, splitmix32, xoshiro128plus,
+};
 pub use operations::grain::{GrainGpuParameters, GrainPlan};
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,

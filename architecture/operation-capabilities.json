@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "fd40731fcc9301732fa34b5a44e76e8abea0617c8ad683576b179e918c96d9c1",
+  "registry_hash": "346e0e0c0a7290cd80a0ac07a3314f59365f312bd887874c0da8c3f9e7dd63a7",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -245,14 +245,14 @@
       "parameter_versions": [
         1
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 149,
-      "cpu_supported": false,
+      "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "censorize backend is unqualified until #477 supplies the CPU/mask pipeline capability"
+      "cpu_fallback": true,
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:channelmixer:src/iop/channelmixer.c:v2",
@@ -1874,11 +1874,11 @@
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 3,
-      "cpu_supported": false,
+      "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "censorize backend is unqualified until #477 supplies the CPU/mask pipeline capability"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "rusttable.colorcorrection",

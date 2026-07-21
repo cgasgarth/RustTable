@@ -762,14 +762,11 @@ impl RegistrySnapshot {
 
 #[path = "registry_basicadj.rs"]
 mod registry_basicadj;
-#[path = "registry_censorize.rs"]
-mod registry_censorize;
 #[path = "registry_operations.rs"]
 mod registry_operations;
 pub use registry_basicadj::basicadj_definition;
-pub use registry_censorize::censorize_definition;
 pub use registry_operations::{
-    BUILTIN_OPERATIONS, bloom_definition, crop_definition, dither_definition,
+    BUILTIN_OPERATIONS, bloom_definition, censorize_definition, crop_definition, dither_definition,
     enlargecanvas_definition, exposure_definition, finalscale_definition, flip_definition,
     graduatednd_definition, grain_definition, invert_definition, lenscorrection_definition,
     linear_offset_definition, perspective_definition, relight_definition, rgb_gain_definition,
