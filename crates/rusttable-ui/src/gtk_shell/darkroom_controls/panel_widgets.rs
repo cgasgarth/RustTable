@@ -17,7 +17,7 @@ use super::{
     DARKROOM_GEOMETRY, DarkroomModuleGroup, DarkroomModuleGroupHandler, DarkroomRailStatus,
     chrome_toggle,
 };
-use super::{ExposurePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
+use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
 use crate::presentation::{
     DarkroomHistoryViewModel, DarkroomImageInformationViewModel, DarkroomPanelProjection,
     DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, build_history_panel,
@@ -108,8 +108,10 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     modules.set_widget_name("darkroom-right-modules");
     let exposure = ExposurePanel::new();
     let rgb_denoise = RgbDenoisePanel::new();
+    let raw_denoise = RawDenoisePanel::new();
     modules.append(exposure.widget());
     modules.append(rgb_denoise.widget());
+    modules.append(raw_denoise.widget());
     let controller_modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     controller_modules.set_widget_name("darkroom-right-controller-modules");
     modules.append(&controller_modules);
@@ -128,6 +130,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         controller_modules,
         exposure,
         rgb_denoise,
+        raw_denoise,
         histogram,
         search,
         module_group,
@@ -140,6 +143,7 @@ pub(super) fn render_typed_modules_into(
     right_modules: &gtk4::Box,
     exposure: &ExposurePanel,
     rgb_denoise: &RgbDenoisePanel,
+    raw_denoise: &RawDenoisePanel,
     typed_modules: &Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     action_handler: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
     group: DarkroomModuleGroup,
@@ -160,6 +164,7 @@ pub(super) fn render_typed_modules_into(
     clear_children(right_modules);
     right_modules.append(exposure.widget());
     right_modules.append(rgb_denoise.widget());
+    right_modules.append(raw_denoise.widget());
     let filtered_right = modules
         .right_modules()
         .filter(|module| module.id() != "exposure")

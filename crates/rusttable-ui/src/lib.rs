@@ -15,6 +15,7 @@ pub mod input_mapping;
 pub mod library;
 pub mod neural_restore;
 pub mod presentation;
+pub mod raw_denoise;
 pub mod rgb_denoise;
 pub mod viewport_presentation;
 
@@ -93,6 +94,16 @@ pub use presentation::{
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
     PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
     SelectedPreviewFailure, SelectedPreviewState, SliderSpec, ThumbnailIndicators,
+};
+pub use raw_denoise::{
+    RAW_DENOISE_FOCUS_ORDER, RAW_DENOISE_MAX_STRENGTH, RAW_DENOISE_TILES, RawDenoiseAction,
+    RawDenoiseCalibrationStatus, RawDenoiseCancellationState, RawDenoiseController,
+    RawDenoiseControllerError, RawDenoiseFailure, RawDenoiseJobKind, RawDenoiseJobRequest,
+    RawDenoiseMemoryState, RawDenoiseModelOption, RawDenoiseOutputPolicy, RawDenoisePanel,
+    RawDenoisePlan, RawDenoisePlanError, RawDenoisePlanPolicy, RawDenoiseProfileStatus,
+    RawDenoiseProgress, RawDenoiseProviderState, RawDenoiseServiceError, RawDenoiseServiceEvent,
+    RawDenoiseServicePort, RawDenoiseSnapshot, RawDenoiseSourceInfo, RawDenoiseSourceLayout,
+    RawDenoiseStatus, RawDenoiseViewModel,
 };
 pub use rgb_denoise::{
     RGB_DENOISE_FOCUS_ORDER, RGB_DENOISE_MAX_DETAIL_STRENGTH, RGB_DENOISE_MAX_STRENGTH,

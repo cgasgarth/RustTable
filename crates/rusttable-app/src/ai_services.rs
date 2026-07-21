@@ -18,6 +18,9 @@ use rusttable_ui::{
     AiTask, InstallSummary, ModelHash, PhotoSelection, QualificationJob, RgbDenoiseJobRequest,
     RgbDenoiseServiceError, RgbDenoiseServicePort, RgbDenoiseSnapshot,
 };
+use rusttable_ui::{
+    RawDenoiseJobRequest, RawDenoiseServiceError, RawDenoiseServicePort, RawDenoiseSnapshot,
+};
 
 #[derive(Debug, Default)]
 pub(crate) struct UnavailableAiBatchService;
@@ -146,10 +149,58 @@ impl RgbDenoiseServicePort for UnavailableRgbDenoiseService {
     }
 }
 
+/// Typed RAW boundary for the current composition root.
+///
+/// The registry knows about `RawLinearDenoise`, but the decoder/calibration/profile
+/// snapshot, qualified provider executor, DNG publisher, and catalog importer are not
+/// wired into the app yet. Keeping this adapter explicit prevents GTK from pretending
+/// those capabilities exist or from launching a substitute implementation.
+#[derive(Debug, Default)]
+pub(crate) struct UnavailableRawDenoiseService;
+
+impl RawDenoiseServicePort for UnavailableRawDenoiseService {
+    fn snapshot(
+        &mut self,
+        selection: &rusttable_ui::PhotoSelection,
+    ) -> Result<RawDenoiseSnapshot, RawDenoiseServiceError> {
+        Ok(RawDenoiseSnapshot::unavailable(selection.clone()))
+    }
+
+    fn request_preview(
+        &mut self,
+        _request: &RawDenoiseJobRequest,
+    ) -> Result<u64, RawDenoiseServiceError> {
+        Err(RawDenoiseServiceError::BackendUnavailable)
+    }
+
+    fn request_full(
+        &mut self,
+        _request: &RawDenoiseJobRequest,
+    ) -> Result<u64, RawDenoiseServiceError> {
+        Err(RawDenoiseServiceError::BackendUnavailable)
+    }
+
+    fn request_export(
+        &mut self,
+        _request: &RawDenoiseJobRequest,
+    ) -> Result<u64, RawDenoiseServiceError> {
+        Err(RawDenoiseServiceError::BackendUnavailable)
+    }
+
+    fn cancel(&mut self, _job: u64) -> Result<(), RawDenoiseServiceError> {
+        Err(RawDenoiseServiceError::BackendUnavailable)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusttable_ui::AiModelsFailure;
+    use rusttable_ui::{
+        AiModelsFailure, AiProvider, ModelHash, PhotoSelection, RawDenoiseCalibrationStatus,
+        RawDenoiseJobKind, RawDenoiseModelOption, RawDenoiseOutputPolicy, RawDenoisePlan,
+        RawDenoisePlanPolicy, RawDenoiseProfileStatus, RawDenoiseSourceInfo,
+        RawDenoiseSourceLayout,
+    };
 
     #[test]
     fn unavailable_model_adapter_is_explicit_and_privacy_safe() {
@@ -178,6 +229,53 @@ mod tests {
                 .expect("truthful snapshot")
                 .models(),
             &[]
+        );
+    }
+
+    #[test]
+    fn raw_denoise_adapter_exposes_missing_backend_without_side_effects() {
+        let mut service = UnavailableRawDenoiseService;
+        let snapshot = service
+            .snapshot(&PhotoSelection::none())
+            .expect("truthful snapshot");
+        assert!(snapshot.models().is_empty());
+        assert_eq!(
+            service.request_export(&RawDenoiseJobRequest::new(
+                0,
+                RawDenoiseJobKind::Export,
+                // This request is never dispatched by the unavailable adapter; the plan is
+                // only constructed here to exercise the typed request boundary.
+                RawDenoisePlan::build(
+                    1,
+                    &RawDenoiseSourceInfo::available(
+                        "source",
+                        "edit",
+                        "dng",
+                        (1, 1),
+                        RawDenoiseSourceLayout::XTrans,
+                        RawDenoiseCalibrationStatus::Present,
+                        RawDenoiseProfileStatus::LinearRec2020,
+                    ),
+                    &RawDenoiseModelOption::new(
+                        ModelHash::new(
+                            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                        )
+                        .expect("hash"),
+                        "model",
+                        true,
+                        vec![RawDenoiseSourceLayout::XTrans],
+                        256,
+                        vec![AiProvider::Cpu],
+                    ),
+                    AiProvider::Cpu,
+                    50,
+                    256,
+                    RawDenoisePlanPolicy::MinimalRaw,
+                    RawDenoiseOutputPolicy::PublishAndImport,
+                )
+                .expect("typed plan"),
+            )),
+            Err(RawDenoiseServiceError::BackendUnavailable)
         );
     }
 }

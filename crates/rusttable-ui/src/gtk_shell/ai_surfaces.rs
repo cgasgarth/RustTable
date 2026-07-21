@@ -3,6 +3,7 @@
 use super::runtime::GtkShell;
 use crate::ai_batch::{AiBatchAction, AiBatchPanel, AiBatchState};
 use crate::ai_models::{AiModelsAction, AiModelsPanel, AiModelsViewModel};
+use crate::raw_denoise::{RawDenoiseAction, RawDenoiseViewModel};
 use crate::rgb_denoise::{RgbDenoiseAction, RgbDenoiseViewModel};
 
 impl GtkShell {
@@ -17,6 +18,17 @@ impl GtkShell {
         F: Fn(RgbDenoiseAction) + 'static,
     {
         self.darkroom.connect_rgb_denoise_action(handler);
+    }
+
+    pub fn set_raw_denoise_state(&self, state: &RawDenoiseViewModel) {
+        self.darkroom.set_raw_denoise_state(state);
+    }
+
+    pub fn connect_raw_denoise_action<F>(&self, handler: F)
+    where
+        F: Fn(RawDenoiseAction) + 'static,
+    {
+        self.darkroom.connect_raw_denoise_action(handler);
     }
 
     /// Returns the AI Models preferences surface. The model registry remains an application port.

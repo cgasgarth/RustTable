@@ -167,6 +167,18 @@ fn package_rejects_traversal_extra_entries_and_hash_drift() {
 }
 
 #[test]
+fn raw_linear_task_is_a_scale_one_registry_contract() {
+    let mut raw_manifest = manifest(b"onnx-fixture", &[]);
+    raw_manifest.task = ModelTask::RawLinearDenoise;
+    raw_manifest
+        .validate()
+        .expect("valid RawLinearDenoise manifest");
+    assert_eq!(raw_manifest.task.scale_factor(), 1);
+    assert_eq!(raw_manifest.task.super_resolution_scale(), None);
+    assert!(raw_manifest.providers.contains(&Provider::Cpu));
+}
+
+#[test]
 fn graph_contract_rejects_external_data_and_accepts_exact_typed_graph() {
     let package = ModelPackage::from_rtmodel(
         &package_bytes(b"onnx-fixture", &[]),
