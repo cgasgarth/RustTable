@@ -79,8 +79,8 @@ impl WorkspaceRenderHandle {
             .map(|(photo_id, tile)| (*photo_id, tile.thumbnails.state()))
             .collect::<BTreeMap<_, _>>();
         let previous_details = self.photo_details.borrow().clone();
-        clear_children(&self.lighttable);
-        clear_children(&self.filmstrip);
+        clear_flow_box(&self.lighttable);
+        clear_flow_box(&self.filmstrip);
         self.photo_tiles.borrow_mut().clear();
         self.photo_details.borrow_mut().clear();
         let zoom = self.interaction.borrow().zoom();
@@ -580,9 +580,12 @@ fn retained_thumbnail_state(
     }
 }
 
-fn clear_children(container: &impl IsA<gtk4::Widget>) {
-    while let Some(child) = container.first_child() {
-        child.unparent();
+fn clear_flow_box(flow_box: &gtk4::FlowBox) {
+    // FlowBox owns an internal GtkFlowBoxChild wrapper for every inserted widget.
+    // Removing that wrapper through FlowBox keeps its internal sibling list in sync;
+    // generic Widget::unparent leaves GTK4 unable to accept the next insertion.
+    while let Some(child) = flow_box.first_child() {
+        flow_box.remove(&child);
     }
 }
 
