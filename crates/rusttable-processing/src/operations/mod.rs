@@ -5,6 +5,7 @@
 //! by the existing operation registry and pixelpipe; they are not a second
 //! pipeline.
 
+pub mod basicadj;
 pub mod bloom;
 pub mod colorcorrection;
 pub mod colorin;

@@ -5,6 +5,7 @@ use rusttable_core::{
 };
 
 use crate::operations::{
+    basicadj::BasicAdjConfig,
     bloom::BloomConfig,
     colorcorrection::ColorCorrectionConfig,
     colorin::ColorInConfig,
@@ -31,6 +32,8 @@ use crate::operations::{
 };
 use crate::{FiniteF32, ScalarNarrowingError};
 
+#[path = "operation_basicadj.rs"]
+mod operation_basicadj;
 #[path = "operation_compat.rs"]
 mod operation_compat;
 #[path = "operation_error.rs"]
@@ -51,6 +54,7 @@ mod operation_grain;
 mod operation_legacy;
 #[path = "operation_spatial.rs"]
 mod operation_spatial;
+pub(crate) use operation_basicadj::compile_basicadj;
 pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
 pub(crate) use operation_grain::compile_grain;
@@ -80,6 +84,9 @@ pub struct ProcessingOperation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProcessingOperationKind {
+    BasicAdj {
+        config: BasicAdjConfig,
+    },
     Exposure {
         stops: FiniteF32,
         black: FiniteF32,
@@ -279,6 +286,10 @@ impl ProcessingOperation {
             opacity,
             kind: ProcessingOperationKind::Exposure { stops, black },
         })
+    }
+
+    pub(crate) fn compile_basicadj(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_basicadj(operation)
     }
 
     pub(crate) fn compile_linear_offset(

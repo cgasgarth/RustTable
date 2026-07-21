@@ -161,7 +161,8 @@ fn write_operation(hasher: &mut Sha256, operation: &rusttable_processing::Proces
 
 fn write_operation_kind(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
-        ProcessingOperationKind::Exposure { .. }
+        ProcessingOperationKind::BasicAdj { .. }
+        | ProcessingOperationKind::Exposure { .. }
         | ProcessingOperationKind::LinearOffset { .. }
         | ProcessingOperationKind::RgbGain { .. }
         | ProcessingOperationKind::Highlights { .. }
@@ -175,6 +176,24 @@ fn write_operation_kind(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
 
 fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
+        ProcessingOperationKind::BasicAdj { config } => {
+            hasher.update([21]);
+            for value in [
+                config.black_point(),
+                config.exposure(),
+                config.hlcompr(),
+                config.hlcomprthresh(),
+                config.contrast(),
+                config.middle_grey(),
+                config.brightness(),
+                config.saturation(),
+                config.vibrance(),
+                config.clip(),
+            ] {
+                hasher.update(value.to_bits().to_le_bytes());
+            }
+            hasher.update(config.preserve_colors().id().to_le_bytes());
+        }
         ProcessingOperationKind::Exposure { stops, black } => {
             hasher.update([0]);
             hasher.update(stops.get().to_bits().to_le_bytes());

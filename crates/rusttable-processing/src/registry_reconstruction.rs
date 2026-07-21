@@ -8,6 +8,9 @@ use rusttable_core::Operation;
 
 pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     match operation.kind() {
+        crate::ProcessingOperationKind::BasicAdj { .. } => {
+            crate::descriptor::basicadj_descriptor().id
+        }
         crate::ProcessingOperationKind::Exposure { .. } => {
             crate::descriptor::exposure_descriptor().id
         }

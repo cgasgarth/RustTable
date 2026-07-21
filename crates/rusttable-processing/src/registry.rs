@@ -742,8 +742,11 @@ impl RegistrySnapshot {
     }
 }
 
+#[path = "registry_basicadj.rs"]
+mod registry_basicadj;
 #[path = "registry_operations.rs"]
 mod registry_operations;
+pub use registry_basicadj::basicadj_definition;
 pub use registry_operations::{
     BUILTIN_OPERATIONS, bloom_definition, crop_definition, dither_definition,
     enlargecanvas_definition, exposure_definition, finalscale_definition, flip_definition,

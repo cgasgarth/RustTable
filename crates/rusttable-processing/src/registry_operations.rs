@@ -944,6 +944,7 @@ macro_rules! builtin_operations {
     () => {
         &[
             $crate::registry::exposure_definition as $crate::registry::OperationDefinitionFactory,
+            $crate::registry::basicadj_definition,
             $crate::registry::linear_offset_definition,
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
