@@ -15,6 +15,8 @@ pub mod enlargecanvas;
 pub mod finalscale;
 pub mod flip;
 pub mod highlights;
+pub mod lenscorrection;
+pub mod perspective;
 pub mod primaries;
 pub mod rotatepixels;
 pub mod scalepixels;
