@@ -246,3 +246,36 @@ fn clahe_registry_is_descriptor_visible_and_cpu_qualified() {
             .is_some_and(|capability| capability.available)
     );
 }
+
+#[test]
+fn liquify_registry_exposes_geometry_and_explicit_cpu_fallback() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.liquify")
+        .expect("liquify registry seam");
+    assert_eq!(definition.descriptor().id.compatibility_name, "liquify");
+    assert!(
+        definition
+            .descriptor()
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::GEOMETRY)
+    );
+    assert!(
+        definition
+            .descriptor()
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::MASKS)
+    );
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_none());
+    assert!(
+        registry
+            .capability(
+                "rusttable.liquify",
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                rusttable_color::ColorEncoding::LinearSrgbD65,
+                Some("preview"),
+            )
+            .is_some_and(|capability| capability.available)
+    );
+}

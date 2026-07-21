@@ -27,6 +27,7 @@ pub mod grain;
 pub mod highlights;
 pub mod invert;
 pub mod lenscorrection;
+pub mod liquify;
 pub mod mask_manager;
 pub mod perspective;
 pub mod primaries;

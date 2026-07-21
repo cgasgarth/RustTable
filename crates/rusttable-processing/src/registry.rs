@@ -772,9 +772,10 @@ pub use registry_operations::{
     BUILTIN_OPERATIONS, bloom_definition, censorize_definition, clahe_definition, crop_definition,
     defringe_definition, dither_definition, enlargecanvas_definition, exposure_definition,
     finalscale_definition, flip_definition, graduatednd_definition, grain_definition,
-    invert_definition, lenscorrection_definition, linear_offset_definition, perspective_definition,
-    relight_definition, rgb_gain_definition, rotatepixels_definition, scalepixels_definition,
-    shadhi_definition, soften_definition, temperature_definition, vignette_definition,
+    invert_definition, lenscorrection_definition, linear_offset_definition, liquify_definition,
+    perspective_definition, relight_definition, rgb_gain_definition, rotatepixels_definition,
+    scalepixels_definition, shadhi_definition, soften_definition, temperature_definition,
+    vignette_definition,
 };
 use registry_operations::{
     hex, operation_descriptor_for, snapshot_hash, unavailable, validate_definition,

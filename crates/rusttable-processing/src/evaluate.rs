@@ -10,25 +10,13 @@ use crate::{
 use rusttable_core::OperationId;
 use sha2::Digest;
 use std::{collections::BTreeMap, fmt};
-/// Immutable resolved automatic plans keyed by authored operation ID.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct BasicAdjPlanSet {
-    plans: BTreeMap<OperationId, crate::operations::basicadj::BasicAdjPlan>,
-    identity: [u8; 32],
-}
-impl BasicAdjPlanSet {
-    #[must_use]
-    pub fn plan(
-        &self,
-        operation_id: OperationId,
-    ) -> Option<&crate::operations::basicadj::BasicAdjPlan> {
-        self.plans.get(&operation_id)
-    }
-    #[must_use]
-    pub const fn identity(&self) -> [u8; 32] {
-        self.identity
-    }
-}
+
+#[path = "evaluate_basicadj.rs"]
+mod evaluate_basicadj;
+#[path = "evaluate_liquify.rs"]
+mod evaluate_liquify;
+
+pub use evaluate_basicadj::BasicAdjPlanSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
     InvalidExposureScale {
@@ -664,6 +652,14 @@ fn apply_operation_with_plans(
                     reason: error.to_string(),
                 })
         }
+        ProcessingOperationKind::Liquify { config } => evaluate_liquify::apply_liquify(
+            step_index,
+            operation_id,
+            config,
+            pixels,
+            dimensions,
+            opacity,
+        ),
         ProcessingOperationKind::Crop { .. }
         | ProcessingOperationKind::Flip { .. }
         | ProcessingOperationKind::RotatePixels { .. }

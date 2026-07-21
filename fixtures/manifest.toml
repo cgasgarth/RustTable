@@ -542,6 +542,20 @@ source = "deterministic-generated-fixture"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-testkit::qualification"
 [[fixtures]]
+id = "corpus.geometry.liquify"
+path = "fixtures/corpus/assets/geometry-liquify.toml"
+size = 278
+sha256 = "5c5e612f4afbcd4c1b6f113a1e138cb39218a075d833732183f82cc1bf1bd899"
+media_type = "application/descriptor"
+privacy = "synthetic"
+consumers = ["rusttable-processing", "rusttable-testkit"]
+consuming_issue_ranges = ["#389"]
+artifact_class = "descriptor"
+format = "toml"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-processing::liquify"
+[[fixtures]]
 id = "corpus.geometry.one-pixel"
 path = "fixtures/corpus/assets/geometry-one-pixel.raw"
 size = 91
