@@ -108,8 +108,11 @@ pub(super) fn desktop_body(
         .orientation(gtk4::Orientation::Horizontal)
         .start_child(left_panel)
         .end_child(&center_column)
+        .hexpand(true)
+        .vexpand(true)
         .resize_start_child(false)
         .shrink_start_child(false)
+        .shrink_end_child(false)
         .position(i32::from(layout.side_panel_widths.preferred_px))
         .build();
     split.connect_map({
@@ -120,6 +123,8 @@ pub(super) fn desktop_body(
         .orientation(gtk4::Orientation::Horizontal)
         .start_child(&split)
         .end_child(right_panel)
+        .hexpand(true)
+        .vexpand(true)
         .resize_end_child(false)
         .shrink_end_child(false)
         .position(i32::from(
@@ -127,10 +132,16 @@ pub(super) fn desktop_body(
         ))
         .build();
     workspace_with_right_panel.connect_map(move |paned| {
-        let content_width = u16::try_from(paned.allocated_width()).unwrap_or(u16::MAX);
-        paned.set_position(i32::from(
-            layout.preferred_right_panel_position_for_content_width(content_width),
-        ));
+        let paned = paned.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            let content_width = u16::try_from(paned.allocated_width()).unwrap_or(u16::MAX);
+            if content_width == 0 {
+                return;
+            }
+            paned.set_position(i32::from(
+                layout.preferred_right_panel_position_for_content_width(content_width),
+            ));
+        });
     });
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
@@ -278,6 +289,10 @@ fn panel_column(region: ShellRegion, width: i32) -> gtk4::Box {
     panel.set_widget_name(region.identifier());
     apply_theme_role(&panel, ThemeRole::Panel);
     panel.set_width_request(width);
+    panel.set_hexpand(false);
+    panel.set_vexpand(true);
+    panel.set_halign(gtk4::Align::Fill);
+    panel.set_valign(gtk4::Align::Fill);
     panel
 }
 
@@ -297,7 +312,11 @@ fn append_panel_slots(panel: &gtk4::Box, top: &gtk4::Box, center: &gtk4::Box, bo
         .child(&scrolling_center)
         .hscrollbar_policy(gtk4::PolicyType::Never)
         .vscrollbar_policy(gtk4::PolicyType::Automatic)
-        .propagate_natural_width(true)
+        // Module labels and controls can be wider than a Darktable rail. Do not
+        // let their natural width become the panel's requested width; the
+        // enclosing Paned must retain a center viewport and the rail scrolls
+        // vertically inside its allocated width.
+        .propagate_natural_width(false)
         .hexpand(true)
         .vexpand(true)
         .build();

@@ -3,8 +3,9 @@
 use rusttable_core::PhotoId;
 use rusttable_ui::gtk_shell::{
     DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS,
-    LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
-    PANEL_SLOTS, PanelRole, ShellLayout, ShellRegion, THUMBNAIL_METRICS, ViewMode, WorkspaceRole,
+    DarkroomGeometryReceipt, LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES,
+    LIGHTTABLE_TOOLBAR, PANEL_SLOTS, PanelRole, ShellLayout, ShellRegion, THUMBNAIL_METRICS,
+    ViewMode, WorkspaceRole,
 };
 use rusttable_ui::{
     DarkroomWorkspaceViewModel, LighttableContentState, LighttableInteractionState,
@@ -130,6 +131,30 @@ fn darkroom_viewport_contract_exposes_live_histogram_and_truthful_overlay_slots(
     ] {
         assert!(ids.contains(id), "missing stable viewport contract ID {id}");
     }
+}
+
+#[test]
+fn darkroom_geometry_keeps_both_rails_and_a_visible_center_at_supported_sizes() {
+    for (window_width, minimum_center_width) in [(640, 320), (900, 320), (1_224, 650)] {
+        let geometry = DarkroomGeometryReceipt::for_window(window_width, 768, true, true, true);
+
+        assert_eq!(geometry.left_panel_width_px, 150);
+        assert_eq!(geometry.right_panel_width_px, 150);
+        assert!(geometry.center_width_px() >= minimum_center_width);
+        assert!(geometry.center_width_px() > geometry.right_panel_width_px);
+    }
+}
+
+#[test]
+fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
+    let runtime_layout = include_str!("../src/gtk_shell/runtime_layout.rs");
+    let darkroom_panels = include_str!("../src/gtk_shell/darkroom_controls/panel_widgets.rs");
+
+    assert!(runtime_layout.contains(".propagate_natural_width(false)"));
+    assert!(runtime_layout.contains(".shrink_end_child(false)"));
+    assert!(runtime_layout.contains("gtk4::glib::idle_add_local_once"));
+    assert!(darkroom_panels.contains("darkroom-module-groups-scroll"));
+    assert!(darkroom_panels.contains(".propagate_natural_width(false)"));
 }
 
 #[test]
