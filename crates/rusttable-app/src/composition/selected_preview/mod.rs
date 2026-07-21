@@ -1,5 +1,7 @@
 //! Worker-to-GTK bridge for selected darkroom previews and histogram analysis.
 
+mod lifecycle;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
@@ -14,7 +16,8 @@ use rusttable_ui::{
 
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
 
-use super::preview_lifecycle::{PreviewLifecycle, PreviewSelectionToken};
+pub(crate) use lifecycle::PreviewLifecycle;
+use lifecycle::PreviewSelectionToken;
 
 struct PreviewResult {
     token: PreviewSelectionToken,
@@ -22,7 +25,7 @@ struct PreviewResult {
     histogram: Option<Result<HistogramData, HistogramError>>,
 }
 
-pub(super) fn start_selected_preview(
+pub(crate) fn start_selected_preview(
     shell: &GtkShell,
     catalog: crate::gtk_controller::GtkCatalogController,
     lifecycle: Rc<RefCell<PreviewLifecycle>>,

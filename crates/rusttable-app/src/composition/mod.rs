@@ -1,20 +1,17 @@
 mod ai_ui;
-mod catalog_preview;
-mod catalog_preview_smoke;
 mod collection_bridge;
-mod darkroom_edit;
-mod darkroom_panels;
-mod darkroom_ui;
+mod darkroom;
 mod import_bridge;
-mod preview_bridge;
-mod preview_lifecycle;
+mod selected_preview;
 pub(crate) mod services;
 
-pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
-pub use catalog_preview_smoke::{
+pub use services::catalog_preview::smoke::{
     CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError, CatalogPreviewSmokePorts,
     CatalogPreviewSmokeReceipt, CatalogPreviewSmokeRequest, CatalogPreviewSmokeResult,
     CatalogPreviewSmokeService, CatalogPreviewSmokeStage, CatalogPreviewSmokeStatus,
+};
+pub use services::catalog_preview::{
+    CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService,
 };
 
 use crate::gtk_controller::{CollectionController, GtkCatalogController};
@@ -52,9 +49,8 @@ use collection_bridge::{
     apply_collection_action, apply_lighttable_toolbar_action, apply_photo_selection,
     collection_filter_state, empty_collection_filter_state,
 };
-use preview_bridge::start_selected_preview;
-use preview_lifecycle::PreviewLifecycle;
 use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
+use selected_preview::{PreviewLifecycle, start_selected_preview};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,7 +207,7 @@ fn activate_application(
     }
     install_action_input(&shell);
     let ai_bridges = install_ai_ui_bridges(&shell);
-    darkroom_ui::install(&shell);
+    darkroom::install(&shell);
     let neural_controller = ai_bridges.rgb;
     let raw_denoise_controller = ai_bridges.raw;
     let ai_batch_controller = install_ai_batch_ui_bridge(&shell);
@@ -273,9 +269,9 @@ fn activate_application(
     let selection_controller = Rc::clone(&catalog_controller);
     let selection_collection = Rc::clone(active_collection);
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
-    let darkroom_bridge = darkroom_edit::install(&shell, &catalog_controller, &preview_lifecycle);
+    let darkroom_bridge = darkroom::install_edit(&shell, &catalog_controller, &preview_lifecycle);
     let darkroom_panel_bridge =
-        darkroom_panels::install(&shell, &catalog_controller, &preview_lifecycle);
+        darkroom::install_panels(&shell, &catalog_controller, &preview_lifecycle);
     let history_refresh_bridge = darkroom_panel_bridge.clone();
     let history_refresh_shell = shell.clone();
     let history_refresh_catalog = Rc::clone(&catalog_controller);

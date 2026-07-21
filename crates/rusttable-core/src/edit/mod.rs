@@ -1,4 +1,3 @@
-#[path = "edit.rs"]
 mod aggregate;
 mod operation;
 

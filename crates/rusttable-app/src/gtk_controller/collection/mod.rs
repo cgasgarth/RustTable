@@ -1,5 +1,9 @@
 //! GTK-facing collection state backed by the imported catalog records.
 
+mod service;
+
+pub use service::LibraryCollectionService;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
