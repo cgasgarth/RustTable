@@ -147,6 +147,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "linear-offset",
             "rgbgain",
             "invert",
+            "defringe",
             "dither",
             "grain",
             "relight",
@@ -179,6 +180,17 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     let invert = modules.module("invert").expect("invert module");
     assert!(invert.availability().is_deprecated());
     assert!(invert.status_text().contains("Deprecated"));
+    let defringe = modules.module("defringe").expect("defringe module");
+    assert!(defringe.availability().is_deprecated());
+    assert!(defringe.availability().is_unsupported());
+    assert!(!defringe.enabled());
+    assert!(
+        defringe
+            .status_text()
+            .contains("backend qualification is pending #475")
+    );
+    assert!(!DarkroomModuleGroup::Active.matches(defringe));
+    assert!(DarkroomModuleGroup::Deprecated.matches(defringe));
     assert!(bloom_has_typed_sliders(&modules));
     let graduatednd = modules.module("graduatednd").expect("graduated ND");
     assert_eq!(graduatednd.presets().len(), 13);
@@ -238,6 +250,43 @@ fn censorize_projects_exact_controls_and_is_cpu_supported() {
     assert_float_eq(noise.minimum(), 0.0);
     assert_float_eq(noise.maximum(), 1.0);
     assert_float_eq(noise.default_value(), 0.0);
+}
+
+#[test]
+fn defringe_descriptor_projects_exact_v1_controls_without_qualifying_processing() {
+    let modules = reference_modules().expect("reference modules");
+    let defringe = modules.module("defringe").expect("defringe");
+    assert_eq!(
+        defringe
+            .controls()
+            .controls()
+            .map(|control| control.id().as_str())
+            .collect::<Vec<_>>(),
+        ["defringe-radius", "defringe-threshold", "defringe-mode"]
+    );
+    for (id, minimum, maximum, default) in [
+        ("defringe-radius", 0.5, 20.0, 4.0),
+        ("defringe-threshold", 0.5, 128.0, 20.0),
+    ] {
+        let slider = defringe
+            .controls()
+            .control(id)
+            .expect("defringe slider")
+            .slider_spec()
+            .expect("slider metadata");
+        assert_float_eq(slider.minimum(), minimum);
+        assert_float_eq(slider.maximum(), maximum);
+        assert_float_eq(slider.default_value(), default);
+    }
+    let mode = defringe.controls().control("defringe-mode").expect("mode");
+    assert_eq!(
+        mode.choices()
+            .map(crate::presentation::PresentationText::as_str)
+            .collect::<Vec<_>>(),
+        ["global_average", "local_average", "static"]
+    );
+    assert_eq!(mode.value(), DarkroomControlValue::Choice(0));
+    assert!(!defringe.availability().is_supported());
 }
 
 fn assert_float_eq(actual: f64, expected: f64) {

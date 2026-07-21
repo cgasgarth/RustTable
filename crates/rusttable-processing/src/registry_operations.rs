@@ -953,6 +953,7 @@ macro_rules! builtin_operations {
             $crate::registry::linear_offset_definition,
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
+            $crate::registry::defringe_definition,
             $crate::registry::dither_definition,
             $crate::registry::grain_definition,
             $crate::registry::relight_definition,

@@ -17,6 +17,7 @@
 #![doc = "```"]
 
 mod color;
+pub mod defringe_compatibility;
 pub mod demosaic;
 pub mod descriptor;
 mod evaluate;
@@ -42,6 +43,7 @@ pub use color::{
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
+pub use descriptor::defringe_descriptor;
 pub use descriptor::{
     basicadj_descriptor, bloom_descriptor, censorize_descriptor, color_reconstruction_descriptor,
     colorin_descriptor, crop_descriptor, dither_descriptor, enlargecanvas_descriptor,

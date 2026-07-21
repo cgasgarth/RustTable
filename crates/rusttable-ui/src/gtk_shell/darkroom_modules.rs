@@ -433,7 +433,8 @@ impl DarkroomModuleViewModel {
     #[must_use]
     pub fn status_text(&self) -> String {
         match &self.availability {
-            DarkroomModuleAvailability::Unsupported { reason } => {
+            DarkroomModuleAvailability::Unsupported { reason }
+            | DarkroomModuleAvailability::DeprecatedUnavailable { reason } => {
                 return format!("Unavailable · {reason}");
             }
             DarkroomModuleAvailability::Deprecated { reason } => {

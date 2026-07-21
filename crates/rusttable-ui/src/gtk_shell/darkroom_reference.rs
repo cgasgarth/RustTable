@@ -10,6 +10,7 @@ mod registry_modules;
 pub enum DarkroomModuleAvailability {
     Supported,
     Deprecated { reason: String },
+    DeprecatedUnavailable { reason: String },
     Unsupported { reason: String },
 }
 
@@ -21,19 +22,27 @@ impl DarkroomModuleAvailability {
 
     #[must_use]
     pub const fn is_deprecated(&self) -> bool {
-        matches!(self, Self::Deprecated { .. })
+        matches!(
+            self,
+            Self::Deprecated { .. } | Self::DeprecatedUnavailable { .. }
+        )
     }
 
     #[must_use]
     pub const fn is_unsupported(&self) -> bool {
-        matches!(self, Self::Unsupported { .. })
+        matches!(
+            self,
+            Self::DeprecatedUnavailable { .. } | Self::Unsupported { .. }
+        )
     }
 
     #[must_use]
     pub fn reason(&self) -> Option<&str> {
         match self {
             Self::Supported => None,
-            Self::Deprecated { reason } | Self::Unsupported { reason } => Some(reason),
+            Self::Deprecated { reason }
+            | Self::DeprecatedUnavailable { reason }
+            | Self::Unsupported { reason } => Some(reason),
         }
     }
 }
