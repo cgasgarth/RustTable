@@ -1,5 +1,4 @@
 //! Built-in operation factories and registry validation helpers.
-
 #[path = "registry_censorize.rs"]
 mod registry_censorize;
 pub use registry_censorize::censorize_definition;
@@ -13,6 +12,8 @@ pub use registry_defringe::defringe_definition;
 mod registry_clipping;
 #[path = "registry_liquify.rs"]
 mod registry_liquify;
+#[path = "registry_rasterfile.rs"]
+mod registry_rasterfile;
 use super::{
     CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
     MigrationBinding, OperationCapability, OperationDefinition, OperationDefinitionFactory,
@@ -29,6 +30,7 @@ use crate::descriptor::{
 };
 pub use registry_clipping::clipping_definition;
 pub use registry_liquify::liquify_definition;
+pub use registry_rasterfile::rasterfile_definition;
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -40,7 +42,6 @@ pub(super) fn unavailable(reason: &str) -> OperationCapability {
         reason: Some(reason.to_owned()),
     }
 }
-
 pub(super) fn validate_definition(
     definition: &OperationDefinition,
     findings: &mut Vec<RegistryValidationError>,
@@ -133,7 +134,6 @@ pub(super) fn validate_definition(
         }
     }
 }
-
 pub(super) fn snapshot_hash(definitions: &[OperationDefinition]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(REGISTRY_SCHEMA.as_bytes());
@@ -179,7 +179,6 @@ fn prepare_exposure(
         crate::evaluate::execute_prepared_operation,
     )
 }
-
 fn prepare_linear_offset(
     operation: &Operation,
     descriptor: &DescriptorId,
@@ -974,6 +973,7 @@ macro_rules! builtin_operations {
             $crate::registry::graduatednd_definition,
             $crate::registry::crop_definition,
             $crate::registry::clipping_definition,
+            $crate::registry::rasterfile_definition,
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,
             $crate::registry::scalepixels_definition,

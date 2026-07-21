@@ -12,6 +12,7 @@ rusttable-masks.workspace = true
 rusttable-core.workspace = true
 rusttable-color.workspace = true
 rusttable-image.workspace = true
+rusttable-image-io.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -24,3 +25,6 @@ test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+png.workspace = true

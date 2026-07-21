@@ -4103,6 +4103,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "image",
+ "png",
  "rawler",
  "rawloader",
  "rusttable-color",
@@ -4200,10 +4201,12 @@ version = "0.1.0"
 name = "rusttable-processing"
 version = "0.1.0"
 dependencies = [
+ "png",
  "postcard",
  "rusttable-color",
  "rusttable-core",
  "rusttable-image",
+ "rusttable-image-io",
  "rusttable-masks",
  "serde",
  "serde_json",

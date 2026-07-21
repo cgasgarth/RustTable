@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 flate2.workspace = true
 image.workspace = true
+png.workspace = true
 rawloader.workspace = true
 rawler.workspace = true
 rusttable-color.workspace = true

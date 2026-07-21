@@ -90,6 +90,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Clipping { .. } => {
             crate::descriptor::clipping_descriptor().id
         }
+        crate::ProcessingOperationKind::RasterFile { .. } => {
+            crate::descriptor::rasterfile_descriptor().id
+        }
         crate::ProcessingOperationKind::LensCorrection { .. } => {
             crate::descriptor::lenscorrection_descriptor().id
         }

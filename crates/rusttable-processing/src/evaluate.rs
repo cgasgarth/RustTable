@@ -167,7 +167,6 @@ pub fn prepare_basicadj_plans(
     };
     Ok(BasicAdjPlanSet { plans, identity })
 }
-
 pub(crate) fn execute_prepared_operation(
     operation: &PreparedCpuOperation,
     step_index: PipelineStepIndex,
@@ -635,7 +634,8 @@ fn apply_operation_with_plans(
                 pixel_index_offset,
             )
         }
-        ProcessingOperationKind::MaskManager { .. } => Ok(()),
+        ProcessingOperationKind::MaskManager { .. }
+        | ProcessingOperationKind::RasterFile { .. } => Ok(()),
         ProcessingOperationKind::Retouch { config } => {
             let plan = crate::RetouchPlan::new(config.config(), dimensions).map_err(|error| {
                 EvaluationError::OperationExecution {

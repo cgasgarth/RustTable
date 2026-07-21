@@ -32,6 +32,7 @@ pub mod liquify;
 pub mod mask_manager;
 pub mod perspective;
 pub mod primaries;
+pub mod rasterfile;
 pub mod relight;
 pub mod retouch;
 mod retouch_pixel;
