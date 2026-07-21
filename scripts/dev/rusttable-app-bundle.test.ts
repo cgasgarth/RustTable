@@ -8,6 +8,7 @@ import {
   parseCargoMetadataVersion,
   renderBundlePlist,
   RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
+  RUSTTABLE_ICON_FILE,
   validateBundle,
 } from './rusttable-app-bundle';
 
@@ -38,6 +39,7 @@ describe('RustTable bundle metadata and manifest contracts', () => {
     const plist = renderBundlePlist(parseBundleManifest(renderBundlePlist({
       CFBundleDisplayName: 'RustTable',
       CFBundleExecutable: 'RustTable',
+      CFBundleIconFile: RUSTTABLE_ICON_FILE,
       CFBundleIdentifier: 'com.cgasgarth.rusttable',
       CFBundleName: 'RustTable',
       CFBundlePackageType: 'APPL',
@@ -51,6 +53,7 @@ describe('RustTable bundle metadata and manifest contracts', () => {
     expect(parseBundleManifest(plist)).toEqual({
       CFBundleDisplayName: 'RustTable',
       CFBundleExecutable: 'RustTable',
+      CFBundleIconFile: RUSTTABLE_ICON_FILE,
       CFBundleIdentifier: 'com.cgasgarth.rusttable',
       CFBundleName: 'RustTable',
       CFBundlePackageType: 'APPL',
@@ -63,6 +66,7 @@ describe('RustTable bundle metadata and manifest contracts', () => {
     const plist = renderBundlePlist(parseBundleManifest(renderBundlePlist({
       CFBundleDisplayName: 'rusttable - latest',
       CFBundleExecutable: 'RustTable',
+      CFBundleIconFile: RUSTTABLE_ICON_FILE,
       CFBundleIdentifier: 'com.cgasgarth.rusttable.latest',
       CFBundleName: 'rusttable - latest',
       CFBundlePackageType: 'APPL',
@@ -77,6 +81,7 @@ describe('RustTable bundle metadata and manifest contracts', () => {
     const manifest = {
       CFBundleDisplayName: 'RustTable',
       CFBundleExecutable: 'RustTable',
+      CFBundleIconFile: RUSTTABLE_ICON_FILE,
       CFBundleIdentifier: 'com.cgasgarth.rusttable',
       CFBundleName: 'RustTable',
       CFBundlePackageType: 'APPL',
@@ -101,13 +106,14 @@ describe('RustTable bundle metadata and manifest contracts', () => {
       await writeFile(license, 'GPL-3.0-or-later\n');
       await createRustTableBundle({ appPath, executablePath: executable, licensePath: license, version: '0.1.0' });
       await validateBundle(appPath, license);
-      expect(await readdir(join(appPath, 'Contents/Resources'))).toEqual(['LICENSE']);
+      expect((await readdir(join(appPath, 'Contents/Resources'))).sort()).toEqual(['LICENSE', RUSTTABLE_ICON_FILE]);
       await writeFile(join(appPath, 'Contents/Resources/LICENSE'), 'corrupt');
       await expect(validateBundle(appPath, license)).rejects.toThrow('LICENSE differs');
       await writeFile(join(appPath, 'Contents/Resources/LICENSE'), await readFile(license));
       await writeFile(join(appPath, 'Contents/Info.plist'), renderBundlePlist({
         CFBundleDisplayName: 'Other',
         CFBundleExecutable: 'RustTable',
+        CFBundleIconFile: RUSTTABLE_ICON_FILE,
         CFBundleIdentifier: 'com.cgasgarth.rusttable',
         CFBundleName: 'RustTable',
         CFBundlePackageType: 'APPL',

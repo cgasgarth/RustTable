@@ -24,6 +24,7 @@
 ## Development and tests
 
 - Use test-driven development. Add focused deterministic coverage for every behavior change and regression.
+- Prefer `CARGO_BUILD_JOBS=10` for local Rust builds and checks.
 - Keep external runtimes, packaging, full reference execution, and other expensive checks out of unit tests.
 - `cargo xtask check` is the complete local gate: source policy, formatting, strict Clippy, all-target/all-feature tests, operation data, fixtures, and standard dependency checks.
 - Local hooks are optional convenience. Pull-request CI on Linux, macOS, Windows, and dependency checks is the merge authority.
