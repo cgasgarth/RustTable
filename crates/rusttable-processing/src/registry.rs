@@ -762,6 +762,7 @@ impl RegistrySnapshot {
 
 #[path = "registry_basicadj.rs"]
 mod registry_basicadj;
+pub use super::registry_borders_overlay::{borders_definition, overlay_definition};
 #[path = "registry_masks.rs"]
 mod registry_masks;
 #[path = "registry_operations.rs"]

@@ -974,6 +974,8 @@ macro_rules! builtin_operations {
             $crate::registry::crop_definition,
             $crate::registry::clipping_definition,
             $crate::registry::rasterfile_definition,
+            $crate::registry::borders_definition,
+            $crate::registry::overlay_definition,
             $crate::registry::watermark_definition,
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,

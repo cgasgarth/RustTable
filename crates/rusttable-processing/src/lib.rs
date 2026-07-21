@@ -30,6 +30,7 @@ mod output;
 mod pipeline;
 pub mod rawprepare;
 pub mod registry;
+mod registry_borders_overlay;
 mod registry_closure;
 mod registry_color;
 mod registry_reconstruction;
@@ -78,6 +79,13 @@ pub use operations::basicadj_analysis::{
     BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
     BasicAdjAnalysisRaster, BasicAdjAnalysisResult, BasicAdjAnalysisRoi, BasicAdjResolvedValues,
 };
+pub use operations::borders::{
+    BORDERS_WGSL, BordersAspect, BordersBasis, BordersCodecError, BordersColor, BordersConfig,
+    BordersExecution, BordersExecutionError, BordersFrame, BordersGeometry, BordersHistory,
+    BordersOrientation, BordersParametersV1, BordersParametersV2, BordersParametersV3,
+    BordersParametersV4, BordersPlan, BordersPlanError, decode_history as decode_borders_history,
+    migrate_history as migrate_borders_history,
+};
 pub use operations::censorize::{
     CENSORIZE_COMPATIBILITY_ID, CENSORIZE_PARAMETER_BYTES, CENSORIZE_RNG_VERSION,
     CENSORIZE_SCHEMA_VERSION, CensorizeBackend, CensorizeBlend, CensorizeCodecError,
@@ -109,6 +117,14 @@ pub use operations::liquify::{
     LiquifyStatus, LiquifyWarpType,
 };
 pub use operations::mask_manager::{MaskManagerError, MaskManagerParameters};
+pub use operations::overlay::{
+    OVERLAY_WGSL, OverlayAlpha, OverlayAnchor, OverlayAsset, OverlayAssetError, OverlayAssetStore,
+    OverlayBaseScale, OverlayChannel, OverlayCodecError, OverlayConfig, OverlayEdge,
+    OverlayExecution, OverlayExecutionError, OverlayHistory, OverlayImageScale,
+    OverlayInterpolation, OverlayParametersV1, OverlayPlan, OverlayProfilePolicy, OverlayReceipt,
+    OverlayReference, decode_history as decode_overlay_history,
+    migrate_history as migrate_overlay_history,
+};
 pub use operations::rasterfile::{
     RasterFileChannelMode, RasterFileExecutionError, RasterFileForm, RasterFileHistory,
     RasterFileParametersV1, RasterFilePlan, RasterFileReceipt, RasterFileTile,
