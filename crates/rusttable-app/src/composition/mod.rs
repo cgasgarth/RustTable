@@ -25,7 +25,7 @@ use crate::gtk_thumbnail_controller::{GtkThumbnailController, default_thumbnail_
 use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
     COMMAND_QUIT_ACCELERATORS, MacApplicationBridge, MacApplicationCommand, MacOpenRequest,
-    MacTerminationDecision,
+    MacTerminationDecision, QUIT_ACTION_NAME,
 };
 use gtk4::gio::prelude::{ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt};
 use gtk4::glib::{self, ControlFlow};
@@ -421,8 +421,7 @@ fn install_application_menus(
         let active_shell = Rc::clone(active_shell);
         action.connect_activate(move |_, _| match command {
             MacApplicationCommand::Quit => {
-                if native_bridge.borrow_mut().request_termination(false, true)
-                    == MacTerminationDecision::Proceed
+                if command.route(&mut native_bridge.borrow_mut()) == MacTerminationDecision::Proceed
                 {
                     action_application.quit();
                 }
@@ -446,7 +445,7 @@ fn install_application_menus(
     }
     application.set_accels_for_action("app.preferences", &["<Primary>comma"]);
     application.set_accels_for_action("app.hide", &["<Primary>h"]);
-    application.set_accels_for_action("app.quit", COMMAND_QUIT_ACCELERATORS);
+    application.set_accels_for_action(QUIT_ACTION_NAME, COMMAND_QUIT_ACCELERATORS);
 
     let application_menu = gtk4::gio::Menu::new();
     application_menu.append(Some("About RustTable"), Some("app.about"));
@@ -455,7 +454,7 @@ fn install_application_menus(
     application_menu.append(Some("Hide RustTable"), Some("app.hide"));
     application_menu.append(Some("Hide Others"), Some("app.hide-others"));
     application_menu.append(Some("Show All"), Some("app.show-all"));
-    application_menu.append(Some("Quit RustTable"), Some("app.quit"));
+    application_menu.append(Some("Quit RustTable"), Some(QUIT_ACTION_NAME));
 
     let window_menu = gtk4::gio::Menu::new();
     window_menu.append(Some("Window"), Some("app.window"));

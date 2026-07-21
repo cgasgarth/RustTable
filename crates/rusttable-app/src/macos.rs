@@ -16,6 +16,9 @@ pub const MAX_OPEN_FILES: usize = 256;
 /// The `RustTable` bundle identity used by native application metadata and the runtime fallback.
 pub const BUNDLE_IDENTIFIER: &str = "com.cgasgarth.rusttable";
 
+/// The application action exposed by the native macOS menu for Command-Q.
+pub const QUIT_ACTION_NAME: &str = "app.quit";
+
 /// GTK accelerator spellings that cover Command-Q on macOS and the primary quit shortcut elsewhere.
 #[cfg(target_os = "macos")]
 pub const COMMAND_QUIT_ACCELERATORS: &[&str] = &["<Meta>q", "<Primary>q"];
@@ -64,6 +67,22 @@ pub enum MacApplicationCommand {
     ShowAll,
     Window,
     Quit,
+}
+
+impl MacApplicationCommand {
+    /// Routes the native quit command through the lifecycle policy.
+    pub fn route(self, bridge: &mut MacApplicationBridge) -> MacTerminationDecision {
+        match self {
+            Self::Quit => bridge.request_termination(false, true),
+            Self::About
+            | Self::Preferences
+            | Self::Services
+            | Self::Hide
+            | Self::HideOthers
+            | Self::ShowAll
+            | Self::Window => MacTerminationDecision::Ignore,
+        }
+    }
 }
 
 /// A typed lifecycle event produced by the native GTK/GIO adapter.
@@ -466,7 +485,7 @@ mod tests {
     use super::{
         BUNDLE_IDENTIFIER, COMMAND_QUIT_ACCELERATORS, MAX_OPEN_FILES, MacApplicationBridge,
         MacApplicationCommand, MacApplicationEvent, MacOpenRejection, MacOpenTarget,
-        MacTerminationDecision, MacWindowAction, document_types,
+        MacTerminationDecision, MacWindowAction, QUIT_ACTION_NAME, document_types,
     };
 
     #[cfg(target_os = "macos")]
@@ -601,6 +620,7 @@ mod tests {
     #[test]
     fn native_menu_roles_and_document_declarations_are_stable() {
         assert_eq!(BUNDLE_IDENTIFIER, "com.cgasgarth.rusttable");
+        assert_eq!(QUIT_ACTION_NAME, "app.quit");
         assert_eq!(
             [
                 MacApplicationCommand::About,
@@ -645,5 +665,23 @@ mod tests {
         assert!(COMMAND_QUIT_ACCELERATORS.contains(&"<Primary>q"));
         #[cfg(target_os = "macos")]
         assert!(COMMAND_QUIT_ACCELERATORS.contains(&"<Meta>q"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn command_q_routes_to_quit_and_stops_native_callbacks() {
+        let mut bridge = MacApplicationBridge::default();
+        assert_eq!(
+            MacApplicationCommand::Quit.route(&mut bridge),
+            MacTerminationDecision::Proceed
+        );
+        assert_eq!(
+            MacApplicationCommand::Quit.route(&mut bridge),
+            MacTerminationDecision::Ignore
+        );
+        assert_eq!(
+            bridge.window_action(MacApplicationEvent::Reopen, 0),
+            MacWindowAction::Ignore
+        );
     }
 }
