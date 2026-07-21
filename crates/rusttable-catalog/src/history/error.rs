@@ -25,6 +25,9 @@ pub enum HistoryError {
     BranchHasSnapshot(HistoryBranchId),
     BranchHasEvidence(HistoryBranchId),
     SourceBranchMismatch,
+    MergeConflict {
+        reason: &'static str,
+    },
     DuplicateEvidence,
     MissingEvidence,
     CannotPruneReferencedRevision(HistoryRevisionId),
@@ -64,6 +67,7 @@ impl fmt::Display for HistoryError {
             Self::SourceBranchMismatch => {
                 formatter.write_str("source cursor does not identify a valid branch revision")
             }
+            Self::MergeConflict { reason } => write!(formatter, "history merge conflict: {reason}"),
             Self::DuplicateEvidence => formatter.write_str("history evidence is already retained"),
             Self::MissingEvidence => formatter.write_str("history evidence is not retained"),
             Self::CannotPruneReferencedRevision(id) => {

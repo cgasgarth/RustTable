@@ -3,6 +3,8 @@ use std::num::NonZeroU64;
 
 use rusttable_core::{Edit, OperationId, OperationKey, PhotoId};
 
+use super::canonical::ContentBlobId;
+
 macro_rules! define_history_id {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -405,6 +407,9 @@ impl HistorySnapshot {
 pub enum HistoryEvidenceKind {
     Export,
     Migration,
+    Import,
+    Redo,
+    Restore,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -430,6 +435,211 @@ impl HistoryEvidence {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HistoryProvenance {
+    Native,
+    Darktable { schema: u32, source_id: String },
+    RustTable { schema: u32, source_id: String },
+}
+
+impl HistoryProvenance {
+    #[must_use]
+    pub const fn native() -> Self {
+        Self::Native
+    }
+
+    #[must_use]
+    pub fn darktable(schema: u32, source_id: impl Into<String>) -> Self {
+        Self::Darktable {
+            schema,
+            source_id: source_id.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn rusttable(schema: u32, source_id: impl Into<String>) -> Self {
+        Self::RustTable {
+            schema,
+            source_id: source_id.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HistoryImportSource {
+    Darktable { schema: u32, source_id: String },
+    RustTable { schema: u32, source_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryImportEntry {
+    payload: HistoryPayload,
+    source: HistoryImportSource,
+    is_redo: bool,
+    restore_from: Option<usize>,
+}
+
+impl HistoryImportEntry {
+    #[must_use]
+    pub fn new(
+        payload: HistoryPayload,
+        source: HistoryImportSource,
+        is_redo: bool,
+        restore_from: Option<usize>,
+    ) -> Self {
+        Self {
+            payload,
+            source,
+            is_redo,
+            restore_from,
+        }
+    }
+
+    #[must_use]
+    pub const fn payload(&self) -> &HistoryPayload {
+        &self.payload
+    }
+
+    #[must_use]
+    pub const fn is_redo(&self) -> bool {
+        self.is_redo
+    }
+
+    #[must_use]
+    pub const fn restore_from(&self) -> Option<usize> {
+        self.restore_from
+    }
+
+    #[must_use]
+    pub fn source(&self) -> &HistoryImportSource {
+        &self.source
+    }
+
+    #[must_use]
+    pub fn provenance(&self) -> HistoryProvenance {
+        match &self.source {
+            HistoryImportSource::Darktable { schema, source_id } => {
+                HistoryProvenance::darktable(*schema, source_id.clone())
+            }
+            HistoryImportSource::RustTable { schema, source_id } => {
+                HistoryProvenance::rusttable(*schema, source_id.clone())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HistoryExecutionStatus {
+    Executable,
+    Opaque { reason: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryBlobRefs {
+    edit: ContentBlobId,
+    mask_blend: ContentBlobId,
+    pipeline: ContentBlobId,
+}
+
+impl HistoryBlobRefs {
+    #[must_use]
+    pub const fn new(
+        edit: ContentBlobId,
+        mask_blend: ContentBlobId,
+        pipeline: ContentBlobId,
+    ) -> Self {
+        Self {
+            edit,
+            mask_blend,
+            pipeline,
+        }
+    }
+
+    #[must_use]
+    pub const fn edit(&self) -> ContentBlobId {
+        self.edit
+    }
+
+    #[must_use]
+    pub const fn mask_blend(&self) -> ContentBlobId {
+        self.mask_blend
+    }
+
+    #[must_use]
+    pub const fn pipeline(&self) -> ContentBlobId {
+        self.pipeline
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryJournalEntry {
+    sequence: u64,
+    kind: HistoryOperationKind,
+    revision: Option<HistoryRevisionId>,
+    before: HistoryCursor,
+    after: HistoryCursor,
+    restore_from: Option<HistoryRevisionId>,
+    provenance: HistoryProvenance,
+}
+
+impl HistoryJournalEntry {
+    #[must_use]
+    pub const fn new(
+        sequence: u64,
+        kind: HistoryOperationKind,
+        revision: Option<HistoryRevisionId>,
+        before: HistoryCursor,
+        after: HistoryCursor,
+        restore_from: Option<HistoryRevisionId>,
+        provenance: HistoryProvenance,
+    ) -> Self {
+        Self {
+            sequence,
+            kind,
+            revision,
+            before,
+            after,
+            restore_from,
+            provenance,
+        }
+    }
+
+    #[must_use]
+    pub const fn sequence(&self) -> u64 {
+        self.sequence
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> HistoryOperationKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn revision(&self) -> Option<HistoryRevisionId> {
+        self.revision
+    }
+
+    #[must_use]
+    pub const fn before(&self) -> HistoryCursor {
+        self.before
+    }
+
+    #[must_use]
+    pub const fn after(&self) -> HistoryCursor {
+        self.after
+    }
+
+    #[must_use]
+    pub const fn restore_from(&self) -> Option<HistoryRevisionId> {
+        self.restore_from
+    }
+
+    #[must_use]
+    pub fn provenance(&self) -> &HistoryProvenance {
+        &self.provenance
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BranchTransferPolicy {
     Copy,
@@ -440,6 +650,7 @@ pub enum BranchTransferPolicy {
 pub struct HistoryStateSnapshot {
     pub(crate) photo_id: PhotoId,
     pub(crate) version: HistoryVersion,
+    pub(crate) commit_sequence: u64,
     pub(crate) next_revision_id: u64,
     pub(crate) next_branch_id: u64,
     pub(crate) next_snapshot_id: u64,
@@ -448,6 +659,8 @@ pub struct HistoryStateSnapshot {
     pub(crate) branches: Vec<HistoryBranch>,
     pub(crate) snapshots: Vec<HistorySnapshot>,
     pub(crate) evidence: Vec<HistoryEvidence>,
+    pub(crate) journal: Vec<HistoryJournalEntry>,
+    pub(crate) provenance: std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance>,
 }
 
 impl HistoryStateSnapshot {
@@ -465,9 +678,10 @@ impl HistoryStateSnapshot {
         snapshots: Vec<HistorySnapshot>,
         evidence: Vec<HistoryEvidence>,
     ) -> Self {
-        Self {
+        Self::from_parts_with_journal(
             photo_id,
             version,
+            version.get(),
             next_revision_id,
             next_branch_id,
             next_snapshot_id,
@@ -476,6 +690,42 @@ impl HistoryStateSnapshot {
             branches,
             snapshots,
             evidence,
+            Vec::new(),
+            std::collections::BTreeMap::new(),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn from_parts_with_journal(
+        photo_id: PhotoId,
+        version: HistoryVersion,
+        commit_sequence: u64,
+        next_revision_id: u64,
+        next_branch_id: u64,
+        next_snapshot_id: u64,
+        active_branch: HistoryBranchId,
+        revisions: Vec<HistoryRevision>,
+        branches: Vec<HistoryBranch>,
+        snapshots: Vec<HistorySnapshot>,
+        evidence: Vec<HistoryEvidence>,
+        journal: Vec<HistoryJournalEntry>,
+        provenance: std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance>,
+    ) -> Self {
+        Self {
+            photo_id,
+            version,
+            commit_sequence,
+            next_revision_id,
+            next_branch_id,
+            next_snapshot_id,
+            active_branch,
+            revisions,
+            branches,
+            snapshots,
+            evidence,
+            journal,
+            provenance,
         }
     }
 
@@ -487,6 +737,11 @@ impl HistoryStateSnapshot {
     #[must_use]
     pub const fn version(&self) -> HistoryVersion {
         self.version
+    }
+
+    #[must_use]
+    pub const fn commit_sequence(&self) -> u64 {
+        self.commit_sequence
     }
 
     #[must_use]
@@ -527,6 +782,16 @@ impl HistoryStateSnapshot {
     #[must_use]
     pub fn evidence(&self) -> &[HistoryEvidence] {
         &self.evidence
+    }
+
+    #[must_use]
+    pub fn journal(&self) -> &[HistoryJournalEntry] {
+        &self.journal
+    }
+
+    #[must_use]
+    pub fn provenance(&self) -> &std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance> {
+        &self.provenance
     }
 }
 
