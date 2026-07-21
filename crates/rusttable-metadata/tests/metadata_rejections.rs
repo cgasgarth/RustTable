@@ -42,3 +42,13 @@ fn invalid_orientation_is_rejected_as_a_typed_field_error() {
         })
     ));
 }
+
+#[test]
+fn raw_container_without_embedded_tiff_metadata_is_accepted_as_empty() {
+    assert_eq!(
+        input()
+            .read_bytes(InputFormat::Raw, b"FUJIFILMCCD-RAW synthetic")
+            .expect("RAW metadata is optional"),
+        rusttable_core::ImageMetadata::empty()
+    );
+}

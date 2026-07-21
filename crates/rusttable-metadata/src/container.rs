@@ -11,7 +11,16 @@ pub(crate) fn exif_payload(
     match format {
         InputFormat::Jpeg => jpeg_payload(source, limits),
         InputFormat::Png => png_payload(source, limits),
-        InputFormat::Tiff | InputFormat::Raw => tiff_payload(source, limits),
+        InputFormat::Tiff => tiff_payload(source, limits),
+        // Camera-RAW containers do not share the classic TIFF byte signature at offset zero;
+        // metadata is optional when the decoder has already accepted the RAW container.
+        InputFormat::Raw => {
+            if is_tiff(source) {
+                tiff_payload(source, limits)
+            } else {
+                Ok(None)
+            }
+        }
     }
 }
 
