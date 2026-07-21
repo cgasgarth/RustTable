@@ -65,6 +65,12 @@ registry_issue = 265
 owner = "crates/rusttable-processing/src/descriptor.rs"
 
 [[operation]]
+rust_id = "rusttable.grain"
+descriptor_issue = 263
+registry_issue = 265
+owner = "crates/rusttable-processing/src/descriptor.rs"
+
+[[operation]]
 rust_id = "rusttable.vignette"
 descriptor_issue = 263
 registry_issue = 265

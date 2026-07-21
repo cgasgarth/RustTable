@@ -45,12 +45,15 @@ pub(crate) use operation_geometry::{
 };
 #[path = "operation_effects.rs"]
 mod operation_effects;
+#[path = "operation_grain.rs"]
+mod operation_grain;
 #[path = "operation_legacy.rs"]
 mod operation_legacy;
 #[path = "operation_spatial.rs"]
 mod operation_spatial;
 pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
+pub(crate) use operation_grain::compile_grain;
 pub(crate) use operation_legacy::{compile_relight, compile_shadhi};
 pub(crate) use operation_parameters::{parameter_integer, parameter_u32};
 pub(crate) use operation_spatial::{compile_graduatednd, compile_vignette};
@@ -90,6 +93,9 @@ pub enum ProcessingOperationKind {
     },
     Dither {
         config: DitherConfig,
+    },
+    Grain {
+        config: crate::operations::grain::GrainConfig,
     },
     Crop {
         config: CropConfig,
@@ -261,6 +267,10 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_dither(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_dither(operation)
+    }
+
+    pub(crate) fn compile_grain(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_grain(operation)
     }
 
     pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {

@@ -5,6 +5,7 @@
 mod cache;
 mod contracts;
 mod dispatch;
+mod grain;
 mod point;
 pub mod purpose;
 pub mod recovery;
@@ -29,6 +30,7 @@ pub use dispatch::{
     KernelIdentity, ParameterBlock, ParameterValue, ParityContract, PrepareRequest,
     PreparedGpuKernel, ReceiptStatus, ScalarValue, Tile, TypedParameters,
 };
+pub use grain::{GrainPointError, GrainPointRequest, GrainPointResult};
 pub use point::{BasicPointError, BasicPointOperation, BasicPointRequest, BasicPointResult};
 pub use recovery::{
     AssemblyPlan, AssemblyReceipt, AssemblyTile, AttemptFailure, AttemptFailureKind, AttemptId,

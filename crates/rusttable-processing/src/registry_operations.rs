@@ -9,9 +9,10 @@ use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, crop_descriptor,
     dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
-    flip_descriptor, graduatednd_descriptor, invert_descriptor, linear_offset_descriptor,
-    relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
-    shadhi_descriptor, soften_descriptor, temperature_descriptor, vignette_descriptor,
+    flip_descriptor, graduatednd_descriptor, grain_descriptor, invert_descriptor,
+    linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
+    scalepixels_descriptor, shadhi_descriptor, soften_descriptor, temperature_descriptor,
+    vignette_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -206,6 +207,17 @@ fn prepare_dither(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_dither(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_grain(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_grain(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -447,6 +459,41 @@ pub fn dither_definition() -> OperationDefinition {
             "iop.dither.cpu.floyd-steinberg-full-image",
         ],
         false,
+    )
+}
+
+pub fn grain_definition() -> OperationDefinition {
+    let descriptor = grain_descriptor();
+    let compatibility = descriptor.id.compatibility_name.clone();
+    OperationDefinition::new(
+        descriptor,
+        Some(CpuFactory::new(
+            prepare_grain,
+            crate::evaluate::execute_prepared_operation,
+            RoiKind::Identity,
+            true,
+            false,
+        )),
+        Some(GpuBinding::new(
+            format!("rusttable.{compatibility}.wgsl"),
+            1,
+            crate::operations::grain::wgpu_passes()
+                .into_iter()
+                .map(str::to_owned),
+            ["rgba32float".to_owned()],
+        )),
+        vec![MigrationBinding::new(1, 2, "grain.migration.v1-v2")],
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+        ),
+        vec![
+            "iop.grain.params.v1-v2".to_owned(),
+            "iop.grain.cpu.deterministic-noise".to_owned(),
+            "iop.grain.wgpu.point".to_owned(),
+            "iop.grain.luminance-lut".to_owned(),
+        ],
     )
 }
 
@@ -886,6 +933,7 @@ macro_rules! builtin_operations {
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
             $crate::registry::dither_definition,
+            $crate::registry::grain_definition,
             $crate::registry::relight_definition,
             $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,

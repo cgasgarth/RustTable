@@ -1,7 +1,10 @@
-use rusttable_gpu::{BasicPointError, BasicPointOperation, BasicPointRequest, GpuRuntime};
+use rusttable_gpu::{
+    BasicPointError, BasicPointOperation, BasicPointRequest, GpuRuntime, GrainPointError,
+    GrainPointRequest,
+};
 use rusttable_processing::{
-    FiniteF32, LinearRgb, SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage,
-    encode_linear_srgb, to_linear_srgb,
+    FiniteF32, GrainPlan, LinearRgb, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
+    WorkingRgbImage, encode_linear_srgb, to_linear_srgb,
 };
 use sha2::{Digest, Sha256};
 
@@ -17,6 +20,33 @@ pub enum PixelpipeBackend {
     CpuTiledFallback,
     WgpuBasic,
     WgpuTiled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GpuExecutionError {
+    Basic(BasicPointError),
+    Grain(GrainPointError),
+}
+
+impl From<BasicPointError> for GpuExecutionError {
+    fn from(error: BasicPointError) -> Self {
+        Self::Basic(error)
+    }
+}
+
+impl From<GrainPointError> for GpuExecutionError {
+    fn from(error: GrainPointError) -> Self {
+        Self::Grain(error)
+    }
+}
+
+impl GpuExecutionError {
+    fn into_receipt_error(self) -> BasicPointError {
+        match self {
+            Self::Basic(error) => error,
+            Self::Grain(error) => BasicPointError::Readback(error.to_string()),
+        }
+    }
 }
 
 /// Bounded provenance for one tiled execution and its recovery attempts.
@@ -139,7 +169,7 @@ impl PixelpipeExecutionService {
         &self,
         snapshot: &CpuPixelpipeSnapshot,
     ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
-        let Some(operations) = basic_operations(snapshot) else {
+        let Some(plan) = gpu_plan(snapshot) else {
             return self.cpu_result(snapshot, None);
         };
         let Some(gpu) = self.gpu.as_ref() else {
@@ -149,7 +179,7 @@ impl PixelpipeExecutionService {
             return self.cpu_result(snapshot, Some(BasicPointError::Unhealthy));
         }
 
-        match execute_gpu(gpu, snapshot, &operations) {
+        match execute_gpu(gpu, snapshot, &plan) {
             Ok((image, dispatches)) => Ok(PixelpipeExecutionResult {
                 image,
                 receipt: PixelpipeExecutionReceipt {
@@ -160,7 +190,7 @@ impl PixelpipeExecutionService {
                     tiling: None,
                 },
             }),
-            Err(error) => self.cpu_result(snapshot, Some(error)),
+            Err(error) => self.cpu_result(snapshot, Some(error.into_receipt_error())),
         }
     }
 
@@ -196,22 +226,22 @@ impl PixelpipeExecutionService {
     pub fn execute_tiled(
         &self,
         snapshot: &CpuPixelpipeSnapshot,
-        plan: crate::CpuTilePlan,
+        tile_plan: crate::CpuTilePlan,
     ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
-        let Some(operations) = basic_operations(snapshot) else {
-            return self.cpu_tiled_result(snapshot, plan, None, 0);
+        let Some(plan) = gpu_plan(snapshot) else {
+            return self.cpu_tiled_result(snapshot, tile_plan, None, 0);
         };
         let Some(gpu) = self.gpu.as_ref() else {
-            return self.cpu_tiled_result(snapshot, plan, None, 0);
+            return self.cpu_tiled_result(snapshot, tile_plan, None, 0);
         };
         if !gpu.health_check() {
-            return self.cpu_tiled_result(snapshot, plan, Some(BasicPointError::Unhealthy), 0);
+            return self.cpu_tiled_result(snapshot, tile_plan, Some(BasicPointError::Unhealthy), 0);
         }
 
-        let plans = recovery_plans(plan);
+        let plans = recovery_plans(tile_plan);
         let mut last_error = None;
         for (index, candidate) in plans.iter().copied().enumerate() {
-            match execute_gpu_tiled(gpu, snapshot, &operations, candidate) {
+            match execute_gpu_tiled(gpu, snapshot, &plan, candidate) {
                 Ok((image, dispatches, tile_count)) => {
                     return Ok(PixelpipeExecutionResult {
                         image,
@@ -229,12 +259,12 @@ impl PixelpipeExecutionService {
                         },
                     });
                 }
-                Err(error) => last_error = Some(error),
+                Err(error) => last_error = Some(error.into_receipt_error()),
             }
         }
         self.cpu_tiled_result(
             snapshot,
-            plan,
+            tile_plan,
             last_error,
             u8::try_from(plans.len()).unwrap_or(u8::MAX),
         )
@@ -305,8 +335,15 @@ fn tiling_receipt(
     }
 }
 
-fn basic_operations(snapshot: &CpuPixelpipeSnapshot) -> Option<Vec<BasicPointOperation>> {
+#[derive(Debug, Clone)]
+enum GpuPlan {
+    Basic(Vec<BasicPointOperation>),
+    Grain(rusttable_processing::operations::grain::GrainConfig),
+}
+
+fn gpu_plan(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlan> {
     let mut operations = Vec::new();
+    let mut grain = None;
     for node in snapshot.graph().nodes() {
         let operation = node.operation();
         if !operation.is_enabled() {
@@ -329,19 +366,45 @@ fn basic_operations(snapshot: &CpuPixelpipeSnapshot) -> Option<Vec<BasicPointOpe
                     blue: blue.get(),
                 }
             }
+            rusttable_processing::ProcessingOperationKind::Grain { config } => {
+                if grain.is_some() || !operations.is_empty() {
+                    return None;
+                }
+                grain = Some(*config);
+                continue;
+            }
             _ => return None,
         };
+        if grain.is_some() {
+            return None;
+        }
         operations.push(gpu_operation);
     }
-    Some(operations)
+    if let Some(config) = grain {
+        Some(GpuPlan::Grain(config))
+    } else {
+        Some(GpuPlan::Basic(operations))
+    }
 }
 
 fn execute_gpu(
     gpu: &GpuRuntime,
     snapshot: &CpuPixelpipeSnapshot,
-    operations: &[BasicPointOperation],
-) -> Result<(RgbaF32Image, u32), BasicPointError> {
-    execute_gpu_image(gpu, snapshot.input(), snapshot.output_mode(), operations)
+    plan: &GpuPlan,
+) -> Result<(RgbaF32Image, u32), GpuExecutionError> {
+    match plan {
+        GpuPlan::Basic(operations) => {
+            execute_gpu_image(gpu, snapshot.input(), snapshot.output_mode(), operations)
+        }
+        GpuPlan::Grain(config) => execute_gpu_grain_image(
+            gpu,
+            snapshot.input(),
+            snapshot.output_mode(),
+            *config,
+            snapshot.input().descriptor().dimensions(),
+            (0, 0),
+        ),
+    }
 }
 
 fn execute_gpu_image(
@@ -349,7 +412,7 @@ fn execute_gpu_image(
     input: &RgbaF32Image,
     output_mode: CpuPixelpipeOutputMode,
     operations: &[BasicPointOperation],
-) -> Result<(RgbaF32Image, u32), BasicPointError> {
+) -> Result<(RgbaF32Image, u32), GpuExecutionError> {
     let dimensions = input.descriptor().dimensions();
     let source_pixels = input
         .pixels()
@@ -443,13 +506,134 @@ fn execute_gpu_image(
     Ok((image, result.dispatches()))
 }
 
+fn execute_gpu_grain_image(
+    gpu: &GpuRuntime,
+    input: &RgbaF32Image,
+    output_mode: CpuPixelpipeOutputMode,
+    config: rusttable_processing::operations::grain::GrainConfig,
+    full_dimensions: RasterDimensions,
+    origin: (u32, u32),
+) -> Result<(RgbaF32Image, u32), GpuExecutionError> {
+    let dimensions = input.descriptor().dimensions();
+    let source_pixels = input
+        .pixels()
+        .iter()
+        .copied()
+        .map(|pixel| {
+            Ok(SourceRgb::new(
+                SrgbChannel::new(pixel.red())
+                    .map_err(|_| BasicPointError::NonFiniteInput { component: 0 })?,
+                SrgbChannel::new(pixel.green())
+                    .map_err(|_| BasicPointError::NonFiniteInput { component: 1 })?,
+                SrgbChannel::new(pixel.blue())
+                    .map_err(|_| BasicPointError::NonFiniteInput { component: 2 })?,
+            ))
+        })
+        .collect::<Result<Vec<_>, BasicPointError>>()?;
+    let source = SourceRgbImage::new(dimensions, source_pixels)
+        .map_err(|_| BasicPointError::InvalidPixelPacking)?;
+    let linear = to_linear_srgb(&source);
+    let mut packed = Vec::with_capacity(input.pixels().len() * 4);
+    for (working, source) in linear.pixels().zip(input.pixels()) {
+        packed.extend([
+            working.red().get(),
+            working.green().get(),
+            working.blue().get(),
+            source.alpha(),
+        ]);
+    }
+    let plan = GrainPlan::new(config, full_dimensions)
+        .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    let parameters = plan.gpu_parameters();
+    let result = gpu.execute_grain_point(GrainPointRequest {
+        pixels: &packed,
+        width: dimensions.width(),
+        height: dimensions.height(),
+        full_width: full_dimensions.width(),
+        full_height: full_dimensions.height(),
+        origin_x: origin.0,
+        origin_y: origin.1,
+        channel: parameters.channel.id(),
+        seed: parameters.seed,
+        zoom: parameters.zoom,
+        strength: parameters.strength,
+        lut: plan.gpu_lut(),
+    })?;
+    image_from_packed(input, output_mode, result.pixels(), result.dispatches())
+}
+
+fn image_from_packed(
+    input: &RgbaF32Image,
+    output_mode: CpuPixelpipeOutputMode,
+    packed: &[f32],
+    dispatches: u32,
+) -> Result<(RgbaF32Image, u32), GpuExecutionError> {
+    let dimensions = input.descriptor().dimensions();
+    let (packed_pixels, remainder) = packed.as_chunks::<4>();
+    if !remainder.is_empty() || packed_pixels.len() != input.pixels().len() {
+        return Err(BasicPointError::InvalidPixelPacking.into());
+    }
+    let mut working_pixels = Vec::with_capacity(input.pixels().len());
+    for (index, pixel) in packed_pixels.iter().enumerate() {
+        working_pixels.push(LinearRgb::new(
+            FiniteF32::new(pixel[0]).map_err(|_| BasicPointError::NonFiniteInput {
+                component: index * 4,
+            })?,
+            FiniteF32::new(pixel[1]).map_err(|_| BasicPointError::NonFiniteInput {
+                component: index * 4 + 1,
+            })?,
+            FiniteF32::new(pixel[2]).map_err(|_| BasicPointError::NonFiniteInput {
+                component: index * 4 + 2,
+            })?,
+        ));
+    }
+    let working = WorkingRgbImage::new(dimensions, working_pixels)
+        .map_err(|_| BasicPointError::InvalidPixelPacking)?;
+    let output_pixels = match output_mode {
+        CpuPixelpipeOutputMode::FullExport => working
+            .pixels()
+            .zip(input.pixels())
+            .map(|(pixel, source)| {
+                RgbaF32Pixel::new(
+                    pixel.red().get(),
+                    pixel.green().get(),
+                    pixel.blue().get(),
+                    source.alpha(),
+                )
+            })
+            .collect(),
+        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+            .image()
+            .pixels()
+            .zip(input.pixels())
+            .map(|(pixel, source)| {
+                RgbaF32Pixel::new(
+                    pixel.red().get(),
+                    pixel.green().get(),
+                    pixel.blue().get(),
+                    source.alpha(),
+                )
+            })
+            .collect(),
+    };
+    let encoding = match output_mode {
+        CpuPixelpipeOutputMode::Preview => RgbaF32ColorEncoding::SrgbD65,
+        CpuPixelpipeOutputMode::FullExport => RgbaF32ColorEncoding::LinearSrgbD65,
+    };
+    let descriptor = RgbaF32Descriptor::new(dimensions, encoding);
+    let image = RgbaF32Image::new(descriptor, output_pixels).map_err(|_| {
+        BasicPointError::Readback("GPU output failed the typed image boundary".to_owned())
+    })?;
+    Ok((image, dispatches))
+}
+
 fn execute_gpu_tiled(
     gpu: &GpuRuntime,
     snapshot: &CpuPixelpipeSnapshot,
-    operations: &[BasicPointOperation],
-    plan: crate::CpuTilePlan,
-) -> Result<(RgbaF32Image, u32, u64), BasicPointError> {
-    let grid = plan
+    plan: &GpuPlan,
+    tile_plan: crate::CpuTilePlan,
+) -> Result<(RgbaF32Image, u32, u64), GpuExecutionError> {
+    let grid = tile_plan
         .grid_for(snapshot.input().descriptor().dimensions())
         .map_err(|error| BasicPointError::Readback(error.to_string()))?;
     let input = snapshot.input();
@@ -461,8 +645,19 @@ fn execute_gpu_tiled(
             .map_err(|error| BasicPointError::Readback(error.to_string()))?
             .ok_or_else(|| BasicPointError::Readback("tile disappeared from grid".to_owned()))?;
         let tile_input = extract_tile(input, tile)?;
-        let (tile_output, tile_dispatches) =
-            execute_gpu_image(gpu, &tile_input, snapshot.output_mode(), operations)?;
+        let (tile_output, tile_dispatches) = match plan {
+            GpuPlan::Basic(operations) => {
+                execute_gpu_image(gpu, &tile_input, snapshot.output_mode(), operations)?
+            }
+            GpuPlan::Grain(config) => execute_gpu_grain_image(
+                gpu,
+                &tile_input,
+                snapshot.output_mode(),
+                *config,
+                input.descriptor().dimensions(),
+                (tile.origin_x(), tile.origin_y()),
+            )?,
+        };
         dispatches = dispatches.saturating_add(tile_dispatches);
         place_tile(&mut assembled, input, tile, &tile_output)?;
     }
