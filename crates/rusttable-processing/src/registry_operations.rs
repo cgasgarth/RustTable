@@ -3,6 +3,9 @@
 #[path = "registry_censorize.rs"]
 mod registry_censorize;
 pub use registry_censorize::censorize_definition;
+#[path = "registry_clahe.rs"]
+mod registry_clahe;
+pub use registry_clahe::clahe_definition;
 #[path = "registry_defringe.rs"]
 mod registry_defringe;
 pub use registry_defringe::defringe_definition;
@@ -957,6 +960,7 @@ macro_rules! builtin_operations {
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
             $crate::registry::defringe_definition,
+            $crate::registry::clahe_definition,
             $crate::registry::dither_definition,
             $crate::registry::grain_definition,
             $crate::registry::relight_definition,

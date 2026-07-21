@@ -148,6 +148,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "rgbgain",
             "invert",
             "defringe",
+            "clahe",
             "dither",
             "grain",
             "relight",
@@ -285,6 +286,42 @@ fn defringe_descriptor_projects_exact_v1_controls_and_qualifies_processing() {
     assert!(defringe.availability().is_supported());
 }
 
+#[test]
+fn clahe_descriptor_projects_exact_v1_controls_and_unavailable_state() {
+    let modules = reference_modules().expect("reference modules");
+    let clahe = modules.module("clahe").expect("CLAHE");
+    assert_eq!(clahe.title(), "Old Local Contrast");
+    assert!(clahe.availability().is_deprecated());
+    assert!(clahe.availability().is_unsupported());
+    assert!(!clahe.availability().is_supported());
+    assert!(clahe.status_text().contains("Unavailable"));
+    assert!(clahe.status_text().contains("#473"));
+    assert_eq!(
+        clahe
+            .controls()
+            .controls()
+            .map(|control| control.id().as_str())
+            .collect::<Vec<_>>(),
+        ["clahe-radius", "clahe-slope"]
+    );
+    for (id, minimum, maximum, default) in [
+        ("clahe-radius", 0.0, 256.0, 64.0),
+        ("clahe-slope", 1.0, 3.0, 1.25),
+    ] {
+        let slider = clahe
+            .controls()
+            .control(id)
+            .expect("CLAHE slider")
+            .slider_spec()
+            .expect("slider metadata");
+        assert_float_eq(slider.minimum(), minimum);
+        assert_float_eq(slider.maximum(), maximum);
+        assert_float_eq(slider.default_value(), default);
+    }
+    assert!(!DarkroomModuleGroup::Active.matches(clahe));
+    assert!(DarkroomModuleGroup::Deprecated.matches(clahe));
+}
+
 fn assert_float_eq(actual: f64, expected: f64) {
     assert!((actual - expected).abs() < f64::EPSILON);
 }
@@ -350,6 +387,33 @@ fn censorize_gtk_panel_exposes_sensitive_controls() {
         .downcast::<gtk4::Label>()
         .expect("status label");
     assert!(!status.text().contains("backend is unqualified until #477"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn clahe_gtk_panel_exposes_imported_controls_as_unavailable() {
+    if gtk4::init().is_err() {
+        return;
+    }
+    let module = reference_modules()
+        .expect("reference modules")
+        .module("clahe")
+        .expect("CLAHE")
+        .clone();
+    let panel = build_module_panel(&module);
+    let root: gtk4::Widget = panel.upcast();
+    for id in ["clahe-enabled", "clahe-radius-widget", "clahe-slope-widget"] {
+        assert!(
+            find_widget(&root, id).is_some_and(|widget| !widget.is_sensitive()),
+            "unqualified control {id} must remain insensitive"
+        );
+    }
+    let status = find_widget(&root, "clahe-status")
+        .expect("status widget")
+        .downcast::<gtk4::Label>()
+        .expect("status label");
+    assert!(status.text().contains("Unavailable"));
+    assert!(status.text().contains("#473"));
 }
 
 #[cfg(target_os = "linux")]
