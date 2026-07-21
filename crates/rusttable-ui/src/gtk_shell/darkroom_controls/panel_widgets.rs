@@ -92,7 +92,17 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     let module_group = Rc::new(Cell::new(DarkroomModuleGroup::Active));
     let module_group_handler = Rc::new(RefCell::new(None));
     add_group_buttons(&groups, &module_group, &module_group_handler);
-    panel.append(&groups);
+    let groups_scroll = gtk4::ScrolledWindow::builder()
+        .child(&groups)
+        .hscrollbar_policy(gtk4::PolicyType::Automatic)
+        .vscrollbar_policy(gtk4::PolicyType::Never)
+        .propagate_natural_width(false)
+        .hexpand(true)
+        .vexpand(false)
+        .build();
+    groups_scroll.set_widget_name("darkroom-module-groups-scroll");
+    groups_scroll.set_height_request(26);
+    panel.append(&groups_scroll);
 
     let search = gtk4::SearchEntry::new();
     search.set_widget_name("darkroom-module-search");
@@ -422,6 +432,10 @@ fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
     let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     panel.set_widget_name(id);
     panel.set_width_request(width);
+    panel.set_hexpand(false);
+    panel.set_vexpand(true);
+    panel.set_halign(gtk4::Align::Fill);
+    panel.set_valign(gtk4::Align::Fill);
     panel.set_accessible_role(gtk4::AccessibleRole::Group);
     panel.update_property(&[Property::Label(accessible_name)]);
     apply_theme_role(&panel, ThemeRole::Panel);
