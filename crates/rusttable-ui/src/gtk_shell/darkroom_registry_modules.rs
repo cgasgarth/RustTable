@@ -104,7 +104,7 @@ fn module_from_descriptor(
                     DarkroomControlValue::Slider(40.0),
                 ),
                 (
-                    "vignette-falloff_scale".to_owned(),
+                    "vignette-falloff-scale".to_owned(),
                     DarkroomControlValue::Slider(100.0),
                 ),
                 (
@@ -127,7 +127,7 @@ fn control_from_parameter(
     module_id: &str,
     parameter: &rusttable_processing::descriptor::ParameterDescriptor,
 ) -> Vec<DarkroomControlViewModel> {
-    let control_id = format!("{module_id}-{}", parameter.id);
+    let control_id = format!("{module_id}-{}", ui_parameter_id(&parameter.id));
     let label = parameter_label(&parameter.id);
     let result = match (&parameter.kind, &parameter.default) {
         (ParameterKind::Scalar { minimum, maximum }, ParameterDefault::Scalar(default)) => {
@@ -186,7 +186,7 @@ fn control_from_parameter(
                     .copied()
                     .unwrap_or("component");
                 DarkroomControlViewModel::slider(
-                    format!("{module_id}-{}-{axis}", parameter.id),
+                    format!("{module_id}-{}-{axis}", ui_parameter_id(&parameter.id)),
                     format!("{label} {axis}"),
                     *minimum,
                     *maximum,
@@ -199,6 +199,10 @@ fn control_from_parameter(
         _ => Vec::new(),
     };
     result.into_iter().filter_map(Result::ok).collect()
+}
+
+fn ui_parameter_id(parameter_id: &str) -> String {
+    parameter_id.replace('_', "-")
 }
 
 fn graduatednd_presets() -> Vec<DarkroomModulePreset> {
