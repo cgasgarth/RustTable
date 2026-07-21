@@ -284,6 +284,24 @@ impl DarkroomModuleViewModel {
                 actual: action.module_id().to_owned(),
             }));
         }
+        if !self.availability.is_supported()
+            && matches!(
+                action,
+                DarkroomModuleAction::Enable { .. }
+                    | DarkroomModuleAction::Reset { .. }
+                    | DarkroomModuleAction::Preset { .. }
+                    | DarkroomModuleAction::Control { .. }
+            )
+        {
+            return Err(self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: self
+                    .availability
+                    .reason()
+                    .unwrap_or("registry capability is not qualified")
+                    .to_owned(),
+            }));
+        }
         match action {
             DarkroomModuleAction::Disclosure {
                 expected_revision,

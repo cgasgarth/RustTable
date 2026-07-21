@@ -14,6 +14,8 @@ pub use descriptor_color::{
     colorcorrection_descriptor, colorin_descriptor, colorout_descriptor, primaries_descriptor,
 };
 
+#[path = "descriptor_censorize.rs"]
+mod descriptor_censorize;
 #[path = "descriptor_effects.rs"]
 mod descriptor_effects;
 #[path = "descriptor_operations.rs"]
@@ -33,6 +35,7 @@ pub use crate::operations::rotatepixels::rotatepixels_descriptor;
 pub use crate::operations::scalepixels::scalepixels_descriptor;
 pub use crate::operations::shadhi::shadhi_descriptor;
 pub use crate::operations::vignette::vignette_descriptor;
+pub use descriptor_censorize::censorize_descriptor;
 pub use descriptor_effects::{bloom_descriptor, soften_descriptor};
 pub use descriptor_operations::{
     color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,

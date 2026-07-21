@@ -172,3 +172,29 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
     );
     assert_eq!(ids.last(), Some(&"colorcorrection"));
 }
+
+#[test]
+fn censorize_is_registry_visible_but_unqualified_until_backend_integration() {
+    let definition = builtin_registry()
+        .definition("rusttable.censorize")
+        .expect("censorize registry seam");
+    assert_eq!(definition.descriptor().parameters.len(), 4);
+    assert!(!definition.availability().is_available());
+    assert!(
+        definition
+            .availability()
+            .reason()
+            .expect("qualification reason")
+            .contains("#477")
+    );
+    assert!(
+        builtin_registry()
+            .capability(
+                "rusttable.censorize",
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                rusttable_color::ColorEncoding::LinearSrgbD65,
+                Some("preview"),
+            )
+            .is_some_and(|capability| !capability.available)
+    );
+}

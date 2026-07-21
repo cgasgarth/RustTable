@@ -39,25 +39,26 @@ pub(super) fn validate_definition(
         ));
     }
     let cpu_present = definition.cpu.is_some();
-    if !cpu_present {
+    if !cpu_present && definition.availability().is_available() {
         findings.push(RegistryValidationError::MissingCpu(id.rust_id.clone()));
     }
-    if definition.descriptor.capability.cpu_supported != cpu_present
-        || definition.gpu.as_ref().map(GpuBinding::tier)
-            != definition.descriptor.capability.gpu_tier
-        || definition.cpu.is_some_and(|cpu| {
-            cpu.roi != definition.descriptor.roi
-                || cpu.tileable
-                    != definition
-                        .descriptor
-                        .flags
-                        .contains(OperationFlags::TILEABLE)
-                || cpu.full_image_analysis
-                    != definition
-                        .descriptor
-                        .flags
-                        .contains(OperationFlags::ANALYSIS)
-        })
+    if definition.availability().is_available()
+        && (definition.descriptor.capability.cpu_supported != cpu_present
+            || definition.gpu.as_ref().map(GpuBinding::tier)
+                != definition.descriptor.capability.gpu_tier
+            || definition.cpu.is_some_and(|cpu| {
+                cpu.roi != definition.descriptor.roi
+                    || cpu.tileable
+                        != definition
+                            .descriptor
+                            .flags
+                            .contains(OperationFlags::TILEABLE)
+                    || cpu.full_image_analysis
+                        != definition
+                            .descriptor
+                            .flags
+                            .contains(OperationFlags::ANALYSIS)
+            }))
     {
         findings.push(RegistryValidationError::CapabilityMismatch(
             id.rust_id.clone(),
@@ -955,6 +956,7 @@ macro_rules! builtin_operations {
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,
             $crate::registry::soften_definition,
+            $crate::registry::censorize_definition,
             $crate::registry::vignette_definition,
             $crate::registry::graduatednd_definition,
             $crate::registry::crop_definition,

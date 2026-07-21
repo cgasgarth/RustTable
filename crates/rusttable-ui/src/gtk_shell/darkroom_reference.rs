@@ -28,6 +28,14 @@ impl DarkroomModuleAvailability {
     pub const fn is_unsupported(&self) -> bool {
         matches!(self, Self::Unsupported { .. })
     }
+
+    #[must_use]
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            Self::Supported => None,
+            Self::Deprecated { reason } | Self::Unsupported { reason } => Some(reason),
+        }
+    }
 }
 
 /// Provides the next Darktable operation rows while their backend is explicit.
