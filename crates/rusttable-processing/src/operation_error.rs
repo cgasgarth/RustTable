@@ -6,7 +6,7 @@ use crate::{FiniteF32, ScalarNarrowingError};
 
 use super::OperationCompileError;
 
-pub(super) fn compile_opacity(operation: &Operation) -> Result<FiniteF32, OperationCompileError> {
+pub(crate) fn compile_opacity(operation: &Operation) -> Result<FiniteF32, OperationCompileError> {
     match FiniteF32::try_from(
         FiniteF64::new(operation.opacity().get()).expect("core opacity is finite"),
     ) {

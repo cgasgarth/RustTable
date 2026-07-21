@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 use std::fmt::Write as _;
 
+use crate::descriptor::OperationFlags;
 use crate::{OperationDefinition, RegistrySnapshot};
 
 pub const REGISTRY_CLOSURE_SCHEMA: &str = "rusttable.operation-capabilities.v1";
@@ -187,11 +188,31 @@ fn entry_from_definition(definition: &OperationDefinition, order: usize) -> Regi
         gpu_supported: definition.gpu().is_some(),
         cpu_fallback: definition.cpu().is_some() && definition.gpu().is_some(),
         status: if definition.availability().is_available() {
-            OperationClassification::Implemented
+            if definition
+                .descriptor()
+                .flags
+                .contains(OperationFlags::DEPRECATED)
+            {
+                OperationClassification::DeprecatedImplemented
+            } else {
+                OperationClassification::Implemented
+            }
         } else {
             OperationClassification::IntentionallyUnsupportedBlocking
         },
-        reason: definition.availability().reason().map(str::to_owned),
+        reason: definition
+            .availability()
+            .reason()
+            .map(str::to_owned)
+            .or_else(|| {
+                (definition
+                    .descriptor()
+                    .flags
+                    .contains(OperationFlags::DEPRECATED))
+                .then(|| {
+                    "deprecated compatibility operation; hidden from new-edit discovery".to_owned()
+                })
+            }),
     }
 }
 
@@ -248,7 +269,7 @@ mod tests {
     #[test]
     fn registry_closure_is_sorted_and_hashable() {
         let closure = RegistryClosure::from_registry(builtin_registry()).expect("closure");
-        assert_eq!(closure.entries.len(), 20);
+        assert_eq!(closure.entries.len(), 22);
         assert!(
             closure
                 .entries

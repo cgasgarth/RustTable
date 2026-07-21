@@ -17,6 +17,8 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::RgbGain { .. } => {
             crate::descriptor::rgb_gain_descriptor().id
         }
+        crate::ProcessingOperationKind::Invert { .. } => crate::descriptor::invert_descriptor().id,
+        crate::ProcessingOperationKind::Dither { .. } => crate::descriptor::dither_descriptor().id,
         crate::ProcessingOperationKind::Highlights { .. } => {
             crate::descriptor::highlights_descriptor().id
         }

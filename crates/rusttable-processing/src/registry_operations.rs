@@ -8,9 +8,9 @@ use super::{
 use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, crop_descriptor,
-    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
-    linear_offset_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
-    soften_descriptor, temperature_descriptor,
+    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
+    flip_descriptor, invert_descriptor, linear_offset_descriptor, rgb_gain_descriptor,
+    rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor, temperature_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -188,6 +188,28 @@ fn prepare_rgb_gain(
     )
 }
 
+fn prepare_invert(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_invert(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_dither(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_dither(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn prepare_temperature(
     operation: &Operation,
     descriptor: &DescriptorId,
@@ -354,6 +376,65 @@ pub fn rgb_gain_definition() -> OperationDefinition {
         rgb_gain_descriptor(),
         prepare_rgb_gain,
         &["iop.rgb-gain.descriptor", "iop.rgb-gain.cpu"],
+    )
+}
+
+pub fn invert_definition() -> OperationDefinition {
+    compatibility_definition(
+        invert_descriptor(),
+        prepare_invert,
+        &[
+            "iop.invert.params.v1-v2",
+            "iop.invert.cpu.rgb",
+            "iop.invert.deprecated-visibility",
+        ],
+        false,
+    )
+}
+
+pub fn dither_definition() -> OperationDefinition {
+    compatibility_definition(
+        dither_descriptor(),
+        prepare_dither,
+        &[
+            "iop.dither.params.v1-v2",
+            "iop.dither.cpu.random-posterize",
+            "iop.dither.cpu.floyd-steinberg-full-image",
+        ],
+        false,
+    )
+}
+
+fn compatibility_definition(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+    full_image_analysis: bool,
+) -> OperationDefinition {
+    let compatibility = descriptor.id.compatibility_name.clone();
+    let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
+    let roi = descriptor.roi;
+    OperationDefinition::new(
+        descriptor,
+        Some(CpuFactory::new(
+            prepare,
+            crate::evaluate::execute_prepared_operation,
+            roi,
+            tileable,
+            full_image_analysis,
+        )),
+        None,
+        vec![MigrationBinding::new(
+            1,
+            2,
+            format!("{compatibility}.migration.v1-v2"),
+        )],
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+        ),
+        evidence.iter().map(|id| (*id).to_owned()).collect(),
     )
 }
 
@@ -668,6 +749,8 @@ macro_rules! builtin_operations {
             $crate::registry::exposure_definition as $crate::registry::OperationDefinitionFactory,
             $crate::registry::linear_offset_definition,
             $crate::registry::rgb_gain_definition,
+            $crate::registry::invert_definition,
+            $crate::registry::dither_definition,
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,
             $crate::registry::soften_definition,

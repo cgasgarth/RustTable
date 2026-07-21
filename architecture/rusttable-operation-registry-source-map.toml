@@ -57,6 +57,18 @@ owner = "crates/rusttable-processing/src/registry.rs"
 status = "replaced"
 
 [[operation]]
+rust_id = "rusttable.invert"
+manifest_name = "invert"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.dither"
+manifest_name = "dither"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
 rust_id = "rusttable.colorin"
 manifest_name = "colorin"
 owner = "crates/rusttable-processing/src/registry_color.rs"

@@ -1,6 +1,22 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "10a15ec18719b6027ffcd63ba5c9b40aa482e4babdc09d0c4376db54379e9864"
+snapshot_hash = "1b5c603522579f20e3a1034bde4e684cc762c97c35c5a01de133865136cd775c"
+
+[[operation]]
+rust_id = "rusttable.ashift"
+compatibility_name = "ashift"
+descriptor_version = 1
+parameter_version = 5
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.bloom"
+compatibility_name = "bloom"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
 
 [[operation]]
 rust_id = "rusttable.colorcorrection"
@@ -35,6 +51,30 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.crop"
+compatibility_name = "crop"
+descriptor_version = 1
+parameter_version = 3
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.dither"
+compatibility_name = "dither"
+descriptor_version = 2
+parameter_version = 2
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.enlargecanvas"
+compatibility_name = "enlargecanvas"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.exposure"
 compatibility_name = "exposure"
 descriptor_version = 1
@@ -43,10 +83,42 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.finalscale"
+compatibility_name = "finalscale"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.flip"
+compatibility_name = "flip"
+descriptor_version = 1
+parameter_version = 2
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.highlights"
 compatibility_name = "highlights"
 descriptor_version = 4
 parameter_version = 4
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.invert"
+compatibility_name = "invert"
+descriptor_version = 2
+parameter_version = 2
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.lenscorrection"
+compatibility_name = "lenscorrection"
+descriptor_version = 1
+parameter_version = 1
 implementation_version = 1
 status = "available"
 
@@ -71,6 +143,38 @@ rust_id = "rusttable.rgb_gain"
 compatibility_name = "rgbgain"
 descriptor_version = 1
 parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.rotatepixels"
+compatibility_name = "rotatepixels"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.scalepixels"
+compatibility_name = "scalepixels"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.soften"
+compatibility_name = "soften"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.temperature"
+compatibility_name = "temperature"
+descriptor_version = 1
+parameter_version = 4
 implementation_version = 1
 status = "available"
 

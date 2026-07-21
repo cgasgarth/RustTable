@@ -6,7 +6,7 @@ use clap::Subcommand;
 use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterText, ParameterValue,
 };
-use rusttable_processing::descriptor::{exposure_descriptor, rgb_gain_descriptor};
+use rusttable_processing::descriptor::{OperationFlags, exposure_descriptor, rgb_gain_descriptor};
 use rusttable_processing::operation_stack::{OperationStackSnapshot, OperationStackTemplate};
 use rusttable_processing::{
     FiniteF32, LinearRgb, OperationClassification, PipelineStepIndex, RasterDimensions,
@@ -122,7 +122,10 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
         OperationRegistryCommand::Generate => {
             fs::write(&receipt_path, builtin_registry().receipt())
                 .map_err(|error| format!("operation registry: write failed: {error}"))?;
-            eprintln!("operation registry generated (definitions=9)");
+            eprintln!(
+                "operation registry generated (definitions={})",
+                builtin_registry().definitions().len()
+            );
             Ok(())
         }
         OperationRegistryCommand::Check {
@@ -151,7 +154,8 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
                 execute_builtin_smoke()?;
             }
             eprintln!(
-                "operation registry check passed (definitions=9, snapshot={})",
+                "operation registry check passed (definitions={}, snapshot={})",
+                builtin_registry().definitions().len(),
                 builtin_registry().identity_hash_hex()
             );
             Ok(())
@@ -219,11 +223,26 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
             match registered {
                 Some(definition) => (
                     Some(definition.descriptor().id.rust_id.clone()),
-                    OperationClassification::Implemented,
+                    if definition
+                        .descriptor()
+                        .flags
+                        .contains(OperationFlags::DEPRECATED)
+                    {
+                        OperationClassification::DeprecatedImplemented
+                    } else {
+                        OperationClassification::Implemented
+                    },
                     "rusttable-processing".to_owned(),
                     definition.cpu().is_some(),
                     definition.gpu().is_some(),
-                    None,
+                    definition
+                        .descriptor()
+                        .flags
+                        .contains(OperationFlags::DEPRECATED)
+                        .then(|| {
+                            "deprecated compatibility operation; hidden from new-edit discovery"
+                                .to_owned()
+                        }),
                 ),
                 None => (
                     None,
@@ -582,6 +601,8 @@ fn verify_registry_operations(root: &Path, document: &toml::Value) -> Result {
         "rusttable.exposure",
         "rusttable.linear_offset",
         "rusttable.rgb_gain",
+        "rusttable.invert",
+        "rusttable.dither",
         "rusttable.colorin",
         "rusttable.primaries",
     ];
