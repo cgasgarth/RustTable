@@ -35,12 +35,16 @@ pub use durable_edit::{DurableEditError, DurableEditOutcome, DurableEditService}
 pub use edit_repository::{EditRepository, EditRepositoryError};
 pub use error::CatalogError;
 pub use history::{
-    BranchTransferPolicy, DurableHistoryError, DurableHistoryService, HistoryApplyOutcome,
-    HistoryBranch, HistoryBranchId, HistoryCommand, HistoryComparisonPair, HistoryCursor,
-    HistoryError, HistoryEvidence, HistoryEvidenceKind, HistoryOperationKind,
-    HistoryOperationSummary, HistoryPayload, HistoryRepository, HistoryRepositoryError,
-    HistoryRevision, HistoryRevisionId, HistorySnapshot, HistorySnapshotId, HistoryState,
-    HistoryStateSnapshot, HistorySummaryError, HistoryVersion,
+    BranchTransferPolicy, CanonicalBlob, CanonicalEncodingError, CanonicalHistoryCommand,
+    CanonicalPayload, ContentBlobId, ContentBlobKind, DurableHistoryError, DurableHistoryService,
+    HistoryApplyOutcome, HistoryBlobRefs, HistoryBranch, HistoryBranchId, HistoryCommand,
+    HistoryComparisonPair, HistoryCursor, HistoryError, HistoryEvidence, HistoryEvidenceKind,
+    HistoryExecutionStatus, HistoryImport, HistoryImportEntry, HistoryImportError,
+    HistoryImportSource, HistoryJournalEntry, HistoryOperationKind, HistoryOperationSummary,
+    HistoryPayload, HistoryProvenance, HistoryRepository, HistoryRepositoryError, HistoryRevision,
+    HistoryRevisionId, HistorySnapshot, HistorySnapshotId, HistoryState, HistoryStateSnapshot,
+    HistorySummaryError, HistoryVersion, canonical_edit_bytes, canonical_mask_blend_bytes,
+    canonical_pipeline_bytes,
 };
 pub use import::{
     ImportCandidate, ImportCandidateError, ImportError, ImportOutcome, ImportRecord,

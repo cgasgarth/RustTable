@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use rusttable_core::PhotoId;
+use rusttable_core::{Edit, PhotoId};
 
 use super::command::HistoryCommand;
 use super::error::HistoryError;
 use super::types::{
     BranchTransferPolicy, HistoryBranch, HistoryBranchId, HistoryCursor, HistoryEvidence,
-    HistoryPayload, HistoryRevision, HistoryRevisionId, HistorySnapshot, HistorySnapshotId,
-    HistoryStateSnapshot, HistoryVersion, validate_name,
+    HistoryEvidenceKind, HistoryJournalEntry, HistoryOperationKind, HistoryOperationSummary,
+    HistoryPayload, HistoryProvenance, HistoryRevision, HistoryRevisionId, HistorySnapshot,
+    HistorySnapshotId, HistoryStateSnapshot, HistoryVersion, validate_name,
 };
 
 /// Immutable edit-history graph and mutable cursors/branch metadata for one photo.
@@ -15,6 +16,7 @@ use super::types::{
 pub struct HistoryState {
     photo_id: PhotoId,
     version: HistoryVersion,
+    commit_sequence: u64,
     next_revision_id: u64,
     next_branch_id: u64,
     next_snapshot_id: u64,
@@ -23,6 +25,8 @@ pub struct HistoryState {
     branches: BTreeMap<HistoryBranchId, HistoryBranch>,
     snapshots: BTreeMap<HistorySnapshotId, HistorySnapshot>,
     evidence: BTreeSet<HistoryEvidence>,
+    journal: Vec<HistoryJournalEntry>,
+    provenance: BTreeMap<HistoryRevisionId, HistoryProvenance>,
 }
 
 impl HistoryState {
@@ -42,6 +46,7 @@ impl HistoryState {
         Self {
             photo_id,
             version: HistoryVersion::ZERO,
+            commit_sequence: 0,
             next_revision_id: 1,
             next_branch_id: 2,
             next_snapshot_id: 1,
@@ -50,6 +55,8 @@ impl HistoryState {
             branches,
             snapshots: BTreeMap::new(),
             evidence: BTreeSet::new(),
+            journal: Vec::new(),
+            provenance: BTreeMap::new(),
         }
     }
 
@@ -61,6 +68,11 @@ impl HistoryState {
     #[must_use]
     pub const fn version(&self) -> HistoryVersion {
         self.version
+    }
+
+    #[must_use]
+    pub const fn commit_sequence(&self) -> u64 {
+        self.commit_sequence
     }
 
     #[must_use]
@@ -81,6 +93,12 @@ impl HistoryState {
             .get(&self.active_branch)
             .expect("active branch is validated at construction");
         HistoryCursor::new(branch.id(), branch.cursor())
+    }
+
+    /// The explicit current pointer used by persistence and export adapters.
+    #[must_use]
+    pub fn current_pointer(&self) -> HistoryCursor {
+        self.active_cursor()
     }
 
     #[must_use]
@@ -114,6 +132,15 @@ impl HistoryState {
         self.evidence.iter().copied()
     }
 
+    pub fn journal(&self) -> impl Iterator<Item = &HistoryJournalEntry> {
+        self.journal.iter()
+    }
+
+    #[must_use]
+    pub fn provenance(&self, revision: HistoryRevisionId) -> Option<&HistoryProvenance> {
+        self.provenance.get(&revision)
+    }
+
     #[must_use]
     pub fn current_revision(&self) -> Option<&HistoryRevision> {
         self.active_cursor()
@@ -140,9 +167,47 @@ impl HistoryState {
                 actual: self.version,
             });
         }
+        let before = self.active_cursor();
+        let kind = command.kind();
+        let restore_from = match &command {
+            HistoryCommand::Undo | HistoryCommand::Redo => before.revision(),
+            HistoryCommand::Restore { source } => Some(*source),
+            _ => None,
+        };
+        let is_redo = matches!(&command, HistoryCommand::Redo);
         let mut next = self.clone();
         let outcome = next.apply_mut(command)?;
         next.version = self.version.next().ok_or(HistoryError::RevisionOverflow)?;
+        next.commit_sequence = self
+            .commit_sequence
+            .checked_add(1)
+            .ok_or(HistoryError::RevisionOverflow)?;
+        let after = next.active_cursor();
+        let revision = match &outcome {
+            HistoryApplyOutcome::Appended { revision } => Some(*revision),
+            _ => None,
+        };
+        if let Some(source) = restore_from
+            && next.revisions.contains_key(&source)
+        {
+            next.evidence.insert(HistoryEvidence::new(
+                source,
+                if is_redo {
+                    HistoryEvidenceKind::Redo
+                } else {
+                    HistoryEvidenceKind::Restore
+                },
+            ));
+        }
+        next.journal.push(HistoryJournalEntry::new(
+            next.commit_sequence,
+            kind,
+            revision,
+            before,
+            after,
+            restore_from,
+            HistoryProvenance::native(),
+        ));
         *self = next;
         Ok(outcome)
     }
@@ -153,6 +218,7 @@ impl HistoryState {
         HistoryStateSnapshot {
             photo_id: self.photo_id,
             version: self.version,
+            commit_sequence: self.commit_sequence,
             next_revision_id: self.next_revision_id,
             next_branch_id: self.next_branch_id,
             next_snapshot_id: self.next_snapshot_id,
@@ -161,6 +227,8 @@ impl HistoryState {
             branches: self.branches.values().cloned().collect(),
             snapshots: self.snapshots.values().cloned().collect(),
             evidence: self.evidence.iter().copied().collect(),
+            journal: self.journal.clone(),
+            provenance: self.provenance.clone(),
         }
     }
 
@@ -182,90 +250,33 @@ impl HistoryState {
             branches: persisted_branches,
             snapshots: persisted_snapshots,
             evidence: persisted_evidence,
+            commit_sequence,
+            journal: persisted_journal,
+            provenance: persisted_provenance,
         } = snapshot;
-        let persisted_revision_count = persisted_revisions.len();
-        let revisions = persisted_revisions
-            .into_iter()
-            .map(|revision| (revision.id(), revision))
-            .collect::<BTreeMap<_, _>>();
-        if revisions.len() != persisted_revision_count
-            || revisions.values().any(|revision| {
-                revision.payload().edit().photo_id() != photo_id
-                    || revision
-                        .parent()
-                        .is_some_and(|parent| !revisions.contains_key(&parent))
-            })
-        {
-            return Err(HistoryError::InvalidPersistedState);
-        }
-
-        let persisted_branch_count = persisted_branches.len();
-        let branches = persisted_branches
-            .into_iter()
-            .map(|branch| (branch.id(), branch))
-            .collect::<BTreeMap<_, _>>();
-        if branches.len() != persisted_branch_count
-            || branches.is_empty()
-            || !branches.contains_key(&active_branch)
-            || branches.values().any(|branch| {
-                !validate_name(branch.name())
-                    || branch
-                        .lineage()
-                        .iter()
-                        .any(|revision| !revisions.contains_key(revision))
-                    || branch.cursor().is_some_and(|cursor| {
-                        !branch.lineage().contains(&cursor) || !revisions.contains_key(&cursor)
-                    })
-                    || branch
-                        .redo()
-                        .iter()
-                        .any(|revision| !revisions.contains_key(revision))
-            })
-        {
-            return Err(HistoryError::InvalidPersistedState);
-        }
-
-        let persisted_snapshot_count = persisted_snapshots.len();
-        let snapshots = persisted_snapshots
-            .into_iter()
-            .map(|value| (value.id(), value))
-            .collect::<BTreeMap<_, _>>();
-        if snapshots.len() != persisted_snapshot_count
-            || snapshots.values().any(|value| {
-                !validate_name(value.name())
-                    || branches.get(&value.cursor().branch()).is_none_or(|branch| {
-                        value.cursor().revision().is_some_and(|revision| {
-                            !branch.lineage().contains(&revision)
-                                || !revisions.contains_key(&revision)
-                        })
-                    })
-            })
-        {
-            return Err(HistoryError::InvalidPersistedState);
-        }
-
-        let persisted_evidence_count = persisted_evidence.len();
-        let evidence = persisted_evidence.into_iter().collect::<BTreeSet<_>>();
-        if evidence.len() != persisted_evidence_count
-            || evidence
-                .iter()
-                .any(|value| !revisions.contains_key(&value.revision()))
-        {
-            return Err(HistoryError::InvalidPersistedState);
-        }
-
-        let max_revision = revisions.keys().map(|id| id.get()).max().unwrap_or(0);
-        let max_branch = branches.keys().map(|id| id.get()).max().unwrap_or(0);
-        let max_snapshot = snapshots.keys().map(|id| id.get()).max().unwrap_or(0);
-        if next_revision_id <= max_revision
-            || next_branch_id <= max_branch
-            || next_snapshot_id <= max_snapshot
+        let revisions = restore_revisions(photo_id, persisted_revisions)?;
+        let branches = restore_branches(active_branch, persisted_branches, &revisions)?;
+        let snapshots = restore_snapshots(persisted_snapshots, &branches, &revisions)?;
+        let evidence = restore_evidence(persisted_evidence, &revisions)?;
+        validate_counters(
+            next_revision_id,
+            next_branch_id,
+            next_snapshot_id,
+            &revisions,
+            &branches,
+            &snapshots,
+        )?;
+        validate_journal(&persisted_journal, commit_sequence, &revisions, &branches)?;
+        if persisted_provenance
+            .keys()
+            .any(|revision| !revisions.contains_key(revision))
         {
             return Err(HistoryError::InvalidPersistedState);
         }
         Ok(Self {
             photo_id,
             version,
+            commit_sequence,
             next_revision_id,
             next_branch_id,
             next_snapshot_id,
@@ -274,6 +285,8 @@ impl HistoryState {
             branches,
             snapshots,
             evidence,
+            journal: persisted_journal,
+            provenance: persisted_provenance,
         })
     }
 
@@ -285,6 +298,7 @@ impl HistoryState {
             }
             HistoryCommand::Undo => self.undo(),
             HistoryCommand::Redo => self.redo(),
+            HistoryCommand::Restore { source } => self.restore_revision(source),
             HistoryCommand::CreateBranch { name, from } => {
                 let source = from.unwrap_or_else(|| self.active_cursor());
                 let branch = self.create_branch(name, source)?;
@@ -296,6 +310,19 @@ impl HistoryState {
             }
             HistoryCommand::Transfer { source, policy } => {
                 let revision = self.transfer(source, policy)?;
+                Ok(HistoryApplyOutcome::Appended { revision })
+            }
+            HistoryCommand::Copy { source } => {
+                self.validate_cursor(source)?;
+                source.revision().ok_or(HistoryError::EmptyHistory)?;
+                Ok(HistoryApplyOutcome::Copied { source })
+            }
+            HistoryCommand::Paste { source } => {
+                let revision = self.transfer(source, BranchTransferPolicy::Copy)?;
+                Ok(HistoryApplyOutcome::Appended { revision })
+            }
+            HistoryCommand::Merge { source, target } => {
+                let revision = self.merge(source, target)?;
                 Ok(HistoryApplyOutcome::Appended { revision })
             }
             HistoryCommand::CreateSnapshot { name } => {
@@ -332,6 +359,104 @@ impl HistoryState {
                 Ok(HistoryApplyOutcome::Pruned { removed })
             }
         }
+    }
+
+    fn restore_revision(
+        &mut self,
+        source: HistoryRevisionId,
+    ) -> Result<HistoryApplyOutcome, HistoryError> {
+        let original = self
+            .revisions
+            .get(&source)
+            .ok_or(HistoryError::UnknownRevision(source))?
+            .payload()
+            .clone();
+        let summary = HistoryOperationSummary::new(
+            HistoryOperationKind::Reset,
+            original.summary().operation_id(),
+            original.summary().operation_key().cloned(),
+            "restore revision",
+        )?;
+        let revision = self.append(HistoryPayload::new(
+            original.edit().clone(),
+            original.mask_bytes().to_owned(),
+            original.pipeline_bytes().to_owned(),
+            summary,
+        ))?;
+        Ok(HistoryApplyOutcome::Appended { revision })
+    }
+
+    pub(crate) fn append_for_import(
+        &mut self,
+        payload: HistoryPayload,
+    ) -> Result<HistoryRevisionId, HistoryError> {
+        self.append(payload)
+    }
+
+    pub(crate) fn set_import_provenance(
+        &mut self,
+        revision: HistoryRevisionId,
+        provenance: HistoryProvenance,
+    ) {
+        self.provenance.insert(revision, provenance);
+    }
+
+    pub(crate) fn retain_import_evidence(&mut self, revision: HistoryRevisionId, is_redo: bool) {
+        self.evidence
+            .insert(HistoryEvidence::new(revision, HistoryEvidenceKind::Import));
+        self.evidence.insert(HistoryEvidence::new(
+            revision,
+            if is_redo {
+                HistoryEvidenceKind::Redo
+            } else {
+                HistoryEvidenceKind::Migration
+            },
+        ));
+    }
+
+    pub(crate) fn finish_import(
+        &mut self,
+        entries: &[super::types::HistoryImportEntry],
+        imported: &[HistoryRevisionId],
+        current_index: Option<usize>,
+    ) -> Result<(), HistoryError> {
+        let current_index = current_index
+            .or_else(|| imported.len().checked_sub(1))
+            .ok_or(HistoryError::EmptyHistory)?;
+        let main = self
+            .branches
+            .get_mut(&self.active_branch)
+            .ok_or(HistoryError::UnknownBranch(self.active_branch))?;
+        main.cursor = Some(imported[current_index]);
+        main.redo = imported[current_index + 1..]
+            .iter()
+            .rev()
+            .copied()
+            .collect();
+        self.commit_sequence = imported.len() as u64;
+        self.version = HistoryVersion::from_u64(self.commit_sequence);
+        let mut previous = None;
+        for (index, revision) in imported.iter().copied().enumerate() {
+            let cursor = HistoryCursor::new(self.active_branch, Some(revision));
+            let restore_from = entries[index]
+                .restore_from()
+                .and_then(|source| imported.get(source).copied());
+            self.journal.push(HistoryJournalEntry::new(
+                index as u64 + 1,
+                entries[index].payload().summary().kind(),
+                Some(revision),
+                HistoryCursor::new(self.active_branch, previous),
+                cursor,
+                restore_from,
+                entries[index].provenance(),
+            ));
+            if restore_from.is_some() {
+                self.evidence
+                    .insert(HistoryEvidence::new(revision, HistoryEvidenceKind::Restore));
+            }
+            previous = Some(revision);
+        }
+        Ok(())
     }
 
     fn append(&mut self, payload: HistoryPayload) -> Result<HistoryRevisionId, HistoryError> {
@@ -500,6 +625,94 @@ impl HistoryState {
         self.append(payload)
     }
 
+    fn merge(
+        &mut self,
+        source: HistoryCursor,
+        target: HistoryCursor,
+    ) -> Result<HistoryRevisionId, HistoryError> {
+        self.validate_cursor(source)?;
+        self.validate_cursor(target)?;
+        if target != self.active_cursor() {
+            return Err(HistoryError::MergeConflict {
+                reason: "merge target is not the active cursor",
+            });
+        }
+        let source_id = source.revision().ok_or(HistoryError::EmptyHistory)?;
+        let target_id = target.revision().ok_or(HistoryError::EmptyHistory)?;
+        let source_payload = self
+            .revisions
+            .get(&source_id)
+            .ok_or(HistoryError::UnknownRevision(source_id))?
+            .payload();
+        let target_payload = self
+            .revisions
+            .get(&target_id)
+            .ok_or(HistoryError::UnknownRevision(target_id))?
+            .payload();
+        let mut operations = target_payload
+            .edit()
+            .operations()
+            .cloned()
+            .collect::<Vec<_>>();
+        for operation in source_payload.edit().operations() {
+            if let Some(existing) = operations.iter().find(|value| value.id() == operation.id()) {
+                if existing != operation {
+                    return Err(HistoryError::MergeConflict {
+                        reason: "both branches changed one operation instance",
+                    });
+                }
+            } else {
+                operations.push(operation.clone());
+            }
+        }
+        if !target_payload.mask_bytes().is_empty()
+            && !source_payload.mask_bytes().is_empty()
+            && target_payload.mask_bytes() != source_payload.mask_bytes()
+        {
+            return Err(HistoryError::MergeConflict {
+                reason: "both branches changed the mask bundle",
+            });
+        }
+        if !target_payload.pipeline_bytes().is_empty()
+            && !source_payload.pipeline_bytes().is_empty()
+            && target_payload.pipeline_bytes() != source_payload.pipeline_bytes()
+        {
+            return Err(HistoryError::MergeConflict {
+                reason: "both branches changed the pipeline snapshot",
+            });
+        }
+        let edit = Edit::from_parts(
+            target_payload.edit().id(),
+            self.photo_id,
+            target_payload.edit().base_photo_revision(),
+            target_payload.edit().revision(),
+            operations,
+        )
+        .map_err(|_| HistoryError::MergeConflict {
+            reason: "merged operation IDs are invalid",
+        })?;
+        let summary = HistoryOperationSummary::new(
+            HistoryOperationKind::Merge,
+            source_payload.summary().operation_id(),
+            source_payload.summary().operation_key().cloned(),
+            "branch merge",
+        )?;
+        self.append(HistoryPayload::new(
+            edit,
+            if target_payload.mask_bytes().is_empty() {
+                source_payload.mask_bytes().to_owned()
+            } else {
+                target_payload.mask_bytes().to_owned()
+            },
+            if target_payload.pipeline_bytes().is_empty() {
+                source_payload.pipeline_bytes().to_owned()
+            } else {
+                target_payload.pipeline_bytes().to_owned()
+            },
+            summary,
+        ))
+    }
+
     fn create_snapshot(&mut self, name: String) -> Result<HistorySnapshotId, HistoryError> {
         if !validate_name(&name) {
             return Err(HistoryError::InvalidSnapshotName);
@@ -612,6 +825,145 @@ impl HistoryState {
     }
 }
 
+fn restore_revisions(
+    photo_id: PhotoId,
+    persisted: Vec<HistoryRevision>,
+) -> Result<BTreeMap<HistoryRevisionId, HistoryRevision>, HistoryError> {
+    let count = persisted.len();
+    let revisions = persisted
+        .into_iter()
+        .map(|revision| (revision.id(), revision))
+        .collect::<BTreeMap<_, _>>();
+    if revisions.len() != count
+        || revisions.values().any(|revision| {
+            revision.payload().edit().photo_id() != photo_id
+                || revision
+                    .parent()
+                    .is_some_and(|parent| !revisions.contains_key(&parent))
+        })
+    {
+        return Err(HistoryError::InvalidPersistedState);
+    }
+    Ok(revisions)
+}
+
+fn restore_branches(
+    active_branch: HistoryBranchId,
+    persisted: Vec<HistoryBranch>,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+) -> Result<BTreeMap<HistoryBranchId, HistoryBranch>, HistoryError> {
+    let count = persisted.len();
+    let branches = persisted
+        .into_iter()
+        .map(|branch| (branch.id(), branch))
+        .collect::<BTreeMap<_, _>>();
+    if branches.len() != count
+        || branches.is_empty()
+        || !branches.contains_key(&active_branch)
+        || branches.values().any(|branch| {
+            !validate_name(branch.name())
+                || branch
+                    .lineage()
+                    .iter()
+                    .any(|revision| !revisions.contains_key(revision))
+                || branch.cursor().is_some_and(|cursor| {
+                    !branch.lineage().contains(&cursor) || !revisions.contains_key(&cursor)
+                })
+                || branch
+                    .redo()
+                    .iter()
+                    .any(|revision| !revisions.contains_key(revision))
+        })
+    {
+        return Err(HistoryError::InvalidPersistedState);
+    }
+    Ok(branches)
+}
+
+fn restore_snapshots(
+    persisted: Vec<HistorySnapshot>,
+    branches: &BTreeMap<HistoryBranchId, HistoryBranch>,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+) -> Result<BTreeMap<HistorySnapshotId, HistorySnapshot>, HistoryError> {
+    let count = persisted.len();
+    let snapshots = persisted
+        .into_iter()
+        .map(|value| (value.id(), value))
+        .collect::<BTreeMap<_, _>>();
+    if snapshots.len() != count
+        || snapshots.values().any(|value| {
+            !validate_name(value.name())
+                || branches.get(&value.cursor().branch()).is_none_or(|branch| {
+                    value.cursor().revision().is_some_and(|revision| {
+                        !branch.lineage().contains(&revision) || !revisions.contains_key(&revision)
+                    })
+                })
+        })
+    {
+        return Err(HistoryError::InvalidPersistedState);
+    }
+    Ok(snapshots)
+}
+
+fn restore_evidence(
+    persisted: Vec<HistoryEvidence>,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+) -> Result<BTreeSet<HistoryEvidence>, HistoryError> {
+    let count = persisted.len();
+    let evidence = persisted.into_iter().collect::<BTreeSet<_>>();
+    if evidence.len() != count
+        || evidence
+            .iter()
+            .any(|value| !revisions.contains_key(&value.revision()))
+    {
+        return Err(HistoryError::InvalidPersistedState);
+    }
+    Ok(evidence)
+}
+
+fn validate_counters(
+    next_revision_id: u64,
+    next_branch_id: u64,
+    next_snapshot_id: u64,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+    branches: &BTreeMap<HistoryBranchId, HistoryBranch>,
+    snapshots: &BTreeMap<HistorySnapshotId, HistorySnapshot>,
+) -> Result<(), HistoryError> {
+    let max_revision = revisions.keys().map(|id| id.get()).max().unwrap_or(0);
+    let max_branch = branches.keys().map(|id| id.get()).max().unwrap_or(0);
+    let max_snapshot = snapshots.keys().map(|id| id.get()).max().unwrap_or(0);
+    if next_revision_id <= max_revision
+        || next_branch_id <= max_branch
+        || next_snapshot_id <= max_snapshot
+    {
+        Err(HistoryError::InvalidPersistedState)
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_journal(
+    journal: &[HistoryJournalEntry],
+    commit_sequence: u64,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+    branches: &BTreeMap<HistoryBranchId, HistoryBranch>,
+) -> Result<(), HistoryError> {
+    if journal.iter().enumerate().any(|(index, entry)| {
+        entry.sequence() == 0
+            || entry.sequence() > commit_sequence
+            || (index > 0 && journal[index - 1].sequence() >= entry.sequence())
+            || entry
+                .revision()
+                .is_some_and(|revision| !revisions.contains_key(&revision))
+            || !branches.contains_key(&entry.before().branch())
+            || !branches.contains_key(&entry.after().branch())
+    }) {
+        Err(HistoryError::InvalidPersistedState)
+    } else {
+        Ok(())
+    }
+}
+
 fn lineage_prefix(
     branch: &HistoryBranch,
     cursor: Option<HistoryRevisionId>,
@@ -636,4 +988,5 @@ pub enum HistoryApplyOutcome {
     SnapshotCreated { snapshot: HistorySnapshotId },
     Pruned { removed: usize },
     MetadataChanged,
+    Copied { source: HistoryCursor },
 }

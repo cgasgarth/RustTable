@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use rusttable_catalog::{
     HistoryBranch, HistoryBranchId, HistoryCursor, HistoryEvidence, HistoryEvidenceKind,
-    HistoryOperationKind, HistoryOperationSummary, HistoryRevision, HistoryRevisionId,
-    HistorySnapshot, HistorySnapshotId, HistoryStateSnapshot, HistoryVersion,
+    HistoryJournalEntry, HistoryOperationKind, HistoryOperationSummary, HistoryProvenance,
+    HistoryRevision, HistoryRevisionId, HistorySnapshot, HistorySnapshotId, HistoryStateSnapshot,
+    HistoryVersion,
 };
 use rusttable_core::{Edit, OperationId, OperationKey, PhotoId};
 
@@ -22,6 +23,12 @@ struct StoredMeta {
     branches: Vec<StoredBranch>,
     snapshots: Vec<StoredSnapshot>,
     evidence: Vec<StoredEvidence>,
+    #[serde(default)]
+    commit_sequence: u64,
+    #[serde(default)]
+    journal: Vec<StoredJournal>,
+    #[serde(default)]
+    provenance: Vec<StoredProvenanceRecord>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,6 +53,26 @@ struct StoredSnapshot {
 struct StoredEvidence {
     revision: u64,
     kind: u8,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredJournal {
+    sequence: u64,
+    kind: u8,
+    revision: Option<u64>,
+    before_branch: u64,
+    before_revision: Option<u64>,
+    after_branch: u64,
+    after_revision: Option<u64>,
+    restore_from: Option<u64>,
+    provenance: StoredProvenance,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredProvenance {
+    kind: u8,
+    schema: u32,
+    source_id: Vec<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -106,6 +133,29 @@ pub(crate) fn encode_meta(snapshot: &HistoryStateSnapshot) -> Result<Vec<u8>, ()
             kind: encode_evidence_kind(value.kind()),
         })
         .collect();
+    let journal = snapshot
+        .journal()
+        .iter()
+        .map(|entry| StoredJournal {
+            sequence: entry.sequence(),
+            kind: encode_operation_kind(entry.kind()),
+            revision: entry.revision().map(HistoryRevisionId::get),
+            before_branch: entry.before().branch().get(),
+            before_revision: entry.before().revision().map(HistoryRevisionId::get),
+            after_branch: entry.after().branch().get(),
+            after_revision: entry.after().revision().map(HistoryRevisionId::get),
+            restore_from: entry.restore_from().map(HistoryRevisionId::get),
+            provenance: encode_provenance(entry.provenance()),
+        })
+        .collect();
+    let provenance = snapshot
+        .provenance()
+        .iter()
+        .map(|(revision, value)| StoredProvenanceRecord {
+            revision: revision.get(),
+            provenance: encode_provenance(value),
+        })
+        .collect();
     to_allocvec(&StoredMeta {
         version: FORMAT_VERSION,
         photo_id: snapshot.photo_id().get().to_be_bytes(),
@@ -117,6 +167,9 @@ pub(crate) fn encode_meta(snapshot: &HistoryStateSnapshot) -> Result<Vec<u8>, ()
         branches,
         snapshots,
         evidence,
+        commit_sequence: snapshot.commit_sequence(),
+        journal,
+        provenance,
     })
     .map_err(|_| ())
 }
@@ -174,6 +227,31 @@ pub(crate) fn decode_meta(bytes: &[u8]) -> Result<DecodedMeta, ()> {
             ))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let journal = stored
+        .journal
+        .into_iter()
+        .map(|entry| {
+            Ok(HistoryJournalEntry::new(
+                entry.sequence,
+                decode_operation_kind(entry.kind)?,
+                optional_revision(entry.revision)?,
+                cursor(entry.before_branch, entry.before_revision)?,
+                cursor(entry.after_branch, entry.after_revision)?,
+                optional_revision(entry.restore_from)?,
+                decode_provenance(&entry.provenance)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let provenance = stored
+        .provenance
+        .into_iter()
+        .map(|record| {
+            Ok((
+                HistoryRevisionId::new(record.revision).ok_or(())?,
+                decode_provenance(&record.provenance)?,
+            ))
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
     Ok(DecodedMeta {
         photo_id,
         version: HistoryVersion::from_u64(stored.history_version),
@@ -184,6 +262,9 @@ pub(crate) fn decode_meta(bytes: &[u8]) -> Result<DecodedMeta, ()> {
         branches,
         snapshots,
         evidence,
+        commit_sequence: stored.commit_sequence,
+        journal,
+        provenance,
     })
 }
 
@@ -249,6 +330,15 @@ pub(crate) struct DecodedMeta {
     pub(crate) branches: Vec<HistoryBranch>,
     pub(crate) snapshots: Vec<HistorySnapshot>,
     pub(crate) evidence: Vec<HistoryEvidence>,
+    pub(crate) commit_sequence: u64,
+    pub(crate) journal: Vec<HistoryJournalEntry>,
+    pub(crate) provenance: std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredProvenanceRecord {
+    revision: u64,
+    provenance: StoredProvenance,
 }
 
 fn text(bytes: &[u8]) -> Result<String, ()> {
@@ -259,6 +349,43 @@ fn optional_revision(value: Option<u64>) -> Result<Option<HistoryRevisionId>, ()
     value
         .map(|id| HistoryRevisionId::new(id).ok_or(()))
         .transpose()
+}
+
+fn cursor(branch: u64, revision: Option<u64>) -> Result<HistoryCursor, ()> {
+    Ok(HistoryCursor::new(
+        HistoryBranchId::new(branch).ok_or(())?,
+        optional_revision(revision)?,
+    ))
+}
+
+fn encode_provenance(value: &HistoryProvenance) -> StoredProvenance {
+    match value {
+        HistoryProvenance::Native => StoredProvenance {
+            kind: 1,
+            schema: 0,
+            source_id: Vec::new(),
+        },
+        HistoryProvenance::Darktable { schema, source_id } => StoredProvenance {
+            kind: 2,
+            schema: *schema,
+            source_id: source_id.as_bytes().to_vec(),
+        },
+        HistoryProvenance::RustTable { schema, source_id } => StoredProvenance {
+            kind: 3,
+            schema: *schema,
+            source_id: source_id.as_bytes().to_vec(),
+        },
+    }
+}
+
+fn decode_provenance(value: &StoredProvenance) -> Result<HistoryProvenance, ()> {
+    let source_id = text(&value.source_id)?;
+    match value.kind {
+        1 if value.schema == 0 && source_id.is_empty() => Ok(HistoryProvenance::native()),
+        2 => Ok(HistoryProvenance::darktable(value.schema, source_id)),
+        3 => Ok(HistoryProvenance::rusttable(value.schema, source_id)),
+        _ => Err(()),
+    }
 }
 
 fn encode_operation_kind(kind: HistoryOperationKind) -> u8 {
@@ -296,6 +423,9 @@ fn encode_evidence_kind(kind: HistoryEvidenceKind) -> u8 {
     match kind {
         HistoryEvidenceKind::Export => 1,
         HistoryEvidenceKind::Migration => 2,
+        HistoryEvidenceKind::Import => 3,
+        HistoryEvidenceKind::Redo => 4,
+        HistoryEvidenceKind::Restore => 5,
     }
 }
 
@@ -303,6 +433,9 @@ fn decode_evidence_kind(value: u8) -> Result<HistoryEvidenceKind, ()> {
     match value {
         1 => Ok(HistoryEvidenceKind::Export),
         2 => Ok(HistoryEvidenceKind::Migration),
+        3 => Ok(HistoryEvidenceKind::Import),
+        4 => Ok(HistoryEvidenceKind::Redo),
+        5 => Ok(HistoryEvidenceKind::Restore),
         _ => Err(()),
     }
 }
