@@ -8,7 +8,7 @@ fn limits() -> DecodeLimits {
 #[test]
 fn standard_registry_has_stable_unique_decoder_identities() {
     let descriptors = ImageDecoderRegistry::standard().descriptors();
-    assert_eq!(descriptors.len(), 3);
+    assert_eq!(descriptors.len(), 4);
     assert_eq!(
         descriptors
             .iter()
@@ -17,6 +17,7 @@ fn standard_registry_has_stable_unique_decoder_identities() {
         vec![
             "rusttable.decoder.jpeg.v1",
             "rusttable.decoder.png.v1",
+            "rusttable.decoder.raw.v1",
             "rusttable.decoder.tiff.v1"
         ]
     );
@@ -154,6 +155,19 @@ fn standard_registry_selects_jpeg_and_classic_tiff_by_signature() {
 
     assert_eq!(jpeg_probe.format(), InputFormat::Jpeg);
     assert_eq!(tiff_probe.format(), InputFormat::Tiff);
+}
+
+#[test]
+fn camera_raw_signature_selects_the_raw_decoder_before_decode() {
+    let mut bytes = vec![0_u8; 128];
+    bytes[32..37].copy_from_slice(b"NIKON");
+    let result = ImageDecoderRegistry::standard().probe(&bytes, limits());
+
+    assert!(matches!(
+        result,
+        ProbeOutcome::MalformedRecognized { decoder, error: ImageInputError::MalformedInput { format: InputFormat::Raw, .. } }
+            if decoder.format() == InputFormat::Raw
+    ));
 }
 
 #[test]

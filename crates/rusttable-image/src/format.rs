@@ -3,6 +3,7 @@ pub enum InputFormat {
     Jpeg,
     Png,
     Tiff,
+    Raw,
 }
 
 impl InputFormat {
@@ -13,6 +14,10 @@ impl InputFormat {
             Self::Jpeg => &["jpg", "jpeg"],
             Self::Png => &["png"],
             Self::Tiff => &["tif", "tiff"],
+            Self::Raw => &[
+                "arw", "cr2", "crw", "dng", "erf", "kdc", "nef", "nrw", "orf", "pef", "raf", "raw",
+                "rw2", "sr2", "srf", "x3f",
+            ],
         }
     }
 
@@ -29,8 +34,15 @@ impl InputFormat {
     }
 }
 
-pub const SUPPORTED_INPUT_FORMATS: [InputFormat; 3] =
-    [InputFormat::Jpeg, InputFormat::Png, InputFormat::Tiff];
+pub const SUPPORTED_INPUT_FORMATS: [InputFormat; 4] = [
+    InputFormat::Jpeg,
+    InputFormat::Png,
+    InputFormat::Tiff,
+    InputFormat::Raw,
+];
 
 /// All extensions advertised by the standard decoder registry in stable order.
-pub const SUPPORTED_INPUT_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "tif", "tiff"];
+pub const SUPPORTED_INPUT_EXTENSIONS: [&str; 21] = [
+    "jpg", "jpeg", "png", "tif", "tiff", "arw", "cr2", "crw", "dng", "erf", "kdc", "nef", "nrw",
+    "orf", "pef", "raf", "raw", "rw2", "sr2", "srf", "x3f",
+];

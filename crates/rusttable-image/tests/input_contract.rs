@@ -31,6 +31,7 @@ fn supported_input_formats_have_stable_jpeg_png_tiff_order() {
             rusttable_image::InputFormat::Jpeg,
             rusttable_image::InputFormat::Png,
             rusttable_image::InputFormat::Tiff,
+            rusttable_image::InputFormat::Raw,
         ]
     );
 }
@@ -44,7 +45,7 @@ fn decoder_extensions_are_case_insensitive_and_canonical() {
     );
     assert_eq!(InputFormat::from_extension("png"), Some(InputFormat::Png));
     assert_eq!(InputFormat::from_extension("TIF"), Some(InputFormat::Tiff));
-    assert_eq!(InputFormat::from_extension("raw"), None);
+    assert_eq!(InputFormat::from_extension("raw"), Some(InputFormat::Raw));
     assert_eq!(InputFormat::Jpeg.extensions(), &["jpg", "jpeg"]);
 }
 
