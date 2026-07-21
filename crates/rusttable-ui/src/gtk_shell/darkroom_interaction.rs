@@ -517,4 +517,27 @@ mod tests {
         assert_eq!(state.generation(), generation);
         assert!(state.select(id(99)).is_none());
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn histogram_view_owns_one_stack_child_per_state() {
+        if gtk4::init().is_err() {
+            return;
+        }
+        let stack = gtk4::Stack::new();
+        let _view = HistogramView::new(stack.clone());
+        let mut child = stack.first_child();
+        let mut names = Vec::new();
+        while let Some(widget) = child {
+            names.push(
+                stack
+                    .page(&widget)
+                    .name()
+                    .expect("histogram child has a stable name")
+                    .to_owned(),
+            );
+            child = widget.next_sibling();
+        }
+        assert_eq!(names, ["empty", "loading", "failure", "stale", "ready"]);
+    }
 }

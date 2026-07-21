@@ -158,6 +158,7 @@ mod tests {
         assert!(css.contains("button:disabled"));
         assert!(css.contains("#export-rail-content"));
         assert!(css.contains("#right-panel #export"));
+        assert!(!css.contains("max-width:"));
     }
 
     #[test]
