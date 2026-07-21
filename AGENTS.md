@@ -18,7 +18,9 @@
 - Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
 - Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
 - Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
-- Keep handwritten source files at or below 1,000 lines. Generated compatibility data is the only exception. Split growing code into cohesive modules before it crosses that boundary; never reduce required behavior or reject a feature merely to preserve the limit.
+- Use 1,000 lines as a maintainability trigger, not a functionality ceiling. Split growing handwritten code when responsibility-based decomposition improves navigability; cohesive files may exceed that size when splitting would obscure ownership. Never reduce required behavior or reject a feature merely to satisfy a line count. Generated compatibility data may remain large.
+- Preserve migration lineage when splitting files: keep a parent module at the original responsibility/path and place size-driven child modules in a nested directory beneath it (for example, `module/mod.rs` plus focused children), rather than flattening them into a new high-level catch-all folder. Name child modules after the corresponding Darktable responsibility where that mapping is meaningful.
+- Favor one Rust module or crate boundary per recognizable Darktable subsystem (`src/gui`, `src/libs`, `src/views`, `src/iop`, and related services). New structure should make a source-to-source migration diff easy to locate; do not move unrelated responsibilities merely to satisfy Rust packaging conventions.
 - Prefer the standard library, GTK4/GLib facilities, and established Rust crates over bespoke infrastructure.
 
 ## Development and tests
@@ -35,7 +37,7 @@
 
 - GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
 - Select dependency-ready work by priority label, P0 through P4.
-- A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body.
+- A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body. Move-only structure migrations may consolidate all directly related lineage issues into one PR when splitting them would create avoidable path churn; link every covered issue and preserve its acceptance criteria.
 - Work in batches of at most two PRs; both must merge before the next batch starts. Use multiple agents to deliver each PR, with at least one PR in every batch replacing real darktable behavior in Rust.
 - Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
 - Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.

@@ -8,6 +8,7 @@
 pub mod basicadj;
 pub mod basicadj_analysis;
 pub mod bloom;
+pub mod borders;
 pub mod censorize;
 pub mod clahe;
 pub mod clipping;
@@ -30,6 +31,7 @@ pub mod invert;
 pub mod lenscorrection;
 pub mod liquify;
 pub mod mask_manager;
+pub mod overlay;
 pub mod perspective;
 pub mod primaries;
 pub mod rasterfile;

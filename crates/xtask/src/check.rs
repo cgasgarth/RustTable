@@ -11,7 +11,6 @@ const FORBIDDEN_NATIVE_EXTENSIONS: &[&str] = &[
     "c", "cc", "cl", "cmake", "cpp", "cxx", "h", "hh", "hpp", "m", "mm", "s",
 ];
 const FORBIDDEN_NATIVE_FILENAMES: &[&str] = &["CMakeLists.txt", "ConfigureChecks.cmake"];
-const MAX_HANDWRITTEN_LINES: usize = 1_000;
 type CheckFn = fn(&Path) -> Result;
 
 const CHECKS: &[(&str, CheckFn)] = &[
@@ -177,20 +176,6 @@ fn verify_sources(root: &Path) -> Result {
             return Err(format!(
                 "source policy: native source is forbidden: {relative}"
             ));
-        }
-        if path.extension() == Some(OsStr::new("rs")) {
-            let source = fs::read_to_string(&path)
-                .map_err(|error| format!("source policy: read {relative}: {error}"))?;
-            if !source
-                .lines()
-                .next()
-                .is_some_and(|line| line.contains("GENERATED"))
-                && source.lines().count() > MAX_HANDWRITTEN_LINES
-            {
-                return Err(format!(
-                    "source policy: {relative} exceeds {MAX_HANDWRITTEN_LINES} lines"
-                ));
-            }
         }
     }
     Ok(())

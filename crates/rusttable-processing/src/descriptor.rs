@@ -24,6 +24,7 @@ mod descriptor_masks;
 mod descriptor_operations;
 #[path = "descriptor_retouch.rs"]
 mod descriptor_retouch;
+pub use crate::operations::borders::borders_descriptor;
 pub use crate::operations::clahe::clahe_descriptor;
 pub use crate::operations::clipping::clipping_descriptor;
 pub use crate::operations::crop::crop_descriptor;
@@ -37,6 +38,7 @@ pub use crate::operations::grain::grain_descriptor;
 pub use crate::operations::invert::invert_descriptor;
 pub use crate::operations::lenscorrection::lenscorrection_descriptor;
 pub use crate::operations::liquify::liquify_descriptor;
+pub use crate::operations::overlay::overlay_descriptor;
 pub use crate::operations::perspective::perspective_descriptor;
 pub use crate::operations::rasterfile::rasterfile_descriptor;
 pub use crate::operations::relight::relight_descriptor;
