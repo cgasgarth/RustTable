@@ -270,6 +270,7 @@ fn format_label(format: InputFormat) -> &'static str {
         InputFormat::Jpeg => "JPEG",
         InputFormat::Png => "PNG",
         InputFormat::Tiff => "TIFF",
+        InputFormat::Raw => "RAW",
     }
 }
 

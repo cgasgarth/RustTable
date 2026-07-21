@@ -417,6 +417,7 @@ fn source_identity(
         InputFormat::Jpeg => 1,
         InputFormat::Png => 2,
         InputFormat::Tiff => 3,
+        InputFormat::Raw => 4,
     }]);
     hasher.update(dimensions.width().to_be_bytes());
     hasher.update(dimensions.height().to_be_bytes());

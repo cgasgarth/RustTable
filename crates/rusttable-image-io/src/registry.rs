@@ -7,6 +7,7 @@ use rusttable_image::{
 };
 
 use crate::input::{enforce_limits, malformed, probe_tiff, validate_tiff};
+use crate::raw::{decode_raw, is_raw, probe_raw};
 
 /// Maximum amount of a source that any format probe may inspect.
 pub const PROBE_BUDGET_BYTES: usize = 64 * 1024;
@@ -28,6 +29,7 @@ pub enum ProbeOutcome {
 struct DecoderEntry {
     descriptor: DecoderDescriptor,
     matches: fn(&[u8]) -> bool,
+    full_source_probe: bool,
     probe: fn(&[u8], DecodeLimits) -> Result<ImageProbe, ImageInputError>,
     decode: fn(&[u8], DecodeLimits) -> Result<DecodedImage, ImageInputError>,
 }
@@ -41,7 +43,8 @@ macro_rules! builtin_decoders {
                 implementation: $implementation:literal,
                 matches: $matches:path,
                 probe: $probe:path,
-                decode: $decode:path
+                decode: $decode:path,
+                full_source_probe: $full_source_probe:expr
             }
         ),+ $(,)?
     ) => {
@@ -59,6 +62,7 @@ macro_rules! builtin_decoders {
                     InputFormat::$format,
                 ),
                 matches: $matches,
+                full_source_probe: $full_source_probe,
                 probe: $probe,
                 decode: $decode,
             }),+
@@ -67,27 +71,38 @@ macro_rules! builtin_decoders {
 }
 
 builtin_decoders! {
-    3;
+    4;
     Jpeg {
         id: "rusttable.decoder.jpeg.v1",
         implementation: "image-jpeg-0.25",
         matches: is_jpeg,
         probe: probe_jpeg,
-        decode: decode_jpeg
+        decode: decode_jpeg,
+        full_source_probe: false
     },
     Png {
         id: "rusttable.decoder.png.v1",
         implementation: "image-png-0.25",
         matches: is_png,
         probe: probe_png,
-        decode: decode_png
+        decode: decode_png,
+        full_source_probe: false
+    },
+    Raw {
+        id: "rusttable.decoder.raw.v1",
+        implementation: "rawloader-0.37.1",
+        matches: is_raw,
+        probe: probe_raw,
+        decode: decode_raw,
+        full_source_probe: true
     },
     Tiff {
         id: "rusttable.decoder.tiff.v1",
         implementation: "image-tiff-0.25",
         matches: is_tiff,
         probe: probe_classic_tiff,
-        decode: decode_classic_tiff
+        decode: decode_classic_tiff,
+        full_source_probe: false
     }
 }
 
@@ -101,7 +116,7 @@ pub struct ImageDecoderRegistry {
 }
 
 impl ImageDecoderRegistry {
-    /// Returns the deterministic built-in PNG/JPEG/classic-TIFF registry.
+    /// Returns the deterministic built-in PNG/JPEG/RAW/classic-TIFF registry.
     #[must_use]
     pub const fn standard() -> Self {
         Self {
@@ -126,7 +141,12 @@ impl ImageDecoderRegistry {
         else {
             return ProbeOutcome::NoMatch;
         };
-        match (decoder.probe)(window, limits) {
+        let source = if decoder.full_source_probe {
+            bytes
+        } else {
+            window
+        };
+        match (decoder.probe)(source, limits) {
             Ok(probe) => ProbeOutcome::Match {
                 decoder: decoder.descriptor,
                 probe,
@@ -498,6 +518,7 @@ fn decode_standard(
             ImageProbe::new(format, header.dimensions)
         }
         InputFormat::Tiff => probe_tiff(bytes, limits)?,
+        InputFormat::Raw => return decode_raw(bytes, limits),
     };
     decode_image(bytes, probe, limits, image_format(format))
 }
@@ -554,6 +575,7 @@ fn image_format(format: InputFormat) -> ImageFormat {
         InputFormat::Jpeg => ImageFormat::Jpeg,
         InputFormat::Png => ImageFormat::Png,
         InputFormat::Tiff => ImageFormat::Tiff,
+        InputFormat::Raw => unreachable!("RAW decoding uses the camera-RAW backend"),
     }
 }
 

@@ -26,6 +26,7 @@ allow = [
     "GPL-3.0-or-later",
     "ISC",
     "LGPL-2.1-or-later",
+    "LGPL-2.1",
     "MIT",
     "MPL-2.0",
     "NCSA",

@@ -3,6 +3,7 @@
 
 mod input;
 mod output;
+mod raw;
 mod registry;
 
 pub mod dng_output;

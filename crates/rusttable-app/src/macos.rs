@@ -619,7 +619,7 @@ mod tests {
         assert_eq!(declarations[0].uti, "public.image");
         assert_eq!(
             declarations[0].extensions,
-            &["jpg", "jpeg", "png", "tif", "tiff"]
+            rusttable_image::SUPPORTED_INPUT_EXTENSIONS.as_slice()
         );
         assert_eq!(declarations[1].uti, "com.cgasgarth.rusttable.catalog");
     }

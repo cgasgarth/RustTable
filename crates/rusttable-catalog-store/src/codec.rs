@@ -84,6 +84,7 @@ pub(crate) fn encode(record: &ImportRecord) -> Result<Vec<u8>, ()> {
                 InputFormat::Jpeg => 1,
                 InputFormat::Png => 2,
                 InputFormat::Tiff => 3,
+                InputFormat::Raw => 4,
             },
             width: record.probe().dimensions().width().to_be_bytes(),
             height: record.probe().dimensions().height().to_be_bytes(),
@@ -126,6 +127,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<ImportRecord, ()> {
         1 => InputFormat::Jpeg,
         2 => InputFormat::Png,
         3 => InputFormat::Tiff,
+        4 => InputFormat::Raw,
         _ => return Err(()),
     };
     let dimensions = ImageDimensions::new(
