@@ -151,7 +151,9 @@ pub(super) fn render_typed_modules_into(
     right_modules.append(exposure.widget());
     let filtered_right = modules
         .right_modules()
-        .filter(|module| module.id() != "exposure" && group.matches_title(module.title()));
+        .filter(|module| module.id() != "exposure")
+        .filter(|module| module.availability().is_deprecated() == group.is_deprecated_filter())
+        .filter(|module| group.is_deprecated_filter() || group.matches_title(module.title()));
     right_modules.append(&build_module_column_with_filter(
         filtered_right,
         DarkroomModuleSide::Right,
@@ -220,6 +222,12 @@ pub(super) fn add_group_buttons(
             "group-grading",
             "◐",
             "Grading modules",
+        ),
+        (
+            DarkroomModuleGroup::Deprecated,
+            "group-deprecated",
+            "!",
+            "Deprecated compatibility modules",
         ),
     ]
     .into_iter()

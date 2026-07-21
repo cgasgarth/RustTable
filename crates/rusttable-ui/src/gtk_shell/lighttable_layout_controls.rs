@@ -13,8 +13,24 @@ use super::{LighttableLayout, ThemeRole, apply_theme_role};
 pub struct LighttableLayoutControls {
     root: gtk4::Box,
     buttons: Rc<Vec<(LighttableLayout, gtk4::ToggleButton)>>,
+    panel_buttons: Rc<Vec<(LighttablePanel, gtk4::ToggleButton)>>,
     projecting: Rc<Cell<bool>>,
     layout: Rc<RefCell<LighttableLayout>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LighttablePanel {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LighttableLayoutAction {
+    SetLayout(LighttableLayout),
+    SetPanelVisibility {
+        panel: LighttablePanel,
+        visible: bool,
+    },
 }
 
 impl LighttableLayoutControls {
@@ -50,9 +66,34 @@ impl LighttableLayoutControls {
                 (layout, button)
             })
             .collect::<Vec<_>>();
+        let panel_separator = gtk4::Separator::new(gtk4::Orientation::Vertical);
+        panel_separator.set_widget_name("lighttable-layout-separator-panels");
+        panel_separator.add_css_class("dt_toolbar_separator");
+        root.append(&panel_separator);
+        let panel_buttons = [
+            (LighttablePanel::Left, "left", "Show left panel"),
+            (LighttablePanel::Right, "right", "Show right panel"),
+        ]
+        .into_iter()
+        .map(|(panel, suffix, accessible_name)| {
+            let button = gtk4::ToggleButton::with_label(match panel {
+                LighttablePanel::Left => "left",
+                LighttablePanel::Right => "right",
+            });
+            button.set_widget_name(&format!("lighttable-panel-{suffix}"));
+            button.set_focus_on_click(false);
+            button.set_active(true);
+            button.set_accessible_role(gtk4::AccessibleRole::Button);
+            button.update_property(&[Property::Label(accessible_name)]);
+            button.set_tooltip_text(Some(accessible_name));
+            root.append(&button);
+            (panel, button)
+        })
+        .collect::<Vec<_>>();
         let controls = Self {
             root,
             buttons: Rc::new(buttons),
+            panel_buttons: Rc::new(panel_buttons),
             projecting: Rc::new(Cell::new(false)),
             layout: Rc::new(RefCell::new(LighttableLayout::default())),
         };
@@ -83,6 +124,17 @@ impl LighttableLayoutControls {
     where
         F: Fn(LighttableLayout) + 'static,
     {
+        self.connect_action(move |action| {
+            if let LighttableLayoutAction::SetLayout(layout) = action {
+                handler(layout);
+            }
+        });
+    }
+
+    pub fn connect_action<F>(&self, handler: F)
+    where
+        F: Fn(LighttableLayoutAction) + 'static,
+    {
         let handler = Rc::new(handler);
         let guard = Rc::clone(&self.projecting);
         for (layout, button) in self.buttons.iter() {
@@ -107,9 +159,34 @@ impl LighttableLayoutControls {
                     }
                 }
                 guard.set(false);
-                handler(selected);
+                handler(LighttableLayoutAction::SetLayout(selected));
             });
         }
+        for (panel, button) in self.panel_buttons.iter() {
+            let handler = Rc::clone(&handler);
+            let panel = *panel;
+            let guard = Rc::clone(&guard);
+            button.connect_toggled(move |button| {
+                if !guard.get() {
+                    handler(LighttableLayoutAction::SetPanelVisibility {
+                        panel,
+                        visible: button.is_active(),
+                    });
+                }
+            });
+        }
+    }
+
+    pub fn set_panel_visibility(&self, panel: LighttablePanel, visible: bool) {
+        self.projecting.set(true);
+        if let Some((_, button)) = self
+            .panel_buttons
+            .iter()
+            .find(|(candidate, _)| *candidate == panel)
+        {
+            button.set_active(visible);
+        }
+        self.projecting.set(false);
     }
 }
 
@@ -137,5 +214,9 @@ mod tests {
         }
         assert_eq!(LighttableLayout::Preview.label(), "preview");
         assert!(LighttableLayout::Culling.shows_filmstrip());
+        for id in ["lighttable-panel-left", "lighttable-panel-right"] {
+            assert!(source.contains(id));
+        }
+        assert!(source.contains("lighttable-layout-separator-panels"));
     }
 }
