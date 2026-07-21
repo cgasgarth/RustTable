@@ -665,6 +665,7 @@ impl GtkShell {
     /// view model. Each native card switches to darkroom and reports the typed
     /// [`PhotoId`] through [`Self::set_photo_selected_handler`].
     pub fn set_lighttable_workspace(&self, view_model: &PhotoWorkspaceViewModel) {
+        self.lighttable_generation.set(0);
         self.lighttable_filter.replace(None);
         self.lighttable_workspace.replace(Some(view_model.clone()));
         self.workspace_render_handle().render(view_model, None);
@@ -676,6 +677,7 @@ impl GtkShell {
         view_model: &PhotoWorkspaceViewModel,
         matching_photo_ids: impl IntoIterator<Item = PhotoId>,
     ) {
+        self.lighttable_generation.set(0);
         let matching_photo_ids = matching_photo_ids.into_iter().collect::<BTreeSet<_>>();
         self.lighttable_filter
             .replace(Some(matching_photo_ids.clone()));
@@ -944,6 +946,10 @@ fn connect_darkroom_module_group(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "runtime_tests.rs"]
+mod tests;
 
 #[derive(Clone)]
 struct CollectionRefreshHandle {

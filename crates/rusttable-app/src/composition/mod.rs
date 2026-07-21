@@ -288,11 +288,13 @@ fn activate_application(
     let darkroom_selection_handler = darkroom_bridge.handler.clone();
     let darkroom_selection_panel_bridge = darkroom_panel_bridge;
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
-        let catalog_changed = selection_controller.borrow_mut().select_photo(photo_id);
-        let collection_changed = selection_collection
-            .borrow_mut()
-            .as_mut()
-            .is_some_and(|collection| apply_photo_selection(collection, photo_id, modifiers));
+        let (catalog_changed, collection_changed) = apply_selection_projection(
+            &selection_controller,
+            &selection_collection,
+            &darkroom_selection_shell,
+            photo_id,
+            modifiers,
+        );
         if !catalog_changed && !collection_changed {
             return;
         }
@@ -401,6 +403,24 @@ fn install_action_input(shell: &rusttable_ui::GtkShell) {
             _ => {}
         }
     });
+}
+
+fn apply_selection_projection(
+    catalog: &Rc<RefCell<GtkCatalogController>>,
+    collection: &Rc<RefCell<Option<CollectionController>>>,
+    shell: &rusttable_ui::GtkShell,
+    photo_id: rusttable_core::PhotoId,
+    modifiers: rusttable_ui::SelectionModifiers,
+) -> (bool, bool) {
+    let catalog_changed = catalog.borrow_mut().select_photo(photo_id);
+    let collection_changed = collection
+        .borrow_mut()
+        .as_mut()
+        .is_some_and(|controller| apply_photo_selection(controller, photo_id, modifiers));
+    if let Some(controller) = collection.borrow().as_ref() {
+        shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
+    }
+    (catalog_changed, collection_changed)
 }
 
 fn install_application_menus(
@@ -896,64 +916,4 @@ fn export_request(
 }
 
 #[cfg(test)]
-mod tests {
-    use gtk4::gio::prelude::ApplicationExt;
-    use rusttable_core::PhotoId;
-    use rusttable_ui::{CollectionControlAction, CollectionItem, CollectionProperty};
-
-    use super::{CollectionController, apply_collection_action, collection_filter_state};
-
-    fn id(value: u128) -> PhotoId {
-        PhotoId::new(value).expect("non-zero test photo identifier")
-    }
-
-    #[test]
-    fn collection_actions_project_filter_transitions_for_the_lighttable() {
-        let mut controller = CollectionController::new([
-            CollectionItem::new(id(1), "/photos/2026/holiday/IMG_0001.CR3"),
-            CollectionItem::new(id(2), "/photos/2026/portraits/portrait.jpg"),
-        ]);
-
-        let initial = collection_filter_state(&controller.snapshot());
-        assert_eq!(initial.controls().total_count(), 2);
-        assert_eq!(initial.matching_photo_ids(), &[id(1), id(2)]);
-
-        apply_collection_action(
-            &mut controller,
-            CollectionControlAction::SetSearchText {
-                search_text: "portrait".to_owned(),
-                generation: 1,
-            },
-        );
-        let filtered = collection_filter_state(&controller.snapshot());
-        assert_eq!(filtered.controls().result_count(), 1);
-        assert_eq!(filtered.controls().search_text(), "portrait");
-        assert_eq!(filtered.matching_photo_ids(), &[id(2)]);
-
-        apply_collection_action(
-            &mut controller,
-            CollectionControlAction::SetProperty {
-                property: CollectionProperty::Folders,
-                generation: 2,
-            },
-        );
-        apply_collection_action(
-            &mut controller,
-            CollectionControlAction::Clear { generation: 3 },
-        );
-        let cleared = collection_filter_state(&controller.snapshot());
-        assert_eq!(cleared.controls().property(), CollectionProperty::Folders);
-        assert_eq!(cleared.controls().result_count(), 2);
-        assert_eq!(cleared.matching_photo_ids(), &[id(1), id(2)]);
-    }
-
-    #[test]
-    fn gtk_application_advertises_native_file_open_events() {
-        let application = super::create_application();
-        assert!(
-            application
-                .flags()
-                .contains(gtk4::gio::ApplicationFlags::HANDLES_OPEN)
-        );
-    }
-}
+mod tests;
