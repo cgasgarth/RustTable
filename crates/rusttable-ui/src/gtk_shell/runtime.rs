@@ -14,6 +14,7 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
+use super::darkroom::profile_diagnostics::ProfileDiagnosticRequest;
 use super::runtime_layout::{
     desktop_body, mode_panel_stack, render_modules, right_panel, synchronize_panel_stacks,
     workspace_stack,
@@ -130,6 +131,7 @@ impl GtkShell {
         let ai_models_panel = AiModelsPanel::new();
         let display_profile_banner = DisplayProfileBanner::new();
         let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
+        initialize_profile_diagnostics(&darkroom);
         let lighttable_toolbar = header.lighttable_toolbar().clone();
         header.preferences_button().connect_clicked({
             let editor = input_mapping_editor.clone();
@@ -153,19 +155,13 @@ impl GtkShell {
             camera_panel,
             import_session_panel,
         ) = right_panel();
-        let left_panel = mode_panel_stack(
-            "left-panel-stack",
-            lighttable_left_panel.widget(),
-            darkroom.left_panel(),
-            layout.initial_workspace(),
-        );
-        let right_panel = mode_panel_stack(
-            "right-panel-stack",
+        let (left_panel, right_panel) = build_mode_panels(
+            &workspace,
+            &lighttable_left_panel,
             &lighttable_right_panel,
-            darkroom.right_panel(),
+            &darkroom,
             layout.initial_workspace(),
         );
-        synchronize_panel_stacks(&workspace, &left_panel, &right_panel);
         let (content, filmstrip) =
             desktop_body(&workspace, &left_panel, &right_panel, &initial_i18n);
 
@@ -631,12 +627,39 @@ impl GtkShell {
     }
 }
 
+fn build_mode_panels(
+    workspace: &gtk4::Stack,
+    lighttable_left_panel: &LeftPanel,
+    lighttable_right_panel: &gtk4::Box,
+    darkroom: &DarkroomView,
+    initial_workspace: WorkspaceRole,
+) -> (gtk4::Stack, gtk4::Stack) {
+    let left_panel = mode_panel_stack(
+        "left-panel-stack",
+        lighttable_left_panel.widget(),
+        darkroom.left_panel(),
+        initial_workspace,
+    );
+    let right_panel = mode_panel_stack(
+        "right-panel-stack",
+        lighttable_right_panel,
+        darkroom.right_panel(),
+        initial_workspace,
+    );
+    synchronize_panel_stacks(workspace, &left_panel, &right_panel);
+    (left_panel, right_panel)
+}
+
 fn build_darkroom(panel_width: i32) -> DarkroomRuntime {
     let darkroom = DarkroomView::new(panel_width);
     let darkroom_preview = darkroom.preview().clone();
     let darkroom_workspace = Rc::new(RefCell::new(None::<DarkroomWorkspaceViewModel>));
     connect_darkroom_module_group(&darkroom, &darkroom_workspace);
     (darkroom, darkroom_preview, darkroom_workspace)
+}
+
+fn initialize_profile_diagnostics(darkroom: &DarkroomView) {
+    darkroom.set_profile_diagnostic_state(None, None, ProfileDiagnosticRequest::new());
 }
 
 fn connect_darkroom_module_group(

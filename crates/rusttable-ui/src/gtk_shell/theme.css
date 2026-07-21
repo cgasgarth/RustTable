@@ -355,6 +355,34 @@ expander:hover {
   font-size: 10px;
 }
 
+#header-profile-diagnostic,
+#darkroom-profile-diagnostic {
+  min-width: 0;
+  min-height: 18px;
+  margin: 0 4px;
+  padding: 1px 4px;
+  border-left: 1px solid {{border}};
+  font-size: 10px;
+}
+
+#header-profile-diagnostic label,
+#darkroom-profile-diagnostic label {
+  font-size: 10px;
+}
+
+.dt_profile_diagnostic.profile-diagnostic-ready {
+  color: #65c466ff;
+}
+
+.dt_profile_diagnostic.profile-diagnostic-missing,
+.dt_profile_diagnostic.profile-diagnostic-unsupported,
+.dt_profile_diagnostic.profile-diagnostic-ambiguous,
+.dt_profile_diagnostic.profile-diagnostic-range-mismatch,
+.dt_profile_diagnostic.profile-diagnostic-fallback,
+.dt_profile_diagnostic.profile-diagnostic-stale {
+  color: #ffbb00ff;
+}
+
 #lighttable-toolbar-separator-filter-labels,
 #lighttable-toolbar-separator-labels-rating,
 #lighttable-toolbar-separator-rating-sort,

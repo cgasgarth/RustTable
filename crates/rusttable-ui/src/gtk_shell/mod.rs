@@ -19,6 +19,7 @@ mod lighttable_interaction;
 mod lighttable_toolbar;
 mod model;
 mod photo_preview;
+mod profile_controls;
 mod runtime;
 mod runtime_layout;
 mod runtime_lighttable;
@@ -69,6 +70,12 @@ pub use model::{
     ShellRegion, WorkspaceRole,
 };
 pub use photo_preview::{DarkroomSelectionState, PhotoPreview, PhotoPreviewTextureError};
+pub use profile_controls::{
+    MAX_PROFILE_WARNINGS, PROFILE_CONTROL_WIDGET_IDS, PROFILE_CONTROLS_FOCUS_ORDER, ProfileChoice,
+    ProfileControlAction, ProfileControlMessage, ProfileControls, ProfileControlsState,
+    ProfileMismatchKind, ProfileRole, ProfileRoleState, ProfileRoleStatus,
+    ProfileUnavailableReason, ProfileWarning, ProfileWarningKind,
+};
 pub use runtime::GtkShell;
 pub use theme::{
     DarktableTheme, ThemeRole, apply_theme_role, darktable_theme_css, install_darktable_theme,

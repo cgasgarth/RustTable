@@ -5,6 +5,7 @@ use gtk4::accessible::{Property, State};
 use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
+use super::darkroom::profile_diagnostics::ProfileDiagnosticSurface;
 use super::{
     DARKTABLE_DESKTOP_SPEC, LighttableToolbar, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
     apply_theme_role,
@@ -173,6 +174,12 @@ fn header_toolbar(
     let profile = display_profile.widget();
     profile.set_width_chars(2);
     toolbar.append(profile);
+
+    let profile_diagnostic = ProfileDiagnosticSurface::new(
+        "header-profile-diagnostic",
+        "Display profile diagnostic status",
+    );
+    toolbar.append(profile_diagnostic.widget());
 
     let preferences = gtk4::Button::from_icon_name("preferences-system-symbolic");
     preferences.set_widget_name("header-preferences");
