@@ -3,6 +3,7 @@
 use rusttable_core::PhotoId;
 
 use crate::presentation::{
+    DarkroomHistoryViewModel, DarkroomPanelProjection, DarkroomSnapshotsViewModel,
     PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText, ThumbnailIndicators,
 };
 
@@ -319,6 +320,8 @@ pub struct DarkroomWorkspaceViewModel {
     detail: PhotoDetailViewModel,
     left_modules: Vec<ModulePanelViewModel>,
     right_modules: Vec<ModulePanelViewModel>,
+    history: Option<DarkroomPanelProjection<DarkroomHistoryViewModel>>,
+    snapshots: Option<DarkroomPanelProjection<DarkroomSnapshotsViewModel>>,
 }
 
 impl DarkroomWorkspaceViewModel {
@@ -332,6 +335,8 @@ impl DarkroomWorkspaceViewModel {
             detail,
             left_modules,
             right_modules,
+            history: None,
+            snapshots: None,
         }
     }
 
@@ -348,6 +353,40 @@ impl DarkroomWorkspaceViewModel {
     #[must_use = "iterate over the right-panel modules"]
     pub fn right_modules(&self) -> impl ExactSizeIterator<Item = &ModulePanelViewModel> {
         self.right_modules.iter()
+    }
+
+    /// Adds a revision-checked history projection without changing module ownership.
+    #[must_use]
+    pub fn with_history_projection(
+        mut self,
+        projection: DarkroomPanelProjection<DarkroomHistoryViewModel>,
+    ) -> Self {
+        self.history = Some(projection);
+        self
+    }
+
+    /// Adds a snapshot projection without introducing a second persistence path.
+    #[must_use]
+    pub fn with_snapshots_projection(
+        mut self,
+        projection: DarkroomPanelProjection<DarkroomSnapshotsViewModel>,
+    ) -> Self {
+        self.snapshots = Some(projection);
+        self
+    }
+
+    #[must_use]
+    pub const fn history_projection(
+        &self,
+    ) -> Option<&DarkroomPanelProjection<DarkroomHistoryViewModel>> {
+        self.history.as_ref()
+    }
+
+    #[must_use]
+    pub const fn snapshots_projection(
+        &self,
+    ) -> Option<&DarkroomPanelProjection<DarkroomSnapshotsViewModel>> {
+        self.snapshots.as_ref()
     }
 }
 

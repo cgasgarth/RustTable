@@ -7,8 +7,10 @@ use gtk4::accessible::Property;
 use gtk4::gdk;
 use gtk4::prelude::*;
 
+use super::super::darkroom_status::DarkroomStatusSurface;
 use super::{
     DARKROOM_GEOMETRY, DARKROOM_VIEWPORT_FOCUS_ORDER, DARKROOM_VIEWPORT_WIDGET_IDS,
+    DarkroomPanelVisibility, DarkroomPanelVisibilityAction, DarkroomPanelVisibilityHandler,
     DarkroomViewportActionHandler, PhotoPreview, ThemeRole, apply_theme_role,
 };
 use crate::viewport_presentation::{
@@ -28,11 +30,16 @@ pub(super) struct ViewportControls {
     sync_guard: Rc<Cell<bool>>,
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn darkroom_page(
     preview: &PhotoPreview,
     state: &Rc<RefCell<DarkroomViewportState>>,
     handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-) -> (gtk4::Box, ViewportControls) {
+    left_panel_visible: &Rc<Cell<bool>>,
+    right_panel_visible: &Rc<Cell<bool>>,
+    filmstrip_visible: &Rc<Cell<bool>>,
+    panel_visibility_handler: &Rc<RefCell<Option<DarkroomPanelVisibilityHandler>>>,
+) -> (gtk4::Box, ViewportControls, DarkroomStatusSurface) {
     let page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     page.set_widget_name("darkroom-page");
     page.set_hexpand(true);
@@ -86,6 +93,27 @@ pub(super) fn darkroom_page(
     };
 
     let top = toolbar("darkroom-toolbar-top", "Darkroom color proofing controls");
+    let left_panel = layout_toggle(
+        "darkroom-left-panel-toggle",
+        "left panel",
+        "Show or hide the left darkroom panel",
+        left_panel_visible.get(),
+    );
+    let right_panel = layout_toggle(
+        "darkroom-right-panel-toggle",
+        "right panel",
+        "Show or hide the right darkroom panel",
+        right_panel_visible.get(),
+    );
+    let filmstrip = layout_toggle(
+        "darkroom-filmstrip-toggle",
+        "filmstrip",
+        "Show or hide the bottom filmstrip",
+        filmstrip_visible.get(),
+    );
+    top.append(&left_panel);
+    top.append(&right_panel);
+    top.append(&filmstrip);
     top.append(&soft_proof);
     top.append(&gamut_check);
     let bottom = toolbar("darkroom-toolbar-bottom", "Darkroom viewport controls");
@@ -109,12 +137,60 @@ pub(super) fn darkroom_page(
     page.append(&top);
     page.append(&viewport);
     page.append(&bottom);
+    let status_surface = DarkroomStatusSurface::new();
+    page.append(status_surface.widget());
     page.append(&boundary);
     connect_viewport_controls(&controls, state, handler, preview);
+    connect_layout_toggle(
+        &left_panel,
+        left_panel_visible,
+        panel_visibility_handler,
+        DarkroomPanelVisibility::Left,
+    );
+    connect_layout_toggle(
+        &right_panel,
+        right_panel_visible,
+        panel_visibility_handler,
+        DarkroomPanelVisibility::Right,
+    );
+    connect_layout_toggle(
+        &filmstrip,
+        filmstrip_visible,
+        panel_visibility_handler,
+        DarkroomPanelVisibility::Filmstrip,
+    );
     install_viewport_input(&page, preview, &controls, state, handler);
     debug_assert_eq!(DARKROOM_VIEWPORT_FOCUS_ORDER.len(), 5);
     sync_viewport_controls(&controls, preview, state);
-    (page, controls)
+    (page, controls, status_surface)
+}
+
+fn layout_toggle(id: &str, label: &str, accessible_name: &str, active: bool) -> gtk4::ToggleButton {
+    let button = gtk4::ToggleButton::with_label(label);
+    button.set_widget_name(id);
+    button.set_active(active);
+    button.add_css_class("dt_button");
+    button.set_focus_on_click(false);
+    button.set_tooltip_text(Some(accessible_name));
+    button.update_property(&[Property::Label(accessible_name)]);
+    button
+}
+
+fn connect_layout_toggle(
+    button: &gtk4::ToggleButton,
+    state: &Rc<Cell<bool>>,
+    handler: &Rc<RefCell<Option<DarkroomPanelVisibilityHandler>>>,
+    panel: DarkroomPanelVisibility,
+) {
+    let state = Rc::clone(state);
+    let handler = Rc::clone(handler);
+    button.connect_toggled(move |button| {
+        let visible = button.is_active();
+        state.set(visible);
+        if let Some(handler) = handler.borrow().as_ref() {
+            handler(DarkroomPanelVisibilityAction::new(panel, visible));
+        }
+    });
 }
 
 fn toolbar(id: &str, accessible_name: &str) -> gtk4::Box {

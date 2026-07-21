@@ -9,6 +9,7 @@ mod collection_controls;
 mod darkroom;
 mod darkroom_controls;
 mod darkroom_modules;
+mod darkroom_status;
 mod darktable_spec;
 mod export_panel;
 mod exposure_panel;
@@ -34,7 +35,10 @@ pub use collection_controls::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     LighttablePhotoState,
 };
-pub use darkroom::{DARKROOM_WIDGET_IDS, DarkroomView};
+pub use darkroom::{
+    DARKROOM_LAYOUT_FOCUS_ORDER, DARKROOM_WIDGET_IDS, DarkroomPanelVisibility,
+    DarkroomPanelVisibilityAction, DarkroomView,
+};
 pub use darkroom_controls::{
     DarkroomControlFeedback, DarkroomControlMessage, DarkroomControlModel,
     DarkroomControlModelError, DarkroomModuleControl, DarkroomModuleControlError,
@@ -51,11 +55,12 @@ pub use darkroom_modules::{
 pub use darktable_spec::{
     ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_RAIL_SCROLL_WIDGET_IDS,
     DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarkroomGeometry,
-    DarkroomWindowLayout, DarktableColors, DarktableDesktopSpec, DesktopRegion, FilmstripHeights,
-    LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
-    LayoutMetrics, LighttableCompositionSpec, LighttableModuleSpec, LighttableToolbarSpec,
-    PANEL_SLOTS, PanelRole, PanelSlot as VisualPanelSlot, SidePanelWidths, THUMBNAIL_METRICS,
-    TOP_BAR_SECTIONS, ThumbnailMetrics, TopBarSection, ViewMode, darkroom_window_layout,
+    DarkroomGeometryReceipt, DarkroomWindowLayout, DarktableColors, DarktableDesktopSpec,
+    DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LIGHTTABLE_COMPOSITION,
+    LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, LayoutMetrics, LighttableCompositionSpec,
+    LighttableModuleSpec, LighttableToolbarSpec, PANEL_SLOTS, PanelRole,
+    PanelSlot as VisualPanelSlot, SidePanelWidths, THUMBNAIL_METRICS, TOP_BAR_SECTIONS,
+    ThumbnailMetrics, TopBarSection, ViewMode, darkroom_window_layout,
 };
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;

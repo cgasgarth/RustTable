@@ -90,6 +90,7 @@ pub enum ExportAction {
 
 type ExportActionHandler = Box<dyn Fn(ExportAction)>;
 type ExportRailActionHandler = Box<dyn Fn(ExportRailAction)>;
+type ExportStatusHandler = Box<dyn Fn(&str)>;
 
 /// Darktable-shaped GTK controls for saving the selected persisted edit as PNG.
 #[derive(Clone)]
@@ -110,6 +111,7 @@ pub struct ExportPanel {
     progress: gtk4::ProgressBar,
     actions: Rc<RefCell<Option<ExportActionHandler>>>,
     rail_actions: Rc<RefCell<Option<ExportRailActionHandler>>>,
+    status_handler: Rc<RefCell<Option<ExportStatusHandler>>>,
 }
 
 struct ExportChoices {
@@ -136,6 +138,7 @@ impl ExportPanel {
         let size = Rc::new(Cell::new(ExportSize::Original));
         let actions = Rc::new(RefCell::new(None));
         let rail_actions = Rc::new(RefCell::new(None));
+        let status_handler = Rc::new(RefCell::new(None));
         let choices = export_choices();
         let controls = export_actions();
 
@@ -203,6 +206,7 @@ impl ExportPanel {
             progress: controls.progress,
             actions,
             rail_actions,
+            status_handler,
         };
         panel.connect_actions();
         panel.set_selected(false);
@@ -251,6 +255,14 @@ impl ExportPanel {
         self.actions.replace(Some(Box::new(handler)));
     }
 
+    /// Connects the visible export/background-job status to the owning shell.
+    pub fn connect_status<F>(&self, handler: F)
+    where
+        F: Fn(&str) + 'static,
+    {
+        self.status_handler.replace(Some(Box::new(handler)));
+    }
+
     /// Connects destination, format, and lifecycle events from the export rail.
     pub fn connect_rail_action<F>(&self, handler: F)
     where
@@ -261,7 +273,7 @@ impl ExportPanel {
 
     /// Shows a non-running export status.
     pub fn set_idle(&self, message: &str) {
-        self.status.set_text(message);
+        self.set_status_text(message);
         self.status.remove_css_class("error");
         self.progress.set_visible(false);
         self.cancel.set_visible(false);
@@ -274,7 +286,7 @@ impl ExportPanel {
             self.set_idle("Select a photo to export.");
             return;
         }
-        self.status.set_text(message);
+        self.set_status_text(message);
         self.progress.set_visible(true);
         self.progress.set_fraction(0.0);
         self.progress.set_text(Some(message));
@@ -289,7 +301,7 @@ impl ExportPanel {
         self.progress.set_visible(true);
         self.progress.set_fraction(fraction.clamp(0.0, 1.0));
         self.progress.set_text(Some(message));
-        self.status.set_text(message);
+        self.set_status_text(message);
     }
 
     /// Shows an existing-destination collision that requires an explicit choice.
@@ -298,7 +310,7 @@ impl ExportPanel {
             self.set_idle("Select a photo to export.");
             return;
         }
-        self.status.set_text(message);
+        self.set_status_text(message);
         self.progress.set_visible(false);
         self.cancel.set_visible(false);
         self.replace.set_visible(true);
@@ -312,7 +324,7 @@ impl ExportPanel {
             self.set_idle("Select a photo to export.");
             return;
         }
-        self.status.set_text(message);
+        self.set_status_text(message);
         self.progress.set_visible(false);
         self.cancel.set_visible(false);
         self.replace.set_visible(false);
@@ -395,6 +407,13 @@ impl ExportPanel {
             dispatch(&actions, ExportAction::ReplaceExisting);
             dispatch_rail(&rail_actions, ExportRailAction::ReplaceExisting);
         });
+    }
+
+    fn set_status_text(&self, message: &str) {
+        self.status.set_text(message);
+        if let Some(handler) = self.status_handler.borrow().as_ref() {
+            handler(message);
+        }
     }
 
     fn set_controls_sensitive(&self, sensitive: bool) {
