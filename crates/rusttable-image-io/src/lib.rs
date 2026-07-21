@@ -5,6 +5,8 @@ mod input;
 mod output;
 mod registry;
 
+pub mod dng_output;
+
 pub use input::FileImageInput;
 pub use output::FileImageOutput;
 pub use registry::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};

@@ -179,7 +179,9 @@ fn inspect_tiff(bytes: &[u8], validate_payload: bool) -> Result<TiffImageSpec, I
             directory.strip_byte_counts.as_deref(),
         )?;
     }
-    if bits.iter().any(|value| *value != 8) {
+    let dng_u16 = bits.iter().all(|value| *value == 16)
+        && ((photometric == 32803 && samples == 1) || (photometric == 34892 && samples == 3));
+    if bits.iter().any(|value| *value != 8) && !dng_u16 {
         return Err(unsupported_tiff(UnsupportedImageFeature::BitDepth));
     }
     if directory
@@ -194,7 +196,9 @@ fn inspect_tiff(bytes: &[u8], validate_payload: bool) -> Result<TiffImageSpec, I
         ));
     }
     let supported_color_model = (photometric == 1 && (samples == 1 || samples == 2))
-        || (photometric == 2 && (samples == 3 || samples == 4));
+        || (photometric == 2 && (samples == 3 || samples == 4))
+        || (photometric == 32803 && samples == 1)
+        || (photometric == 34892 && samples == 3);
     if !supported_color_model || bits.len() != usize::try_from(samples).unwrap_or(usize::MAX) {
         return Err(unsupported_tiff(UnsupportedImageFeature::ColorModel));
     }

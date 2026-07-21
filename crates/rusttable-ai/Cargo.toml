@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 rusttable-color.workspace = true
 rusttable-image.workspace = true
+rusttable-image-io.workspace = true
 rusttable-ai-native.workspace = true
 rusttable-pixelpipe.workspace = true
 rusttable-processing.workspace = true
