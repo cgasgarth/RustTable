@@ -8,7 +8,10 @@ use rusttable_pixelpipe::{
     CpuTilePlan, CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor,
     RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
-use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
+use rusttable_processing::{
+    CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
+    to_linear_srgb,
+};
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
     Operation::new_with_opacity(
@@ -109,6 +112,52 @@ fn executes_registered_operations_in_authored_order_and_preserves_alpha() {
     assert!((first.red() - 0.264_041_13).abs() < 0.000_001);
     assert!((first.green() - 0.302_628_25).abs() < 0.000_001);
     assert!((first.blue() - 2.290_086_3).abs() < 0.000_001);
+}
+
+#[test]
+fn exposure_applies_darktable_black_level_scale_without_clipping() {
+    let graph = graph(vec![operation(
+        10,
+        "rusttable.exposure",
+        &[("stops", 1.0), ("black", 0.125)],
+    )]);
+    let request = CpuPixelpipeRequest::new(image(), graph, CpuPixelpipeOutputMode::FullExport);
+    let result = CpuPixelpipeExecutor
+        .execute(&request)
+        .expect("black-level exposure executes");
+
+    let source = SourceRgbImage::new(
+        RasterDimensions::new(2, 1).expect("dimensions"),
+        vec![
+            SourceRgb::new(
+                SrgbChannel::new(0.5).expect("channel"),
+                SrgbChannel::new(0.25).expect("channel"),
+                SrgbChannel::new(0.75).expect("channel"),
+            ),
+            SourceRgb::new(
+                SrgbChannel::new(0.1).expect("channel"),
+                SrgbChannel::new(0.2).expect("channel"),
+                SrgbChannel::new(0.3).expect("channel"),
+            ),
+        ],
+    )
+    .expect("source image");
+    let linear = to_linear_srgb(&source);
+    let scale = 1.0 / (2.0_f32.powi(-1) - 0.125);
+    let first = *linear.pixels().next().expect("first pixel");
+    let output = result.image().pixels();
+    assert!((output[0].red() - (first.red().get() - 0.125) * scale).abs() < 0.000_001);
+    assert!((output[0].green() - (first.green().get() - 0.125) * scale).abs() < 0.000_001);
+    assert!((output[0].blue() - (first.blue().get() - 0.125) * scale).abs() < 0.000_001);
+    assert!((output[0].alpha() - 0.4).abs() < f32::EPSILON);
+    assert!(
+        output[1].red() < 0.0,
+        "black correction preserves negative values"
+    );
+    assert!(
+        output[0].blue() > 1.0,
+        "exposure preserves scene-linear headroom"
+    );
 }
 
 #[test]

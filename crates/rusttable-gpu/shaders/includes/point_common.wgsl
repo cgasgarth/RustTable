@@ -7,7 +7,8 @@ struct PointParams {
     gain_green: f32,
     gain_blue: f32,
     transfer_gamma: f32,
-    _reserved1: vec2<f32>,
+    black_level: f32,
+    _reserved1: f32,
 }
 
 @group(0) @binding(0) var<storage, read> input_pixels: array<vec4<f32>>;

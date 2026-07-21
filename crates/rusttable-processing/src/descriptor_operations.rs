@@ -13,28 +13,49 @@ use super::{
 /// # Panics
 ///
 /// This function cannot panic because its fixed descriptor identity is valid.
-pub fn exposure_descriptor() -> OperationDescriptor {
+fn base_exposure_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new("exposure", "rusttable.exposure", 1, 1, 1).expect("static ID"),
-        parameters: vec![ParameterDescriptor {
-            id: "stops".to_owned(),
-            kind: ParameterKind::Scalar {
-                minimum: -18.0,
-                maximum: 18.0,
+        parameters: vec![
+            ParameterDescriptor {
+                id: "stops".to_owned(),
+                kind: ParameterKind::Scalar {
+                    minimum: -18.0,
+                    maximum: 18.0,
+                },
+                default: ParameterDefault::Scalar(0.0),
+                required: true,
+                introduced_version: 1,
+                removed_version: None,
+                unit: Some("ev".to_owned()),
+                step: Some(0.01),
+                precision: 2,
+                role: ParameterRole::Processing,
+                cache_affecting: true,
+                animatable: true,
+                ui_hint: Some("slider".to_owned()),
+                condition: None,
             },
-            default: ParameterDefault::Scalar(0.0),
-            required: true,
-            introduced_version: 1,
-            removed_version: None,
-            unit: Some("ev".to_owned()),
-            step: Some(0.01),
-            precision: 2,
-            role: ParameterRole::Processing,
-            cache_affecting: true,
-            animatable: true,
-            ui_hint: Some("slider".to_owned()),
-            condition: None,
-        }],
+            ParameterDescriptor {
+                id: "black".to_owned(),
+                kind: ParameterKind::Scalar {
+                    minimum: -1.0,
+                    maximum: 1.0,
+                },
+                default: ParameterDefault::Scalar(0.0),
+                required: false,
+                introduced_version: 1,
+                removed_version: None,
+                unit: None,
+                step: Some(0.000_001),
+                precision: 6,
+                role: ParameterRole::Processing,
+                cache_affecting: true,
+                animatable: true,
+                ui_hint: Some("slider".to_owned()),
+                condition: None,
+            },
+        ],
         flags: OperationFlags::DETERMINISTIC_CPU.insert(OperationFlags::TILEABLE),
         stage: "scene-linear".to_owned(),
         roi: RoiKind::Identity,
@@ -78,8 +99,26 @@ pub fn exposure_descriptor() -> OperationDescriptor {
 /// # Panics
 ///
 /// This function cannot panic because its fixed descriptor identity is valid.
+pub fn exposure_descriptor() -> OperationDescriptor {
+    let mut descriptor = base_exposure_descriptor();
+    descriptor.flags = descriptor.flags.insert(OperationFlags::DETERMINISTIC_GPU);
+    descriptor.capability.gpu_tier = Some(1);
+    descriptor.capability.required_features = vec![
+        "f32-storage".to_owned(),
+        "deterministic-row-major".to_owned(),
+    ];
+    descriptor.capability.required_formats = vec!["rgba32float".to_owned()];
+    descriptor.capability.deterministic_gpu = true;
+    descriptor
+}
+
+#[must_use]
+///
+/// # Panics
+///
+/// This function cannot panic because its fixed descriptor identity is valid.
 pub fn rgb_gain_descriptor() -> OperationDescriptor {
-    let mut descriptor = exposure_descriptor();
+    let mut descriptor = base_exposure_descriptor();
     descriptor.id = DescriptorId::new("rgbgain", "rusttable.rgb_gain", 1, 1, 1).expect("static ID");
     descriptor.parameters = ["red", "green", "blue"]
         .into_iter()
@@ -119,7 +158,7 @@ pub fn rgb_gain_descriptor() -> OperationDescriptor {
 /// This function cannot panic because its fixed descriptor identity is valid.
 #[allow(clippy::too_many_lines)]
 pub fn temperature_descriptor() -> OperationDescriptor {
-    let mut descriptor = exposure_descriptor();
+    let mut descriptor = base_exposure_descriptor();
     descriptor.id =
         DescriptorId::new("temperature", "rusttable.temperature", 1, 4, 1).expect("static ID");
     descriptor.parameters = vec![
@@ -308,7 +347,7 @@ fn text_parameter(id: &str, maximum_bytes: u16, introduced_version: u16) -> Para
 ///
 /// This function cannot panic because its fixed descriptor identity is valid.
 pub fn linear_offset_descriptor() -> OperationDescriptor {
-    let mut descriptor = exposure_descriptor();
+    let mut descriptor = base_exposure_descriptor();
     descriptor.id =
         DescriptorId::new("linear-offset", "rusttable.linear_offset", 1, 1, 1).expect("static ID");
     descriptor.parameters = vec![ParameterDescriptor {
@@ -341,7 +380,7 @@ pub fn linear_offset_descriptor() -> OperationDescriptor {
 #[must_use]
 #[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
 pub fn highlights_descriptor() -> OperationDescriptor {
-    let mut descriptor = exposure_descriptor();
+    let mut descriptor = base_exposure_descriptor();
     descriptor.id =
         DescriptorId::new("highlights", "rusttable.highlights", 4, 4, 1).expect("static ID");
     descriptor.parameters = vec![
@@ -396,7 +435,7 @@ pub fn highlights_descriptor() -> OperationDescriptor {
 #[must_use]
 #[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
 pub fn color_reconstruction_descriptor() -> OperationDescriptor {
-    let mut descriptor = exposure_descriptor();
+    let mut descriptor = base_exposure_descriptor();
     descriptor.id = DescriptorId::new(
         "colorreconstruction",
         "rusttable.colorreconstruction",

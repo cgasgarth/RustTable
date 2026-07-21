@@ -48,9 +48,42 @@ fn compiles_exposure() {
     assert_eq!(
         compiled.kind(),
         &ProcessingOperationKind::Exposure {
-            stops: FiniteF32::new(1.5).expect("finite")
+            stops: FiniteF32::new(1.5).expect("finite"),
+            black: FiniteF32::new(0.0).expect("finite"),
         }
     );
+}
+
+#[test]
+fn compiles_exposure_black_level_and_preserves_legacy_default() {
+    let compiled = ProcessingOperation::compile(&operation(
+        12,
+        "rusttable.exposure",
+        true,
+        vec![("stops", scalar(1.0)), ("black", scalar(0.125))],
+    ))
+    .expect("exposure black-level schema is valid");
+
+    assert_eq!(
+        compiled.kind(),
+        &ProcessingOperationKind::Exposure {
+            stops: FiniteF32::new(1.0).expect("finite"),
+            black: FiniteF32::new(0.125).expect("finite"),
+        }
+    );
+
+    let legacy = ProcessingOperation::compile(&operation(
+        13,
+        "rusttable.exposure",
+        true,
+        vec![("stops", scalar(1.0))],
+    ))
+    .expect("legacy exposure schema is valid");
+    assert!(matches!(
+        legacy.kind(),
+        ProcessingOperationKind::Exposure { black, .. }
+            if black.get().to_bits() == 0.0_f32.to_bits()
+    ));
 }
 
 #[test]

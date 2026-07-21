@@ -1,6 +1,85 @@
 use rusttable_core::{Operation, ParameterName, ParameterValue};
 
-use crate::OperationCompileError;
+use crate::ScalarNarrowingError;
+use crate::{FiniteF32, OperationCompileError, ProcessingOperation, ProcessingOperationKind};
+
+pub(crate) fn compile_scalar<F>(
+    operation: &Operation,
+    required_name: &str,
+    build: F,
+) -> Result<ProcessingOperation, OperationCompileError>
+where
+    F: FnOnce(FiniteF32) -> ProcessingOperationKind,
+{
+    let required = ParameterName::new(required_name).expect("processing schema names are valid");
+    if operation.parameter(&required).is_none() {
+        return Err(OperationCompileError::MissingParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter: required,
+        });
+    }
+    if let Some((unexpected, _)) = operation
+        .parameters()
+        .find(|(name, _)| name.as_str() != required_name)
+    {
+        return Err(OperationCompileError::UnexpectedParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter: unexpected.clone(),
+        });
+    }
+    let value = compile_scalar_parameter(operation, required_name)?;
+    let opacity = super::compile_opacity(operation)?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity,
+        kind: build(value),
+    })
+}
+
+pub(crate) fn compile_scalar_parameter(
+    operation: &Operation,
+    parameter_name: &str,
+) -> Result<FiniteF32, OperationCompileError> {
+    let parameter = ParameterName::new(parameter_name).expect("processing schema names are valid");
+    if operation.parameter(&parameter).is_none() {
+        return Err(OperationCompileError::MissingParameter {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        });
+    }
+    let value = match operation.parameter(&parameter) {
+        Some(ParameterValue::Scalar(value)) => *value,
+        Some(_) => {
+            return Err(OperationCompileError::WrongParameterType {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            });
+        }
+        None => unreachable!("required parameter was checked above"),
+    };
+    match FiniteF32::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(ScalarNarrowingError::Overflow) => {
+            Err(OperationCompileError::ScalarNarrowingOverflow {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            })
+        }
+        Err(ScalarNarrowingError::Underflow) => {
+            Err(OperationCompileError::ScalarNarrowingUnderflow {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            })
+        }
+    }
+}
 
 pub(crate) fn parameter_integer(
     operation: &Operation,

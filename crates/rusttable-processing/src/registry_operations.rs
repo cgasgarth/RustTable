@@ -410,10 +410,25 @@ fn definition(
 }
 
 pub fn exposure_definition() -> OperationDefinition {
-    definition(
+    geometry_definition_with_gpu(
         exposure_descriptor(),
         prepare_exposure,
-        &["iop.exposure.descriptor", "iop.exposure.cpu"],
+        &[
+            "iop.exposure.descriptor",
+            "iop.exposure.cpu",
+            "iop.exposure.wgpu",
+        ],
+        RoiKind::Identity,
+        std::iter::empty(),
+        Some(GpuBinding::new(
+            "rusttable.exposure.wgpu",
+            1,
+            vec![
+                "f32-storage".to_owned(),
+                "deterministic-row-major".to_owned(),
+            ],
+            vec!["rgba32float".to_owned()],
+        )),
     )
 }
 

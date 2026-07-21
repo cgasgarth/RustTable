@@ -959,7 +959,7 @@ mod tests {
         assert!(matches!(
             message.update,
             DarkroomOperationStackUpdate::ResetParameters { defaults, .. }
-                if defaults.len() == 1
+               if defaults.len() == 2
         ));
     }
     #[test]
