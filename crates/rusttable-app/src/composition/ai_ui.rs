@@ -4,11 +4,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ai_services::{
-    UnavailableAiBatchService, UnavailableAiModelsService, UnavailableNeuralRestoreService,
+    UnavailableAiBatchService, UnavailableAiModelsService, UnavailableRgbDenoiseService,
 };
 use rusttable_ui::{
-    AiBatchAction, AiBatchController, AiModelsAction, AiModelsController, NeuralRestoreAction,
-    NeuralRestoreController,
+    AiBatchAction, AiBatchController, AiModelsAction, AiModelsController, RgbDenoiseAction,
+    RgbDenoiseController,
 };
 
 pub(super) fn install_ai_batch_ui_bridge(
@@ -30,7 +30,7 @@ pub(super) fn install_ai_batch_ui_bridge(
 
 pub(super) fn install_ai_ui_bridges(
     shell: &rusttable_ui::GtkShell,
-) -> Rc<RefCell<NeuralRestoreController<UnavailableNeuralRestoreService>>> {
+) -> Rc<RefCell<RgbDenoiseController<UnavailableRgbDenoiseService>>> {
     let ai_models_controller = Rc::new(RefCell::new(AiModelsController::new(
         UnavailableAiModelsService,
     )));
@@ -45,16 +45,16 @@ pub(super) fn install_ai_ui_bridges(
         ai_models_shell.set_ai_models_state(controller.state());
     });
 
-    let neural_controller = Rc::new(RefCell::new(NeuralRestoreController::new(
-        UnavailableNeuralRestoreService,
+    let rgb_controller = Rc::new(RefCell::new(RgbDenoiseController::new(
+        UnavailableRgbDenoiseService,
     )));
-    shell.set_neural_restore_state(neural_controller.borrow().state());
-    let neural_for_actions = Rc::clone(&neural_controller);
-    let neural_shell = shell.clone();
-    shell.connect_neural_restore_action(move |action: NeuralRestoreAction| {
-        let mut controller = neural_for_actions.borrow_mut();
+    shell.set_rgb_denoise_state(rgb_controller.borrow().state());
+    let rgb_for_actions = Rc::clone(&rgb_controller);
+    let rgb_shell = shell.clone();
+    shell.connect_rgb_denoise_action(move |action: RgbDenoiseAction| {
+        let mut controller = rgb_for_actions.borrow_mut();
         let _ = controller.dispatch(action);
-        neural_shell.set_neural_restore_state(controller.state());
+        rgb_shell.set_rgb_denoise_state(controller.state());
     });
-    neural_controller
+    rgb_controller
 }

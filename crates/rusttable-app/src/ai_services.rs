@@ -15,8 +15,8 @@ use rusttable_ui::{
 };
 use rusttable_ui::{
     AiModelsServiceError, AiModelsServicePort, AiModelsSnapshot, AiProvider, AiProviderPolicy,
-    AiTask, InstallSummary, ModelHash, NeuralRestorePreviewPort, NeuralRestoreSnapshot,
-    PhotoSelection, PreviewRequest, PreviewServiceError, QualificationJob,
+    AiTask, InstallSummary, ModelHash, PhotoSelection, QualificationJob, RgbDenoiseJobRequest,
+    RgbDenoiseServiceError, RgbDenoiseServicePort, RgbDenoiseSnapshot,
 };
 
 #[derive(Debug, Default)]
@@ -111,21 +111,38 @@ impl AiModelsServicePort for UnavailableAiModelsService {
     }
 }
 
+/// The composition root keeps this seam explicit until the render snapshot and
+/// qualified #478 provider executor are injected. It never claims inference ran.
 #[derive(Debug, Default)]
-pub(crate) struct UnavailableNeuralRestoreService;
+pub(crate) struct UnavailableRgbDenoiseService;
 
-impl NeuralRestorePreviewPort for UnavailableNeuralRestoreService {
+impl RgbDenoiseServicePort for UnavailableRgbDenoiseService {
     fn snapshot(
         &mut self,
         selection: &PhotoSelection,
-    ) -> Result<NeuralRestoreSnapshot, PreviewServiceError> {
-        Ok(NeuralRestoreSnapshot::unavailable(selection.clone()))
+    ) -> Result<RgbDenoiseSnapshot, RgbDenoiseServiceError> {
+        Ok(RgbDenoiseSnapshot::unavailable(selection.clone()))
     }
-    fn request_preview(&mut self, _request: &PreviewRequest) -> Result<u64, PreviewServiceError> {
-        Err(PreviewServiceError::Unavailable)
+    fn request_preview(
+        &mut self,
+        _request: &RgbDenoiseJobRequest,
+    ) -> Result<u64, RgbDenoiseServiceError> {
+        Err(RgbDenoiseServiceError::Unavailable)
     }
-    fn cancel_preview(&mut self, _job: u64) -> Result<(), PreviewServiceError> {
-        Ok(())
+    fn request_full(
+        &mut self,
+        _request: &RgbDenoiseJobRequest,
+    ) -> Result<u64, RgbDenoiseServiceError> {
+        Err(RgbDenoiseServiceError::Unavailable)
+    }
+    fn request_export(
+        &mut self,
+        _request: &RgbDenoiseJobRequest,
+    ) -> Result<u64, RgbDenoiseServiceError> {
+        Err(RgbDenoiseServiceError::Unavailable)
+    }
+    fn cancel(&mut self, _job: u64) -> Result<(), RgbDenoiseServiceError> {
+        Err(RgbDenoiseServiceError::Unavailable)
     }
 }
 
@@ -149,5 +166,18 @@ mod tests {
             "AI model service is unavailable; no package operation was performed."
         );
         assert!(!message.contains("secret"));
+    }
+
+    #[test]
+    fn rgb_denoise_adapter_does_not_fake_a_plan_or_job() {
+        let mut service = UnavailableRgbDenoiseService;
+        let selection = PhotoSelection::none();
+        assert_eq!(
+            service
+                .snapshot(&selection)
+                .expect("truthful snapshot")
+                .models(),
+            &[]
+        );
     }
 }

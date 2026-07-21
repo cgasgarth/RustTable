@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rusttable_ai::workflows::rgb_denoise::{
-    AlphaOutput, CollisionPolicy, FileTiffPublisher, Matrix3, ModelDescriptor, ModelError,
-    ModelTask, OutputBitDepth, ProviderUsed, RgbDenoiseModel, RgbDenoisePublisher,
-    RgbDenoiseRequest, RgbDenoiseWorkflow, RgbProfile, Strength, TiffCompression, TiffRecipe,
+    AlphaOutput, CollisionPolicy, DetailRecoveryPolicy, FileTiffPublisher, GamutPolicy, Matrix3,
+    ModelDescriptor, ModelError, ModelTask, OutputBitDepth, ProviderUsed, RgbDenoiseModel,
+    RgbDenoisePlan, RgbDenoisePublisher, RgbDenoiseRequest, RgbDenoiseWorkflow, RgbProfile,
+    Strength, TiffCompression, TiffRecipe,
 };
 use rusttable_ai::workflows::rgb_denoise::{ModelTile, PublishError, PublishedArtifact};
 use rusttable_image::ImageDimensions;
@@ -96,6 +97,27 @@ fn request(width: u32, height: u32, pixels: Vec<[f32; 4]>) -> RgbDenoiseRequest 
     )
     .expect("request")
     .with_catalog_import(false, false)
+}
+
+#[test]
+fn immutable_plan_contains_bounded_memory_and_identity_inputs() {
+    let model = model_descriptor();
+    let plan = RgbDenoisePlan::build(
+        640,
+        480,
+        &model,
+        &profile(),
+        &profile(),
+        Strength::new(70).expect("strength"),
+        GamutPolicy::PreserveWideGamut,
+        rusttable_ai::workflows::rgb_denoise::ShadowPolicy::Disabled,
+        DetailRecoveryPolicy::Recover { strength: 30 },
+    )
+    .expect("plan");
+    assert_eq!(plan.tile.width, 4);
+    assert!(plan.memory.bytes > 0);
+    assert_ne!(plan.identity, [0; 32]);
+    assert_eq!(plan.gamut_policy, GamutPolicy::PreserveWideGamut);
 }
 
 #[test]

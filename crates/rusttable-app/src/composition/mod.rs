@@ -52,7 +52,7 @@ use collection_bridge::{
 };
 use preview_bridge::start_selected_preview;
 use preview_lifecycle::PreviewLifecycle;
-use rusttable_ui::{NeuralRestoreAction, PhotoSelection, PhotoSourceKind};
+use rusttable_ui::{PhotoSelection, PhotoSourceKind, RgbDenoiseAction};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -305,13 +305,13 @@ fn activate_application(
         export_selection_lifecycle.borrow_mut().invalidate();
         export_selection.set_selected(true);
         let mut neural = neural_for_selection.borrow_mut();
-        let _ = neural.dispatch(NeuralRestoreAction::SetSelection(PhotoSelection::single(
+        let _ = neural.dispatch(RgbDenoiseAction::SetSelection(PhotoSelection::single(
             photo_id,
             PhotoSourceKind::Raster,
             true,
             0,
         )));
-        neural_selection_shell.set_neural_restore_state(neural.state());
+        neural_selection_shell.set_rgb_denoise_state(neural.state());
         let mut ai_batch = ai_batch_controller.borrow_mut();
         ai_batch.set_selection(vec![rusttable_ui::AiBatchSelection {
             photo_id,

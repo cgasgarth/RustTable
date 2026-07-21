@@ -15,6 +15,7 @@ pub mod input_mapping;
 pub mod library;
 pub mod neural_restore;
 pub mod presentation;
+pub mod rgb_denoise;
 pub mod viewport_presentation;
 
 pub use ai_batch::{
@@ -79,14 +80,7 @@ pub use input_mapping::{
     MappingProfile, MappingSnapshot, ResetScope, SoftTakeover,
 };
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
-pub use neural_restore::{
-    ComparisonMode, NEURAL_RESTORE_FOCUS_ORDER, NeuralRestoreAction, NeuralRestoreController,
-    NeuralRestoreControllerError, NeuralRestorePanel, NeuralRestorePreviewPort,
-    NeuralRestoreSnapshot, NeuralRestoreViewModel, PhotoSelection, PhotoSourceKind,
-    PreviewArtifact, PreviewCache, PreviewCacheKey, PreviewEligibility, PreviewFailure,
-    PreviewFrame, PreviewFrameError, PreviewRequest, PreviewServiceError, PreviewStage,
-    PreviewStatus, RestoreSettings, RestoreTask, Roi, ViewportState,
-};
+pub use neural_restore::{PhotoSelection, PhotoSourceKind};
 pub use presentation::{
     ControlId, ControlIdError, ControlValidationError, DARKROOM_LEFT_PANEL_FOCUS_ORDER,
     DARKROOM_LEFT_PANEL_ORDER, DarkroomControlError, DarkroomControlKind, DarkroomControlValue,
@@ -99,6 +93,16 @@ pub use presentation::{
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
     PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
     SelectedPreviewFailure, SelectedPreviewState, SliderSpec, ThumbnailIndicators,
+};
+pub use rgb_denoise::{
+    RGB_DENOISE_FOCUS_ORDER, RGB_DENOISE_MAX_DETAIL_STRENGTH, RGB_DENOISE_MAX_STRENGTH,
+    RGB_DENOISE_SCALES, RGB_DENOISE_TILES, RgbDenoiseAction, RgbDenoiseCancellationState,
+    RgbDenoiseController, RgbDenoiseControllerError, RgbDenoiseDetailPolicy, RgbDenoiseFailure,
+    RgbDenoiseGamutPolicy, RgbDenoiseJobKind, RgbDenoiseJobRequest, RgbDenoiseMemoryState,
+    RgbDenoiseModelOption, RgbDenoisePanel, RgbDenoisePlan, RgbDenoisePlanError,
+    RgbDenoiseProfileOption, RgbDenoiseProfileState, RgbDenoiseProgress, RgbDenoiseProviderState,
+    RgbDenoiseServiceError, RgbDenoiseServiceEvent, RgbDenoiseServicePort, RgbDenoiseShadowPolicy,
+    RgbDenoiseSnapshot, RgbDenoiseStatus, RgbDenoiseViewModel,
 };
 pub use viewport_presentation::{
     DisplayPresentationController, DisplayPresentationFrame, DisplayPresentationPort,

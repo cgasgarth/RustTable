@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use rusttable_ui::{AI_BATCH_FOCUS_ORDER, AI_MODELS_FOCUS_ORDER, NEURAL_RESTORE_FOCUS_ORDER};
+use rusttable_ui::{AI_BATCH_FOCUS_ORDER, AI_MODELS_FOCUS_ORDER, RGB_DENOISE_FOCUS_ORDER};
 use rusttable_ui::{CAMERA_FOCUS_ORDER, IMPORT_SESSION_FOCUS_ORDER};
 
 const UI_SOURCES: &[&str] = &[
@@ -11,9 +11,9 @@ const UI_SOURCES: &[&str] = &[
     include_str!("../src/ai_models/model.rs"),
     include_str!("../src/ai_models/controller.rs"),
     include_str!("../src/ai_models/view.rs"),
-    include_str!("../src/neural_restore/model.rs"),
-    include_str!("../src/neural_restore/controller.rs"),
-    include_str!("../src/neural_restore/view.rs"),
+    include_str!("../src/rgb_denoise/model.rs"),
+    include_str!("../src/rgb_denoise/controller.rs"),
+    include_str!("../src/rgb_denoise/view.rs"),
     include_str!("../src/ai_batch/model.rs"),
     include_str!("../src/ai_batch/controller.rs"),
     include_str!("../src/ai_batch/view.rs"),
@@ -64,7 +64,7 @@ fn external_editor_focus_fixture_has_a_status_and_confirmation_path() {
 fn ai_surfaces_have_stable_keyboard_and_status_contracts() {
     for order in [
         AI_MODELS_FOCUS_ORDER.as_slice(),
-        NEURAL_RESTORE_FOCUS_ORDER.as_slice(),
+        RGB_DENOISE_FOCUS_ORDER.as_slice(),
         AI_BATCH_FOCUS_ORDER.as_slice(),
     ] {
         let unique = order

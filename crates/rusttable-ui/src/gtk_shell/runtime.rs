@@ -38,7 +38,6 @@ use crate::import::{
     ImportDialog, ImportSessionAction, ImportSessionPanel, ImportSessionViewModel,
 };
 use crate::input_mapping::InputMappingEditor;
-use crate::neural_restore::NeuralRestorePanel;
 use crate::presentation::{
     DarkroomHistoryViewModel, DarkroomPanelActionHandler, DarkroomPanelProjection,
     DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
@@ -66,7 +65,7 @@ pub struct GtkShell {
     workspace: gtk4::Stack,
     lighttable: gtk4::FlowBox,
     lighttable_empty_state: gtk4::Stack,
-    darkroom: DarkroomView,
+    pub(super) darkroom: DarkroomView,
     darkroom_preview: PhotoPreview,
     export_panel: ExportPanel,
     external_editor_panel: ExternalEditorPanel,
@@ -83,7 +82,6 @@ pub struct GtkShell {
     lighttable_toolbar: LighttableToolbar,
     input_mapping_editor: InputMappingEditor,
     pub(super) ai_models_panel: AiModelsPanel,
-    pub(super) neural_restore_panel: NeuralRestorePanel,
     pub(super) ai_batch_panel: AiBatchPanel,
     camera_panel: CameraPanel,
     import_session_panel: ImportSessionPanel,
@@ -167,7 +165,6 @@ impl GtkShell {
             lighttable_right_panel,
             export_panel,
             external_editor_panel,
-            neural_restore_panel,
             ai_batch_panel,
             camera_panel,
             import_session_panel,
@@ -214,7 +211,6 @@ impl GtkShell {
             lighttable_toolbar,
             input_mapping_editor,
             ai_models_panel,
-            neural_restore_panel,
             ai_batch_panel,
             camera_panel,
             import_session_panel,
