@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use crate::operation_model::{CodecField, ParameterCodec};
+use crate::operation::model::{CodecField, ParameterCodec};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParameterValue {

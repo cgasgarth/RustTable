@@ -1,11 +1,5 @@
-pub use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-#[path = "../src/operations/flip.rs"]
-mod flip;
+use rusttable_processing::operations::flip;
+use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
 
 use flip::{
     FlipConfig, FlipParametersV1, FlipParametersV2, FlipPlan, ORIENTATION_NULL, OrientationBits,

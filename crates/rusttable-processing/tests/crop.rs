@@ -1,18 +1,7 @@
 #![allow(clippy::cast_precision_loss, clippy::float_cmp)]
 
+use rusttable_processing::operations::crop;
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-mod common {
-    pub use rusttable_processing::operations::OperationExecutionError;
-}
-
-#[path = "../src/operations/crop.rs"]
-#[allow(dead_code)]
-mod crop;
 
 use crop::{
     CropCodecError, CropConfig, CropLegacyParametersV1, CropMigrationContext, CropParametersV3,

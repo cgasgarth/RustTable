@@ -147,8 +147,8 @@ fn darkroom_geometry_keeps_both_rails_and_a_visible_center_at_supported_sizes() 
 
 #[test]
 fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
-    let runtime_layout = include_str!("../src/gtk_shell/runtime_layout.rs");
-    let darkroom_panels = include_str!("../src/gtk_shell/darkroom_controls/panel_widgets.rs");
+    let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
+    let darkroom_panels = include_str!("../src/views/darkroom/panel_widgets.rs");
 
     assert!(runtime_layout.contains(".propagate_natural_width(false)"));
     assert!(runtime_layout.contains(".shrink_end_child(false)"));
@@ -278,8 +278,8 @@ fn lighttable_grid_and_filmstrip_share_selection_and_darkroom_open_route() {
 
 #[test]
 fn gtk_selection_route_projects_preview_and_darkroom_filmstrip_activation() {
-    let runtime = include_str!("../src/gtk_shell/runtime_lighttable.rs");
-    let shell_runtime = include_str!("../src/gtk_shell/runtime.rs");
+    let runtime = include_str!("../src/gui/runtime/lighttable.rs");
+    let shell_runtime = include_str!("../src/gui/runtime/mod.rs");
 
     assert!(runtime.contains("show_photo_detail(&context.darkroom_preview, detail);"));
     assert!(runtime.contains("surface == PhotoSurface::Filmstrip && darkroom_visible"));

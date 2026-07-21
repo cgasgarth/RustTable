@@ -8,11 +8,13 @@ pub mod collection;
 pub mod darkroom_histogram;
 pub mod display_profile;
 pub mod external_editor;
-pub mod gtk_shell;
+pub mod gui;
 pub mod import;
 pub mod input;
 pub mod input_mapping;
+pub mod iop;
 pub mod library;
+pub mod libs;
 pub mod mask_manager;
 pub mod multiscale_retouch;
 pub mod neural_restore;
@@ -20,6 +22,10 @@ pub mod presentation;
 pub mod raw_denoise;
 pub mod rgb_denoise;
 pub mod viewport_presentation;
+pub mod views;
+pub mod widgets;
+
+pub use gui as gtk_shell;
 
 pub use ai_batch::{
     AI_BATCH_FOCUS_ORDER, AiBatchAction, AiBatchCollision, AiBatchController,

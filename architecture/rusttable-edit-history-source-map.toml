@@ -54,7 +54,7 @@ status = "implemented"
 id = "redb-transaction"
 upstream_path = "src/common/database.c"
 upstream_symbol = "history/current atomic write boundary"
-rust_path = "crates/rusttable-catalog-store/src/history_repository.rs"
+rust_path = "crates/rusttable-catalog-store/src/repositories/history.rs"
 status = "implemented"
 
 [[responsibility]]
@@ -75,7 +75,7 @@ status = "implemented"
 id = "reachability-compaction"
 upstream_path = "src/common/history.c"
 upstream_symbol = "retained history reachability"
-rust_path = "crates/rusttable-catalog-store/src/history_repository.rs"
+rust_path = "crates/rusttable-catalog-store/src/repositories/history.rs"
 status = "implemented"
 
 [[responsibility]]

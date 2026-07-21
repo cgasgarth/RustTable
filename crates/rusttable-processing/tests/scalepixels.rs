@@ -1,32 +1,7 @@
 #![allow(clippy::cast_precision_loss, clippy::float_cmp)]
 
+use rusttable_processing::operations::{OperationExecutionError, scalepixels};
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-mod common {
-    #[derive(Debug, PartialEq, Eq)]
-    pub enum OperationExecutionError {
-        Cancelled,
-        DimensionsMismatch { expected: usize, actual: usize },
-        NonFiniteResult { pixel: usize, channel: RgbChannel },
-    }
-
-    #[derive(Debug, PartialEq, Eq)]
-    pub enum RgbChannel {
-        Red,
-        Green,
-        Blue,
-    }
-}
-
-pub use common::RgbChannel;
-
-#[path = "../src/operations/scalepixels.rs"]
-#[allow(dead_code)]
-mod scalepixels;
 
 use rusttable_image::{
     AlphaMode, ByteOrder, ChannelLayout, ColorEncoding, ImageDescriptor, ImageDimensions,
@@ -148,7 +123,7 @@ fn scalar_cpu_resampling_supports_all_kernels_and_cancellation() {
     let error = plan
         .execute_with_cancel(&[pixel(0.0); 4], || true)
         .expect_err("cancelled");
-    assert!(matches!(error, common::OperationExecutionError::Cancelled));
+    assert!(matches!(error, OperationExecutionError::Cancelled));
 }
 
 #[test]

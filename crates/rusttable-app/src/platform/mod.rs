@@ -1,5 +1,7 @@
 //! Startup platform preflight and narrow native identity adapters.
 
+pub mod macos;
+
 use rusttable_core::platform::{
     ApplicationMode, LinuxLibc, OperatingSystem, OsVersion, PlatformDecision, PlatformIdentity,
     PlatformRegistry, SupportLevel, current_platform_identity, fallback_identity,

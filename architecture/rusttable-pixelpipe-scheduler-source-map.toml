@@ -6,40 +6,40 @@ upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 id = "job-type"
 upstream_path = "src/control/jobs.h"
 upstream_symbol = "dt_job_t"
-rust_path = "crates/rusttable-pixelpipe/src/scheduler_model.rs"
+rust_path = "crates/rusttable-pixelpipe/src/scheduler/model.rs"
 status = "implemented"
 
 [[responsibility]]
 id = "job-admission"
 upstream_path = "src/control/jobs.c"
 upstream_symbol = "dt_control_add_job"
-rust_path = "crates/rusttable-pixelpipe/src/scheduler.rs"
+rust_path = "crates/rusttable-pixelpipe/src/scheduler/mod.rs"
 status = "implemented"
 
 [[responsibility]]
 id = "job-cancellation"
 upstream_path = "src/control/jobs.c"
 upstream_symbol = "dt_control_job_cancel"
-rust_path = "crates/rusttable-pixelpipe/src/scheduler.rs"
+rust_path = "crates/rusttable-pixelpipe/src/scheduler/mod.rs"
 status = "implemented"
 
 [[responsibility]]
 id = "pixelpipe-work"
 upstream_path = "src/develop/pixelpipe_hb.c"
 upstream_symbol = "dt_dev_pixelpipe_process"
-rust_path = "crates/rusttable-pixelpipe/src/scheduler_executor.rs"
+rust_path = "crates/rusttable-pixelpipe/src/scheduler/executor.rs"
 status = "implemented"
 
 [[responsibility]]
 id = "thumbnail-work"
 upstream_path = "src/common/mipmap_cache.c"
 upstream_symbol = "dt_mipmap_cache_get"
-rust_path = "crates/rusttable-pixelpipe/src/scheduler.rs"
+rust_path = "crates/rusttable-pixelpipe/src/scheduler/mod.rs"
 status = "implemented"
 
 [[responsibility]]
 id = "resource-limits"
 upstream_path = "src/common/resource_limits.c"
 upstream_symbol = "dt_set_rlimits"
-rust_path = "crates/rusttable-pixelpipe/src/scheduler_model.rs"
+rust_path = "crates/rusttable-pixelpipe/src/scheduler/model.rs"
 status = "implemented"

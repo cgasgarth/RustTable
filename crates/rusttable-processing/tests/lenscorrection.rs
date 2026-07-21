@@ -1,10 +1,5 @@
-pub use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-#[path = "../src/operations/lenscorrection/mod.rs"]
-pub mod lenscorrection;
+use rusttable_processing::operations::lenscorrection;
+use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
 
 use lenscorrection::{
     CorrectionFlags, LENSFUN_DATABASE_COMMIT, LensCorrectionConfig,

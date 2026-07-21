@@ -1,24 +1,21 @@
 #![forbid(unsafe_code)]
 #![doc = "Transactional embedded import-record persistence for `RustTable`."]
 
-mod catalog_repository;
-mod codec;
-mod collection_repository;
-mod edit_codec;
-mod edit_repository;
-mod history_codec;
-mod history_repository;
-mod import_details_codec;
-mod recipe_repository;
-mod repository;
+mod codecs;
+mod repositories;
 mod schema;
 
-pub use catalog_repository::{AtomicCatalogStoreError, RedbCatalogRepository};
-pub use collection_repository::RedbCollectionRepository;
-pub use edit_repository::RedbEditRepository;
-pub use history_repository::RedbHistoryRepository;
-pub use recipe_repository::{RecipeStoreError, RedbRecipeRepository};
-pub use repository::RedbImportRepository;
+use codecs as codec;
+use codecs::{
+    edit as edit_codec, history as history_codec, import_details as import_details_codec,
+};
+
+pub use repositories::RedbImportRepository;
+pub use repositories::catalog::{AtomicCatalogStoreError, RedbCatalogRepository};
+pub use repositories::collection::RedbCollectionRepository;
+pub use repositories::edit::RedbEditRepository;
+pub use repositories::history::RedbHistoryRepository;
+pub use repositories::recipe::{RecipeStoreError, RedbRecipeRepository};
 pub use rusttable_export::{
     ExportJobId, ExportJobPriority, ExportJobRecord, ExportJobStage, ExportJobState,
     ExportQueueError, RedbExportQueueStore, queue_now_millis,

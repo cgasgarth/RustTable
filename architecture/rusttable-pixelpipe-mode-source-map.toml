@@ -62,14 +62,14 @@ status = "implemented"
 id = "snapshot-identity"
 upstream_path = "src/develop/pixelpipe_hb.c"
 upstream_symbol = "pixelpipe generation"
-rust_path = "crates/rusttable-pixelpipe/src/pipeline_snapshot.rs"
+rust_path = "crates/rusttable-pixelpipe/src/pipeline/snapshot.rs"
 status = "implemented"
 
 [[responsibility]]
 id = "cache-identity"
 upstream_path = "src/common/mipmap_cache.h"
 upstream_symbol = "full preview thumbnail cache mode"
-rust_path = "crates/rusttable-pixelpipe/src/cache_key.rs"
+rust_path = "crates/rusttable-pixelpipe/src/cache/key.rs"
 status = "implemented"
 
 [[responsibility]]

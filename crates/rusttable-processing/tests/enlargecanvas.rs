@@ -1,11 +1,5 @@
-pub use rusttable_processing::{FiniteF32, FiniteF32Error, LinearRgb, RasterDimensions};
-
-pub mod descriptor {
-    pub use rusttable_processing::descriptor::*;
-}
-
-#[path = "../src/operations/enlargecanvas/mod.rs"]
-pub mod enlargecanvas;
+use rusttable_processing::operations::enlargecanvas;
+use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
 
 use enlargecanvas::{
     CanvasColor, CanvasFill, ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasConfig,
