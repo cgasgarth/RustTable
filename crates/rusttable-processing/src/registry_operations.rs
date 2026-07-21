@@ -1,5 +1,9 @@
 //! Built-in operation factories and registry validation helpers.
 
+#[path = "registry_censorize.rs"]
+mod registry_censorize;
+pub use registry_censorize::censorize_definition;
+
 use super::{
     CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
     MigrationBinding, OperationCapability, OperationDefinition, OperationDefinitionFactory,

@@ -153,6 +153,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::Perspective { .. }
                     | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
+                    | rusttable_processing::ProcessingOperationKind::Censorize { .. }
             )
         }) {
             // Both Darktable operations freeze full-image evidence before
@@ -223,6 +224,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::Perspective { .. }
                     | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
+                    | rusttable_processing::ProcessingOperationKind::Censorize { .. }
             )
         }) {
             scope
@@ -281,6 +283,16 @@ impl CpuPixelpipeExecutor {
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
         validate_input_encoding(input)?;
 
+        if let Some(node) = request.graph().nodes().find(|node| {
+            matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::Censorize { .. }
+            )
+        }) && request.graph().nodes().count() == 1
+        {
+            return execute_censorize_image(request, input, node);
+        }
+
         let source = to_processing_source(input)?;
         let linear_input = to_linear_srgb(&source);
         let evaluated =
@@ -325,6 +337,107 @@ impl CpuPixelpipeExecutor {
                 .collect(),
         );
         CpuPixelpipeResult { image, receipt }
+    }
+}
+
+fn execute_censorize_image(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    node: &rusttable_processing::OperationGraphNode,
+) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    let source = to_processing_source(input)?;
+    let linear = to_linear_srgb(&source);
+    let config = match node.operation().kind() {
+        rusttable_processing::ProcessingOperationKind::Censorize { config } => *config,
+        _ => unreachable!("censorize image bridge is only called for censorize"),
+    };
+    let rgba = linear
+        .pixels()
+        .zip(input.pixels())
+        .map(|(rgb, source)| {
+            rusttable_processing::CensorizePixel::new(
+                rgb.red().get(),
+                rgb.green().get(),
+                rgb.blue().get(),
+                source.alpha(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let plan =
+        rusttable_processing::CensorizePlan::new(config, input.descriptor().dimensions(), 1.0, 1.0)
+            .map_err(|source| censorize_evaluation_error(node, &source))?;
+    let output = plan
+        .execute_with_mask(&rgba, None, node.operation().opacity().get(), || false)
+        .map_err(|source| censorize_evaluation_error(node, &source))?;
+    let rgb = output
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel_index, pixel)| {
+            let channels = pixel.channels();
+            Ok(rusttable_processing::LinearRgb::new(
+                rusttable_processing::FiniteF32::new(channels[0])
+                    .map_err(|_| input_component_error(pixel_index, RgbaF32Channel::Red))?,
+                rusttable_processing::FiniteF32::new(channels[1])
+                    .map_err(|_| input_component_error(pixel_index, RgbaF32Channel::Green))?,
+                rusttable_processing::FiniteF32::new(channels[2])
+                    .map_err(|_| input_component_error(pixel_index, RgbaF32Channel::Blue))?,
+            ))
+        })
+        .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
+    let working = rusttable_processing::WorkingRgbImage::new(input.descriptor().dimensions(), rgb)
+        .map_err(|error| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: error.to_string(),
+            },
+        })?;
+    let output_pixels = match request.output_mode() {
+        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+            .image()
+            .pixels()
+            .zip(&output)
+            .map(|(rgb, pixel)| {
+                RgbaF32Pixel::new(
+                    rgb.red().get(),
+                    rgb.green().get(),
+                    rgb.blue().get(),
+                    pixel.alpha(),
+                )
+            })
+            .collect(),
+        CpuPixelpipeOutputMode::FullExport => working
+            .pixels()
+            .zip(&output)
+            .map(|(rgb, pixel)| {
+                RgbaF32Pixel::new(
+                    rgb.red().get(),
+                    rgb.green().get(),
+                    rgb.blue().get(),
+                    pixel.alpha(),
+                )
+            })
+            .collect(),
+    };
+    let descriptor = RgbaF32Descriptor::new(
+        input.descriptor().dimensions(),
+        request.output_mode().color_encoding(),
+    );
+    RgbaF32Image::new(descriptor, output_pixels)
+        .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+fn censorize_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: &rusttable_processing::CensorizeExecutionError,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
     }
 }
 

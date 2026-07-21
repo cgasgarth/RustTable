@@ -23,6 +23,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Invert { .. } => crate::descriptor::invert_descriptor().id,
         crate::ProcessingOperationKind::Dither { .. } => crate::descriptor::dither_descriptor().id,
         crate::ProcessingOperationKind::Grain { .. } => crate::descriptor::grain_descriptor().id,
+        crate::ProcessingOperationKind::Censorize { .. } => {
+            crate::descriptor::censorize_descriptor().id
+        }
         crate::ProcessingOperationKind::Highlights { .. } => {
             crate::descriptor::highlights_descriptor().id
         }

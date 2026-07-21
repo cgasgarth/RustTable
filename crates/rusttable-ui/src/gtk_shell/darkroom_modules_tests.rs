@@ -196,16 +196,11 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
 }
 
 #[test]
-fn censorize_projects_exact_controls_but_remains_truthfully_unavailable() {
+fn censorize_projects_exact_controls_and_is_cpu_supported() {
     let modules = reference_modules().expect("reference module snapshot");
     let censorize = modules.module("censorize").expect("censorize module");
-    assert!(censorize.availability().is_unsupported());
-    assert!(!censorize.enabled());
-    assert!(
-        censorize
-            .status_text()
-            .contains("backend is unqualified until #477")
-    );
+    assert!(censorize.availability().is_supported());
+    assert!(censorize.enabled());
     assert_eq!(
         censorize
             .controls()
@@ -250,12 +245,7 @@ fn assert_float_eq(actual: f64, expected: f64) {
 }
 
 #[test]
-fn unqualified_censorize_rejects_enable_reset_and_control_actions() {
-    let mut module = reference_modules()
-        .expect("reference modules")
-        .module("censorize")
-        .expect("censorize")
-        .clone();
+fn cpu_qualified_censorize_accepts_enable_reset_and_control_actions() {
     for action in [
         DarkroomModuleAction::Enable {
             module_id: "censorize".to_owned(),
@@ -273,17 +263,19 @@ fn unqualified_censorize_rejects_enable_reset_and_control_actions() {
             value: DarkroomControlValue::Slider(0.5),
         },
     ] {
-        assert!(matches!(
-            module.apply(action),
-            Err(DarkroomModuleError::Unsupported { .. })
-        ));
-        assert_eq!(module.revision(), Revision::ZERO);
+        let mut module = reference_modules()
+            .expect("reference modules")
+            .module("censorize")
+            .expect("censorize")
+            .clone();
+        assert!(module.apply(action).is_ok());
+        assert_eq!(module.revision(), Revision::from_u64(1));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
-fn censorize_gtk_panel_keeps_controls_visible_but_insensitive() {
+fn censorize_gtk_panel_exposes_sensitive_controls() {
     if gtk4::init().is_err() {
         return;
     }
@@ -304,15 +296,15 @@ fn censorize_gtk_panel_keeps_controls_visible_but_insensitive() {
         "censorize-reset",
     ] {
         assert!(
-            find_widget(&root, id).is_some_and(|widget| !widget.is_sensitive()),
-            "unqualified control {id} must be insensitive"
+            find_widget(&root, id).is_some_and(|widget| widget.is_sensitive()),
+            "qualified control {id} must be sensitive"
         );
     }
     let status = find_widget(&root, "censorize-status")
         .expect("status widget")
         .downcast::<gtk4::Label>()
         .expect("status label");
-    assert!(status.text().contains("backend is unqualified until #477"));
+    assert!(!status.text().contains("backend is unqualified until #477"));
 }
 
 #[cfg(target_os = "linux")]

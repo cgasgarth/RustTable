@@ -1,32 +1,32 @@
-//! Registry seam for censorize while #477's execution capability is unqualified.
+//! Registry binding for the full-image censorize operation.
 
-use super::{
-    DefinitionAvailability, ImplementationIdentity, OperationDefinition, REGISTRY_BUILD_ID,
-};
-use crate::descriptor::censorize_descriptor;
+use super::{FactoryError, OperationDefinition, PreparedCpuOperation, full_image_definition};
+use crate::ProcessingOperation;
+use crate::descriptor::{DescriptorId, censorize_descriptor};
+use rusttable_core::Operation;
 
-/// Projects censorize's v1 parameter contract before #477 supplies execution.
-///
-/// The exact integration point for #477 is this factory: replace the `None`
-/// CPU binding and `Unavailable` status with the qualified censorize prepare
-/// function and its capability evidence. The descriptor and persisted
-/// parameter names remain unchanged so this UI seam needs no second schema.
-#[must_use]
+fn prepare_censorize(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_censorize(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 pub fn censorize_definition() -> OperationDefinition {
-    OperationDefinition::new(
+    full_image_definition(
         censorize_descriptor(),
-        None,
-        None,
-        Vec::new(),
-        ImplementationIdentity::new(REGISTRY_BUILD_ID, 1, REGISTRY_BUILD_ID),
-        vec![
-            "iop.censorize.descriptor".to_owned(),
-            "iop.censorize.unqualified".to_owned(),
+        prepare_censorize,
+        &[
+            "iop.censorize.params.v1",
+            "iop.censorize.cpu.scalar-reference",
+            "iop.censorize.rng.splitmix32-xoshiro128plus",
+            "iop.censorize.pixelization.five-point",
+            "iop.censorize.mask-blend-seam",
+            "iop.censorize.receipt",
         ],
     )
-    .with_availability(DefinitionAvailability::Unavailable {
-        reason:
-            "censorize backend is unqualified until #477 supplies the CPU/mask pipeline capability"
-                .to_owned(),
-    })
 }
