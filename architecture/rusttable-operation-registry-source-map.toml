@@ -109,3 +109,9 @@ rust_id = "rusttable.primaries"
 manifest_name = "primaries"
 owner = "crates/rusttable-processing/src/registry_color.rs"
 status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.watermark"
+manifest_name = "watermark"
+owner = "crates/rusttable-processing/src/registry_operations.rs"
+status = "replaced"

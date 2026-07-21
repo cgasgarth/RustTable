@@ -768,16 +768,18 @@ mod registry_masks;
 mod registry_operations;
 #[path = "registry_spots.rs"]
 mod registry_spots;
+pub use super::registry_watermark::watermark_definition;
+pub static BUILTIN_OPERATIONS: &[OperationDefinitionFactory] = crate::builtin_operations!();
 pub use registry_basicadj::basicadj_definition;
 pub use registry_masks::{mask_manager_definition, retouch_definition};
 pub use registry_operations::{
-    BUILTIN_OPERATIONS, bloom_definition, censorize_definition, clahe_definition,
-    clipping_definition, crop_definition, defringe_definition, dither_definition,
-    enlargecanvas_definition, exposure_definition, finalscale_definition, flip_definition,
-    graduatednd_definition, grain_definition, invert_definition, lenscorrection_definition,
-    linear_offset_definition, liquify_definition, perspective_definition, rasterfile_definition,
-    relight_definition, rgb_gain_definition, rotatepixels_definition, scalepixels_definition,
-    shadhi_definition, soften_definition, temperature_definition, vignette_definition,
+    bloom_definition, censorize_definition, clahe_definition, clipping_definition, crop_definition,
+    defringe_definition, dither_definition, enlargecanvas_definition, exposure_definition,
+    finalscale_definition, flip_definition, graduatednd_definition, grain_definition,
+    invert_definition, lenscorrection_definition, linear_offset_definition, liquify_definition,
+    perspective_definition, rasterfile_definition, relight_definition, rgb_gain_definition,
+    rotatepixels_definition, scalepixels_definition, shadhi_definition, soften_definition,
+    temperature_definition, vignette_definition,
 };
 use registry_operations::{
     hex, operation_descriptor_for, snapshot_hash, unavailable, validate_definition,

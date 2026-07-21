@@ -16,8 +16,8 @@ mod registry_liquify;
 mod registry_rasterfile;
 use super::{
     CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
-    MigrationBinding, OperationCapability, OperationDefinition, OperationDefinitionFactory,
-    PreparedCpuOperation, REGISTRY_BUILD_ID, REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
+    MigrationBinding, OperationCapability, OperationDefinition, PreparedCpuOperation,
+    REGISTRY_BUILD_ID, REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
@@ -974,6 +974,7 @@ macro_rules! builtin_operations {
             $crate::registry::crop_definition,
             $crate::registry::clipping_definition,
             $crate::registry::rasterfile_definition,
+            $crate::registry::watermark_definition,
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,
             $crate::registry::scalepixels_definition,
@@ -997,4 +998,3 @@ macro_rules! builtin_operations {
         &[$($factory as $crate::registry::OperationDefinitionFactory),+]
     };
 }
-pub static BUILTIN_OPERATIONS: &[OperationDefinitionFactory] = crate::builtin_operations!();
