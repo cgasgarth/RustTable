@@ -55,6 +55,10 @@ pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatu
         .hexpand(true)
         .vexpand(true)
         .build();
+    scroll.set_widget_name("darkroom-left-module-scroll");
+    scroll.set_can_focus(true);
+    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
+    scroll.set_propagate_natural_height(false);
     panel.append(&scroll);
     (
         panel,
@@ -74,9 +78,6 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         width,
         "Darkroom processing module rail",
     );
-    let histogram = histogram();
-    panel.append(&histogram);
-
     let groups = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
     groups.set_widget_name("darkroom-module-groups");
     groups.set_accessible_role(gtk4::AccessibleRole::Toolbar);
@@ -94,6 +95,9 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     search.set_hexpand(true);
     panel.append(&search);
 
+    let histogram = histogram();
+    panel.append(&histogram);
+
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     modules.set_widget_name("darkroom-right-modules");
     let exposure = ExposurePanel::new();
@@ -106,6 +110,10 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         .hexpand(true)
         .vexpand(true)
         .build();
+    scroll.set_widget_name("darkroom-right-module-scroll");
+    scroll.set_can_focus(true);
+    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
+    scroll.set_propagate_natural_height(false);
     panel.append(&scroll);
     (
         panel,

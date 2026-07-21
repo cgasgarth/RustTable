@@ -1,8 +1,9 @@
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rusttable_ui::ImportRequest;
+use rusttable_ui::{ImportRequest, is_raw_path};
 
 use super::{
     CollectionController, GtkCatalogController, MacApplicationBridge, dispatch_open_request,
@@ -16,7 +17,19 @@ pub(super) fn dispatch_import_request(
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
     request: &ImportRequest,
 ) {
-    let paths = expand_import_paths(request.paths(), request.recursive());
+    let existing = active_catalog
+        .borrow()
+        .as_ref()
+        .map(|catalog| catalog.borrow().existing_source_paths())
+        .unwrap_or_default();
+    let paths = effective_import_paths(
+        expand_import_paths(request.paths(), request.recursive()),
+        request,
+        &existing,
+    );
+    if paths.is_empty() {
+        return;
+    }
     let delivery = native_bridge.borrow_mut().receive_paths(paths);
     if let Some(open_request) = delivery.request().cloned() {
         dispatch_open_request(
@@ -26,6 +39,18 @@ pub(super) fn dispatch_import_request(
             active_collection,
         );
     }
+}
+
+fn effective_import_paths(
+    paths: Vec<PathBuf>,
+    request: &ImportRequest,
+    existing: &BTreeSet<PathBuf>,
+) -> Vec<PathBuf> {
+    paths
+        .into_iter()
+        .filter(|path| !request.ignore_nonraws() || is_raw_path(path))
+        .filter(|path| !request.select_new() || !existing.contains(path))
+        .collect()
 }
 
 fn expand_import_paths(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
@@ -53,5 +78,28 @@ fn collect_import_files(path: &std::path::Path, recursive: bool, output: &mut Ve
         } else {
             output.push(path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effective_import_paths_apply_new_and_raw_filters_before_dispatch() {
+        let paths = vec![
+            PathBuf::from("new.nef"),
+            PathBuf::from("new.jpg"),
+            PathBuf::from("old.arw"),
+        ];
+        let existing = BTreeSet::from([PathBuf::from("old.arw")]);
+        let request = ImportRequest::new(paths.clone(), false, true, true, 3).expect("request");
+        assert_eq!(
+            effective_import_paths(paths, &request, &existing)
+                .into_iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+            ["new.nef"]
+        );
     }
 }

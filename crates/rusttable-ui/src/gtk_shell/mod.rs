@@ -48,12 +48,13 @@ pub use darkroom_modules::{
     DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column, build_module_panel,
 };
 pub use darktable_spec::{
-    ColorToken, DARKROOM_GEOMETRY, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS,
-    DarkroomGeometry, DarktableColors, DarktableDesktopSpec, DesktopRegion, FilmstripHeights,
+    ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_RAIL_SCROLL_WIDGET_IDS,
+    DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarkroomGeometry,
+    DarkroomWindowLayout, DarktableColors, DarktableDesktopSpec, DesktopRegion, FilmstripHeights,
     LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
     LayoutMetrics, LighttableCompositionSpec, LighttableModuleSpec, LighttableToolbarSpec,
     PANEL_SLOTS, PanelRole, PanelSlot as VisualPanelSlot, SidePanelWidths, THUMBNAIL_METRICS,
-    TOP_BAR_SECTIONS, ThumbnailMetrics, TopBarSection, ViewMode,
+    TOP_BAR_SECTIONS, ThumbnailMetrics, TopBarSection, ViewMode, darkroom_window_layout,
 };
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use exposure_panel::ExposurePanel;

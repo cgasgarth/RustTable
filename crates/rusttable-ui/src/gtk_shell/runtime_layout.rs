@@ -15,7 +15,7 @@ use super::lighttable::empty_collection_state;
 use super::{
     DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls,
     ModuleControlKind, ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
-    apply_theme_role,
+    apply_theme_role, darkroom_window_layout,
 };
 
 pub(super) fn right_panel() -> (
@@ -151,6 +151,10 @@ fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
     let center = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     center.set_hexpand(true);
     center.set_vexpand(true);
+    center.set_width_request(i32::from(
+        darkroom_window_layout(DARKTABLE_DESKTOP_SPEC.layout.window_width_px)
+            .center_minimum_width_px(),
+    ));
     center.set_widget_name("workspace");
     apply_theme_role(&center, ThemeRole::Workspace);
     center.append(workspace);

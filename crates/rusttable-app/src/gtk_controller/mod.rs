@@ -7,6 +7,7 @@
 mod collection;
 mod collection_service;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use rusttable_catalog::ImportRepository;
@@ -161,6 +162,29 @@ impl GtkCatalogController {
     pub fn collection_service(&self) -> Option<LibraryCollectionService> {
         self.catalog_path()
             .and_then(|path| LibraryCollectionService::open(path).ok())
+    }
+
+    /// Returns absolute source paths already represented by the ready catalog.
+    #[must_use]
+    pub fn existing_source_paths(&self) -> BTreeSet<PathBuf> {
+        let GtkCatalogState::Ready(catalog) = &self.state else {
+            return BTreeSet::new();
+        };
+        let Ok(repository) = RedbImportRepository::open(catalog.location().catalog_path()) else {
+            return BTreeSet::new();
+        };
+        let Ok(records) = repository.list() else {
+            return BTreeSet::new();
+        };
+        records
+            .iter()
+            .map(|record| {
+                catalog
+                    .location()
+                    .source_root()
+                    .join(record.source().as_str())
+            })
+            .collect()
     }
 
     /// Selects a photo present in the ready workspace.

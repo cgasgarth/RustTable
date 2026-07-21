@@ -58,11 +58,12 @@ pub use gtk_shell::{
 };
 pub use import::{
     IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, IMPORT_SESSION_FOCUS_ORDER, ImportAction,
-    ImportDialog, ImportItemOutcome, ImportPanelViewModel, ImportRequest, ImportReviewRow,
-    ImportRowState, ImportRowViewModel, ImportSessionAction, ImportSessionController,
-    ImportSessionControllerError, ImportSessionEvent, ImportSessionPanel,
+    ImportDialog, ImportItemOutcome, ImportPanelViewModel, ImportPlace, ImportRequest,
+    ImportReviewRow, ImportRowState, ImportRowViewModel, ImportSessionAction,
+    ImportSessionController, ImportSessionControllerError, ImportSessionEvent, ImportSessionPanel,
     ImportSessionServiceError, ImportSessionServicePort, ImportSessionState,
-    ImportSessionViewModel,
+    ImportSessionViewModel, ImportSourceModel, ImportSourceRow, ImportSourceState,
+    MAX_IMPORT_SOURCE_ROWS, RAW_EXTENSIONS, is_raw_path,
 };
 pub use input::GtkInputAdapter;
 pub use input_mapping::{

@@ -37,7 +37,7 @@ use profile_diagnostics::{
 };
 
 /// Stable widget identifiers for the initial darkroom surface.
-pub const DARKROOM_WIDGET_IDS: [&str; 13] = [
+pub const DARKROOM_WIDGET_IDS: [&str; 17] = [
     "darkroom-page",
     "darkroom-toolbar-top",
     "darkroom-photo-preview",
@@ -50,6 +50,10 @@ pub const DARKROOM_WIDGET_IDS: [&str; 13] = [
     "darkroom-right-panel",
     "darkroom-histogram",
     "darkroom-module-groups",
+    "darkroom-module-search",
+    "darkroom-left-module-scroll",
+    "darkroom-right-module-scroll",
+    "darkroom-right-modules",
     "exposure",
 ];
 
@@ -566,6 +570,7 @@ mod tests {
         DARKROOM_MODULE_WIDGET_IDS, DARKROOM_RAIL_FOCUS_ORDER, DARKROOM_VIEWPORT_FOCUS_ORDER,
         DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS, DarkroomModuleGroup,
     };
+    use crate::gtk_shell::DARKROOM_OPERATION_FOCUS_ORDER;
 
     #[test]
     fn darkroom_contract_has_stable_unique_roles_and_initial_exposure() {
@@ -576,6 +581,13 @@ mod tests {
         assert_eq!(unique.len(), DARKROOM_WIDGET_IDS.len());
         assert_eq!(DARKROOM_WIDGET_IDS[0], "darkroom-page");
         assert_eq!(DARKROOM_WIDGET_IDS.last(), Some(&"exposure"));
+        assert!(DARKROOM_WIDGET_IDS.contains(&"darkroom-left-module-scroll"));
+        assert!(DARKROOM_WIDGET_IDS.contains(&"darkroom-right-module-scroll"));
+        assert_eq!(DARKROOM_OPERATION_FOCUS_ORDER[0], "module-disclosure");
+        assert_eq!(
+            DARKROOM_OPERATION_FOCUS_ORDER.last(),
+            Some(&"module-control")
+        );
         assert_eq!(DARKROOM_RAIL_FOCUS_ORDER[0], "darkroom-navigation");
         assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.last(), Some(&"group-grading"));
         assert_eq!(DARKROOM_MODULE_WIDGET_IDS[0], "darkroom-module-search");

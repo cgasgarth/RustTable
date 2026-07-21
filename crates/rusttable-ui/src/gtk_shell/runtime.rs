@@ -454,6 +454,11 @@ impl GtkShell {
         }
     }
 
+    /// Projects the catalog-owned source identity into the import row model.
+    pub fn set_import_existing_paths(&self, paths: impl IntoIterator<Item = std::path::PathBuf>) {
+        self.import_dialog.set_existing_paths(paths);
+    }
+
     /// Projects #469 camera discovery/session/capture state into the shell.
     pub fn set_camera_state(&self, state: &CameraViewModel) {
         self.camera_panel.set_state(state);

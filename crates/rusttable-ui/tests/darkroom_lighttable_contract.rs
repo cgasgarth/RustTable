@@ -59,6 +59,10 @@ fn darkroom_stack_keeps_darktable_regions_and_stable_widget_order() {
             "darkroom-right-panel",
             "darkroom-histogram",
             "darkroom-module-groups",
+            "darkroom-module-search",
+            "darkroom-left-module-scroll",
+            "darkroom-right-module-scroll",
+            "darkroom-right-modules",
             "exposure",
         ]
     );
