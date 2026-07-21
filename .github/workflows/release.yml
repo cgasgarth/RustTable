@@ -35,7 +35,8 @@ jobs:
         if: matrix.name == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev
+          sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev nasm
+          nasm --version
       - name: Install macOS native dependencies
         if: matrix.name == 'macOS'
         run: brew install gtk4 libheif
