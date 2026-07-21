@@ -45,6 +45,7 @@ pub fn runtime_bundle_identifier() -> String {
     BUNDLE_IDENTIFIER.to_owned()
 }
 
+#[cfg(target_os = "macos")]
 fn bundle_identifier_from_plist(plist: &str) -> Option<String> {
     let (_, value) = plist.split_once("<key>CFBundleIdentifier</key>")?;
     let value = value.trim_start().strip_prefix("<string>")?;
@@ -465,8 +466,11 @@ mod tests {
     use super::{
         BUNDLE_IDENTIFIER, COMMAND_QUIT_ACCELERATORS, MAX_OPEN_FILES, MacApplicationBridge,
         MacApplicationCommand, MacApplicationEvent, MacOpenRejection, MacOpenTarget,
-        MacTerminationDecision, MacWindowAction, bundle_identifier_from_plist, document_types,
+        MacTerminationDecision, MacWindowAction, document_types,
     };
+
+    #[cfg(target_os = "macos")]
+    use super::bundle_identifier_from_plist;
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -620,6 +624,7 @@ mod tests {
         assert_eq!(declarations[1].uti, "com.cgasgarth.rusttable.catalog");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn installed_bundle_identifier_is_read_without_changing_the_fallback() {
         assert_eq!(
