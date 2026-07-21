@@ -19,6 +19,12 @@ pub const BUNDLE_IDENTIFIER: &str = "com.cgasgarth.rusttable";
 /// The application action exposed by the native macOS menu for Command-Q.
 pub const QUIT_ACTION_NAME: &str = "app.quit";
 
+/// Flags required for Finder, Dock, and `LaunchServices` file-open delivery.
+#[must_use]
+pub const fn application_flags() -> gtk4::gio::ApplicationFlags {
+    gtk4::gio::ApplicationFlags::HANDLES_OPEN
+}
+
 /// GTK accelerator spellings that cover Command-Q on macOS and the primary quit shortcut elsewhere.
 #[cfg(target_os = "macos")]
 pub const COMMAND_QUIT_ACCELERATORS: &[&str] = &["<Meta>q", "<Primary>q"];
@@ -485,7 +491,8 @@ mod tests {
     use super::{
         BUNDLE_IDENTIFIER, COMMAND_QUIT_ACCELERATORS, MAX_OPEN_FILES, MacApplicationBridge,
         MacApplicationCommand, MacApplicationEvent, MacOpenRejection, MacOpenTarget,
-        MacTerminationDecision, MacWindowAction, QUIT_ACTION_NAME, document_types,
+        MacTerminationDecision, MacWindowAction, QUIT_ACTION_NAME, application_flags,
+        document_types,
     };
 
     #[cfg(target_os = "macos")]
@@ -621,6 +628,7 @@ mod tests {
     fn native_menu_roles_and_document_declarations_are_stable() {
         assert_eq!(BUNDLE_IDENTIFIER, "com.cgasgarth.rusttable");
         assert_eq!(QUIT_ACTION_NAME, "app.quit");
+        assert!(application_flags().contains(gtk4::gio::ApplicationFlags::HANDLES_OPEN));
         assert_eq!(
             [
                 MacApplicationCommand::About,

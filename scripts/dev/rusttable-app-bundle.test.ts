@@ -49,6 +49,12 @@ describe('RustTable bundle metadata and manifest contracts', () => {
     expect(plist).toContain('<key>CFBundleIdentifier</key><string>com.cgasgarth.rusttable</string>');
     expect(plist).toContain('<key>CFBundleDocumentTypes</key><array>');
     expect(plist).toContain('<string>public.image</string>');
+    for (const extension of [
+      'arw', 'cr2', 'crw', 'dng', 'erf', 'kdc', 'nef', 'nrw', 'orf', 'pef',
+      'raf', 'raw', 'rw2', 'sr2', 'srf', 'x3f',
+    ]) {
+      expect(plist).toContain(`<string>${extension}</string>`);
+    }
     expect(plist).toContain('<string>com.cgasgarth.rusttable.catalog</string>');
     expect(parseBundleManifest(plist)).toEqual({
       CFBundleDisplayName: 'RustTable',
