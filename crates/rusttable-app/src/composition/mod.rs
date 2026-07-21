@@ -52,7 +52,7 @@ use collection_bridge::{
 };
 use preview_bridge::start_selected_preview;
 use preview_lifecycle::PreviewLifecycle;
-use rusttable_ui::{PhotoSelection, PhotoSourceKind, RgbDenoiseAction};
+use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,10 +204,14 @@ fn activate_application(
             .set_snapshot(snapshot.as_ref());
     }
     install_action_input(&shell);
-    let neural_controller = install_ai_ui_bridges(&shell);
+    let ai_bridges = install_ai_ui_bridges(&shell);
+    let neural_controller = ai_bridges.rgb;
+    let raw_denoise_controller = ai_bridges.raw;
     let ai_batch_controller = install_ai_batch_ui_bridge(&shell);
     let neural_for_selection = Rc::clone(&neural_controller);
+    let raw_denoise_for_selection = Rc::clone(&raw_denoise_controller);
     let neural_selection_shell = shell.clone();
+    let raw_denoise_selection_shell = shell.clone();
     let ai_batch_selection_shell = shell.clone();
     let export_panel = shell.export_panel().clone();
     let export_lifecycle = Rc::new(RefCell::new(ExportLifecycle::default()));
@@ -312,6 +316,14 @@ fn activate_application(
             0,
         )));
         neural_selection_shell.set_rgb_denoise_state(neural.state());
+        let mut raw_denoise = raw_denoise_for_selection.borrow_mut();
+        let _ = raw_denoise.dispatch(RawDenoiseAction::SetSelection(PhotoSelection::single(
+            photo_id,
+            PhotoSourceKind::Raster,
+            true,
+            0,
+        )));
+        raw_denoise_selection_shell.set_raw_denoise_state(raw_denoise.state());
         let mut ai_batch = ai_batch_controller.borrow_mut();
         ai_batch.set_selection(vec![rusttable_ui::AiBatchSelection {
             photo_id,

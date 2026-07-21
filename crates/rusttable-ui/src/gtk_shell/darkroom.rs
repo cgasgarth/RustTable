@@ -23,6 +23,7 @@ use crate::presentation::{
     DarkroomControlValue, DarkroomHistoryViewModel, DarkroomPanelActionHandler,
     DarkroomPanelProjection, DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
 };
+use crate::raw_denoise::{RawDenoiseAction, RawDenoisePanel, RawDenoiseViewModel};
 use crate::rgb_denoise::{RgbDenoiseAction, RgbDenoisePanel, RgbDenoiseViewModel};
 use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
@@ -187,6 +188,7 @@ pub struct DarkroomView {
     right_modules: gtk4::Box,
     exposure: ExposurePanel,
     rgb_denoise: RgbDenoisePanel,
+    raw_denoise: RawDenoisePanel,
     rail_status: DarkroomRailStatus,
     histogram: HistogramView,
     histogram_generation: Rc<Cell<Option<ViewportGeneration>>>,
@@ -237,6 +239,7 @@ impl DarkroomView {
             right_modules,
             exposure,
             rgb_denoise,
+            raw_denoise,
             histogram,
             module_search,
             module_group,
@@ -261,6 +264,7 @@ impl DarkroomView {
             right_modules,
             exposure,
             rgb_denoise,
+            raw_denoise,
             rail_status,
             histogram,
             histogram_generation,
@@ -632,6 +636,7 @@ impl DarkroomView {
         let right_modules = self.right_modules.clone();
         let exposure = self.exposure.clone();
         let rgb_denoise = self.rgb_denoise.clone();
+        let raw_denoise = self.raw_denoise.clone();
         let search = self.module_search.clone();
         self.module_group_handler
             .replace(Some(Box::new(move |group| {
@@ -640,6 +645,7 @@ impl DarkroomView {
                     &right_modules,
                     &exposure,
                     &rgb_denoise,
+                    &raw_denoise,
                     &typed_modules,
                     &module_action_handler,
                     group,
@@ -655,6 +661,7 @@ impl DarkroomView {
             &self.right_modules,
             &self.exposure,
             &self.rgb_denoise,
+            &self.raw_denoise,
             &self.typed_modules,
             &self.module_action_handler,
             self.module_group.get(),
@@ -669,6 +676,7 @@ impl DarkroomView {
         let right_modules = self.right_modules.clone();
         let exposure = self.exposure.clone();
         let rgb_denoise = self.rgb_denoise.clone();
+        let raw_denoise = self.raw_denoise.clone();
         let group = Rc::clone(&self.module_group);
         self.module_search.connect_search_changed(move |search| {
             render_typed_modules_into(
@@ -676,6 +684,7 @@ impl DarkroomView {
                 &right_modules,
                 &exposure,
                 &rgb_denoise,
+                &raw_denoise,
                 &typed_modules,
                 &module_action_handler,
                 group.get(),
@@ -695,6 +704,19 @@ impl DarkroomView {
         F: Fn(RgbDenoiseAction) + 'static,
     {
         self.rgb_denoise.connect_action(handler);
+    }
+
+    /// Projects RAW denoise service state into the darkroom processing rail.
+    pub fn set_raw_denoise_state(&self, state: &RawDenoiseViewModel) {
+        self.raw_denoise.set_state(state);
+    }
+
+    /// Connects RAW denoise controls to the application-owned service controller.
+    pub fn connect_raw_denoise_action<F>(&self, handler: F)
+    where
+        F: Fn(RawDenoiseAction) + 'static,
+    {
+        self.raw_denoise.connect_action(handler);
     }
 
     /// Projects a selected image into the side-rail states without inventing unavailable data.
@@ -764,6 +786,7 @@ type DarkroomPanelBuild = (
     gtk4::Box,
     ExposurePanel,
     RgbDenoisePanel,
+    RawDenoisePanel,
     gtk4::Stack,
     gtk4::SearchEntry,
     Rc<Cell<DarkroomModuleGroup>>,
