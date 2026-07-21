@@ -3,6 +3,7 @@ use rusttable_processing::{
     FiniteF32, LinearRgb, SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage,
     encode_linear_srgb, to_linear_srgb,
 };
+use sha2::{Digest, Sha256};
 
 use crate::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot,
@@ -13,7 +14,34 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PixelpipeBackend {
     CpuCanonical,
+    CpuTiledFallback,
     WgpuBasic,
+    WgpuTiled,
+}
+
+/// Bounded provenance for one tiled execution and its recovery attempts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PixelpipeTilingReceipt {
+    plan_identity: [u8; 32],
+    tile_count: u64,
+    attempts: u8,
+}
+
+impl PixelpipeTilingReceipt {
+    #[must_use]
+    pub const fn plan_identity(&self) -> [u8; 32] {
+        self.plan_identity
+    }
+
+    #[must_use]
+    pub const fn tile_count(&self) -> u64 {
+        self.tile_count
+    }
+
+    #[must_use]
+    pub const fn attempts(&self) -> u8 {
+        self.attempts
+    }
 }
 
 /// Bounded provenance for one service execution attempt.
@@ -23,6 +51,7 @@ pub struct PixelpipeExecutionReceipt {
     backend: PixelpipeBackend,
     gpu_fallback: Option<BasicPointError>,
     dispatches: u32,
+    tiling: Option<PixelpipeTilingReceipt>,
 }
 
 impl PixelpipeExecutionReceipt {
@@ -44,6 +73,11 @@ impl PixelpipeExecutionReceipt {
     #[must_use]
     pub const fn dispatches(&self) -> u32 {
         self.dispatches
+    }
+
+    #[must_use]
+    pub const fn tiling(&self) -> Option<&PixelpipeTilingReceipt> {
+        self.tiling.as_ref()
     }
 }
 
@@ -123,6 +157,7 @@ impl PixelpipeExecutionService {
                     backend: PixelpipeBackend::WgpuBasic,
                     gpu_fallback: None,
                     dispatches,
+                    tiling: None,
                 },
             }),
             Err(error) => self.cpu_result(snapshot, Some(error)),
@@ -143,8 +178,130 @@ impl PixelpipeExecutionService {
                 backend: PixelpipeBackend::CpuCanonical,
                 gpu_fallback: fallback,
                 dispatches: 0,
+                tiling: None,
             },
         })
+    }
+
+    /// Executes eligible point operations in row-major tiles with bounded
+    /// smaller-tile recovery before publishing the canonical CPU fallback.
+    ///
+    /// Each GPU attempt uses a fresh tile assembly. A failed attempt cannot
+    /// publish partial pixels, and at most three tile plans are tried.
+    ///
+    /// # Errors
+    ///
+    /// Returns the canonical CPU pixelpipe error if every bounded GPU attempt
+    /// and its CPU fallback fail.
+    pub fn execute_tiled(
+        &self,
+        snapshot: &CpuPixelpipeSnapshot,
+        plan: crate::CpuTilePlan,
+    ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
+        let Some(operations) = basic_operations(snapshot) else {
+            return self.cpu_tiled_result(snapshot, plan, None, 0);
+        };
+        let Some(gpu) = self.gpu.as_ref() else {
+            return self.cpu_tiled_result(snapshot, plan, None, 0);
+        };
+        if !gpu.health_check() {
+            return self.cpu_tiled_result(snapshot, plan, Some(BasicPointError::Unhealthy), 0);
+        }
+
+        let plans = recovery_plans(plan);
+        let mut last_error = None;
+        for (index, candidate) in plans.iter().copied().enumerate() {
+            match execute_gpu_tiled(gpu, snapshot, &operations, candidate) {
+                Ok((image, dispatches, tile_count)) => {
+                    return Ok(PixelpipeExecutionResult {
+                        image,
+                        receipt: PixelpipeExecutionReceipt {
+                            snapshot_identity: snapshot.identity(),
+                            backend: PixelpipeBackend::WgpuTiled,
+                            gpu_fallback: None,
+                            dispatches,
+                            tiling: Some(tiling_receipt(
+                                snapshot,
+                                candidate,
+                                tile_count,
+                                index + 1,
+                            )),
+                        },
+                    });
+                }
+                Err(error) => last_error = Some(error),
+            }
+        }
+        self.cpu_tiled_result(
+            snapshot,
+            plan,
+            last_error,
+            u8::try_from(plans.len()).unwrap_or(u8::MAX),
+        )
+    }
+
+    fn cpu_tiled_result(
+        &self,
+        snapshot: &CpuPixelpipeSnapshot,
+        plan: crate::CpuTilePlan,
+        fallback: Option<BasicPointError>,
+        attempts: u8,
+    ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
+        let result = self.cpu.execute_tiled(snapshot, plan)?;
+        let grid = plan
+            .grid_for(snapshot.input().descriptor().dimensions())
+            .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
+        Ok(PixelpipeExecutionResult {
+            image: result.image().clone(),
+            receipt: PixelpipeExecutionReceipt {
+                snapshot_identity: snapshot.identity(),
+                backend: PixelpipeBackend::CpuTiledFallback,
+                gpu_fallback: fallback,
+                dispatches: 0,
+                tiling: Some(tiling_receipt(
+                    snapshot,
+                    plan,
+                    grid.tile_count(),
+                    usize::from(attempts),
+                )),
+            },
+        })
+    }
+}
+
+fn recovery_plans(initial: crate::CpuTilePlan) -> Vec<crate::CpuTilePlan> {
+    let mut plans = vec![initial];
+    let mut width = initial.tile_width();
+    let mut height = initial.tile_height();
+    for _ in 0..2 {
+        width = width.div_ceil(2);
+        height = height.div_ceil(2);
+        let Ok(plan) = crate::CpuTilePlan::new(width, height) else {
+            break;
+        };
+        if plans.last().is_some_and(|previous| *previous == plan) {
+            break;
+        }
+        plans.push(plan);
+    }
+    plans
+}
+
+fn tiling_receipt(
+    snapshot: &CpuPixelpipeSnapshot,
+    plan: crate::CpuTilePlan,
+    tile_count: u64,
+    attempts: usize,
+) -> PixelpipeTilingReceipt {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rusttable.pixelpipe.tiling.v1");
+    hasher.update(snapshot.identity().as_bytes());
+    hasher.update(plan.tile_width().to_le_bytes());
+    hasher.update(plan.tile_height().to_le_bytes());
+    PixelpipeTilingReceipt {
+        plan_identity: hasher.finalize().into(),
+        tile_count,
+        attempts: u8::try_from(attempts.min(usize::from(u8::MAX))).unwrap_or(u8::MAX),
     }
 }
 
@@ -184,7 +341,15 @@ fn execute_gpu(
     snapshot: &CpuPixelpipeSnapshot,
     operations: &[BasicPointOperation],
 ) -> Result<(RgbaF32Image, u32), BasicPointError> {
-    let input = snapshot.input();
+    execute_gpu_image(gpu, snapshot.input(), snapshot.output_mode(), operations)
+}
+
+fn execute_gpu_image(
+    gpu: &GpuRuntime,
+    input: &RgbaF32Image,
+    output_mode: CpuPixelpipeOutputMode,
+    operations: &[BasicPointOperation],
+) -> Result<(RgbaF32Image, u32), BasicPointError> {
     let dimensions = input.descriptor().dimensions();
     let source_pixels = input
         .pixels()
@@ -235,7 +400,7 @@ fn execute_gpu(
     }
     let working = WorkingRgbImage::new(dimensions, working_pixels)
         .map_err(|_| BasicPointError::InvalidPixelPacking)?;
-    let output_pixels = match snapshot.output_mode() {
+    let output_pixels = match output_mode {
         CpuPixelpipeOutputMode::FullExport => working
             .pixels()
             .zip(input.pixels())
@@ -262,7 +427,7 @@ fn execute_gpu(
             })
             .collect(),
     };
-    let encoding = match snapshot.output_mode() {
+    let encoding = match output_mode {
         CpuPixelpipeOutputMode::Preview => RgbaF32ColorEncoding::SrgbD65,
         CpuPixelpipeOutputMode::FullExport => RgbaF32ColorEncoding::LinearSrgbD65,
     };
@@ -276,4 +441,111 @@ fn execute_gpu(
         }
     })?;
     Ok((image, result.dispatches()))
+}
+
+fn execute_gpu_tiled(
+    gpu: &GpuRuntime,
+    snapshot: &CpuPixelpipeSnapshot,
+    operations: &[BasicPointOperation],
+    plan: crate::CpuTilePlan,
+) -> Result<(RgbaF32Image, u32, u64), BasicPointError> {
+    let grid = plan
+        .grid_for(snapshot.input().descriptor().dimensions())
+        .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    let input = snapshot.input();
+    let mut assembled = vec![None; input.pixels().len()];
+    let mut dispatches = 0_u32;
+    for tile_index in 0..grid.tile_count() {
+        let tile = grid
+            .tile_at(tile_index)
+            .map_err(|error| BasicPointError::Readback(error.to_string()))?
+            .ok_or_else(|| BasicPointError::Readback("tile disappeared from grid".to_owned()))?;
+        let tile_input = extract_tile(input, tile)?;
+        let (tile_output, tile_dispatches) =
+            execute_gpu_image(gpu, &tile_input, snapshot.output_mode(), operations)?;
+        dispatches = dispatches.saturating_add(tile_dispatches);
+        place_tile(&mut assembled, input, tile, &tile_output)?;
+    }
+    let pixels = assembled
+        .into_iter()
+        .map(|pixel| pixel.ok_or_else(|| BasicPointError::Readback("tiled output gap".to_owned())))
+        .collect::<Result<Vec<_>, _>>()?;
+    let descriptor = RgbaF32Descriptor::new(
+        input.descriptor().dimensions(),
+        snapshot.output_mode().color_encoding(),
+    );
+    let output = RgbaF32Image::new(descriptor, pixels)
+        .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    Ok((output, dispatches, grid.tile_count()))
+}
+
+fn extract_tile(
+    input: &RgbaF32Image,
+    tile: crate::CpuPixelpipeTile,
+) -> Result<RgbaF32Image, BasicPointError> {
+    let dimensions = tile.dimensions();
+    let source_width = input.descriptor().dimensions().width();
+    let pixel_count = usize::try_from(dimensions.pixel_count())
+        .map_err(|_| BasicPointError::Readback("tile pixel count is too large".to_owned()))?;
+    let mut pixels = Vec::with_capacity(pixel_count);
+    for y in 0..dimensions.height() {
+        let row = u64::from(tile.origin_y() + y)
+            .checked_mul(u64::from(source_width))
+            .and_then(|offset| offset.checked_add(u64::from(tile.origin_x())))
+            .ok_or_else(|| BasicPointError::Readback("tile source index overflow".to_owned()))?;
+        let start = usize::try_from(row)
+            .map_err(|_| BasicPointError::Readback("tile source index is too large".to_owned()))?;
+        let end = start
+            .checked_add(dimensions.width() as usize)
+            .ok_or_else(|| BasicPointError::Readback("tile row overflow".to_owned()))?;
+        let row_pixels = input.pixels().get(start..end).ok_or_else(|| {
+            BasicPointError::Readback("tile source row is out of bounds".to_owned())
+        })?;
+        pixels.extend_from_slice(row_pixels);
+    }
+    RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, input.descriptor().color_encoding()),
+        pixels,
+    )
+    .map_err(|error| BasicPointError::Readback(error.to_string()))
+}
+
+fn place_tile(
+    assembled: &mut [Option<RgbaF32Pixel>],
+    input: &RgbaF32Image,
+    tile: crate::CpuPixelpipeTile,
+    output: &RgbaF32Image,
+) -> Result<(), BasicPointError> {
+    let source_width = input.descriptor().dimensions().width();
+    let dimensions = tile.dimensions();
+    for y in 0..dimensions.height() {
+        let destination_row = u64::from(tile.origin_y() + y)
+            .checked_mul(u64::from(source_width))
+            .and_then(|offset| offset.checked_add(u64::from(tile.origin_x())))
+            .ok_or_else(|| {
+                BasicPointError::Readback("tile destination index overflow".to_owned())
+            })?;
+        let destination = usize::try_from(destination_row).map_err(|_| {
+            BasicPointError::Readback("tile destination index is too large".to_owned())
+        })?;
+        let source = usize::try_from(u64::from(y) * u64::from(dimensions.width()))
+            .map_err(|_| BasicPointError::Readback("tile output index is too large".to_owned()))?;
+        for x in 0..dimensions.width() as usize {
+            let destination_index = destination.checked_add(x).ok_or_else(|| {
+                BasicPointError::Readback("tile destination row overflow".to_owned())
+            })?;
+            if assembled.get(destination_index).is_none()
+                || output.pixels().get(source + x).is_none()
+            {
+                return Err(BasicPointError::Readback(
+                    "tile output is out of bounds".to_owned(),
+                ));
+            }
+            if assembled[destination_index].is_some() {
+                return Err(BasicPointError::Readback("tiled output overlap".to_owned()));
+            }
+            assembled[destination_index] = Some(output.pixels()[source + x]);
+        }
+    }
+    Ok(())
 }

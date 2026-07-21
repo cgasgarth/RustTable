@@ -23,7 +23,7 @@ pub enum CpuPixelpipeOutputMode {
 }
 
 impl CpuPixelpipeOutputMode {
-    const fn color_encoding(self) -> RgbaF32ColorEncoding {
+    pub(crate) const fn color_encoding(self) -> RgbaF32ColorEncoding {
         match self {
             Self::Preview => RgbaF32ColorEncoding::SrgbD65,
             Self::FullExport => RgbaF32ColorEncoding::LinearSrgbD65,
