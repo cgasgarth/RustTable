@@ -2,6 +2,7 @@
 
 use rusttable_color::{ColorEncoding, Precision};
 use rusttable_image::Roi;
+use rusttable_masks::MaskGraph;
 use rusttable_processing::OperationStackSnapshot;
 
 use crate::RoiPlanIdentity;
@@ -26,6 +27,7 @@ pub struct PipelineSnapshotInput {
     quality: PipelineQuality,
     precision: Precision,
     implementation: ImplementationIdentity,
+    mask_graph: Option<MaskGraph>,
 }
 
 impl PipelineSnapshotInput {
@@ -55,6 +57,7 @@ impl PipelineSnapshotInput {
             quality: PipelineQuality::Normal,
             precision: Precision::F32,
             implementation,
+            mask_graph: None,
         })
     }
 
@@ -81,6 +84,12 @@ impl PipelineSnapshotInput {
         self.publication_generation = generation;
         self
     }
+
+    #[must_use]
+    pub fn with_mask_graph(mut self, graph: MaskGraph) -> Self {
+        self.mask_graph = Some(graph);
+        self
+    }
 }
 
 /// The stable boundary between application/catalog state and pixel execution.
@@ -102,6 +111,7 @@ pub struct PipelineSnapshot {
     blend_status: BlendStatus,
     raster_status: RasterStatus,
     identity: PipelineSnapshotIdentity,
+    mask_graph: Option<MaskGraph>,
 }
 
 impl PipelineSnapshot {
@@ -125,11 +135,12 @@ impl PipelineSnapshot {
         if input.output.dimensions().width() == 0 || input.output.dimensions().height() == 0 {
             return Err(ContractError::InvalidDimensions);
         }
-        let mask_status = if input
-            .stack
-            .operations()
-            .iter()
-            .any(|operation| operation.mask_id().is_some())
+        let mask_status = if input.mask_graph.is_some()
+            || input
+                .stack
+                .operations()
+                .iter()
+                .any(|operation| operation.mask_id().is_some())
         {
             MaskStatus::Referenced
         } else {
@@ -162,6 +173,7 @@ impl PipelineSnapshot {
             blend_status,
             raster_status: RasterStatus::Validated,
             identity: PipelineSnapshotIdentity::from_bytes(&[]),
+            mask_graph: input.mask_graph,
         };
         snapshot.identity = PipelineSnapshotIdentity::from_bytes(&snapshot.canonical_bytes());
         Ok(snapshot)
@@ -236,6 +248,17 @@ impl PipelineSnapshot {
         self.identity
     }
 
+    #[must_use]
+    pub const fn mask_graph(&self) -> Option<&MaskGraph> {
+        self.mask_graph.as_ref()
+    }
+    #[must_use]
+    pub fn mask_graph_identity(&self) -> [u8; 32] {
+        self.mask_graph
+            .as_ref()
+            .map_or([0; 32], MaskGraph::identity)
+    }
+
     /// Returns the canonical bytes used for identity and cache keys.
     #[must_use]
     pub fn canonical_bytes(&self) -> Vec<u8> {
@@ -267,6 +290,7 @@ impl PipelineSnapshot {
                 .concat(),
         );
         write_stack(&self.stack, &mut bytes);
+        bytes.extend_from_slice(&self.mask_graph_identity());
         bytes.push(purpose_tag(self.purpose));
         bytes.push(quality_tag(self.quality));
         bytes.push(precision_tag(self.precision));

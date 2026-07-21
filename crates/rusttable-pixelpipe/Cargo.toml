@@ -10,6 +10,7 @@ version.workspace = true
 workspace = true
 
 [dependencies]
+rusttable-masks.workspace = true
 rusttable-gpu.workspace = true
 rusttable-color.workspace = true
 rusttable-core.workspace = true

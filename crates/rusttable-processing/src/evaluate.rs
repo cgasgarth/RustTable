@@ -1,5 +1,3 @@
-use std::{collections::BTreeMap, fmt};
-
 use crate::operations::{
     OperationExecutionError,
     colorreconstruction::ColorReconstructionPlan,
@@ -11,14 +9,13 @@ use crate::{
 };
 use rusttable_core::OperationId;
 use sha2::Digest;
-
+use std::{collections::BTreeMap, fmt};
 /// Immutable resolved automatic plans keyed by authored operation ID.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BasicAdjPlanSet {
     plans: BTreeMap<OperationId, crate::operations::basicadj::BasicAdjPlan>,
     identity: [u8; 32],
 }
-
 impl BasicAdjPlanSet {
     #[must_use]
     pub fn plan(
@@ -27,13 +24,11 @@ impl BasicAdjPlanSet {
     ) -> Option<&crate::operations::basicadj::BasicAdjPlan> {
         self.plans.get(&operation_id)
     }
-
     #[must_use]
     pub const fn identity(&self) -> [u8; 32] {
         self.identity
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
     InvalidExposureScale {
@@ -59,14 +54,12 @@ pub enum EvaluationError {
         reason: String,
     },
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendArithmeticStage {
     Delta,
     WeightedDelta,
     Output,
 }
-
 /// Evaluates a compiled pipeline into a new linear-light sRGB image.
 ///
 /// The input image and compiled pipeline remain unchanged. Working values are
@@ -91,7 +84,6 @@ pub fn evaluate(
         output,
     ))
 }
-
 pub(crate) fn evaluate_steps<'a, I>(
     steps: I,
     input: &[LinearRgb],
@@ -103,7 +95,6 @@ where
 {
     evaluate_steps_with_plans(steps, input, dimensions, pixel_index_offset, None)
 }
-
 pub(crate) fn evaluate_steps_with_plans<'a, I>(
     steps: I,
     input: &[LinearRgb],
@@ -127,7 +118,6 @@ where
     }
     Ok(output)
 }
-
 /// Resolves every automatic basicadj node against the full preceding image,
 /// then executes the graph once to establish the next node's analysis input.
 /// The returned set is reusable by every tile of that snapshot.
@@ -657,6 +647,23 @@ fn apply_operation_with_plans(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::MaskManager { .. } => Ok(()),
+        ProcessingOperationKind::Retouch { config } => {
+            let plan = crate::RetouchPlan::new(config.config(), dimensions).map_err(|error| {
+                EvaluationError::OperationExecution {
+                    step_index,
+                    operation_id,
+                    reason: error.to_string(),
+                }
+            })?;
+            plan.execute_linear_rgb(pixels, || false, |_| {})
+                .map(|_| ())
+                .map_err(|error| EvaluationError::OperationExecution {
+                    step_index,
+                    operation_id,
+                    reason: error.to_string(),
+                })
+        }
         ProcessingOperationKind::Crop { .. }
         | ProcessingOperationKind::Flip { .. }
         | ProcessingOperationKind::RotatePixels { .. }
@@ -671,7 +678,6 @@ fn apply_operation_with_plans(
         )),
     }
 }
-
 fn operation_error(
     step_index: PipelineStepIndex,
     operation_id: OperationId,
@@ -683,7 +689,6 @@ fn operation_error(
         reason: error.to_string(),
     }
 }
-
 fn operation_plan_error<E: fmt::Display>(
     step_index: PipelineStepIndex,
     operation_id: OperationId,
@@ -695,7 +700,6 @@ fn operation_plan_error<E: fmt::Display>(
         reason: error.to_string(),
     }
 }
-
 fn apply_reconstruction(
     pixels: &mut [LinearRgb],
     candidates: &[LinearRgb],
@@ -743,7 +747,6 @@ fn apply_reconstruction(
     }
     Ok(())
 }
-
 fn apply_channels<F>(
     pixels: &mut [LinearRgb],
     step_index: PipelineStepIndex,

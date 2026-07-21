@@ -190,6 +190,8 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "enlargecanvas",
             "ashift",
             "lenscorrection",
+            "mask_manager",
+            "retouch",
             "highlights",
             "colorreconstruction",
             "colorin",

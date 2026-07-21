@@ -26,6 +26,10 @@ impl rusttable_pixelpipe::CacheValue for TestValue {
 }
 
 fn key(seed: u8) -> CacheKey {
+    key_with_mask(seed, 0)
+}
+
+fn key_with_mask(seed: u8, mask: u8) -> CacheKey {
     let dimensions = ImageDimensions::new(4, 4).expect("dimensions");
     let identity = ImplementationIdentity::new("rusttable.test", 1, "build").expect("identity");
     CacheKey::builder()
@@ -45,8 +49,14 @@ fn key(seed: u8) -> CacheKey {
             [seed; 32],
         ))
         .parameters(1, [seed, 9])
+        .mask_graph_identity([mask; 32])
         .build()
         .expect("complete key")
+}
+
+#[test]
+fn cache_identity_changes_for_mask_graph_ancestry() {
+    assert_ne!(key_with_mask(1, 1), key_with_mask(1, 2));
 }
 
 #[test]

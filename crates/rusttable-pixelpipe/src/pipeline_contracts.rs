@@ -526,6 +526,7 @@ pub enum ContractError {
     InvalidFormat,
     InvalidDimensions,
     Stack(String),
+    MaskGraph(String),
 }
 
 impl fmt::Display for ContractError {
@@ -544,6 +545,7 @@ impl fmt::Display for ContractError {
             Self::InvalidFormat => formatter.write_str("pixelpipe format continuity is invalid"),
             Self::InvalidDimensions => formatter.write_str("pixelpipe dimensions are invalid"),
             Self::Stack(error) => write!(formatter, "pixelpipe stack is invalid: {error}"),
+            Self::MaskGraph(error) => write!(formatter, "pixelpipe mask graph is invalid: {error}"),
         }
     }
 }

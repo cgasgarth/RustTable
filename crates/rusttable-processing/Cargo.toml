@@ -8,6 +8,7 @@ version.workspace = true
 
 [dependencies]
 postcard.workspace = true
+rusttable-masks.workspace = true
 rusttable-core.workspace = true
 rusttable-color.workspace = true
 rusttable-image.workspace = true

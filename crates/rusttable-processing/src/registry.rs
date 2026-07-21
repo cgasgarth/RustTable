@@ -762,9 +762,12 @@ impl RegistrySnapshot {
 
 #[path = "registry_basicadj.rs"]
 mod registry_basicadj;
+#[path = "registry_masks.rs"]
+mod registry_masks;
 #[path = "registry_operations.rs"]
 mod registry_operations;
 pub use registry_basicadj::basicadj_definition;
+pub use registry_masks::{mask_manager_definition, retouch_definition};
 pub use registry_operations::{
     BUILTIN_OPERATIONS, bloom_definition, censorize_definition, clahe_definition, crop_definition,
     defringe_definition, dither_definition, enlargecanvas_definition, exposure_definition,

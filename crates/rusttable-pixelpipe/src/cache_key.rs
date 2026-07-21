@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Version of the structured in-memory cache identity.
-pub const CACHE_KEY_SCHEMA_VERSION: u16 = 2;
+pub const CACHE_KEY_SCHEMA_VERSION: u16 = 3;
 
 /// The precision identity used by a cache key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -199,6 +199,7 @@ pub enum CacheKeyComponent {
     Backend,
     Schema,
     Mode,
+    MaskGraph,
 }
 
 /// A complete output-affecting pixelpipe cache identity.
@@ -222,6 +223,7 @@ pub struct CacheKey {
     mask: MaskStatus,
     blend: BlendStatus,
     raster_identity: [u8; 32],
+    mask_graph_identity: [u8; 32],
     analysis_identity: [u8; 32],
     backend_identity: [u8; 32],
     mode_identity: [u8; 32],
@@ -269,6 +271,7 @@ impl CacheKey {
             mask: snapshot.mask_status(),
             blend: snapshot.blend_status(),
             raster_identity: snapshot.source().identity().as_bytes(),
+            mask_graph_identity: snapshot.mask_graph_identity(),
             analysis_identity: [0; 32],
             backend_identity: implementation_identity(snapshot.implementation()),
             mode_identity: [0; 32],
@@ -326,6 +329,7 @@ impl CacheKey {
             mask: MaskStatus::NotReferenced,
             blend: BlendStatus::NotReferenced,
             raster_identity: plan.source_identity().as_bytes(),
+            mask_graph_identity: [0; 32],
             analysis_identity: [0; 32],
             backend_identity: [0; 32],
             mode_identity: plan.identity().as_bytes(),
@@ -377,6 +381,10 @@ impl CacheKey {
         self.blend
     }
     #[must_use]
+    pub const fn mask_graph_identity(&self) -> [u8; 32] {
+        self.mask_graph_identity
+    }
+    #[must_use]
     pub const fn backend_identity(&self) -> [u8; 32] {
         self.backend_identity
     }
@@ -388,7 +396,7 @@ impl CacheKey {
     #[must_use]
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(256);
-        bytes.extend_from_slice(b"rusttable.pixelpipe.cache-key.v2");
+        bytes.extend_from_slice(b"rusttable.pixelpipe.cache-key.v3");
         bytes.extend_from_slice(&self.schema_version.to_le_bytes());
         bytes.extend_from_slice(&self.source.as_bytes());
         write_bytes(&self.source_descriptor, &mut bytes);
@@ -414,6 +422,7 @@ impl CacheKey {
         bytes.push(mask_tag(self.mask));
         bytes.push(blend_tag(self.blend));
         bytes.extend_from_slice(&self.raster_identity);
+        bytes.extend_from_slice(&self.mask_graph_identity);
         bytes.extend_from_slice(&self.analysis_identity);
         bytes.extend_from_slice(&self.backend_identity);
         bytes.extend_from_slice(&self.mode_identity);
@@ -436,6 +445,7 @@ impl CacheKey {
             CacheKeyComponent::Output,
             CacheKeyComponent::Parameters,
             CacheKeyComponent::MaskBlendRaster,
+            CacheKeyComponent::MaskGraph,
             CacheKeyComponent::Backend,
             CacheKeyComponent::Mode,
             CacheKeyComponent::Schema,
@@ -474,6 +484,7 @@ pub struct CacheKeyBuilder {
     mask: MaskStatus,
     blend: BlendStatus,
     raster_identity: [u8; 32],
+    mask_graph_identity: [u8; 32],
     analysis_identity: [u8; 32],
     backend_identity: [u8; 32],
     mode_identity: [u8; 32],
@@ -499,6 +510,7 @@ impl Default for CacheKeyBuilder {
             mask: MaskStatus::NotReferenced,
             blend: BlendStatus::NotReferenced,
             raster_identity: [0; 32],
+            mask_graph_identity: [0; 32],
             analysis_identity: [0; 32],
             backend_identity: [0; 32],
             mode_identity: [0; 32],
@@ -589,6 +601,11 @@ impl CacheKeyBuilder {
         self
     }
     #[must_use]
+    pub const fn mask_graph_identity(mut self, value: [u8; 32]) -> Self {
+        self.mask_graph_identity = value;
+        self
+    }
+    #[must_use]
     pub const fn analysis_identity(mut self, value: [u8; 32]) -> Self {
         self.analysis_identity = value;
         self
@@ -627,6 +644,7 @@ impl CacheKeyBuilder {
             mask: self.mask,
             blend: self.blend,
             raster_identity: self.raster_identity,
+            mask_graph_identity: self.mask_graph_identity,
             analysis_identity: self.analysis_identity,
             backend_identity: self.backend_identity,
             mode_identity: self.mode_identity,

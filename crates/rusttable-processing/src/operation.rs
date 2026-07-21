@@ -1,8 +1,3 @@
-use rusttable_core::{
-    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
-};
-use std::fmt;
-
 use crate::operations::{
     basicadj::BasicAdjConfig,
     bloom::BloomConfig,
@@ -30,6 +25,9 @@ use crate::operations::{
     vignette::VignetteConfig,
 };
 use crate::{FiniteF32, ScalarNarrowingError};
+use rusttable_core::{
+    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+};
 
 #[path = "operation_basicadj.rs"]
 mod operation_basicadj;
@@ -57,8 +55,14 @@ mod operation_effects;
 mod operation_grain;
 #[path = "operation_legacy.rs"]
 mod operation_legacy;
+#[path = "operation_masks.rs"]
+mod operation_masks;
+#[path = "operation_retouch.rs"]
+mod operation_retouch;
 #[path = "operation_spatial.rs"]
 mod operation_spatial;
+#[path = "operation_text.rs"]
+mod operation_text;
 pub(crate) use operation_basicadj::compile_basicadj;
 pub(crate) use operation_censorize::compile_censorize;
 pub(crate) use operation_clahe::compile_clahe;
@@ -72,6 +76,7 @@ pub(crate) use operation_parameters::{
     compile_scalar, compile_scalar_parameter, parameter_f64, parameter_integer, parameter_u32,
 };
 pub(crate) use operation_spatial::{compile_graduatednd, compile_vignette};
+use operation_text::{invalid_parameters, optional_parameter_text, parameter_bool, parameter_text};
 const EXPOSURE_PARAMETER: &str = "stops";
 const EXPOSURE_BLACK_PARAMETER: &str = "black";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -183,6 +188,12 @@ pub enum ProcessingOperationKind {
     },
     Clahe {
         config: crate::operations::clahe::ClaheConfig,
+    },
+    MaskManager {
+        config: crate::operations::mask_manager::MaskManagerParameters,
+    },
+    Retouch {
+        config: crate::operations::retouch::RetouchParameters,
     },
 }
 
@@ -300,11 +311,9 @@ impl ProcessingOperation {
             kind: ProcessingOperationKind::Exposure { stops, black },
         })
     }
-
     pub(crate) fn compile_basicadj(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_basicadj(operation)
     }
-
     pub(crate) fn compile_linear_offset(
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
@@ -312,39 +321,38 @@ impl ProcessingOperation {
             ProcessingOperationKind::LinearOffset { value }
         })
     }
-
     pub(crate) fn compile_rgb_gain(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_rgb_gain(operation)
     }
-
     pub(crate) fn compile_invert(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_invert(operation)
     }
-
     pub(crate) fn compile_dither(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_dither(operation)
     }
-
     pub(crate) fn compile_grain(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_grain(operation)
     }
-
     pub(crate) fn compile_censorize(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_censorize(operation)
     }
-
     pub(crate) fn compile_defringe(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_defringe(operation)
     }
-
+    pub(crate) fn compile_mask_manager(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        operation_masks::compile_mask_manager(operation)
+    }
+    pub(crate) fn compile_retouch(operation: &Operation) -> Result<Self, OperationCompileError> {
+        operation_retouch::compile_retouch(operation)
+    }
     pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_relight(operation)
     }
-
     pub(crate) fn compile_shadhi(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_shadhi(operation)
     }
-
     pub(crate) fn compile_highlights(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_highlights(operation)
     }
@@ -354,7 +362,6 @@ impl ProcessingOperation {
     ) -> Result<Self, OperationCompileError> {
         compile_color_reconstruction(operation)
     }
-
     pub(crate) fn compile_colorin(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_colorin(operation)
     }
@@ -362,7 +369,6 @@ impl ProcessingOperation {
     pub(crate) fn compile_primaries(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_primaries(operation)
     }
-
     pub(crate) fn compile_colorout(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_colorout(operation)
     }
@@ -372,7 +378,6 @@ impl ProcessingOperation {
     ) -> Result<Self, OperationCompileError> {
         compile_colorcorrection(operation)
     }
-
     pub(crate) fn compile_temperature(
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
@@ -928,72 +933,5 @@ pub(crate) fn parameter_f32(
                 parameter,
             })
         }
-    }
-}
-
-fn parameter_text(
-    operation: &Operation,
-    name: &'static str,
-) -> Result<String, OperationCompileError> {
-    let parameter = ParameterName::new(name).expect("static processing parameter");
-    match operation.parameter(&parameter) {
-        Some(ParameterValue::Text(value)) => Ok(value.as_str().to_owned()),
-        Some(_) => Err(OperationCompileError::WrongParameterType {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter,
-        }),
-        None => Err(OperationCompileError::MissingParameter {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter,
-        }),
-    }
-}
-
-fn optional_parameter_text(
-    operation: &Operation,
-    name: &'static str,
-) -> Result<Option<String>, OperationCompileError> {
-    let parameter = ParameterName::new(name).expect("static processing parameter");
-    match operation.parameter(&parameter) {
-        None => Ok(None),
-        Some(ParameterValue::Text(value)) => Ok(Some(value.as_str().to_owned())),
-        Some(_) => Err(OperationCompileError::WrongParameterType {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter,
-        }),
-    }
-}
-
-fn parameter_bool(
-    operation: &Operation,
-    name: &'static str,
-) -> Result<bool, OperationCompileError> {
-    let parameter = ParameterName::new(name).expect("static processing parameter");
-    match operation.parameter(&parameter) {
-        Some(ParameterValue::Bool(value)) => Ok(*value),
-        Some(_) => Err(OperationCompileError::WrongParameterType {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter,
-        }),
-        None => Err(OperationCompileError::MissingParameter {
-            operation_id: operation.id(),
-            key: operation.key().clone(),
-            parameter,
-        }),
-    }
-}
-
-pub(crate) fn invalid_parameters<E: fmt::Display>(
-    operation: &Operation,
-    error: E,
-) -> OperationCompileError {
-    OperationCompileError::InvalidParameters {
-        operation_id: operation.id(),
-        key: operation.key().clone(),
-        reason: error.to_string(),
     }
 }

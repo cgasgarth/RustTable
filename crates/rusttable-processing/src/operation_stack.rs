@@ -1,4 +1,7 @@
+#![allow(clippy::large_enum_variant)]
+
 use crate::descriptor::DescriptorId;
+use rusttable_masks::MaskReference;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
@@ -56,6 +59,7 @@ pub struct OperationInstance {
     multi_instance: bool,
     mask_id: Option<u128>,
     blend_id: Option<u128>,
+    mask_reference: Option<MaskReference>,
 }
 
 impl OperationInstance {
@@ -87,6 +91,7 @@ impl OperationInstance {
             multi_instance,
             mask_id: None,
             blend_id: None,
+            mask_reference: None,
         })
     }
 
@@ -137,11 +142,23 @@ impl OperationInstance {
         self.blend_id
     }
 
+    #[must_use]
+    pub const fn mask_reference(&self) -> Option<MaskReference> {
+        self.mask_reference
+    }
+
     /// Attaches immutable mask and blend references to this operation.
     #[must_use]
     pub const fn with_mask_blend(mut self, mask_id: Option<u128>, blend_id: Option<u128>) -> Self {
         self.mask_id = mask_id;
         self.blend_id = blend_id;
+        self
+    }
+
+    /// Attaches the typed immutable mask edge used by cross-operation routing.
+    #[must_use]
+    pub const fn with_mask_reference(mut self, reference: Option<MaskReference>) -> Self {
+        self.mask_reference = reference;
         self
     }
 
@@ -163,6 +180,17 @@ impl OperationInstance {
         output.push(u8::from(self.multi_instance));
         output.extend_from_slice(&self.mask_id.unwrap_or_default().to_be_bytes());
         output.extend_from_slice(&self.blend_id.unwrap_or_default().to_be_bytes());
+        if let Some(reference) = self.mask_reference {
+            output.push(1);
+            output.extend_from_slice(&reference.identity().photo_id().to_be_bytes());
+            output.extend_from_slice(&reference.identity().edit_revision().to_be_bytes());
+            output.extend_from_slice(&reference.identity().mask_id().to_be_bytes());
+            output.extend_from_slice(&reference.identity().mask_version().to_be_bytes());
+            output.extend_from_slice(&reference.consumer_operation().to_be_bytes());
+            output.extend_from_slice(&reference.consumer_mask_id().to_be_bytes());
+        } else {
+            output.push(0);
+        }
     }
 }
 
