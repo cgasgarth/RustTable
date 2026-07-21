@@ -4,6 +4,7 @@
 mod ai_services;
 mod composition;
 mod configuration;
+mod darkroom_services;
 mod extensions;
 pub mod gtk_controller;
 pub mod gtk_export;

@@ -134,6 +134,29 @@ fn module_search_matches_title_and_id_without_case_or_whitespace_surprises() {
 }
 
 #[test]
+fn darkroom_search_covers_static_panels_and_has_explicit_empty_behavior() {
+    for (query, title, id) in [
+        (" exposure ", "Exposure", "exposure"),
+        ("rgb ai", "RGB AI denoise", "rgb-denoise"),
+        ("raw denoise", "RAW AI denoise", "raw-denoise"),
+        ("mask-manager", "Mask manager", "mask-manager"),
+        ("retouch", "Multiscale retouch", "multiscale-retouch"),
+    ] {
+        assert!(
+            search_matches(query, title, id, &[]),
+            "query {query} should match"
+        );
+    }
+    assert!(search_matches("", "Mask manager", "mask-manager", &[]));
+    assert!(!search_matches(
+        "does-not-exist",
+        "Mask manager",
+        "mask-manager",
+        &[]
+    ));
+}
+
+#[test]
 fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     let modules = reference_modules().expect("reference module snapshot");
     assert_eq!(

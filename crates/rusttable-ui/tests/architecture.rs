@@ -3,7 +3,10 @@
 use rusttable_ui::{
     AI_BATCH_FOCUS_ORDER, AI_MODELS_FOCUS_ORDER, RAW_DENOISE_FOCUS_ORDER, RGB_DENOISE_FOCUS_ORDER,
 };
-use rusttable_ui::{CAMERA_FOCUS_ORDER, IMPORT_SESSION_FOCUS_ORDER};
+use rusttable_ui::{
+    CAMERA_FOCUS_ORDER, IMPORT_SESSION_FOCUS_ORDER, MASK_MANAGER_FOCUS_ORDER,
+    MULTISCALE_RETOUCH_FOCUS_ORDER,
+};
 
 const UI_SOURCES: &[&str] = &[
     include_str!("../src/external_editor/model.rs"),
@@ -28,6 +31,12 @@ const UI_SOURCES: &[&str] = &[
     include_str!("../src/import/session_model.rs"),
     include_str!("../src/import/session_controller.rs"),
     include_str!("../src/import/session_view.rs"),
+    include_str!("../src/mask_manager/model.rs"),
+    include_str!("../src/mask_manager/controller.rs"),
+    include_str!("../src/mask_manager/view.rs"),
+    include_str!("../src/multiscale_retouch/model.rs"),
+    include_str!("../src/multiscale_retouch/controller.rs"),
+    include_str!("../src/multiscale_retouch/view.rs"),
 ];
 
 const CAMERA_IMPORT_SOURCES: &[&str] = &[
@@ -72,6 +81,7 @@ fn ai_surfaces_have_stable_keyboard_and_status_contracts() {
         RGB_DENOISE_FOCUS_ORDER.as_slice(),
         RAW_DENOISE_FOCUS_ORDER.as_slice(),
         AI_BATCH_FOCUS_ORDER.as_slice(),
+        MULTISCALE_RETOUCH_FOCUS_ORDER.as_slice(),
     ] {
         let unique = order
             .iter()
@@ -82,6 +92,13 @@ fn ai_surfaces_have_stable_keyboard_and_status_contracts() {
         assert!(order.iter().any(|id| id.ends_with("cancel")));
         assert!(!order.iter().any(|id| id.contains("path")));
     }
+    let mask_order = MASK_MANAGER_FOCUS_ORDER.as_slice();
+    let unique = mask_order
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(unique.len(), mask_order.len());
+    assert!(mask_order.iter().any(|id| id.ends_with("status")));
 }
 
 #[test]
