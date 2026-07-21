@@ -527,6 +527,9 @@ pub fn build_history_panel(
             actions.append(&next);
             body.append(&actions);
             let entries = gtk4::Box::new(gtk4::Orientation::Vertical, 1);
+            if history.entries().next().is_none() {
+                append_status(&entries, "no edit history for this photo");
+            }
             for (index, entry) in history.entries().enumerate() {
                 let button = panel_button(
                     &format!("history-entry-{}", entry.id().get()),
@@ -585,6 +588,9 @@ pub fn build_snapshots_panel(
             toolbar.append(&take);
             toolbar.append(&compare);
             body.append(&toolbar);
+            if snapshots.entries().next().is_none() {
+                append_status(&body, "no saved snapshots for this photo");
+            }
             for entry in snapshots.entries() {
                 let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
                 let select = panel_button(

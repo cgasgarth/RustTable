@@ -39,7 +39,10 @@ use crate::import::{
 };
 use crate::input_mapping::InputMappingEditor;
 use crate::neural_restore::NeuralRestorePanel;
-use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
+use crate::presentation::{
+    DarkroomHistoryViewModel, DarkroomPanelActionHandler, DarkroomPanelProjection,
+    DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
+};
 use crate::viewport_presentation::{
     DisplayPresentationFrame, PresentationStatus, ViewportGeneration,
 };
@@ -334,6 +337,18 @@ impl GtkShell {
             .set_viewport_selection(photo_id, Revision::ZERO, generation);
     }
 
+    #[must_use]
+    pub fn darkroom_panel_target(&self) -> Option<DarkroomPanelTarget> {
+        let viewport = self.darkroom.viewport_state();
+        viewport.photo_id().map(|photo_id| {
+            DarkroomPanelTarget::new(
+                photo_id,
+                viewport.generation(),
+                viewport.edit_revision().unwrap_or(Revision::ZERO),
+            )
+        })
+    }
+
     /// Clears the old texture while the selected preview and its histogram are computed off-loop.
     pub fn set_darkroom_preview_loading(&self) {
         self.darkroom_preview.set_loading();
@@ -389,6 +404,22 @@ impl GtkShell {
     /// Projects a controller-owned darkroom status or typed error.
     pub fn set_darkroom_status(&self, text: &str) {
         self.darkroom.set_status(text);
+    }
+
+    pub fn set_history_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomHistoryViewModel>,
+        handler: Option<DarkroomPanelActionHandler>,
+    ) {
+        self.darkroom.set_history_projection(projection, handler);
+    }
+
+    pub fn set_snapshots_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomSnapshotsViewModel>,
+        handler: Option<DarkroomPanelActionHandler>,
+    ) {
+        self.darkroom.set_snapshots_projection(projection, handler);
     }
 
     /// Returns the Darktable-shaped selected-photo PNG export module.
