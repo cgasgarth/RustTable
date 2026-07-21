@@ -9,6 +9,8 @@ pub use registry_clahe::clahe_definition;
 #[path = "registry_defringe.rs"]
 mod registry_defringe;
 pub use registry_defringe::defringe_definition;
+#[path = "registry_clipping.rs"]
+mod registry_clipping;
 #[path = "registry_liquify.rs"]
 mod registry_liquify;
 use super::{
@@ -25,12 +27,12 @@ use crate::descriptor::{
     scalepixels_descriptor, shadhi_descriptor, soften_descriptor, temperature_descriptor,
     vignette_descriptor,
 };
+pub use registry_clipping::clipping_definition;
 pub use registry_liquify::liquify_definition;
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-
 pub(super) fn unavailable(reason: &str) -> OperationCapability {
     OperationCapability {
         backend: ExecutionBackend::Cpu,
@@ -157,7 +159,6 @@ pub(super) fn snapshot_hash(definitions: &[OperationDefinition]) -> [u8; 32] {
     }
     hasher.finalize().into()
 }
-
 pub(super) fn hex(bytes: &[u8; 32]) -> String {
     let mut output = String::with_capacity(64);
     for byte in bytes {
@@ -165,11 +166,9 @@ pub(super) fn hex(bytes: &[u8; 32]) -> String {
     }
     output
 }
-
 pub(super) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     crate::registry_reconstruction::operation_descriptor_for(operation)
 }
-
 fn prepare_exposure(
     operation: &Operation,
     descriptor: &DescriptorId,
@@ -974,6 +973,7 @@ macro_rules! builtin_operations {
             $crate::registry::vignette_definition,
             $crate::registry::graduatednd_definition,
             $crate::registry::crop_definition,
+            $crate::registry::clipping_definition,
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,
             $crate::registry::scalepixels_definition,

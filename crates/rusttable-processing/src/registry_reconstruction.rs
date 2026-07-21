@@ -87,6 +87,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Perspective { .. } => {
             crate::descriptor::perspective_descriptor().id
         }
+        crate::ProcessingOperationKind::Clipping { .. } => {
+            crate::descriptor::clipping_descriptor().id
+        }
         crate::ProcessingOperationKind::LensCorrection { .. } => {
             crate::descriptor::lenscorrection_descriptor().id
         }

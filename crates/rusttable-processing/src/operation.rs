@@ -1,6 +1,7 @@
 use crate::operations::{
     basicadj::BasicAdjConfig,
     bloom::BloomConfig,
+    clipping::ClippingConfig,
     colorcorrection::ColorCorrectionConfig,
     colorin::ColorInConfig,
     colorout::ColorOutConfig,
@@ -41,8 +42,8 @@ mod operation_geometry;
 #[path = "operation_parameters.rs"]
 mod operation_parameters;
 pub(crate) use operation_geometry::{
-    compile_enlargecanvas, compile_finalscale, compile_lenscorrection, compile_perspective,
-    compile_scalepixels,
+    compile_clipping, compile_enlargecanvas, compile_finalscale, compile_lenscorrection,
+    compile_perspective, compile_scalepixels,
 };
 #[path = "operation_censorize.rs"]
 mod operation_censorize;
@@ -140,6 +141,9 @@ pub enum ProcessingOperationKind {
     },
     Perspective {
         config: PerspectiveConfig,
+    },
+    Clipping {
+        config: ClippingConfig,
     },
     LensCorrection {
         config: LensCorrectionConfig,

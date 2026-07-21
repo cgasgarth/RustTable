@@ -45,13 +45,13 @@ pub use color::{
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
     basicadj_descriptor, bloom_descriptor, censorize_descriptor, clahe_descriptor,
-    color_reconstruction_descriptor, colorin_descriptor, crop_descriptor, defringe_descriptor,
-    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
-    flip_descriptor, graduatednd_descriptor, grain_descriptor, highlights_descriptor,
-    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor, liquify_descriptor,
-    mask_manager_descriptor, perspective_descriptor, primaries_descriptor, retouch_descriptor,
-    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor,
-    temperature_descriptor, vignette_descriptor,
+    clipping_descriptor, color_reconstruction_descriptor, colorin_descriptor, crop_descriptor,
+    defringe_descriptor, dither_descriptor, enlargecanvas_descriptor, exposure_descriptor,
+    finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
+    highlights_descriptor, invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
+    liquify_descriptor, mask_manager_descriptor, perspective_descriptor, primaries_descriptor,
+    retouch_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, EvaluationError, evaluate, prepare_basicadj_plans,

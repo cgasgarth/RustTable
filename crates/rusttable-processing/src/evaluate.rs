@@ -10,7 +10,6 @@ use crate::{
 use rusttable_core::OperationId;
 use sha2::Digest;
 use std::{collections::BTreeMap, fmt};
-
 #[path = "evaluate_basicadj.rs"]
 mod evaluate_basicadj;
 #[path = "evaluate_liquify.rs"]
@@ -671,6 +670,7 @@ fn apply_operation_with_plans(
         | ProcessingOperationKind::FinalScale { .. }
         | ProcessingOperationKind::EnlargeCanvas { .. }
         | ProcessingOperationKind::Perspective { .. }
+        | ProcessingOperationKind::Clipping { .. }
         | ProcessingOperationKind::LensCorrection { .. } => Err(operation_error(
             step_index,
             operation_id,
