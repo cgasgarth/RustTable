@@ -5,8 +5,6 @@ pub mod ai_batch;
 pub mod ai_models;
 pub mod camera;
 pub mod collection;
-pub mod darkroom_histogram;
-pub mod display_profile;
 pub mod external_editor;
 pub mod gui;
 pub mod import;
@@ -45,11 +43,6 @@ pub use camera::{
     CameraViewModel,
 };
 pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
-pub use darkroom_histogram::{
-    DARKROOM_HISTOGRAM_BINS, DARKROOM_HISTOGRAM_MAX_SAMPLES, HistogramBin, HistogramChannel,
-    HistogramData, HistogramError, HistogramSample,
-};
-pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use external_editor::{
     ArgumentRow, ArgumentRowError, CompletionAction, EXTERNAL_EDITOR_FOCUS_ORDER,
     ExecutableApproval, ExecutableIdentity, ExternalEditorAction, ExternalEditorController,
@@ -73,6 +66,7 @@ pub use gtk_shell::{
     NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole,
     apply_theme_role, darktable_theme_css, install_darktable_theme, reference_modules,
 };
+pub use gui::{DisplayProfileBanner, GtkMonitorInventory};
 pub use import::{
     IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, IMPORT_SESSION_FOCUS_ORDER, ImportAction,
     ImportDialog, ImportItemOutcome, ImportPanelViewModel, ImportPlace, ImportRequest,
@@ -89,6 +83,10 @@ pub use input_mapping::{
     MappingProfile, MappingSnapshot, ResetScope, SoftTakeover,
 };
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
+pub use libs::histogram::{
+    DARKROOM_HISTOGRAM_BINS, DARKROOM_HISTOGRAM_MAX_SAMPLES, HistogramBin, HistogramChannel,
+    HistogramData, HistogramError, HistogramSample,
+};
 pub use mask_manager::{
     MASK_MANAGER_FOCUS_ORDER, MASK_MANAGER_MAX_FEATHER, MaskCombination, MaskConsumptionState,
     MaskGroupOption, MaskManagerAction, MaskManagerCapability, MaskManagerController,

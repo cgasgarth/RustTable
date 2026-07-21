@@ -87,7 +87,7 @@ impl RedbCatalogRepository {
         path: &Path,
         before_commit: Option<BeforeCommitHook>,
     ) -> Result<Self, RepositoryError> {
-        let database = Arc::new(schema::open(path)?);
+        let database = schema::open(path)?;
         Ok(Self {
             database: Arc::clone(&database),
             imports: RedbImportRepository::from_database(Arc::clone(&database)),

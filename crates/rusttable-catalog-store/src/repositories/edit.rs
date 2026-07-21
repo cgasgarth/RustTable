@@ -25,7 +25,7 @@ impl RedbEditRepository {
     /// Returns a typed unavailable or corrupt-persisted-data error.
     pub fn open(path: &Path) -> Result<Self, EditRepositoryError> {
         Ok(Self {
-            database: Arc::new(schema::open(path).map_err(|error| map_schema_error(&error))?),
+            database: schema::open(path).map_err(|error| map_schema_error(&error))?,
         })
     }
 

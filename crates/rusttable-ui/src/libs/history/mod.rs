@@ -9,7 +9,11 @@ use std::{cell::RefCell, fmt, rc::Rc};
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
-use super::{PresentationText, PresentationTextError};
+use crate::libs::panel::{
+    DarkroomPanelAction, DarkroomPanelActionHandler, DarkroomPanelProjection, DarkroomPanelState,
+    append_status, panel_button, panel_expander,
+};
+use crate::presentation::{PresentationText, PresentationTextError};
 
 /// Stable identity for one visible history entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -531,6 +535,102 @@ fn validate_selection(selected: Option<usize>, entries: usize) -> Result<(), Dar
         return Err(DarkroomHistoryError::InvalidSelection { selected, entries });
     }
     Ok(())
+}
+
+#[must_use]
+pub fn build_history_panel(
+    projection: &DarkroomPanelProjection<DarkroomHistoryViewModel>,
+    handler: Option<DarkroomPanelActionHandler>,
+) -> gtk4::Expander {
+    let body = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
+    match projection.state() {
+        DarkroomPanelState::Empty => append_status(&body, "select a photo to view edit history"),
+        DarkroomPanelState::Loading => append_status(&body, "loading edit history…"),
+        DarkroomPanelState::Error(error) => {
+            append_status(&body, &format!("Error · {}", error.as_str()));
+        }
+        DarkroomPanelState::Ready(history) => {
+            let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+            let previous = panel_button("history-previous", "Undo");
+            let next = panel_button("history-next", "Redo");
+            let branch = panel_button("history-branch", "New branch");
+            actions.append(&previous);
+            actions.append(&next);
+            actions.append(&branch);
+            body.append(&actions);
+            let entries = gtk4::Box::new(gtk4::Orientation::Vertical, 1);
+            if history.entries().next().is_none() {
+                append_status(&entries, "no edit history for this photo");
+            }
+            for (index, entry) in history.entries().enumerate() {
+                let button = panel_button(
+                    &format!("history-entry-{}", entry.id().get()),
+                    entry.label().as_str(),
+                );
+                if history.selected_index() == Some(index) {
+                    button.add_css_class("selected");
+                }
+                if let (Some(handler), Some(target)) = (handler.clone(), projection.target()) {
+                    let revision = projection.revision();
+                    button.connect_clicked(move |_| {
+                        handler(DarkroomPanelAction::SelectHistory {
+                            target,
+                            revision,
+                            index,
+                        });
+                    });
+                }
+                entries.append(&button);
+            }
+            body.append(&entries);
+            if let (Some(handler), Some(target)) = (handler, projection.target()) {
+                connect_history_button(
+                    &previous,
+                    handler.clone(),
+                    target,
+                    projection.revision(),
+                    true,
+                );
+                connect_history_button(
+                    &next,
+                    handler.clone(),
+                    target,
+                    projection.revision(),
+                    false,
+                );
+                let revision = projection.revision();
+                let name = format!("branch-{}", revision.get().saturating_add(1));
+                branch.connect_clicked(move |_| {
+                    handler(DarkroomPanelAction::CreateBranch {
+                        target,
+                        revision,
+                        name: name.clone(),
+                    });
+                });
+            }
+        }
+    }
+    panel_expander("darkroom-history", "history", projection.expanded(), &body)
+}
+
+fn connect_history_button(
+    button: &gtk4::Button,
+    handler: DarkroomPanelActionHandler,
+    target: crate::libs::panel::DarkroomPanelTarget,
+    revision: Revision,
+    previous: bool,
+) {
+    button.connect_clicked(move |_| {
+        handler(DarkroomPanelAction::NavigateHistory {
+            target,
+            revision,
+            direction: if previous {
+                HistoryDirection::Previous
+            } else {
+                HistoryDirection::Next
+            },
+        });
+    });
 }
 
 #[cfg(test)]

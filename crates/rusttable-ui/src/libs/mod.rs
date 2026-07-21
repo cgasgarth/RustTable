@@ -1,4 +1,9 @@
 pub(crate) mod collect;
 pub(crate) mod export;
+pub(crate) mod histogram;
+pub(crate) mod history;
+pub(crate) mod image_information;
 pub(crate) mod navigation;
+pub(crate) mod panel;
 pub(crate) mod profiles;
+pub(crate) mod snapshots;

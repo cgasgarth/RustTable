@@ -26,7 +26,7 @@ impl RedbImportRepository {
     /// Returns a typed unavailable or corrupt-persisted-data error.
     pub fn open(path: &Path) -> Result<Self, RepositoryError> {
         Ok(Self {
-            database: Arc::new(schema::open(path)?),
+            database: schema::open(path)?,
         })
     }
 

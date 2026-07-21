@@ -21,9 +21,7 @@ pub struct RedbCollectionRepository {
 impl RedbCollectionRepository {
     pub fn open(path: &Path) -> Result<Self, CollectionRepositoryError> {
         let database = schema::open(path).map_err(|error| map_schema_error(&error))?;
-        Ok(Self {
-            database: Arc::new(database),
-        })
+        Ok(Self { database })
     }
 
     /// Rechecks the state and all derived indexes without changing the catalog.

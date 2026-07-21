@@ -6,6 +6,7 @@
 
 mod ai_surfaces;
 pub(crate) mod darktable_spec;
+pub(crate) mod display_profile;
 mod header;
 pub(crate) mod model;
 pub(crate) mod runtime;
@@ -24,7 +25,6 @@ pub(crate) use crate::views::lighttable::toolbar as lighttable_toolbar;
 pub(crate) use crate::widgets::canvas as viewport_canvas;
 pub(crate) use crate::widgets::preview as photo_preview;
 
-pub use crate::display_profile::DisplayProfileBanner;
 pub use crate::import::ImportAction;
 pub use crate::iop::exposure::ExposurePanel;
 pub use collection_controls::{
@@ -59,6 +59,7 @@ pub use darktable_spec::{
     PanelSlot as VisualPanelSlot, SidePanelWidths, THUMBNAIL_METRICS, TOP_BAR_SECTIONS,
     ThumbnailMetrics, TopBarSection, ViewMode, darkroom_window_layout,
 };
+pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
 pub use lighttable_interaction::{
     CullingRestriction, LighttableInteractionState, LighttableLayout, LighttableSelectionAction,

@@ -12,7 +12,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-use crate::display_profile::DisplayProfileBanner;
+use crate::gui::display_profile::DisplayProfileBanner;
 use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};

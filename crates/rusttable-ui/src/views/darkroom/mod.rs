@@ -17,6 +17,7 @@ mod surfaces;
 mod viewport;
 pub(super) use crate::gui::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
 use crate::iop::exposure::ExposurePanel;
+use crate::libs::histogram::{HistogramData, HistogramError, HistogramSample};
 use crate::presentation::{
     DarkroomControlValue, DarkroomHistoryViewModel, DarkroomPanelActionHandler,
     DarkroomPanelProjection, DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
@@ -27,7 +28,6 @@ use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
 };
 use crate::widgets::preview::PhotoPreview;
-use crate::{HistogramData, HistogramError, HistogramSample};
 use crate::{MaskManagerAction, MaskManagerPanel, MaskManagerSnapshot};
 use crate::{MultiscaleRetouchAction, MultiscaleRetouchPanel, MultiscaleRetouchSnapshot};
 use interaction::{
