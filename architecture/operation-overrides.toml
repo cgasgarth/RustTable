@@ -9202,8 +9202,8 @@ evidence_hash = "a625565145748277d704132197a481457f0a5c72283ea52aef56603305843b8
 version = 2
 byte_size = 512
 layout_hash = "a9522dc2bd102127538992d595a43070e6e82d545579b451370fc1936db6be71"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "generated.bytes.decode.v2"
+opaque_blocking = false
 fixture_id = "operation.spots.params.v2"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"

@@ -1,0 +1,10 @@
+schema = "rusttable.spots.fixture.v1"
+operation = "spots"
+parameter_versions = [1, 2]
+legacy_v1_bytes = 1472
+current_v2_bytes = 512
+max_entries = 64
+ordering = "source-immutable-row-major"
+modes = ["clone", "heal"]
+roi = "destination-and-transformed-source-union"
+future_history = "opaque-and-blocking"

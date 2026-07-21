@@ -570,6 +570,20 @@ source = "deterministic-generated-fixture"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-testkit::qualification"
 [[fixtures]]
+id = "corpus.operation.spots"
+path = "fixtures/corpus/assets/operation-spots.toml"
+size = 303
+sha256 = "55e98b29cec6e50a417d7c1960117520fc0749173426a0fcd9b38b8ffbac25bb"
+media_type = "application/descriptor"
+privacy = "synthetic"
+consumers = ["rusttable-processing", "rusttable-testkit"]
+consuming_issue_ranges = ["#391"]
+artifact_class = "descriptor"
+format = "toml"
+source = "deterministic-generated-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-processing::spots"
+[[fixtures]]
 id = "corpus.geometry.path"
 path = "fixtures/corpus/assets/geometry-path.raw"
 size = 109

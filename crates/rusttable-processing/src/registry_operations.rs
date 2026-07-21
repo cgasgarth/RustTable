@@ -11,8 +11,6 @@ mod registry_defringe;
 pub use registry_defringe::defringe_definition;
 #[path = "registry_liquify.rs"]
 mod registry_liquify;
-pub use registry_liquify::liquify_definition;
-
 use super::{
     CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
     MigrationBinding, OperationCapability, OperationDefinition, OperationDefinitionFactory,
@@ -27,6 +25,7 @@ use crate::descriptor::{
     scalepixels_descriptor, shadhi_descriptor, soften_descriptor, temperature_descriptor,
     vignette_descriptor,
 };
+pub use registry_liquify::liquify_definition;
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -985,6 +984,7 @@ macro_rules! builtin_operations {
             $crate::registry::liquify_definition,
             $crate::registry::mask_manager_definition,
             $crate::registry::retouch_definition,
+            $crate::registry::spots_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,

@@ -113,6 +113,13 @@ pub use operations::retouch::{
     RetouchConfigError, RetouchExecutionError, RetouchFillMode, RetouchForm, RetouchParameters,
     RetouchPixel, RetouchPlan, RetouchReceipt, RetouchScale,
 };
+pub use operations::spots::{
+    SPOTS_COMPATIBILITY_ID, SPOTS_IMPLEMENTATION_VERSION, SPOTS_MAX_ENTRIES,
+    SPOTS_PARAMETER_BYTES_V1, SPOTS_PARAMETER_BYTES_V2, SPOTS_RUST_ID, SPOTS_SCHEMA_VERSION,
+    SpotsCodecError, SpotsConfig, SpotsEntry, SpotsExecutionError, SpotsForm, SpotsFormKind,
+    SpotsHistory, SpotsLegacySpot, SpotsMode, SpotsParametersV1, SpotsParametersV2, SpotsPlan,
+    SpotsReceipt,
+};
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,
     encode_linear_srgb,

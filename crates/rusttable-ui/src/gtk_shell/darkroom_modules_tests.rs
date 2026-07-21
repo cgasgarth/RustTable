@@ -193,6 +193,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "liquify",
             "mask_manager",
             "retouch",
+            "spots",
             "highlights",
             "colorreconstruction",
             "colorin",

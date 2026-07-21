@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "374d635255acd8094ca0ec2ddea50db6a24b10707741874a56e04bfdfa0628b1",
+  "registry_hash": "57e0fb7d646b83ff62f49e39bb11bc79893a169f3b7f8cd8304eea398e9a3f9d",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -1609,21 +1609,21 @@
     {
       "identity": "darktable:spots:src/iop/spots.c:v2",
       "compatibility_name": "spots",
-      "rust_id": null,
+      "rust_id": "rusttable.spots",
       "reference_path": "src/iop/spots.c",
       "descriptor_version": 2,
       "parameter_versions": [
         1,
         2
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 118,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "DeprecatedImplemented",
+      "reason": "deprecated compatibility operation; hidden from new-edit discovery"
     },
     {
       "identity": "darktable:temperature:src/iop/temperature.c:v4",
@@ -2416,6 +2416,25 @@
       "reason": null
     },
     {
+      "identity": "rusttable.spots",
+      "compatibility_name": "spots",
+      "rust_id": "rusttable.spots",
+      "reference_path": "",
+      "descriptor_version": 2,
+      "parameter_versions": [
+        1,
+        2
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 32,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "DeprecatedImplemented",
+      "reason": "deprecated compatibility operation; hidden from new-edit discovery"
+    },
+    {
       "identity": "rusttable.temperature",
       "compatibility_name": "temperature",
       "rust_id": "rusttable.temperature",
@@ -2429,7 +2448,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 32,
+      "order": 33,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
@@ -2450,7 +2469,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 33,
+      "order": 34,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,

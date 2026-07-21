@@ -21,6 +21,7 @@ use crate::operations::{
     scalepixels::ScalePixelsConfig,
     shadhi::ShadhiConfig,
     soften::SoftenConfig,
+    spots::SpotsParametersV2,
     temperature::{TemperatureConfig, WhiteBalanceSource},
     vignette::VignetteConfig,
 };
@@ -61,6 +62,8 @@ mod operation_masks;
 mod operation_retouch;
 #[path = "operation_spatial.rs"]
 mod operation_spatial;
+#[path = "operation_spots.rs"]
+mod operation_spots;
 #[path = "operation_text.rs"]
 mod operation_text;
 pub(crate) use operation_basicadj::compile_basicadj;
@@ -194,6 +197,9 @@ pub enum ProcessingOperationKind {
     },
     Retouch {
         config: crate::operations::retouch::RetouchParameters,
+    },
+    Spots {
+        parameters: Box<SpotsParametersV2>,
     },
     Liquify {
         config: crate::operations::liquify::LiquifyConfig,
@@ -349,6 +355,9 @@ impl ProcessingOperation {
     }
     pub(crate) fn compile_retouch(operation: &Operation) -> Result<Self, OperationCompileError> {
         operation_retouch::compile_retouch(operation)
+    }
+    pub(crate) fn compile_spots(operation: &Operation) -> Result<Self, OperationCompileError> {
+        operation_spots::compile_spots(operation)
     }
     pub(crate) fn compile_liquify(operation: &Operation) -> Result<Self, OperationCompileError> {
         let parameter = ParameterName::new("payload").expect("schema name");
