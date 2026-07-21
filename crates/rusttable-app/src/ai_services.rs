@@ -2,6 +2,10 @@
 //!
 //! These adapters are intentionally boring: they make the GTK surfaces usable and truthful
 //! during the backend transition without claiming model installation or inference succeeded.
+//!
+//! Integration seam for #778: once #478 lands, the application composition root should inject
+//! its typed registry implementation here. The UI must not acquire package storage, runtime
+//! handles, native provider diagnostics, or model persistence of its own.
 
 use std::path::PathBuf;
 
@@ -122,5 +126,28 @@ impl NeuralRestorePreviewPort for UnavailableNeuralRestoreService {
     }
     fn cancel_preview(&mut self, _job: u64) -> Result<(), PreviewServiceError> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusttable_ui::AiModelsFailure;
+
+    #[test]
+    fn unavailable_model_adapter_is_explicit_and_privacy_safe() {
+        let mut service = UnavailableAiModelsService;
+        let path = PathBuf::from("/private/photos/secret/model.rtmodel");
+        assert_eq!(
+            service.stage_local_package(path),
+            Err(AiModelsServiceError::Unavailable)
+        );
+        assert_eq!(service.snapshot(), Err(AiModelsServiceError::Unavailable));
+        let message = AiModelsFailure::ServiceUnavailable.message();
+        assert_eq!(
+            message,
+            "AI model service is unavailable; no package operation was performed."
+        );
+        assert!(!message.contains("secret"));
     }
 }

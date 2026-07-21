@@ -5,7 +5,8 @@
 use std::fmt;
 use std::path::PathBuf;
 
-pub const AI_MODELS_FOCUS_ORDER: [&str; 10] = [
+pub const AI_MODELS_FOCUS_ORDER: [&str; 11] = [
+    "ai-models-refresh",
     "ai-models-package-picker",
     "ai-models-confirm-install",
     "ai-models-provider-policy",
@@ -17,6 +18,17 @@ pub const AI_MODELS_FOCUS_ORDER: [&str; 10] = [
     "ai-models-cancel",
     "ai-models-status",
 ];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiModelsDisplayState {
+    Loading,
+    Empty,
+    Ready,
+    UnavailableProvider,
+    ActiveRun,
+    Failure,
+    Unavailable,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AiTask {
@@ -336,6 +348,7 @@ impl InstalledModel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AiModelsSnapshot {
+    generation: u64,
     service_state: ModelServiceState,
     models: Vec<InstalledModel>,
     provider_policy: AiProviderPolicy,
@@ -348,6 +361,7 @@ impl AiModelsSnapshot {
     #[must_use]
     pub fn unavailable(reason: impl Into<String>) -> Self {
         Self {
+            generation: 0,
             service_state: ModelServiceState::Unavailable,
             models: Vec::new(),
             provider_policy: AiProviderPolicy::Auto,
@@ -363,6 +377,7 @@ impl AiModelsSnapshot {
     #[must_use]
     pub fn available(models: Vec<InstalledModel>) -> Self {
         Self {
+            generation: 0,
             service_state: ModelServiceState::Available,
             models,
             provider_policy: AiProviderPolicy::Auto,
@@ -373,6 +388,29 @@ impl AiModelsSnapshot {
             )],
             announcement: "Model registry ready".to_owned(),
         }
+    }
+
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn with_generation(mut self, generation: u64) -> Self {
+        self.generation = generation;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_service_state(mut self, service_state: ModelServiceState) -> Self {
+        self.service_state = service_state;
+        self
+    }
+
+    #[must_use]
+    pub fn with_available_providers(mut self, providers: Vec<ProviderCapability>) -> Self {
+        self.available_providers = providers;
+        self
     }
 
     #[must_use]
@@ -394,6 +432,21 @@ impl AiModelsSnapshot {
     #[must_use]
     pub fn available_providers(&self) -> &[ProviderCapability] {
         &self.available_providers
+    }
+
+    #[must_use]
+    pub fn provider(&self, provider: AiProvider) -> Option<&ProviderCapability> {
+        self.available_providers
+            .iter()
+            .find(|capability| capability.provider() == provider)
+    }
+
+    #[must_use]
+    pub fn provider_unavailable(&self) -> bool {
+        self.provider_policy.provider().is_some_and(|provider| {
+            self.provider(provider)
+                .is_none_or(|capability| capability.state() == QualificationState::Unavailable)
+        })
     }
     #[must_use]
     pub fn announcement(&self) -> &str {
@@ -570,6 +623,10 @@ pub struct AiModelsViewModel {
     qualification: Option<QualificationJob>,
     failure: Option<AiModelsFailure>,
     status: String,
+    loading: bool,
+    selected_task: AiTask,
+    selected_model: Option<ModelHash>,
+    selected_provider: AiProvider,
 }
 
 impl Default for AiModelsViewModel {
@@ -589,7 +646,19 @@ impl AiModelsViewModel {
             staging: None,
             qualification: None,
             failure: None,
+            loading: false,
+            selected_task: AiTask::RawBayerDenoise,
+            selected_model: None,
+            selected_provider: AiProvider::Cpu,
         }
+    }
+
+    #[must_use]
+    pub fn loading() -> Self {
+        let mut state = Self::unavailable();
+        "Loading AI model registry…".clone_into(&mut state.status);
+        state.loading = true;
+        state
     }
     #[must_use]
     pub const fn snapshot(&self) -> &AiModelsSnapshot {
@@ -611,10 +680,89 @@ impl AiModelsViewModel {
     pub fn status(&self) -> &str {
         &self.status
     }
+
+    #[must_use]
+    pub fn display_state(&self) -> AiModelsDisplayState {
+        if self.loading {
+            return AiModelsDisplayState::Loading;
+        }
+        if self.failure.is_some() {
+            return AiModelsDisplayState::Failure;
+        }
+        if self.qualification.is_some() {
+            return AiModelsDisplayState::ActiveRun;
+        }
+        if self.snapshot.service_state() == ModelServiceState::Unavailable {
+            return AiModelsDisplayState::Unavailable;
+        }
+        if self.snapshot.service_state() == ModelServiceState::Degraded
+            || self.snapshot.provider_unavailable()
+        {
+            return AiModelsDisplayState::UnavailableProvider;
+        }
+        if self.snapshot.models().is_empty() {
+            return AiModelsDisplayState::Empty;
+        }
+        AiModelsDisplayState::Ready
+    }
+
+    #[must_use]
+    pub const fn selected_task(&self) -> AiTask {
+        self.selected_task
+    }
+
+    #[must_use]
+    pub const fn selected_model(&self) -> Option<&ModelHash> {
+        self.selected_model.as_ref()
+    }
+
+    #[must_use]
+    pub const fn selected_provider(&self) -> AiProvider {
+        self.selected_provider
+    }
+
+    #[must_use]
+    pub const fn is_loading(&self) -> bool {
+        self.loading
+    }
+
+    pub fn begin_refresh(&mut self) {
+        self.loading = true;
+        self.failure = None;
+        "Loading installed AI model packages…".clone_into(&mut self.status);
+    }
+
+    pub fn select_provider(&mut self, provider: AiProvider) {
+        self.selected_provider = provider;
+    }
+
+    pub fn select_task(&mut self, task: AiTask) {
+        self.selected_task = task;
+        self.reconcile_selection();
+    }
+
+    pub fn select_model(&mut self, model: Option<ModelHash>) {
+        self.selected_model = model;
+        self.reconcile_selection();
+    }
+
     pub fn replace_snapshot(&mut self, snapshot: AiModelsSnapshot) {
+        let _ = self.replace_snapshot_if_newer(snapshot);
+    }
+
+    pub fn replace_snapshot_if_newer(&mut self, snapshot: AiModelsSnapshot) -> bool {
+        if snapshot.generation() < self.snapshot.generation() {
+            self.loading = false;
+            "A stale model registry refresh was ignored; current state kept."
+                .clone_into(&mut self.status);
+            return false;
+        }
         snapshot.announcement().clone_into(&mut self.status);
         self.snapshot = snapshot;
         self.failure = None;
+        self.loading = false;
+        self.reconcile_selection();
+        true
     }
     pub fn set_staging(&mut self, staging: Option<InstallSummary>) {
         self.staging = staging;
@@ -625,10 +773,43 @@ impl AiModelsViewModel {
     pub fn announce(&mut self, value: impl Into<String>) {
         self.status = value.into();
         self.failure = None;
+        self.loading = false;
     }
     pub fn fail(&mut self, failure: AiModelsFailure) {
         failure.message().clone_into(&mut self.status);
         self.failure = Some(failure);
+        self.loading = false;
+    }
+
+    fn reconcile_selection(&mut self) {
+        let task_models = self
+            .snapshot
+            .models()
+            .iter()
+            .filter(|model| model.task() == self.selected_task)
+            .collect::<Vec<_>>();
+        let selected_is_valid = self
+            .selected_model
+            .as_ref()
+            .is_some_and(|hash| task_models.iter().any(|model| model.hash() == hash));
+        if selected_is_valid {
+            return;
+        }
+        let configured = self
+            .snapshot
+            .task_defaults()
+            .iter()
+            .find(|(task, _)| *task == self.selected_task)
+            .and_then(|(_, hash)| hash.as_ref())
+            .and_then(|hash| task_models.iter().find(|model| model.hash() == hash))
+            .map(|model| model.hash().clone());
+        self.selected_model = configured.or_else(|| {
+            task_models
+                .iter()
+                .find(|model| model.enabled())
+                .or_else(|| task_models.first())
+                .map(|model| model.hash().clone())
+        });
     }
 }
 
@@ -639,6 +820,7 @@ pub enum AiModelsAction {
     ConfirmInstall,
     CancelInstall,
     SetProviderPolicy(AiProviderPolicy),
+    SelectQualificationProvider(AiProvider),
     SetTaskDefault {
         task: AiTask,
         model: Option<ModelHash>,
@@ -740,6 +922,66 @@ mod tests {
         assert_eq!(
             state.snapshot().available_providers()[0].state(),
             QualificationState::Unavailable
+        );
+    }
+
+    #[test]
+    fn stale_snapshot_is_ignored_and_selection_survives_new_generation() {
+        let model = InstalledModel::new(
+            "rgb-denoise",
+            "1",
+            hash(),
+            AiTask::RgbDenoise,
+            42,
+            "NCHW f32 1×3×256×256",
+            "256² overlap 16",
+            "linear RGB",
+            vec![ProviderCapability::new(
+                AiProvider::Cpu,
+                QualificationState::Qualified,
+            )],
+        );
+        let model_hash = model.hash().clone();
+        let mut state = AiModelsViewModel::default();
+        state.select_task(AiTask::RgbDenoise);
+        assert!(state.replace_snapshot_if_newer(
+            AiModelsSnapshot::available(vec![model]).with_generation(4)
+        ));
+        assert_eq!(state.selected_model(), Some(&model_hash));
+        assert!(
+            !state.replace_snapshot_if_newer(
+                AiModelsSnapshot::available(Vec::new()).with_generation(3)
+            )
+        );
+        assert_eq!(state.selected_model(), Some(&model_hash));
+        assert_eq!(state.snapshot().generation(), 4);
+    }
+
+    #[test]
+    fn display_state_covers_loading_empty_provider_run_and_failure() {
+        let mut state = AiModelsViewModel::loading();
+        assert_eq!(state.display_state(), AiModelsDisplayState::Loading);
+        state.replace_snapshot(AiModelsSnapshot::available(Vec::new()));
+        assert_eq!(state.display_state(), AiModelsDisplayState::Empty);
+        let mut unavailable_provider =
+            AiModelsSnapshot::available(Vec::new()).with_available_providers(vec![
+                ProviderCapability::new(AiProvider::CoreMl, QualificationState::Unavailable),
+            ]);
+        unavailable_provider.set_provider_policy(AiProviderPolicy::CoreMl);
+        state.replace_snapshot(unavailable_provider);
+        assert_eq!(
+            state.display_state(),
+            AiModelsDisplayState::UnavailableProvider
+        );
+        let model = ModelHash::new("b".repeat(64)).expect("hash");
+        state.set_qualification(Some(QualificationJob::new(1, model, AiProvider::Cpu, 2)));
+        assert_eq!(state.display_state(), AiModelsDisplayState::ActiveRun);
+        state.set_qualification(None);
+        state.fail(AiModelsFailure::InvalidPackage);
+        assert_eq!(state.display_state(), AiModelsDisplayState::Failure);
+        assert_eq!(
+            state.status(),
+            "The selected package did not pass bounded validation."
         );
     }
 }

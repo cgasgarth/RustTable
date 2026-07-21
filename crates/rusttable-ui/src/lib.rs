@@ -25,9 +25,10 @@ pub use ai_batch::{
 };
 pub use ai_models::{
     AI_MODELS_FOCUS_ORDER, AiModelsAction, AiModelsController, AiModelsControllerError,
-    AiModelsFailure, AiModelsPanel, AiModelsServiceError, AiModelsServicePort, AiModelsSnapshot,
-    AiModelsViewModel, AiProvider, AiProviderPolicy, AiTask, InstallSummary, InstalledModel,
-    ModelHash, ModelServiceState, ProviderCapability, QualificationJob,
+    AiModelsDisplayState, AiModelsFailure, AiModelsPanel, AiModelsServiceError,
+    AiModelsServicePort, AiModelsSnapshot, AiModelsViewModel, AiProvider, AiProviderPolicy, AiTask,
+    InstallSummary, InstalledModel, ModelHash, ModelServiceState, ProviderCapability,
+    QualificationJob,
 };
 pub use camera::{
     CAMERA_FOCUS_ORDER, CameraAction, CameraController, CameraControllerError, CameraPanel,
