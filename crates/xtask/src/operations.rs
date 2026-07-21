@@ -220,29 +220,18 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
             .find(|definition| definition.descriptor().id.compatibility_name == operation.name);
         let (rust_id, status, implementation_crate, cpu_supported, gpu_supported, reason) =
             match registered {
-                Some(definition) => (
-                    Some(definition.descriptor().id.rust_id.clone()),
-                    if definition
-                        .descriptor()
-                        .flags
-                        .contains(OperationFlags::DEPRECATED)
-                    {
-                        OperationClassification::DeprecatedImplemented
-                    } else {
-                        OperationClassification::Implemented
-                    },
-                    "rusttable-processing".to_owned(),
-                    definition.cpu().is_some(),
-                    definition.gpu().is_some(),
-                    definition
-                        .descriptor()
-                        .flags
-                        .contains(OperationFlags::DEPRECATED)
-                        .then(|| {
-                            "deprecated compatibility operation; hidden from new-edit discovery"
-                                .to_owned()
-                        }),
-                ),
+                Some(definition) => {
+                    let (status, implementation_crate, cpu, gpu, reason) =
+                        registered_operation_capability(definition);
+                    (
+                        Some(definition.descriptor().id.rust_id.clone()),
+                        status,
+                        implementation_crate,
+                        cpu,
+                        gpu,
+                        reason,
+                    )
+                }
                 None => (
                     None,
                     OperationClassification::IntentionallyUnsupportedBlocking,
@@ -297,6 +286,37 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
         .map_err(|error| format!("operation manifest: serialization failed: {error}"))?;
     rendered.push('\n');
     Ok(rendered)
+}
+
+fn registered_operation_capability(
+    definition: &rusttable_processing::OperationDefinition,
+) -> (OperationClassification, String, bool, bool, Option<String>) {
+    if !definition.availability().is_available() {
+        return (
+            OperationClassification::IntentionallyUnsupportedBlocking,
+            String::new(),
+            definition.cpu().is_some(),
+            definition.gpu().is_some(),
+            definition.availability().reason().map(str::to_owned),
+        );
+    }
+    let deprecated = definition
+        .descriptor()
+        .flags
+        .contains(OperationFlags::DEPRECATED);
+    (
+        if deprecated {
+            OperationClassification::DeprecatedImplemented
+        } else {
+            OperationClassification::Implemented
+        },
+        "rusttable-processing".to_owned(),
+        definition.cpu().is_some(),
+        definition.gpu().is_some(),
+        deprecated.then(|| {
+            "deprecated compatibility operation; hidden from new-edit discovery".to_owned()
+        }),
+    )
 }
 
 #[allow(clippy::too_many_lines)]

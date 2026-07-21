@@ -154,6 +154,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "temperature",
             "bloom",
             "soften",
+            "censorize",
             "vignette",
             "graduatednd",
             "crop",
@@ -192,6 +193,141 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     let vignette = modules.module("vignette").expect("vignette");
     assert!(vignette.controls().control("vignette-center-x").is_some());
     assert!(vignette.availability().is_supported());
+}
+
+#[test]
+fn censorize_projects_exact_controls_but_remains_truthfully_unavailable() {
+    let modules = reference_modules().expect("reference module snapshot");
+    let censorize = modules.module("censorize").expect("censorize module");
+    assert!(censorize.availability().is_unsupported());
+    assert!(!censorize.enabled());
+    assert!(
+        censorize
+            .status_text()
+            .contains("backend is unqualified until #477")
+    );
+    assert_eq!(
+        censorize
+            .controls()
+            .controls()
+            .map(|control| control.id().as_str())
+            .collect::<Vec<_>>(),
+        [
+            "censorize-radius-1",
+            "censorize-pixelate",
+            "censorize-radius-2",
+            "censorize-noise"
+        ]
+    );
+    for id in [
+        "censorize-radius-1",
+        "censorize-pixelate",
+        "censorize-radius-2",
+    ] {
+        let slider = censorize
+            .controls()
+            .control(id)
+            .expect("radius control")
+            .slider_spec()
+            .expect("radius slider");
+        assert_float_eq(slider.minimum(), 0.0);
+        assert_float_eq(slider.maximum(), 500.0);
+        assert_float_eq(slider.default_value(), 0.0);
+    }
+    let noise = censorize
+        .controls()
+        .control("censorize-noise")
+        .expect("noise control")
+        .slider_spec()
+        .expect("noise slider");
+    assert_float_eq(noise.minimum(), 0.0);
+    assert_float_eq(noise.maximum(), 1.0);
+    assert_float_eq(noise.default_value(), 0.0);
+}
+
+fn assert_float_eq(actual: f64, expected: f64) {
+    assert!((actual - expected).abs() < f64::EPSILON);
+}
+
+#[test]
+fn unqualified_censorize_rejects_enable_reset_and_control_actions() {
+    let mut module = reference_modules()
+        .expect("reference modules")
+        .module("censorize")
+        .expect("censorize")
+        .clone();
+    for action in [
+        DarkroomModuleAction::Enable {
+            module_id: "censorize".to_owned(),
+            expected_revision: Revision::ZERO,
+            enabled: true,
+        },
+        DarkroomModuleAction::Reset {
+            module_id: "censorize".to_owned(),
+            expected_revision: Revision::ZERO,
+        },
+        DarkroomModuleAction::Control {
+            module_id: "censorize".to_owned(),
+            expected_revision: Revision::ZERO,
+            id: "censorize-noise".to_owned(),
+            value: DarkroomControlValue::Slider(0.5),
+        },
+    ] {
+        assert!(matches!(
+            module.apply(action),
+            Err(DarkroomModuleError::Unsupported { .. })
+        ));
+        assert_eq!(module.revision(), Revision::ZERO);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn censorize_gtk_panel_keeps_controls_visible_but_insensitive() {
+    if gtk4::init().is_err() {
+        return;
+    }
+    let module = reference_modules()
+        .expect("reference modules")
+        .module("censorize")
+        .expect("censorize")
+        .clone();
+    let panel = build_module_panel(&module);
+    let root: gtk4::Widget = panel.upcast();
+    assert_eq!(root.widget_name(), "censorize");
+    for id in [
+        "censorize-enabled",
+        "censorize-radius-1-widget",
+        "censorize-pixelate-widget",
+        "censorize-radius-2-widget",
+        "censorize-noise-widget",
+        "censorize-reset",
+    ] {
+        assert!(
+            find_widget(&root, id).is_some_and(|widget| !widget.is_sensitive()),
+            "unqualified control {id} must be insensitive"
+        );
+    }
+    let status = find_widget(&root, "censorize-status")
+        .expect("status widget")
+        .downcast::<gtk4::Label>()
+        .expect("status label");
+    assert!(status.text().contains("backend is unqualified until #477"));
+}
+
+#[cfg(target_os = "linux")]
+fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
+    if root.widget_name() == name {
+        return Some(root.clone());
+    }
+    let mut child = root.first_child();
+    while let Some(current) = child {
+        if let Some(found) = find_widget(&current, name) {
+            return Some(found);
+        }
+        child = current.next_sibling();
+    }
+    None
 }
 
 fn bloom_has_typed_sliders(modules: &DarkroomModulesViewModel) -> bool {

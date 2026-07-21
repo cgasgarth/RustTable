@@ -100,6 +100,21 @@ impl GtkDarkroomEditController {
         let photo_id = self
             .selected_photo
             .ok_or(DarkroomModuleError::NoSelection)?;
+        if let Some(module) = self
+            .modules
+            .as_ref()
+            .and_then(|modules| modules.module(action.module_id()))
+            && !module.availability().is_supported()
+        {
+            return Err(DarkroomModuleError::Unsupported {
+                module_id: module.id().to_owned(),
+                reason: module
+                    .availability()
+                    .reason()
+                    .unwrap_or("registry capability is not qualified")
+                    .to_owned(),
+            });
+        }
         let current = self.load_edit(photo_id)?;
         let expected = action.expected_revision();
         if current.revision() != expected {
@@ -485,5 +500,70 @@ mod tests {
                 FiniteF64::new(50.0).expect("finite")
             ))
         );
+    }
+
+    #[test]
+    fn censorize_history_round_trip_projects_values_without_claiming_execution() {
+        let original = Edit::from_parts(
+            EditId::new(5).expect("edit id"),
+            PhotoId::new(2).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(8),
+            [Operation::new_with_opacity(
+                OperationId::new(10).expect("operation id"),
+                OperationKey::new("rusttable.censorize").expect("operation key"),
+                true,
+                OperationOpacity::ONE,
+                [
+                    (
+                        ParameterName::new("radius_1").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(12.0).expect("finite")),
+                    ),
+                    (
+                        ParameterName::new("pixelate").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(24.0).expect("finite")),
+                    ),
+                    (
+                        ParameterName::new("radius_2").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(4.0).expect("finite")),
+                    ),
+                    (
+                        ParameterName::new("noise").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(0.25).expect("finite")),
+                    ),
+                ],
+            )
+            .expect("operation")],
+        )
+        .expect("edit");
+        let modules = project_edit(&original).expect("projection");
+        let censorize = modules.module("censorize").expect("censorize");
+        assert_eq!(censorize.revision(), Revision::from_u64(8));
+        assert!(censorize.enabled());
+        assert_eq!(
+            censorize
+                .controls()
+                .control("censorize-noise")
+                .expect("noise")
+                .value(),
+            DarkroomControlValue::Slider(0.25)
+        );
+
+        let mut controller = GtkDarkroomEditController::new(None);
+        controller.selected_photo = Some(PhotoId::new(2).expect("photo"));
+        controller.modules = Some(modules);
+        let error = controller
+            .apply(&DarkroomModuleAction::Control {
+                module_id: "censorize".to_owned(),
+                expected_revision: Revision::from_u64(8),
+                id: "censorize-noise".to_owned(),
+                value: DarkroomControlValue::Slider(0.5),
+            })
+            .expect_err("unqualified censorize must not persist or execute");
+        assert!(matches!(
+            error,
+            DarkroomModuleError::Unsupported { ref module_id, ref reason }
+                if module_id == "censorize" && reason.contains("#477")
+        ));
     }
 }

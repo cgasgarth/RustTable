@@ -19,6 +19,10 @@ pub enum DarkroomModuleError {
     Preview {
         message: String,
     },
+    Unsupported {
+        module_id: String,
+        reason: String,
+    },
     StaleRevision {
         expected: Revision,
         actual: Revision,
@@ -57,6 +61,9 @@ impl fmt::Display for DarkroomModuleError {
                 write!(formatter, "edit persistence failed: {message}")
             }
             Self::Preview { message } => write!(formatter, "preview refresh failed: {message}"),
+            Self::Unsupported { module_id, reason } => {
+                write!(formatter, "module {module_id} is unavailable: {reason}")
+            }
             Self::StaleRevision { expected, actual } => {
                 write!(
                     formatter,
