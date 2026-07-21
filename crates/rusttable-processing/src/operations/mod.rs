@@ -18,6 +18,7 @@ pub mod enlargecanvas;
 pub mod finalscale;
 pub mod flip;
 pub mod graduatednd;
+pub mod grain;
 pub mod highlights;
 pub mod invert;
 pub mod lenscorrection;

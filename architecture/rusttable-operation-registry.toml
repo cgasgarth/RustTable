@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "ccc07e2bd2f16d042e7ce7d55bfe9456544f25463fb94c064d64b64c469d8fed"
+snapshot_hash = "bd0d22f1f92420e17dcb184ab7caacee7836c87b6ee3c385b7b0eb461a84350e"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -103,6 +103,14 @@ rust_id = "rusttable.graduatednd"
 compatibility_name = "graduatednd"
 descriptor_version = 1
 parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.grain"
+compatibility_name = "grain"
+descriptor_version = 2
+parameter_version = 2
 implementation_version = 1
 status = "available"
 

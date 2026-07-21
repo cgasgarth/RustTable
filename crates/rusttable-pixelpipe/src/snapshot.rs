@@ -375,6 +375,11 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
                 .to_bytes(),
             );
         }
+        ProcessingOperationKind::Grain { config } => {
+            hasher.update([20]);
+            hasher.update(config.parameters().to_bytes());
+            hasher.update(config.seed().to_le_bytes());
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

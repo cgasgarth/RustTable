@@ -730,6 +730,7 @@ pub(crate) fn verify_tiling_source_map(root: &Path, issue: i64) -> Result {
         "rusttable.exposure",
         "rusttable.linear_offset",
         "rusttable.rgb_gain",
+        "rusttable.grain",
         "rusttable.vignette",
         "rusttable.graduatednd",
     ];

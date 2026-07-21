@@ -182,6 +182,21 @@ fn apply_operation(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::Grain { config } => {
+            let plan = crate::operations::grain::GrainPlan::new(*config, dimensions)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            let candidate = plan
+                .execute_window(pixels, pixel_index_offset)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Temperature { config } => {
             let multipliers = config.multipliers();
             apply_channels(

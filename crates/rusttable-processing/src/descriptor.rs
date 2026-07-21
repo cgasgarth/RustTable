@@ -20,6 +20,7 @@ pub use crate::operations::enlargecanvas::enlargecanvas_descriptor;
 pub use crate::operations::finalscale::finalscale_descriptor;
 pub use crate::operations::flip::flip_descriptor;
 pub use crate::operations::graduatednd::graduatednd_descriptor;
+pub use crate::operations::grain::grain_descriptor;
 pub use crate::operations::invert::invert_descriptor;
 pub use crate::operations::lenscorrection::lenscorrection_descriptor;
 pub use crate::operations::perspective::perspective_descriptor;
