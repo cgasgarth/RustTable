@@ -3706,6 +3706,11 @@ dependencies = [
 [[package]]
 name = "rusttable-masks"
 version = "0.1.0"
+dependencies = [
+ "postcard",
+ "serde",
+ "sha2",
+]
 
 [[package]]
 name = "rusttable-metadata"
@@ -3738,6 +3743,7 @@ dependencies = [
  "rusttable-core",
  "rusttable-gpu",
  "rusttable-image",
+ "rusttable-masks",
  "rusttable-processing",
  "sha2",
  "tokio",
@@ -3755,6 +3761,7 @@ dependencies = [
  "rusttable-color",
  "rusttable-core",
  "rusttable-image",
+ "rusttable-masks",
  "serde",
  "serde_json",
  "sha2",

@@ -4,6 +4,7 @@ use std::fmt;
 
 use rusttable_color::ColorEncoding;
 use rusttable_image::ChannelLayout;
+use rusttable_masks::MaskIdentity;
 use rusttable_processing::descriptor::{
     OperationDescriptor, OperationFlags, RoiKind, TilingContract,
 };
@@ -335,6 +336,10 @@ pub enum PreparationError {
         operation_id: u128,
         mask_id: u128,
     },
+    DanglingTypedMask {
+        operation_id: u128,
+        mask_id: MaskIdentity,
+    },
     DanglingBlend {
         operation_id: u128,
         blend_id: u128,
@@ -578,6 +583,19 @@ fn validate_references(snapshot: &PipelineSnapshot) -> Result<(), PreparationErr
             });
         }
     }
+    if let Some(graph) = snapshot.mask_graph() {
+        for operation in snapshot.stack().operations() {
+            if let Some(reference) = operation.mask_reference()
+                && (reference.consumer_operation() != operation.id()
+                    || graph.node(reference.identity()).is_none())
+            {
+                return Err(PreparationError::DanglingTypedMask {
+                    operation_id: operation.id(),
+                    mask_id: reference.identity(),
+                });
+            }
+        }
+    }
     Ok(())
 }
 
@@ -663,6 +681,7 @@ fn prepared_node(
     identity_bytes.extend_from_slice(b"rusttable.pixelpipe.node.v1");
     identity_bytes.extend_from_slice(&operation.id().to_le_bytes());
     identity_bytes.extend_from_slice(&descriptor.canonical_hash().unwrap_or([0; 32]));
+    identity_bytes.extend_from_slice(&snapshot.mask_graph_identity());
     identity_bytes.extend_from_slice(format!("{:?}", prepared.roi_contract()).as_bytes());
     identity_bytes.extend_from_slice(&(operation.parameters().len() as u64).to_le_bytes());
     identity_bytes.extend_from_slice(operation.parameters());
@@ -682,7 +701,7 @@ fn prepared_node(
         tiling: descriptor.tiling,
         resource: prepared.resource,
         implementation: prepared.implementation,
-        mask: if operation.mask_id().is_some() {
+        mask: if operation.mask_id().is_some() || operation.mask_reference().is_some() {
             MaskStatus::Deferred
         } else {
             MaskStatus::NotReferenced

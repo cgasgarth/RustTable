@@ -726,7 +726,7 @@ fn geometry_definition_with_gpu(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn geometry_definition_with_traits(
+pub(super) fn geometry_definition_with_traits(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
     evidence: &'static [&'static str],
@@ -979,6 +979,8 @@ macro_rules! builtin_operations {
             $crate::registry::enlargecanvas_definition,
             $crate::registry::perspective_definition,
             $crate::registry::lenscorrection_definition,
+            $crate::registry::mask_manager_definition,
+            $crate::registry::retouch_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,

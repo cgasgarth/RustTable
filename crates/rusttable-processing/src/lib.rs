@@ -48,9 +48,10 @@ pub use descriptor::{
     color_reconstruction_descriptor, colorin_descriptor, crop_descriptor, defringe_descriptor,
     dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
     flip_descriptor, graduatednd_descriptor, grain_descriptor, highlights_descriptor,
-    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor, perspective_descriptor,
-    primaries_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
-    soften_descriptor, temperature_descriptor, vignette_descriptor,
+    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
+    mask_manager_descriptor, perspective_descriptor, primaries_descriptor, retouch_descriptor,
+    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor,
+    temperature_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, EvaluationError, evaluate, prepare_basicadj_plans,
@@ -100,6 +101,12 @@ pub use operations::defringe::{
     DefringePixel, DefringePlan, DefringeReceipt,
 };
 pub use operations::grain::{GrainGpuParameters, GrainPlan};
+pub use operations::mask_manager::{MaskManagerError, MaskManagerParameters};
+pub use operations::retouch::{
+    RETOUCH_MAX_SCALES, RETOUCH_SCHEMA_VERSION, RetouchAlgorithm, RetouchBlurType, RetouchConfig,
+    RetouchConfigError, RetouchExecutionError, RetouchFillMode, RetouchForm, RetouchParameters,
+    RetouchPixel, RetouchPlan, RetouchReceipt, RetouchScale,
+};
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,
     encode_linear_srgb,
