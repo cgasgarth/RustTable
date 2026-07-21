@@ -127,9 +127,6 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     modules.append(raw_denoise.widget());
     modules.append(mask_manager.widget());
     modules.append(multiscale_retouch.widget());
-    let controller_modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    controller_modules.set_widget_name("darkroom-right-controller-modules");
-    modules.append(&controller_modules);
     let scroll = gtk4::ScrolledWindow::builder()
         .child(&modules)
         .hexpand(true)
@@ -142,7 +139,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     panel.append(&scroll);
     (
         panel,
-        controller_modules,
+        modules,
         exposure,
         rgb_denoise,
         raw_denoise,
@@ -251,23 +248,6 @@ fn histogram() -> gtk4::Stack {
     histogram.set_height_request(i32::from(DARKROOM_GEOMETRY.histogram_height_px));
     histogram.set_accessible_role(gtk4::AccessibleRole::Img);
     histogram.update_property(&[Property::Label("Image histogram")]);
-    for (name, text) in [
-        ("empty", "select a photo to show the histogram"),
-        ("loading", "calculating histogram…"),
-        ("failure", "histogram unavailable for this preview"),
-        ("stale", "preview changed; waiting for current histogram"),
-    ] {
-        let state = gtk4::Label::new(Some(text));
-        state.set_widget_name(&format!("darkroom-histogram-{name}"));
-        state.set_halign(gtk4::Align::Center);
-        state.set_valign(gtk4::Align::Center);
-        state.add_css_class("dim-label");
-        state.set_hexpand(true);
-        state.set_vexpand(true);
-        state.set_accessible_role(gtk4::AccessibleRole::Status);
-        histogram.add_named(&state, Some(name));
-    }
-    histogram.set_visible_child_name("empty");
     histogram
 }
 

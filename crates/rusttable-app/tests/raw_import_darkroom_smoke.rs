@@ -2,7 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rusttable_app::gtk_controller::{GtkCatalogController, GtkCatalogState};
+use rusttable_app::gtk_controller::{
+    GtkCatalogController, GtkCatalogState, GtkDarkroomPanelController,
+};
 use rusttable_app::gtk_preview_controller::{GtkPreviewController, GtkPreviewState};
 use rusttable_app::gtk_thumbnail_controller::{GtkThumbnailController, GtkThumbnailSource};
 use rusttable_app::workspace::run_raster_import;
@@ -16,7 +18,9 @@ use rusttable_ui::gtk_shell::{DarkroomSelectionState, PhotoPreview};
 use rusttable_ui::presentation::{
     PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState,
 };
-use rusttable_ui::{ImportAction, ImportRequest, ImportSourceModel};
+use rusttable_ui::{
+    DarkroomPanelTarget, ImportAction, ImportRequest, ImportSourceModel, ViewportGeneration,
+};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -166,6 +170,19 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
         )
         .expect("preview bytes fit usize")
     );
+
+    let mut darkroom_panels = GtkDarkroomPanelController::new(Some(catalog_path.clone()));
+    let projections = darkroom_panels
+        .select_photo(DarkroomPanelTarget::new(
+            photo_id,
+            ViewportGeneration::new(1),
+            rusttable_core::Revision::ZERO,
+        ))
+        .expect("successful RAW open keeps darkroom rails available");
+    assert!(matches!(
+        projections.history().state(),
+        rusttable_ui::DarkroomPanelState::Ready(_)
+    ));
 
     let dimensions =
         PreviewDimensions::new(preview.dimensions().width(), preview.dimensions().height())

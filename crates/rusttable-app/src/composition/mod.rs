@@ -505,6 +505,7 @@ fn dispatch_open_request(
     if let Some(path) = request.catalog_path() {
         *catalog.borrow_mut() = GtkCatalogController::load_catalog_at(path.to_path_buf());
         refresh_catalog_shell(&shell, &catalog, active_collection);
+        start_workspace_thumbnails(&shell, &catalog.borrow());
         if catalog.borrow().opened_successfully() {
             record_recent_path(path);
         }
@@ -544,6 +545,7 @@ fn dispatch_open_request(
                 if let Some(photo_id) = selected_photo {
                     let _ = shell.open_photo(photo_id);
                 }
+                start_workspace_thumbnails(&shell, &catalog.borrow());
                 ControlFlow::Break
             }
             Err(TryRecvError::Empty) => ControlFlow::Continue,
@@ -586,7 +588,6 @@ fn refresh_catalog_shell(
         shell.set_collection_filter_state(&collection_filter_state(&collection.snapshot()));
     }
     drop(controller);
-    start_workspace_thumbnails(shell, &catalog.borrow());
 }
 
 enum ThumbnailWorkerMessage {

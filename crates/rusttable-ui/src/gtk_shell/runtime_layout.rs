@@ -261,8 +261,35 @@ fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) ->
         ));
     }
     bottom_tools.append(layout_controls.widget());
-    bottom_tools.insert_child_after(&gtk4::Button::with_label("100%"), None::<&gtk4::Widget>);
+    bottom_tools.append(&gtk4::Button::with_label("100%"));
     bottom_tools
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use gtk4::prelude::*;
+
+    use super::lighttable_footer;
+    use rusttable_i18n::I18n;
+
+    use crate::gtk_shell::LighttableLayoutControls;
+
+    #[test]
+    fn lighttable_footer_attaches_every_control_to_one_parent() {
+        if gtk4::init().is_err() {
+            return;
+        }
+        let controls = LighttableLayoutControls::new();
+        let footer = lighttable_footer(&I18n::default(), &controls);
+        let mut child = footer.first_child();
+        let mut count = 0;
+        while let Some(widget) = child {
+            assert!(widget.parent().is_some(), "footer child must be attached");
+            count += 1;
+            child = widget.next_sibling();
+        }
+        assert_eq!(count, 5);
+    }
 }
 
 fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {

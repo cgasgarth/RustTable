@@ -52,12 +52,10 @@ pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
 
 pub(crate) fn open(path: &Path) -> Result<Database, RepositoryError> {
     let existed = path.exists();
-    let database = Database::create(path).map_err(|_| {
-        if existed {
-            RepositoryError::CorruptPersistedData
-        } else {
-            RepositoryError::Unavailable
-        }
+    let database = Database::create(path).map_err(|error| match error {
+        redb::DatabaseError::DatabaseAlreadyOpen => RepositoryError::Unavailable,
+        _ if existed => RepositoryError::CorruptPersistedData,
+        _ => RepositoryError::Unavailable,
     })?;
     if existed {
         validate(&database)?;
@@ -649,4 +647,28 @@ fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), Re
         .open_table(COLLECTION_INTEGRITY_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::open;
+    use rusttable_catalog::RepositoryError;
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    #[test]
+    fn concurrent_database_open_is_unavailable_not_corrupt() {
+        let path = std::env::temp_dir().join(format!(
+            "rusttable-schema-open-{}-{}.redb",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let first = open(&path).expect("first schema open");
+        assert!(matches!(open(&path), Err(RepositoryError::Unavailable)));
+        drop(first);
+        let _ = fs::remove_file(path);
+    }
 }
