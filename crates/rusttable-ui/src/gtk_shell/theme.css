@@ -2,7 +2,7 @@
 
 * {
   color: {{foreground}};
-  font-family: Sans;
+  font-family: sans-serif, "Arial Unicode MS";
   font-size: 11px;
   font-weight: normal;
 }
@@ -18,7 +18,7 @@ window,
 
 #header {
   min-height: 32px;
-  padding: 0 4px;
+  padding: 0 3px;
   border-bottom: 1px solid {{border}};
 }
 
@@ -31,7 +31,8 @@ window,
 
 #header-left {
   min-width: 150px;
-  padding: 3px 7px 3px 2px;
+  padding: 2px 7px 2px 2px;
+  margin: 0;
 }
 
 #rusttable-aperture-mark {
@@ -52,6 +53,14 @@ window,
 
 #header-center {
   min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+#header-right {
+  min-width: 0;
+  margin: 0;
+  padding: 0 2px 0 4px;
 }
 
 .dt_view_switcher {
@@ -61,8 +70,9 @@ window,
 
 .dt_view_switcher button {
   min-height: 26px;
-  padding: 1px 7px;
-  border: 0;
+  min-width: 72px;
+  padding: 1px 8px;
+  border: 1px solid transparent;
   border-radius: 0;
   background-color: transparent;
   background-image: none;
@@ -80,12 +90,19 @@ window,
 }
 
 .dt_toolbar button,
-.dt_button {
+.dt_button,
+.dt_export_action,
+button,
+checkbutton check,
+entry,
+dropdown,
+spinbutton,
+textview {
   min-height: 22px;
   padding: 1px 4px;
-  border: 0;
-  border-radius: 1px;
-  background-color: transparent;
+  border: 1px solid {{button_background}};
+  border-radius: 2px;
+  background-color: {{button_background}};
   background-image: none;
   box-shadow: none;
   color: {{foreground}};
@@ -95,15 +112,34 @@ window,
 .dt_toolbar button:hover,
 button:hover,
 .dt_button:hover {
-  background-color: {{hovered_thumbnail}};
+  background-color: #777777ff;
+  border-color: #777777ff;
   color: {{background}};
+}
+
+button:disabled,
+checkbutton check:disabled,
+entry:disabled,
+dropdown:disabled,
+spinbutton:disabled,
+textview:disabled {
+  background-color: transparent;
+  border-color: {{border}};
+  color: #6a6a6aff;
+}
+
+button:disabled:hover,
+.dt_button:disabled:hover {
+  background-color: transparent;
+  border-color: {{border}};
+  color: #6a6a6aff;
 }
 
 .dt_view_switcher button:checked,
 .dt_view_switcher .active {
   background-color: transparent;
   color: #ffffffff;
-  border-color: transparent;
+  border-bottom-color: #b9b9b9ff;
 }
 
 #left-panel,
@@ -255,7 +291,7 @@ button:hover,
 .dt_module_panel,
 expander {
   margin: 0 0 1px 0;
-  padding: 0.18em 0.35em;
+  padding: 0;
   background-color: {{module_background}};
   color: {{foreground}};
   border-bottom: 1px solid {{border}};
@@ -269,6 +305,8 @@ expander:hover {
 .dt_section_label,
 .dt_section_expander,
 .dt_module_group > title {
+  min-height: 19px;
+  padding: 1px 4px;
   color: {{foreground}};
   background-color: transparent;
   font-weight: bold;
@@ -276,7 +314,7 @@ expander:hover {
 
 .dt_toolbar {
   min-height: 28px;
-  padding: 1px 3px;
+  padding: 1px 4px;
   background-color: {{background}};
   color: {{foreground}};
 }
@@ -343,7 +381,9 @@ expander:hover {
 
 .dt_header_icon {
   min-width: 22px;
-  font-size: 13px;
+  min-height: 24px;
+  padding: 1px 3px;
+  font-size: 12px;
 }
 
 #lighttable-collection-toolbar button:hover,
@@ -486,8 +526,24 @@ scale:focus-visible {
   padding: 3px 0 5px 12px;
 }
 
+#right-panel #export {
+  min-width: 0;
+  padding: 0;
+}
+
+#right-panel #export > title {
+  min-height: 19px;
+  padding: 1px 4px;
+}
+
+#right-panel #export > box {
+  min-width: 0;
+  padding: 3px 4px 4px;
+}
+
 #export-rail-content {
   min-width: 0;
+  padding: 0;
 }
 
 .dt_export_row {
@@ -495,15 +551,16 @@ scale:focus-visible {
   padding: 1px 0;
 }
 
-.dt_export_row label {
+.dt_export_label {
   font-size: 10px;
+  color: #919191ff;
 }
 
 #export-destination,
 #export-format,
 #export-size,
 #export-custom-size {
-  min-width: 82px;
+  min-width: 76px;
 }
 
 #export-destination-row,
@@ -511,6 +568,16 @@ scale:focus-visible {
 #export-size-row,
 #export-custom-size-row {
   margin-right: 2px;
+}
+
+#export-actions {
+  margin-top: 1px;
+}
+
+#export-actions button {
+  min-height: 22px;
+  min-width: 0;
+  padding: 1px 4px;
 }
 
 #rendered-png-status {
@@ -654,7 +721,7 @@ scale:focus-visible {
 
 .dt_placeholder,
 .dim-label {
-  color: {{foreground}};
+  color: #919191ff;
 }
 
 scrollbar slider {

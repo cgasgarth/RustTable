@@ -52,6 +52,9 @@ pub enum DarkroomModuleError {
         expected: String,
         actual: String,
     },
+    DuplicateModule {
+        id: String,
+    },
     RevisionOverflow,
 }
 
@@ -79,6 +82,7 @@ impl fmt::Display for DarkroomModuleError {
                     "action targets module {expected}, received {actual}"
                 )
             }
+            Self::DuplicateModule { id } => write!(formatter, "duplicate darkroom module: {id}"),
             Self::RevisionOverflow => formatter.write_str("module revision counter overflowed"),
         }
     }
@@ -487,15 +491,24 @@ pub struct DarkroomModulesViewModel {
 }
 
 impl DarkroomModulesViewModel {
-    /// Validates side assignments while preserving insertion order within each side.
+    /// Validates side assignments and identities while preserving insertion order within each side.
     ///
     /// # Errors
     ///
     /// Returns an error when a module's control snapshot is invalid.
     pub fn new(modules: Vec<DarkroomModuleViewModel>) -> Result<Self, DarkroomModuleError> {
-        let mut left = Vec::new();
-        let mut right = Vec::new();
+        let mut left: Vec<DarkroomModuleViewModel> = Vec::new();
+        let mut right: Vec<DarkroomModuleViewModel> = Vec::new();
         for module in modules {
+            if left
+                .iter()
+                .chain(right.iter())
+                .any(|item| item.id() == module.id())
+            {
+                return Err(DarkroomModuleError::DuplicateModule {
+                    id: module.id().to_owned(),
+                });
+            }
             match module.side() {
                 DarkroomModuleSide::Left => left.push(module),
                 DarkroomModuleSide::Right => right.push(module),
@@ -567,8 +580,6 @@ pub fn build_module_panel_with_actions(
     recover.update_property(&[Property::Label("Refresh module snapshot")]);
     status_row.append(&status);
     status_row.append(&recover);
-    content.append(&status_row);
-
     let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     header.set_widget_name(&format!("{}-header", module.id()));
     header.add_css_class("dt_module_header");
@@ -597,6 +608,8 @@ pub fn build_module_panel_with_actions(
         reset
     });
     content.append(&header);
+    // Darktable inserts trouble/status content directly below the module header.
+    content.append(&status_row);
 
     let mut control_rows = Vec::new();
     for control in module.controls().controls() {
@@ -744,7 +757,11 @@ pub fn build_module_column_with_filter<'a>(
     let column = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     column.set_widget_name(side.widget_name());
     column.set_vexpand(true);
-    let query = query.trim().to_ascii_lowercase();
+    let query = if matches!(side, DarkroomModuleSide::Left) {
+        String::new()
+    } else {
+        query.trim().to_ascii_lowercase()
+    };
     let mut rendered = 0;
     for module in modules {
         if !module_matches_query(module, &query) {

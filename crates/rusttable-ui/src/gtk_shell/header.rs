@@ -46,6 +46,7 @@ impl HeaderChrome {
         let center = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         center.set_widget_name(PanelSlot::HeaderCenter.identifier());
         center.set_hexpand(true);
+        center.set_halign(gtk4::Align::Fill);
         center.append(&toolbar);
         root.append(&center);
         root.append(&mode_switcher(workspace, i18n));
@@ -81,6 +82,7 @@ fn brand(i18n: &I18n) -> gtk4::Box {
     brand.set_width_request(i32::from(
         DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px,
     ));
+    brand.set_hexpand(false);
     brand.set_halign(gtk4::Align::Start);
     brand.set_valign(gtk4::Align::Center);
     apply_theme_role(&brand, ThemeRole::Toolbar);
@@ -156,7 +158,7 @@ fn header_toolbar(
     toolbar.set_valign(gtk4::Align::Center);
     apply_theme_role(&toolbar, ThemeRole::Toolbar);
 
-    let import = gtk4::Button::with_label("+");
+    let import = gtk4::Button::from_icon_name("list-add-symbolic");
     import.set_widget_name("header-import");
     import.set_tooltip_text(Some(
         &i18n.text(MessageId::ToolbarImport, &MessageArgs::new()),
@@ -172,7 +174,7 @@ fn header_toolbar(
     profile.set_width_chars(2);
     toolbar.append(profile);
 
-    let preferences = gtk4::Button::with_label("⚙");
+    let preferences = gtk4::Button::from_icon_name("preferences-system-symbolic");
     preferences.set_widget_name("header-preferences");
     preferences.set_tooltip_text(Some(
         &i18n.text(MessageId::ToolbarPreferences, &MessageArgs::new()),
@@ -186,6 +188,8 @@ fn header_toolbar(
 fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     let modes = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     modes.set_widget_name(PanelSlot::HeaderRight.identifier());
+    modes.set_hexpand(false);
+    modes.set_halign(gtk4::Align::End);
     modes.set_valign(gtk4::Align::Center);
     apply_theme_role(&modes, ThemeRole::ViewSwitcher);
 

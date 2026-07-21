@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use gtk4::accessible::Property;
+use gtk4::accessible::{Property, State};
 use gtk4::prelude::*;
 
 use crate::CollectionProperty;
@@ -279,6 +279,7 @@ impl LighttableToolbar {
         for label in LighttableColorLabel::ALL {
             let button = gtk4::Button::with_label("●");
             button.set_widget_name(&format!("lighttable-color-{}", label.index()));
+            button.set_accessible_role(gtk4::AccessibleRole::Button);
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_color_filter");
             let tooltip = format!("toggle {} label on selected images", label.label());
@@ -294,10 +295,23 @@ impl LighttableToolbar {
         let rejected = gtk4::Button::with_label("×");
         rejected.set_widget_name("lighttable-rating-rejected");
         rejected.add_css_class("dt_filter_button");
+        rejected.add_css_class("dt_rating_filter");
+        rejected.set_accessible_role(gtk4::AccessibleRole::Button);
         rejected.update_property(&[Property::Label("set rejected rating on selected images")]);
         rejected.set_tooltip_text(Some("reject selected images"));
         root.append(&rejected);
         rating_buttons.push((LighttableRating::Rejected, rejected));
+
+        let unrated = gtk4::Button::with_label("0");
+        unrated.set_widget_name("lighttable-rating-zero");
+        unrated.add_css_class("dt_filter_button");
+        unrated.add_css_class("dt_rating_filter");
+        unrated.set_accessible_role(gtk4::AccessibleRole::Button);
+        unrated.update_property(&[Property::Label("set zero-star rating on selected images")]);
+        unrated.set_tooltip_text(Some("set zero stars on selected images"));
+        root.append(&unrated);
+        rating_buttons.push((LighttableRating::Zero, unrated));
+
         for rating in LighttableRating::STARS {
             let button = gtk4::Button::with_label("★");
             button.set_widget_name(&format!(
@@ -306,6 +320,7 @@ impl LighttableToolbar {
             ));
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_rating_filter");
+            button.set_accessible_role(gtk4::AccessibleRole::Button);
             let tooltip = format!("set {} on selected images", rating.label());
             button.update_property(&[Property::Label(&tooltip)]);
             button.set_tooltip_text(Some(&tooltip));
@@ -380,12 +395,16 @@ impl LighttableToolbar {
                 "dt_rating_filter",
                 state.selected_rating == Some(*rating),
             ));
+            button.update_state(&[State::Selected(Some(
+                state.selected_rating == Some(*rating),
+            ))]);
         }
         for (label, button) in &self.label_buttons {
             button.set_css_classes(&button_classes(
                 "dt_color_filter",
                 state.selected_labels.contains(label),
             ));
+            button.update_state(&[State::Selected(Some(state.selected_labels.contains(label)))]);
         }
         self.projecting.set(false);
     }

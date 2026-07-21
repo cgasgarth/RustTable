@@ -7,6 +7,7 @@
 mod ai_surfaces;
 mod collection_controls;
 mod darkroom;
+mod darkroom_controls;
 mod darkroom_modules;
 mod darktable_spec;
 mod export_panel;
@@ -23,6 +24,7 @@ mod runtime_layout;
 mod runtime_lighttable;
 mod theme;
 mod thumbnail;
+mod viewport_canvas;
 
 pub use crate::display_profile::DisplayProfileBanner;
 pub use crate::import::ImportAction;
@@ -31,6 +33,14 @@ pub use collection_controls::{
     LighttablePhotoState,
 };
 pub use darkroom::{DARKROOM_WIDGET_IDS, DarkroomView};
+pub use darkroom_controls::{
+    DarkroomControlFeedback, DarkroomControlMessage, DarkroomControlModel,
+    DarkroomControlModelError, DarkroomModuleControl, DarkroomModuleControlError,
+    DarkroomOperationStackFeedback, DarkroomOperationStackUpdate,
+    DarkroomOperationStackUpdateMessage, DarkroomParameterAssignment, DarkroomParameterControl,
+    DarkroomParameterValue, DarkroomParameterValueKind, DarkroomSelection,
+    ParameterValidationError,
+};
 pub use darkroom_modules::{
     DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel,
     DarkroomModulesViewModel, build_module_column, build_module_panel,
@@ -62,4 +72,9 @@ pub use photo_preview::{DarkroomSelectionState, PhotoPreview, PhotoPreviewTextur
 pub use runtime::GtkShell;
 pub use theme::{
     DarktableTheme, ThemeRole, apply_theme_role, darktable_theme_css, install_darktable_theme,
+};
+pub use viewport_canvas::{
+    FrameProjectionResult, MAX_PAN, MAX_ZOOM_PERCENT, MIN_ZOOM_PERCENT, PanOffset, PreviewFrameKey,
+    PreviewFrameProjection, ProjectedImage, RedrawToken, ViewportCanvasState, ViewportSize,
+    ViewportSizeError, ViewportZoom, ZoomPercent, ZoomPercentError,
 };

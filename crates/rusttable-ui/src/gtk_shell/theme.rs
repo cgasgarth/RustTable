@@ -155,6 +155,9 @@ mod tests {
         assert!(css.contains("font-size: 11px"));
         assert!(!css.contains("font-size: 0.85em"));
         assert!(css.contains(".dt_view_switcher"));
+        assert!(css.contains("button:disabled"));
+        assert!(css.contains("#export-rail-content"));
+        assert!(css.contains("#right-panel #export"));
     }
 
     #[test]

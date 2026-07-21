@@ -102,12 +102,18 @@ pub(super) fn desktop_body(
 ) -> (gtk4::Box, gtk4::FlowBox) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let center = central_workspace(workspace);
+    let (filmstrip_root, filmstrip) = filmstrip(i18n);
+    let center_column = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    center_column.set_hexpand(true);
+    center_column.set_vexpand(true);
+    center_column.append(&center);
+    center_column.append(&filmstrip_root);
     let split = gtk4::Paned::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .start_child(left_panel)
-        .end_child(&center)
+        .end_child(&center_column)
         .resize_start_child(false)
-        .shrink_start_child(true)
+        .shrink_start_child(false)
         .position(i32::from(layout.side_panel_widths.preferred_px))
         .build();
     split.connect_map({
@@ -119,12 +125,17 @@ pub(super) fn desktop_body(
         .start_child(&split)
         .end_child(right_panel)
         .resize_end_child(false)
-        .shrink_end_child(true)
+        .shrink_end_child(false)
         .position(i32::from(
             layout.preferred_right_panel_position_px(layout.window_width_px),
         ))
         .build();
-    let (filmstrip_root, filmstrip) = filmstrip(i18n);
+    workspace_with_right_panel.connect_map(move |paned| {
+        let content_width = u16::try_from(paned.allocated_width()).unwrap_or(u16::MAX);
+        paned.set_position(i32::from(
+            layout.preferred_right_panel_position_for_content_width(content_width),
+        ));
+    });
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
     content.set_margin_top(outer_border);
@@ -132,7 +143,6 @@ pub(super) fn desktop_body(
     content.set_margin_start(outer_border);
     content.set_margin_end(outer_border);
     content.append(&workspace_with_right_panel);
-    content.append(&filmstrip_root);
     (content, filmstrip)
 }
 
@@ -227,6 +237,7 @@ fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     apply_theme_role(&strip, ThemeRole::Filmstrip);
     let height = i32::from(DARKTABLE_DESKTOP_SPEC.layout.filmstrip_heights.preferred_px);
     strip.set_height_request(height);
+    strip.set_hexpand(true);
     strip.set_vexpand(false);
     let photos = gtk4::FlowBox::builder()
         .orientation(gtk4::Orientation::Horizontal)
@@ -264,7 +275,10 @@ fn panel_column(region: ShellRegion, width: i32) -> gtk4::Box {
 }
 
 fn panel_slot(slot: PanelSlot) -> gtk4::Box {
-    let slot_widget = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    let slot_widget = gtk4::Box::new(
+        gtk4::Orientation::Vertical,
+        i32::from(DARKTABLE_DESKTOP_SPEC.layout.panel_module_spacing_px),
+    );
     slot_widget.set_widget_name(slot.identifier());
     slot_widget.add_css_class("dt_panel_slot");
     slot_widget
@@ -274,9 +288,13 @@ fn append_panel_slots(panel: &gtk4::Box, top: &gtk4::Box, center: &gtk4::Box, bo
     let scrolling_center = center.clone();
     let scroll = gtk4::ScrolledWindow::builder()
         .child(&scrolling_center)
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .vscrollbar_policy(gtk4::PolicyType::Automatic)
+        .propagate_natural_width(true)
         .hexpand(true)
         .vexpand(true)
         .build();
+    scroll.set_placement(gtk4::CornerType::TopRight);
     panel.append(&top.clone());
     panel.append(&scroll);
     panel.append(&bottom.clone());

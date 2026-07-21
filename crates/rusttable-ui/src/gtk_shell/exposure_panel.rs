@@ -1,6 +1,6 @@
 //! GTK4 Exposure IOP panel matching Darktable's manual controls.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gtk4::accessible::Property;
@@ -20,6 +20,7 @@ type ExposureActionHandler = Box<dyn Fn(ExposureAction)>;
 pub struct ExposurePanel {
     expander: gtk4::Expander,
     state: Rc<RefCell<ExposureModuleState>>,
+    mode_stack: gtk4::Stack,
     enabled: gtk4::Switch,
     mode: gtk4::DropDown,
     exposure: gtk4::Scale,
@@ -29,6 +30,7 @@ pub struct ExposurePanel {
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    sync_guard: Rc<Cell<bool>>,
 }
 
 impl ExposurePanel {
@@ -44,8 +46,12 @@ impl ExposurePanel {
     pub fn from_state(initial_state: ExposureModuleState) -> Self {
         let state = Rc::new(RefCell::new(initial_state));
         let actions = Rc::new(RefCell::new(None));
+        let sync_guard = Rc::new(Cell::new(false));
         let enabled = gtk4::Switch::new();
         let mode = gtk4::DropDown::from_strings(&["manual", "automatic"]);
+        let mode_stack = gtk4::Stack::new();
+        mode_stack.set_widget_name("exposure-mode-stack");
+        mode_stack.set_hhomogeneous(false);
         let exposure = gtk4::Scale::with_range(
             gtk4::Orientation::Horizontal,
             EXPOSURE_EV_MINIMUM,
@@ -76,6 +82,25 @@ impl ExposurePanel {
         let compensate_highlight_preservation = gtk4::Switch::new();
         let exposure_value = value_label("exposure-value", "Exposure value");
         let black_value = value_label("black-value", "Black-level value");
+        let manual = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+        append_switch_row(
+            &manual,
+            "compensate camera exposure bias",
+            &compensate_exposure_bias,
+        );
+        append_switch_row(
+            &manual,
+            "compensate highlight preservation",
+            &compensate_highlight_preservation,
+        );
+        append_scale_row(&manual, "exposure", &exposure, &exposure_value, "EV");
+        mode_stack.add_named(&manual, Some("manual"));
+        let automatic = gtk4::Label::new(Some("automatic exposure uses the source histogram"));
+        automatic.set_widget_name("exposure-automatic-status");
+        automatic.set_halign(gtk4::Align::Start);
+        automatic.add_css_class("dim-label");
+        automatic.set_accessible_role(gtk4::AccessibleRole::Status);
+        mode_stack.add_named(&automatic, Some("automatic"));
         let presets = gtk4::Button::with_label("presets");
         presets.set_widget_name("exposure-presets");
         presets.set_sensitive(false);
@@ -84,29 +109,25 @@ impl ExposurePanel {
         presets.update_property(&[Property::Label("Exposure presets unavailable")]);
         let reset = gtk4::Button::with_label("reset");
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-
-        append_switch_row(&content, "enabled", &enabled);
         append_dropdown_row(&content, "mode", &mode);
-        append_scale_row(&content, "exposure", &exposure, &exposure_value, "EV");
+        content.append(&mode_stack);
         append_scale_row(&content, "black", &black, &black_value, "");
-        append_switch_row(
-            &content,
-            "compensate exposure bias",
-            &compensate_exposure_bias,
-        );
-        append_switch_row(
-            &content,
-            "compensate highlight preservation",
-            &compensate_highlight_preservation,
-        );
-        content.append(&presets);
-        content.append(&reset);
+
+        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        let title = gtk4::Label::new(Some("exposure"));
+        title.set_halign(gtk4::Align::Start);
+        title.set_hexpand(true);
+        header.append(&title);
+        header.append(&enabled);
+        header.append(&presets);
+        header.append(&reset);
 
         let expander = gtk4::Expander::builder()
             .label("exposure")
             .expanded(initial_state.expanded())
             .child(&content)
             .build();
+        expander.set_label_widget(Some(&header));
         expander.set_widget_name("exposure");
         apply_theme_role(&expander, ThemeRole::Module);
         expander.set_accessible_role(gtk4::AccessibleRole::Group);
@@ -136,6 +157,7 @@ impl ExposurePanel {
         let panel = Self {
             expander,
             state,
+            mode_stack,
             enabled,
             mode,
             exposure,
@@ -145,6 +167,7 @@ impl ExposurePanel {
             compensate_exposure_bias,
             compensate_highlight_preservation,
             actions,
+            sync_guard,
         };
         panel.sync_widgets();
         panel.connect_actions(&reset);
@@ -184,65 +207,69 @@ impl ExposurePanel {
     }
 
     fn connect_actions(&self, reset: &gtk4::Button) {
+        let controls = self.control_set();
         connect_switch_action(
             &self.enabled,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
+            controls.clone(),
             ExposureAction::SetEnabled,
         );
         connect_expander_action(
             &self.expander,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
+            controls.clone(),
         );
-        connect_mode_action(&self.mode, Rc::clone(&self.state), Rc::clone(&self.actions));
+        connect_mode_action(
+            &self.mode,
+            Rc::clone(&self.state),
+            Rc::clone(&self.actions),
+            controls.clone(),
+        );
         connect_scale_action(
             &self.exposure,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
+            controls.clone(),
             ExposureAction::SetExposureEv,
         );
         connect_scale_action(
             &self.black,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
+            controls.clone(),
             ExposureAction::SetBlackLevel,
         );
         connect_switch_action(
             &self.compensate_exposure_bias,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
+            controls.clone(),
             ExposureAction::SetCompensateExposureBias,
         );
         connect_switch_action(
             &self.compensate_highlight_preservation,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
+            controls.clone(),
             ExposureAction::SetCompensateHighlightPreservation,
         );
-
         let state = Rc::clone(&self.state);
         let actions = Rc::clone(&self.actions);
-        let controls = ControlSet {
-            expander: self.expander.clone(),
-            enabled: self.enabled.clone(),
-            mode: self.mode.clone(),
-            exposure: self.exposure.clone(),
-            exposure_value: self.exposure_value.clone(),
-            black: self.black.clone(),
-            black_value: self.black_value.clone(),
-            compensate_exposure_bias: self.compensate_exposure_bias.clone(),
-            compensate_highlight_preservation: self.compensate_highlight_preservation.clone(),
-        };
         reset.connect_clicked(move |_| {
-            dispatch(&state, &actions, ExposureAction::Reset);
-            sync_controls(&state, &controls);
+            dispatch(&state, &actions, &controls, ExposureAction::Reset);
         });
     }
 
     fn sync_widgets(&self) {
-        let controls = ControlSet {
+        sync_controls(&self.state, &self.control_set());
+    }
+
+    fn control_set(&self) -> ControlSet {
+        ControlSet {
             expander: self.expander.clone(),
+            mode_stack: self.mode_stack.clone(),
             enabled: self.enabled.clone(),
             mode: self.mode.clone(),
             exposure: self.exposure.clone(),
@@ -251,8 +278,8 @@ impl ExposurePanel {
             black_value: self.black_value.clone(),
             compensate_exposure_bias: self.compensate_exposure_bias.clone(),
             compensate_highlight_preservation: self.compensate_highlight_preservation.clone(),
-        };
-        sync_controls(&self.state, &controls);
+            sync_guard: Rc::clone(&self.sync_guard),
+        }
     }
 }
 
@@ -265,6 +292,7 @@ impl Default for ExposurePanel {
 #[derive(Clone)]
 struct ControlSet {
     expander: gtk4::Expander,
+    mode_stack: gtk4::Stack,
     enabled: gtk4::Switch,
     mode: gtk4::DropDown,
     exposure: gtk4::Scale,
@@ -273,13 +301,31 @@ struct ControlSet {
     black_value: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
+    sync_guard: Rc<Cell<bool>>,
 }
 
 fn sync_controls(state: &Rc<RefCell<ExposureModuleState>>, controls: &ControlSet) {
     let state = *state.borrow();
+    controls.sync_guard.set(true);
     controls.enabled.set_active(state.enabled());
     controls.expander.set_expanded(state.expanded());
     controls.mode.set_selected(mode_index(state.mode()));
+    controls
+        .mode_stack
+        .set_visible_child_name(match state.mode() {
+            ExposureMode::Manual => "manual",
+            ExposureMode::Automatic => "automatic",
+        });
+    controls.mode.set_sensitive(state.enabled());
+    controls.mode_stack.set_sensitive(state.enabled());
+    controls.black.set_sensitive(state.enabled());
+    controls
+        .compensate_exposure_bias
+        .set_sensitive(state.enabled());
+    controls
+        .compensate_highlight_preservation
+        .set_sensitive(state.enabled());
+    controls.exposure.set_sensitive(state.enabled());
     controls.exposure.set_value(state.exposure_ev());
     controls
         .exposure_value
@@ -294,6 +340,7 @@ fn sync_controls(state: &Rc<RefCell<ExposureModuleState>>, controls: &ControlSet
     controls
         .compensate_highlight_preservation
         .set_active(state.compensate_highlight_preservation());
+    controls.sync_guard.set(false);
 }
 
 fn append_switch_row(container: &gtk4::Box, label: &str, control: &gtk4::Switch) {
@@ -365,12 +412,13 @@ fn connect_switch_action<F>(
     control: &gtk4::Switch,
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: ControlSet,
     action: F,
 ) where
     F: Fn(bool) -> ExposureAction + 'static,
 {
     control.connect_active_notify(move |control| {
-        dispatch(&state, &actions, action(control.is_active()));
+        dispatch(&state, &actions, &controls, action(control.is_active()));
     });
 }
 
@@ -378,11 +426,13 @@ fn connect_expander_action(
     control: &gtk4::Expander,
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: ControlSet,
 ) {
     control.connect_expanded_notify(move |control| {
         dispatch(
             &state,
             &actions,
+            &controls,
             ExposureAction::SetExpanded(control.is_expanded()),
         );
     });
@@ -392,6 +442,7 @@ fn connect_mode_action(
     control: &gtk4::DropDown,
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: ControlSet,
 ) {
     control.connect_selected_notify(move |control| {
         let mode = if control.selected() == mode_index(ExposureMode::Manual) {
@@ -399,7 +450,7 @@ fn connect_mode_action(
         } else {
             ExposureMode::Automatic
         };
-        dispatch(&state, &actions, ExposureAction::SetMode(mode));
+        dispatch(&state, &actions, &controls, ExposureAction::SetMode(mode));
     });
 }
 
@@ -407,22 +458,27 @@ fn connect_scale_action<F>(
     control: &gtk4::Scale,
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: ControlSet,
     action: F,
 ) where
     F: Fn(f64) -> ExposureAction + 'static,
 {
     control.connect_value_changed(move |control| {
-        dispatch(&state, &actions, action(control.value()));
+        dispatch(&state, &actions, &controls, action(control.value()));
     });
 }
 
 fn dispatch(
     state: &Rc<RefCell<ExposureModuleState>>,
     actions: &Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: &ControlSet,
     action: ExposureAction,
 ) {
-    let accepted = state.borrow_mut().apply(action).is_ok();
-    if accepted && let Some(handler) = actions.borrow().as_ref() {
+    if controls.sync_guard.get() || state.borrow_mut().apply(action).is_err() {
+        return;
+    }
+    sync_controls(state, controls);
+    if let Some(handler) = actions.borrow().as_ref() {
         handler(action);
     }
 }
