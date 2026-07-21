@@ -6,10 +6,28 @@ use crate::{FaultState, GpuRuntime};
 const WORKGROUP_SIZE: u32 = 256;
 const POINT_PARAMS_SIZE: u64 = 64;
 const POINT_PARAMS_BYTES: usize = 64;
+const BASICADJ_PARAMS_SIZE: u64 = 48;
+const BASICADJ_PARAMS_BYTES: usize = 48;
+
+/// Frozen scalar coefficients for one atomic basicadj stage.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BasicAdjPointParameters {
+    pub black_point: f32,
+    pub scale: f32,
+    pub gamma: f32,
+    pub middle_grey: f32,
+    pub contrast: f32,
+    pub hlcomp: f32,
+    pub hlrange: f32,
+    pub preserve_colors: i32,
+    pub saturation: f32,
+    pub vibrance: f32,
+}
 
 /// One operation in the basic linear-light point pipeline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BasicPointOperation {
+    BasicAdj(BasicAdjPointParameters),
     Exposure { stops: f32, black: f32 },
     LinearOffset { value: f32 },
     RgbGain { red: f32, green: f32, blue: f32 },
@@ -18,6 +36,7 @@ pub enum BasicPointOperation {
 impl BasicPointOperation {
     fn entry_point(self) -> &'static str {
         match self {
+            Self::BasicAdj(_) => "basicadj",
             Self::Exposure { .. } => "exposure",
             Self::LinearOffset { .. } => "linear_offset",
             Self::RgbGain { .. } => "rgb_gain",
@@ -28,6 +47,7 @@ impl BasicPointOperation {
         let mut bytes = [0_u8; POINT_PARAMS_BYTES];
         bytes[0..4].copy_from_slice(&pixel_count.to_le_bytes());
         let values = match self {
+            Self::BasicAdj(_) => [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::Exposure { stops, black } => [stops, 0.0, 1.0, 1.0, 1.0, 2.2, black],
             Self::LinearOffset { value } => [0.0, value, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::RgbGain { red, green, blue } => [0.0, 0.0, red, green, blue, 2.2, 0.0],
@@ -36,6 +56,32 @@ impl BasicPointOperation {
             let offset = 28 + index * 4;
             bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
         }
+        bytes
+    }
+
+    fn basic_params(self) -> [u8; BASICADJ_PARAMS_BYTES] {
+        let mut bytes = [0_u8; BASICADJ_PARAMS_BYTES];
+        let Self::BasicAdj(parameters) = self else {
+            return bytes;
+        };
+        for (index, value) in [
+            parameters.black_point,
+            parameters.scale,
+            parameters.gamma,
+            parameters.middle_grey,
+            parameters.contrast,
+            parameters.hlcomp,
+            parameters.hlrange,
+            parameters.saturation,
+            parameters.vibrance,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let offset = index * 4;
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[36..40].copy_from_slice(&parameters.preserve_colors.to_le_bytes());
         bytes
     }
 }
@@ -199,6 +245,16 @@ impl GpuRuntime {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(BASICADJ_PARAMS_SIZE),
+                    },
+                    count: None,
+                },
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -232,10 +288,19 @@ impl GpuRuntime {
                 let params_bytes =
                     operation.params(u32::try_from(request.pixels.len() / 4).unwrap_or(u32::MAX));
                 queue.write_buffer(&params, 0, &params_bytes);
-                params
+                let basic_params = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("RustTable basicadj parameters"),
+                    size: BASICADJ_PARAMS_SIZE,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                let basic_bytes = operation.basic_params();
+                queue.write_buffer(&basic_params, 0, &basic_bytes);
+                (params, basic_params)
             })
             .collect::<Vec<_>>();
-        for (operation, params) in request.operations.iter().zip(&parameter_buffers) {
+        for (operation, (params, basic_params)) in request.operations.iter().zip(&parameter_buffers)
+        {
             let entry_point = operation.entry_point();
             let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some(entry_point),
@@ -260,6 +325,10 @@ impl GpuRuntime {
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: basic_params.as_entire_binding(),
                     },
                 ],
             });
@@ -333,6 +402,19 @@ fn validate_request(
         return Err(BasicPointError::NonFiniteInput { component });
     }
     if request.operations.iter().any(|operation| match operation {
+        BasicPointOperation::BasicAdj(parameters) => [
+            parameters.black_point,
+            parameters.scale,
+            parameters.gamma,
+            parameters.middle_grey,
+            parameters.contrast,
+            parameters.hlcomp,
+            parameters.hlrange,
+            parameters.saturation,
+            parameters.vibrance,
+        ]
+        .iter()
+        .any(|value| !value.is_finite()),
         BasicPointOperation::Exposure { stops, black } => !stops.is_finite() || !black.is_finite(),
         BasicPointOperation::LinearOffset { value } => !value.is_finite(),
         BasicPointOperation::RgbGain { red, green, blue } => {
@@ -438,6 +520,45 @@ mod tests {
                 (actual - expected).abs() < 0.00001,
                 "{actual} != {expected}"
             );
+        }
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    #[tokio::test]
+    async fn basicadj_dispatch_preserves_atomic_order_and_alpha_when_gpu_is_available() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let parameters = BasicAdjPointParameters {
+            black_point: 0.1,
+            scale: 1.5,
+            gamma: 0.5,
+            middle_grey: 0.1842,
+            contrast: 1.0,
+            hlcomp: 0.0,
+            hlrange: 0.9,
+            preserve_colors: 1,
+            saturation: 0.0,
+            vibrance: 0.0,
+        };
+        let input = [0.4, 0.2, 0.8, 0.37];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::BasicAdj(parameters)],
+            })
+            .expect("basicadj dispatch");
+        let expected = [
+            (0.4_f32 - 0.1).mul_add(1.5, 0.0).sqrt(),
+            (0.2_f32 - 0.1).mul_add(1.5, 0.0).sqrt(),
+            (0.8_f32 - 0.1).mul_add(1.5, 0.0).sqrt(),
+            0.37,
+        ];
+        for (actual, expected) in result.pixels().iter().zip(expected) {
+            assert!((actual - expected).abs() < 0.0001, "{actual} != {expected}");
         }
         assert_eq!(result.dispatches(), 1);
     }

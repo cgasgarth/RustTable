@@ -100,18 +100,21 @@ pub struct CpuPipelineReceipt {
     input_identity: PixelIdentity,
     output_identity: PixelIdentity,
     snapshot_identity: CpuPixelpipeSnapshotIdentity,
+    basicadj_plan_identity: [u8; 32],
     output_mode: CpuPixelpipeOutputMode,
     nodes: Vec<CpuNodeReceipt>,
 }
 
 impl CpuPipelineReceipt {
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_descriptor: RgbaF32Descriptor,
         output_descriptor: RgbaF32Descriptor,
         source_identity: SourceRasterIdentity,
         pixel_identities: (PixelIdentity, PixelIdentity),
         snapshot_identity: CpuPixelpipeSnapshotIdentity,
+        basicadj_plan_identity: [u8; 32],
         output_mode: CpuPixelpipeOutputMode,
         nodes: Vec<CpuNodeReceipt>,
     ) -> Self {
@@ -123,6 +126,7 @@ impl CpuPipelineReceipt {
             input_identity: pixel_identities.0,
             output_identity: pixel_identities.1,
             snapshot_identity,
+            basicadj_plan_identity,
             output_mode,
             nodes,
         }
@@ -188,6 +192,13 @@ impl CpuPipelineReceipt {
     #[must_use]
     pub const fn output_mode(&self) -> CpuPixelpipeOutputMode {
         self.output_mode
+    }
+
+    /// Returns the frozen automatic-basicadj resolution identity used by the
+    /// execution. Zero means that no automatic basicadj node was present.
+    #[must_use]
+    pub const fn basicadj_plan_identity(&self) -> [u8; 32] {
+        self.basicadj_plan_identity
     }
 
     #[must_use]

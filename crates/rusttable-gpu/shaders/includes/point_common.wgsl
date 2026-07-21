@@ -11,9 +11,24 @@ struct PointParams {
     _reserved1: f32,
 }
 
+struct BasicAdjParams {
+    black_point: f32,
+    scale: f32,
+    gamma: f32,
+    middle_grey: f32,
+    contrast: f32,
+    hlcomp: f32,
+    hlrange: f32,
+    saturation: f32,
+    vibrance: f32,
+    preserve_colors: u32,
+    _reserved: u32,
+}
+
 @group(0) @binding(0) var<storage, read> input_pixels: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> output_pixels: array<vec4<f32>>;
 @group(0) @binding(2) var<uniform> params: PointParams;
+@group(0) @binding(3) var<uniform> basic_params: BasicAdjParams;
 
 fn in_bounds(index: u32) -> bool {
     return index < params.pixel_count;

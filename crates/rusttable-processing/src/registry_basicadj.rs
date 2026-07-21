@@ -1,6 +1,6 @@
 use super::{
-    CpuFactory, FactoryError, ImplementationIdentity, MigrationBinding, OperationDefinition,
-    PreparedCpuOperation, REGISTRY_BUILD_ID, RoiKind,
+    CpuFactory, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
+    OperationDefinition, PreparedCpuOperation, REGISTRY_BUILD_ID, RoiKind,
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{DescriptorId, basicadj_descriptor};
@@ -26,9 +26,17 @@ pub fn basicadj_definition() -> OperationDefinition {
             crate::evaluate::execute_prepared_operation,
             RoiKind::Identity,
             true,
-            false,
+            true,
         )),
-        None,
+        Some(GpuBinding::new(
+            "rusttable.basicadj.wgsl",
+            1,
+            [
+                "f32-storage".to_owned(),
+                "deterministic-row-major".to_owned(),
+            ],
+            ["rgba32float".to_owned()],
+        )),
         vec![MigrationBinding::new(1, 2, "basicadj.migration.v1")],
         ImplementationIdentity::new(
             format!("{REGISTRY_BUILD_ID}.basicadj"),

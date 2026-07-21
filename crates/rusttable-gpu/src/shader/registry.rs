@@ -45,6 +45,13 @@ const ENTRY_SPECS: &[EntrySpec] = &[
         transcendental: &["exp2"],
     },
     EntrySpec {
+        id: "basicadj",
+        owner_operation: Some("rusttable.basicadj"),
+        owner_kernel: "darktable.basicadj",
+        cpu_reference: "rusttable.cpu.basicadj",
+        transcendental: &["pow", "log"],
+    },
+    EntrySpec {
         id: "linear_offset",
         owner_operation: None,
         owner_kernel: "rusttable.kernel.linear-offset",
@@ -115,7 +122,7 @@ impl ShaderRegistry {
             if reflection.workgroup_size != [256, 1, 1] {
                 return Err(ShaderError::Reflection(spec.id.to_owned()));
             }
-            if reflection.bindings.len() != 3 {
+            if reflection.bindings.len() != 4 {
                 return Err(ShaderError::Reflection(format!("{} bindings", spec.id)));
             }
             let source_tree_hash = catalog.source_tree_hash(POINT_SOURCE)?;
@@ -283,8 +290,8 @@ mod tests {
     #[test]
     fn checked_in_registry_has_stable_initial_entries() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        assert_eq!(registry.entries().len(), 7);
-        assert_eq!(registry.entries()[0].reflection.bindings.len(), 3);
+        assert_eq!(registry.entries().len(), 8);
+        assert_eq!(registry.entries()[0].reflection.bindings.len(), 4);
         assert_eq!(registry.entries()[0].reflection.workgroup_size, [256, 1, 1]);
         assert!(
             registry

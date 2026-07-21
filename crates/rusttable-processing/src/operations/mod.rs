@@ -6,6 +6,7 @@
 //! pipeline.
 
 pub mod basicadj;
+pub mod basicadj_analysis;
 pub mod bloom;
 pub mod colorcorrection;
 pub mod colorin;

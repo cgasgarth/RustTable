@@ -2,7 +2,9 @@ use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
 use rusttable_processing::{
-    BasicAdjConfig, BasicAdjParametersV2, PreserveColors, ProcessingOperationKind, builtin_registry,
+    BasicAdjAnalysisPlan, BasicAdjAnalysisRaster, BasicAdjAnalysisRoi, BasicAdjAutoControls,
+    BasicAdjConfig, BasicAdjParametersV2, FiniteF32, LinearRgb, PreserveColors,
+    ProcessingOperationKind, RasterDimensions, builtin_registry,
 };
 
 fn operation(parameters: &[(&str, f64)]) -> Operation {
@@ -55,4 +57,72 @@ fn config_identity_includes_auto_clip_control() {
     let first_plan = rusttable_processing::BasicAdjPlan::new(first).expect("first plan");
     let second_plan = rusttable_processing::BasicAdjPlan::new(second).expect("second plan");
     assert_ne!(first_plan.identity(), second_plan.identity());
+}
+
+fn pixel(red: f32, green: f32, blue: f32) -> LinearRgb {
+    LinearRgb::new(
+        FiniteF32::new(red).expect("finite red"),
+        FiniteF32::new(green).expect("finite green"),
+        FiniteF32::new(blue).expect("finite blue"),
+    )
+}
+
+#[test]
+fn analysis_is_stable_for_histogram_ties_and_repeated_runs() {
+    let dimensions = RasterDimensions::new(2, 2).expect("dimensions");
+    let pixels = [
+        pixel(0.1, 0.2, 0.3),
+        pixel(0.4, 0.5, 0.6),
+        pixel(0.7, 0.8, 0.9),
+        pixel(1.0, 1.1, 1.2),
+    ];
+    let config = BasicAdjConfig::defaults().with_auto_controls(
+        BasicAdjAutoControls::all()
+            .with_brightness(false)
+            .with_contrast(false),
+    );
+    let raster = BasicAdjAnalysisRaster::new(dimensions, &pixels, None).expect("raster");
+    let first = BasicAdjAnalysisPlan::analyze(config, raster).expect("analysis");
+    let second = BasicAdjAnalysisPlan::analyze(config, raster).expect("analysis");
+    assert_eq!(first, second);
+    assert_eq!(first.sample_count(), 12);
+    assert_eq!(first.histogram().iter().sum::<u64>(), first.sample_count());
+    assert!(first.percentiles()[2] <= first.percentiles()[4]);
+    assert_ne!(first.identity(), [0; 32]);
+}
+
+#[test]
+fn analysis_honors_mask_and_roi_before_resolving_one_plan() {
+    let dimensions = RasterDimensions::new(3, 2).expect("dimensions");
+    let pixels = [
+        pixel(0.1, 0.1, 0.1),
+        pixel(0.2, 0.2, 0.2),
+        pixel(0.3, 0.3, 0.3),
+        pixel(0.4, 0.4, 0.4),
+        pixel(0.5, 0.5, 0.5),
+        pixel(0.6, 0.6, 0.6),
+    ];
+    let mask = [0.0, 1.0, 0.0, 0.0, 1.0, 0.0];
+    let roi = BasicAdjAnalysisRoi::new(1, 0, 2, 2).expect("ROI");
+    let raster = BasicAdjAnalysisRaster::with_roi(dimensions, &pixels, Some(&mask), roi)
+        .expect("masked raster");
+    let config = BasicAdjConfig::defaults()
+        .with_auto_controls(BasicAdjAutoControls::none().with_exposure(true));
+    let plan = rusttable_processing::BasicAdjPlan::resolve(config, raster).expect("plan");
+    assert_ne!(plan.analysis_identity(), [0; 32]);
+    assert!(plan.gpu_parameters().scale.is_finite());
+}
+
+#[test]
+fn analysis_cancellation_never_publishes_a_partial_result() {
+    let dimensions = RasterDimensions::new(2, 2).expect("dimensions");
+    let pixels = [pixel(0.1, 0.2, 0.3); 4];
+    let raster = BasicAdjAnalysisRaster::new(dimensions, &pixels, None).expect("raster");
+    let config = BasicAdjConfig::defaults().with_auto_controls(BasicAdjAutoControls::all());
+    let error = BasicAdjAnalysisPlan::analyze_with_cancellation(config, raster, || true)
+        .expect_err("cancelled analysis");
+    assert!(matches!(
+        error,
+        rusttable_processing::BasicAdjAnalysisError::Cancelled
+    ));
 }

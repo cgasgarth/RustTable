@@ -3,11 +3,14 @@
 //! The operation stays atomic because Darktable applies these stages in a
 //! compatibility-sensitive order.  The current `RustTable` operation boundary
 //! supplies deterministic point execution, so the auto-levels controls are
-//! retained in the persisted configuration while analysis remains outside
-//! this slice.
+//! retained in the persisted configuration while automatic analysis resolves
+//! one immutable plan before execution.
 
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+use super::basicadj_analysis::{
+    BasicAdjAnalysisError, BasicAdjAnalysisRaster, BasicAdjAnalysisResult,
+};
 use super::common::OperationExecutionError;
 use crate::{FiniteF32, LinearRgb, RgbChannel};
 use sha2::{Digest, Sha256};
@@ -17,6 +20,103 @@ pub const BASICADJ_COMPATIBILITY_ID: &str = "basicadj";
 pub const BASICADJ_SCHEMA_VERSION: u16 = 2;
 const DEFAULT_MIDDLE_GREY: f32 = 18.42;
 const CAMERA_LUMINANCE: [f32; 3] = [0.222_504_5, 0.716_878_6, 0.060_616_9];
+
+/// Legacy controls that may be resolved by one deterministic full-image pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct BasicAdjAutoControls(u8);
+
+impl BasicAdjAutoControls {
+    const BLACK_POINT: u8 = 1 << 0;
+    const EXPOSURE: u8 = 1 << 1;
+    const BRIGHTNESS: u8 = 1 << 2;
+    const CONTRAST: u8 = 1 << 3;
+    const HLCOMPR: u8 = 1 << 4;
+    const HLCOMPRTHRESH: u8 = 1 << 5;
+
+    #[must_use]
+    pub const fn none() -> Self {
+        Self(0)
+    }
+
+    #[must_use]
+    pub const fn all() -> Self {
+        Self(
+            Self::BLACK_POINT
+                | Self::EXPOSURE
+                | Self::BRIGHTNESS
+                | Self::CONTRAST
+                | Self::HLCOMPR
+                | Self::HLCOMPRTHRESH,
+        )
+    }
+
+    #[must_use]
+    pub const fn with_black_point(self, enabled: bool) -> Self {
+        Self(set_bit(self.0, Self::BLACK_POINT, enabled))
+    }
+
+    #[must_use]
+    pub const fn with_exposure(self, enabled: bool) -> Self {
+        Self(set_bit(self.0, Self::EXPOSURE, enabled))
+    }
+
+    #[must_use]
+    pub const fn with_brightness(self, enabled: bool) -> Self {
+        Self(set_bit(self.0, Self::BRIGHTNESS, enabled))
+    }
+
+    #[must_use]
+    pub const fn with_contrast(self, enabled: bool) -> Self {
+        Self(set_bit(self.0, Self::CONTRAST, enabled))
+    }
+
+    #[must_use]
+    pub const fn with_highlight_compression(self, enabled: bool) -> Self {
+        Self(set_bit(self.0, Self::HLCOMPR, enabled))
+    }
+
+    #[must_use]
+    pub const fn with_highlight_threshold(self, enabled: bool) -> Self {
+        Self(set_bit(self.0, Self::HLCOMPRTHRESH, enabled))
+    }
+
+    #[must_use]
+    pub const fn black_point(self) -> bool {
+        self.0 & Self::BLACK_POINT != 0
+    }
+    #[must_use]
+    pub const fn exposure(self) -> bool {
+        self.0 & Self::EXPOSURE != 0
+    }
+    #[must_use]
+    pub const fn brightness(self) -> bool {
+        self.0 & Self::BRIGHTNESS != 0
+    }
+    #[must_use]
+    pub const fn contrast(self) -> bool {
+        self.0 & Self::CONTRAST != 0
+    }
+    #[must_use]
+    pub const fn highlight_compression(self) -> bool {
+        self.0 & Self::HLCOMPR != 0
+    }
+    #[must_use]
+    pub const fn highlight_threshold(self) -> bool {
+        self.0 & Self::HLCOMPRTHRESH != 0
+    }
+    #[must_use]
+    pub const fn is_active(self) -> bool {
+        self.0 != 0
+    }
+    #[must_use]
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+}
+
+const fn set_bit(bits: u8, bit: u8, enabled: bool) -> u8 {
+    if enabled { bits | bit } else { bits & !bit }
+}
 
 /// Darktable's stable RGB norm IDs used by the color-preserving contrast path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -163,6 +263,7 @@ pub struct BasicAdjConfig {
     saturation: FiniteF32,
     vibrance: FiniteF32,
     clip: FiniteF32,
+    auto_controls: BasicAdjAutoControls,
 }
 
 impl BasicAdjConfig {
@@ -179,6 +280,7 @@ impl BasicAdjConfig {
             saturation: bounded("saturation", value.saturation, -1.0, 1.0)?,
             vibrance: bounded("vibrance", value.vibrance, -1.0, 1.0)?,
             clip: bounded("clip", value.clip, -1.0, 1.0)?,
+            auto_controls: BasicAdjAutoControls::none(),
         })
     }
 
@@ -231,6 +333,61 @@ impl BasicAdjConfig {
     pub const fn clip(self) -> f32 {
         self.clip.get()
     }
+
+    /// Enables selected legacy automatic controls for the next immutable plan.
+    #[must_use]
+    pub const fn with_auto_controls(mut self, controls: BasicAdjAutoControls) -> Self {
+        self.auto_controls = controls;
+        self
+    }
+
+    #[must_use]
+    pub const fn auto_controls(self) -> BasicAdjAutoControls {
+        self.auto_controls
+    }
+
+    pub(crate) fn with_resolved_analysis(self, result: &BasicAdjAnalysisResult) -> Self {
+        let controls = self.auto_controls;
+        let values = result.resolved_values();
+        Self {
+            black_point: if controls.black_point() {
+                FiniteF32::from_proven_finite(values.black_point())
+            } else {
+                self.black_point
+            },
+            exposure: if controls.exposure() {
+                FiniteF32::from_proven_finite(values.exposure())
+            } else {
+                self.exposure
+            },
+            hlcompr: if controls.highlight_compression() {
+                FiniteF32::from_proven_finite(values.hlcompr())
+            } else {
+                self.hlcompr
+            },
+            hlcomprthresh: if controls.highlight_threshold() {
+                FiniteF32::from_proven_finite(values.hlcomprthresh())
+            } else {
+                self.hlcomprthresh
+            },
+            contrast: if controls.contrast() {
+                FiniteF32::from_proven_finite(values.contrast())
+            } else {
+                self.contrast
+            },
+            middle_grey: self.middle_grey,
+            brightness: if controls.brightness() {
+                FiniteF32::from_proven_finite(values.brightness())
+            } else {
+                self.brightness
+            },
+            saturation: self.saturation,
+            vibrance: self.vibrance,
+            clip: self.clip,
+            preserve_colors: self.preserve_colors,
+            auto_controls: BasicAdjAutoControls::none(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -281,11 +438,19 @@ pub struct BasicAdjPlan {
     contrast: FiniteF32,
     hlcomp: FiniteF32,
     hlrange: FiniteF32,
+    analysis_identity: [u8; 32],
     identity: [u8; 32],
 }
 
 impl BasicAdjPlan {
     pub fn new(config: BasicAdjConfig) -> Result<Self, BasicAdjPlanError> {
+        Self::new_with_analysis(config, [0; 32])
+    }
+
+    fn new_with_analysis(
+        config: BasicAdjConfig,
+        analysis_identity: [u8; 32],
+    ) -> Result<Self, BasicAdjPlanError> {
         let white = (-config.exposure()).exp2();
         let denominator = white - config.black_point();
         let scale = FiniteF32::new(1.0 / denominator)
@@ -318,6 +483,8 @@ impl BasicAdjPlan {
             contrast,
             hlcomp,
             hlrange,
+            config.auto_controls(),
+            analysis_identity,
         );
         Ok(Self {
             config,
@@ -327,13 +494,76 @@ impl BasicAdjPlan {
             contrast,
             hlcomp,
             hlrange,
+            analysis_identity,
             identity,
         })
+    }
+
+    /// Resolves automatic controls once against a full analysis raster.
+    pub fn resolve(
+        config: BasicAdjConfig,
+        raster: BasicAdjAnalysisRaster<'_>,
+    ) -> Result<Self, BasicAdjAnalysisError> {
+        if !config.auto_controls().is_active() {
+            return Self::new(config).map_err(BasicAdjAnalysisError::Plan);
+        }
+        let result = super::basicadj_analysis::BasicAdjAnalysisPlan::analyze(config, raster)?;
+        let resolved = config.with_resolved_analysis(&result);
+        Self::new_with_analysis(resolved, result.identity()).map_err(BasicAdjAnalysisError::Plan)
+    }
+
+    /// Resolves automatic controls and checks the supplied cancellation hook
+    /// at deterministic row boundaries.
+    pub fn resolve_with_cancellation(
+        config: BasicAdjConfig,
+        raster: BasicAdjAnalysisRaster<'_>,
+        should_cancel: impl Fn() -> bool,
+    ) -> Result<Self, BasicAdjAnalysisError> {
+        if !config.auto_controls().is_active() {
+            return Self::new(config).map_err(BasicAdjAnalysisError::Plan);
+        }
+        let result = super::basicadj_analysis::BasicAdjAnalysisPlan::analyze_with_cancellation(
+            config,
+            raster,
+            should_cancel,
+        )?;
+        let resolved = config.with_resolved_analysis(&result);
+        Self::new_with_analysis(resolved, result.identity()).map_err(BasicAdjAnalysisError::Plan)
     }
 
     #[must_use]
     pub const fn identity(&self) -> [u8; 32] {
         self.identity
+    }
+
+    #[must_use]
+    pub const fn analysis_identity(&self) -> [u8; 32] {
+        self.analysis_identity
+    }
+
+    #[must_use]
+    pub const fn gpu_parameters(&self) -> BasicAdjGpuParameters {
+        BasicAdjGpuParameters {
+            black_point: self.config.black_point(),
+            scale: self.scale.get(),
+            gamma: self.gamma.get(),
+            middle_grey: self.middle_grey.get(),
+            contrast: self.contrast.get(),
+            hlcomp: self.hlcomp.get(),
+            hlrange: self.hlrange.get(),
+            preserve_colors: self.config.preserve_colors().id(),
+            saturation: self.config.saturation(),
+            vibrance: self.config.vibrance(),
+        }
+    }
+
+    /// Produces immutable execution evidence for cache/publication owners.
+    #[must_use]
+    pub const fn receipt(&self) -> BasicAdjExecutionReceipt {
+        BasicAdjExecutionReceipt {
+            plan_identity: self.identity,
+            analysis_identity: self.analysis_identity,
+        }
     }
 
     #[must_use]
@@ -470,6 +700,43 @@ impl fmt::Display for BasicAdjPlanError {
 }
 impl std::error::Error for BasicAdjPlanError {}
 
+/// Scalar parameters consumed by the atomic basicadj WGPU point stage.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BasicAdjGpuParameters {
+    pub black_point: f32,
+    pub scale: f32,
+    pub gamma: f32,
+    pub middle_grey: f32,
+    pub contrast: f32,
+    pub hlcomp: f32,
+    pub hlrange: f32,
+    pub preserve_colors: i32,
+    pub saturation: f32,
+    pub vibrance: f32,
+}
+
+/// Stable execution evidence for one resolved basicadj plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BasicAdjExecutionReceipt {
+    plan_identity: [u8; 32],
+    analysis_identity: [u8; 32],
+}
+
+impl BasicAdjExecutionReceipt {
+    #[must_use]
+    pub const fn plan_identity(self) -> [u8; 32] {
+        self.plan_identity
+    }
+
+    #[must_use]
+    pub const fn analysis_identity(self) -> [u8; 32] {
+        self.analysis_identity
+    }
+}
+
+/// Descriptive alias used by cache and pixelpipe callers.
+pub type BasicAdjustmentsPlan = BasicAdjPlan;
+
 fn checked(
     value: f32,
     pixel: usize,
@@ -494,6 +761,7 @@ fn hlcurve(level: f32, hlcomp: f32, hlrange: f32) -> f32 {
     y.ln_1p() * ratio
 }
 
+#[allow(clippy::too_many_arguments)]
 fn plan_identity(
     config: &BasicAdjConfig,
     scale: FiniteF32,
@@ -502,6 +770,8 @@ fn plan_identity(
     contrast: FiniteF32,
     hlcomp: FiniteF32,
     hlrange: FiniteF32,
+    auto_controls: BasicAdjAutoControls,
+    analysis_identity: [u8; 32],
 ) -> [u8; 32] {
     let fields = [
         config.black_point(),
@@ -524,6 +794,8 @@ fn plan_identity(
     let mut hasher = Sha256::new();
     hasher.update(BASICADJ_SCHEMA_VERSION.to_le_bytes());
     hasher.update(config.preserve_colors().id().to_le_bytes());
+    hasher.update([auto_controls.bits()]);
+    hasher.update(analysis_identity);
     for field in fields {
         hasher.update(field.to_bits().to_le_bytes());
     }

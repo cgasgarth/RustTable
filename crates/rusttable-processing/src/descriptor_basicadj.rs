@@ -54,6 +54,7 @@ pub fn basicadj_descriptor() -> OperationDescriptor {
         flags: OperationFlags::DEPRECATED
             .insert(OperationFlags::DETERMINISTIC_CPU)
             .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::ANALYSIS)
             .insert(OperationFlags::COLOR)
             .insert(OperationFlags::BLENDING),
         stage: "scene-linear".to_owned(),
@@ -69,11 +70,14 @@ pub fn basicadj_descriptor() -> OperationDescriptor {
         },
         capability: CapabilityContract {
             cpu_supported: true,
-            gpu_tier: None,
-            required_features: Vec::new(),
-            required_formats: Vec::new(),
+            gpu_tier: Some(1),
+            required_features: vec![
+                "f32-storage".to_owned(),
+                "deterministic-row-major".to_owned(),
+            ],
+            required_formats: vec!["rgba32float".to_owned()],
             deterministic_cpu: true,
-            deterministic_gpu: false,
+            deterministic_gpu: true,
             fallback_to_cpu: true,
             precision: "f32".to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
