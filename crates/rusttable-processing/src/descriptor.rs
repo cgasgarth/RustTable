@@ -38,6 +38,7 @@ pub use crate::operations::invert::invert_descriptor;
 pub use crate::operations::lenscorrection::lenscorrection_descriptor;
 pub use crate::operations::liquify::liquify_descriptor;
 pub use crate::operations::perspective::perspective_descriptor;
+pub use crate::operations::rasterfile::rasterfile_descriptor;
 pub use crate::operations::relight::relight_descriptor;
 pub use crate::operations::rotatepixels::rotatepixels_descriptor;
 pub use crate::operations::scalepixels::scalepixels_descriptor;

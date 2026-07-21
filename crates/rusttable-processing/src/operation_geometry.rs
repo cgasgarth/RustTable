@@ -12,6 +12,7 @@ use crate::operations::{
     },
     lenscorrection::{LensCorrectionConfig, LensCorrectionParametersV1},
     perspective::{PerspectiveConfig, PerspectiveParametersV5},
+    rasterfile::{RasterFileChannelMode, RasterFileParametersV1},
     scalepixels::ScalePixelsConfig,
 };
 
@@ -39,6 +40,7 @@ const CLIPPING_PARAMETERS: [&str; 21] = [
     "ratio_n",
     "ratio_d",
 ];
+const RASTERFILE_PARAMETERS: [&str; 3] = ["mode", "filename", "filename2"];
 
 pub(crate) fn compile_scalepixels(
     operation: &Operation,
@@ -137,6 +139,30 @@ pub(crate) fn compile_clipping(
         enabled: operation.is_enabled(),
         opacity: super::compile_opacity(operation)?,
         kind: ProcessingOperationKind::Clipping { config },
+    })
+}
+
+pub(crate) fn compile_rasterfile(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    super::reject_unexpected(operation, &RASTERFILE_PARAMETERS)?;
+    let mode = RasterFileChannelMode::new(
+        u8::try_from(super::parameter_integer(operation, "mode", 7.0)?).map_err(|_| {
+            super::invalid_parameters(operation, "rasterfile channel mode is out of range")
+        })?,
+    )
+    .map_err(|error| super::invalid_parameters(operation, error))?;
+    let path = super::optional_parameter_text(operation, "filename")?.unwrap_or_default();
+    let file = super::optional_parameter_text(operation, "filename2")?.unwrap_or_default();
+    let config = RasterFileParametersV1::new(mode, path.as_bytes(), file.as_bytes())
+        .map_err(|error| super::invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: super::compile_opacity(operation)?,
+        kind: ProcessingOperationKind::RasterFile {
+            config: Box::new(config),
+        },
     })
 }
 

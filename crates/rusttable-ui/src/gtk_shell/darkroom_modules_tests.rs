@@ -184,6 +184,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "graduatednd",
             "crop",
             "clipping",
+            "rasterfile",
             "flip",
             "rotatepixels",
             "scalepixels",

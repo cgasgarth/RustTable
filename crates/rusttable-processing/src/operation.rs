@@ -17,6 +17,7 @@ use crate::operations::{
     lenscorrection::LensCorrectionConfig,
     perspective::PerspectiveConfig,
     primaries::PrimariesConfig,
+    rasterfile::RasterFileParametersV1,
     relight::RelightConfig,
     rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
     scalepixels::ScalePixelsConfig,
@@ -43,7 +44,7 @@ mod operation_geometry;
 mod operation_parameters;
 pub(crate) use operation_geometry::{
     compile_clipping, compile_enlargecanvas, compile_finalscale, compile_lenscorrection,
-    compile_perspective, compile_scalepixels,
+    compile_perspective, compile_rasterfile, compile_scalepixels,
 };
 #[path = "operation_censorize.rs"]
 mod operation_censorize;
@@ -96,6 +97,7 @@ pub struct ProcessingOperation {
     pub(crate) kind: ProcessingOperationKind,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(clippy::large_enum_variant)]
 pub enum ProcessingOperationKind {
     BasicAdj {
         config: BasicAdjConfig,
@@ -144,6 +146,9 @@ pub enum ProcessingOperationKind {
     },
     Clipping {
         config: ClippingConfig,
+    },
+    RasterFile {
+        config: Box<RasterFileParametersV1>,
     },
     LensCorrection {
         config: LensCorrectionConfig,

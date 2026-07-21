@@ -108,6 +108,12 @@ pub use operations::liquify::{
     LiquifyStatus, LiquifyWarpType,
 };
 pub use operations::mask_manager::{MaskManagerError, MaskManagerParameters};
+pub use operations::rasterfile::{
+    RasterFileChannelMode, RasterFileExecutionError, RasterFileForm, RasterFileHistory,
+    RasterFileParametersV1, RasterFilePlan, RasterFileReceipt, RasterFileTile,
+    RasterFileVectorizationReceipt, RasterMaskAsset, RasterMaskAssetError, RasterMaskCache,
+    RasterMaskFormat, RasterMaskLimits, decode_history, migrate_history,
+};
 pub use operations::retouch::{
     RETOUCH_MAX_SCALES, RETOUCH_SCHEMA_VERSION, RetouchAlgorithm, RetouchBlurType, RetouchConfig,
     RetouchConfigError, RetouchExecutionError, RetouchFillMode, RetouchForm, RetouchParameters,
