@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
+use rusttable_core::Revision;
 
 use super::super::darkroom_modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
@@ -15,6 +16,11 @@ use super::{
     chrome_toggle,
 };
 use super::{ExposurePanel, ThemeRole, apply_theme_role};
+use crate::presentation::{
+    DarkroomHistoryViewModel, DarkroomImageInformationViewModel, DarkroomPanelProjection,
+    DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, build_history_panel,
+    build_image_information_panel, build_snapshots_panel,
+};
 
 pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatus) {
     let panel = rail("darkroom-left-panel", width, "Darkroom left module rail");
@@ -26,24 +32,15 @@ pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatu
         true,
         "select a photo to navigate",
     );
-    let (snapshots, snapshots_state) = rail_module(
-        "darkroom-snapshots",
-        "snapshots",
-        false,
-        "select a photo to view snapshots",
-    );
-    let (history, history_state) = rail_module(
-        "darkroom-history",
-        "history",
-        false,
-        "select a photo to view edit history",
-    );
-    let (image_information, image_information_state) = rail_module(
-        "darkroom-image-information",
-        "image information",
-        false,
-        "image information unavailable",
-    );
+    let snapshots_projection = DarkroomPanelProjection::<DarkroomSnapshotsViewModel>::empty();
+    let history_projection = DarkroomPanelProjection::<DarkroomHistoryViewModel>::empty();
+    let image_projection = DarkroomPanelProjection::<DarkroomImageInformationViewModel>::empty();
+    let snapshots = build_snapshots_panel(&snapshots_projection, None);
+    let history = build_history_panel(&history_projection, None);
+    let image_information = build_image_information_panel(&image_projection);
+    let snapshots_body = projection_body(&snapshots);
+    let history_body = projection_body(&history);
+    let image_information_body = projection_body(&image_information);
     for module in [navigation, snapshots, history, image_information] {
         modules.append(&module);
     }
@@ -65,11 +62,18 @@ pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatu
         controller_modules,
         DarkroomRailStatus {
             navigation: navigation_state,
-            snapshots: snapshots_state,
-            history: history_state,
-            image_information: image_information_state,
+            snapshots_body,
+            history_body,
+            image_information_body,
         },
     )
+}
+
+fn projection_body(expander: &gtk4::Expander) -> gtk4::Box {
+    let child = expander.child().expect("panel projection has a body");
+    child
+        .downcast::<gtk4::Box>()
+        .expect("panel projection body is a GTK box")
 }
 
 pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
@@ -257,6 +261,48 @@ pub(super) fn add_group_buttons(
     .collect::<Vec<_>>();
     for button in buttons {
         groups.append(&button);
+    }
+}
+
+impl DarkroomRailStatus {
+    pub(super) fn set_detail(&self, detail: &PhotoDetailViewModel, target: DarkroomPanelTarget) {
+        let information = DarkroomImageInformationViewModel::new(
+            detail.title().as_str(),
+            detail.facts().cloned().collect(),
+            vec!["GPS coordinates".to_owned(), "copyright".to_owned()],
+        )
+        .expect("photo detail facts are already validated");
+        let projection = DarkroomPanelProjection::ready(target, Revision::ZERO, information);
+        replace_projection(
+            &self.image_information_body,
+            &build_image_information_panel(&projection),
+        );
+    }
+
+    pub(super) fn clear_detail(&self) {
+        let snapshots = DarkroomPanelProjection::<DarkroomSnapshotsViewModel>::empty();
+        let history = DarkroomPanelProjection::<DarkroomHistoryViewModel>::empty();
+        let image = DarkroomPanelProjection::<DarkroomImageInformationViewModel>::empty();
+        replace_projection(
+            &self.snapshots_body,
+            &build_snapshots_panel(&snapshots, None),
+        );
+        replace_projection(&self.history_body, &build_history_panel(&history, None));
+        replace_projection(
+            &self.image_information_body,
+            &build_image_information_panel(&image),
+        );
+    }
+}
+
+fn replace_projection(slot: &gtk4::Box, expander: &gtk4::Expander) {
+    let body = projection_body(expander);
+    while let Some(child) = slot.first_child() {
+        child.unparent();
+    }
+    while let Some(child) = body.first_child() {
+        child.unparent();
+        slot.append(&child);
     }
 }
 

@@ -59,6 +59,10 @@ pub enum DarkroomModuleError {
         expected: String,
         actual: String,
     },
+    UnknownPreset {
+        module_id: String,
+        preset_id: String,
+    },
     DuplicateModule {
         id: String,
     },
@@ -89,6 +93,13 @@ impl fmt::Display for DarkroomModuleError {
                     "action targets module {expected}, received {actual}"
                 )
             }
+            Self::UnknownPreset {
+                module_id,
+                preset_id,
+            } => write!(
+                formatter,
+                "unknown preset {preset_id} for module {module_id}"
+            ),
             Self::DuplicateModule { id } => write!(formatter, "duplicate darkroom module: {id}"),
             Self::RevisionOverflow => formatter.write_str("module revision counter overflowed"),
         }
@@ -125,6 +136,11 @@ pub enum DarkroomModuleAction {
         module_id: String,
         expected_revision: Revision,
     },
+    Preset {
+        module_id: String,
+        expected_revision: Revision,
+        preset_id: String,
+    },
     Control {
         module_id: String,
         expected_revision: Revision,
@@ -144,9 +160,43 @@ impl DarkroomModuleAction {
             Self::Disclosure { module_id, .. }
             | Self::Enable { module_id, .. }
             | Self::Reset { module_id, .. }
+            | Self::Preset { module_id, .. }
             | Self::Control { module_id, .. }
             | Self::Recover { module_id, .. } => module_id,
         }
+    }
+}
+
+/// A registry-sourced preset with typed control values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DarkroomModulePreset {
+    id: String,
+    label: String,
+    values: Vec<(String, DarkroomControlValue)>,
+}
+
+impl DarkroomModulePreset {
+    #[must_use]
+    pub fn new(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        values: Vec<(String, DarkroomControlValue)>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            values,
+        }
+    }
+
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.label
     }
 }
 
@@ -165,6 +215,7 @@ pub struct DarkroomModuleViewModel {
     resettable: bool,
     revision: Revision,
     controls: DarkroomControlsViewModel,
+    presets: Vec<DarkroomModulePreset>,
     availability: DarkroomModuleAvailability,
     status: DarkroomModuleStatus,
 }
@@ -206,6 +257,7 @@ impl DarkroomModuleViewModel {
             resettable,
             revision,
             controls,
+            presets: Vec::new(),
             availability: DarkroomModuleAvailability::Supported,
             status: DarkroomModuleStatus::Ready,
         })
@@ -267,6 +319,17 @@ impl DarkroomModuleViewModel {
         &self.controls
     }
 
+    #[must_use]
+    pub fn presets(&self) -> impl ExactSizeIterator<Item = &DarkroomModulePreset> {
+        self.presets.iter()
+    }
+
+    #[must_use]
+    pub fn with_presets(mut self, presets: Vec<DarkroomModulePreset>) -> Self {
+        self.presets = presets;
+        self
+    }
+
     /// Returns stable widget names in GTK keyboard traversal order.
     #[must_use]
     pub fn focus_order(&self) -> Vec<String> {
@@ -276,6 +339,9 @@ impl DarkroomModuleViewModel {
         ];
         if self.resettable {
             order.push(format!("{}-reset", self.id));
+        }
+        if !self.presets.is_empty() {
+            order.insert(2, format!("{}-presets", self.id));
         }
         order.extend(
             self.controls
@@ -312,6 +378,11 @@ impl DarkroomModuleViewModel {
             DarkroomModuleAction::Reset {
                 expected_revision, ..
             } => self.reset(expected_revision),
+            DarkroomModuleAction::Preset {
+                expected_revision,
+                preset_id,
+                ..
+            } => self.apply_preset(expected_revision, &preset_id),
             DarkroomModuleAction::Control {
                 expected_revision,
                 id,
@@ -472,6 +543,31 @@ impl DarkroomModuleViewModel {
         Ok(revision)
     }
 
+    fn apply_preset(
+        &mut self,
+        expected_revision: Revision,
+        preset_id: &str,
+    ) -> Result<Revision, DarkroomModuleError> {
+        self.check_revision(expected_revision)?;
+        let Some(preset) = self.presets.iter().find(|preset| preset.id() == preset_id) else {
+            return Err(self.record_error(DarkroomModuleError::UnknownPreset {
+                module_id: self.id.clone(),
+                preset_id: preset_id.to_owned(),
+            }));
+        };
+        let values = preset.values.clone();
+        let mut revision = expected_revision;
+        for (control_id, value) in values {
+            revision = self
+                .controls
+                .set_value(revision, &control_id, value)
+                .map_err(|error| self.record_control_error(error))?;
+        }
+        self.revision = revision;
+        self.status = DarkroomModuleStatus::Ready;
+        Ok(revision)
+    }
+
     fn check_revision(&mut self, expected: Revision) -> Result<(), DarkroomModuleError> {
         if expected != self.revision {
             let error = DarkroomModuleError::StaleRevision {
@@ -621,13 +717,28 @@ pub fn build_module_panel_with_actions(
     enabled.set_focusable(true);
     enabled.update_property(&[Property::Label("Enable module")]);
     header.append(&enabled);
-    let presets = gtk4::Button::with_label("Presets");
-    presets.set_widget_name(&format!("{}-presets", module.id()));
-    presets.set_tooltip_text(Some("Presets are unavailable for this module"));
-    presets.set_sensitive(false);
-    presets.set_focusable(false);
-    presets.update_property(&[Property::Label("Module presets unavailable")]);
-    header.append(&presets);
+    let presets = if module.presets().len() == 0 {
+        let button = gtk4::Button::with_label("Presets");
+        button.set_widget_name(&format!("{}-presets", module.id()));
+        button.set_tooltip_text(Some("Presets are unavailable for this module"));
+        button.set_sensitive(false);
+        button.set_focusable(false);
+        button.update_property(&[Property::Label("Module presets unavailable")]);
+        header.append(&button);
+        None
+    } else {
+        let labels = module
+            .presets()
+            .map(DarkroomModulePreset::label)
+            .collect::<Vec<_>>();
+        let dropdown = gtk4::DropDown::from_strings(&labels);
+        dropdown.set_widget_name(&format!("{}-presets", module.id()));
+        dropdown.set_sensitive(module_available && module.enabled());
+        dropdown.set_focusable(true);
+        dropdown.update_property(&[Property::Label("Choose module preset")]);
+        header.append(&dropdown);
+        Some(dropdown)
+    };
     let reset = module.resettable().then(|| {
         let reset = gtk4::Button::with_label("Reset");
         reset.set_widget_name(&format!("{}-reset", module.id()));
@@ -692,11 +803,15 @@ pub fn build_module_panel_with_actions(
         let status_for_enabled = status.clone();
         let recover_for_enabled = recover.clone();
         let reset_for_enabled = reset.clone();
+        let presets_for_enabled = presets.clone();
         let current_revision_for_enabled = current_revision.clone();
         let module_id_for_enabled = module_id.clone();
         enabled.connect_toggled(move |enabled| {
             if let Some(reset) = reset_for_enabled.as_ref() {
                 reset.set_sensitive(enabled.is_active());
+            }
+            if let Some(presets) = presets_for_enabled.as_ref() {
+                presets.set_sensitive(module_available && enabled.is_active());
             }
             for row in &control_rows {
                 row.set_sensitive(module_available && enabled.is_active());
@@ -729,6 +844,37 @@ pub fn build_module_panel_with_actions(
                     DarkroomModuleAction::Reset {
                         module_id: module_id_for_reset.clone(),
                         expected_revision: *current_revision_for_reset.borrow(),
+                    },
+                );
+            });
+        }
+
+        if let Some(presets) = presets {
+            let status_for_presets = status.clone();
+            let recover_for_presets = recover.clone();
+            let handler_for_presets = handler.clone();
+            let current_revision_for_presets = current_revision.clone();
+            let module_id_for_presets = module_id.clone();
+            let preset_ids = module
+                .presets()
+                .map(|preset| preset.id().to_owned())
+                .collect::<Vec<_>>();
+            presets.connect_selected_notify(move |presets| {
+                let Ok(index) = usize::try_from(presets.selected()) else {
+                    return;
+                };
+                let Some(preset_id) = preset_ids.get(index) else {
+                    return;
+                };
+                dispatch_module_action(
+                    &handler_for_presets,
+                    &status_for_presets,
+                    &recover_for_presets,
+                    &current_revision_for_presets,
+                    DarkroomModuleAction::Preset {
+                        module_id: module_id_for_presets.clone(),
+                        expected_revision: *current_revision_for_presets.borrow(),
+                        preset_id: preset_id.clone(),
                     },
                 );
             });

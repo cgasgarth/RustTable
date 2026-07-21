@@ -23,6 +23,11 @@ impl DarkroomModuleAvailability {
     pub const fn is_deprecated(&self) -> bool {
         matches!(self, Self::Deprecated { .. })
     }
+
+    #[must_use]
+    pub const fn is_unsupported(&self) -> bool {
+        matches!(self, Self::Unsupported { .. })
+    }
 }
 
 /// Provides the next Darktable operation rows while their backend is explicit.

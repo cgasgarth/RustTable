@@ -44,8 +44,9 @@ pub use darkroom_controls::{
     ParameterValidationError,
 };
 pub use darkroom_modules::{
-    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModuleSide, DarkroomModuleStatus,
-    DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column, build_module_panel,
+    DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide,
+    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column,
+    build_module_panel,
 };
 pub use darktable_spec::{
     ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_RAIL_SCROLL_WIDGET_IDS,

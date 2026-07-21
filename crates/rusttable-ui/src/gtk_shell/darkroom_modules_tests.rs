@@ -141,7 +141,14 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             .right_modules()
             .map(DarkroomModuleViewModel::id)
             .collect::<Vec<_>>(),
-        vec!["bloom", "soften", "invert", "dither"]
+        vec![
+            "bloom",
+            "soften",
+            "invert",
+            "dither",
+            "graduatednd",
+            "vignette"
+        ]
     );
     assert!(modules.module("bloom").is_some());
     assert!(modules.module("soften").is_some());
@@ -150,6 +157,19 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     assert!(invert.availability().is_deprecated());
     assert!(invert.status_text().contains("Deprecated"));
     assert!(bloom_has_typed_sliders(&modules));
+    let graduatednd = modules.module("graduatednd").expect("graduated ND");
+    assert_eq!(graduatednd.presets().len(), 13);
+    let minimum = graduatednd
+        .controls()
+        .control("graduatednd-density")
+        .expect("density")
+        .slider_spec()
+        .expect("density slider")
+        .minimum();
+    assert!((minimum + 8.0).abs() < f64::EPSILON);
+    let vignette = modules.module("vignette").expect("vignette");
+    assert!(vignette.controls().control("vignette-center-x").is_some());
+    assert!(vignette.availability().is_unsupported());
 }
 
 fn bloom_has_typed_sliders(modules: &DarkroomModulesViewModel) -> bool {
