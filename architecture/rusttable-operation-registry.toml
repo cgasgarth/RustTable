@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "9e7148fa9e548efa69f1514c65eabe73623bcaf699509ed44e67de1454fe1525"
+snapshot_hash = "6763d68c8c6fbfeb433063a6f508c896a788d66af94e5b5c00fb6c2504ae9945"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -179,6 +179,22 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.liquify"
+compatibility_name = "liquify"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.mask_manager"
+compatibility_name = "mask_manager"
+descriptor_version = 2
+parameter_version = 2
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.primaries"
 compatibility_name = "primaries"
 descriptor_version = 1
@@ -189,6 +205,14 @@ status = "available"
 [[operation]]
 rust_id = "rusttable.relight"
 compatibility_name = "relight"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.retouch"
+compatibility_name = "retouch"
 descriptor_version = 1
 parameter_version = 1
 implementation_version = 1

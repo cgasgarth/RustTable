@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn registry_closure_is_sorted_and_hashable() {
         let closure = RegistryClosure::from_registry(builtin_registry()).expect("closure");
-        assert_eq!(closure.entries.len(), 33);
+        assert_eq!(closure.entries.len(), 34);
         assert!(
             closure
                 .entries

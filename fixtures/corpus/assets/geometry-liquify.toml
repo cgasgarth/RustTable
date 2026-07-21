@@ -1,0 +1,11 @@
+schema = "rusttable.liquify.fixture.v1"
+privacy = "synthetic-only"
+dimensions = [12, 8]
+interpolation = "bilinear"
+path = "move,line"
+warp = "linear"
+center = [3.0, 3.0]
+strength = [4.0, 3.0]
+radius = 3.0
+falloff = [0.25, 0.75]
+expected = "deterministic-inverse-field-and-mask"

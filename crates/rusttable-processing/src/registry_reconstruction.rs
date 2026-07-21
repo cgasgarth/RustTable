@@ -89,6 +89,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::LensCorrection { .. } => {
             crate::descriptor::lenscorrection_descriptor().id
         }
+        crate::ProcessingOperationKind::Liquify { .. } => {
+            crate::descriptor::liquify_descriptor().id
+        }
     }
 }
 

@@ -195,6 +195,9 @@ pub enum ProcessingOperationKind {
     Retouch {
         config: crate::operations::retouch::RetouchParameters,
     },
+    Liquify {
+        config: crate::operations::liquify::LiquifyConfig,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -346,6 +349,36 @@ impl ProcessingOperation {
     }
     pub(crate) fn compile_retouch(operation: &Operation) -> Result<Self, OperationCompileError> {
         operation_retouch::compile_retouch(operation)
+    }
+    pub(crate) fn compile_liquify(operation: &Operation) -> Result<Self, OperationCompileError> {
+        let parameter = ParameterName::new("payload").expect("schema name");
+        let payload = operation.parameter(&parameter).ok_or_else(|| {
+            OperationCompileError::MissingParameter {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter: parameter.clone(),
+            }
+        })?;
+        let rusttable_core::ParameterValue::Text(payload) = payload else {
+            return Err(OperationCompileError::WrongParameterType {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                parameter,
+            });
+        };
+        let config = crate::operations::liquify::LiquifyConfig::from_hex(payload.as_str())
+            .map_err(|error| OperationCompileError::InvalidParameters {
+                operation_id: operation.id(),
+                key: operation.key().clone(),
+                reason: error.to_string(),
+            })?;
+        let opacity = compile_opacity(operation)?;
+        Ok(Self {
+            operation_id: operation.id(),
+            enabled: operation.is_enabled(),
+            opacity,
+            kind: ProcessingOperationKind::Liquify { config },
+        })
     }
     pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_relight(operation)

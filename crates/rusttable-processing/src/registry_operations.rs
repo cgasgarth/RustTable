@@ -9,6 +9,9 @@ pub use registry_clahe::clahe_definition;
 #[path = "registry_defringe.rs"]
 mod registry_defringe;
 pub use registry_defringe::defringe_definition;
+#[path = "registry_liquify.rs"]
+mod registry_liquify;
+pub use registry_liquify::liquify_definition;
 
 use super::{
     CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
@@ -979,6 +982,7 @@ macro_rules! builtin_operations {
             $crate::registry::enlargecanvas_definition,
             $crate::registry::perspective_definition,
             $crate::registry::lenscorrection_definition,
+            $crate::registry::liquify_definition,
             $crate::registry::mask_manager_definition,
             $crate::registry::retouch_definition,
             $crate::registry_reconstruction::highlights_definition,

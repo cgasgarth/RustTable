@@ -48,7 +48,7 @@ pub use descriptor::{
     color_reconstruction_descriptor, colorin_descriptor, crop_descriptor, defringe_descriptor,
     dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
     flip_descriptor, graduatednd_descriptor, grain_descriptor, highlights_descriptor,
-    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
+    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor, liquify_descriptor,
     mask_manager_descriptor, perspective_descriptor, primaries_descriptor, retouch_descriptor,
     rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor,
     temperature_descriptor, vignette_descriptor,
@@ -101,6 +101,12 @@ pub use operations::defringe::{
     DefringePixel, DefringePlan, DefringeReceipt,
 };
 pub use operations::grain::{GrainGpuParameters, GrainPlan};
+pub use operations::liquify::{
+    LIQUIFY_COMPATIBILITY_ID, LIQUIFY_PARAMETER_BYTES, LIQUIFY_SCHEMA_VERSION, LiquifyConfig,
+    LiquifyExecution, LiquifyExecutionError, LiquifyGpuDispatch, LiquifyInterpolation, LiquifyNode,
+    LiquifyNodeType, LiquifyParametersV1, LiquifyPathKind, LiquifyPlan, LiquifyPoint,
+    LiquifyStatus, LiquifyWarpType,
+};
 pub use operations::mask_manager::{MaskManagerError, MaskManagerParameters};
 pub use operations::retouch::{
     RETOUCH_MAX_SCALES, RETOUCH_SCHEMA_VERSION, RetouchAlgorithm, RetouchBlurType, RetouchConfig,
