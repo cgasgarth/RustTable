@@ -281,6 +281,7 @@ export const installCanonicalComputerUseApp = async ({
     if (await pathExists(installPath)) {
       await assertCompleteBundle(installPath, readIdentifier, readManifestValue, {
         allowLegacyIcon: true,
+        allowLegacyDocumentTypes: true,
       });
       await unregisterBundle(installPath, run);
       await rename(installPath, backupPath);
