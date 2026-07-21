@@ -60,6 +60,10 @@ pub enum MessageId {
     CollectionPropertyFilmroll,
     /// Folders collection property.
     CollectionPropertyFolders,
+    /// Rating collection property.
+    CollectionPropertyRating,
+    /// Color-label collection property.
+    CollectionPropertyColorLabel,
     /// Filename collection property.
     CollectionPropertyFilename,
     /// Collection search placeholder.
@@ -107,6 +111,8 @@ impl MessageId {
             Self::PanelColor => "panel-color",
             Self::CollectionPropertyFilmroll => "collection-property-filmroll",
             Self::CollectionPropertyFolders => "collection-property-folders",
+            Self::CollectionPropertyRating => "collection-property-rating",
+            Self::CollectionPropertyColorLabel => "collection-property-color-label",
             Self::CollectionPropertyFilename => "collection-property-filename",
             Self::CollectionSearch => "collection-search",
             Self::CollectionClear => "collection-clear",
@@ -120,7 +126,7 @@ impl MessageId {
     }
 
     /// Returns every message ID in schema order.
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 33] = [
         Self::AppTitle,
         Self::ToolbarImport,
         Self::ToolbarPreferences,
@@ -143,6 +149,8 @@ impl MessageId {
         Self::PanelColor,
         Self::CollectionPropertyFilmroll,
         Self::CollectionPropertyFolders,
+        Self::CollectionPropertyRating,
+        Self::CollectionPropertyColorLabel,
         Self::CollectionPropertyFilename,
         Self::CollectionSearch,
         Self::CollectionClear,

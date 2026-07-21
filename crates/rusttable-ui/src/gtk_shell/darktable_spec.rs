@@ -297,6 +297,29 @@ pub const LIGHTTABLE_COMPOSITION: LighttableCompositionSpec = LighttableComposit
     empty_state_columns: 2,
 };
 
+/// Geometry of the Darktable darkroom center column and its adjacent rails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DarkroomGeometry {
+    /// Fixed top proofing toolbar height.
+    pub top_toolbar_height_px: u8,
+    /// Fixed bottom viewport toolbar height.
+    pub bottom_toolbar_height_px: u8,
+    /// Minimum viewport height before the filmstrip is allowed to compress.
+    pub viewport_minimum_height_px: u16,
+    /// Initial scopes graph height in the right rail.
+    pub histogram_height_px: u16,
+    /// Separator between the center column and the filmstrip.
+    pub filmstrip_separator_px: u8,
+}
+
+pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
+    top_toolbar_height_px: 28,
+    bottom_toolbar_height_px: 28,
+    viewport_minimum_height_px: 200,
+    histogram_height_px: 128,
+    filmstrip_separator_px: 1,
+};
+
 /// Pixel bounds for the initial Darktable grid and filmstrip thumbnail surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ThumbnailMetrics {
@@ -548,8 +571,8 @@ pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
 #[cfg(test)]
 mod tests {
     use super::{
-        ColorToken, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DesktopRegion,
-        FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
+        ColorToken, DARKROOM_GEOMETRY, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS,
+        DesktopRegion, FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
         LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, PANEL_SLOTS,
         PanelRole, PanelSlot, THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ViewMode,
     };
@@ -578,6 +601,17 @@ mod tests {
             DesktopRegion::CenterWorkspace.identifier(),
             "center-workspace"
         );
+    }
+
+    #[test]
+    fn darkroom_geometry_keeps_viewport_between_toolbars_and_filmstrip() {
+        const {
+            assert!(DARKROOM_GEOMETRY.top_toolbar_height_px > 0);
+            assert!(DARKROOM_GEOMETRY.bottom_toolbar_height_px > 0);
+            assert!(DARKROOM_GEOMETRY.viewport_minimum_height_px >= 200);
+            assert!(DARKROOM_GEOMETRY.histogram_height_px >= 92);
+        }
+        assert_eq!(DARKROOM_GEOMETRY.filmstrip_separator_px, 1);
     }
 
     #[test]

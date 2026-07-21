@@ -34,7 +34,9 @@ use crate::ai_batch::AiBatchPanel;
 use crate::ai_models::AiModelsPanel;
 use crate::camera::{CameraAction, CameraPanel, CameraViewModel};
 use crate::external_editor::{ExternalEditorAction, ExternalEditorPanel, ExternalEditorViewModel};
-use crate::import::{ImportSessionAction, ImportSessionPanel, ImportSessionViewModel};
+use crate::import::{
+    ImportDialog, ImportSessionAction, ImportSessionPanel, ImportSessionViewModel,
+};
 use crate::input_mapping::InputMappingEditor;
 use crate::neural_restore::NeuralRestorePanel;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
@@ -77,6 +79,7 @@ pub struct GtkShell {
     pub(super) ai_batch_panel: AiBatchPanel,
     camera_panel: CameraPanel,
     import_session_panel: ImportSessionPanel,
+    import_dialog: ImportDialog,
     i18n: Rc<RefCell<I18n>>,
     display_profile_banner: DisplayProfileBanner,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
@@ -125,6 +128,7 @@ impl GtkShell {
             .build();
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
+        let import_dialog = ImportDialog::new(&window);
         let panel_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
         let (darkroom, darkroom_preview, darkroom_workspace) = build_darkroom(panel_width);
         let darkroom_left_modules = darkroom.left_modules().clone();
@@ -203,6 +207,7 @@ impl GtkShell {
             ai_batch_panel,
             camera_panel,
             import_session_panel,
+            import_dialog,
             i18n: Rc::clone(&i18n),
             display_profile_banner,
             lighttable_workspace: Rc::new(RefCell::new(None)),
@@ -441,10 +446,11 @@ impl GtkShell {
     where
         F: Fn(ImportAction) + 'static,
     {
-        let callback = Rc::new(callback);
+        self.import_dialog.connect_action(callback);
+        let dialog = self.import_dialog.clone();
         for button in &self.import_buttons {
-            let callback = Rc::clone(&callback);
-            button.connect_clicked(move |_| callback(ImportAction::ChooseFiles));
+            let dialog = dialog.clone();
+            button.connect_clicked(move |_| dialog.present());
         }
     }
 

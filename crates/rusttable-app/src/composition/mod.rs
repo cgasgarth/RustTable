@@ -2,6 +2,7 @@ mod ai_ui;
 mod catalog_preview;
 mod catalog_preview_smoke;
 mod collection_bridge;
+mod import_bridge;
 mod preview_lifecycle;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
@@ -22,10 +23,7 @@ use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
     MacApplicationBridge, MacApplicationCommand, MacOpenRequest, MacTerminationDecision,
 };
-use gtk4::gio::prelude::{
-    ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt, ListModelExt,
-};
-use gtk4::glib::object::CastNone;
+use gtk4::gio::prelude::{ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt};
 use gtk4::glib::{self, ControlFlow};
 use gtk4::prelude::GtkWindowExt;
 use gtk4::prelude::{GtkApplicationExt, RecentManagerExt, WidgetExt};
@@ -238,14 +236,17 @@ fn activate_application(
     let import_active_shell = Rc::clone(active_shell);
     let import_active_catalog = Rc::clone(active_catalog);
     let import_active_collection = Rc::clone(active_collection);
-    shell.connect_import_action(move |action| match action {
-        ImportAction::ChooseFiles => open_import_dialog(
-            &import_shell,
-            &import_bridge,
-            &import_active_shell,
-            &import_active_catalog,
-            &import_active_collection,
-        ),
+    shell.connect_import_action(move |action| {
+        if let ImportAction::Import(request) = action {
+            import_bridge::dispatch_import_request(
+                &import_shell,
+                &import_bridge,
+                &import_active_shell,
+                &import_active_catalog,
+                &import_active_collection,
+                &request,
+            );
+        }
     });
     connect_export_actions(
         &shell,
@@ -287,45 +288,6 @@ fn activate_application(
     if let Some(request) = native_bridge.borrow_mut().mark_ready() {
         dispatch_open_request(&request, active_shell, active_catalog, active_collection);
     }
-}
-
-fn open_import_dialog(
-    shell: &rusttable_ui::GtkShell,
-    native_bridge: &Rc<RefCell<MacApplicationBridge>>,
-    active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
-    active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
-    active_collection: &Rc<RefCell<Option<CollectionController>>>,
-) {
-    let dialog = gtk4::FileDialog::builder()
-        .title("Import images")
-        .accept_label("Import")
-        .modal(true)
-        .build();
-    let filter = gtk4::FileFilter::new();
-    filter.set_name(Some("Supported raster images"));
-    for suffix in ["jpg", "jpeg", "png", "tif", "tiff"] {
-        filter.add_suffix(suffix);
-    }
-    dialog.set_default_filter(Some(&filter));
-    let native_bridge = Rc::clone(native_bridge);
-    let active_shell = Rc::clone(active_shell);
-    let active_catalog = Rc::clone(active_catalog);
-    let active_collection = Rc::clone(active_collection);
-    dialog.open_multiple(
-        Some(shell.window()),
-        None::<&gtk4::gio::Cancellable>,
-        move |result| {
-            let Ok(files) = result else { return };
-            let paths = (0..files.n_items())
-                .filter_map(|index| files.item(index).and_downcast::<gtk4::gio::File>())
-                .filter_map(|file| file.path())
-                .collect::<Vec<_>>();
-            let delivery = native_bridge.borrow_mut().receive_paths(paths);
-            if let Some(request) = delivery.request().cloned() {
-                dispatch_open_request(&request, &active_shell, &active_catalog, &active_collection);
-            }
-        },
-    );
 }
 
 fn install_action_input(shell: &rusttable_ui::GtkShell) {
@@ -967,7 +929,10 @@ mod tests {
 
         apply_collection_action(
             &mut controller,
-            CollectionControlAction::SetSearchText("portrait".to_owned()),
+            CollectionControlAction::SetSearchText {
+                search_text: "portrait".to_owned(),
+                generation: 1,
+            },
         );
         let filtered = collection_filter_state(&controller.snapshot());
         assert_eq!(filtered.controls().result_count(), 1);
@@ -976,9 +941,15 @@ mod tests {
 
         apply_collection_action(
             &mut controller,
-            CollectionControlAction::SetProperty(CollectionProperty::Folders),
+            CollectionControlAction::SetProperty {
+                property: CollectionProperty::Folders,
+                generation: 2,
+            },
         );
-        apply_collection_action(&mut controller, CollectionControlAction::Clear);
+        apply_collection_action(
+            &mut controller,
+            CollectionControlAction::Clear { generation: 3 },
+        );
         let cleared = collection_filter_state(&controller.snapshot());
         assert_eq!(cleared.controls().property(), CollectionProperty::Folders);
         assert_eq!(cleared.controls().result_count(), 2);

@@ -12,6 +12,10 @@ pub enum CollectionProperty {
     Filmroll,
     /// The containing folder path.
     Folders,
+    /// The current star rating.
+    Rating,
+    /// The current color label.
+    ColorLabel,
     /// The source filename.
     #[default]
     Filename,
@@ -19,7 +23,13 @@ pub enum CollectionProperty {
 
 impl CollectionProperty {
     /// All supported properties in the same order used by the GTK dropdown.
-    pub const ALL: [Self; 3] = [Self::Filmroll, Self::Folders, Self::Filename];
+    pub const ALL: [Self; 5] = [
+        Self::Filmroll,
+        Self::Folders,
+        Self::Rating,
+        Self::ColorLabel,
+        Self::Filename,
+    ];
 
     /// Returns the stable message ID used by the collection control.
     #[must_use]
@@ -27,6 +37,8 @@ impl CollectionProperty {
         match self {
             Self::Filmroll => MessageId::CollectionPropertyFilmroll,
             Self::Folders => MessageId::CollectionPropertyFolders,
+            Self::Rating => MessageId::CollectionPropertyRating,
+            Self::ColorLabel => MessageId::CollectionPropertyColorLabel,
             Self::Filename => MessageId::CollectionPropertyFilename,
         }
     }
@@ -43,7 +55,9 @@ impl CollectionProperty {
         match self {
             Self::Filmroll => 0,
             Self::Folders => 1,
-            Self::Filename => 2,
+            Self::Rating => 2,
+            Self::ColorLabel => 3,
+            Self::Filename => 4,
         }
     }
 
@@ -53,7 +67,9 @@ impl CollectionProperty {
         match index {
             0 => Some(Self::Filmroll),
             1 => Some(Self::Folders),
-            2 => Some(Self::Filename),
+            2 => Some(Self::Rating),
+            3 => Some(Self::ColorLabel),
+            4 => Some(Self::Filename),
             _ => None,
         }
     }
@@ -128,6 +144,7 @@ impl CollectionItem {
         match property {
             CollectionProperty::Filmroll => self.filmroll(),
             CollectionProperty::Folders => self.folders(),
+            CollectionProperty::Rating | CollectionProperty::ColorLabel => "",
             CollectionProperty::Filename => self.filename(),
         }
     }
@@ -175,17 +192,32 @@ impl CollectionRule {
     /// Returns whether an item matches this rule.
     #[must_use]
     pub fn matches(&self, item: &CollectionItem) -> bool {
+        if matches!(
+            self.property,
+            CollectionProperty::Rating | CollectionProperty::ColorLabel
+        ) {
+            return true;
+        }
+        self.matches_value(item.value(self.property))
+    }
+
+    /// Returns whether a display value matches this rule.
+    #[must_use]
+    pub fn matches_value(&self, haystack: &str) -> bool {
         let needle = self.search_text.trim();
         if needle.is_empty() {
             return true;
         }
 
-        let haystack = item.value(self.property);
         match self.property {
-            CollectionProperty::Filename => needle.split(',').any(|term| {
-                contains_case_insensitive(haystack, strip_prefix_wildcard(term.trim()))
-            }),
-            CollectionProperty::Filmroll | CollectionProperty::Folders => {
+            CollectionProperty::Filename | CollectionProperty::Rating => {
+                needle.split(',').any(|term| {
+                    contains_case_insensitive(haystack, strip_prefix_wildcard(term.trim()))
+                })
+            }
+            CollectionProperty::Filmroll
+            | CollectionProperty::Folders
+            | CollectionProperty::ColorLabel => {
                 let needle = needle
                     .strip_suffix('*')
                     .unwrap_or(needle)
@@ -226,14 +258,14 @@ mod tests {
 
     #[test]
     fn property_indices_match_the_dropdown_order() {
-        assert_eq!(CollectionProperty::ALL.len(), 3);
+        assert_eq!(CollectionProperty::ALL.len(), 5);
         for property in CollectionProperty::ALL {
             assert_eq!(
                 CollectionProperty::from_index(property.index()),
                 Some(property)
             );
         }
-        assert_eq!(CollectionProperty::from_index(3), None);
+        assert_eq!(CollectionProperty::from_index(5), None);
     }
 
     #[test]

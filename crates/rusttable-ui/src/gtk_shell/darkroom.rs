@@ -16,8 +16,8 @@ mod darkroom_interaction;
 mod darkroom_viewport;
 #[path = "darkroom_controls/panel_widgets.rs"]
 mod panel_widgets;
+pub(super) use super::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
 use super::{ExposurePanel, PhotoPreview};
-pub(super) use super::{ThemeRole, apply_theme_role};
 use crate::presentation::PhotoDetailViewModel;
 use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,

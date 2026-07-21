@@ -9,12 +9,20 @@ pub(super) fn apply_collection_action(
     controller: &mut CollectionController,
     action: CollectionControlAction,
 ) {
+    let generation = match &action {
+        CollectionControlAction::SetProperty { generation, .. }
+        | CollectionControlAction::SetSearchText { generation, .. }
+        | CollectionControlAction::Clear { generation } => *generation,
+    };
+    if !controller.accept_generation(generation) {
+        return;
+    }
     match action {
-        CollectionControlAction::SetProperty(property) => controller.set_property(property),
-        CollectionControlAction::SetSearchText(search_text) => {
+        CollectionControlAction::SetProperty { property, .. } => controller.set_property(property),
+        CollectionControlAction::SetSearchText { search_text, .. } => {
             controller.set_search_text(search_text);
         }
-        CollectionControlAction::Clear => controller.clear(),
+        CollectionControlAction::Clear { .. } => controller.clear(),
     }
 }
 
@@ -38,7 +46,8 @@ pub(super) fn apply_lighttable_toolbar_action(
 
 pub(super) fn collection_filter_state(snapshot: &CollectionSnapshot) -> CollectionFilterState {
     let controls = CollectionControlState::new(snapshot.property(), snapshot.total_count())
-        .with_results(snapshot.search_text(), snapshot.result_count());
+        .with_results(snapshot.search_text(), snapshot.result_count())
+        .with_generation(snapshot.generation());
     CollectionFilterState::new(controls, snapshot.matching_photo_ids().collect())
         .with_lighttable_state(snapshot.photo_states().cloned(), snapshot.toolbar().clone())
 }

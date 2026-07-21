@@ -23,6 +23,7 @@ pub struct CollectionSnapshot {
     matching_photo_ids: Vec<PhotoId>,
     photo_states: Vec<LighttablePhotoState>,
     toolbar: LighttableToolbarState,
+    generation: u64,
 }
 
 impl CollectionSnapshot {
@@ -65,6 +66,11 @@ impl CollectionSnapshot {
     pub const fn toolbar(&self) -> &LighttableToolbarState {
         &self.toolbar
     }
+
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
 }
 
 /// Controller for one Darktable collection rule and its result set.
@@ -77,6 +83,7 @@ pub struct CollectionController {
     catalog_state: Option<CatalogState>,
     selected: BTreeSet<PhotoId>,
     sort: LighttableSort,
+    generation: u64,
 }
 
 impl CollectionController {
@@ -101,6 +108,7 @@ impl CollectionController {
             catalog_state: None,
             selected: BTreeSet::new(),
             sort: LighttableSort::Filename,
+            generation: 0,
         }
     }
 
@@ -177,6 +185,14 @@ impl CollectionController {
     /// Clears the search text while preserving the selected property.
     pub fn clear(&mut self) {
         self.rule.set_search_text(String::new());
+    }
+
+    pub fn accept_generation(&mut self, generation: u64) -> bool {
+        if generation < self.generation {
+            return false;
+        }
+        self.generation = generation;
+        true
     }
 
     pub fn set_sort(&mut self, sort: LighttableSort) {
@@ -270,7 +286,10 @@ impl CollectionController {
         let mut matching_items = self
             .items
             .iter()
-            .filter(|item| self.rule.matches(item))
+            .filter(|item| {
+                self.rule.matches(item)
+                    && organization_matches(&self.rule, item.photo_id(), &self.organization)
+            })
             .collect::<Vec<_>>();
         if let Ok(collator) = LocaleCollator::new(self.collation_profile.clone()) {
             matching_items.sort_by(|left, right| {
@@ -319,6 +338,7 @@ impl CollectionController {
             matching_photo_ids,
             photo_states,
             toolbar,
+            generation: self.generation,
         }
     }
 }
@@ -354,6 +374,41 @@ fn organization_rating(
     organization
         .get(&photo_id)
         .map_or(0, |state| state.rating.as_u8())
+}
+
+fn organization_matches(
+    rule: &CollectionRule,
+    photo_id: PhotoId,
+    organization: &BTreeMap<PhotoId, PhotoOrganizationState>,
+) -> bool {
+    if rule.search_text().trim().is_empty() {
+        return true;
+    }
+    let Some(state) = organization.get(&photo_id) else {
+        return true;
+    };
+    match rule.property() {
+        CollectionProperty::Rating => {
+            let rating = if state.rejected {
+                "rejected".to_owned()
+            } else {
+                state.rating.as_u8().to_string()
+            };
+            rule.matches_value(&rating)
+        }
+        CollectionProperty::ColorLabel => state.color_labels.iter().any(|label| {
+            rule.matches_value(match label {
+                ColorLabel::Red => "red",
+                ColorLabel::Yellow => "yellow",
+                ColorLabel::Green => "green",
+                ColorLabel::Blue => "blue",
+                ColorLabel::Purple => "purple",
+            })
+        }),
+        CollectionProperty::Filmroll
+        | CollectionProperty::Folders
+        | CollectionProperty::Filename => true,
+    }
 }
 
 fn photo_state(
