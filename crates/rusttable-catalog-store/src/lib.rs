@@ -6,6 +6,8 @@ mod codec;
 mod collection_repository;
 mod edit_codec;
 mod edit_repository;
+mod history_codec;
+mod history_repository;
 mod import_details_codec;
 mod recipe_repository;
 mod repository;
@@ -14,6 +16,7 @@ mod schema;
 pub use catalog_repository::{AtomicCatalogStoreError, RedbCatalogRepository};
 pub use collection_repository::RedbCollectionRepository;
 pub use edit_repository::RedbEditRepository;
+pub use history_repository::RedbHistoryRepository;
 pub use recipe_repository::{RecipeStoreError, RedbRecipeRepository};
 pub use repository::RedbImportRepository;
 pub use rusttable_export::{
