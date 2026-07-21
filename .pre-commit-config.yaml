@@ -8,6 +8,6 @@ repos:
         pass_filenames: false
       - id: rusttable-check
         name: RustTable complete local gate
-        entry: cargo xtask check
+        entry: bash scripts/dev/precommit-check.sh
         language: system
         pass_filenames: false

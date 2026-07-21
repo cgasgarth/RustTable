@@ -22,7 +22,7 @@ mod reference;
 mod shaders;
 
 use std::path::{Path, PathBuf};
-use std::process::{Command as ProcessCommand, ExitCode};
+use std::process::{Command as ProcessCommand, ExitCode, Output};
 
 use clap::{Parser, Subcommand};
 
@@ -44,7 +44,11 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Task {
     /// Run the complete local merge-readiness gate.
-    Check,
+    Check {
+        /// Run independent non-Cargo checks alongside the shared Cargo pipeline.
+        #[arg(long)]
+        parallel: bool,
+    },
     /// Validate color-space and transform contracts.
     Color {
         #[command(subcommand)]
@@ -143,7 +147,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let root = repository_root();
     let result = match cli.command {
-        Task::Check => check::run(&root),
+        Task::Check { parallel } => check::run(&root, parallel),
         Task::Color { command } => color::run(&root, &command),
         Task::Codegen { command } => codegen::run(&root, command),
         Task::Fixtures { command } => fixtures::run(&root, command),
@@ -191,6 +195,45 @@ pub(crate) fn run_process(label: &str, command: &mut ProcessCommand) -> Result {
     } else {
         Err(format!("{label}: failed with {status}"))
     }
+}
+
+pub(crate) fn run_process_quiet(label: &str, command: &mut ProcessCommand) -> Result {
+    let output = command
+        .output()
+        .map_err(|error| format!("{label}: could not start: {error}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{label}: failed with {}\n{}",
+            output.status,
+            process_failure_excerpt(&output)
+        ))
+    }
+}
+
+fn process_failure_excerpt(output: &Output) -> String {
+    const MAX_CHARS: usize = 4_000;
+    let mut text = String::new();
+    for (label, bytes) in [("stderr", &output.stderr), ("stdout", &output.stdout)] {
+        let content = String::from_utf8_lossy(bytes);
+        if !content.trim().is_empty() {
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(label);
+            text.push_str(":\n");
+            text.push_str(content.trim());
+        }
+    }
+    if text.is_empty() {
+        return "(no process output)".to_owned();
+    }
+    let mut excerpt = text.chars().take(MAX_CHARS).collect::<String>();
+    if text.chars().count() > MAX_CHARS {
+        excerpt.push_str("\n(output truncated)");
+    }
+    excerpt
 }
 
 #[cfg(test)]

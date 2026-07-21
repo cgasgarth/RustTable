@@ -175,7 +175,6 @@ pub(crate) fn run_manifest(root: &Path, check: bool) -> Result {
                     .to_owned(),
             );
         }
-        eprintln!("operation manifest closure verified: {}", path.display());
     } else {
         fs::write(&path, rendered)
             .map_err(|error| format!("operation manifest: write failed: {error}"))?;

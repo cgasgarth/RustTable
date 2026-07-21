@@ -44,11 +44,6 @@ pub(crate) fn verify_committed(root: &Path) -> Result {
             manifest.reference.source_commit
         ));
     }
-    eprintln!(
-        "operation manifest verified: {} operations at {}",
-        manifest.operations.len(),
-        PINNED_DARKTABLE_COMMIT
-    );
     Ok(())
 }
 

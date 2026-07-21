@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export CARGO_BUILD_JOBS=10
 
 if [[ "$(uname -s)" != Linux ]]; then
   printf 'Linux distribution smoke requires Linux\n' >&2
