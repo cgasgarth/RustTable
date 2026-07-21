@@ -49,6 +49,7 @@ export interface BundleDocumentType {
 
 export interface BundleValidationOptions {
   allowLegacyIcon?: boolean;
+  allowLegacyDocumentTypes?: boolean;
 }
 
 /** Mirrors rusttable-image's standard decoder registry plus the explicit catalog-open policy. */
@@ -224,7 +225,10 @@ const parseBundleManifestWithOptions = (
     if (key === 'CFBundleIconFile' && legacyIconMissing) continue;
     if (manifest[key] !== expected[key]) throw new Error(`Bundle Info.plist has unexpected ${key}.`);
   }
-  if (JSON.stringify(parseBundleDocumentTypes(plist)) !== JSON.stringify(RUSTTABLE_DOCUMENT_TYPES)) {
+  if (
+    options.allowLegacyDocumentTypes !== true &&
+    JSON.stringify(parseBundleDocumentTypes(plist)) !== JSON.stringify(RUSTTABLE_DOCUMENT_TYPES)
+  ) {
     throw new Error('Bundle Info.plist document declarations are not canonical.');
   }
   assertVersion(manifest.CFBundleShortVersionString);

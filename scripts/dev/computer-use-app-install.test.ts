@@ -22,6 +22,7 @@ import {
   RUSTTABLE_BUNDLE_IDENTITY,
   RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
   RUSTTABLE_ICON_FILE,
+  RUSTTABLE_DOCUMENT_TYPES,
   readBundleManifest,
 } from './rusttable-app-bundle';
 
@@ -286,6 +287,44 @@ describe('computer-use installer parsing', () => {
       expect((await readdir(join(root, 'Applications'))).filter((entry) => entry.endsWith('.app'))).toEqual([
         'rusttable - latest.app',
       ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  test('replaces a pre-RAW canonical app before strict registration', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
+    try {
+      const installPath = join(root, 'Applications/rusttable - latest.app');
+      const source = await makeBundle(root, 'source', '0.2.0');
+      const installed = await makeBundle(join(root, 'Applications'), 'rusttable - latest.app', '0.1.0');
+      const plistPath = join(installed, 'Contents/Info.plist');
+      const rawExtensions = RUSTTABLE_DOCUMENT_TYPES[0]?.extensions.slice(5) ?? [];
+      const plist = await readFile(plistPath, 'utf8');
+      await writeFile(
+        plistPath,
+        rawExtensions.reduce(
+          (current, extension) => current.replace(`<string>${extension}</string>`, ''),
+          plist,
+        ),
+      );
+      const calls: string[] = [];
+      const run = async (request: { args: string[]; label: string }) => {
+        calls.push(request.label);
+        if (request.label === 'stage computer-use app') await cp(request.args[0]!, request.args[1]!, { recursive: true });
+        return { exitCode: 0, stderr: '', stdout: '' };
+      };
+
+      await installCanonicalComputerUseApp({
+        installPath,
+        run,
+        sourcePath: source,
+        transactionId: 'pre-raw-replace',
+      });
+
+      expect((await readBundleManifest(installPath)).CFBundleShortVersionString).toBe('0.2.0');
+      expect(calls).toContain('unregister ' + installPath);
+      expect(await readFile(join(installPath, 'Contents/Info.plist'), 'utf8')).toContain('<string>raf</string>');
     } finally {
       await rm(root, { force: true, recursive: true });
     }
