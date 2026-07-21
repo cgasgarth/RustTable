@@ -13,6 +13,7 @@ mod develop;
 mod durable_edit;
 mod edit_repository;
 mod error;
+mod history;
 mod import;
 mod import_details;
 mod organization;
@@ -33,6 +34,14 @@ pub use develop::{DevelopInput, DevelopInputError, DevelopSelection};
 pub use durable_edit::{DurableEditError, DurableEditOutcome, DurableEditService};
 pub use edit_repository::{EditRepository, EditRepositoryError};
 pub use error::CatalogError;
+pub use history::{
+    BranchTransferPolicy, DurableHistoryError, DurableHistoryService, HistoryApplyOutcome,
+    HistoryBranch, HistoryBranchId, HistoryCommand, HistoryComparisonPair, HistoryCursor,
+    HistoryError, HistoryEvidence, HistoryEvidenceKind, HistoryOperationKind,
+    HistoryOperationSummary, HistoryPayload, HistoryRepository, HistoryRepositoryError,
+    HistoryRevision, HistoryRevisionId, HistorySnapshot, HistorySnapshotId, HistoryState,
+    HistoryStateSnapshot, HistorySummaryError, HistoryVersion,
+};
 pub use import::{
     ImportCandidate, ImportCandidateError, ImportError, ImportOutcome, ImportRecord,
     ImportRecordError, ImportService,
