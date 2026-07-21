@@ -136,6 +136,7 @@ const main = async (): Promise<void> => {
     const bundlePaths = await discoverRepositoryAppBundles(worktreePaths);
     const legacyInstallPath = join(dirname(options.installPath), 'RustTable.app');
     const applicationBundlePaths = await discoverApplicationBundles(dirname(options.installPath));
+    const recoveryDirectory = join(process.env.HOME ?? '/tmp', '.Trash');
     const removed = await cleanupRepositoryAppBundles({
       bundlePaths: [...bundlePaths, ...applicationBundlePaths, legacyInstallPath],
       keepPaths: [sourcePath, options.installPath],
@@ -143,23 +144,30 @@ const main = async (): Promise<void> => {
       worktreePaths,
       run: runCommand,
     });
-    const registrations = await runCommand({
-      args: ['-dump'],
-      command: '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',
-      label: 'inspect LaunchServices registrations',
-    });
-    const stalePaths = findStaleRepositoryRegistrationPaths({
-      canonicalPath: options.installPath,
-      legacyPaths: [...applicationBundlePaths, legacyInstallPath],
-      registrations: parseLaunchServicesRegistrations(registrations.stdout),
-      worktreePaths,
-    });
     const removedPaths = new Set(removed);
-    const unregistered = await unregisterRepositoryBundles({
-      paths: stalePaths.filter((path) => !removedPaths.has(path)),
-      run: runCommand,
-    });
-    process.stdout.write(`Installed ${options.installPath}; cleaned ${removed.length} bundle(s), unregistered ${unregistered.length} stale path(s).\n`);
+    let unregisteredCount = 0;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const registrations = await runCommand({
+        args: ['-dump'],
+        command: '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',
+        label: 'inspect LaunchServices registrations',
+      });
+      const stalePaths = findStaleRepositoryRegistrationPaths({
+        canonicalPath: options.installPath,
+        legacyPaths: [...applicationBundlePaths, legacyInstallPath, ...bundlePaths],
+        managedDirectories: [recoveryDirectory],
+        managedRepositoryRoots: [join(dirname(root), 'fork')],
+        registrations: parseLaunchServicesRegistrations(registrations.stdout),
+        worktreePaths,
+      });
+      const unregistered = await unregisterRepositoryBundles({
+        paths: stalePaths.filter((path) => !removedPaths.has(path)),
+        run: runCommand,
+      });
+      unregisteredCount += unregistered.length;
+      if (unregistered.length === 0) break;
+    }
+    process.stdout.write(`Installed ${options.installPath}; cleaned ${removed.length} bundle(s), unregistered ${unregisteredCount} stale path(s).\n`);
   }
 
   if (options.shouldLaunch) {

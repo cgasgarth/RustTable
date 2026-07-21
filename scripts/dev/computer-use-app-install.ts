@@ -189,17 +189,30 @@ const isRepositoryOwnedBundlePath = (
   path: string,
   worktreePaths: readonly string[],
   exactPaths: readonly string[],
+  managedDirectories: readonly string[],
+  managedRepositoryRoots: readonly string[],
 ): boolean =>
-  isWorktreeTargetBundle(path, worktreePaths) || exactPaths.some((exactPath) => resolve(exactPath) === resolve(path));
+  isWorktreeTargetBundle(path, worktreePaths) ||
+  isWorktreeTargetBundle(path, managedRepositoryRoots) ||
+  exactPaths.some((exactPath) => resolve(exactPath) === resolve(path)) ||
+  managedDirectories.some((directory) => {
+    const resolvedDirectory = resolve(directory);
+    const resolvedPath = resolve(path);
+    return dirname(resolvedPath) === resolvedDirectory && basename(resolvedPath).endsWith('.app');
+  });
 
 export const findStaleRepositoryRegistrationPaths = ({
   canonicalPath,
   legacyPaths = [],
+  managedDirectories = [],
+  managedRepositoryRoots = [],
   registrations,
   worktreePaths,
 }: {
   canonicalPath: string;
   legacyPaths?: readonly string[];
+  managedDirectories?: readonly string[];
+  managedRepositoryRoots?: readonly string[];
   registrations: readonly LaunchServicesRegistration[];
   worktreePaths: readonly string[];
 }): string[] => {
@@ -208,7 +221,7 @@ export const findStaleRepositoryRegistrationPaths = ({
     .filter((registration) => REPOSITORY_BUNDLE_IDENTIFIERS.has(registration.bundleIdentifier))
     .map((registration) => resolve(registration.path))
     .filter((path) => path !== canonical)
-    .filter((path) => isRepositoryOwnedBundlePath(path, worktreePaths, legacyPaths))
+    .filter((path) => isRepositoryOwnedBundlePath(path, worktreePaths, legacyPaths, managedDirectories, managedRepositoryRoots))
     .filter((path, index, paths) => paths.indexOf(path) === index)
     .sort();
 };
@@ -304,6 +317,8 @@ export const cleanupRepositoryAppBundles = async ({
   keepPaths,
   recoveryDirectory = join(process.env.HOME ?? '/tmp', '.Trash'),
   repositoryPaths = [],
+  managedDirectories = [],
+  managedRepositoryRoots = [],
   worktreePaths = [],
   readIdentifier = readBundleIdentifier,
   run,
@@ -312,6 +327,8 @@ export const cleanupRepositoryAppBundles = async ({
   keepPaths: readonly string[];
   recoveryDirectory?: string;
   repositoryPaths?: readonly string[];
+  managedDirectories?: readonly string[];
+  managedRepositoryRoots?: readonly string[];
   worktreePaths?: readonly string[];
   readIdentifier?: BundleIdentifierReader;
   run: CommandRunner;
@@ -321,7 +338,7 @@ export const cleanupRepositoryAppBundles = async ({
   for (const bundlePath of bundlePaths) {
     const resolvedPath = resolve(bundlePath);
     if (keep.has(resolvedPath)) continue;
-    if (!isRepositoryOwnedBundlePath(resolvedPath, worktreePaths, repositoryPaths)) continue;
+    if (!isRepositoryOwnedBundlePath(resolvedPath, worktreePaths, repositoryPaths, managedDirectories, managedRepositoryRoots)) continue;
     if ((await lstat(resolvedPath).catch(() => undefined))?.isSymbolicLink()) continue;
     const identifier = await readIdentifier(resolvedPath).catch(() => 'unreadable');
     if (!REPOSITORY_BUNDLE_IDENTIFIERS.has(identifier)) continue;
