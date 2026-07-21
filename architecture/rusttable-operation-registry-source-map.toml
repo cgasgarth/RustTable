@@ -69,6 +69,18 @@ owner = "crates/rusttable-processing/src/registry.rs"
 status = "replaced"
 
 [[operation]]
+rust_id = "rusttable.relight"
+manifest_name = "relight"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.shadhi"
+manifest_name = "shadhi"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
 rust_id = "rusttable.colorin"
 manifest_name = "colorin"
 owner = "crates/rusttable-processing/src/registry_color.rs"

@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "98070caadc5d03f74215a2d4cd6e8614a51b6f9253398d196b181c36a691b1b2",
+  "registry_hash": "0b5047902f7696b32cba628f8fdd857261ecf921fa0084bf2a0d679f11b7b450",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -1403,20 +1403,20 @@
     {
       "identity": "darktable:relight:src/iop/relight.c:v1",
       "compatibility_name": "relight",
-      "rust_id": null,
+      "rust_id": "rusttable.relight",
       "reference_path": "src/iop/relight.c",
       "descriptor_version": 1,
       "parameter_versions": [
         1
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 108,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "DeprecatedImplemented",
+      "reason": "deprecated compatibility operation; hidden from new-edit discovery"
     },
     {
       "identity": "darktable:retouch:src/iop/retouch.c:v3",
@@ -1513,7 +1513,7 @@
     {
       "identity": "darktable:shadhi:src/iop/shadhi.c:v5",
       "compatibility_name": "shadhi",
-      "rust_id": null,
+      "rust_id": "rusttable.shadhi",
       "reference_path": "src/iop/shadhi.c",
       "descriptor_version": 5,
       "parameter_versions": [
@@ -1523,14 +1523,14 @@
         4,
         5
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 70,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:sharpen:src/iop/sharpen.c:v1",
@@ -2140,6 +2140,24 @@
       "reason": null
     },
     {
+      "identity": "rusttable.relight",
+      "compatibility_name": "relight",
+      "rust_id": "rusttable.relight",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 17,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "DeprecatedImplemented",
+      "reason": "deprecated compatibility operation; hidden from new-edit discovery"
+    },
+    {
       "identity": "rusttable.rgb_gain",
       "compatibility_name": "rgbgain",
       "rust_id": "rusttable.rgb_gain",
@@ -2150,7 +2168,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 17,
+      "order": 18,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
@@ -2168,7 +2186,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 18,
+      "order": 19,
       "cpu_supported": true,
       "gpu_supported": true,
       "cpu_fallback": true,
@@ -2186,10 +2204,32 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 19,
+      "order": 20,
       "cpu_supported": true,
       "gpu_supported": true,
       "cpu_fallback": true,
+      "status": "Implemented",
+      "reason": null
+    },
+    {
+      "identity": "rusttable.shadhi",
+      "compatibility_name": "shadhi",
+      "rust_id": "rusttable.shadhi",
+      "reference_path": "",
+      "descriptor_version": 5,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 21,
+      "cpu_supported": true,
+      "gpu_supported": false,
+      "cpu_fallback": false,
       "status": "Implemented",
       "reason": null
     },
@@ -2204,7 +2244,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 20,
+      "order": 22,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,
@@ -2225,7 +2265,7 @@
       ],
       "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 21,
+      "order": 23,
       "cpu_supported": true,
       "gpu_supported": false,
       "cpu_fallback": false,

@@ -20,8 +20,10 @@ use crate::operations::{
     lenscorrection::LensCorrectionConfig,
     perspective::PerspectiveConfig,
     primaries::PrimariesConfig,
+    relight::RelightConfig,
     rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
     scalepixels::ScalePixelsConfig,
+    shadhi::ShadhiConfig,
     soften::SoftenConfig,
     temperature::{TemperatureConfig, WhiteBalanceSource},
 };
@@ -40,8 +42,11 @@ pub(crate) use operation_geometry::{
 };
 #[path = "operation_effects.rs"]
 mod operation_effects;
+#[path = "operation_legacy.rs"]
+mod operation_legacy;
 pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
+pub(crate) use operation_legacy::{compile_relight, compile_shadhi};
 pub(crate) use operation_parameters::{parameter_integer, parameter_u32};
 
 pub(crate) use operation_error::compile_opacity;
@@ -131,6 +136,12 @@ pub enum ProcessingOperationKind {
     },
     Soften {
         config: SoftenConfig,
+    },
+    Relight {
+        config: RelightConfig,
+    },
+    Shadhi {
+        config: ShadhiConfig,
     },
 }
 
@@ -239,6 +250,14 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_dither(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_dither(operation)
+    }
+
+    pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_relight(operation)
+    }
+
+    pub(crate) fn compile_shadhi(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_shadhi(operation)
     }
 
     pub(crate) fn compile_highlights(operation: &Operation) -> Result<Self, OperationCompileError> {
