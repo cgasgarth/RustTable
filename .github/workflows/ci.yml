@@ -28,7 +28,7 @@ jobs:
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev
+          sudo apt-get install --no-install-recommends libgtk-4-dev
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
@@ -69,10 +69,17 @@ jobs:
         if: matrix.platform == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev
+          sudo apt-get install --no-install-recommends libgtk-4-dev
       - name: Install macOS native dependencies
         if: matrix.platform == 'macOS'
-        run: brew install gtk4 libheif
+        run: brew install gtk4
+      - name: Install Windows native dependencies
+        if: matrix.platform == 'Windows'
+        shell: pwsh
+        run: |
+          $env:VCPKG_ROOT = 'C:\vcpkg'
+          "VCPKG_ROOT=$env:VCPKG_ROOT" >> $env:GITHUB_ENV
+          & "$env:VCPKG_ROOT\vcpkg.exe" install libheif:x64-windows-static-md
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
