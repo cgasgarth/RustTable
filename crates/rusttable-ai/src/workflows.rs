@@ -20,4 +20,5 @@ pub mod super_resolution {
     };
 }
 
+pub mod raw_linear;
 pub mod rgb_denoise;
