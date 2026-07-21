@@ -18,7 +18,7 @@ mod darkroom_viewport;
 mod panel_widgets;
 pub(super) use super::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
 use super::{ExposurePanel, PhotoPreview};
-use crate::presentation::PhotoDetailViewModel;
+use crate::presentation::{DarkroomPanelTarget, PhotoDetailViewModel};
 use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
 };
@@ -517,20 +517,16 @@ impl DarkroomView {
 
     /// Projects a selected image into the side-rail states without inventing unavailable data.
     pub fn set_detail(&self, detail: &PhotoDetailViewModel) {
+        let viewport = self.viewport_state.borrow();
         self.rail_status
             .navigation
             .set_text("filmstrip navigation ready");
-        self.rail_status
-            .snapshots
-            .set_text("snapshot data unavailable");
-        self.rail_status
-            .history
-            .set_text("edit history unavailable");
-        self.rail_status.image_information.set_text(&format!(
-            "{} · {} metadata fields",
-            detail.title().as_str(),
-            detail.facts().count()
-        ));
+        let target = DarkroomPanelTarget::new(
+            detail.id(),
+            viewport.generation(),
+            viewport.edit_revision().unwrap_or(Revision::ZERO),
+        );
+        self.rail_status.set_detail(detail, target);
         self.histogram.unavailable();
     }
 
@@ -539,15 +535,7 @@ impl DarkroomView {
         self.rail_status
             .navigation
             .set_text("select a photo to navigate");
-        self.rail_status
-            .snapshots
-            .set_text("select a photo to view snapshots");
-        self.rail_status
-            .history
-            .set_text("select a photo to view edit history");
-        self.rail_status
-            .image_information
-            .set_text("image information unavailable");
+        self.rail_status.clear_detail();
         self.histogram_generation.set(None);
         self.histogram.clear();
         self.preview.clear_selection();
@@ -557,9 +545,9 @@ impl DarkroomView {
 #[derive(Clone)]
 struct DarkroomRailStatus {
     navigation: gtk4::Label,
-    snapshots: gtk4::Label,
-    history: gtk4::Label,
-    image_information: gtk4::Label,
+    snapshots_body: gtk4::Box,
+    history_body: gtk4::Box,
+    image_information_body: gtk4::Box,
 }
 
 type DarkroomPanelBuild = (

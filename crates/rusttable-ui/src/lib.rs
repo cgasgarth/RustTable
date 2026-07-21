@@ -45,8 +45,8 @@ pub use external_editor::{
 };
 pub use gtk_shell::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    CullingRestriction, DarkroomModuleAvailability, DarkroomModuleError, DarkroomModuleSide,
-    DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
+    CullingRestriction, DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset,
+    DarkroomModuleSide, DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
     DarkroomWorkspaceViewModel, DarktableTheme, ExportAction, ExportPanel, ExportSize,
     ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
     LighttableInteractionState, LighttableLayout, LighttableLayoutAction, LighttableLayoutControls,
@@ -81,11 +81,16 @@ pub use neural_restore::{
     PreviewStatus, RestoreSettings, RestoreTask, Roi, ViewportState,
 };
 pub use presentation::{
-    ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlKind,
-    DarkroomControlValue, DarkroomControlViewModel, DarkroomControlsStatus,
-    DarkroomControlsViewModel, PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel,
-    PhotoWorkspaceViewModel, PhotoWorkspaceViewModelError, PresentationText, PresentationTextError,
-    PreviewDimensions, PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
+    ControlId, ControlIdError, ControlValidationError, DARKROOM_LEFT_PANEL_FOCUS_ORDER,
+    DARKROOM_LEFT_PANEL_ORDER, DarkroomControlError, DarkroomControlKind, DarkroomControlValue,
+    DarkroomControlViewModel, DarkroomControlsStatus, DarkroomControlsViewModel,
+    DarkroomEditCommand, DarkroomEditRouteError, DarkroomEditRouter, DarkroomEditTarget,
+    DarkroomImageInformationViewModel, DarkroomPanelAction, DarkroomPanelActionHandler,
+    DarkroomPanelError, DarkroomPanelId, DarkroomPanelProjection, DarkroomPanelRouter,
+    DarkroomPanelState, DarkroomPanelTarget, DarkroomSnapshotEntry, DarkroomSnapshotsViewModel,
+    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
+    PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
+    PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
     SelectedPreviewFailure, SelectedPreviewState, SliderSpec, ThumbnailIndicators,
 };
 pub use viewport_presentation::{

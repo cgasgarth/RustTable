@@ -4,7 +4,9 @@ use rusttable_core::PhotoId;
 
 pub mod basic_edit;
 pub mod darkroom_controls;
+pub mod darkroom_edit_routing;
 pub mod darkroom_history;
+pub mod darkroom_panels;
 pub mod exposure;
 
 pub use basic_edit::{
@@ -15,10 +17,20 @@ pub use darkroom_controls::{
     DarkroomControlValue, DarkroomControlViewModel, DarkroomControlsStatus,
     DarkroomControlsViewModel, SliderSpec,
 };
+pub use darkroom_edit_routing::{
+    DarkroomEditCommand, DarkroomEditRouteError, DarkroomEditRouter, DarkroomEditTarget,
+};
 pub use darkroom_history::{
     DarkroomHistoryAction, DarkroomHistoryActionHandler, DarkroomHistoryEntry,
     DarkroomHistoryError, DarkroomHistoryStatus, DarkroomHistoryViewModel, HistoryDirection,
     HistoryEntryId, build_history_stack, history_action_handler,
+};
+pub use darkroom_panels::{
+    DARKROOM_LEFT_PANEL_FOCUS_ORDER, DARKROOM_LEFT_PANEL_ORDER, DarkroomImageInformationViewModel,
+    DarkroomPanelAction, DarkroomPanelActionHandler, DarkroomPanelError, DarkroomPanelId,
+    DarkroomPanelProjection, DarkroomPanelRouter, DarkroomPanelState, DarkroomPanelTarget,
+    DarkroomSnapshotEntry, DarkroomSnapshotsViewModel, build_history_panel,
+    build_image_information_panel, build_snapshots_panel,
 };
 pub use exposure::ExposurePanelViewModel;
 
