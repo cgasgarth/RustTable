@@ -540,7 +540,7 @@ fn reconstruction_io() -> InputOutputContract {
     }
 }
 
-fn default_io_contract() -> InputOutputContract {
+pub(crate) fn default_io_contract() -> InputOutputContract {
     let image = ImagePredicate {
         channels: 3,
         alpha: AlphaPolicy::Preserve,
@@ -554,7 +554,7 @@ fn default_io_contract() -> InputOutputContract {
     }
 }
 
-fn default_mask_blend() -> MaskBlendContract {
+pub(crate) fn default_mask_blend() -> MaskBlendContract {
     MaskBlendContract {
         consumes_mask: false,
         publishes_mask: false,

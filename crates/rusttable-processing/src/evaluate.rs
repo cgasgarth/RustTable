@@ -115,6 +115,21 @@ fn apply_operation(
         return Ok(());
     }
     match operation.kind() {
+        ProcessingOperationKind::BasicAdj { config } => {
+            let plan = crate::operations::basicadj::BasicAdjPlan::new(*config)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let candidate = plan
+                .execute(pixels, pixel_index_offset)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Exposure { stops, black } => {
             let white = (-stops.get()).exp2();
             let scale = 1.0 / (white - black.get());
