@@ -2,14 +2,21 @@
 
 use std::{cell::RefCell, fmt, rc::Rc};
 
+use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
+use crate::presentation::PresentationTextError;
 use crate::presentation::darkroom_controls::{
-    ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlKind,
-    DarkroomControlValue, DarkroomControlViewModel, DarkroomControlsViewModel,
+    ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlValue,
+    DarkroomControlViewModel, DarkroomControlsViewModel,
 };
-use crate::presentation::{PresentationText, PresentationTextError};
+
+use super::{ThemeRole, apply_theme_role};
+
+#[path = "darkroom_controls/module_widgets.rs"]
+mod module_widgets;
+use module_widgets::{build_control_row, dispatch_module_action};
 
 /// The side of the darkroom shell that owns a module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -543,34 +550,49 @@ pub fn build_module_panel_with_actions(
     let module_id = module.id().to_owned();
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     content.set_widget_name(&format!("{}-content", module.id()));
+    apply_theme_role(&content, ThemeRole::Module);
 
     let status_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    status_row.set_widget_name(&format!("{}-status-row", module.id()));
     let status = gtk4::Label::new(Some(&module.status_text()));
     status.set_widget_name(&format!("{}-status", module.id()));
     status.set_halign(gtk4::Align::Start);
     status.set_hexpand(true);
     status.set_accessible_role(gtk4::AccessibleRole::Status);
+    status.update_property(&[Property::Label("Module status")]);
     let recover = gtk4::Button::with_label("Refresh");
     recover.set_widget_name(&format!("{}-recover", module.id()));
     recover.set_sensitive(false);
     recover.set_focus_on_click(false);
+    recover.update_property(&[Property::Label("Refresh module snapshot")]);
     status_row.append(&status);
     status_row.append(&recover);
     content.append(&status_row);
 
     let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    header.set_widget_name(&format!("{}-header", module.id()));
+    header.add_css_class("dt_module_header");
     let enabled = gtk4::CheckButton::new();
     enabled.set_widget_name(&format!("{}-enabled", module.id()));
     enabled.set_label(Some("Enabled"));
     enabled.set_active(module.enabled());
     enabled.set_focusable(true);
+    enabled.update_property(&[Property::Label("Enable module")]);
     header.append(&enabled);
+    let presets = gtk4::Button::with_label("Presets");
+    presets.set_widget_name(&format!("{}-presets", module.id()));
+    presets.set_tooltip_text(Some("Presets are unavailable for this module"));
+    presets.set_sensitive(false);
+    presets.set_focusable(false);
+    presets.update_property(&[Property::Label("Module presets unavailable")]);
+    header.append(&presets);
     let reset = module.resettable().then(|| {
         let reset = gtk4::Button::with_label("Reset");
         reset.set_widget_name(&format!("{}-reset", module.id()));
         reset.set_sensitive(module.enabled());
         reset.set_focus_on_click(false);
         reset.set_halign(gtk4::Align::End);
+        reset.update_property(&[Property::Label("Reset module to defaults")]);
         header.append(&reset);
         reset
     });
@@ -598,6 +620,9 @@ pub fn build_module_panel_with_actions(
         .build();
     expander.set_widget_name(module.id());
     expander.set_focusable(true);
+    expander.set_accessible_role(gtk4::AccessibleRole::Group);
+    expander.update_property(&[Property::Label(module.title())]);
+    apply_theme_role(&expander, ThemeRole::Module);
 
     if let Some(handler) = action_handler {
         let status_for_expander = status.clone();
@@ -686,156 +711,6 @@ pub fn build_module_panel_with_actions(
     expander
 }
 
-#[allow(clippy::too_many_lines)]
-fn build_control_row(
-    control: &DarkroomControlViewModel,
-    module_enabled: bool,
-    action_handler: Option<DarkroomModuleActionHandler>,
-    status: gtk4::Label,
-    recover: gtk4::Button,
-    current_revision: Rc<RefCell<Revision>>,
-    module_id: String,
-) -> gtk4::Box {
-    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    row.set_widget_name(control.id().as_str());
-    let label = gtk4::Label::new(Some(control.label().as_str()));
-    label.set_halign(gtk4::Align::Start);
-    label.set_hexpand(true);
-    row.append(&label);
-
-    match control.kind() {
-        DarkroomControlKind::Slider => {
-            let spec = control.slider_spec().expect("slider has slider metadata");
-            let slider = gtk4::Scale::with_range(
-                gtk4::Orientation::Horizontal,
-                spec.minimum(),
-                spec.maximum(),
-                spec.step(),
-            );
-            slider.set_value(spec.value());
-            slider.set_sensitive(module_enabled);
-            slider.set_hexpand(true);
-            slider.set_widget_name(&format!("{}-widget", control.id()));
-            slider.set_focusable(true);
-            if let Some(handler) = action_handler {
-                let id = control.id().to_string();
-                slider.connect_value_changed(move |slider| {
-                    dispatch_module_action(
-                        &handler,
-                        &status,
-                        &recover,
-                        &current_revision,
-                        DarkroomModuleAction::Control {
-                            module_id: module_id.clone(),
-                            expected_revision: *current_revision.borrow(),
-                            id: id.clone(),
-                            value: DarkroomControlValue::Slider(slider.value()),
-                        },
-                    );
-                });
-            }
-            row.append(&slider);
-        }
-        DarkroomControlKind::Choice => {
-            let choices = control
-                .choices()
-                .map(PresentationText::as_str)
-                .collect::<Vec<_>>();
-            let choice = gtk4::DropDown::from_strings(&choices);
-            if let DarkroomControlValue::Choice(selected) = control.value() {
-                choice.set_selected(u32::try_from(selected).unwrap_or(u32::MAX));
-            }
-            choice.set_sensitive(module_enabled);
-            choice.set_widget_name(&format!("{}-widget", control.id()));
-            choice.set_focusable(true);
-            if let Some(handler) = action_handler {
-                let id = control.id().to_string();
-                choice.connect_selected_notify(move |choice| {
-                    let Ok(selected) = usize::try_from(choice.selected()) else {
-                        return;
-                    };
-                    dispatch_module_action(
-                        &handler,
-                        &status,
-                        &recover,
-                        &current_revision,
-                        DarkroomModuleAction::Control {
-                            module_id: module_id.clone(),
-                            expected_revision: *current_revision.borrow(),
-                            id: id.clone(),
-                            value: DarkroomControlValue::Choice(selected),
-                        },
-                    );
-                });
-            }
-            row.append(&choice);
-        }
-        DarkroomControlKind::Toggle => {
-            let toggle = gtk4::Switch::new();
-            if let DarkroomControlValue::Toggle(active) = control.value() {
-                toggle.set_active(active);
-            }
-            toggle.set_sensitive(module_enabled);
-            toggle.set_widget_name(&format!("{}-widget", control.id()));
-            toggle.set_focusable(true);
-            if let Some(handler) = action_handler {
-                let id = control.id().to_string();
-                toggle.connect_active_notify(move |toggle| {
-                    dispatch_module_action(
-                        &handler,
-                        &status,
-                        &recover,
-                        &current_revision,
-                        DarkroomModuleAction::Control {
-                            module_id: module_id.clone(),
-                            expected_revision: *current_revision.borrow(),
-                            id: id.clone(),
-                            value: DarkroomControlValue::Toggle(toggle.is_active()),
-                        },
-                    );
-                });
-            }
-            row.append(&toggle);
-        }
-    }
-    row
-}
-
-fn dispatch_module_action(
-    handler: &DarkroomModuleActionHandler,
-    status: &gtk4::Label,
-    recover: &gtk4::Button,
-    current_revision: &RefCell<Revision>,
-    action: DarkroomModuleAction,
-) {
-    match handler(action) {
-        Ok(revision) => {
-            *current_revision.borrow_mut() = revision;
-            status.set_label(&format!("Ready · revision {revision}"));
-            recover.set_sensitive(false);
-        }
-        Err(error) => {
-            if let Some(actual) = stale_actual_revision(&error) {
-                *current_revision.borrow_mut() = actual;
-                status.set_label("Stale callback · refresh required");
-                recover.set_sensitive(true);
-            } else {
-                status.set_label(&format!("Module error · {error}"));
-            }
-        }
-    }
-}
-
-fn stale_actual_revision(error: &DarkroomModuleError) -> Option<Revision> {
-    match error {
-        DarkroomModuleError::StaleRevision { actual, .. } => Some(*actual),
-        DarkroomModuleError::Control(DarkroomControlError::StaleRevision { actual, .. }) => {
-            Some(*actual)
-        }
-        _ => None,
-    }
-}
-
 /// Builds a native GTK4 vertical module column in model order.
 #[must_use]
 pub fn build_module_column<'a>(
@@ -852,15 +727,54 @@ pub fn build_module_column_with_actions<'a>(
     side: DarkroomModuleSide,
     action_handler: Option<&DarkroomModuleActionHandler>,
 ) -> gtk4::Box {
+    build_module_column_with_filter(modules, side, "", action_handler)
+}
+
+/// Builds a module column after applying a case-insensitive title/id search.
+///
+/// The empty-state label is intentionally explicit so a search never leaves a
+/// blank rail that could be mistaken for missing module data.
+#[must_use]
+pub fn build_module_column_with_filter<'a>(
+    modules: impl Iterator<Item = &'a DarkroomModuleViewModel>,
+    side: DarkroomModuleSide,
+    query: &str,
+    action_handler: Option<&DarkroomModuleActionHandler>,
+) -> gtk4::Box {
     let column = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     column.set_widget_name(side.widget_name());
+    column.set_vexpand(true);
+    let query = query.trim().to_ascii_lowercase();
+    let mut rendered = 0;
     for module in modules {
+        if !module_matches_query(module, &query) {
+            continue;
+        }
         column.append(&build_module_panel_with_actions(
             module,
             action_handler.cloned(),
         ));
+        rendered += 1;
+    }
+    if rendered == 0 {
+        let empty = gtk4::Label::new(Some(if query.is_empty() {
+            "No modules available"
+        } else {
+            "No modules match this search"
+        }));
+        empty.set_widget_name("darkroom-module-search-empty");
+        empty.set_halign(gtk4::Align::Start);
+        empty.add_css_class("dim-label");
+        empty.set_accessible_role(gtk4::AccessibleRole::Status);
+        column.append(&empty);
     }
     column
+}
+
+fn module_matches_query(module: &DarkroomModuleViewModel, query: &str) -> bool {
+    query.is_empty()
+        || module.title().to_ascii_lowercase().contains(query)
+        || module.id().to_ascii_lowercase().contains(query)
 }
 
 #[cfg(test)]
@@ -984,5 +898,18 @@ mod tests {
             DarkroomControlValue::Choice(0)
         );
         assert!(matches!(model.status(), DarkroomModuleStatus::Ready));
+    }
+
+    #[test]
+    fn module_search_matches_title_and_id_without_case_or_whitespace_surprises() {
+        let module = module("color-balance", DarkroomModuleSide::Right);
+
+        assert!(module_matches_query(&module, ""));
+        assert!(module_matches_query(
+            &module,
+            "  COLOR  ".trim().to_ascii_lowercase().as_str()
+        ));
+        assert!(module_matches_query(&module, "balance"));
+        assert!(!module_matches_query(&module, "exposure"));
     }
 }

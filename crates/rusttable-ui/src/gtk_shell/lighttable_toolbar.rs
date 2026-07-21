@@ -273,6 +273,7 @@ impl LighttableToolbar {
         search.set_hexpand(true);
         search.set_max_width_chars(18);
         root.append(&search);
+        root.append(&toolbar_separator("filter-labels"));
 
         let mut label_buttons = Vec::new();
         for label in LighttableColorLabel::ALL {
@@ -286,6 +287,8 @@ impl LighttableToolbar {
             root.append(&button);
             label_buttons.push((label, button));
         }
+
+        root.append(&toolbar_separator("labels-rating"));
 
         let mut rating_buttons = Vec::new();
         let rejected = gtk4::Button::with_label("×");
@@ -310,6 +313,8 @@ impl LighttableToolbar {
             rating_buttons.push((rating, button));
         }
 
+        root.append(&toolbar_separator("rating-sort"));
+
         let sort = gtk4::DropDown::from_strings(&["filename", "capture time", "rating"]);
         sort.set_widget_name("lighttable-sort");
         sort.set_accessible_role(gtk4::AccessibleRole::ComboBox);
@@ -320,6 +325,7 @@ impl LighttableToolbar {
         count.add_css_class("dim-label");
         count.set_accessible_role(gtk4::AccessibleRole::Status);
         root.append(&count);
+        root.append(&toolbar_separator("count-reset"));
         let reset = gtk4::Button::with_label("reset");
         reset.set_widget_name("lighttable-reset");
         reset.add_css_class("dt_filter_button");
@@ -327,6 +333,7 @@ impl LighttableToolbar {
             "clear collection filter, sort, and selection",
         )]);
         reset.set_tooltip_text(Some("clear filter, sort, and selection"));
+        reset.set_sensitive(false);
         root.append(&reset);
 
         Self {
@@ -363,6 +370,11 @@ impl LighttableToolbar {
             "{} selected · {} of {}",
             state.selected_count, state.visible_count, state.total_count
         ));
+        self.reset.set_sensitive(
+            state.has_active_filter()
+                || state.selected_count() > 0
+                || state.sort() != LighttableSort::Filename,
+        );
         for (rating, button) in &self.rating_buttons {
             button.set_css_classes(&button_classes(
                 "dt_rating_filter",
@@ -438,6 +450,15 @@ fn button_classes(kind: &'static str, selected: bool) -> Vec<&'static str> {
         classes.push("dt_selected");
     }
     classes
+}
+
+fn toolbar_separator(id: &str) -> gtk4::Separator {
+    let separator = gtk4::Separator::new(gtk4::Orientation::Vertical);
+    separator.set_widget_name(&format!("lighttable-toolbar-separator-{id}"));
+    separator.add_css_class("dt_toolbar_separator");
+    separator.set_margin_start(2);
+    separator.set_margin_end(2);
+    separator
 }
 
 fn property_index(property: CollectionProperty) -> u32 {
