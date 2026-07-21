@@ -766,6 +766,8 @@ mod registry_basicadj;
 mod registry_masks;
 #[path = "registry_operations.rs"]
 mod registry_operations;
+#[path = "registry_spots.rs"]
+mod registry_spots;
 pub use registry_basicadj::basicadj_definition;
 pub use registry_masks::{mask_manager_definition, retouch_definition};
 pub use registry_operations::{
@@ -780,6 +782,7 @@ pub use registry_operations::{
 use registry_operations::{
     hex, operation_descriptor_for, snapshot_hash, unavailable, validate_definition,
 };
+pub use registry_spots::spots_definition;
 
 /// Returns the process-wide immutable first-party registry snapshot.
 ///

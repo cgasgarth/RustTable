@@ -36,6 +36,7 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Retouch { .. } => {
             crate::descriptor::retouch_descriptor().id
         }
+        crate::ProcessingOperationKind::Spots { .. } => crate::descriptor::spots_descriptor().id,
         crate::ProcessingOperationKind::Highlights { .. } => {
             crate::descriptor::highlights_descriptor().id
         }

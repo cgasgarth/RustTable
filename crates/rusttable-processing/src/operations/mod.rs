@@ -38,6 +38,7 @@ pub mod rotatepixels;
 pub mod scalepixels;
 pub mod shadhi;
 pub mod soften;
+pub mod spots;
 pub mod temperature;
 pub mod vignette;
 

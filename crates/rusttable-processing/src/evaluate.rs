@@ -15,7 +15,8 @@ use std::{collections::BTreeMap, fmt};
 mod evaluate_basicadj;
 #[path = "evaluate_liquify.rs"]
 mod evaluate_liquify;
-
+#[path = "evaluate_spots.rs"]
+mod evaluate_spots;
 pub use evaluate_basicadj::BasicAdjPlanSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
@@ -651,6 +652,9 @@ fn apply_operation_with_plans(
                     operation_id,
                     reason: error.to_string(),
                 })
+        }
+        ProcessingOperationKind::Spots { parameters } => {
+            evaluate_spots::apply_spots(step_index, operation_id, parameters, pixels, dimensions)
         }
         ProcessingOperationKind::Liquify { config } => evaluate_liquify::apply_liquify(
             step_index,
