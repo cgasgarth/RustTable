@@ -35,7 +35,8 @@ jobs:
         if: matrix.name == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev nasm
+          sudo apt-get install --no-install-recommends libgtk-4-dev libheif-dev libnuma-dev nasm
+          dpkg-query -W -f='${Status}\n' libnuma-dev | grep -Fx 'install ok installed'
           nasm --version
       - name: Install macOS native dependencies
         if: matrix.name == 'macOS'
