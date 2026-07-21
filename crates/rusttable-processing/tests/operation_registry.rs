@@ -160,7 +160,7 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
         .collect::<Vec<_>>();
     assert_eq!(ids.len(), builtin_registry().definitions().len());
     assert_eq!(
-        &ids[..7],
+        &ids[..8],
         [
             "exposure",
             "basicadj",
@@ -168,6 +168,7 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
             "rgbgain",
             "invert",
             "defringe",
+            "clahe",
             "dither"
         ]
     );
@@ -190,5 +191,62 @@ fn censorize_is_registry_visible_and_cpu_qualified() {
                 Some("preview"),
             )
             .is_some_and(|capability| capability.available)
+    );
+}
+
+#[test]
+fn clahe_registry_is_descriptor_visible_but_truthfully_unavailable() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.clahe")
+        .expect("CLAHE registry seam");
+    let descriptor = definition.descriptor();
+    assert_eq!(descriptor.id.compatibility_name, "clahe");
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::DEPRECATED)
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::HIDDEN)
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::STYLE_ELIGIBLE)
+    );
+    assert!(definition.cpu().is_none());
+    assert_eq!(
+        definition.availability().reason(),
+        Some("backend qualification is pending #473; rusttable.clahe is read-only")
+    );
+    let radius = descriptor
+        .parameters
+        .iter()
+        .find(|parameter| parameter.id == "radius")
+        .expect("radius descriptor");
+    assert_eq!(
+        radius.kind,
+        rusttable_processing::descriptor::ParameterKind::Scalar {
+            minimum: 0.0,
+            maximum: 256.0,
+        }
+    );
+    assert_eq!(
+        radius.default,
+        rusttable_processing::descriptor::ParameterDefault::Scalar(64.0)
+    );
+    assert_eq!(
+        registry
+            .capability(
+                "rusttable.clahe",
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                rusttable_color::ColorEncoding::LinearSrgbD65,
+                Some("full"),
+            )
+            .and_then(|capability| capability.reason),
+        Some("backend qualification is pending #473; rusttable.clahe is read-only".to_owned())
     );
 }

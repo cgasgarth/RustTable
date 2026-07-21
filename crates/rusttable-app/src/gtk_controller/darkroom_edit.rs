@@ -206,7 +206,9 @@ fn project_edit(edit: &Edit) -> Result<DarkroomModulesViewModel, DarkroomModuleE
             .transpose()?;
         module.reconcile_operation(
             edit.revision(),
-            operation.is_some_and(Operation::is_enabled),
+            operation.is_some_and(|operation| {
+                Operation::is_enabled(operation) && module.availability().is_supported()
+            }),
             values.into_iter().flatten(),
         )?;
     }
@@ -635,5 +637,65 @@ mod tests {
                 Some(&ParameterValue::Integer(mode))
             );
         }
+    }
+
+    #[test]
+    fn clahe_imported_values_project_through_history_but_stay_unqualified() {
+        let original = Edit::from_parts(
+            EditId::new(40).expect("edit id"),
+            PhotoId::new(2).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(11),
+            [Operation::new_with_opacity(
+                OperationId::new(41).expect("operation id"),
+                OperationKey::new("rusttable.clahe").expect("operation key"),
+                true,
+                OperationOpacity::ONE,
+                [
+                    (
+                        ParameterName::new("radius").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(128.0).expect("radius")),
+                    ),
+                    (
+                        ParameterName::new("slope").expect("parameter"),
+                        ParameterValue::Scalar(FiniteF64::new(2.5).expect("slope")),
+                    ),
+                ],
+            )
+            .expect("operation")],
+        )
+        .expect("edit");
+
+        let modules = project_edit(&original).expect("history projection");
+        let clahe = modules.module("clahe").expect("CLAHE module");
+        assert_eq!(clahe.title(), "Old Local Contrast");
+        assert!(clahe.availability().is_unsupported());
+        assert!(!clahe.enabled());
+        assert_eq!(
+            clahe
+                .controls()
+                .control("clahe-radius")
+                .expect("radius")
+                .value(),
+            DarkroomControlValue::Slider(128.0)
+        );
+        assert_eq!(
+            clahe
+                .controls()
+                .control("clahe-slope")
+                .expect("slope")
+                .value(),
+            DarkroomControlValue::Slider(2.5)
+        );
+        let error = clahe
+            .clone()
+            .apply(DarkroomModuleAction::Control {
+                module_id: "clahe".to_owned(),
+                expected_revision: original.revision(),
+                id: "clahe-radius".to_owned(),
+                value: DarkroomControlValue::Slider(64.0),
+            })
+            .expect_err("unqualified backend must reject actions");
+        assert!(matches!(error, DarkroomModuleError::Unsupported { .. }));
     }
 }

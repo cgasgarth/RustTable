@@ -16,6 +16,7 @@
 #![doc = "fn converts(source: &SourceRgbImage) { let _ = to_linear_srgb_from_display_p3(source); }"]
 #![doc = "```"]
 
+pub mod clahe_compatibility;
 mod color;
 pub mod defringe_compatibility;
 pub mod demosaic;
@@ -36,6 +37,11 @@ mod registry_reconstruction;
 mod scalar;
 mod window;
 
+pub use clahe_compatibility::{
+    CLAHE_COMPATIBILITY_ID, CLAHE_OPERATION_KEY, CLAHE_PARAMETER_VERSION, CLAHE_RADIUS_DEFAULT,
+    CLAHE_RADIUS_MAXIMUM, CLAHE_RADIUS_MINIMUM, CLAHE_SCHEMA_VERSION, CLAHE_SLOPE_DEFAULT,
+    CLAHE_SLOPE_MAXIMUM, CLAHE_SLOPE_MINIMUM, ClaheParameterError, ClaheParametersV1,
+};
 pub use color::{
     DisplayP3Channel, DisplayP3ChannelError, DisplayP3Rgb, DisplayP3RgbImage, ImageBuildError,
     LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel, SourceColorSpace, SourceRgb,
@@ -44,11 +50,11 @@ pub use color::{
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
-    basicadj_descriptor, bloom_descriptor, censorize_descriptor, color_reconstruction_descriptor,
-    colorin_descriptor, crop_descriptor, defringe_descriptor, dither_descriptor,
-    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
-    graduatednd_descriptor, grain_descriptor, highlights_descriptor, invert_descriptor,
-    lenscorrection_descriptor, linear_offset_descriptor, perspective_descriptor,
+    basicadj_descriptor, bloom_descriptor, censorize_descriptor, clahe_descriptor,
+    color_reconstruction_descriptor, colorin_descriptor, crop_descriptor, defringe_descriptor,
+    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
+    flip_descriptor, graduatednd_descriptor, grain_descriptor, highlights_descriptor,
+    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor, perspective_descriptor,
     primaries_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
     soften_descriptor, temperature_descriptor, vignette_descriptor,
 };

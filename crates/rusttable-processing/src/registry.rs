@@ -766,7 +766,7 @@ mod registry_basicadj;
 mod registry_operations;
 pub use registry_basicadj::basicadj_definition;
 pub use registry_operations::{
-    BUILTIN_OPERATIONS, bloom_definition, censorize_definition, crop_definition,
+    BUILTIN_OPERATIONS, bloom_definition, censorize_definition, clahe_definition, crop_definition,
     defringe_definition, dither_definition, enlargecanvas_definition, exposure_definition,
     finalscale_definition, flip_definition, graduatednd_definition, grain_definition,
     invert_definition, lenscorrection_definition, linear_offset_definition, perspective_definition,
