@@ -233,6 +233,7 @@ fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
         ProcessingOperationKind::ColorCorrection { config } => {
@@ -312,6 +313,44 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
                 )
                 .to_bytes(),
             );
+        }
+        ProcessingOperationKind::Perspective { config } => {
+            hasher.update([16]);
+            hasher.update(
+                rusttable_processing::operations::perspective::PerspectiveParametersV5 {
+                    rotation: config.rotation().get(),
+                    lensshift_v: config.lensshift_v().get(),
+                    lensshift_h: config.lensshift_h().get(),
+                    shear: config.shear().get(),
+                    focal_length: config.focal_length().get(),
+                    crop_factor: config.crop_factor().get(),
+                    orthocorr: config.orthocorr().get(),
+                    aspect: config.aspect().get(),
+                    mode: config.method() as i32,
+                    crop_mode: config.crop_mode() as i32,
+                    crop_left: config.crop_rectangle()[0],
+                    crop_right: config.crop_rectangle()[1],
+                    crop_top: config.crop_rectangle()[2],
+                    crop_bottom: config.crop_rectangle()[3],
+                    last_drawn_lines: config
+                        .drawn_lines()
+                        .iter()
+                        .map(|line| line.map(rusttable_processing::FiniteF32::get))
+                        .collect(),
+                    last_quad: config.quad(),
+                }
+                .to_bytes(),
+            );
+            if let Some(source) = config.opaque_source() {
+                hasher.update([1]);
+                hasher.update(source);
+            } else {
+                hasher.update([0]);
+            }
+        }
+        ProcessingOperationKind::LensCorrection { config } => {
+            hasher.update([17]);
+            hasher.update(config.canonical_identity_bytes());
         }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }

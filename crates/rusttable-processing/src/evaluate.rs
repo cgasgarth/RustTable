@@ -279,7 +279,9 @@ fn apply_operation(
         | ProcessingOperationKind::RotatePixels { .. }
         | ProcessingOperationKind::ScalePixels { .. }
         | ProcessingOperationKind::FinalScale { .. }
-        | ProcessingOperationKind::EnlargeCanvas { .. } => Err(operation_error(
+        | ProcessingOperationKind::EnlargeCanvas { .. }
+        | ProcessingOperationKind::Perspective { .. }
+        | ProcessingOperationKind::LensCorrection { .. } => Err(operation_error(
             step_index,
             operation_id,
             OperationExecutionError::GeometryRequiresFrameBoundary,

@@ -203,7 +203,7 @@ fn prepare_crop(
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
-        ProcessingOperation::compile_crop(operation).map_err(FactoryError::Operation)?,
+        crate::operation::compile_crop(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -214,7 +214,7 @@ fn prepare_flip(
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
-        ProcessingOperation::compile_flip(operation).map_err(FactoryError::Operation)?,
+        crate::operation::compile_flip(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -225,7 +225,7 @@ fn prepare_rotatepixels(
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
-        ProcessingOperation::compile_rotatepixels(operation).map_err(FactoryError::Operation)?,
+        crate::operation::compile_rotatepixels(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -236,7 +236,7 @@ fn prepare_scalepixels(
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
-        ProcessingOperation::compile_scalepixels(operation).map_err(FactoryError::Operation)?,
+        crate::operation::compile_scalepixels(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -247,7 +247,7 @@ fn prepare_finalscale(
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
-        ProcessingOperation::compile_finalscale(operation).map_err(FactoryError::Operation)?,
+        crate::operation::compile_finalscale(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -258,7 +258,29 @@ fn prepare_enlargecanvas(
     descriptor: &DescriptorId,
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
-        ProcessingOperation::compile_enlargecanvas(operation).map_err(FactoryError::Operation)?,
+        crate::operation::compile_enlargecanvas(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_perspective(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_perspective(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_lenscorrection(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_lenscorrection(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -355,7 +377,18 @@ fn geometry_definition(
     roi: RoiKind,
     migrations: impl IntoIterator<Item = MigrationBinding>,
 ) -> OperationDefinition {
-    geometry_definition_with_gpu(descriptor, prepare, evidence, roi, migrations, None)
+    let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
+    let full_image_analysis = descriptor.flags.contains(OperationFlags::ANALYSIS);
+    geometry_definition_with_traits(
+        descriptor,
+        prepare,
+        evidence,
+        roi,
+        migrations,
+        None,
+        tileable,
+        full_image_analysis,
+    )
 }
 
 fn geometry_definition_with_gpu(
@@ -366,8 +399,32 @@ fn geometry_definition_with_gpu(
     migrations: impl IntoIterator<Item = MigrationBinding>,
     gpu: Option<GpuBinding>,
 ) -> OperationDefinition {
-    let compatibility = descriptor.id.compatibility_name.clone();
     let tileable = descriptor.flags.contains(OperationFlags::TILEABLE);
+    let full_image_analysis = descriptor.flags.contains(OperationFlags::ANALYSIS);
+    geometry_definition_with_traits(
+        descriptor,
+        prepare,
+        evidence,
+        roi,
+        migrations,
+        gpu,
+        tileable,
+        full_image_analysis,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn geometry_definition_with_traits(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+    roi: RoiKind,
+    migrations: impl IntoIterator<Item = MigrationBinding>,
+    gpu: Option<GpuBinding>,
+    tileable: bool,
+    full_image_analysis: bool,
+) -> OperationDefinition {
+    let compatibility = descriptor.id.compatibility_name.clone();
     OperationDefinition::new(
         descriptor,
         Some(CpuFactory::new(
@@ -375,7 +432,7 @@ fn geometry_definition_with_gpu(
             crate::evaluate::execute_prepared_operation,
             roi,
             tileable,
-            false,
+            full_image_analysis,
         )),
         gpu,
         migrations.into_iter().collect(),
@@ -495,6 +552,39 @@ pub fn enlargecanvas_definition() -> OperationDefinition {
     )
 }
 
+pub fn perspective_definition() -> OperationDefinition {
+    geometry_definition_with_traits(
+        crate::descriptor::perspective_descriptor(),
+        prepare_perspective,
+        &[
+            "iop.perspective.descriptor",
+            "iop.perspective.cpu",
+            "iop.perspective.analysis",
+        ],
+        RoiKind::Distortion,
+        (1..5).map(|version| {
+            MigrationBinding::new(version, version + 1, format!("ashift.migration.v{version}"))
+        }),
+        None,
+        false,
+        true,
+    )
+}
+
+pub fn lenscorrection_definition() -> OperationDefinition {
+    geometry_definition(
+        crate::descriptor::lenscorrection_descriptor(),
+        prepare_lenscorrection,
+        &[
+            "iop.lenscorrection.descriptor",
+            "iop.lenscorrection.cpu",
+            "iop.lenscorrection.lensfun",
+        ],
+        RoiKind::Distortion,
+        std::iter::empty(),
+    )
+}
+
 /// Defines the static built-in factory slice used by startup and xtask.
 #[macro_export]
 macro_rules! builtin_operations {
@@ -510,6 +600,8 @@ macro_rules! builtin_operations {
             $crate::registry::scalepixels_definition,
             $crate::registry::finalscale_definition,
             $crate::registry::enlargecanvas_definition,
+            $crate::registry::perspective_definition,
+            $crate::registry::lenscorrection_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,

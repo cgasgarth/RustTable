@@ -14,6 +14,8 @@ use crate::operations::{
     finalscale::FinalScaleConfig,
     flip::{FlipConfig, FlipMode, OrientationBits},
     highlights::HighlightsConfig,
+    lenscorrection::LensCorrectionConfig,
+    perspective::PerspectiveConfig,
     primaries::PrimariesConfig,
     rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
     scalepixels::ScalePixelsConfig,
@@ -25,6 +27,9 @@ use crate::{FiniteF32, ScalarNarrowingError};
 mod operation_error;
 #[path = "operation_geometry.rs"]
 mod operation_geometry;
+pub(crate) use operation_geometry::{
+    compile_enlargecanvas, compile_finalscale, compile_lenscorrection, compile_perspective,
+};
 
 use operation_error::compile_opacity;
 
@@ -74,6 +79,12 @@ pub enum ProcessingOperationKind {
     },
     EnlargeCanvas {
         config: EnlargeCanvasConfig,
+    },
+    Perspective {
+        config: PerspectiveConfig,
+    },
+    LensCorrection {
+        config: LensCorrectionConfig,
     },
     Highlights {
         config: HighlightsConfig,
@@ -229,36 +240,6 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_temperature(operation)
-    }
-
-    pub(crate) fn compile_crop(operation: &Operation) -> Result<Self, OperationCompileError> {
-        compile_crop(operation)
-    }
-
-    pub(crate) fn compile_flip(operation: &Operation) -> Result<Self, OperationCompileError> {
-        compile_flip(operation)
-    }
-
-    pub(crate) fn compile_rotatepixels(
-        operation: &Operation,
-    ) -> Result<Self, OperationCompileError> {
-        compile_rotatepixels(operation)
-    }
-
-    pub(crate) fn compile_scalepixels(
-        operation: &Operation,
-    ) -> Result<Self, OperationCompileError> {
-        compile_scalepixels(operation)
-    }
-
-    pub(crate) fn compile_finalscale(operation: &Operation) -> Result<Self, OperationCompileError> {
-        operation_geometry::compile_finalscale(operation)
-    }
-
-    pub(crate) fn compile_enlargecanvas(
-        operation: &Operation,
-    ) -> Result<Self, OperationCompileError> {
-        operation_geometry::compile_enlargecanvas(operation)
     }
 
     #[must_use]
@@ -757,7 +738,9 @@ fn source_from_legacy_preset(
     }
 }
 
-fn compile_crop(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+pub(crate) fn compile_crop(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &CROP_PARAMETERS)?;
     let config = CropConfig::new(
         parameter_f32(operation, "cx", 0.0)?,
@@ -776,7 +759,9 @@ fn compile_crop(operation: &Operation) -> Result<ProcessingOperation, OperationC
     })
 }
 
-fn compile_flip(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {
+pub(crate) fn compile_flip(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &FLIP_PARAMETERS)?;
     let mode = match parameter_integer(operation, "mode", 0.0)? {
         0 => FlipMode::Automatic,
@@ -796,7 +781,7 @@ fn compile_flip(operation: &Operation) -> Result<ProcessingOperation, OperationC
     })
 }
 
-fn compile_rotatepixels(
+pub(crate) fn compile_rotatepixels(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &ROTATEPIXELS_PARAMETERS)?;
@@ -813,7 +798,7 @@ fn compile_rotatepixels(
     })
 }
 
-fn compile_scalepixels(
+pub(crate) fn compile_scalepixels(
     operation: &Operation,
 ) -> Result<ProcessingOperation, OperationCompileError> {
     reject_unexpected(operation, &SCALEPIXELS_PARAMETERS)?;
