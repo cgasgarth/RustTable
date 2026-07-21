@@ -27,6 +27,7 @@ mod profile_controls;
 mod runtime;
 mod runtime_layout;
 mod runtime_lighttable;
+mod runtime_selection;
 mod theme;
 mod thumbnail;
 mod viewport_canvas;

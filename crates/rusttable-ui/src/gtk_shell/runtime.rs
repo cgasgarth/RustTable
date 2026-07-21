@@ -797,7 +797,7 @@ impl GtkShell {
         });
     }
 
-    fn workspace_render_handle(&self) -> WorkspaceRenderHandle {
+    pub(super) fn workspace_render_handle(&self) -> WorkspaceRenderHandle {
         WorkspaceRenderHandle {
             lighttable: self.lighttable.clone(),
             lighttable_empty_state: self.lighttable_empty_state.clone(),

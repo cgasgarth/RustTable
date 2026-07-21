@@ -518,8 +518,12 @@ fn dispatch_open_request(
         match receiver.try_recv() {
             Ok(batch) => {
                 record_successful_recent_paths(&recent_paths, &batch);
+                let selected_photo = batch.first_selected_photo();
                 *catalog.borrow_mut() = GtkCatalogController::load_catalog_at(catalog_path.clone());
                 refresh_catalog_shell(&shell, &catalog, &active_collection);
+                if let Some(photo_id) = selected_photo {
+                    let _ = shell.open_photo(photo_id);
+                }
                 ControlFlow::Break
             }
             Err(TryRecvError::Empty) => ControlFlow::Continue,
