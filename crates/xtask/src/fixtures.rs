@@ -31,11 +31,6 @@ pub(crate) fn verify(root: &Path, manifest: &Path) -> Result {
         .map_err(|error| error.to_string())?;
     let repository = rusttable_testkit::fixtures::FixtureRepository::new(root, manifest)
         .map_err(|error| error.to_string())?;
-    let verified = repository.verify().map_err(|error| error.to_string())?;
-    eprintln!(
-        "fixture corpus verified: {} files, {} bytes",
-        verified.fixtures().len(),
-        verified.total_bytes()
-    );
+    let _verified = repository.verify().map_err(|error| error.to_string())?;
     Ok(())
 }

@@ -43,7 +43,11 @@ Options:
 `;
 
 const runCommand = async (request: CommandRequest): Promise<CommandResult> => {
-  const child = Bun.spawn([request.command, ...request.args], { stderr: 'pipe', stdout: 'pipe' });
+  const child = Bun.spawn([request.command, ...request.args], {
+    env: { ...process.env, CARGO_BUILD_JOBS: '10' },
+    stderr: 'pipe',
+    stdout: 'pipe',
+  });
   const [stdout, stderr] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

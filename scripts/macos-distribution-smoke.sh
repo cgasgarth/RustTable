@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export CARGO_BUILD_JOBS=10
 
 if [[ "$(uname -s)" != Darwin ]]; then
   printf 'macOS distribution smoke requires macOS\n' >&2
