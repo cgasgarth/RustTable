@@ -482,6 +482,16 @@ spinbutton,
   color: {{foreground}};
 }
 
+.dt_thumbnail_surface {
+  background-color: {{thumbnail_background}};
+  border: 1px solid {{border}};
+}
+
+.dt_thumbnail_placeholder {
+  color: {{foreground}};
+  font-size: 10px;
+}
+
 #photo-thumbnail {
   min-width: 220px;
   min-height: 146px;

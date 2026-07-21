@@ -68,6 +68,17 @@ pub(super) fn mode_panel_stack(
     let stack = gtk4::Stack::new();
     stack.set_widget_name(id);
     stack.set_transition_type(gtk4::StackTransitionType::None);
+    let preferred_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
+    // Paned allocates a child from its minimum/natural width.  The module
+    // contents are intentionally wider than Darktable's rail in places, so
+    // make the stack's initial request explicit and let its inner scroller
+    // handle overflow instead of allowing natural width to consume the
+    // center workspace.
+    stack.set_width_request(preferred_width);
+    stack.set_hexpand(false);
+    stack.set_vexpand(true);
+    stack.set_halign(gtk4::Align::Fill);
+    stack.set_valign(gtk4::Align::Fill);
     stack.add_named(lighttable, Some(WorkspaceRole::Lighttable.stack_name()));
     stack.add_named(darkroom, Some(WorkspaceRole::Darkroom.stack_name()));
     stack.set_visible_child_name(initial.stack_name());
@@ -131,6 +142,11 @@ pub(super) fn desktop_body(
             layout.preferred_right_panel_position_px(layout.window_width_px),
         ))
         .build();
+    // The right rail is vertically scrolled and must be allowed to shrink to
+    // its preferred Darktable width.  Without this, the natural width of an
+    // expanded module wins the first allocation and the rail covers the
+    // center of the window.
+    workspace_with_right_panel.set_shrink_end_child(true);
     workspace_with_right_panel.connect_map(move |paned| {
         let paned = paned.clone();
         gtk4::glib::idle_add_local_once(move || {

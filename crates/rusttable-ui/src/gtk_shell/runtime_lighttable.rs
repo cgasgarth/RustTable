@@ -205,6 +205,12 @@ impl WorkspaceRenderHandle {
             LighttableContentState::from_rendered_count(collection_state.rendered_count())
                 .stack_name(),
         );
+        // Keep the native FlowBox visible whenever the projection contains
+        // cards.  This is intentionally separate from the Stack state: a
+        // stale visibility flag can otherwise leave the selection toolbar
+        // accurate while the lighttable surface remains visually empty after
+        // a native-file open/reset.
+        self.lighttable.set_visible(rendered_photos > 0);
         self.lighttable_empty_state.set_tooltip_text(
             (!collection_state.status_text().is_empty()).then_some(collection_state.status_text()),
         );
@@ -466,6 +472,7 @@ fn lighttable_card(
     grid: LighttableGridSpec,
 ) -> (gtk4::Button, ThumbnailSurface) {
     let card = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    card.add_css_class("dt_photo_card");
     card.set_margin_top(4);
     card.set_margin_bottom(4);
     card.set_margin_start(4);
@@ -503,6 +510,10 @@ fn lighttable_card(
     button.set_widget_name(&format!("photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
     button.set_child(Some(&card));
+    button.set_size_request(
+        i32::from(grid.thumbnail_width_px()).saturating_add(12),
+        i32::from(grid.thumbnail_height_px()).saturating_add(42),
+    );
     button.set_tooltip_text(Some(title));
     button.set_accessible_role(gtk4::AccessibleRole::Button);
     button.update_property(&[Property::Label(&format!("Select {title}"))]);
