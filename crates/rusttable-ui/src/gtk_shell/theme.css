@@ -745,6 +745,22 @@ scale:focus-visible {
   background-color: {{darkroom_canvas}};
 }
 
+#darkroom-viewport-overlay {
+  padding: 4px;
+}
+
+.darkroom_viewport_badge {
+  padding: 2px 5px;
+  background-color: #181818dd;
+  border: 1px solid {{border}};
+  color: {{foreground}};
+  font-size: 10px;
+}
+
+.darkroom_viewport_badge.warning {
+  color: #f0c36bff;
+}
+
 #darkroom-preview-header,
 #darkroom-preview-facts {
   min-height: 20px;

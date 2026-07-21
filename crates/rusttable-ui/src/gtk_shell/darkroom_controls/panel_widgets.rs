@@ -180,7 +180,9 @@ fn histogram() -> gtk4::Stack {
     histogram.update_property(&[Property::Label("Image histogram")]);
     for (name, text) in [
         ("empty", "select a photo to show the histogram"),
-        ("unavailable", "histogram unavailable for this preview"),
+        ("loading", "calculating histogram…"),
+        ("failure", "histogram unavailable for this preview"),
+        ("stale", "preview changed; waiting for current histogram"),
     ] {
         let state = gtk4::Label::new(Some(text));
         state.set_widget_name(&format!("darkroom-histogram-{name}"));

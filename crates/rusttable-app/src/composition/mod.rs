@@ -4,6 +4,7 @@ mod catalog_preview_smoke;
 mod collection_bridge;
 mod darkroom_edit;
 mod import_bridge;
+mod preview_bridge;
 mod preview_lifecycle;
 
 pub use catalog_preview::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService};
@@ -18,7 +19,6 @@ use crate::gtk_export::{
     ExportCancellation, ExportCollisionSelection, ExportCompletion, ExportRequest, ExportRunError,
     ExportSettings, ExportSizeSelection, ExportStage, ExportStatus, run_with_progress,
 };
-use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
 use crate::gtk_thumbnail_controller::{GtkThumbnailController, default_thumbnail_cache_root};
 use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
@@ -49,7 +49,8 @@ use collection_bridge::{
     apply_collection_action, apply_lighttable_toolbar_action, apply_photo_selection,
     collection_filter_state, empty_collection_filter_state,
 };
-use preview_lifecycle::{PreviewLifecycle, PreviewSelectionToken};
+use preview_bridge::start_selected_preview;
+use preview_lifecycle::PreviewLifecycle;
 use rusttable_ui::{NeuralRestoreAction, PhotoSelection, PhotoSourceKind};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
@@ -259,10 +260,8 @@ fn activate_application(
     );
     let selection_controller = Rc::clone(&catalog_controller);
     let selection_collection = Rc::clone(active_collection);
-    let preview = shell.darkroom_preview().clone();
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
-    let darkroom_bridge =
-        darkroom_edit::install(&shell, &catalog_controller, &preview, &preview_lifecycle);
+    let darkroom_bridge = darkroom_edit::install(&shell, &catalog_controller, &preview_lifecycle);
     let export_selection = export_panel.clone();
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
     let darkroom_selection_controller = Rc::clone(&darkroom_bridge.controller);
@@ -312,7 +311,11 @@ fn activate_application(
         }]);
         ai_batch_selection_shell.set_ai_batch_state(ai_batch.state());
         let catalog = selection_controller.borrow().clone();
-        start_selected_preview(&preview, catalog, Rc::clone(&preview_lifecycle));
+        start_selected_preview(
+            &darkroom_selection_shell,
+            catalog,
+            Rc::clone(&preview_lifecycle),
+        );
     });
     shell.present();
     active_shell.replace(Some(shell));
@@ -857,84 +860,6 @@ fn export_request(
         destination,
         ExportSettings::from_selection(size, collision),
     ))
-}
-
-struct PreviewResult {
-    token: PreviewSelectionToken,
-    state: GtkPreviewState,
-}
-
-fn start_selected_preview(
-    preview: &rusttable_ui::gtk_shell::PhotoPreview,
-    catalog: GtkCatalogController,
-    lifecycle: Rc<RefCell<PreviewLifecycle>>,
-) {
-    let Some(photo_id) = catalog.selected_photo() else {
-        preview.set_failure(GtkPreviewFailureKind::NoSelection.message());
-        return;
-    };
-    let token = lifecycle.borrow_mut().begin(photo_id);
-    preview.set_loading();
-    let (sender, receiver) = mpsc::channel();
-    let worker = thread::Builder::new()
-        .name("rusttable-preview".to_owned())
-        .spawn(move || {
-            let state = GtkPreviewController::new().render_selected(&catalog);
-            let _ = sender.send(PreviewResult { token, state });
-        });
-    if worker.is_err() {
-        preview.set_failure(GtkPreviewFailureKind::RenderUnavailable.message());
-        return;
-    }
-
-    let preview = preview.clone();
-    glib::source::timeout_add_local(Duration::from_millis(16), move || {
-        match receiver.try_recv() {
-            Ok(result) => {
-                if lifecycle.borrow().is_current(result.token) {
-                    install_preview_state(&preview, result.state);
-                }
-                ControlFlow::Break
-            }
-            Err(TryRecvError::Empty) => ControlFlow::Continue,
-            Err(TryRecvError::Disconnected) => {
-                if lifecycle.borrow().is_current(token) {
-                    preview.set_failure(GtkPreviewFailureKind::RenderUnavailable.message());
-                }
-                ControlFlow::Break
-            }
-        }
-    });
-}
-
-fn install_preview_state(preview: &rusttable_ui::gtk_shell::PhotoPreview, state: GtkPreviewState) {
-    let GtkPreviewState::Ready(rendered) = state else {
-        if let GtkPreviewState::Failed(failure) = state {
-            preview.set_failure(failure.message());
-        }
-        return;
-    };
-
-    let Ok(dimensions) = rusttable_ui::PreviewDimensions::new(
-        rendered.dimensions().width(),
-        rendered.dimensions().height(),
-    ) else {
-        preview.set_failure(GtkPreviewFailureKind::InvalidRgba8.message());
-        return;
-    };
-    let Ok(status) = rusttable_ui::PresentationText::new("rendered") else {
-        preview.set_failure(GtkPreviewFailureKind::RenderUnavailable.message());
-        return;
-    };
-    let Ok(metadata) =
-        rusttable_ui::Rgba8PreviewMetadata::new(dimensions, status, rendered.pixels().to_vec())
-    else {
-        preview.set_failure(GtkPreviewFailureKind::InvalidRgba8.message());
-        return;
-    };
-    if preview.set_rgba8(&metadata).is_err() {
-        preview.set_failure(GtkPreviewFailureKind::InvalidRgba8.message());
-    }
 }
 
 #[cfg(test)]

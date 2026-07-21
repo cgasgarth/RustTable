@@ -36,6 +36,13 @@ impl PreviewLifecycle {
     }
 }
 
+impl PreviewSelectionToken {
+    #[must_use]
+    pub(super) const fn generation(self) -> u64 {
+        self.generation
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rusttable_core::PhotoId;

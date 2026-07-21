@@ -37,8 +37,8 @@ pub use collection_controls::{
     LighttablePhotoState,
 };
 pub use darkroom::{
-    DARKROOM_LAYOUT_FOCUS_ORDER, DARKROOM_WIDGET_IDS, DarkroomPanelVisibility,
-    DarkroomPanelVisibilityAction, DarkroomView,
+    DARKROOM_LAYOUT_FOCUS_ORDER, DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS,
+    DarkroomPanelVisibility, DarkroomPanelVisibilityAction, DarkroomView,
 };
 pub use darkroom_controls::{
     DarkroomControlFeedback, DarkroomControlMessage, DarkroomControlModel,

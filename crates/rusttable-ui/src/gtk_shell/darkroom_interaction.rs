@@ -8,45 +8,29 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
+use crate::darkroom_histogram::{
+    DARKROOM_HISTOGRAM_BINS, HistogramData, HistogramError, HistogramSample,
+};
 use crate::viewport_presentation::ViewportGeneration;
 
-const MAX_HISTOGRAM_BINS: usize = 4_096;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum HistogramState {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum HistogramSurfaceState {
     Empty,
-    Unavailable,
-    Ready,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct HistogramData {
-    bins: Vec<[f32; 3]>,
-}
-
-impl HistogramData {
-    fn new(red: &[f32], green: &[f32], blue: &[f32]) -> Option<Self> {
-        if red.is_empty()
-            || red.len() != green.len()
-            || red.len() != blue.len()
-            || red.len() > MAX_HISTOGRAM_BINS
-            || red
-                .iter()
-                .chain(green)
-                .chain(blue)
-                .any(|value| !value.is_finite() || *value < 0.0)
-        {
-            return None;
-        }
-        Some(Self {
-            bins: red
-                .iter()
-                .zip(green)
-                .zip(blue)
-                .map(|((red, green), blue)| [*red, *green, *blue])
-                .collect(),
-        })
-    }
+    Loading {
+        generation: ViewportGeneration,
+    },
+    Ready {
+        generation: ViewportGeneration,
+        data: HistogramData,
+    },
+    Failed {
+        generation: ViewportGeneration,
+        error: HistogramError,
+    },
+    Stale {
+        expected: ViewportGeneration,
+        received: ViewportGeneration,
+    },
 }
 
 #[derive(Clone)]
@@ -54,17 +38,21 @@ pub(super) struct HistogramView {
     stack: gtk4::Stack,
     chart: gtk4::DrawingArea,
     data: Rc<RefCell<Option<HistogramData>>>,
-    state: Rc<RefCell<HistogramState>>,
+    state: Rc<RefCell<HistogramSurfaceState>>,
+    failure: gtk4::Label,
+    stale: gtk4::Label,
+    selected_sample: Rc<RefCell<Option<HistogramSample>>>,
 }
 
 impl HistogramView {
     pub(super) fn new(stack: gtk4::Stack) -> Self {
         clear_children(&stack);
         let data = Rc::new(RefCell::new(None));
+        let selected_sample = Rc::new(RefCell::new(None));
         let chart = gtk4::DrawingArea::new();
         chart.set_widget_name("darkroom-histogram-chart");
         chart.set_content_width(220);
-        chart.set_content_height(92);
+        chart.set_content_height(128);
         chart.set_hexpand(true);
         chart.set_vexpand(true);
         chart.set_accessible_role(gtk4::AccessibleRole::Img);
@@ -76,55 +64,126 @@ impl HistogramView {
             "darkroom-histogram-empty",
             "select a photo to show the histogram",
         );
-        let unavailable = histogram_status(
-            "darkroom-histogram-unavailable",
+        let loading = histogram_status("darkroom-histogram-loading", "calculating histogram…");
+        let failure = histogram_status(
+            "darkroom-histogram-failure",
             "histogram unavailable for this preview",
         );
+        let stale = histogram_status(
+            "darkroom-histogram-stale",
+            "preview changed; waiting for current histogram",
+        );
         stack.add_named(&empty, Some("empty"));
-        stack.add_named(&unavailable, Some("unavailable"));
+        stack.add_named(&loading, Some("loading"));
+        stack.add_named(&failure, Some("failure"));
+        stack.add_named(&stale, Some("stale"));
         stack.add_named(&chart, Some("ready"));
         stack.set_visible_child_name("empty");
+
+        install_histogram_sample_selection(&chart, &data, &selected_sample);
 
         Self {
             stack,
             chart,
             data,
-            state: Rc::new(RefCell::new(HistogramState::Empty)),
+            state: Rc::new(RefCell::new(HistogramSurfaceState::Empty)),
+            failure,
+            stale,
+            selected_sample,
         }
     }
 
     pub(super) fn clear(&self) {
         self.data.replace(None);
-        self.state.replace(HistogramState::Empty);
+        self.selected_sample.replace(None);
+        self.state.replace(HistogramSurfaceState::Empty);
         self.stack.set_visible_child_name("empty");
         self.chart.queue_draw();
     }
 
-    pub(super) fn unavailable(&self) {
+    pub(super) fn loading(&self, generation: ViewportGeneration) {
         self.data.replace(None);
-        self.state.replace(HistogramState::Unavailable);
-        self.stack.set_visible_child_name("unavailable");
+        self.selected_sample.replace(None);
+        self.state
+            .replace(HistogramSurfaceState::Loading { generation });
+        self.stack.set_visible_child_name("loading");
         self.chart.queue_draw();
     }
 
-    pub(super) fn set_bins(&self, red: &[f32], green: &[f32], blue: &[f32]) -> bool {
-        let Some(data) = HistogramData::new(red, green, blue) else {
-            self.unavailable();
-            return false;
-        };
+    pub(super) fn failure(&self, generation: ViewportGeneration, error: HistogramError) {
+        self.data.replace(None);
+        self.selected_sample.replace(None);
+        self.failure.set_text(&format_histogram_error(error));
+        self.state
+            .replace(HistogramSurfaceState::Failed { generation, error });
+        self.stack.set_visible_child_name("failure");
+        self.chart.queue_draw();
+    }
+
+    pub(super) fn stale(&self, expected: ViewportGeneration, received: ViewportGeneration) {
+        self.data.replace(None);
+        self.selected_sample.replace(None);
+        self.stale.set_text(&format!(
+            "preview changed; ignored histogram generation {}",
+            received.get()
+        ));
+        self.state
+            .replace(HistogramSurfaceState::Stale { expected, received });
+        self.stack.set_visible_child_name("stale");
+        self.chart.queue_draw();
+    }
+
+    pub(super) fn set_data(&self, generation: ViewportGeneration, data: HistogramData) {
+        self.selected_sample.replace(None);
         self.data.replace(Some(data));
-        self.state.replace(HistogramState::Ready);
+        let data = self
+            .data
+            .borrow()
+            .clone()
+            .expect("histogram data just installed");
+        self.state
+            .replace(HistogramSurfaceState::Ready { generation, data });
         self.stack.set_visible_child_name("ready");
         self.chart.queue_draw();
-        true
     }
 
-    pub(super) fn state(&self) -> HistogramState {
-        *self.state.borrow()
+    pub(super) fn state(&self) -> HistogramSurfaceState {
+        self.state.borrow().clone()
     }
 
     pub(super) fn is_ready(&self) -> bool {
-        self.state() == HistogramState::Ready
+        matches!(self.state(), HistogramSurfaceState::Ready { .. })
+    }
+
+    pub(super) fn selected_sample(&self) -> Option<HistogramSample> {
+        *self.selected_sample.borrow()
+    }
+
+    pub(super) fn connect_sample<F>(&self, handler: F)
+    where
+        F: Fn(HistogramSample) + 'static,
+    {
+        let selected_sample = Rc::clone(&self.selected_sample);
+        let data = Rc::clone(&self.data);
+        let chart = self.chart.clone();
+        let callback = Rc::new(handler);
+        let click = gtk4::GestureClick::new();
+        click.set_button(1);
+        click.connect_pressed(move |_, _, x, _| {
+            let data_guard = data.borrow();
+            let Some(data) = data_guard.as_ref() else {
+                return;
+            };
+            let width = f64::from(chart.width().max(1));
+            let bin = histogram_bin_for_x(x, width);
+            let Some(sample) = data.sample(bin) else {
+                return;
+            };
+            drop(data_guard);
+            selected_sample.replace(Some(sample));
+            callback(sample);
+        });
+        self.chart.add_controller(click);
     }
 }
 
@@ -138,24 +197,37 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
         let Some(data) = data.borrow().as_ref().cloned() else {
             return;
         };
-        let maximum = data
-            .bins
-            .iter()
-            .flat_map(|bin| bin.iter().copied())
-            .fold(0.0_f32, f32::max);
-        if maximum <= f32::EPSILON {
+        let maximum = data.maximum();
+        if maximum == 0 {
             return;
         }
-        let colors = [(0.9, 0.22, 0.22), (0.22, 0.9, 0.28), (0.3, 0.5, 1.0)];
-        let bin_count = u32::try_from(data.bins.len()).expect("histogram bins are bounded");
+        let channels = [
+            (
+                crate::darkroom_histogram::HistogramChannel::Red,
+                (0.9, 0.22, 0.22, 0.78),
+            ),
+            (
+                crate::darkroom_histogram::HistogramChannel::Green,
+                (0.22, 0.9, 0.28, 0.78),
+            ),
+            (
+                crate::darkroom_histogram::HistogramChannel::Blue,
+                (0.3, 0.5, 1.0, 0.78),
+            ),
+            (
+                crate::darkroom_histogram::HistogramChannel::Luminance,
+                (0.92, 0.92, 0.92, 0.65),
+            ),
+        ];
+        let bin_count = u32::try_from(data.bins().len()).expect("histogram bins are bounded");
         let bin_width = width / f64::from(bin_count);
-        for channel in 0..3 {
-            context.set_source_rgba(colors[channel].0, colors[channel].1, colors[channel].2, 0.8);
+        for (channel, color) in channels {
+            context.set_source_rgba(color.0, color.1, color.2, color.3);
             context.set_line_width(1.0);
-            for (index, bin) in data.bins.iter().enumerate() {
+            for (index, bin) in data.bins().iter().enumerate() {
                 let index = u32::try_from(index).expect("histogram bin index is bounded");
                 let x = (f64::from(index) + 0.5) * bin_width;
-                let y = height - (f64::from(bin[channel] / maximum) * height);
+                let y = height - (f64::from(bin.channel(channel)) / f64::from(maximum) * height);
                 if index == 0 {
                     context.move_to(x, y);
                 } else {
@@ -165,6 +237,36 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
             let _ = context.stroke();
         }
     });
+}
+
+fn install_histogram_sample_selection(
+    chart: &gtk4::DrawingArea,
+    _data: &Rc<RefCell<Option<HistogramData>>>,
+    _selected_sample: &Rc<RefCell<Option<HistogramSample>>>,
+) {
+    chart.set_tooltip_text(Some("Click the histogram to select a luminance/RGB range"));
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+fn histogram_bin_for_x(x: f64, width: f64) -> usize {
+    ((x / width) * DARKROOM_HISTOGRAM_BINS as f64)
+        .floor()
+        .clamp(0.0, (DARKROOM_HISTOGRAM_BINS - 1) as f64) as usize
+}
+
+fn format_histogram_error(error: HistogramError) -> String {
+    match error {
+        HistogramError::NonFinite { .. } => "histogram failed: non-finite preview pixel".to_owned(),
+        HistogramError::IncorrectByteLength { .. }
+        | HistogramError::IncorrectSampleLength { .. }
+        | HistogramError::SizeOverflow
+        | HistogramError::Empty => "histogram failed: invalid preview data".to_owned(),
+        HistogramError::PreviewUnavailable => "histogram failed: preview unavailable".to_owned(),
+    }
 }
 
 fn histogram_status(id: &str, text: &str) -> gtk4::Label {
@@ -378,7 +480,7 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{FilmstripState, HistogramData, HistogramState};
+    use super::{FilmstripState, HistogramSurfaceState, HistogramView};
     use crate::viewport_presentation::ViewportGeneration;
     use rusttable_core::PhotoId;
 
@@ -387,18 +489,21 @@ mod tests {
     }
 
     #[test]
-    fn histogram_rejects_mismatched_non_finite_or_negative_bins() {
-        assert!(HistogramData::new(&[1.0], &[1.0, 2.0], &[1.0]).is_none());
-        assert!(HistogramData::new(&[f32::NAN], &[1.0], &[1.0]).is_none());
-        assert!(HistogramData::new(&[-1.0], &[1.0], &[1.0]).is_none());
-    }
-
-    #[test]
-    fn histogram_accepts_bounded_rgb_bins() {
-        let histogram =
-            HistogramData::new(&[1.0, 2.0], &[2.0, 1.0], &[0.0, 1.0]).expect("valid histogram");
-        assert_eq!(histogram.bins.len(), 2);
-        assert_eq!(HistogramState::Ready, HistogramState::Ready);
+    fn histogram_surface_state_names_loading_failure_and_stale_generations() {
+        assert!(matches!(
+            HistogramSurfaceState::Loading {
+                generation: ViewportGeneration::new(2)
+            },
+            HistogramSurfaceState::Loading { .. }
+        ));
+        assert!(matches!(
+            HistogramSurfaceState::Stale {
+                expected: ViewportGeneration::new(2),
+                received: ViewportGeneration::new(1)
+            },
+            HistogramSurfaceState::Stale { .. }
+        ));
+        let _ = std::mem::size_of::<HistogramView>();
     }
 
     #[test]
