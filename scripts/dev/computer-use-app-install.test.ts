@@ -21,6 +21,7 @@ import {
   renderBundlePlist,
   RUSTTABLE_BUNDLE_IDENTITY,
   RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
+  RUSTTABLE_ICON_FILE,
   readBundleManifest,
 } from './rusttable-app-bundle';
 
@@ -245,6 +246,38 @@ describe('computer-use installer parsing', () => {
     }
   });
 
+  test('replaces the legacy icon-less canonical app before strict registration', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
+    try {
+      const installPath = join(root, 'Applications/rusttable - latest.app');
+      const source = await makeBundle(root, 'source', '0.2.0');
+      await makeLegacyBundle(join(root, 'Applications'), 'rusttable - latest.app', '0.1.0');
+      const calls: string[] = [];
+      const run = async (request: { args: string[]; label: string; command: string }) => {
+        calls.push(request.label);
+        if (request.label === 'stage computer-use app') {
+          await cp(request.args[0]!, request.args[1]!, { recursive: true });
+        }
+        return { exitCode: 0, stderr: '', stdout: '' };
+      };
+
+      await installCanonicalComputerUseApp({
+        installPath,
+        run,
+        sourcePath: source,
+        transactionId: 'legacy-replace',
+      });
+
+      expect((await readBundleManifest(installPath)).CFBundleShortVersionString).toBe('0.2.0');
+      expect(calls).toContain('unregister ' + installPath);
+      expect((await readdir(join(root, 'Applications'))).filter((entry) => entry.endsWith('.app'))).toEqual([
+        'rusttable - latest.app',
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   test('cleans repository-owned duplicates recoverably and refuses unrelated or symlink paths', async () => {
     const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
     try {
@@ -285,19 +318,20 @@ describe('computer-use installer parsing', () => {
       const canonical = await makeBundle(applications, 'rusttable - latest.app');
       const legacy = await makeBundle(applications, 'RustTable.app', '0.1.0', RUSTTABLE_BUNDLE_IDENTITY);
       const duplicate = await makeBundle(applications, 'rusttable-copy.app');
+      const legacyDuplicate = await makeLegacyBundle(applications, 'rusttable-legacy.app', '0.1.0');
       const unrelated = await makeBundle(applications, 'Photos.app', '0.1.0', {
         bundleIdentifier: 'com.example.photos',
         bundleName: 'Photos',
         displayName: 'Photos',
       });
       const removed = await cleanupRepositoryAppBundles({
-        bundlePaths: [canonical, legacy, duplicate, unrelated],
+        bundlePaths: [canonical, legacy, duplicate, legacyDuplicate, unrelated],
         keepPaths: [canonical],
-        repositoryPaths: [canonical, legacy, duplicate, unrelated],
+        repositoryPaths: [canonical, legacy, duplicate, legacyDuplicate, unrelated],
         recoveryDirectory: join(root, 'Trash'),
         run: async () => ({ exitCode: 0, stderr: '', stdout: '' }),
       });
-      expect(removed.sort()).toEqual([duplicate, legacy].sort());
+      expect(removed.sort()).toEqual([duplicate, legacy, legacyDuplicate].sort());
       expect(await pathExistsForTest(canonical)).toBe(true);
       expect(await pathExistsForTest(unrelated)).toBe(true);
     } finally {
@@ -334,6 +368,18 @@ const makeBundle = async (
     version,
     identity,
   });
+};
+
+const makeLegacyBundle = async (root: string, name: string, version = '0.1.0'): Promise<string> => {
+  const directory = await makeBundle(root, name, version);
+  await rm(join(directory, 'Contents/Resources', RUSTTABLE_ICON_FILE));
+  const plistPath = join(directory, 'Contents/Info.plist');
+  const plist = await readFile(plistPath, 'utf8');
+  await writeFile(
+    plistPath,
+    plist.replace(`<key>CFBundleIconFile</key><string>${RUSTTABLE_ICON_FILE}</string>\n`, ''),
+  );
+  return directory;
 };
 
 const invalidManifest = (): string =>

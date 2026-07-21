@@ -16,6 +16,14 @@ pub const MAX_OPEN_FILES: usize = 256;
 /// The `RustTable` bundle identity used by native application metadata and the runtime fallback.
 pub const BUNDLE_IDENTIFIER: &str = "com.cgasgarth.rusttable";
 
+/// GTK accelerator spellings that cover Command-Q on macOS and the primary quit shortcut elsewhere.
+#[cfg(target_os = "macos")]
+pub const COMMAND_QUIT_ACCELERATORS: &[&str] = &["<Meta>q", "<Primary>q"];
+
+/// GTK accelerator spelling for the primary quit shortcut on non-macOS platforms.
+#[cfg(not(target_os = "macos"))]
+pub const COMMAND_QUIT_ACCELERATORS: &[&str] = &["<Primary>q"];
+
 /// Returns the bundle identifier that owns the running executable.
 #[must_use]
 pub fn runtime_bundle_identifier() -> String {
@@ -455,9 +463,9 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
-        BUNDLE_IDENTIFIER, MAX_OPEN_FILES, MacApplicationBridge, MacApplicationCommand,
-        MacApplicationEvent, MacOpenRejection, MacOpenTarget, MacTerminationDecision,
-        MacWindowAction, bundle_identifier_from_plist, document_types,
+        BUNDLE_IDENTIFIER, COMMAND_QUIT_ACCELERATORS, MAX_OPEN_FILES, MacApplicationBridge,
+        MacApplicationCommand, MacApplicationEvent, MacOpenRejection, MacOpenTarget,
+        MacTerminationDecision, MacWindowAction, bundle_identifier_from_plist, document_types,
     };
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -625,5 +633,12 @@ mod tests {
             None
         );
         assert_eq!(BUNDLE_IDENTIFIER, "com.cgasgarth.rusttable");
+    }
+
+    #[test]
+    fn quit_accelerators_include_the_platform_command_binding() {
+        assert!(COMMAND_QUIT_ACCELERATORS.contains(&"<Primary>q"));
+        #[cfg(target_os = "macos")]
+        assert!(COMMAND_QUIT_ACCELERATORS.contains(&"<Meta>q"));
     }
 }

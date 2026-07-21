@@ -21,7 +21,8 @@ use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind,
 use crate::gtk_thumbnail_controller::{GtkThumbnailController, default_thumbnail_cache_root};
 use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
-    MacApplicationBridge, MacApplicationCommand, MacOpenRequest, MacTerminationDecision,
+    COMMAND_QUIT_ACCELERATORS, MacApplicationBridge, MacApplicationCommand, MacOpenRequest,
+    MacTerminationDecision,
 };
 use gtk4::gio::prelude::{ActionMapExt, ApplicationExt, ApplicationExtManual, FileExt};
 use gtk4::glib::{self, ControlFlow};
@@ -388,7 +389,7 @@ fn install_application_menus(
     }
     application.set_accels_for_action("app.preferences", &["<Primary>comma"]);
     application.set_accels_for_action("app.hide", &["<Primary>h"]);
-    application.set_accels_for_action("app.quit", &["<Primary>q"]);
+    application.set_accels_for_action("app.quit", COMMAND_QUIT_ACCELERATORS);
 
     let application_menu = gtk4::gio::Menu::new();
     application_menu.append(Some("About RustTable"), Some("app.about"));

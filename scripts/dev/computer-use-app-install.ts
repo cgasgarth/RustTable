@@ -1,4 +1,4 @@
-import { access, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { access, lstat, mkdir, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
@@ -9,6 +9,7 @@ import {
   readBundleManifest,
   validateBundle,
   type BundleManifest,
+  type BundleValidationOptions,
 } from './rusttable-app-bundle';
 
 export {
@@ -103,17 +104,21 @@ export const parseGitWorktreePaths = (porcelain: string): string[] =>
 export { parseBundleIdentifier };
 
 export const readBundleIdentifier: BundleIdentifierReader = async (bundlePath) =>
-  (await readBundleManifest(bundlePath)).CFBundleIdentifier;
+  parseBundleIdentifier(await readFile(join(bundlePath, 'Contents/Info.plist'), 'utf8'));
 
-type BundleManifestReader = (bundlePath: string) => Promise<BundleManifest>;
+type BundleManifestReader = (
+  bundlePath: string,
+  options?: BundleValidationOptions,
+) => Promise<BundleManifest>;
 
 const assertCompleteBundle = async (
   bundlePath: string,
   readIdentifier: BundleIdentifierReader,
   readManifest: BundleManifestReader,
+  options: BundleValidationOptions = {},
 ): Promise<void> => {
-  await validateBundle(bundlePath, undefined, RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY);
-  const manifest = await readManifest(bundlePath);
+  await validateBundle(bundlePath, undefined, RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY, options);
+  const manifest = await readManifest(bundlePath, options);
   const identifier = await readIdentifier(bundlePath);
   const expected = RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY;
   if (
@@ -261,7 +266,9 @@ export const installCanonicalComputerUseApp = async ({
       label: 'quit installed RustTable',
     });
     if (await pathExists(installPath)) {
-      await assertCompleteBundle(installPath, readIdentifier, readManifestValue);
+      await assertCompleteBundle(installPath, readIdentifier, readManifestValue, {
+        allowLegacyIcon: true,
+      });
       await unregisterBundle(installPath, run);
       await rename(installPath, backupPath);
       backupCreated = true;
@@ -319,7 +326,7 @@ export const cleanupRepositoryAppBundles = async ({
     const identifier = await readIdentifier(resolvedPath).catch(() => 'unreadable');
     if (!REPOSITORY_BUNDLE_IDENTIFIERS.has(identifier)) continue;
     try {
-      await validateBundle(resolvedPath);
+      await validateBundle(resolvedPath, undefined, undefined, { allowLegacyIcon: true });
     } catch {
       continue;
     }
