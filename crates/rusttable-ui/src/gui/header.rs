@@ -1,6 +1,6 @@
 //! Darktable-shaped GTK4 header and lighttable mode chrome.
 
-use crate::display_profile::DisplayProfileBanner;
+use crate::gui::display_profile::DisplayProfileBanner;
 use gtk4::accessible::{Property, State};
 use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};

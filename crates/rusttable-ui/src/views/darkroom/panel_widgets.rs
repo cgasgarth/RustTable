@@ -50,15 +50,7 @@ pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatu
     let controller_modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     controller_modules.set_widget_name("darkroom-left-controller-modules");
     modules.append(&controller_modules);
-    let scroll = gtk4::ScrolledWindow::builder()
-        .child(&modules)
-        .hexpand(true)
-        .vexpand(true)
-        .build();
-    scroll.set_widget_name("darkroom-left-module-scroll");
-    scroll.set_can_focus(true);
-    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
-    scroll.set_propagate_natural_height(false);
+    let scroll = rail_scroll(&modules, width, "darkroom-left-module-scroll");
     panel.append(&scroll);
     (
         panel,
@@ -102,6 +94,8 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         .build();
     groups_scroll.set_widget_name("darkroom-module-groups-scroll");
     groups_scroll.set_height_request(26);
+    groups_scroll.set_min_content_width(width);
+    groups_scroll.set_propagate_natural_width(false);
     panel.append(&groups_scroll);
 
     let search = gtk4::SearchEntry::new();
@@ -109,6 +103,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     search.set_placeholder_text(Some("search modules"));
     search.set_accessible_role(gtk4::AccessibleRole::SearchBox);
     search.update_property(&[Property::Label("Search darkroom modules")]);
+    search.set_width_request(width);
     search.set_hexpand(true);
     panel.append(&search);
 
@@ -127,15 +122,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     modules.append(raw_denoise.widget());
     modules.append(mask_manager.widget());
     modules.append(multiscale_retouch.widget());
-    let scroll = gtk4::ScrolledWindow::builder()
-        .child(&modules)
-        .hexpand(true)
-        .vexpand(true)
-        .build();
-    scroll.set_widget_name("darkroom-right-module-scroll");
-    scroll.set_can_focus(true);
-    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
-    scroll.set_propagate_natural_height(false);
+    let scroll = rail_scroll(&modules, width, "darkroom-right-module-scroll");
     panel.append(&scroll);
     (
         panel,
@@ -242,10 +229,29 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
     }
 }
 
+fn rail_scroll(child: &impl IsA<gtk4::Widget>, width: i32, id: &str) -> gtk4::ScrolledWindow {
+    let scroll = gtk4::ScrolledWindow::builder()
+        .child(child)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+    scroll.set_widget_name(id);
+    scroll.set_can_focus(true);
+    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
+    scroll.set_min_content_width(width);
+    scroll.set_propagate_natural_width(false);
+    scroll.set_propagate_natural_height(false);
+    scroll
+}
+
 fn histogram() -> gtk4::Stack {
     let histogram = gtk4::Stack::new();
     histogram.set_widget_name("darkroom-histogram");
     histogram.set_height_request(i32::from(DARKROOM_GEOMETRY.histogram_height_px));
+    histogram.set_hexpand(true);
+    histogram.set_halign(gtk4::Align::Fill);
+    histogram.set_vexpand(false);
+    histogram.set_valign(gtk4::Align::Start);
     histogram.set_accessible_role(gtk4::AccessibleRole::Img);
     histogram.update_property(&[Property::Label("Image histogram")]);
     histogram

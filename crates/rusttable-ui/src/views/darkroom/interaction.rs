@@ -8,7 +8,7 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
-use crate::darkroom_histogram::{
+use crate::libs::histogram::{
     DARKROOM_HISTOGRAM_BINS, HistogramData, HistogramError, HistogramSample,
 };
 use crate::viewport_presentation::ViewportGeneration;
@@ -55,6 +55,7 @@ impl HistogramView {
         chart.set_content_height(128);
         chart.set_hexpand(true);
         chart.set_vexpand(true);
+        chart.connect_resize(|chart, _, _| chart.queue_draw());
         chart.set_accessible_role(gtk4::AccessibleRole::Img);
         chart.update_property(&[Property::Label("Rendered image histogram")]);
         chart.set_tooltip_text(Some("Rendered image histogram"));
@@ -203,19 +204,19 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
         }
         let channels = [
             (
-                crate::darkroom_histogram::HistogramChannel::Red,
+                crate::libs::histogram::HistogramChannel::Red,
                 (0.9, 0.22, 0.22, 0.78),
             ),
             (
-                crate::darkroom_histogram::HistogramChannel::Green,
+                crate::libs::histogram::HistogramChannel::Green,
                 (0.22, 0.9, 0.28, 0.78),
             ),
             (
-                crate::darkroom_histogram::HistogramChannel::Blue,
+                crate::libs::histogram::HistogramChannel::Blue,
                 (0.3, 0.5, 1.0, 0.78),
             ),
             (
-                crate::darkroom_histogram::HistogramChannel::Luminance,
+                crate::libs::histogram::HistogramChannel::Luminance,
                 (0.92, 0.92, 0.92, 0.65),
             ),
         ];

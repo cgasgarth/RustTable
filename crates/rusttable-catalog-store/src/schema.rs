@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::time::Duration;
 
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
@@ -49,20 +52,49 @@ pub(crate) const HISTORY_BLOBS_TABLE: TableDefinition<&[u8], &[u8]> =
 pub(crate) const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blob_refs");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
+const DATABASE_OPEN_RETRIES: u8 = 8;
+const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(2);
 
-pub(crate) fn open(path: &Path) -> Result<Database, RepositoryError> {
+pub(crate) fn open(path: &Path) -> Result<Arc<Database>, RepositoryError> {
     let existed = path.exists();
-    let database = Database::create(path).map_err(|error| match error {
-        redb::DatabaseError::DatabaseAlreadyOpen => RepositoryError::Unavailable,
-        _ if existed => RepositoryError::CorruptPersistedData,
-        _ => RepositoryError::Unavailable,
-    })?;
-    if existed {
-        validate(&database)?;
-    } else {
-        initialize(&database)?;
+    for attempt in 0..DATABASE_OPEN_RETRIES {
+        let mut databases = database_registry()
+            .lock()
+            .map_err(|_| RepositoryError::Unavailable)?;
+        if let Some(database) = databases.get(path).and_then(Weak::upgrade) {
+            return Ok(database);
+        }
+        let database = match Database::create(path) {
+            Ok(database) => Arc::new(database),
+            Err(redb::DatabaseError::DatabaseAlreadyOpen)
+                if attempt + 1 < DATABASE_OPEN_RETRIES =>
+            {
+                drop(databases);
+                std::thread::sleep(DATABASE_OPEN_RETRY_DELAY);
+                continue;
+            }
+            Err(error) => {
+                return Err(match error {
+                    redb::DatabaseError::DatabaseAlreadyOpen => RepositoryError::Unavailable,
+                    _ if existed => RepositoryError::CorruptPersistedData,
+                    _ => RepositoryError::Unavailable,
+                });
+            }
+        };
+        if existed {
+            validate(&database)?;
+        } else {
+            initialize(&database)?;
+        }
+        databases.insert(PathBuf::from(path), Arc::downgrade(&database));
+        return Ok(database);
     }
-    Ok(database)
+    Err(RepositoryError::Unavailable)
+}
+
+fn database_registry() -> &'static Mutex<BTreeMap<PathBuf, Weak<Database>>> {
+    static DATABASES: OnceLock<Mutex<BTreeMap<PathBuf, Weak<Database>>>> = OnceLock::new();
+    DATABASES.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
 fn initialize(database: &Database) -> Result<(), RepositoryError> {
@@ -652,23 +684,27 @@ fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), Re
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    };
 
     use super::open;
-    use rusttable_catalog::RepositoryError;
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
-    fn concurrent_database_open_is_unavailable_not_corrupt() {
+    fn concurrent_database_open_reuses_the_live_catalog_handle() {
         let path = std::env::temp_dir().join(format!(
             "rusttable-schema-open-{}-{}.redb",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
         let first = open(&path).expect("first schema open");
-        assert!(matches!(open(&path), Err(RepositoryError::Unavailable)));
+        let second = open(&path).expect("second schema open");
+        assert!(Arc::ptr_eq(&first, &second));
         drop(first);
+        drop(second);
         let _ = fs::remove_file(path);
     }
 }

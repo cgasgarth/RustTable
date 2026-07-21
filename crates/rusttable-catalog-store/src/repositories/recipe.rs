@@ -33,7 +33,7 @@ impl RedbRecipeRepository {
     /// Opens a recipe repository, sharing the same schema migration as the catalog store.
     pub fn open(path: &Path) -> Result<Self, RecipeStoreError> {
         Ok(Self {
-            database: Arc::new(schema::open(path).map_err(|error| map_schema_error(&error))?),
+            database: schema::open(path).map_err(|error| map_schema_error(&error))?,
         })
     }
 

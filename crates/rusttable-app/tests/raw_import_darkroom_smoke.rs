@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::thread;
 
 use rusttable_app::gtk_controller::{
     GtkCatalogController, GtkCatalogState, GtkDarkroomPanelController,
@@ -149,6 +150,35 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
     let mut catalog = GtkCatalogController::load_catalog_at(catalog_path.clone());
     assert!(matches!(catalog.state(), GtkCatalogState::Ready(_)));
     assert!(catalog.select_photo(photo_id));
+
+    let concurrent_preview_catalog = catalog.clone();
+    let concurrent_thumbnail_catalog = catalog_path.clone();
+    let concurrent_thumbnail_source_root = directory.0.clone();
+    let concurrent_thumbnail_cache = directory.0.join("thumbnail-concurrent-cache");
+    let (concurrent_preview, concurrent_thumbnail) = thread::scope(|scope| {
+        let preview = scope.spawn(move || {
+            GtkPreviewController::new().render_selected(&concurrent_preview_catalog)
+        });
+        let thumbnail = scope.spawn(move || {
+            let mut controller = GtkThumbnailController::open(
+                concurrent_thumbnail_catalog,
+                concurrent_thumbnail_source_root,
+                concurrent_thumbnail_cache,
+            )
+            .expect("concurrent RAW thumbnail controller");
+            controller.render(photo_id)
+        });
+        (
+            preview.join().expect("concurrent RAW preview worker"),
+            thumbnail.join().expect("concurrent RAW thumbnail worker"),
+        )
+    });
+    assert!(
+        matches!(concurrent_preview, GtkPreviewState::Ready(_)),
+        "concurrent preview state: {concurrent_preview:?}"
+    );
+    assert!(concurrent_thumbnail.is_ok());
+
     let preview = GtkPreviewController::new().render_selected(&catalog);
     let GtkPreviewState::Ready(preview) = preview else {
         panic!("selected RAW preview must render");

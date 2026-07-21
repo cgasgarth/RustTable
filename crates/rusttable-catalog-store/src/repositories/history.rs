@@ -28,7 +28,7 @@ impl RedbHistoryRepository {
     /// Returns a typed schema, availability, or corruption error.
     pub fn open(path: &Path, photo_id: PhotoId) -> Result<Self, HistoryRepositoryError> {
         Ok(Self {
-            database: Arc::new(schema::open(path).map_err(|error| map_schema_error(&error))?),
+            database: schema::open(path).map_err(|error| map_schema_error(&error))?,
             photo_id,
         })
     }

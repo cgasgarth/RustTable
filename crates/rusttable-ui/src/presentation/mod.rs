@@ -5,10 +5,25 @@ use rusttable_core::PhotoId;
 pub mod basic_edit;
 pub mod darkroom_controls;
 pub mod darkroom_edit_routing;
-pub mod darkroom_history;
-pub mod darkroom_panels;
 pub mod exposure;
 
+pub use crate::libs::history::build_history_panel;
+pub use crate::libs::history::{
+    DarkroomHistoryAction, DarkroomHistoryActionHandler, DarkroomHistoryEntry,
+    DarkroomHistoryError, DarkroomHistoryStatus, DarkroomHistoryViewModel, HistoryDirection,
+    HistoryEntryId, build_history_stack, history_action_handler,
+};
+pub use crate::libs::image_information::{
+    DarkroomImageInformationViewModel, build_image_information_panel,
+};
+pub use crate::libs::panel::{
+    DARKROOM_LEFT_PANEL_FOCUS_ORDER, DARKROOM_LEFT_PANEL_ORDER, DarkroomPanelAction,
+    DarkroomPanelActionHandler, DarkroomPanelError, DarkroomPanelId, DarkroomPanelProjection,
+    DarkroomPanelRouter, DarkroomPanelState, DarkroomPanelTarget,
+};
+pub use crate::libs::snapshots::{
+    DarkroomSnapshotEntry, DarkroomSnapshotsViewModel, build_snapshots_panel,
+};
 pub use basic_edit::{
     BasicEditField, BasicEditInspectorViewModel, BasicEditSaveState, BasicEditValues,
 };
@@ -19,18 +34,6 @@ pub use darkroom_controls::{
 };
 pub use darkroom_edit_routing::{
     DarkroomEditCommand, DarkroomEditRouteError, DarkroomEditRouter, DarkroomEditTarget,
-};
-pub use darkroom_history::{
-    DarkroomHistoryAction, DarkroomHistoryActionHandler, DarkroomHistoryEntry,
-    DarkroomHistoryError, DarkroomHistoryStatus, DarkroomHistoryViewModel, HistoryDirection,
-    HistoryEntryId, build_history_stack, history_action_handler,
-};
-pub use darkroom_panels::{
-    DARKROOM_LEFT_PANEL_FOCUS_ORDER, DARKROOM_LEFT_PANEL_ORDER, DarkroomImageInformationViewModel,
-    DarkroomPanelAction, DarkroomPanelActionHandler, DarkroomPanelError, DarkroomPanelId,
-    DarkroomPanelProjection, DarkroomPanelRouter, DarkroomPanelState, DarkroomPanelTarget,
-    DarkroomSnapshotEntry, DarkroomSnapshotsViewModel, build_history_panel,
-    build_image_information_panel, build_snapshots_panel,
 };
 pub use exposure::ExposurePanelViewModel;
 
