@@ -47,7 +47,50 @@ pub use super::darkroom_module_actions::{
     DarkroomModuleStatus,
 };
 
+/// Registry-backed darkroom grouping used by the GTK rail filters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DarkroomModuleGroup {
+    Active,
+    Favorites,
+    Basic,
+    Tone,
+    Color,
+    Correct,
+    Effects,
+    Grading,
+    Technical,
+    Deprecated,
+}
+
+impl DarkroomModuleGroup {
+    #[must_use]
+    pub fn matches(self, module: &DarkroomModuleViewModel) -> bool {
+        match self {
+            Self::Active => {
+                module.enabled() && !module.is_hidden() && !module.availability().is_deprecated()
+            }
+            Self::Favorites => {
+                module.is_favorite()
+                    && !module.is_hidden()
+                    && !module.availability().is_deprecated()
+            }
+            Self::Deprecated => module.availability().is_deprecated(),
+            Self::Basic => !module.is_hidden() && module.group_key() == "group.basic",
+            Self::Tone => !module.is_hidden() && module.group_key() == "group.tone",
+            Self::Color => !module.is_hidden() && module.group_key() == "group.color",
+            Self::Correct => {
+                !module.is_hidden()
+                    && matches!(module.group_key(), "group.correct" | "group.corrective")
+            }
+            Self::Effects => !module.is_hidden() && module.group_key() == "group.effects",
+            Self::Grading => !module.is_hidden() && module.group_key() == "group.grading",
+            Self::Technical => !module.is_hidden() && module.group_key() == "group.technical",
+        }
+    }
+}
+
 /// One ordered, disclosure-capable module in a darkroom side panel.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct DarkroomModuleViewModel {
     id: String,
@@ -61,6 +104,9 @@ pub struct DarkroomModuleViewModel {
     presets: Vec<DarkroomModulePreset>,
     availability: DarkroomModuleAvailability,
     status: DarkroomModuleStatus,
+    group_key: String,
+    favorite: bool,
+    hidden: bool,
 }
 
 impl DarkroomModuleViewModel {
@@ -103,6 +149,9 @@ impl DarkroomModuleViewModel {
             presets: Vec::new(),
             availability: DarkroomModuleAvailability::Supported,
             status: DarkroomModuleStatus::Ready,
+            group_key: "group.basic".to_owned(),
+            favorite: false,
+            hidden: false,
         })
     }
 
@@ -145,6 +194,34 @@ impl DarkroomModuleViewModel {
     pub fn with_availability(mut self, availability: DarkroomModuleAvailability) -> Self {
         self.availability = availability;
         self
+    }
+
+    #[must_use]
+    pub fn with_registry_metadata(
+        mut self,
+        group_key: impl Into<String>,
+        favorite: bool,
+        hidden: bool,
+    ) -> Self {
+        self.group_key = group_key.into();
+        self.favorite = favorite;
+        self.hidden = hidden;
+        self
+    }
+
+    #[must_use]
+    pub fn group_key(&self) -> &str {
+        &self.group_key
+    }
+
+    #[must_use]
+    pub const fn is_favorite(&self) -> bool {
+        self.favorite
+    }
+
+    #[must_use]
+    pub const fn is_hidden(&self) -> bool {
+        self.hidden
     }
 
     #[must_use]

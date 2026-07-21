@@ -143,12 +143,33 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             .collect::<Vec<_>>(),
         vec![
             "exposure",
-            "bloom",
-            "soften",
+            "basicadj",
+            "linear-offset",
+            "rgbgain",
             "invert",
             "dither",
+            "grain",
+            "relight",
+            "shadhi",
+            "temperature",
+            "bloom",
+            "soften",
+            "vignette",
             "graduatednd",
-            "vignette"
+            "crop",
+            "flip",
+            "rotatepixels",
+            "scalepixels",
+            "finalscale",
+            "enlargecanvas",
+            "ashift",
+            "lenscorrection",
+            "highlights",
+            "colorreconstruction",
+            "colorin",
+            "primaries",
+            "colorout",
+            "colorcorrection",
         ]
     );
     assert!(modules.module("bloom").is_some());
@@ -170,7 +191,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     assert!((minimum + 8.0).abs() < f64::EPSILON);
     let vignette = modules.module("vignette").expect("vignette");
     assert!(vignette.controls().control("vignette-center-x").is_some());
-    assert!(vignette.availability().is_unsupported());
+    assert!(vignette.availability().is_supported());
 }
 
 fn bloom_has_typed_sliders(modules: &DarkroomModulesViewModel) -> bool {

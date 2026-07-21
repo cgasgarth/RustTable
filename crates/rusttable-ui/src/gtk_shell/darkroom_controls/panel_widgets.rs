@@ -156,8 +156,7 @@ pub(super) fn render_typed_modules_into(
     let filtered_right = modules
         .right_modules()
         .filter(|module| module.id() != "exposure")
-        .filter(|module| module.availability().is_deprecated() == group.is_deprecated_filter())
-        .filter(|module| group.is_deprecated_filter() || group.matches_title(module.title()));
+        .filter(|module| group.matches(module));
     right_modules.append(&build_module_column_with_filter(
         filtered_right,
         DarkroomModuleSide::Right,
@@ -218,16 +217,41 @@ pub(super) fn add_group_buttons(
             "Favorite modules",
         ),
         (
-            DarkroomModuleGroup::Technical,
-            "group-technical",
-            "○",
-            "Technical modules",
+            DarkroomModuleGroup::Basic,
+            "group-basic",
+            "B",
+            "Basic modules",
+        ),
+        (DarkroomModuleGroup::Tone, "group-tone", "T", "Tone modules"),
+        (
+            DarkroomModuleGroup::Color,
+            "group-color",
+            "C",
+            "Color modules",
+        ),
+        (
+            DarkroomModuleGroup::Correct,
+            "group-correct",
+            "⌕",
+            "Corrective modules",
+        ),
+        (
+            DarkroomModuleGroup::Effects,
+            "group-effects",
+            "E",
+            "Effect modules",
         ),
         (
             DarkroomModuleGroup::Grading,
             "group-grading",
             "◐",
             "Grading modules",
+        ),
+        (
+            DarkroomModuleGroup::Technical,
+            "group-technical",
+            "⚙",
+            "Technical modules",
         ),
         (
             DarkroomModuleGroup::Deprecated,

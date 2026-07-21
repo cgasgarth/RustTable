@@ -8,7 +8,7 @@ use rusttable_core::{PhotoId, Revision};
 use rusttable_display_profile::{DisplayProfileReceipt, DisplayProfileSnapshot};
 
 use super::darkroom_modules::{
-    DarkroomModuleActionHandler, DarkroomModulesViewModel, reference_modules,
+    DarkroomModuleActionHandler, DarkroomModuleGroup, DarkroomModulesViewModel, reference_modules,
 };
 #[path = "darkroom_interaction.rs"]
 mod darkroom_interaction;
@@ -107,7 +107,7 @@ impl DarkroomPanelVisibilityAction {
 }
 
 /// Stable left-to-right focus order for the darkroom rail controls.
-pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 10] = [
+pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 15] = [
     "darkroom-navigation",
     "darkroom-snapshots",
     "darkroom-history",
@@ -115,8 +115,13 @@ pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 10] = [
     "darkroom-module-search",
     "group-active",
     "group-favorites",
-    "group-technical",
+    "group-basic",
+    "group-tone",
+    "group-color",
+    "group-correct",
+    "group-effects",
     "group-grading",
+    "group-technical",
     "group-deprecated",
 ];
 
@@ -131,36 +136,6 @@ pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 8] = [
     "exposure-presets",
     "exposure-reset",
 ];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum DarkroomModuleGroup {
-    Active,
-    Favorites,
-    Technical,
-    Grading,
-    Deprecated,
-}
-
-impl DarkroomModuleGroup {
-    pub(super) fn matches_title(self, title: &str) -> bool {
-        let title = title.to_ascii_lowercase();
-        match self {
-            Self::Active => true,
-            Self::Favorites => title.contains("favorite"),
-            Self::Technical => ["balance", "denoise", "lens", "raw", "sharpen"]
-                .iter()
-                .any(|term| title.contains(term)),
-            Self::Grading => ["color", "contrast", "curve", "exposure", "tone"]
-                .iter()
-                .any(|term| title.contains(term)),
-            Self::Deprecated => false,
-        }
-    }
-
-    pub(super) const fn is_deprecated_filter(self) -> bool {
-        matches!(self, Self::Deprecated)
-    }
-}
 
 type DarkroomModuleGroupHandler = Box<dyn Fn(DarkroomModuleGroup)>;
 pub(super) type DarkroomPanelVisibilityHandler = Box<dyn Fn(DarkroomPanelVisibilityAction)>;
@@ -233,7 +208,7 @@ impl DarkroomView {
     /// Builds the initial Darktable darkroom around the immutable preview boundary.
     #[must_use]
     pub fn new(panel_width: i32) -> Self {
-        debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 10);
+        debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 15);
         debug_assert_eq!(DARKROOM_MODULE_WIDGET_IDS.len(), 8);
         let preview = PhotoPreview::new();
         let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
@@ -827,10 +802,17 @@ mod tests {
 
     #[test]
     fn module_groups_have_stable_semantics_and_truthful_filtering() {
-        assert!(DarkroomModuleGroup::Active.matches_title("anything"));
-        assert!(DarkroomModuleGroup::Favorites.matches_title("Favorite presets"));
-        assert!(DarkroomModuleGroup::Technical.matches_title("Lens correction"));
-        assert!(DarkroomModuleGroup::Grading.matches_title("Color balance"));
-        assert!(!DarkroomModuleGroup::Technical.matches_title("Exposure"));
+        let modules = crate::reference_modules().expect("registry modules");
+        let exposure = modules.module("exposure").expect("exposure");
+        let lens = modules.module("lenscorrection").expect("lens correction");
+        let grading = modules.module("graduatednd").expect("graduated ND");
+        let grain = modules.module("grain").expect("grain");
+        let hidden = modules.module("finalscale").expect("hidden final scale");
+        assert!(DarkroomModuleGroup::Active.matches(exposure));
+        assert!(DarkroomModuleGroup::Technical.matches(lens));
+        assert!(DarkroomModuleGroup::Grading.matches(grading));
+        assert!(DarkroomModuleGroup::Favorites.matches(grain));
+        assert!(!DarkroomModuleGroup::Technical.matches(exposure));
+        assert!(!DarkroomModuleGroup::Correct.matches(hidden));
     }
 }
