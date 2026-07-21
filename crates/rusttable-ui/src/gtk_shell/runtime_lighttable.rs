@@ -252,6 +252,25 @@ impl WorkspaceRenderHandle {
         self.open_photo(photo_id, &detail);
     }
 
+    pub(super) fn open_photo_by_id(&self, photo_id: PhotoId) -> bool {
+        let Some(detail) = self.photo_details.borrow().get(&photo_id).cloned() else {
+            return false;
+        };
+        let selected = self
+            .interaction
+            .borrow_mut()
+            .apply(LighttableSelectionAction::Select {
+                photo_id,
+                modifiers: SelectionModifiers::default(),
+            });
+        if selected.is_none() {
+            return false;
+        }
+        self.sync_selection_styles();
+        self.open_photo(photo_id, &detail);
+        true
+    }
+
     pub(super) fn move_focus(
         &self,
         direction: super::NavigationDirection,
