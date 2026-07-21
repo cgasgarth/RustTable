@@ -13,6 +13,7 @@ use super::{
     DarkroomPanelVisibility, DarkroomPanelVisibilityAction, DarkroomPanelVisibilityHandler,
     DarkroomViewportActionHandler, PhotoPreview, ThemeRole, apply_theme_role,
 };
+use crate::HistogramSample;
 use crate::viewport_presentation::{
     DarkroomViewportAction, DarkroomViewportCommand, DarkroomViewportState, DarkroomZoom,
     ViewportColorMode, ViewportComparison,
@@ -26,8 +27,32 @@ pub(super) struct ViewportControls {
     soft_proof: gtk4::ToggleButton,
     gamut_check: gtk4::ToggleButton,
     projection: gtk4::Label,
+    overlay_before: gtk4::Label,
+    overlay_soft_proof: gtk4::Label,
+    overlay_gamut: gtk4::Label,
+    overlay_sample: gtk4::Label,
     canvas: Option<gtk4::Picture>,
     sync_guard: Rc<Cell<bool>>,
+}
+
+impl ViewportControls {
+    pub(super) fn set_histogram_sample(&self, sample: HistogramSample) {
+        let values = sample.values();
+        self.overlay_sample.set_text(&format!(
+            "histogram sample · bin {} · R {} · G {} · B {} · L {}",
+            sample.bin(),
+            values.red(),
+            values.green(),
+            values.blue(),
+            values.luminance()
+        ));
+        self.overlay_sample.set_visible(true);
+    }
+
+    pub(super) fn clear_histogram_sample(&self) {
+        self.overlay_sample.set_text("");
+        self.overlay_sample.set_visible(false);
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -56,6 +81,37 @@ pub(super) fn darkroom_page(
     projection.add_css_class("dim-label");
     projection.set_accessible_role(gtk4::AccessibleRole::Status);
     projection.update_property(&[Property::Label("Current viewport projection")]);
+
+    let overlay_before = viewport_badge(
+        "darkroom-overlay-before",
+        "before preview unavailable",
+        "Before/after viewport state",
+    );
+    let overlay_soft_proof = viewport_badge(
+        "darkroom-overlay-soft-proof",
+        "soft proof requested · transform unavailable",
+        "Soft-proof viewport state",
+    );
+    let overlay_gamut = viewport_badge(
+        "darkroom-overlay-gamut",
+        "gamut warning requested · analysis unavailable",
+        "Gamut-warning viewport state",
+    );
+    let overlay_sample = viewport_badge(
+        "darkroom-overlay-histogram-sample",
+        "",
+        "Selected histogram sample",
+    );
+    let overlay = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    overlay.set_widget_name("darkroom-viewport-overlay");
+    overlay.set_halign(gtk4::Align::Start);
+    overlay.set_valign(gtk4::Align::Start);
+    overlay.set_margin_start(10);
+    overlay.set_margin_top(10);
+    overlay.append(&overlay_before);
+    overlay.append(&overlay_soft_proof);
+    overlay.append(&overlay_gamut);
+    overlay.append(&overlay_sample);
 
     let zoom = gtk4::DropDown::from_strings(&DarkroomZoom::ALL.map(DarkroomZoom::label));
     zoom.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[3]);
@@ -88,6 +144,10 @@ pub(super) fn darkroom_page(
         soft_proof: soft_proof.clone(),
         gamut_check: gamut_check.clone(),
         projection: projection.clone(),
+        overlay_before: overlay_before.clone(),
+        overlay_soft_proof: overlay_soft_proof.clone(),
+        overlay_gamut: overlay_gamut.clone(),
+        overlay_sample: overlay_sample.clone(),
         canvas: find_image_canvas(preview.widget().upcast_ref()),
         sync_guard: Rc::new(Cell::new(false)),
     };
@@ -130,6 +190,7 @@ pub(super) fn darkroom_page(
     viewport.update_property(&[Property::Label("Darkroom image viewport")]);
     viewport.set_child(Some(preview.widget()));
     viewport.add_overlay(&projection);
+    viewport.add_overlay(&overlay);
     let boundary = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     boundary.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[7]);
     boundary.update_property(&[Property::Label("Filmstrip boundary")]);
@@ -445,6 +506,15 @@ pub(super) fn sync_viewport_controls(
         .gamut_check
         .set_active(state.color_mode() == ViewportColorMode::GamutCheck);
     controls.projection.set_text(&state.projection_label());
+    controls
+        .overlay_before
+        .set_visible(state.comparison() == ViewportComparison::Before);
+    controls
+        .overlay_soft_proof
+        .set_visible(state.color_mode() == ViewportColorMode::SoftProof);
+    controls
+        .overlay_gamut
+        .set_visible(state.color_mode() == ViewportColorMode::GamutCheck);
     apply_canvas_projection(controls.canvas.as_ref(), preview, state);
     controls.sync_guard.set(false);
 }
@@ -520,4 +590,17 @@ fn chrome_button(id: &str, label: &str, accessible_name: &str) -> gtk4::Button {
     button.set_focus_on_click(false);
     button.update_property(&[Property::Label(accessible_name)]);
     button
+}
+
+fn viewport_badge(id: &str, text: &str, accessible_name: &str) -> gtk4::Label {
+    let badge = gtk4::Label::new(Some(text));
+    badge.set_widget_name(id);
+    badge.set_halign(gtk4::Align::Start);
+    badge.add_css_class("darkroom_viewport_badge");
+    badge.add_css_class("warning");
+    badge.set_tooltip_text(Some(accessible_name));
+    badge.set_accessible_role(gtk4::AccessibleRole::Status);
+    badge.update_property(&[Property::Label(accessible_name)]);
+    badge.set_visible(false);
+    badge
 }

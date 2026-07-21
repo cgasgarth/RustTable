@@ -2,9 +2,9 @@
 
 use rusttable_core::PhotoId;
 use rusttable_ui::gtk_shell::{
-    DARKROOM_WIDGET_IDS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, LAYOUT_METRICS,
-    LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, PANEL_SLOTS, PanelRole,
-    ShellLayout, ShellRegion, THUMBNAIL_METRICS, ViewMode, WorkspaceRole,
+    DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS,
+    LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
+    PANEL_SLOTS, PanelRole, ShellLayout, ShellRegion, THUMBNAIL_METRICS, ViewMode, WorkspaceRole,
 };
 use rusttable_ui::{
     DarkroomWorkspaceViewModel, LighttableContentState, LighttableInteractionState,
@@ -112,6 +112,24 @@ fn darkroom_model_keeps_left_and_right_module_stacks_typed() {
             .collect::<Vec<_>>(),
         vec![ModuleControlKind::Slider, ModuleControlKind::Toggle]
     );
+}
+
+#[test]
+fn darkroom_viewport_contract_exposes_live_histogram_and_truthful_overlay_slots() {
+    let ids = DARKROOM_VIEWPORT_WIDGET_IDS
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(ids.len(), DARKROOM_VIEWPORT_WIDGET_IDS.len());
+    for id in [
+        "darkroom-viewport-overlay",
+        "darkroom-overlay-before",
+        "darkroom-overlay-soft-proof",
+        "darkroom-overlay-gamut",
+        "darkroom-overlay-histogram-sample",
+    ] {
+        assert!(ids.contains(id), "missing stable viewport contract ID {id}");
+    }
 }
 
 #[test]

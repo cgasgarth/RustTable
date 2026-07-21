@@ -5,7 +5,6 @@ use std::rc::Rc;
 
 use crate::composition::preview_lifecycle::PreviewLifecycle;
 use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
-use rusttable_ui::gtk_shell::PhotoPreview;
 use rusttable_ui::{DarkroomModuleActionHandler, GtkShell};
 
 pub(super) struct DarkroomEditBridge {
@@ -16,7 +15,6 @@ pub(super) struct DarkroomEditBridge {
 pub(super) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
-    preview: &PhotoPreview,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
 ) -> DarkroomEditBridge {
     let catalog = Rc::clone(catalog);
@@ -31,7 +29,6 @@ pub(super) fn install(
     let action_controller = Rc::clone(&controller);
     let action_shell = shell.clone();
     let action_catalog = Rc::clone(&catalog);
-    let action_preview = preview.clone();
     let action_lifecycle = Rc::clone(&lifecycle);
     let slot_for_handler = Rc::clone(&slot);
     let handler: DarkroomModuleActionHandler = Rc::new(move |action| {
@@ -47,7 +44,7 @@ pub(super) fn install(
                     outcome.revision()
                 ));
                 super::start_selected_preview(
-                    &action_preview,
+                    &action_shell,
                     action_catalog.borrow().clone(),
                     Rc::clone(&action_lifecycle),
                 );

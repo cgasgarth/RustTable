@@ -26,6 +26,7 @@ use crate::presentation::{
 use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
 };
+use crate::{HistogramData, HistogramError, HistogramSample};
 use darkroom_interaction::{
     FilmstripState, HistogramView, connect_filmstrip_button, install_filmstrip_keyboard,
     sync_filmstrip_buttons,
@@ -166,7 +167,7 @@ pub(super) type DarkroomPanelVisibilityHandler = Box<dyn Fn(DarkroomPanelVisibil
 type DarkroomFilmstripHandler = Box<dyn Fn(PhotoId, ViewportGeneration)>;
 
 /// Stable identifiers for the darkroom viewport controls and filmstrip boundary.
-pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 9] = [
+pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 14] = [
     "darkroom-viewport",
     "darkroom-soft-proof",
     "darkroom-gamut-check",
@@ -174,6 +175,11 @@ pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 9] = [
     "darkroom-fit",
     "darkroom-before-after",
     "darkroom-viewport-projection",
+    "darkroom-viewport-overlay",
+    "darkroom-overlay-before",
+    "darkroom-overlay-soft-proof",
+    "darkroom-overlay-gamut",
+    "darkroom-overlay-histogram-sample",
     "darkroom-filmstrip-boundary",
     "darkroom-image-canvas",
 ];
@@ -294,6 +300,10 @@ impl DarkroomView {
             filmstrip_visible,
             panel_visibility_handler,
         };
+        let overlay_controls = view.viewport_controls.clone();
+        view.histogram.connect_sample(move |sample| {
+            overlay_controls.set_histogram_sample(sample);
+        });
         view.install_module_search();
         view.render_typed_modules();
         view
@@ -361,7 +371,8 @@ impl DarkroomView {
             .select(photo_id, edit_revision, generation);
         self.filmstrip_state.borrow_mut().set_generation(generation);
         self.histogram_generation.set(Some(generation));
-        self.histogram.unavailable();
+        self.histogram.loading(generation);
+        self.viewport_controls.clear_histogram_sample();
         self.sync_viewport_projection();
     }
 
@@ -371,6 +382,7 @@ impl DarkroomView {
         self.filmstrip_state.borrow_mut().clear_selection();
         self.histogram_generation.set(None);
         self.histogram.clear();
+        self.viewport_controls.clear_histogram_sample();
         self.sync_viewport_projection();
     }
 
@@ -422,9 +434,47 @@ impl DarkroomView {
         generation: ViewportGeneration,
     ) -> bool {
         if self.histogram_generation.get() != Some(generation) {
+            self.histogram
+                .stale(self.viewport_state.borrow().generation(), generation);
             return false;
         }
-        self.histogram.set_bins(red, green, blue)
+        let Some(data) = HistogramData::from_rgb_bin_values(red, green, blue) else {
+            self.histogram.failure(
+                generation,
+                HistogramError::IncorrectSampleLength {
+                    expected: red.len(),
+                    actual: green.len().max(blue.len()),
+                },
+            );
+            return false;
+        };
+        self.histogram.set_data(generation, data);
+        true
+    }
+
+    /// Publishes the worker-computed histogram result for the selected preview generation.
+    #[must_use]
+    pub fn set_histogram_result(
+        &self,
+        generation: ViewportGeneration,
+        result: Result<HistogramData, HistogramError>,
+    ) -> bool {
+        if self.histogram_generation.get() != Some(generation) {
+            self.histogram
+                .stale(self.viewport_state.borrow().generation(), generation);
+            return false;
+        }
+        match result {
+            Ok(data) => self.histogram.set_data(generation, data),
+            Err(error) => self.histogram.failure(generation, error),
+        }
+        true
+    }
+
+    /// Returns the histogram sample currently selected by a click in the right rail.
+    #[must_use]
+    pub fn histogram_sample(&self) -> Option<HistogramSample> {
+        self.histogram.selected_sample()
     }
 
     /// Returns whether a rendered histogram is currently available for the selected preview.
@@ -676,7 +726,6 @@ impl DarkroomView {
         ) {
             self.set_snapshots_projection(&snapshots, None);
         }
-        self.histogram.unavailable();
     }
 
     /// Projects the controller-owned snapshot state into the left rail.
@@ -706,6 +755,7 @@ impl DarkroomView {
         self.rail_status.clear_detail();
         self.histogram_generation.set(None);
         self.histogram.clear();
+        self.viewport_controls.clear_histogram_sample();
         self.preview.clear_selection();
     }
 }

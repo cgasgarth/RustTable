@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::display_profile::DisplayProfileBanner;
 use gtk4::gdk;
 use gtk4::prelude::*;
-use rusttable_core::PhotoId;
+use rusttable_core::{PhotoId, Revision};
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use super::darkroom::profile_diagnostics::ProfileDiagnosticRequest;
@@ -40,7 +40,10 @@ use crate::import::{
 use crate::input_mapping::InputMappingEditor;
 use crate::neural_restore::NeuralRestorePanel;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
-use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus};
+use crate::viewport_presentation::{
+    DisplayPresentationFrame, PresentationStatus, ViewportGeneration,
+};
+use crate::{HistogramData, HistogramError};
 
 use super::runtime_lighttable::{PhotoTilePair, WorkspaceRenderHandle};
 
@@ -323,6 +326,55 @@ impl GtkShell {
     #[must_use]
     pub fn darkroom_preview(&self) -> &PhotoPreview {
         &self.darkroom_preview
+    }
+
+    /// Starts a generation-tagged darkroom selection before its worker-rendered preview arrives.
+    pub fn begin_darkroom_selection(&self, photo_id: PhotoId, generation: ViewportGeneration) {
+        self.darkroom
+            .set_viewport_selection(photo_id, Revision::ZERO, generation);
+    }
+
+    /// Clears the old texture while the selected preview and its histogram are computed off-loop.
+    pub fn set_darkroom_preview_loading(&self) {
+        self.darkroom_preview.set_loading();
+        self.darkroom.set_status("loading preview");
+    }
+
+    /// Restores the truthful empty darkroom surface when no catalog photo is selected.
+    pub fn clear_darkroom_selection(&self, message: &str) {
+        self.darkroom.clear_viewport_selection();
+        self.darkroom_preview.set_failure(message);
+        self.darkroom.set_status(message);
+    }
+
+    /// Installs a validated worker result and its already-computed histogram on the GTK surface.
+    ///
+    /// The darkroom checks the generation again before publishing histogram data, so a late
+    /// worker cannot restore data from an older selection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture error when the validated preview dimensions cannot be represented by
+    /// GTK's memory texture API.
+    pub fn set_darkroom_preview_result(
+        &self,
+        generation: ViewportGeneration,
+        metadata: &crate::presentation::Rgba8PreviewMetadata,
+        histogram: Result<HistogramData, HistogramError>,
+    ) -> Result<(), super::PhotoPreviewTextureError> {
+        self.darkroom_preview.set_rgba8(metadata)?;
+        let _ = self.darkroom.set_histogram_result(generation, histogram);
+        self.darkroom.sync_viewport_projection();
+        Ok(())
+    }
+
+    /// Projects a preview failure and removes any histogram that belonged to its frame.
+    pub fn set_darkroom_preview_failure(&self, generation: ViewportGeneration, message: &str) {
+        self.darkroom_preview.set_failure(message);
+        let _ = self
+            .darkroom
+            .set_histogram_result(generation, Err(HistogramError::PreviewUnavailable));
+        self.darkroom.set_status(message);
     }
 
     /// Projects a controller-owned selected-photo operation stack into GTK.

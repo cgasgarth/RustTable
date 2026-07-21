@@ -5,6 +5,7 @@ pub mod ai_batch;
 pub mod ai_models;
 pub mod camera;
 pub mod collection;
+pub mod darkroom_histogram;
 pub mod display_profile;
 pub mod external_editor;
 pub mod gtk_shell;
@@ -33,6 +34,10 @@ pub use camera::{
     CameraViewModel,
 };
 pub use collection::{CollectionItem, CollectionProperty, CollectionRule};
+pub use darkroom_histogram::{
+    DARKROOM_HISTOGRAM_BINS, DARKROOM_HISTOGRAM_MAX_SAMPLES, HistogramBin, HistogramChannel,
+    HistogramData, HistogramError, HistogramSample,
+};
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use external_editor::{
     ArgumentRow, ArgumentRowError, CompletionAction, EXTERNAL_EDITOR_FOCUS_ORDER,
@@ -98,5 +103,5 @@ pub use viewport_presentation::{
     DisplayPresentationController, DisplayPresentationFrame, DisplayPresentationPort,
     DisplayPresentationRequest, DisplayPresentationState, PresentationFailure,
     PresentationGeneration, PresentationMode, PresentationStatus, PresentationTicket,
-    SdrFallbackReason,
+    SdrFallbackReason, ViewportColorMode, ViewportComparison, ViewportGeneration,
 };
