@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "5d9d7e57fc1b9efd323f4e7caee34fcdc0b490e04f0d1236d03542244a8f2d55",
+  "registry_hash": "ce33705e2ddc961de153496e26798660821e288cb65d5d181f3ba10a6b4469e2",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -1764,7 +1764,7 @@
     {
       "identity": "darktable:watermark:src/iop/watermark.c:v7",
       "compatibility_name": "watermark",
-      "rust_id": null,
+      "rust_id": "rusttable.watermark",
       "reference_path": "src/iop/watermark.c",
       "descriptor_version": 7,
       "parameter_versions": [
@@ -1779,11 +1779,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 161,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
+      "cpu_fallback": false,
       "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "reason": "generic operation payload lacks a managed asset/context port; use WatermarkPlan until that seam lands"
     },
     {
       "identity": "darktable:zonesystem:src/iop/zonesystem.c:v1",
@@ -2514,6 +2514,30 @@
       "cpu_fallback": false,
       "status": "Implemented",
       "reason": null
+    },
+    {
+      "identity": "rusttable.watermark",
+      "compatibility_name": "watermark",
+      "rust_id": "rusttable.watermark",
+      "reference_path": "",
+      "descriptor_version": 1,
+      "parameter_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "implementation_crate": "rusttable-processing",
+      "issue_sequence_id": 395,
+      "order": 37,
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "IntentionallyUnsupportedBlocking",
+      "reason": "generic operation payload lacks a managed asset/context port; use WatermarkPlan until that seam lands"
     }
   ]
 }

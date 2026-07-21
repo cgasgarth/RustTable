@@ -45,6 +45,7 @@ pub use crate::operations::scalepixels::scalepixels_descriptor;
 pub use crate::operations::shadhi::shadhi_descriptor;
 pub use crate::operations::spots::spots_descriptor;
 pub use crate::operations::vignette::vignette_descriptor;
+pub use crate::operations::watermark::watermark_descriptor;
 pub use descriptor_censorize::censorize_descriptor;
 pub use descriptor_effects::{bloom_descriptor, soften_descriptor};
 pub use descriptor_masks::mask_manager_descriptor;

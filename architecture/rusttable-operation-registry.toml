@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "a8728905d5a717a0286d4803a13638c469d03a2712fdbfac0081a7e58fcfe913"
+snapshot_hash = "fe60f8030e4c0fd20a753e40c21719e502b6f174689db0fe41a229a75233c1af"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -39,6 +39,14 @@ rust_id = "rusttable.clahe"
 compatibility_name = "clahe"
 descriptor_version = 1
 parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.clipping"
+compatibility_name = "clipping"
+descriptor_version = 5
+parameter_version = 5
 implementation_version = 1
 status = "available"
 
@@ -203,6 +211,14 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.rasterfile"
+compatibility_name = "rasterfile"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.relight"
 compatibility_name = "relight"
 descriptor_version = 1
@@ -281,4 +297,12 @@ descriptor_version = 4
 parameter_version = 4
 implementation_version = 1
 status = "available"
+
+[[operation]]
+rust_id = "rusttable.watermark"
+compatibility_name = "watermark"
+descriptor_version = 1
+parameter_version = 7
+implementation_version = 1
+status = "unavailable"
 

@@ -629,6 +629,7 @@ fn verify_registry_operations(root: &Path, document: &toml::Value) -> Result {
         "rusttable.primaries",
         "rusttable.vignette",
         "rusttable.graduatednd",
+        "rusttable.watermark",
     ];
     if entries.len() != expected.len() {
         return Err(format!(

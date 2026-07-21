@@ -33,6 +33,7 @@ pub mod registry;
 mod registry_closure;
 mod registry_color;
 mod registry_reconstruction;
+mod registry_watermark;
 mod scalar;
 mod window;
 
@@ -125,6 +126,15 @@ pub use operations::spots::{
     SpotsCodecError, SpotsConfig, SpotsEntry, SpotsExecutionError, SpotsForm, SpotsFormKind,
     SpotsHistory, SpotsLegacySpot, SpotsMode, SpotsParametersV1, SpotsParametersV2, SpotsPlan,
     SpotsReceipt,
+};
+pub use operations::watermark::{
+    ExpandedWatermark, WATERMARK_ALLOWED_FONT_SET_HASH, WATERMARK_COMPATIBILITY_ID,
+    WATERMARK_IMPLEMENTATION_VERSION, WATERMARK_PARAMETER_VERSION, WATERMARK_RUST_ID,
+    WATERMARK_SCHEMA_VERSION, WatermarkAnchor, WatermarkCodecError, WatermarkContext,
+    WatermarkContextError, WatermarkExecutionError, WatermarkHistory, WatermarkParametersV1,
+    WatermarkParametersV7, WatermarkPlan, WatermarkReceipt, WatermarkScaleMode,
+    decode_history as decode_watermark_history, migrate_history as migrate_watermark_history,
+    watermark_descriptor,
 };
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,

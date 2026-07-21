@@ -185,6 +185,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "crop",
             "clipping",
             "rasterfile",
+            "watermark",
             "flip",
             "rotatepixels",
             "scalepixels",
@@ -207,6 +208,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     assert!(modules.module("bloom").is_some());
     assert!(modules.module("soften").is_some());
     assert!(modules.module("dither").is_some());
+    assert!(modules.module("watermark").is_some());
     let invert = modules.module("invert").expect("invert module");
     assert!(invert.availability().is_deprecated());
     assert!(invert.status_text().contains("Deprecated"));

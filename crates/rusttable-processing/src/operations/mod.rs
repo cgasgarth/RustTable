@@ -43,6 +43,7 @@ pub mod soften;
 pub mod spots;
 pub mod temperature;
 pub mod vignette;
+pub mod watermark;
 
 pub use common::{
     OperationExecutionError, ReconstructionBudget, ReconstructionDiagnostics, ReconstructionReceipt,
