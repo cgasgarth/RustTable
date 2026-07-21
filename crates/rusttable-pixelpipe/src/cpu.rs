@@ -155,6 +155,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
                     | rusttable_processing::ProcessingOperationKind::Defringe { .. }
+                    | rusttable_processing::ProcessingOperationKind::Clahe { .. }
             )
         }) {
             // Both Darktable operations freeze full-image evidence before
@@ -227,6 +228,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
                     | rusttable_processing::ProcessingOperationKind::Defringe { .. }
+                    | rusttable_processing::ProcessingOperationKind::Clahe { .. }
             )
         }) {
             scope
@@ -308,6 +310,16 @@ impl CpuPixelpipeExecutor {
         }) && request.graph().nodes().count() == 1
         {
             return execute_censorize_image(request, input, node);
+        }
+
+        if let Some(node) = request.graph().nodes().find(|node| {
+            matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::Clahe { .. }
+            )
+        }) && request.graph().nodes().count() == 1
+        {
+            return execute_clahe_image(request, input, node);
         }
 
         let source = to_processing_source(input)?;
@@ -502,6 +514,107 @@ fn execute_defringe_image(
         output_pixels,
     )
     .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+fn execute_clahe_image(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    node: &rusttable_processing::OperationGraphNode,
+) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    let source = to_processing_source(input)?;
+    let linear = to_linear_srgb(&source);
+    let config = match node.operation().kind() {
+        rusttable_processing::ProcessingOperationKind::Clahe { config } => *config,
+        _ => unreachable!("clahe image bridge is only called for clahe"),
+    };
+    let pixels = linear
+        .pixels()
+        .zip(input.pixels())
+        .map(|(rgb, source)| {
+            rusttable_processing::ClahePixel::new(
+                rgb.red().get(),
+                rgb.green().get(),
+                rgb.blue().get(),
+                source.alpha(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let plan =
+        rusttable_processing::ClahePlan::new(config, input.descriptor().dimensions(), 1.0, 1.0)
+            .map_err(|source| clahe_evaluation_error(node, &source))?;
+    let output = plan
+        .execute_with_mask(&pixels, None, node.operation().opacity().get(), || false)
+        .map_err(|source| clahe_evaluation_error(node, &source))?;
+    let rgb = output
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel_index, pixel)| {
+            let channels = pixel.channels();
+            Ok(rusttable_processing::LinearRgb::new(
+                rusttable_processing::FiniteF32::new(channels[0])
+                    .map_err(|_| input_component_error(pixel_index, RgbaF32Channel::Red))?,
+                rusttable_processing::FiniteF32::new(channels[1])
+                    .map_err(|_| input_component_error(pixel_index, RgbaF32Channel::Green))?,
+                rusttable_processing::FiniteF32::new(channels[2])
+                    .map_err(|_| input_component_error(pixel_index, RgbaF32Channel::Blue))?,
+            ))
+        })
+        .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
+    let working = rusttable_processing::WorkingRgbImage::new(input.descriptor().dimensions(), rgb)
+        .map_err(|error| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: error.to_string(),
+            },
+        })?;
+    let output_pixels = match request.output_mode() {
+        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+            .image()
+            .pixels()
+            .zip(&output)
+            .map(|(rgb, pixel)| {
+                RgbaF32Pixel::new(
+                    rgb.red().get(),
+                    rgb.green().get(),
+                    rgb.blue().get(),
+                    pixel.channels()[3],
+                )
+            })
+            .collect(),
+        CpuPixelpipeOutputMode::FullExport => working
+            .pixels()
+            .zip(&output)
+            .map(|(rgb, pixel)| {
+                RgbaF32Pixel::new(
+                    rgb.red().get(),
+                    rgb.green().get(),
+                    rgb.blue().get(),
+                    pixel.channels()[3],
+                )
+            })
+            .collect(),
+    };
+    let descriptor = RgbaF32Descriptor::new(
+        input.descriptor().dimensions(),
+        request.output_mode().color_encoding(),
+    );
+    RgbaF32Image::new(descriptor, output_pixels)
+        .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+fn clahe_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: &rusttable_processing::ClaheExecutionError,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
 }
 
 fn defringe_evaluation_error(

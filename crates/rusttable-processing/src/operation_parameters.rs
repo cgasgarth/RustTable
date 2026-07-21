@@ -81,6 +81,28 @@ pub(crate) fn compile_scalar_parameter(
     }
 }
 
+pub(crate) fn parameter_f64(
+    operation: &Operation,
+    name: &'static str,
+    default: f64,
+) -> Result<f64, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    match operation.parameter(&parameter) {
+        None => Ok(default),
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "integer compatibility values are widened to the canonical f64 form"
+        )]
+        Some(ParameterValue::Integer(value)) => Ok(*value as f64),
+        Some(ParameterValue::Scalar(value)) => Ok(value.get()),
+        Some(_) => Err(OperationCompileError::WrongParameterType {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
+    }
+}
+
 pub(crate) fn parameter_integer(
     operation: &Operation,
     name: &'static str,

@@ -287,15 +287,14 @@ fn defringe_descriptor_projects_exact_v1_controls_and_qualifies_processing() {
 }
 
 #[test]
-fn clahe_descriptor_projects_exact_v1_controls_and_unavailable_state() {
+fn clahe_descriptor_projects_exact_v1_controls_and_cpu_state() {
     let modules = reference_modules().expect("reference modules");
     let clahe = modules.module("clahe").expect("CLAHE");
     assert_eq!(clahe.title(), "Old Local Contrast");
     assert!(clahe.availability().is_deprecated());
-    assert!(clahe.availability().is_unsupported());
-    assert!(!clahe.availability().is_supported());
-    assert!(clahe.status_text().contains("Unavailable"));
-    assert!(clahe.status_text().contains("#473"));
+    assert!(!clahe.availability().is_unsupported());
+    assert!(clahe.availability().is_supported());
+    assert!(clahe.status_text().contains("Deprecated"));
     assert_eq!(
         clahe
             .controls()

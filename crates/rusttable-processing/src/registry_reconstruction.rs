@@ -29,6 +29,7 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Defringe { .. } => {
             crate::descriptor::defringe_descriptor().id
         }
+        crate::ProcessingOperationKind::Clahe { .. } => crate::descriptor::clahe_descriptor().id,
         crate::ProcessingOperationKind::Highlights { .. } => {
             crate::descriptor::highlights_descriptor().id
         }

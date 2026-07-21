@@ -16,7 +16,6 @@
 #![doc = "fn converts(source: &SourceRgbImage) { let _ = to_linear_srgb_from_display_p3(source); }"]
 #![doc = "```"]
 
-pub mod clahe_compatibility;
 mod color;
 pub mod defringe_compatibility;
 pub mod demosaic;
@@ -37,11 +36,6 @@ mod registry_reconstruction;
 mod scalar;
 mod window;
 
-pub use clahe_compatibility::{
-    CLAHE_COMPATIBILITY_ID, CLAHE_OPERATION_KEY, CLAHE_PARAMETER_VERSION, CLAHE_RADIUS_DEFAULT,
-    CLAHE_RADIUS_MAXIMUM, CLAHE_RADIUS_MINIMUM, CLAHE_SCHEMA_VERSION, CLAHE_SLOPE_DEFAULT,
-    CLAHE_SLOPE_MAXIMUM, CLAHE_SLOPE_MINIMUM, ClaheParameterError, ClaheParametersV1,
-};
 pub use color::{
     DisplayP3Channel, DisplayP3ChannelError, DisplayP3Rgb, DisplayP3RgbImage, ImageBuildError,
     LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel, SourceColorSpace, SourceRgb,
@@ -88,6 +82,13 @@ pub use operations::censorize::{
     CensorizeConfig, CensorizeExecutionError, CensorizeHistory, CensorizeMask,
     CensorizeParameterError, CensorizeParametersV1, CensorizePixel, CensorizePlan,
     CensorizeReceipt, CensorizeRng, CensorizeStages, gaussian_noise, splitmix32, xoshiro128plus,
+};
+pub use operations::clahe::{
+    CLAHE_ALIAS, CLAHE_BINS, CLAHE_COMPATIBILITY_ID, CLAHE_HISTOGRAM_ENTRIES,
+    CLAHE_PARAMETER_BYTES, CLAHE_RADIUS_DEFAULT, CLAHE_RADIUS_MAX, CLAHE_RADIUS_MIN,
+    CLAHE_SCHEMA_VERSION, CLAHE_SLOPE_DEFAULT, CLAHE_SLOPE_MAX, CLAHE_SLOPE_MIN, ClaheBackend,
+    ClaheBlend, ClaheCodecError, ClaheConfig, ClaheExecutionError, ClaheHistory, ClaheMask,
+    ClaheOutcome, ClaheParameterError, ClaheParametersV1, ClahePixel, ClahePlan, ClaheReceipt,
 };
 pub use operations::defringe::{
     DEFRINGE_ALIAS, DEFRINGE_COMPATIBILITY_ID, DEFRINGE_GAUSSIAN_ORDER,

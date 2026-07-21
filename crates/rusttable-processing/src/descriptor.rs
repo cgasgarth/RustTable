@@ -16,12 +16,11 @@ pub use descriptor_color::{
 
 #[path = "descriptor_censorize.rs"]
 mod descriptor_censorize;
-#[path = "descriptor_clahe.rs"]
-mod descriptor_clahe;
 #[path = "descriptor_effects.rs"]
 mod descriptor_effects;
 #[path = "descriptor_operations.rs"]
 mod descriptor_operations;
+pub use crate::operations::clahe::clahe_descriptor;
 pub use crate::operations::crop::crop_descriptor;
 pub use crate::operations::defringe::defringe_descriptor;
 pub use crate::operations::dither::dither_descriptor;
@@ -39,7 +38,6 @@ pub use crate::operations::scalepixels::scalepixels_descriptor;
 pub use crate::operations::shadhi::shadhi_descriptor;
 pub use crate::operations::vignette::vignette_descriptor;
 pub use descriptor_censorize::censorize_descriptor;
-pub use descriptor_clahe::clahe_descriptor;
 pub use descriptor_effects::{bloom_descriptor, soften_descriptor};
 pub use descriptor_operations::{
     color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,
