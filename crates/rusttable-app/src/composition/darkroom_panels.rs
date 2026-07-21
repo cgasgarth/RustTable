@@ -10,6 +10,7 @@ use crate::gtk_controller::{
 use rusttable_core::Revision;
 use rusttable_ui::{DarkroomPanelAction, DarkroomPanelActionHandler, GtkShell};
 
+#[derive(Clone)]
 pub(super) struct DarkroomPanelBridge {
     controller: Rc<RefCell<GtkDarkroomPanelController>>,
     handler: DarkroomPanelActionHandler,
@@ -71,6 +72,29 @@ pub(super) fn install(
 }
 
 impl DarkroomPanelBridge {
+    pub(super) fn refresh(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
+        let mut controller = self.controller.borrow_mut();
+        controller.set_catalog_path(catalog.catalog_path().map(std::path::Path::to_path_buf));
+        let target = shell.darkroom_panel_target();
+        let result = target.map_or(Ok(None), |target| {
+            controller.rebind_target(target).map(Some)
+        });
+        match result.and_then(|_| controller.refresh().map(Some)) {
+            Ok(Some(projections)) => {
+                drop(controller);
+                project(
+                    shell,
+                    &Rc::new(RefCell::new(Some(self.handler.clone()))),
+                    &projections,
+                );
+            }
+            Ok(None) => {}
+            Err(error) => {
+                shell.set_darkroom_status(&format!("Darkroom rail error · {error}"));
+            }
+        }
+    }
+
     pub(super) fn select(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
         let Some(target) = shell.darkroom_panel_target() else {
             shell.clear_darkroom_selection("select a photo to view history and snapshots");

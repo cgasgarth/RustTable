@@ -265,6 +265,12 @@ fn activate_application(
     let darkroom_bridge = darkroom_edit::install(&shell, &catalog_controller, &preview_lifecycle);
     let darkroom_panel_bridge =
         darkroom_panels::install(&shell, &catalog_controller, &preview_lifecycle);
+    let history_refresh_bridge = darkroom_panel_bridge.clone();
+    let history_refresh_shell = shell.clone();
+    let history_refresh_catalog = Rc::clone(&catalog_controller);
+    darkroom_bridge.set_after_commit(Rc::new(move || {
+        history_refresh_bridge.refresh(&history_refresh_shell, &history_refresh_catalog.borrow());
+    }));
     let export_selection = export_panel.clone();
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
     let darkroom_selection_controller = Rc::clone(&darkroom_bridge.controller);
