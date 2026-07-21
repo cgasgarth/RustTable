@@ -1,8 +1,13 @@
 use crate::PresentationText;
 
 mod dialog;
+mod source_model;
 
 pub use dialog::{IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, ImportDialog};
+pub use source_model::{
+    ImportPlace, ImportSourceModel, ImportSourceRow, ImportSourceState, MAX_IMPORT_SOURCE_ROWS,
+    RAW_EXTENSIONS, is_raw_path,
+};
 
 /// Typed request emitted by the GTK import dialog after source selection.
 #[derive(Debug, Clone, PartialEq, Eq)]

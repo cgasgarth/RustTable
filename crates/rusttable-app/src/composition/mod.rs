@@ -187,6 +187,7 @@ fn activate_application(
         application,
         I18n::new(resolved_locale.locale().clone()).unwrap_or_default(),
     );
+    shell.set_import_existing_paths(catalog_controller.borrow().existing_source_paths());
     let mut display_profiles = rusttable_display_profile::DisplayProfileService::new();
     if display_profiles
         .reconcile(rusttable_ui::GtkMonitorInventory.discover())
@@ -490,6 +491,7 @@ fn refresh_catalog_shell(
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
 ) {
     let controller = catalog.borrow();
+    shell.set_import_existing_paths(controller.existing_source_paths());
     active_collection.replace(controller.collection_controller());
     if let Some(workspace) = controller.state().workspace() {
         shell.set_photo_workspace(workspace);

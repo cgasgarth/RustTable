@@ -312,6 +312,52 @@ pub struct DarkroomGeometry {
     pub filmstrip_separator_px: u8,
 }
 
+/// The two deterministic side-rail modes used by the GTK shell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DarkroomWindowLayout {
+    /// The preferred 150px rails with the full center minimum.
+    Normal,
+    /// The same two rails retained while the center viewport accepts a compact minimum.
+    Narrow,
+}
+
+impl DarkroomWindowLayout {
+    #[must_use]
+    pub const fn center_minimum_width_px(self) -> u16 {
+        match self {
+            Self::Normal => 650,
+            Self::Narrow => 320,
+        }
+    }
+}
+
+/// Returns the geometry mode without collapsing either darkroom rail.
+#[must_use]
+pub const fn darkroom_window_layout(window_width_px: u16) -> DarkroomWindowLayout {
+    if LAYOUT_METRICS.preferred_center_width_px(window_width_px)
+        >= DarkroomWindowLayout::Normal.center_minimum_width_px()
+    {
+        DarkroomWindowLayout::Normal
+    } else {
+        DarkroomWindowLayout::Narrow
+    }
+}
+
+/// Stable scrolling boundaries for the two darkroom module rails.
+pub const DARKROOM_RAIL_SCROLL_WIDGET_IDS: [&str; 2] = [
+    "darkroom-left-module-scroll",
+    "darkroom-right-module-scroll",
+];
+
+/// Operation controls follow module disclosure, status, and typed control order.
+pub const DARKROOM_OPERATION_FOCUS_ORDER: [&str; 5] = [
+    "module-disclosure",
+    "module-enabled",
+    "module-presets",
+    "module-reset",
+    "module-control",
+];
+
 pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
     top_toolbar_height_px: 28,
     bottom_toolbar_height_px: 28,
@@ -571,10 +617,12 @@ pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
 #[cfg(test)]
 mod tests {
     use super::{
-        ColorToken, DARKROOM_GEOMETRY, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS,
-        DesktopRegion, FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
+        ColorToken, DARKROOM_GEOMETRY, DARKROOM_RAIL_SCROLL_WIDGET_IDS, DARKTABLE_COLORS,
+        DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarkroomWindowLayout, DesktopRegion,
+        FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
         LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, PANEL_SLOTS,
         PanelRole, PanelSlot, THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ViewMode,
+        darkroom_window_layout,
     };
 
     #[test]
@@ -662,6 +710,15 @@ mod tests {
             LAYOUT_METRICS.preferred_center_width_px(1_224)
                 >= LAYOUT_METRICS.center_minimum_width_px
         );
+    }
+
+    #[test]
+    fn darkroom_narrow_mode_keeps_both_rails_and_compacts_only_the_center() {
+        assert_eq!(darkroom_window_layout(1_224), DarkroomWindowLayout::Normal);
+        assert_eq!(darkroom_window_layout(900), DarkroomWindowLayout::Narrow);
+        assert_eq!(DarkroomWindowLayout::Normal.center_minimum_width_px(), 650);
+        assert_eq!(DarkroomWindowLayout::Narrow.center_minimum_width_px(), 320);
+        assert_eq!(DARKROOM_RAIL_SCROLL_WIDGET_IDS.len(), 2);
     }
 
     #[test]
