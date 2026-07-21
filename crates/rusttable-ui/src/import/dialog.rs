@@ -542,8 +542,25 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    use std::cell::RefCell;
+    #[cfg(target_os = "linux")]
+    use std::fs;
+    #[cfg(target_os = "linux")]
+    use std::rc::Rc;
+    #[cfg(target_os = "linux")]
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[cfg(target_os = "linux")]
+    use gtk4::prelude::ButtonExt;
+
     use super::{IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS};
+    #[cfg(target_os = "linux")]
+    use crate::import::ImportAction;
     use crate::import::ImportRequest;
+
+    #[cfg(target_os = "linux")]
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn import_dialog_contract_keeps_typed_source_rows_and_actions() {
@@ -579,5 +596,59 @@ mod tests {
         assert!(!request.select_new());
         assert!(request.ignore_nonraws());
         assert_eq!(request.generation(), 7);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn gtk_source_selection_emits_the_typed_import_action() {
+        if gtk4::init().is_err() {
+            return;
+        }
+        let application = gtk4::Application::new(
+            Some("com.cgasgarth.rusttable.test.import-dialog"),
+            Default::default(),
+        );
+        let parent = gtk4::ApplicationWindow::new(&application);
+        let dialog = super::super::dialog::ImportDialog::new(&parent);
+        let number = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let source = std::env::temp_dir().join(format!(
+            "rusttable-import-dialog-{}/deterministic-xpro2.raf",
+            number
+        ));
+        fs::create_dir_all(source.parent().expect("fixture parent")).expect("fixture parent");
+        fs::write(&source, b"synthetic fixture").expect("fixture source");
+
+        let received = Rc::new(RefCell::new(None));
+        dialog.connect_action({
+            let received = Rc::clone(&received);
+            move |action| {
+                received.replace(Some(action));
+            }
+        });
+        dialog.set_source_roots(std::slice::from_ref(&source));
+        assert_eq!(
+            dialog.model.borrow().effective_paths(),
+            vec![source.clone()]
+        );
+
+        dialog.import.emit_clicked();
+
+        let action = received.borrow().clone().expect("typed import action");
+        let ImportAction::Import(request) = action else {
+            panic!("source selection must emit ImportAction::Import");
+        };
+        assert_eq!(request.paths(), std::slice::from_ref(&source));
+        assert!(request.select_new());
+        assert!(!request.recursive());
+        assert!(!request.ignore_nonraws());
+        assert_eq!(request.generation(), 1);
+
+        fs::remove_dir_all(
+            source
+                .parent()
+                .and_then(std::path::Path::parent)
+                .expect("fixture directory"),
+        )
+        .expect("remove fixture directory");
     }
 }

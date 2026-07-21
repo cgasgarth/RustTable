@@ -2,6 +2,7 @@ mod compression;
 mod manifest;
 mod privacy;
 mod qualification;
+mod raw;
 mod verify;
 
 pub use compression::{CompressionError, DecompressionReport};
@@ -13,6 +14,7 @@ pub use privacy::{
     PrivacyFinding, PrivacyFindingKind, PrivacyReport, PrivacyScanner, PrivacyScannerLimits,
 };
 pub use qualification::{QualificationError, qualify_binary};
+pub use raw::{RawImportFixture, deterministic_compressed_raf};
 pub use verify::{
     FixtureRepository, VerificationError, VerificationReport, VerifiedFixture, sha256_hex,
 };
