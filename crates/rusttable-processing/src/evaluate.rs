@@ -277,7 +277,9 @@ fn apply_operation(
         ProcessingOperationKind::Crop { .. }
         | ProcessingOperationKind::Flip { .. }
         | ProcessingOperationKind::RotatePixels { .. }
-        | ProcessingOperationKind::ScalePixels { .. } => Err(operation_error(
+        | ProcessingOperationKind::ScalePixels { .. }
+        | ProcessingOperationKind::FinalScale { .. }
+        | ProcessingOperationKind::EnlargeCanvas { .. } => Err(operation_error(
             step_index,
             operation_id,
             OperationExecutionError::GeometryRequiresFrameBoundary,
