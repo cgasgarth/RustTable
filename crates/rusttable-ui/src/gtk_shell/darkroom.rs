@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
+use rusttable_display_profile::{DisplayProfileReceipt, DisplayProfileSnapshot};
 
 use super::darkroom_modules::{DarkroomModuleActionHandler, DarkroomModulesViewModel};
 #[path = "darkroom_interaction.rs"]
@@ -26,6 +27,12 @@ use darkroom_interaction::{
 pub(super) use darkroom_viewport::chrome_toggle;
 use darkroom_viewport::{ViewportControls, darkroom_page, sync_viewport_controls};
 use panel_widgets::{left_panel, render_typed_modules_into, right_panel};
+
+#[path = "profile_diagnostics.rs"]
+pub(super) mod profile_diagnostics;
+use profile_diagnostics::{
+    ProfileDiagnosticRequest, ProfileDiagnosticSurface, project_profile_diagnostic,
+};
 
 /// Stable widget identifiers for the initial darkroom surface.
 pub const DARKROOM_WIDGET_IDS: [&str; 13] = [
@@ -145,6 +152,7 @@ pub struct DarkroomView {
     filmstrip_state: Rc<RefCell<FilmstripState>>,
     filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
     filmstrip_widget: Rc<RefCell<Option<gtk4::FlowBox>>>,
+    profile_diagnostic: ProfileDiagnosticSurface,
 }
 
 impl DarkroomView {
@@ -157,6 +165,9 @@ impl DarkroomView {
         let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
         let viewport_handler = Rc::new(RefCell::new(None));
         let (page, viewport_controls) = darkroom_page(&preview, &viewport_state, &viewport_handler);
+        let profile_diagnostic =
+            ProfileDiagnosticSurface::new("darkroom-profile-diagnostic", "Darkroom profile status");
+        page.append(profile_diagnostic.widget());
         let (left_panel, left_modules, rail_status) = left_panel(panel_width);
         let (
             right_panel,
@@ -196,6 +207,7 @@ impl DarkroomView {
             filmstrip_state,
             filmstrip_handler,
             filmstrip_widget,
+            profile_diagnostic,
         };
         view.install_module_search();
         view
@@ -253,6 +265,17 @@ impl DarkroomView {
     /// Reapplies the current projection after the orchestrator installs a new texture.
     pub fn sync_viewport_projection(&self) {
         sync_viewport_controls(&self.viewport_controls, &self.preview, &self.viewport_state);
+    }
+
+    /// Projects the same typed profile decision used by the header into the darkroom status row.
+    pub(super) fn set_profile_diagnostic_state(
+        &self,
+        snapshot: Option<&DisplayProfileSnapshot>,
+        receipt: Option<DisplayProfileReceipt>,
+        request: ProfileDiagnosticRequest,
+    ) {
+        let projection = project_profile_diagnostic(snapshot, receipt, request);
+        self.profile_diagnostic.set_projection(&projection);
     }
 
     /// Publishes validated RGB histogram bins without coupling GTK to the pixelpipe.
