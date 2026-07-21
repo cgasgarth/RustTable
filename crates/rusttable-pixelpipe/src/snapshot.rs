@@ -295,6 +295,24 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
                 hasher.update([0]);
             }
         }
+        ProcessingOperationKind::FinalScale { config } => {
+            hasher.update([14]);
+            hasher.update(config.request().identity_bytes());
+            hasher.update([
+                config.quality().kind().tag(),
+                config.quality().kernel().tag(),
+            ]);
+            hasher.update([u8::from(config.allow_upscale())]);
+        }
+        ProcessingOperationKind::EnlargeCanvas { config } => {
+            hasher.update([15]);
+            hasher.update(
+                rusttable_processing::operations::enlargecanvas::EnlargeCanvasParametersV1::new(
+                    *config,
+                )
+                .to_bytes(),
+            );
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

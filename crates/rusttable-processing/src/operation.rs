@@ -10,6 +10,8 @@ use crate::operations::{
     colorout::ColorOutConfig,
     colorreconstruction::ColorReconstructionConfig,
     crop::CropConfig,
+    enlargecanvas::EnlargeCanvasConfig,
+    finalscale::FinalScaleConfig,
     flip::{FlipConfig, FlipMode, OrientationBits},
     highlights::HighlightsConfig,
     primaries::PrimariesConfig,
@@ -21,6 +23,10 @@ use crate::{FiniteF32, ScalarNarrowingError};
 
 #[path = "operation_error.rs"]
 mod operation_error;
+#[path = "operation_geometry.rs"]
+mod operation_geometry;
+
+use operation_error::compile_opacity;
 
 const EXPOSURE_PARAMETER: &str = "stops";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -62,6 +68,12 @@ pub enum ProcessingOperationKind {
     },
     ScalePixels {
         config: ScalePixelsConfig,
+    },
+    FinalScale {
+        config: FinalScaleConfig,
+    },
+    EnlargeCanvas {
+        config: EnlargeCanvasConfig,
     },
     Highlights {
         config: HighlightsConfig,
@@ -237,6 +249,16 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_scalepixels(operation)
+    }
+
+    pub(crate) fn compile_finalscale(operation: &Operation) -> Result<Self, OperationCompileError> {
+        operation_geometry::compile_finalscale(operation)
+    }
+
+    pub(crate) fn compile_enlargecanvas(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        operation_geometry::compile_enlargecanvas(operation)
     }
 
     #[must_use]
@@ -963,19 +985,5 @@ fn invalid_parameters<E: fmt::Display>(operation: &Operation, error: E) -> Opera
         operation_id: operation.id(),
         key: operation.key().clone(),
         reason: error.to_string(),
-    }
-}
-
-fn compile_opacity(operation: &Operation) -> Result<FiniteF32, OperationCompileError> {
-    match FiniteF32::try_from(
-        FiniteF64::new(operation.opacity().get()).expect("core opacity is finite"),
-    ) {
-        Ok(value) => Ok(value),
-        Err(ScalarNarrowingError::Underflow) => {
-            Err(OperationCompileError::OpacityNarrowingUnderflow {
-                operation_id: operation.id(),
-            })
-        }
-        Err(ScalarNarrowingError::Overflow) => unreachable!("checked opacity cannot overflow f32"),
     }
 }

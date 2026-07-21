@@ -1,6 +1,24 @@
 use std::fmt;
 
+use rusttable_core::{FiniteF64, Operation};
+
+use crate::{FiniteF32, ScalarNarrowingError};
+
 use super::OperationCompileError;
+
+pub(super) fn compile_opacity(operation: &Operation) -> Result<FiniteF32, OperationCompileError> {
+    match FiniteF32::try_from(
+        FiniteF64::new(operation.opacity().get()).expect("core opacity is finite"),
+    ) {
+        Ok(value) => Ok(value),
+        Err(ScalarNarrowingError::Underflow) => {
+            Err(OperationCompileError::OpacityNarrowingUnderflow {
+                operation_id: operation.id(),
+            })
+        }
+        Err(ScalarNarrowingError::Overflow) => unreachable!("checked opacity cannot overflow f32"),
+    }
+}
 
 impl fmt::Display for OperationCompileError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

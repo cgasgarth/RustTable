@@ -13,6 +13,8 @@ pub use descriptor_color::{
 #[path = "descriptor_operations.rs"]
 mod descriptor_operations;
 pub use crate::operations::crop::crop_descriptor;
+pub use crate::operations::enlargecanvas::enlargecanvas_descriptor;
+pub use crate::operations::finalscale::finalscale_descriptor;
 pub use crate::operations::flip::flip_descriptor;
 pub use crate::operations::rotatepixels::rotatepixels_descriptor;
 pub use crate::operations::scalepixels::scalepixels_descriptor;

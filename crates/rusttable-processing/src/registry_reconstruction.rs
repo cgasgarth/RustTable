@@ -46,6 +46,12 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::ScalePixels { .. } => {
             crate::descriptor::scalepixels_descriptor().id
         }
+        crate::ProcessingOperationKind::FinalScale { .. } => {
+            crate::descriptor::finalscale_descriptor().id
+        }
+        crate::ProcessingOperationKind::EnlargeCanvas { .. } => {
+            crate::descriptor::enlargecanvas_descriptor().id
+        }
     }
 }
 

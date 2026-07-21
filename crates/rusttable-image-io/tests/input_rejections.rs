@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusttable_image::{DecodeLimits, ImageInput, ImageInputError};
 use rusttable_image_io::FileImageInput;
@@ -47,7 +48,12 @@ fn input(max_source_bytes: u64) -> FileImageInput {
 }
 
 fn with_fixture<T>(name: &str, bytes: &[u8], operation: impl FnOnce(&Path) -> T) -> T {
-    let path = std::env::temp_dir().join(format!("rusttable-image-io-reject-{name}"));
+    static NEXT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+    let fixture_id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "rusttable-image-io-reject-{}-{fixture_id}-{name}",
+        std::process::id()
+    ));
     fs::write(&path, bytes).expect("fixture should be writable");
     let result = operation(&path);
     fs::remove_file(path).expect("fixture should be removable");

@@ -143,6 +143,8 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::Flip { .. }
                     | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
                     | rusttable_processing::ProcessingOperationKind::ScalePixels { .. }
+                    | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
+                    | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
             )
         }) {
             // Both Darktable operations freeze full-image evidence before
@@ -200,6 +202,8 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::Flip { .. }
                     | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
                     | rusttable_processing::ProcessingOperationKind::ScalePixels { .. }
+                    | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
+                    | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
             )
         }) {
             scope

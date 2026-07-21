@@ -11,6 +11,8 @@ pub mod colorout;
 pub mod colorreconstruction;
 mod common;
 pub mod crop;
+pub mod enlargecanvas;
+pub mod finalscale;
 pub mod flip;
 pub mod highlights;
 pub mod primaries;

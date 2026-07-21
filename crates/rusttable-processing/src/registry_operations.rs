@@ -7,9 +7,9 @@ use super::{
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, crop_descriptor, exposure_descriptor,
-    flip_descriptor, linear_offset_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
-    scalepixels_descriptor, temperature_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, crop_descriptor, enlargecanvas_descriptor,
+    exposure_descriptor, finalscale_descriptor, flip_descriptor, linear_offset_descriptor,
+    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, temperature_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -242,6 +242,28 @@ fn prepare_scalepixels(
     )
 }
 
+fn prepare_finalscale(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_finalscale(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_enlargecanvas(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_enlargecanvas(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
@@ -433,6 +455,46 @@ pub fn scalepixels_definition() -> OperationDefinition {
     )
 }
 
+pub fn finalscale_definition() -> OperationDefinition {
+    geometry_definition_with_gpu(
+        finalscale_descriptor(),
+        prepare_finalscale,
+        &[
+            "iop.finalscale.descriptor",
+            "iop.finalscale.cpu",
+            "iop.finalscale.wgpu",
+        ],
+        RoiKind::Scale,
+        std::iter::empty(),
+        Some(GpuBinding::new(
+            "rusttable.finalscale.wgpu",
+            1,
+            vec!["finalscale_resampler".to_owned()],
+            vec!["rgba32float".to_owned()],
+        )),
+    )
+}
+
+pub fn enlargecanvas_definition() -> OperationDefinition {
+    geometry_definition_with_gpu(
+        enlargecanvas_descriptor(),
+        prepare_enlargecanvas,
+        &[
+            "iop.enlargecanvas.descriptor",
+            "iop.enlargecanvas.cpu",
+            "iop.enlargecanvas.wgpu",
+        ],
+        RoiKind::Scale,
+        std::iter::empty(),
+        Some(GpuBinding::new(
+            "rusttable.enlargecanvas.wgpu",
+            1,
+            vec!["enlargecanvas_fill_copy".to_owned()],
+            vec!["rgba32float".to_owned()],
+        )),
+    )
+}
+
 /// Defines the static built-in factory slice used by startup and xtask.
 #[macro_export]
 macro_rules! builtin_operations {
@@ -446,6 +508,8 @@ macro_rules! builtin_operations {
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,
             $crate::registry::scalepixels_definition,
+            $crate::registry::finalscale_definition,
+            $crate::registry::enlargecanvas_definition,
             $crate::registry_reconstruction::highlights_definition,
             $crate::registry_reconstruction::color_reconstruction_definition,
             $crate::registry_color::colorin_definition,
