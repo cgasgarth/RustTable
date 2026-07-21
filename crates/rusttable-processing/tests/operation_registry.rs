@@ -59,6 +59,21 @@ fn operation_registry_executes_all_first_party_operations_through_factories() {
             "rusttable.rgb_gain",
             &[("red", 1.0), ("green", 0.75), ("blue", 0.5)],
         ),
+        operation(
+            4,
+            "rusttable.bloom",
+            &[("size", 0.0), ("threshold", 0.0), ("strength", 25.0)],
+        ),
+        operation(
+            5,
+            "rusttable.soften",
+            &[
+                ("size", 0.0),
+                ("saturation", 100.0),
+                ("brightness", 0.33),
+                ("amount", 50.0),
+            ],
+        ),
     ];
 
     let prepared = cases
@@ -76,6 +91,14 @@ fn operation_registry_executes_all_first_party_operations_through_factories() {
     assert!(matches!(
         prepared[2].operation().kind(),
         ProcessingOperationKind::RgbGain { .. }
+    ));
+    assert!(matches!(
+        prepared[3].operation().kind(),
+        ProcessingOperationKind::Bloom { .. }
+    ));
+    assert!(matches!(
+        prepared[4].operation().kind(),
+        ProcessingOperationKind::Soften { .. }
     ));
 }
 

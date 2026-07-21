@@ -452,3 +452,39 @@ fn tiled_execution_matches_full_frame_image_and_receipt() {
         assert_eq!(tiled.receipt(), full_frame.receipt());
     }
 }
+
+#[test]
+fn neighborhood_effects_use_full_frame_cpu_path_and_preserve_alpha() {
+    let executor = CpuPixelpipeExecutor;
+    let operation_graph = graph(vec![
+        operation(
+            10,
+            "rusttable.bloom",
+            &[("size", 0.0), ("threshold", 0.0), ("strength", 25.0)],
+        ),
+        operation(
+            11,
+            "rusttable.soften",
+            &[
+                ("size", 0.0),
+                ("saturation", 100.0),
+                ("brightness", 0.33),
+                ("amount", 50.0),
+            ],
+        ),
+    ]);
+    let request = CpuPixelpipeRequest::new(
+        tiled_image(),
+        operation_graph,
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let full_frame = executor.execute(&request).expect("full-frame execution");
+    let tiled = executor
+        .execute_tiled(&request, CpuTilePlan::new(2, 2).expect("valid tile plan"))
+        .expect("full-frame neighborhood fallback");
+
+    assert_eq!(tiled.image(), full_frame.image());
+    for (actual, source) in tiled.image().pixels().iter().zip(tiled_image().pixels()) {
+        assert_eq!(actual.alpha().to_bits(), source.alpha().to_bits());
+    }
+}

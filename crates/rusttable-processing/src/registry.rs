@@ -745,10 +745,10 @@ impl RegistrySnapshot {
 #[path = "registry_operations.rs"]
 mod registry_operations;
 pub use registry_operations::{
-    BUILTIN_OPERATIONS, crop_definition, enlargecanvas_definition, exposure_definition,
-    finalscale_definition, flip_definition, lenscorrection_definition, linear_offset_definition,
-    perspective_definition, rgb_gain_definition, rotatepixels_definition, scalepixels_definition,
-    temperature_definition,
+    BUILTIN_OPERATIONS, bloom_definition, crop_definition, enlargecanvas_definition,
+    exposure_definition, finalscale_definition, flip_definition, lenscorrection_definition,
+    linear_offset_definition, perspective_definition, rgb_gain_definition, rotatepixels_definition,
+    scalepixels_definition, soften_definition, temperature_definition,
 };
 use registry_operations::{
     hex, operation_descriptor_for, snapshot_hash, unavailable, validate_definition,

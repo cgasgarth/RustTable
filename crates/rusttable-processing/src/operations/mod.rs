@@ -5,11 +5,13 @@
 //! by the existing operation registry and pixelpipe; they are not a second
 //! pipeline.
 
+pub mod bloom;
 pub mod colorcorrection;
 pub mod colorin;
 pub mod colorout;
 pub mod colorreconstruction;
 mod common;
+pub mod convolution;
 pub mod crop;
 pub mod enlargecanvas;
 pub mod finalscale;
@@ -20,6 +22,7 @@ pub mod perspective;
 pub mod primaries;
 pub mod rotatepixels;
 pub mod scalepixels;
+pub mod soften;
 pub mod temperature;
 
 pub use common::{

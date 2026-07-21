@@ -139,6 +139,8 @@ impl CpuPixelpipeExecutor {
                 node.operation().kind(),
                 rusttable_processing::ProcessingOperationKind::Highlights { .. }
                     | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+                    | rusttable_processing::ProcessingOperationKind::Bloom { .. }
+                    | rusttable_processing::ProcessingOperationKind::Soften { .. }
                     | rusttable_processing::ProcessingOperationKind::Crop { .. }
                     | rusttable_processing::ProcessingOperationKind::Flip { .. }
                     | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
@@ -200,6 +202,8 @@ impl CpuPixelpipeExecutor {
                 node.operation().kind(),
                 rusttable_processing::ProcessingOperationKind::Highlights { .. }
                     | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+                    | rusttable_processing::ProcessingOperationKind::Bloom { .. }
+                    | rusttable_processing::ProcessingOperationKind::Soften { .. }
                     | rusttable_processing::ProcessingOperationKind::Crop { .. }
                     | rusttable_processing::ProcessingOperationKind::Flip { .. }
                     | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
