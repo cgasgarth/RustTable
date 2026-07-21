@@ -3,8 +3,8 @@
 use std::fmt;
 
 use rusttable_processing::{
-    EvaluationError, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb, evaluate_graph,
-    to_linear_srgb,
+    BasicAdjPlanSet, EvaluationError, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb,
+    evaluate_graph_with_basicadj_plans, prepare_basicadj_plans, to_linear_srgb,
 };
 
 use crate::{
@@ -93,8 +93,9 @@ impl CpuPixelpipeExecutor {
         &self,
         request: &CpuPixelpipeSnapshot,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
-        let image = Self::execute_image(request, request.input())?;
-        Ok(Self::result_for(request, image))
+        let plans = Self::prepare_plans(request)?;
+        let image = Self::execute_image(request, request.input(), &plans)?;
+        Ok(Self::result_for(request, image, plans.identity()))
     }
 
     /// Executes with a generation-owned cancellation scope. The scope is
@@ -109,12 +110,13 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Allocation)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        let image = Self::execute_image(request, request.input())?;
+        let plans = Self::prepare_plans(request)?;
+        let image = Self::execute_image(request, request.input(), &plans)?;
         scope
             .child(CancellationStage::Publication)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        Ok(Self::result_for(request, image))
+        Ok(Self::result_for(request, image, plans.identity()))
     }
 
     /// Executes a point-operation graph in deterministic, row-major tiles.
@@ -134,6 +136,7 @@ impl CpuPixelpipeExecutor {
         tile_plan: CpuTilePlan,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
+        let plans = Self::prepare_plans(request)?;
         if request.graph().nodes().any(|node| {
             matches!(
                 node.operation().kind(),
@@ -156,7 +159,8 @@ impl CpuPixelpipeExecutor {
             // replacement. Running them independently per tile changes their
             // result, so the legal tiled contract is a full-frame analysis
             // followed by one publication.
-            return self.execute(request);
+            let image = Self::execute_image(request, request.input(), &plans)?;
+            return Ok(Self::result_for(request, image, plans.identity()));
         }
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
@@ -171,7 +175,7 @@ impl CpuPixelpipeExecutor {
                     source: CpuTileAssemblyError::TileUnavailable,
                 })?;
             let tile_input = tile_input(request.input(), tile)?;
-            let tile_output = Self::execute_image(request, &tile_input)?;
+            let tile_output = Self::execute_image(request, &tile_input, &plans)?;
             assemble_tile(
                 &mut assembled,
                 request.input().descriptor(),
@@ -186,7 +190,7 @@ impl CpuPixelpipeExecutor {
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-        Ok(Self::result_for(request, image))
+        Ok(Self::result_for(request, image, plans.identity()))
     }
 
     /// Executes row-major tiles with a mandatory check before every tile and
@@ -198,6 +202,11 @@ impl CpuPixelpipeExecutor {
         scope: &CancellationScope,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
+        scope
+            .child(CancellationStage::Allocation)
+            .check()
+            .map_err(CpuPixelpipeError::Cancelled)?;
+        let plans = Self::prepare_plans(request)?;
         if request.graph().nodes().any(|node| {
             matches!(
                 node.operation().kind(),
@@ -244,7 +253,7 @@ impl CpuPixelpipeExecutor {
                     source: CpuTileAssemblyError::TileUnavailable,
                 })?;
             let tile_input = tile_input(request.input(), tile)?;
-            let tile_output = Self::execute_image(request, &tile_input)?;
+            let tile_output = Self::execute_image(request, &tile_input, &plans)?;
             assemble_tile(
                 &mut assembled,
                 request.input().descriptor(),
@@ -262,19 +271,21 @@ impl CpuPixelpipeExecutor {
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-        Ok(Self::result_for(request, image))
+        Ok(Self::result_for(request, image, plans.identity()))
     }
 
     fn execute_image(
         request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
+        plans: &BasicAdjPlanSet,
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
         validate_input_encoding(input)?;
 
         let source = to_processing_source(input)?;
         let linear_input = to_linear_srgb(&source);
-        let evaluated = evaluate_graph(request.graph(), &linear_input)
-            .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
+        let evaluated =
+            evaluate_graph_with_basicadj_plans(request.graph(), &linear_input, Some(plans))
+                .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
         let output_descriptor = RgbaF32Descriptor::new(
             input.descriptor().dimensions(),
             request.output_mode().color_encoding(),
@@ -284,13 +295,26 @@ impl CpuPixelpipeExecutor {
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
     }
 
-    fn result_for(request: &CpuPixelpipeSnapshot, image: RgbaF32Image) -> CpuPixelpipeResult {
+    fn prepare_plans(request: &CpuPixelpipeSnapshot) -> Result<BasicAdjPlanSet, CpuPixelpipeError> {
+        validate_input_encoding(request.input())?;
+        let source = to_processing_source(request.input())?;
+        let linear = to_linear_srgb(&source);
+        prepare_basicadj_plans(request.graph(), &linear)
+            .map_err(|source| CpuPixelpipeError::Evaluation { source })
+    }
+
+    fn result_for(
+        request: &CpuPixelpipeSnapshot,
+        image: RgbaF32Image,
+        basicadj_plan_identity: [u8; 32],
+    ) -> CpuPixelpipeResult {
         let receipt = CpuPipelineReceipt::new(
             request.input().descriptor(),
             image.descriptor(),
             request.source_identity(),
             (pixel_identity(request.input()), pixel_identity(&image)),
             request.identity(),
+            basicadj_plan_identity,
             request.output_mode(),
             request
                 .graph()

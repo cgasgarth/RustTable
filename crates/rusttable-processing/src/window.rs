@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::evaluate::evaluate_steps;
+use crate::evaluate::{BasicAdjPlanSet, evaluate_steps, evaluate_steps_with_plans};
 use crate::{
     CompiledOperationGraph, EvaluationError, LinearRgb, RasterDimensions, WorkingRgbImage,
 };
@@ -243,13 +243,29 @@ pub fn evaluate_graph(
     graph: &CompiledOperationGraph,
     input: &WorkingRgbImage,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    let pixels = evaluate_steps(
+    evaluate_graph_with_basicadj_plans(graph, input, None)
+}
+
+/// Evaluates a graph using one previously resolved automatic-basicadj set.
+/// Supplying this set is what makes tiled and full-frame execution share the
+/// same automatic values.
+///
+/// # Errors
+///
+/// Returns the first graph-operation or pixel-evaluation failure.
+pub fn evaluate_graph_with_basicadj_plans(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+) -> Result<WorkingRgbImage, EvaluationError> {
+    let pixels = evaluate_steps_with_plans(
         graph
             .nodes()
             .map(|node| (node.pipeline_step_index(), node.prepared())),
         input.pixel_slice(),
         input.dimensions(),
         0,
+        plans,
     )?;
     Ok(WorkingRgbImage::from_validated_parts(
         input.dimensions(),

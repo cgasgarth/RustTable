@@ -50,7 +50,9 @@ pub use descriptor::{
     perspective_descriptor, primaries_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
     scalepixels_descriptor, soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
-pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
+pub use evaluate::{
+    BasicAdjPlanSet, BlendArithmeticStage, EvaluationError, evaluate, prepare_basicadj_plans,
+};
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
     DEFAULT_BLACK_LEVEL, DEFAULT_EXPOSURE_EV, EXPOSURE_EV_MAXIMUM, EXPOSURE_EV_MINIMUM,
@@ -63,8 +65,14 @@ pub use graph::{
 };
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 pub use operations::basicadj::{
-    BasicAdjConfig, BasicAdjConfigError, BasicAdjParametersV1, BasicAdjParametersV2, BasicAdjPlan,
-    BasicAdjPlanError, PreserveColors, migrate_v1_to_v2,
+    BasicAdjAutoControls, BasicAdjConfig, BasicAdjConfigError, BasicAdjExecutionReceipt,
+    BasicAdjGpuParameters, BasicAdjParametersV1, BasicAdjParametersV2, BasicAdjPlan,
+    BasicAdjPlanError, BasicAdjustmentsPlan, PreserveColors, migrate_v1_to_v2,
+};
+pub use operations::basicadj_analysis::{
+    BASICADJ_HISTOGRAM_BINS, BASICADJ_HISTOGRAM_MAXIMUM, BASICADJ_HISTOGRAM_MINIMUM,
+    BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
+    BasicAdjAnalysisRaster, BasicAdjAnalysisResult, BasicAdjAnalysisRoi, BasicAdjResolvedValues,
 };
 pub use operations::grain::{GrainGpuParameters, GrainPlan};
 pub use output::{
@@ -87,7 +95,7 @@ pub use registry_closure::{
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
-    evaluate_graph, evaluate_graph_window,
+    evaluate_graph, evaluate_graph_window, evaluate_graph_with_basicadj_plans,
 };
 
 pub use operation_stack::{

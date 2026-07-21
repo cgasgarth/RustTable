@@ -1,10 +1,10 @@
 use rusttable_gpu::{
-    BasicPointError, BasicPointOperation, BasicPointRequest, GpuRuntime, GrainPointError,
-    GrainPointRequest,
+    BasicAdjPointParameters, BasicPointError, BasicPointOperation, BasicPointRequest, GpuRuntime,
+    GrainPointError, GrainPointRequest,
 };
 use rusttable_processing::{
-    FiniteF32, GrainPlan, LinearRgb, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
-    WorkingRgbImage, encode_linear_srgb, to_linear_srgb,
+    BasicAdjPlan, FiniteF32, GrainPlan, LinearRgb, RasterDimensions, SourceRgb, SourceRgbImage,
+    SrgbChannel, WorkingRgbImage, encode_linear_srgb, prepare_basicadj_plans, to_linear_srgb,
 };
 use sha2::{Digest, Sha256};
 
@@ -78,6 +78,7 @@ impl PixelpipeTilingReceipt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PixelpipeExecutionReceipt {
     snapshot_identity: crate::CpuPixelpipeSnapshotIdentity,
+    basicadj_plan_identity: [u8; 32],
     backend: PixelpipeBackend,
     gpu_fallback: Option<BasicPointError>,
     dispatches: u32,
@@ -88,6 +89,11 @@ impl PixelpipeExecutionReceipt {
     #[must_use]
     pub const fn snapshot_identity(&self) -> crate::CpuPixelpipeSnapshotIdentity {
         self.snapshot_identity
+    }
+
+    #[must_use]
+    pub const fn basicadj_plan_identity(&self) -> [u8; 32] {
+        self.basicadj_plan_identity
     }
 
     #[must_use]
@@ -184,6 +190,7 @@ impl PixelpipeExecutionService {
                 image,
                 receipt: PixelpipeExecutionReceipt {
                     snapshot_identity: snapshot.identity(),
+                    basicadj_plan_identity: basicadj_plan_identity(snapshot),
                     backend: PixelpipeBackend::WgpuBasic,
                     gpu_fallback: None,
                     dispatches,
@@ -205,6 +212,7 @@ impl PixelpipeExecutionService {
             image,
             receipt: PixelpipeExecutionReceipt {
                 snapshot_identity: snapshot.identity(),
+                basicadj_plan_identity: basicadj_plan_identity(snapshot),
                 backend: PixelpipeBackend::CpuCanonical,
                 gpu_fallback: fallback,
                 dispatches: 0,
@@ -247,6 +255,7 @@ impl PixelpipeExecutionService {
                         image,
                         receipt: PixelpipeExecutionReceipt {
                             snapshot_identity: snapshot.identity(),
+                            basicadj_plan_identity: basicadj_plan_identity(snapshot),
                             backend: PixelpipeBackend::WgpuTiled,
                             gpu_fallback: None,
                             dispatches,
@@ -285,6 +294,7 @@ impl PixelpipeExecutionService {
             image: result.image().clone(),
             receipt: PixelpipeExecutionReceipt {
                 snapshot_identity: snapshot.identity(),
+                basicadj_plan_identity: basicadj_plan_identity(snapshot),
                 backend: PixelpipeBackend::CpuTiledFallback,
                 gpu_fallback: fallback,
                 dispatches: 0,
@@ -353,6 +363,24 @@ fn gpu_plan(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlan> {
             return None;
         }
         let gpu_operation = match operation.kind() {
+            rusttable_processing::ProcessingOperationKind::BasicAdj { config } => {
+                let plan = basicadj_plans(snapshot)
+                    .and_then(|plans| plans.plan(operation.operation_id()).cloned())
+                    .or_else(|| BasicAdjPlan::new(*config).ok())?;
+                let parameters = plan.gpu_parameters();
+                BasicPointOperation::BasicAdj(BasicAdjPointParameters {
+                    black_point: parameters.black_point,
+                    scale: parameters.scale,
+                    gamma: parameters.gamma,
+                    middle_grey: parameters.middle_grey,
+                    contrast: parameters.contrast,
+                    hlcomp: parameters.hlcomp,
+                    hlrange: parameters.hlrange,
+                    preserve_colors: parameters.preserve_colors,
+                    saturation: parameters.saturation,
+                    vibrance: parameters.vibrance,
+                })
+            }
             rusttable_processing::ProcessingOperationKind::Exposure { stops, black } => {
                 BasicPointOperation::Exposure {
                     stops: stops.get(),
@@ -388,6 +416,36 @@ fn gpu_plan(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlan> {
     } else {
         Some(GpuPlan::Basic(operations))
     }
+}
+
+fn basicadj_plans(
+    snapshot: &CpuPixelpipeSnapshot,
+) -> Option<rusttable_processing::BasicAdjPlanSet> {
+    let dimensions = snapshot.input().descriptor().dimensions();
+    let source_pixels = snapshot
+        .input()
+        .pixels()
+        .iter()
+        .copied()
+        .map(|pixel| {
+            Ok(SourceRgb::new(
+                SrgbChannel::new(pixel.red())
+                    .map_err(|_| BasicPointError::NonFiniteInput { component: 0 })?,
+                SrgbChannel::new(pixel.green())
+                    .map_err(|_| BasicPointError::NonFiniteInput { component: 1 })?,
+                SrgbChannel::new(pixel.blue())
+                    .map_err(|_| BasicPointError::NonFiniteInput { component: 2 })?,
+            ))
+        })
+        .collect::<Result<Vec<_>, BasicPointError>>()
+        .ok()?;
+    let source = SourceRgbImage::new(dimensions, source_pixels).ok()?;
+    let linear = to_linear_srgb(&source);
+    prepare_basicadj_plans(snapshot.graph(), &linear).ok()
+}
+
+fn basicadj_plan_identity(snapshot: &CpuPixelpipeSnapshot) -> [u8; 32] {
+    basicadj_plans(snapshot).map_or([0; 32], |plans| plans.identity())
 }
 
 fn execute_gpu(

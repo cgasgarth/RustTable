@@ -193,6 +193,7 @@ fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind
                 hasher.update(value.to_bits().to_le_bytes());
             }
             hasher.update(config.preserve_colors().id().to_le_bytes());
+            hasher.update([config.auto_controls().bits()]);
         }
         ProcessingOperationKind::Exposure { stops, black } => {
             hasher.update([0]);

@@ -31,7 +31,10 @@ pub use dispatch::{
     PreparedGpuKernel, ReceiptStatus, ScalarValue, Tile, TypedParameters,
 };
 pub use grain::{GrainPointError, GrainPointRequest, GrainPointResult};
-pub use point::{BasicPointError, BasicPointOperation, BasicPointRequest, BasicPointResult};
+pub use point::{
+    BasicAdjPointParameters, BasicPointError, BasicPointOperation, BasicPointRequest,
+    BasicPointResult,
+};
 pub use recovery::{
     AssemblyPlan, AssemblyReceipt, AssemblyTile, AttemptFailure, AttemptFailureKind, AttemptId,
     AttemptOutcome, AttemptReceipt, AttemptResources, CleanupStatus,

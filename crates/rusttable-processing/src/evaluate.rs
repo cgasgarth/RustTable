@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use crate::operations::{
     OperationExecutionError,
@@ -10,6 +10,29 @@ use crate::{
     ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
+use sha2::Digest;
+
+/// Immutable resolved automatic plans keyed by authored operation ID.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BasicAdjPlanSet {
+    plans: BTreeMap<OperationId, crate::operations::basicadj::BasicAdjPlan>,
+    identity: [u8; 32],
+}
+
+impl BasicAdjPlanSet {
+    #[must_use]
+    pub fn plan(
+        &self,
+        operation_id: OperationId,
+    ) -> Option<&crate::operations::basicadj::BasicAdjPlan> {
+        self.plans.get(&operation_id)
+    }
+
+    #[must_use]
+    pub const fn identity(&self) -> [u8; 32] {
+        self.identity
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
@@ -78,11 +101,93 @@ pub(crate) fn evaluate_steps<'a, I>(
 where
     I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
 {
+    evaluate_steps_with_plans(steps, input, dimensions, pixel_index_offset, None)
+}
+
+pub(crate) fn evaluate_steps_with_plans<'a, I>(
+    steps: I,
+    input: &[LinearRgb],
+    dimensions: RasterDimensions,
+    pixel_index_offset: usize,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
+) -> Result<Vec<LinearRgb>, EvaluationError>
+where
+    I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
+{
     let mut output = input.to_vec();
     for (step_index, operation) in steps {
-        operation.execute(step_index, &mut output, dimensions, pixel_index_offset)?;
+        apply_operation_with_plans(
+            step_index,
+            operation.operation(),
+            &mut output,
+            dimensions,
+            pixel_index_offset,
+            basicadj_plans,
+        )?;
     }
     Ok(output)
+}
+
+/// Resolves every automatic basicadj node against the full preceding image,
+/// then executes the graph once to establish the next node's analysis input.
+/// The returned set is reusable by every tile of that snapshot.
+///
+/// # Errors
+///
+/// Returns the first graph-operation or automatic-analysis failure.
+pub fn prepare_basicadj_plans(
+    graph: &crate::CompiledOperationGraph,
+    input: &WorkingRgbImage,
+) -> Result<BasicAdjPlanSet, EvaluationError> {
+    let mut current = input.pixel_slice().to_vec();
+    let mut plans = BTreeMap::new();
+    for node in graph.nodes() {
+        let operation = node.operation();
+        if let crate::ProcessingOperationKind::BasicAdj { config } = operation.kind()
+            && operation.is_enabled()
+            && operation.opacity().get().to_bits() != 0.0_f32.to_bits()
+            && config.auto_controls().is_active()
+        {
+            let raster = crate::BasicAdjAnalysisRaster::new(input.dimensions(), &current, None)
+                .map_err(|error| EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: operation.operation_id(),
+                    reason: error.to_string(),
+                })?;
+            let plan = crate::BasicAdjPlan::resolve(*config, raster).map_err(|error| {
+                EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: operation.operation_id(),
+                    reason: error.to_string(),
+                }
+            })?;
+            plans.insert(operation.operation_id(), plan);
+        }
+        let plan_set = BasicAdjPlanSet {
+            plans: plans.clone(),
+            identity: [0; 32],
+        };
+        apply_operation_with_plans(
+            node.pipeline_step_index(),
+            operation,
+            &mut current,
+            input.dimensions(),
+            0,
+            Some(&plan_set),
+        )?;
+    }
+    let identity = if plans.is_empty() {
+        [0; 32]
+    } else {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(b"rusttable.basicadj.plan-set.v1");
+        for (operation_id, plan) in &plans {
+            hasher.update(operation_id.get().to_le_bytes());
+            hasher.update(plan.identity());
+        }
+        hasher.finalize().into()
+    };
+    Ok(BasicAdjPlanSet { plans, identity })
 }
 
 pub(crate) fn execute_prepared_operation(
@@ -92,22 +197,24 @@ pub(crate) fn execute_prepared_operation(
     dimensions: RasterDimensions,
     pixel_index_offset: usize,
 ) -> Result<(), EvaluationError> {
-    apply_operation(
+    apply_operation_with_plans(
         step_index,
         operation.operation(),
         pixels,
         dimensions,
         pixel_index_offset,
+        None,
     )
 }
 
 #[allow(clippy::too_many_lines)]
-fn apply_operation(
+fn apply_operation_with_plans(
     step_index: PipelineStepIndex,
     operation: &ProcessingOperation,
     pixels: &mut [LinearRgb],
     dimensions: RasterDimensions,
     pixel_index_offset: usize,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
 ) -> Result<(), EvaluationError> {
     let operation_id = operation.operation_id();
     let opacity = operation.opacity().get();
@@ -116,7 +223,13 @@ fn apply_operation(
     }
     match operation.kind() {
         ProcessingOperationKind::BasicAdj { config } => {
-            let plan = crate::operations::basicadj::BasicAdjPlan::new(*config)
+            let plan = basicadj_plans
+                .and_then(|plans| plans.plan(operation_id))
+                .cloned()
+                .map_or_else(
+                    || crate::operations::basicadj::BasicAdjPlan::new(*config),
+                    Ok,
+                )
                 .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             let candidate = plan
                 .execute(pixels, pixel_index_offset)
@@ -736,12 +849,13 @@ mod tests {
         let capacity = pixels.capacity();
 
         for step in pipeline.active_steps() {
-            apply_operation(
+            apply_operation_with_plans(
                 step.index(),
                 step.operation(),
                 &mut pixels,
                 RasterDimensions::new(1, 1).expect("test dimensions"),
                 0,
+                None,
             )
             .expect("finite operation");
         }
