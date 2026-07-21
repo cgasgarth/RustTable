@@ -57,9 +57,10 @@ pub use gtk_shell::{
     install_darktable_theme,
 };
 pub use import::{
-    IMPORT_SESSION_FOCUS_ORDER, ImportAction, ImportItemOutcome, ImportPanelViewModel,
-    ImportReviewRow, ImportRowState, ImportRowViewModel, ImportSessionAction,
-    ImportSessionController, ImportSessionControllerError, ImportSessionEvent, ImportSessionPanel,
+    IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, IMPORT_SESSION_FOCUS_ORDER, ImportAction,
+    ImportDialog, ImportItemOutcome, ImportPanelViewModel, ImportRequest, ImportReviewRow,
+    ImportRowState, ImportRowViewModel, ImportSessionAction, ImportSessionController,
+    ImportSessionControllerError, ImportSessionEvent, ImportSessionPanel,
     ImportSessionServiceError, ImportSessionServicePort, ImportSessionState,
     ImportSessionViewModel,
 };

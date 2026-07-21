@@ -18,6 +18,7 @@ pub struct CollectionControlState {
     total_count: usize,
     result_count: usize,
     status: CollectionStatus,
+    generation: u64,
 }
 
 /// Bounded states the navigator can show while a collection projection is refreshed.
@@ -181,6 +182,7 @@ impl CollectionControlState {
             total_count,
             result_count: total_count,
             status: CollectionStatus::for_counts(total_count, total_count),
+            generation: 0,
         }
     }
 
@@ -217,6 +219,17 @@ impl CollectionControlState {
         self
     }
 
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn with_generation(mut self, generation: u64) -> Self {
+        self.generation = generation;
+        self
+    }
+
     /// Returns a loading projection without exposing catalog internals to GTK.
     #[must_use]
     pub fn loading(mut self) -> Self {
@@ -241,11 +254,17 @@ impl CollectionControlState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CollectionControlAction {
     /// The user selected a different collection property.
-    SetProperty(CollectionProperty),
+    SetProperty {
+        property: CollectionProperty,
+        generation: u64,
+    },
     /// The user changed the collection search text.
-    SetSearchText(String),
+    SetSearchText {
+        search_text: String,
+        generation: u64,
+    },
     /// The user pressed the clear action.
-    Clear,
+    Clear { generation: u64 },
 }
 
 /// GTK4 property dropdown, search entry, clear action, and result count.
@@ -261,6 +280,7 @@ pub struct CollectionControls {
     locale: Rc<RefCell<I18n>>,
     state: Rc<RefCell<CollectionControlState>>,
     projecting: Rc<Cell<bool>>,
+    generation: Rc<Cell<u64>>,
 }
 
 impl CollectionControls {
@@ -364,6 +384,7 @@ impl CollectionControls {
                 0,
             ))),
             projecting: Rc::new(Cell::new(false)),
+            generation: Rc::new(Cell::new(0)),
         }
     }
 
@@ -375,8 +396,12 @@ impl CollectionControls {
 
     /// Projects controller state into the GTK controls.
     pub fn set_state(&self, state: &CollectionControlState) {
+        if state.generation() < self.generation.get() {
+            return;
+        }
         self.projecting.set(true);
         self.state.replace(state.clone());
+        self.generation.set(state.generation());
         self.property_dropdown
             .set_selected(state.property().index());
         self.search_entry.set_text(state.search_text());
@@ -429,27 +454,40 @@ impl CollectionControls {
 
         let property_callback = Rc::clone(&callback);
         let projecting = Rc::clone(&self.projecting);
+        let generation = Rc::clone(&self.generation);
         self.property_dropdown
             .connect_selected_notify(move |dropdown| {
                 if !projecting.get()
                     && let Some(property) = CollectionProperty::from_index(dropdown.selected())
                 {
-                    property_callback(CollectionControlAction::SetProperty(property));
+                    let next = generation.get().saturating_add(1);
+                    generation.set(next);
+                    property_callback(CollectionControlAction::SetProperty {
+                        property,
+                        generation: next,
+                    });
                 }
             });
 
         let search_callback = Rc::clone(&callback);
         let projecting = Rc::clone(&self.projecting);
+        let generation = Rc::clone(&self.generation);
         self.search_entry.connect_search_changed(move |entry| {
             if !projecting.get() {
-                search_callback(CollectionControlAction::SetSearchText(
-                    entry.text().to_string(),
-                ));
+                let next = generation.get().saturating_add(1);
+                generation.set(next);
+                search_callback(CollectionControlAction::SetSearchText {
+                    search_text: entry.text().to_string(),
+                    generation: next,
+                });
             }
         });
 
+        let generation = Rc::clone(&self.generation);
         self.clear_button.connect_clicked(move |_| {
-            callback(CollectionControlAction::Clear);
+            let next = generation.get().saturating_add(1);
+            generation.set(next);
+            callback(CollectionControlAction::Clear { generation: next });
         });
     }
 }
@@ -507,17 +545,37 @@ mod tests {
     #[test]
     fn actions_are_typed_for_runtime_integration() {
         assert_eq!(
-            CollectionControlAction::SetProperty(CollectionProperty::Filmroll),
-            CollectionControlAction::SetProperty(CollectionProperty::Filmroll)
+            CollectionControlAction::SetProperty {
+                property: CollectionProperty::Filmroll,
+                generation: 1,
+            },
+            CollectionControlAction::SetProperty {
+                property: CollectionProperty::Filmroll,
+                generation: 1,
+            }
         );
         assert_eq!(
-            CollectionControlAction::SetSearchText("holiday".to_owned()),
-            CollectionControlAction::SetSearchText("holiday".to_owned())
+            CollectionControlAction::SetSearchText {
+                search_text: "holiday".to_owned(),
+                generation: 2,
+            },
+            CollectionControlAction::SetSearchText {
+                search_text: "holiday".to_owned(),
+                generation: 2,
+            }
         );
         assert_eq!(
-            CollectionControlAction::Clear,
-            CollectionControlAction::Clear
+            CollectionControlAction::Clear { generation: 3 },
+            CollectionControlAction::Clear { generation: 3 }
         );
+    }
+
+    #[test]
+    fn collection_projection_generation_is_monotonic() {
+        let newer = CollectionControlState::new(CollectionProperty::Filename, 2).with_generation(4);
+        let older = CollectionControlState::new(CollectionProperty::Filename, 1).with_generation(3);
+        assert_eq!(newer.generation(), 4);
+        assert!(older.generation() < newer.generation());
     }
 
     #[test]

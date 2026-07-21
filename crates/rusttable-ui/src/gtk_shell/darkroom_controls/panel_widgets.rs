@@ -10,7 +10,10 @@ use super::super::darkroom_modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
     build_module_column_with_filter,
 };
-use super::{DarkroomModuleGroup, DarkroomModuleGroupHandler, DarkroomRailStatus, chrome_toggle};
+use super::{
+    DARKROOM_GEOMETRY, DarkroomModuleGroup, DarkroomModuleGroupHandler, DarkroomRailStatus,
+    chrome_toggle,
+};
 use super::{ExposurePanel, ThemeRole, apply_theme_role};
 
 pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatus) {
@@ -158,7 +161,7 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 fn histogram() -> gtk4::Stack {
     let histogram = gtk4::Stack::new();
     histogram.set_widget_name("darkroom-histogram");
-    histogram.set_height_request(92);
+    histogram.set_height_request(i32::from(DARKROOM_GEOMETRY.histogram_height_px));
     histogram.set_accessible_role(gtk4::AccessibleRole::Img);
     histogram.update_property(&[Property::Label("Image histogram")]);
     for (name, text) in [

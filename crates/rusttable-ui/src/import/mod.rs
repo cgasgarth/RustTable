@@ -1,10 +1,71 @@
 use crate::PresentationText;
 
+mod dialog;
+
+pub use dialog::{IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, ImportDialog};
+
+/// Typed request emitted by the GTK import dialog after source selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportRequest {
+    paths: Vec<std::path::PathBuf>,
+    recursive: bool,
+    select_new: bool,
+    ignore_nonraws: bool,
+    generation: u64,
+}
+
+impl ImportRequest {
+    /// Creates a bounded request from the dialog's selected files or folder.
+    #[must_use]
+    pub fn new(
+        paths: Vec<std::path::PathBuf>,
+        recursive: bool,
+        select_new: bool,
+        ignore_nonraws: bool,
+        generation: u64,
+    ) -> Option<Self> {
+        (!paths.is_empty()).then_some(Self {
+            paths,
+            recursive,
+            select_new,
+            ignore_nonraws,
+            generation,
+        })
+    }
+
+    #[must_use]
+    pub fn paths(&self) -> &[std::path::PathBuf] {
+        &self.paths
+    }
+
+    #[must_use]
+    pub const fn recursive(&self) -> bool {
+        self.recursive
+    }
+
+    #[must_use]
+    pub const fn select_new(&self) -> bool {
+        self.select_new
+    }
+
+    #[must_use]
+    pub const fn ignore_nonraws(&self) -> bool {
+        self.ignore_nonraws
+    }
+
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+}
+
 /// Typed command emitted by GTK import controls.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportAction {
     /// Open the GTK file chooser for one or more supported images.
     ChooseFiles,
+    /// Import the selected files or source folder with its typed options.
+    Import(ImportRequest),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -8,8 +8,8 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 
 use super::{
-    DARKROOM_VIEWPORT_FOCUS_ORDER, DARKROOM_VIEWPORT_WIDGET_IDS, DarkroomViewportActionHandler,
-    PhotoPreview, ThemeRole, apply_theme_role,
+    DARKROOM_GEOMETRY, DARKROOM_VIEWPORT_FOCUS_ORDER, DARKROOM_VIEWPORT_WIDGET_IDS,
+    DarkroomViewportActionHandler, PhotoPreview, ThemeRole, apply_theme_role,
 };
 use crate::viewport_presentation::{
     DarkroomViewportAction, DarkroomViewportCommand, DarkroomViewportState, DarkroomZoom,
@@ -97,6 +97,7 @@ pub(super) fn darkroom_page(
     viewport.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[0]);
     viewport.set_hexpand(true);
     viewport.set_vexpand(true);
+    viewport.set_size_request(-1, i32::from(DARKROOM_GEOMETRY.viewport_minimum_height_px));
     viewport.set_accessible_role(gtk4::AccessibleRole::Group);
     viewport.update_property(&[Property::Label("Darkroom image viewport")]);
     viewport.set_child(Some(preview.widget()));
@@ -122,6 +123,10 @@ fn toolbar(id: &str, accessible_name: &str) -> gtk4::Box {
     toolbar.add_css_class("dt_darkroom_toolbar");
     toolbar.set_accessible_role(gtk4::AccessibleRole::Toolbar);
     toolbar.update_property(&[Property::Label(accessible_name)]);
+    toolbar.set_height_request(match id {
+        "darkroom-toolbar-top" => i32::from(DARKROOM_GEOMETRY.top_toolbar_height_px),
+        _ => i32::from(DARKROOM_GEOMETRY.bottom_toolbar_height_px),
+    });
     toolbar
 }
 
