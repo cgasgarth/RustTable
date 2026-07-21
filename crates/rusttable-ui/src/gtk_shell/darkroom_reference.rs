@@ -31,6 +31,10 @@ impl DarkroomModuleAvailability {
 }
 
 /// Provides the next Darktable operation rows while their backend is explicit.
+///
+/// # Errors
+///
+/// Returns a typed module error if the registry projection is invalid.
 pub fn reference_modules() -> Result<DarkroomModulesViewModel, DarkroomModuleError> {
     registry_modules::modules_from_registry()
 }

@@ -6,6 +6,7 @@
 
 mod collection;
 mod collection_service;
+mod darkroom_edit;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,7 @@ use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root}
 
 pub use collection::{CollectionController, CollectionSnapshot};
 pub use collection_service::LibraryCollectionService;
+pub use darkroom_edit::{DarkroomEditOutcome, GtkDarkroomEditController};
 
 /// Persisted catalog state consumed by the GTK application shell.
 #[derive(Debug, Clone, PartialEq, Eq)]

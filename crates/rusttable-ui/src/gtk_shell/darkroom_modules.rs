@@ -1,6 +1,6 @@
 //! Darktable-style darkroom module columns and their GTK4 projection.
 
-use std::{cell::RefCell, fmt, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
@@ -8,7 +8,7 @@ use rusttable_core::Revision;
 
 use crate::presentation::PresentationTextError;
 use crate::presentation::darkroom_controls::{
-    ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlValue,
+    ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlValue,
     DarkroomControlViewModel, DarkroomControlsViewModel,
 };
 
@@ -42,167 +42,10 @@ impl DarkroomModuleSide {
     }
 }
 
-/// Error returned by a module-level action.
-#[derive(Debug, Clone, PartialEq)]
-pub enum DarkroomModuleError {
-    StaleRevision {
-        expected: Revision,
-        actual: Revision,
-    },
-    Control(DarkroomControlError),
-    NotResettable,
-    SnapshotRevisionRewind {
-        current: Revision,
-        replacement: Revision,
-    },
-    WrongModule {
-        expected: String,
-        actual: String,
-    },
-    UnknownPreset {
-        module_id: String,
-        preset_id: String,
-    },
-    DuplicateModule {
-        id: String,
-    },
-    RevisionOverflow,
-}
-
-impl fmt::Display for DarkroomModuleError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::StaleRevision { expected, actual } => {
-                write!(
-                    formatter,
-                    "stale module callback: expected {expected}, current {actual}"
-                )
-            }
-            Self::Control(error) => write!(formatter, "control error: {error:?}"),
-            Self::NotResettable => formatter.write_str("module does not support reset"),
-            Self::SnapshotRevisionRewind {
-                current,
-                replacement,
-            } => write!(
-                formatter,
-                "module snapshot revision {replacement} is older than current {current}"
-            ),
-            Self::WrongModule { expected, actual } => {
-                write!(
-                    formatter,
-                    "action targets module {expected}, received {actual}"
-                )
-            }
-            Self::UnknownPreset {
-                module_id,
-                preset_id,
-            } => write!(
-                formatter,
-                "unknown preset {preset_id} for module {module_id}"
-            ),
-            Self::DuplicateModule { id } => write!(formatter, "duplicate darkroom module: {id}"),
-            Self::RevisionOverflow => formatter.write_str("module revision counter overflowed"),
-        }
-    }
-}
-
-impl std::error::Error for DarkroomModuleError {}
-
-/// Last-known module state exposed to a GTK status row.
-#[derive(Debug, Clone, PartialEq)]
-pub enum DarkroomModuleStatus {
-    Ready,
-    Stale {
-        expected: Revision,
-        actual: Revision,
-    },
-    Error(DarkroomModuleError),
-}
-
-/// A revision-safe action emitted by a module widget.
-#[derive(Debug, Clone, PartialEq)]
-pub enum DarkroomModuleAction {
-    Disclosure {
-        module_id: String,
-        expected_revision: Revision,
-        expanded: bool,
-    },
-    Enable {
-        module_id: String,
-        expected_revision: Revision,
-        enabled: bool,
-    },
-    Reset {
-        module_id: String,
-        expected_revision: Revision,
-    },
-    Preset {
-        module_id: String,
-        expected_revision: Revision,
-        preset_id: String,
-    },
-    Control {
-        module_id: String,
-        expected_revision: Revision,
-        id: String,
-        value: DarkroomControlValue,
-    },
-    Recover {
-        module_id: String,
-        expected_revision: Revision,
-    },
-}
-
-impl DarkroomModuleAction {
-    #[must_use]
-    pub fn module_id(&self) -> &str {
-        match self {
-            Self::Disclosure { module_id, .. }
-            | Self::Enable { module_id, .. }
-            | Self::Reset { module_id, .. }
-            | Self::Preset { module_id, .. }
-            | Self::Control { module_id, .. }
-            | Self::Recover { module_id, .. } => module_id,
-        }
-    }
-}
-
-/// A registry-sourced preset with typed control values.
-#[derive(Debug, Clone, PartialEq)]
-pub struct DarkroomModulePreset {
-    id: String,
-    label: String,
-    values: Vec<(String, DarkroomControlValue)>,
-}
-
-impl DarkroomModulePreset {
-    #[must_use]
-    pub fn new(
-        id: impl Into<String>,
-        label: impl Into<String>,
-        values: Vec<(String, DarkroomControlValue)>,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            label: label.into(),
-            values,
-        }
-    }
-
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-
-    #[must_use]
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-}
-
-/// Callback type used by action-aware GTK module builders.
-pub type DarkroomModuleActionHandler =
-    Rc<dyn Fn(DarkroomModuleAction) -> Result<Revision, DarkroomModuleError>>;
+pub use super::darkroom_module_actions::{
+    DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError, DarkroomModulePreset,
+    DarkroomModuleStatus,
+};
 
 /// One ordered, disclosure-capable module in a darkroom side panel.
 #[derive(Debug, Clone, PartialEq)]
@@ -427,6 +270,46 @@ impl DarkroomModuleViewModel {
         Ok(())
     }
 
+    /// Reconciles the module from persisted operation parameter values.
+    ///
+    /// The application controller supplies values keyed by the GTK control id;
+    /// the construction-time defaults remain in place for absent optional
+    /// parameters and unknown persisted extensions.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed control or revision error when the persisted projection
+    /// cannot be represented by this module's descriptor-backed controls.
+    pub fn reconcile_operation<I>(
+        &mut self,
+        revision: Revision,
+        enabled: bool,
+        values: I,
+    ) -> Result<(), DarkroomModuleError>
+    where
+        I: IntoIterator<Item = (String, DarkroomControlValue)>,
+    {
+        let mut controls = self.controls.controls().cloned().collect::<Vec<_>>();
+        for (id, value) in values {
+            let Some(control) = controls
+                .iter_mut()
+                .find(|control| control.id().as_str() == id)
+            else {
+                let control_id = ControlId::new(id.clone())
+                    .map_err(ControlValidationError::InvalidId)
+                    .map_err(DarkroomControlError::Validation)
+                    .map_err(|error| self.record_control_error(error))?;
+                return Err(
+                    self.record_control_error(DarkroomControlError::UnknownControl(control_id))
+                );
+            };
+            control.set_value(value).map_err(|error| {
+                self.record_control_error(DarkroomControlError::Validation(error))
+            })?;
+        }
+        self.reconcile_snapshot(revision, self.expanded, enabled, controls)
+    }
+
     /// Clears a stale status after the owner confirms that its snapshot is current.
     ///
     /// # Errors
@@ -555,7 +438,7 @@ impl DarkroomModuleViewModel {
                 preset_id: preset_id.to_owned(),
             }));
         };
-        let values = preset.values.clone();
+        let values = preset.values().to_vec();
         let mut revision = expected_revision;
         for (control_id, value) in values {
             revision = self

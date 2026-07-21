@@ -20,8 +20,8 @@ use super::darkroom_status::DarkroomStatusSurface;
 pub(super) use super::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
 use super::{ExposurePanel, PhotoPreview};
 use crate::presentation::{
-    DarkroomHistoryViewModel, DarkroomPanelActionHandler, DarkroomPanelProjection,
-    DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
+    DarkroomControlValue, DarkroomHistoryViewModel, DarkroomPanelActionHandler,
+    DarkroomPanelProjection, DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
 };
 use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
@@ -544,6 +544,36 @@ impl DarkroomView {
         action_handler: Option<DarkroomModuleActionHandler>,
     ) {
         self.typed_modules.replace(Some(modules.clone()));
+        if let Some(exposure) = modules.module("exposure") {
+            let exposure_ev = exposure
+                .controls()
+                .control("exposure-stops")
+                .and_then(|control| match control.value() {
+                    DarkroomControlValue::Slider(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or(0.0);
+            let black_level = exposure
+                .controls()
+                .control("exposure-black")
+                .and_then(|control| match control.value() {
+                    DarkroomControlValue::Slider(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or(0.0);
+            let _ = self.exposure.set_module_projection(
+                exposure.revision(),
+                exposure.enabled(),
+                exposure.expanded(),
+                exposure_ev,
+                black_level,
+            );
+            self.exposure
+                .set_module_action_handler(action_handler.clone(), exposure.revision());
+        } else {
+            self.exposure
+                .set_module_action_handler(None, Revision::ZERO);
+        }
         self.module_action_handler.replace(action_handler);
         self.render_typed_modules();
     }

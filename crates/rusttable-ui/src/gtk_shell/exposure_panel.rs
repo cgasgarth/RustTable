@@ -5,12 +5,14 @@ use std::rc::Rc;
 
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
+use rusttable_core::Revision;
 use rusttable_processing::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
     EXPOSURE_EV_MAXIMUM, EXPOSURE_EV_MINIMUM, EXPOSURE_EV_SOFT_MAXIMUM, EXPOSURE_EV_SOFT_MINIMUM,
     ExposureAction, ExposureActionError, ExposureMode, ExposureModuleState,
 };
 
+use super::darkroom_modules::{DarkroomModuleAction, DarkroomModuleActionHandler};
 use super::{ThemeRole, apply_theme_role};
 
 type ExposureActionHandler = Box<dyn Fn(ExposureAction)>;
@@ -30,6 +32,8 @@ pub struct ExposurePanel {
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    module_actions: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: Rc<RefCell<Revision>>,
     sync_guard: Rc<Cell<bool>>,
 }
 
@@ -46,6 +50,8 @@ impl ExposurePanel {
     pub fn from_state(initial_state: ExposureModuleState) -> Self {
         let state = Rc::new(RefCell::new(initial_state));
         let actions = Rc::new(RefCell::new(None));
+        let module_actions = Rc::new(RefCell::new(None));
+        let module_revision = Rc::new(RefCell::new(Revision::ZERO));
         let sync_guard = Rc::new(Cell::new(false));
         let enabled = gtk4::Switch::new();
         let mode = gtk4::DropDown::from_strings(&["manual", "automatic"]);
@@ -167,6 +173,8 @@ impl ExposurePanel {
             compensate_exposure_bias,
             compensate_highlight_preservation,
             actions,
+            module_actions,
+            module_revision,
             sync_guard,
         };
         panel.sync_widgets();
@@ -194,6 +202,42 @@ impl ExposurePanel {
         self.actions.replace(Some(Box::new(handler)));
     }
 
+    /// Connects the legacy Exposure widget to the controller-owned generic
+    /// darkroom operation path.
+    pub fn set_module_action_handler(
+        &self,
+        handler: Option<DarkroomModuleActionHandler>,
+        revision: Revision,
+    ) {
+        self.module_actions.replace(handler);
+        self.module_revision.replace(revision);
+    }
+
+    /// Projects persisted exposure parameters into the native panel.
+    ///
+    /// # Errors
+    ///
+    /// Returns the processing-domain validation error when persisted values are
+    /// outside the Exposure module's accepted bounds.
+    pub fn set_module_projection(
+        &self,
+        revision: Revision,
+        enabled: bool,
+        expanded: bool,
+        exposure_ev: f64,
+        black_level: f64,
+    ) -> Result<(), ExposureActionError> {
+        let mut state = ExposureModuleState::default();
+        state.apply(ExposureAction::SetEnabled(enabled))?;
+        state.apply(ExposureAction::SetExpanded(expanded))?;
+        state.apply(ExposureAction::SetExposureEv(exposure_ev))?;
+        state.apply(ExposureAction::SetBlackLevel(black_level))?;
+        self.state.replace(state);
+        self.module_revision.replace(revision);
+        self.sync_widgets();
+        Ok(())
+    }
+
     /// Applies an explicit action and updates all native controls.
     ///
     /// # Errors
@@ -213,6 +257,8 @@ impl ExposurePanel {
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
             ExposureAction::SetEnabled,
         );
         connect_expander_action(
@@ -220,18 +266,24 @@ impl ExposurePanel {
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
         );
         connect_mode_action(
             &self.mode,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
         );
         connect_scale_action(
             &self.exposure,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
             ExposureAction::SetExposureEv,
         );
         connect_scale_action(
@@ -239,6 +291,8 @@ impl ExposurePanel {
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
             ExposureAction::SetBlackLevel,
         );
         connect_switch_action(
@@ -246,6 +300,8 @@ impl ExposurePanel {
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
             ExposureAction::SetCompensateExposureBias,
         );
         connect_switch_action(
@@ -253,12 +309,23 @@ impl ExposurePanel {
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
+            Rc::clone(&self.module_actions),
+            Rc::clone(&self.module_revision),
             ExposureAction::SetCompensateHighlightPreservation,
         );
         let state = Rc::clone(&self.state);
         let actions = Rc::clone(&self.actions);
+        let module_actions = Rc::clone(&self.module_actions);
+        let module_revision = Rc::clone(&self.module_revision);
         reset.connect_clicked(move |_| {
-            dispatch(&state, &actions, &controls, ExposureAction::Reset);
+            dispatch(
+                &state,
+                &actions,
+                &controls,
+                &module_actions,
+                &module_revision,
+                ExposureAction::Reset,
+            );
         });
     }
 
@@ -413,12 +480,21 @@ fn connect_switch_action<F>(
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
     controls: ControlSet,
+    module_actions: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: Rc<RefCell<Revision>>,
     action: F,
 ) where
     F: Fn(bool) -> ExposureAction + 'static,
 {
     control.connect_active_notify(move |control| {
-        dispatch(&state, &actions, &controls, action(control.is_active()));
+        dispatch(
+            &state,
+            &actions,
+            &controls,
+            &module_actions,
+            &module_revision,
+            action(control.is_active()),
+        );
     });
 }
 
@@ -427,12 +503,16 @@ fn connect_expander_action(
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
     controls: ControlSet,
+    module_actions: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: Rc<RefCell<Revision>>,
 ) {
     control.connect_expanded_notify(move |control| {
         dispatch(
             &state,
             &actions,
             &controls,
+            &module_actions,
+            &module_revision,
             ExposureAction::SetExpanded(control.is_expanded()),
         );
     });
@@ -443,6 +523,8 @@ fn connect_mode_action(
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
     controls: ControlSet,
+    module_actions: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: Rc<RefCell<Revision>>,
 ) {
     control.connect_selected_notify(move |control| {
         let mode = if control.selected() == mode_index(ExposureMode::Manual) {
@@ -450,7 +532,14 @@ fn connect_mode_action(
         } else {
             ExposureMode::Automatic
         };
-        dispatch(&state, &actions, &controls, ExposureAction::SetMode(mode));
+        dispatch(
+            &state,
+            &actions,
+            &controls,
+            &module_actions,
+            &module_revision,
+            ExposureAction::SetMode(mode),
+        );
     });
 }
 
@@ -459,12 +548,21 @@ fn connect_scale_action<F>(
     state: Rc<RefCell<ExposureModuleState>>,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
     controls: ControlSet,
+    module_actions: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: Rc<RefCell<Revision>>,
     action: F,
 ) where
     F: Fn(f64) -> ExposureAction + 'static,
 {
     control.connect_value_changed(move |control| {
-        dispatch(&state, &actions, &controls, action(control.value()));
+        dispatch(
+            &state,
+            &actions,
+            &controls,
+            &module_actions,
+            &module_revision,
+            action(control.value()),
+        );
     });
 }
 
@@ -472,6 +570,8 @@ fn dispatch(
     state: &Rc<RefCell<ExposureModuleState>>,
     actions: &Rc<RefCell<Option<ExposureActionHandler>>>,
     controls: &ControlSet,
+    module_actions: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: &Rc<RefCell<Revision>>,
     action: ExposureAction,
 ) {
     if controls.sync_guard.get() || state.borrow_mut().apply(action).is_err() {
@@ -481,6 +581,50 @@ fn dispatch(
     if let Some(handler) = actions.borrow().as_ref() {
         handler(action);
     }
+    if let Some(action) = exposure_module_action(action, *module_revision.borrow())
+        && let Some(handler) = module_actions.borrow().as_ref()
+        && let Ok(revision) = handler(action)
+    {
+        *module_revision.borrow_mut() = revision;
+    }
+}
+
+fn exposure_module_action(
+    action: ExposureAction,
+    expected_revision: Revision,
+) -> Option<DarkroomModuleAction> {
+    let action = match action {
+        ExposureAction::SetExpanded(expanded) => DarkroomModuleAction::Disclosure {
+            module_id: "exposure".to_owned(),
+            expected_revision,
+            expanded,
+        },
+        ExposureAction::SetEnabled(enabled) => DarkroomModuleAction::Enable {
+            module_id: "exposure".to_owned(),
+            expected_revision,
+            enabled,
+        },
+        ExposureAction::SetExposureEv(value) => DarkroomModuleAction::Control {
+            module_id: "exposure".to_owned(),
+            expected_revision,
+            id: "exposure-stops".to_owned(),
+            value: crate::presentation::DarkroomControlValue::Slider(value),
+        },
+        ExposureAction::SetBlackLevel(value) => DarkroomModuleAction::Control {
+            module_id: "exposure".to_owned(),
+            expected_revision,
+            id: "exposure-black".to_owned(),
+            value: crate::presentation::DarkroomControlValue::Slider(value),
+        },
+        ExposureAction::Reset => DarkroomModuleAction::Reset {
+            module_id: "exposure".to_owned(),
+            expected_revision,
+        },
+        ExposureAction::SetMode(_)
+        | ExposureAction::SetCompensateExposureBias(_)
+        | ExposureAction::SetCompensateHighlightPreservation(_) => return None,
+    };
+    Some(action)
 }
 
 const fn mode_index(mode: ExposureMode) -> u32 {
