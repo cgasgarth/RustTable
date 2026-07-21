@@ -36,6 +36,13 @@ fn module_from_definition(
             }
         }
         DefinitionAvailability::Available => DarkroomModuleAvailability::Supported,
+        DefinitionAvailability::Unavailable { reason }
+            if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
+        {
+            DarkroomModuleAvailability::DeprecatedUnavailable {
+                reason: reason.clone(),
+            }
+        }
         DefinitionAvailability::Unavailable { reason } => DarkroomModuleAvailability::Unsupported {
             reason: reason.clone(),
         },

@@ -6,6 +6,7 @@ use rusttable_catalog::EditRepository;
 use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::{Edit, FiniteF64, Operation, ParameterText, ParameterValue};
 use rusttable_processing::builtin_registry;
+use rusttable_processing::defringe_compatibility::DefringeMode;
 use rusttable_ui::presentation::{DarkroomControlKind, DarkroomControlValue};
 use rusttable_ui::{
     DarkroomModuleAction, DarkroomModuleError, DarkroomModuleViewModel, DarkroomModulesViewModel,
@@ -233,6 +234,22 @@ fn parameter_value_to_control(
     control: &rusttable_ui::DarkroomControlViewModel,
     value: &ParameterValue,
 ) -> Result<(String, DarkroomControlValue), DarkroomModuleError> {
+    if control.id().as_str() == "defringe-mode" {
+        let ParameterValue::Integer(value) = value else {
+            return Err(persistence_error(
+                "defringe mode must be a numeric v1 value",
+            ));
+        };
+        let Some(mode) = DefringeMode::from_numeric(*value) else {
+            return Err(persistence_error(
+                "defringe mode is outside the v1 numeric enum",
+            ));
+        };
+        return Ok((
+            control.id().as_str().to_owned(),
+            DarkroomControlValue::Choice(mode.index()),
+        ));
+    }
     let value = match (control.kind(), value) {
         (DarkroomControlKind::Slider, ParameterValue::Scalar(value)) => {
             DarkroomControlValue::Slider(value.get())
@@ -324,6 +341,13 @@ fn parameter_from_control(
     control: &rusttable_ui::DarkroomControlViewModel,
     existing: &ParameterValue,
 ) -> Option<ParameterValue> {
+    if control.id().as_str() == "defringe-mode" {
+        let DarkroomControlValue::Choice(value) = control.value() else {
+            return None;
+        };
+        return DefringeMode::from_numeric(i64::try_from(value).ok()?)
+            .map(|mode| ParameterValue::Integer(mode.numeric()));
+    }
     match (control.value(), existing) {
         (DarkroomControlValue::Slider(value), ParameterValue::Scalar(_)) => {
             Some(ParameterValue::Scalar(FiniteF64::new(value).ok()?))
@@ -548,5 +572,68 @@ mod tests {
                 .value(),
             DarkroomControlValue::Slider(0.25)
         );
+    }
+
+    #[test]
+    fn defringe_imported_numeric_modes_round_trip_through_the_canonical_edit() {
+        for mode in [0_i64, 1, 2] {
+            let original = Edit::from_parts(
+                EditId::new(20 + u128::try_from(mode).expect("mode")).expect("edit id"),
+                PhotoId::new(2).expect("photo id"),
+                Revision::ZERO,
+                Revision::from_u64(9),
+                [Operation::new_with_opacity(
+                    OperationId::new(30 + u128::try_from(mode).expect("mode"))
+                        .expect("operation id"),
+                    OperationKey::new("rusttable.defringe").expect("operation key"),
+                    true,
+                    OperationOpacity::ONE,
+                    [
+                        (
+                            ParameterName::new("radius").expect("radius"),
+                            ParameterValue::Scalar(FiniteF64::new(4.0).expect("radius value")),
+                        ),
+                        (
+                            ParameterName::new("threshold").expect("threshold"),
+                            ParameterValue::Scalar(FiniteF64::new(20.0).expect("threshold value")),
+                        ),
+                        (
+                            ParameterName::new("mode").expect("mode"),
+                            ParameterValue::Integer(mode),
+                        ),
+                    ],
+                )
+                .expect("operation")],
+            )
+            .expect("edit");
+            let mut modules = project_edit(&original).expect("projection");
+            let defringe = modules.module_mut("defringe").expect("defringe");
+            assert_eq!(
+                defringe
+                    .controls()
+                    .control("defringe-mode")
+                    .expect("mode control")
+                    .value(),
+                DarkroomControlValue::Choice(usize::try_from(mode).expect("mode index"))
+            );
+            let replacement = rewrite_operations(
+                &original,
+                defringe,
+                &DarkroomModuleAction::Control {
+                    module_id: "defringe".to_owned(),
+                    expected_revision: original.revision(),
+                    id: "defringe-mode".to_owned(),
+                    value: DarkroomControlValue::Choice(usize::try_from(mode).expect("mode index")),
+                },
+            )
+            .expect("canonical rewrite");
+            assert_eq!(
+                replacement
+                    .first()
+                    .expect("defringe operation")
+                    .parameter(&ParameterName::new("mode").expect("mode")),
+                Some(&ParameterValue::Integer(mode))
+            );
+        }
     }
 }

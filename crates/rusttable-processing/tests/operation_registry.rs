@@ -160,13 +160,14 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
         .collect::<Vec<_>>();
     assert_eq!(ids.len(), builtin_registry().definitions().len());
     assert_eq!(
-        &ids[..6],
+        &ids[..7],
         [
             "exposure",
             "basicadj",
             "linear-offset",
             "rgbgain",
             "invert",
+            "defringe",
             "dither"
         ]
     );
