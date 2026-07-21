@@ -712,20 +712,14 @@ impl DarkroomView {
             viewport.edit_revision().unwrap_or(Revision::ZERO),
         );
         self.rail_status.set_detail(detail, target);
-        if let Ok(history) = DarkroomPanelProjection::error(
-            target,
-            Revision::ZERO,
-            "edit history unavailable for this selection",
-        ) {
-            self.set_history_projection(&history, None);
-        }
-        if let Ok(snapshots) = DarkroomPanelProjection::error(
-            target,
-            Revision::ZERO,
-            "snapshots unavailable for this selection",
-        ) {
-            self.set_snapshots_projection(&snapshots, None);
-        }
+        self.set_history_projection(
+            &DarkroomPanelProjection::<DarkroomHistoryViewModel>::empty(),
+            None,
+        );
+        self.set_snapshots_projection(
+            &DarkroomPanelProjection::<DarkroomSnapshotsViewModel>::empty(),
+            None,
+        );
     }
 
     /// Projects the controller-owned snapshot state into the left rail.

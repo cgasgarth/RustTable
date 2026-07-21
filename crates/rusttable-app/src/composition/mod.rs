@@ -3,6 +3,7 @@ mod catalog_preview;
 mod catalog_preview_smoke;
 mod collection_bridge;
 mod darkroom_edit;
+mod darkroom_panels;
 mod import_bridge;
 mod preview_bridge;
 mod preview_lifecycle;
@@ -262,11 +263,14 @@ fn activate_application(
     let selection_collection = Rc::clone(active_collection);
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
     let darkroom_bridge = darkroom_edit::install(&shell, &catalog_controller, &preview_lifecycle);
+    let darkroom_panel_bridge =
+        darkroom_panels::install(&shell, &catalog_controller, &preview_lifecycle);
     let export_selection = export_panel.clone();
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
     let darkroom_selection_controller = Rc::clone(&darkroom_bridge.controller);
     let darkroom_selection_shell = shell.clone();
     let darkroom_selection_handler = darkroom_bridge.handler.clone();
+    let darkroom_selection_panel_bridge = darkroom_panel_bridge;
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
         let catalog_changed = selection_controller.borrow_mut().select_photo(photo_id);
         let collection_changed = selection_collection
@@ -316,6 +320,8 @@ fn activate_application(
             catalog,
             Rc::clone(&preview_lifecycle),
         );
+        darkroom_selection_panel_bridge
+            .select(&darkroom_selection_shell, &selection_controller.borrow());
     });
     shell.present();
     active_shell.replace(Some(shell));
