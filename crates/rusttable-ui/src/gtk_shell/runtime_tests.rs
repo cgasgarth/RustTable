@@ -73,6 +73,11 @@ fn native_open_projection_survives_workspace_reset_and_mode_switch() {
     assert_eq!(shell.lighttable_toolbar.state().selected_count(), 1);
     assert!(shell.photo_tiles.borrow().contains_key(&second));
     assert!(shell.lighttable.first_child().is_some());
+    assert!(shell.lighttable.is_visible());
+    assert_eq!(
+        shell.lighttable_empty_state.visible_child_name().as_deref(),
+        Some("grid")
+    );
 
     let dimensions = PreviewDimensions::new(1, 1).expect("test dimensions");
     let status = PresentationText::new("thumbnail ready").expect("test status");
