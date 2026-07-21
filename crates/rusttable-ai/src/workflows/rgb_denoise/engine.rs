@@ -13,8 +13,9 @@ use sha2::{Digest, Sha256};
 use super::detail::{DetailError, apply_detail_recovery};
 use super::ports::{ModelTile, RgbDenoiseControl, RgbDenoiseModel, RgbDenoiseObserver};
 use super::{
-    CollisionPolicy, ModelDescriptor, ModelError, ModelTask, ProviderSelection, ProviderUsed,
-    RgbDenoisePlan, RgbDenoiseProgress, RgbDenoiseRequest, RgbDenoiseStage,
+    CollisionPolicy, DetailRecoveryPolicy, GamutPolicy, ModelDescriptor, ModelError, ModelTask,
+    ProviderSelection, ProviderUsed, RgbDenoisePlan, RgbDenoiseProgress, RgbDenoiseRequest,
+    RgbDenoiseStage, ShadowPolicy,
 };
 
 const LUMA: [f32; 3] = [0.2126, 0.7152, 0.0722];
@@ -57,13 +58,32 @@ pub fn process(
             .ok_or(ProcessError::TileCountOverflow)?,
     )
     .map_err(|_| ProcessError::TileCountOverflow)?;
-    let plan = RgbDenoisePlan {
-        dimensions: rusttable_image::ImageDimensions::new(dimensions.width(), dimensions.height())
-            .map_err(|_| ProcessError::DimensionOverflow)?,
-        tile_count,
-        detail_recovery_strength: request.strength().detail_recovery_strength(),
-        preserve_wide_gamut: request.preserve_wide_gamut(),
-    };
+    let plan = RgbDenoisePlan::build(
+        dimensions.width(),
+        dimensions.height(),
+        model.descriptor(),
+        request.working_profile(),
+        request.output_profile(),
+        request.strength(),
+        if request.preserve_wide_gamut() {
+            GamutPolicy::PreserveWideGamut
+        } else {
+            GamutPolicy::ConvertToWorking
+        },
+        if model.descriptor().shadow_boost() {
+            ShadowPolicy::ProtectDeepShadows
+        } else {
+            ShadowPolicy::Disabled
+        },
+        if request.strength().detail_recovery_strength() == 0 {
+            DetailRecoveryPolicy::Disabled
+        } else {
+            DetailRecoveryPolicy::Recover {
+                strength: request.strength().detail_recovery_strength(),
+            }
+        },
+    )
+    .map_err(ProcessError::Plan)?;
     observer.progress(RgbDenoiseProgress {
         stage: RgbDenoiseStage::Validate,
         completed: 1,
@@ -423,6 +443,7 @@ fn artifact_key(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessError {
     Model { source: ModelError },
+    Plan(super::PlanError),
     InvalidTilePlan,
     TileCountOverflow,
     DimensionOverflow,

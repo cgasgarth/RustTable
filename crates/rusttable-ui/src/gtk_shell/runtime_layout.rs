@@ -7,7 +7,6 @@ use crate::ai_batch::AiBatchPanel;
 use crate::camera::CameraPanel;
 use crate::external_editor::ExternalEditorPanel;
 use crate::import::ImportSessionPanel;
-use crate::neural_restore::NeuralRestorePanel;
 
 use super::darkroom_modules::DarkroomModuleGroup;
 use super::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
@@ -22,7 +21,6 @@ pub(super) fn right_panel() -> (
     gtk4::Box,
     ExportPanel,
     ExternalEditorPanel,
-    NeuralRestorePanel,
     AiBatchPanel,
     CameraPanel,
     ImportSessionPanel,
@@ -34,7 +32,6 @@ pub(super) fn right_panel() -> (
     apply_theme_role(&panel, ThemeRole::Panel);
     let export_panel = ExportPanel::new();
     let external_editor_panel = ExternalEditorPanel::new();
-    let neural_restore_panel = NeuralRestorePanel::new();
     let ai_batch_panel = AiBatchPanel::new();
     let camera_panel = CameraPanel::new();
     let import_session_panel = ImportSessionPanel::new();
@@ -44,7 +41,6 @@ pub(super) fn right_panel() -> (
     }
     center.append(export_panel.widget());
     center.append(external_editor_panel.widget());
-    center.append(neural_restore_panel.widget());
     center.append(ai_batch_panel.widget());
     center.append(camera_panel.widget());
     center.append(import_session_panel.widget());
@@ -57,7 +53,6 @@ pub(super) fn right_panel() -> (
         panel,
         export_panel,
         external_editor_panel,
-        neural_restore_panel,
         ai_batch_panel,
         camera_panel,
         import_session_panel,

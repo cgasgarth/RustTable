@@ -11,11 +11,12 @@ pub use ports::{
 };
 pub use tiff::FileTiffPublisher;
 pub use types::{
-    AlphaOutput, CollisionPolicy, DETAIL_BAND_MULTIPLIERS, Matrix3, ModelDescriptor, ModelError,
-    ModelTask, OutputBitDepth, ProfileError, ProviderSelection, ProviderUsed, RequestError,
-    RgbDenoiseBatchReceipt, RgbDenoisePlan, RgbDenoiseProgress, RgbDenoiseReceipt,
-    RgbDenoiseRequest, RgbDenoiseStage, RgbProfile, Strength, StrengthError, TiffCompression,
-    TiffRecipe, TiffRecipeError, WORKFLOW_VERSION,
+    AlphaOutput, CollisionPolicy, DETAIL_BAND_MULTIPLIERS, DetailRecoveryPolicy, GamutPolicy,
+    Matrix3, MemoryEstimate, ModelDescriptor, ModelError, ModelTask, OutputBitDepth, PlanError,
+    ProfileError, ProviderSelection, ProviderUsed, RequestError, RgbDenoiseBatchReceipt,
+    RgbDenoisePlan, RgbDenoiseProgress, RgbDenoiseReceipt, RgbDenoiseRequest, RgbDenoiseStage,
+    RgbProfile, ShadowPolicy, Strength, StrengthError, TiffCompression, TiffRecipe,
+    TiffRecipeError, TilePolicy, WORKFLOW_VERSION,
 };
 
 const MAX_BATCH_ITEMS: usize = 256;

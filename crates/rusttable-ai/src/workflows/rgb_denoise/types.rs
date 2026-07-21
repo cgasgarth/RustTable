@@ -7,6 +7,7 @@
 use std::{fmt, path::PathBuf};
 
 use rusttable_pixelpipe::{RgbaF32Image, SourceRasterIdentity};
+use sha2::{Digest, Sha256};
 
 pub const WORKFLOW_VERSION: u32 = 1;
 pub const DETAIL_BAND_MULTIPLIERS: [f32; 5] = [0.25, 0.15, 0.05, 0.02, 0.01];
@@ -270,6 +271,36 @@ pub enum ProviderUsed {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GamutPolicy {
+    ConvertToWorking,
+    PreserveWideGamut,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ShadowPolicy {
+    Disabled,
+    ProtectDeepShadows,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DetailRecoveryPolicy {
+    Disabled,
+    Recover { strength: u8 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TilePolicy {
+    pub width: u32,
+    pub height: u32,
+    pub overlap: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MemoryEstimate {
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OutputBitDepth {
     Eight,
     Sixteen,
@@ -530,12 +561,160 @@ pub struct RgbDenoiseProgress {
     pub total: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RgbDenoisePlan {
     pub dimensions: rusttable_image::ImageDimensions,
+    pub model_id: String,
+    pub working_profile: String,
+    pub output_profile: String,
+    pub scale: u8,
+    pub tile: TilePolicy,
     pub tile_count: u64,
+    pub gamut_policy: GamutPolicy,
+    pub shadow_policy: ShadowPolicy,
+    pub detail_policy: DetailRecoveryPolicy,
     pub detail_recovery_strength: u8,
     pub preserve_wide_gamut: bool,
+    pub memory: MemoryEstimate,
+    pub identity: [u8; 32],
+}
+
+impl RgbDenoisePlan {
+    /// Builds the immutable plan consumed by RGB denoise processing and UI/app
+    /// dispatch. All values that affect processing are hashed into `identity`.
+    pub fn build(
+        width: u32,
+        height: u32,
+        model: &ModelDescriptor,
+        working_profile: &RgbProfile,
+        output_profile: &RgbProfile,
+        strength: Strength,
+        gamut_policy: GamutPolicy,
+        shadow_policy: ShadowPolicy,
+        detail_policy: DetailRecoveryPolicy,
+    ) -> Result<Self, PlanError> {
+        if width == 0 || height == 0 {
+            return Err(PlanError::EmptyImage);
+        }
+        if model.task() != ModelTask::RgbDenoise {
+            return Err(PlanError::WrongTask);
+        }
+        if model.scale() != 1 {
+            return Err(PlanError::UnsupportedScale {
+                scale: model.scale(),
+            });
+        }
+        if !model.qualified() {
+            return Err(PlanError::UnqualifiedModel);
+        }
+        if matches!(gamut_policy, GamutPolicy::PreserveWideGamut) && model.scale() != 1 {
+            return Err(PlanError::WideGamutScale);
+        }
+        if matches!(shadow_policy, ShadowPolicy::ProtectDeepShadows) && !model.shadow_boost() {
+            return Err(PlanError::ShadowUnsupported);
+        }
+        if let DetailRecoveryPolicy::Recover { strength } = detail_policy
+            && strength > 100
+        {
+            return Err(PlanError::DetailStrength { strength });
+        }
+        let step = model
+            .tile_size()
+            .checked_sub(model.overlap().saturating_mul(2))
+            .filter(|step| *step > 0)
+            .ok_or(PlanError::InvalidTile)?;
+        let tile_count = u64::from(width.div_ceil(step))
+            .checked_mul(u64::from(height.div_ceil(step)))
+            .ok_or(PlanError::Overflow)?;
+        let pixels = u64::from(width)
+            .checked_mul(u64::from(height))
+            .ok_or(PlanError::Overflow)?;
+        let source = pixels.checked_mul(16).ok_or(PlanError::Overflow)?;
+        let output = source;
+        let gamut = if matches!(gamut_policy, GamutPolicy::PreserveWideGamut) {
+            pixels
+        } else {
+            0
+        };
+        let detail = if matches!(detail_policy, DetailRecoveryPolicy::Recover { .. }) {
+            pixels.checked_mul(4).ok_or(PlanError::Overflow)?
+        } else {
+            0
+        };
+        let tile = u64::from(model.tile_size())
+            .checked_mul(u64::from(model.tile_size()))
+            .and_then(|pixels| pixels.checked_mul(3 * 4))
+            .ok_or(PlanError::Overflow)?;
+        let memory_bytes = source
+            .checked_add(output)
+            .and_then(|value| value.checked_add(gamut))
+            .and_then(|value| value.checked_add(detail))
+            .and_then(|value| value.checked_add(tile))
+            .ok_or(PlanError::Overflow)?;
+        if memory_bytes > 2 * 1024 * 1024 * 1024 {
+            return Err(PlanError::MemoryLimit {
+                bytes: memory_bytes,
+            });
+        }
+        let dimensions = rusttable_image::ImageDimensions::new(width, height)
+            .map_err(|_| PlanError::Overflow)?;
+        let preserve_wide_gamut = matches!(gamut_policy, GamutPolicy::PreserveWideGamut);
+        let detail_recovery_strength = match detail_policy {
+            DetailRecoveryPolicy::Disabled => strength.detail_recovery_strength(),
+            DetailRecoveryPolicy::Recover { strength } => strength,
+        };
+        let tile = TilePolicy {
+            width: model.tile_size(),
+            height: model.tile_size(),
+            overlap: model.overlap(),
+        };
+        let mut hasher = Sha256::new();
+        hasher.update(b"rusttable.ai.rgb-denoise.plan.v1");
+        hasher.update(model.model_id().as_bytes());
+        hasher.update(working_profile.identity().as_bytes());
+        hasher.update(output_profile.identity().as_bytes());
+        hasher.update([model.scale(), strength.get(), detail_recovery_strength]);
+        hasher.update(model.tile_size().to_le_bytes());
+        hasher.update(model.overlap().to_le_bytes());
+        hasher.update([u8::from(preserve_wide_gamut)]);
+        hasher.update([match shadow_policy {
+            ShadowPolicy::Disabled => 0,
+            ShadowPolicy::ProtectDeepShadows => 1,
+        }]);
+        let identity = hasher.finalize().into();
+        Ok(Self {
+            dimensions,
+            model_id: model.model_id().to_owned(),
+            working_profile: working_profile.identity().to_owned(),
+            output_profile: output_profile.identity().to_owned(),
+            scale: model.scale(),
+            tile,
+            tile_count,
+            gamut_policy,
+            shadow_policy,
+            detail_policy,
+            detail_recovery_strength,
+            preserve_wide_gamut,
+            memory: MemoryEstimate {
+                bytes: memory_bytes,
+            },
+            identity,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanError {
+    EmptyImage,
+    WrongTask,
+    UnsupportedScale { scale: u8 },
+    UnqualifiedModel,
+    WideGamutScale,
+    ShadowUnsupported,
+    DetailStrength { strength: u8 },
+    InvalidTile,
+    Overflow,
+    MemoryLimit { bytes: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
