@@ -4,6 +4,7 @@ import {
   type CommandRequest,
   type CommandResult,
   cleanupRepositoryAppBundles,
+  discoverApplicationBundles,
   discoverRepositoryAppBundles,
   findStaleRepositoryRegistrationPaths,
   installCanonicalComputerUseApp,
@@ -130,10 +131,11 @@ const main = async (): Promise<void> => {
     const worktreePaths = parseGitWorktreePaths(worktreeResult.stdout);
     const bundlePaths = await discoverRepositoryAppBundles(worktreePaths);
     const legacyInstallPath = join(dirname(options.installPath), 'RustTable.app');
+    const applicationBundlePaths = await discoverApplicationBundles(dirname(options.installPath));
     const removed = await cleanupRepositoryAppBundles({
-      bundlePaths: [...bundlePaths, legacyInstallPath],
+      bundlePaths: [...bundlePaths, ...applicationBundlePaths, legacyInstallPath],
       keepPaths: [sourcePath, options.installPath],
-      repositoryPaths: [legacyInstallPath],
+      repositoryPaths: [...applicationBundlePaths, legacyInstallPath],
       worktreePaths,
       run: runCommand,
     });
@@ -144,7 +146,7 @@ const main = async (): Promise<void> => {
     });
     const stalePaths = findStaleRepositoryRegistrationPaths({
       canonicalPath: options.installPath,
-      legacyPaths: [legacyInstallPath],
+      legacyPaths: [...applicationBundlePaths, legacyInstallPath],
       registrations: parseLaunchServicesRegistrations(registrations.stdout),
       worktreePaths,
     });

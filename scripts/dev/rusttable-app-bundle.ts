@@ -5,6 +5,8 @@ export const RUSTTABLE_BUNDLE_IDENTIFIER = 'com.cgasgarth.rusttable';
 export const RUSTTABLE_BUNDLE_NAME = 'RustTable';
 export const RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER = 'com.cgasgarth.rusttable.latest';
 export const RUSTTABLE_COMPUTER_USE_BUNDLE_NAME = 'rusttable - latest';
+export const RUSTTABLE_ICON_FILE = 'RustTable.icns';
+const DEFAULT_ICON_PATH = join(import.meta.dir, 'assets', RUSTTABLE_ICON_FILE);
 
 export interface RustTableBundleIdentity {
   bundleIdentifier: string;
@@ -27,6 +29,7 @@ export const RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY: RustTableBundleIdentity = {
 const REQUIRED_KEYS = [
   'CFBundleDisplayName',
   'CFBundleExecutable',
+  'CFBundleIconFile',
   'CFBundleIdentifier',
   'CFBundleName',
   'CFBundlePackageType',
@@ -77,6 +80,7 @@ export type MetadataCommandRunner = (
 const expectedManifest = (version: string, identity: RustTableBundleIdentity): BundleManifest => ({
   CFBundleDisplayName: identity.displayName,
   CFBundleExecutable: RUSTTABLE_BUNDLE_NAME,
+  CFBundleIconFile: RUSTTABLE_ICON_FILE,
   CFBundleIdentifier: identity.bundleIdentifier,
   CFBundleName: identity.bundleName,
   CFBundlePackageType: 'APPL',
@@ -221,6 +225,7 @@ const expectedPayload = new Set([
   'Contents/MacOS/RustTable',
   'Contents/Resources',
   'Contents/Resources/LICENSE',
+  `Contents/Resources/${RUSTTABLE_ICON_FILE}`,
 ]);
 
 const listPayload = async (root: string, relative = ''): Promise<string[]> => {
@@ -263,6 +268,10 @@ export const validateBundle = async (
     ]);
     if (!bytesEqual(rootLicense, bundleLicense)) throw new Error('RustTable.app LICENSE differs from root LICENSE.');
   }
+  const icon = await readFile(join(bundlePath, 'Contents/Resources', RUSTTABLE_ICON_FILE));
+  if (!bytesEqual(icon.subarray(0, 4), Uint8Array.from([0x69, 0x63, 0x6e, 0x73]))) {
+    throw new Error('RustTable.app icon is not a valid ICNS file.');
+  }
   return manifest;
 };
 
@@ -270,11 +279,13 @@ export const createRustTableBundle = async ({
   appPath,
   executablePath,
   licensePath,
+  iconPath = DEFAULT_ICON_PATH,
   version,
   identity = RUSTTABLE_BUNDLE_IDENTITY,
 }: {
   appPath: string;
   executablePath: string;
+  iconPath?: string;
   licensePath: string;
   version: string;
   identity?: RustTableBundleIdentity;
@@ -286,6 +297,7 @@ export const createRustTableBundle = async ({
   await copyFile(executablePath, join(appPath, 'Contents/MacOS/RustTable'));
   await chmod(join(appPath, 'Contents/MacOS/RustTable'), 0o755);
   await copyFile(licensePath, join(appPath, 'Contents/Resources/LICENSE'));
+  await copyFile(iconPath, join(appPath, 'Contents/Resources', RUSTTABLE_ICON_FILE));
   await Bun.write(join(appPath, 'Contents/Info.plist'), renderBundlePlist(manifest));
   return appPath;
 };

@@ -116,10 +116,11 @@ assert_payload() {
   local candidate_plist="$candidate/Contents/Info.plist"
   local actual_payload
   local expected_payload
-  expected_payload=$'Contents\nContents/Info.plist\nContents/MacOS\nContents/MacOS/RustTable\nContents/Resources\nContents/Resources/LICENSE'
+  expected_payload=$'Contents\nContents/Info.plist\nContents/MacOS\nContents/MacOS/RustTable\nContents/Resources\nContents/Resources/LICENSE\nContents/Resources/RustTable.icns'
   actual_payload="$(cd "$candidate" && find Contents -print | sort)"
   [[ "$actual_payload" == "$expected_payload" ]] || fail "${label}-payload"
   [[ -x "$candidate/Contents/MacOS/RustTable" ]] || fail "${label}-executable"
+  [[ -f "$candidate/Contents/Resources/RustTable.icns" ]] || fail "${label}-icon"
   [[ -f "$candidate_plist" ]] || fail "${label}-plist"
   plutil -lint "$candidate_plist" >/dev/null || fail "${label}-plist-lint"
   cmp "$root/LICENSE" "$candidate/Contents/Resources/LICENSE" >/dev/null || fail "${label}-license"
@@ -129,6 +130,7 @@ assert_payload() {
 assert_field staged CFBundleDisplayName RustTable
 assert_field staged CFBundleName RustTable
 assert_field staged CFBundleExecutable RustTable
+assert_field staged CFBundleIconFile RustTable.icns
 assert_field staged CFBundleIdentifier com.cgasgarth.rusttable
 assert_field staged CFBundlePackageType APPL
 assert_field staged CFBundleShortVersionString "$version"
@@ -188,7 +190,7 @@ pass 'archive-checksum'
 
 archive_entries="$(unzip -Z1 "$archive" | sort)"
 archive_files="$(printf '%s\n' "$archive_entries" | grep -v '/$' || true)"
-expected_archive_files=$'RustTable.app/Contents/Info.plist\nRustTable.app/Contents/MacOS/RustTable\nRustTable.app/Contents/Resources/LICENSE'
+expected_archive_files=$'RustTable.app/Contents/Info.plist\nRustTable.app/Contents/MacOS/RustTable\nRustTable.app/Contents/Resources/LICENSE\nRustTable.app/Contents/Resources/RustTable.icns'
 [[ "$archive_files" == "$expected_archive_files" ]] || fail 'archive-payload'
 if printf '%s\n' "$archive_entries" | grep -Eq '(^|/)(__MACOSX/|\._)'; then
   fail 'archive-sidecars'
@@ -204,6 +206,7 @@ plist="$extracted_bundle/Contents/Info.plist"
 assert_field extracted CFBundleDisplayName RustTable
 assert_field extracted CFBundleName RustTable
 assert_field extracted CFBundleExecutable RustTable
+assert_field extracted CFBundleIconFile RustTable.icns
 assert_field extracted CFBundleIdentifier com.cgasgarth.rusttable
 assert_field extracted CFBundlePackageType APPL
 assert_field extracted CFBundleShortVersionString "$version"

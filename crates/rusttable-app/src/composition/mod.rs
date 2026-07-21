@@ -91,8 +91,9 @@ pub fn run() -> Result<(), DesktopRunError> {
                 return Ok(());
             }
 
+            let application_id = crate::macos::runtime_bundle_identifier();
             let application = gtk4::Application::builder()
-                .application_id(crate::macos::BUNDLE_IDENTIFIER)
+                .application_id(application_id)
                 .build();
             let active_shell = Rc::new(RefCell::new(None::<rusttable_ui::GtkShell>));
             let active_catalog = Rc::new(RefCell::new(None::<Rc<RefCell<GtkCatalogController>>>));

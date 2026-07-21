@@ -149,6 +149,14 @@ export const discoverRepositoryAppBundles = async (worktreePaths: readonly strin
   return bundles.filter((path, index) => bundles.indexOf(path) === index).sort();
 };
 
+export const discoverApplicationBundles = async (directory: string): Promise<string[]> => {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith('.app'))
+    .map((entry) => resolve(directory, entry.name))
+    .sort();
+};
+
 export const parseLaunchServicesRegistrations = (dump: string): LaunchServicesRegistration[] => {
   const registrations: LaunchServicesRegistration[] = [];
   let path: string | undefined;
@@ -246,7 +254,12 @@ export const installCanonicalComputerUseApp = async ({
   try {
     await run({ args: [sourcePath, stagingPath], command: 'ditto', label: 'stage computer-use app' });
     await assertCompleteBundle(stagingPath, readIdentifier, readManifestValue);
-    await run({ allowedExitCodes: [0, 1], args: ['-e', 'tell application "RustTable" to quit'], command: 'osascript', label: 'quit RustTable' });
+    await run({
+      allowedExitCodes: [0, 1],
+      args: ['-e', `tell application id "${RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER}" to quit`],
+      command: 'osascript',
+      label: 'quit installed RustTable',
+    });
     if (await pathExists(installPath)) {
       await assertCompleteBundle(installPath, readIdentifier, readManifestValue);
       await unregisterBundle(installPath, run);

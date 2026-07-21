@@ -10,6 +10,7 @@ import {
   parseComputerUseInstallOptions,
   parseGitWorktreePaths,
   parseLaunchServicesRegistrations,
+  discoverApplicationBundles,
   RUSTTABLE_BUNDLE_IDENTIFIER,
   RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
   DEFAULT_COMPUTER_USE_APP_PATH,
@@ -52,6 +53,26 @@ describe('computer-use installer parsing', () => {
       '/repo',
       '/repo/wt',
     ]);
+  });
+
+  test('discovers every direct application bundle for managed-install cleanup', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
+    try {
+      await makeBundle(root, 'rusttable - latest.app');
+      await makeBundle(root, 'RustTable.app', '0.1.0', RUSTTABLE_BUNDLE_IDENTITY);
+      await makeBundle(root, 'Unrelated.app', '0.1.0', {
+        bundleIdentifier: 'com.example.unrelated',
+        bundleName: 'Unrelated',
+        displayName: 'Unrelated',
+      });
+      expect(await discoverApplicationBundles(root)).toEqual([
+        join(root, 'RustTable.app'),
+        join(root, 'Unrelated.app'),
+        join(root, 'rusttable - latest.app'),
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   test('parses LaunchServices path and identifier pairs', () => {
@@ -137,8 +158,10 @@ describe('computer-use installer parsing', () => {
       const invalidInstalled = await makeBundle(root, 'installed');
       await writeFile(join(invalidInstalled, 'Contents/Info.plist'), invalidManifest());
       const calls: string[] = [];
+      const requests: Array<{ args: string[]; command: string; label: string }> = [];
       const run = async (request: { args: string[]; label: string; command: string }) => {
         calls.push(request.label);
+        requests.push(request);
         if (request.label === 'stage computer-use app') await cp(request.args[0]!, request.args[1]!, { recursive: true });
         return { exitCode: 0, stderr: '', stdout: '' };
       };
@@ -150,7 +173,13 @@ describe('computer-use installer parsing', () => {
           transactionId: 'installed-invalid',
         }),
       ).rejects.toThrow();
-      expect(calls).toEqual(['stage computer-use app', 'quit RustTable']);
+      expect(calls).toEqual(['stage computer-use app', 'quit installed RustTable']);
+      expect(requests[1]).toEqual({
+        allowedExitCodes: [0, 1],
+        args: ['-e', `tell application id "${RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER}" to quit`],
+        command: 'osascript',
+        label: 'quit installed RustTable',
+      });
       expect(await readFile(join(invalidInstalled, 'Contents/Info.plist'), 'utf8')).toBe(invalidManifest());
 
       const stagedCalls: string[] = [];
@@ -248,7 +277,43 @@ describe('computer-use installer parsing', () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  test('cleans managed application siblings without deleting unrelated applications', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
+    try {
+      const applications = join(root, 'Applications');
+      const canonical = await makeBundle(applications, 'rusttable - latest.app');
+      const legacy = await makeBundle(applications, 'RustTable.app', '0.1.0', RUSTTABLE_BUNDLE_IDENTITY);
+      const duplicate = await makeBundle(applications, 'rusttable-copy.app');
+      const unrelated = await makeBundle(applications, 'Photos.app', '0.1.0', {
+        bundleIdentifier: 'com.example.photos',
+        bundleName: 'Photos',
+        displayName: 'Photos',
+      });
+      const removed = await cleanupRepositoryAppBundles({
+        bundlePaths: [canonical, legacy, duplicate, unrelated],
+        keepPaths: [canonical],
+        repositoryPaths: [canonical, legacy, duplicate, unrelated],
+        recoveryDirectory: join(root, 'Trash'),
+        run: async () => ({ exitCode: 0, stderr: '', stdout: '' }),
+      });
+      expect(removed.sort()).toEqual([duplicate, legacy].sort());
+      expect(await pathExistsForTest(canonical)).toBe(true);
+      expect(await pathExistsForTest(unrelated)).toBe(true);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
+
+const pathExistsForTest = async (path: string): Promise<boolean> => {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const makeBundle = async (
   root: string,
@@ -275,6 +340,7 @@ const invalidManifest = (): string =>
   renderBundlePlist({
     CFBundleDisplayName: 'NotRustTable',
     CFBundleExecutable: 'RustTable',
+    CFBundleIconFile: 'RustTable.icns',
     CFBundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER,
     CFBundleName: 'RustTable',
     CFBundlePackageType: 'APPL',

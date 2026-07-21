@@ -13,8 +13,36 @@ use rusttable_image::InputFormat;
 /// Maximum number of files accepted from one native event or queued during startup.
 pub const MAX_OPEN_FILES: usize = 256;
 
-/// The `RustTable` bundle identity used by native application metadata and GTK application setup.
+/// The `RustTable` bundle identity used by native application metadata and the runtime fallback.
 pub const BUNDLE_IDENTIFIER: &str = "com.cgasgarth.rusttable";
+
+/// Returns the bundle identifier that owns the running executable.
+#[must_use]
+pub fn runtime_bundle_identifier() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        let plist_path = std::env::current_exe().ok().and_then(|executable| {
+            executable
+                .parent()?
+                .parent()
+                .map(|contents| contents.join("Info.plist"))
+        });
+        if let Some(plist_path) = plist_path
+            && let Ok(plist) = fs::read_to_string(plist_path)
+            && let Some(identifier) = bundle_identifier_from_plist(&plist)
+        {
+            return identifier;
+        }
+    }
+    BUNDLE_IDENTIFIER.to_owned()
+}
+
+fn bundle_identifier_from_plist(plist: &str) -> Option<String> {
+    let (_, value) = plist.split_once("<key>CFBundleIdentifier</key>")?;
+    let value = value.trim_start().strip_prefix("<string>")?;
+    let (identifier, _) = value.split_once("</string>")?;
+    (!identifier.is_empty()).then(|| identifier.to_owned())
+}
 
 /// A native-style application command that the GTK composition root can execute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,7 +457,7 @@ mod tests {
     use super::{
         BUNDLE_IDENTIFIER, MAX_OPEN_FILES, MacApplicationBridge, MacApplicationCommand,
         MacApplicationEvent, MacOpenRejection, MacOpenTarget, MacTerminationDecision,
-        MacWindowAction, document_types,
+        MacWindowAction, bundle_identifier_from_plist, document_types,
     };
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -582,5 +610,20 @@ mod tests {
             &["jpg", "jpeg", "png", "tif", "tiff"]
         );
         assert_eq!(declarations[1].uti, "com.cgasgarth.rusttable.catalog");
+    }
+
+    #[test]
+    fn installed_bundle_identifier_is_read_without_changing_the_fallback() {
+        assert_eq!(
+            bundle_identifier_from_plist(
+                "<key>CFBundleIdentifier</key><string>com.cgasgarth.rusttable.latest</string>"
+            ),
+            Some("com.cgasgarth.rusttable.latest".to_owned())
+        );
+        assert_eq!(
+            bundle_identifier_from_plist("<key>CFBundleName</key><string>RustTable</string>"),
+            None
+        );
+        assert_eq!(BUNDLE_IDENTIFIER, "com.cgasgarth.rusttable");
     }
 }
