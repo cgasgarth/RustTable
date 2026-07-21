@@ -17,7 +17,7 @@ impl ExportDestination {
     #[must_use]
     const fn label(self) -> &'static str {
         match self {
-            Self::LocalFile => "local file (choose on export)",
+            Self::LocalFile => "local file",
         }
     }
 }
@@ -139,11 +139,12 @@ impl ExportPanel {
         let choices = export_choices();
         let controls = export_actions();
 
-        let content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+        let content = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
         content.set_widget_name("export-rail-content");
+        content.set_hexpand(true);
         append_labeled(
             &content,
-            "destination",
+            "storage",
             &choices.destination_choice,
             "export-destination-row",
         );
@@ -154,20 +155,18 @@ impl ExportPanel {
             "export-format-row",
         );
         content.append(&export_separator("destination-size"));
+        append_labeled(&content, "size", &choices.size_choice, "export-size-row");
         append_labeled(
             &content,
-            "set size",
-            &choices.size_choice,
-            "export-size-row",
-        );
-        append_labeled(
-            &content,
-            "custom maximum (px)",
+            "max edge (px)",
             &choices.custom_size,
             "export-custom-size-row",
         );
         content.append(&export_separator("size-actions"));
-        let actions_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        let actions_row = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+        actions_row.set_widget_name("export-actions");
+        actions_row.add_css_class("dt_export_actions");
+        actions_row.set_hexpand(true);
         actions_row.append(&controls.save);
         actions_row.append(&controls.cancel);
         actions_row.append(&controls.replace);
@@ -181,7 +180,10 @@ impl ExportPanel {
             .child(&content)
             .build();
         expander.set_widget_name("export");
+        expander.set_hexpand(true);
+        expander.set_vexpand(false);
         expander.add_css_class("dt_module_group");
+        expander.add_css_class("dt_export_module");
         expander.set_accessible_role(gtk4::AccessibleRole::Group);
 
         let panel = Self {
@@ -407,21 +409,26 @@ fn export_choices() -> ExportChoices {
     let destination = Rc::new(Cell::new(ExportDestination::LocalFile));
     let destination_choice = gtk4::DropDown::from_strings(&[ExportDestination::LocalFile.label()]);
     destination_choice.set_widget_name("export-destination");
+    destination_choice.set_hexpand(false);
     destination_choice.set_accessible_role(gtk4::AccessibleRole::ComboBox);
     destination_choice.set_tooltip_text(Some("export destination is selected when export starts"));
 
     let format = Rc::new(Cell::new(ExportFormat::Png));
     let format_choice = gtk4::DropDown::from_strings(&[ExportFormat::Png.label()]);
     format_choice.set_widget_name("export-format");
+    format_choice.set_hexpand(false);
     format_choice.set_accessible_role(gtk4::AccessibleRole::ComboBox);
     format_choice.set_tooltip_text(Some("PNG is the currently supported export format"));
 
     let size_choice = gtk4::DropDown::from_strings(&["original", "fit 2048", "fit 4096"]);
     size_choice.set_widget_name("export-size");
+    size_choice.set_hexpand(false);
     size_choice.set_accessible_role(gtk4::AccessibleRole::ComboBox);
     size_choice.set_tooltip_text(Some("Choose the maximum exported edge"));
     let custom_size = gtk4::SpinButton::with_range(1.0, f64::from(MAXIMUM_EDGE), 1.0);
     custom_size.set_widget_name("export-custom-size");
+    custom_size.set_hexpand(false);
+    custom_size.set_width_chars(6);
     custom_size.set_value(2_048.0);
     custom_size.set_numeric(true);
     custom_size.set_tooltip_text(Some("Custom maximum edge in pixels (1–16384)"));
@@ -439,28 +446,36 @@ fn export_choices() -> ExportChoices {
 fn export_actions() -> ExportActions {
     let save = gtk4::Button::with_label("Save PNG…");
     save.set_widget_name("save-rendered-png");
+    save.add_css_class("dt_export_action");
+    save.set_hexpand(true);
     save.set_accessible_role(gtk4::AccessibleRole::Button);
     save.set_tooltip_text(Some("Save the selected persisted edit as a verified PNG"));
 
     let cancel = gtk4::Button::with_label("Cancel PNG export");
     cancel.set_widget_name("cancel-rendered-png");
+    cancel.add_css_class("dt_export_action");
+    cancel.set_hexpand(true);
     cancel.set_accessible_role(gtk4::AccessibleRole::Button);
     cancel.set_visible(false);
 
     let replace = gtk4::Button::with_label("Replace existing PNG");
     replace.set_widget_name("replace-rendered-png");
+    replace.add_css_class("dt_export_action");
+    replace.set_hexpand(true);
     replace.set_accessible_role(gtk4::AccessibleRole::Button);
     replace.set_visible(false);
 
     let status = gtk4::Label::new(Some("Select a photo to export."));
     status.set_widget_name("rendered-png-status");
     status.set_halign(gtk4::Align::Start);
+    status.set_hexpand(true);
     status.set_wrap(true);
     status.add_css_class("dim-label");
     status.set_accessible_role(gtk4::AccessibleRole::Status);
 
     let progress = gtk4::ProgressBar::new();
     progress.set_widget_name("rendered-png-progress");
+    progress.set_hexpand(true);
     progress.set_show_text(true);
     progress.set_visible(false);
 
@@ -483,13 +498,15 @@ fn append_labeled<W>(container: &gtk4::Box, label: &str, control: &W, id: &str)
 where
     W: IsA<gtk4::Widget>,
 {
-    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     row.set_widget_name(id);
     row.add_css_class("dt_export_row");
+    row.set_hexpand(true);
     row.set_valign(gtk4::Align::Center);
     let text = gtk4::Label::new(Some(label));
     text.set_halign(gtk4::Align::Start);
     text.set_hexpand(true);
+    text.add_css_class("dt_export_label");
     row.append(&text);
     row.append(control);
     container.append(&row);
@@ -530,10 +547,7 @@ mod tests {
 
     #[test]
     fn export_rail_keeps_only_truthful_destination_and_format_choices() {
-        assert_eq!(
-            ExportDestination::LocalFile.label(),
-            "local file (choose on export)"
-        );
+        assert_eq!(ExportDestination::LocalFile.label(), "local file");
         assert_eq!(ExportFormat::Png.label(), "PNG");
     }
 

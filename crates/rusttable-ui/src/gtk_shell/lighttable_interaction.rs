@@ -61,14 +61,7 @@ impl LighttableLayout {
 
     #[must_use]
     pub const fn shows_filmstrip(self) -> bool {
-        matches!(
-            self,
-            Self::FileManager
-                | Self::Zoomable
-                | Self::Culling
-                | Self::CullingDynamic
-                | Self::Preview
-        )
+        matches!(self, Self::Culling | Self::CullingDynamic | Self::Preview)
     }
 }
 
@@ -448,12 +441,13 @@ impl LighttableInteractionState {
         self.culling_viewport
     }
 
+    #[must_use]
+    pub const fn culling_restriction(&self) -> CullingRestriction {
+        self.culling_restriction
+    }
+
     pub fn culling_ids(&self) -> impl Iterator<Item = PhotoId> + '_ {
-        let selection_only = match self.culling_restriction {
-            CullingRestriction::Collection => false,
-            CullingRestriction::Selection => true,
-            CullingRestriction::Automatic => !self.selected.is_empty(),
-        };
+        let selection_only = self.culling_selection_only();
         self.ordered_ids
             .iter()
             .copied()
@@ -500,10 +494,18 @@ impl LighttableInteractionState {
                         .saturating_add(self.columns)
                         .min(self.ordered_ids.len().saturating_sub(1)),
                 };
-                self.apply(LighttableSelectionAction::Select {
-                    photo_id: self.ordered_ids[next],
-                    modifiers,
-                })
+                let photo_id = self.ordered_ids[next];
+                self.focus = Some(photo_id);
+                if modifiers.extend() || modifiers.range() {
+                    self.apply(LighttableSelectionAction::Select {
+                        photo_id,
+                        modifiers,
+                    })
+                } else {
+                    // Darktable's ordinary arrow navigation moves the active
+                    // thumbnail without replacing the persistent selection.
+                    Some(photo_id)
+                }
             }
             LighttableSelectionAction::OpenSelected => self
                 .focus
@@ -520,6 +522,9 @@ impl LighttableInteractionState {
                 None
             }
             LighttableSelectionAction::SetLayout(layout) => {
+                if self.layout != layout && layout.shows_culling() {
+                    self.culling_viewport.fit();
+                }
                 self.layout = layout;
                 None
             }
@@ -572,6 +577,50 @@ impl LighttableInteractionState {
         self.selected
             .extend(self.ordered_ids[start..=end].iter().copied());
     }
+
+    fn culling_selection_only(&self) -> bool {
+        match self.culling_restriction {
+            CullingRestriction::Collection => false,
+            CullingRestriction::Selection => true,
+            CullingRestriction::Automatic => match self.layout {
+                // Dynamic culling is explicitly driven by the selected set.
+                LighttableLayout::CullingDynamic => true,
+                // Preview follows the collection for one selected image, but
+                // follows a multi-image selection when its active image is in it.
+                LighttableLayout::Preview => {
+                    self.selected.len() > 1
+                        && self.focus.is_some_and(|id| self.selected.contains(&id))
+                }
+                // Fixed culling uses the collection when the selected images
+                // already form the contiguous synchronized window. Otherwise
+                // Darktable restricts navigation to the selection.
+                LighttableLayout::Culling => {
+                    self.selected.len() > 1
+                        && self.focus.is_some_and(|id| self.selected.contains(&id))
+                        && !self.selected_ids_are_contiguous()
+                }
+                LighttableLayout::FileManager | LighttableLayout::Zoomable => false,
+            },
+        }
+    }
+
+    fn selected_ids_are_contiguous(&self) -> bool {
+        let Some(first) = self
+            .ordered_ids
+            .iter()
+            .position(|id| self.selected.contains(id))
+        else {
+            return false;
+        };
+        let Some(last) = self
+            .ordered_ids
+            .iter()
+            .rposition(|id| self.selected.contains(id))
+        else {
+            return false;
+        };
+        last.saturating_sub(first).saturating_add(1) == self.selected.len()
+    }
 }
 
 #[cfg(test)]
@@ -622,6 +671,7 @@ mod tests {
             modifiers: SelectionModifiers::default(),
         });
         assert_eq!(state.focus(), Some(id(5)));
+        assert_eq!(state.selected().collect::<Vec<_>>(), vec![id(2), id(4)]);
     }
 
     #[test]
@@ -683,6 +733,8 @@ mod tests {
         let mut state = state();
         assert!(LighttableLayout::FileManager.shows_grid());
         assert!(LighttableLayout::Culling.shows_culling());
+        assert!(!LighttableLayout::FileManager.shows_filmstrip());
+        assert!(!LighttableLayout::Zoomable.shows_filmstrip());
         assert!(LighttableLayout::Preview.shows_filmstrip());
         state.apply(LighttableSelectionAction::Select {
             photo_id: id(4),
@@ -700,6 +752,38 @@ mod tests {
             state.apply(LighttableSelectionAction::SetCullingActive(id(4))),
             Some(id(4))
         );
+    }
+
+    #[test]
+    fn automatic_culling_matches_darktable_selection_sync_rules() {
+        let mut state = state();
+        state.apply(LighttableSelectionAction::SetLayout(
+            LighttableLayout::Preview,
+        ));
+        assert_eq!(
+            state.culling_ids().collect::<Vec<_>>(),
+            state.ordered().collect::<Vec<_>>()
+        );
+
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(2),
+            modifiers: SelectionModifiers::default(),
+        });
+        assert_eq!(
+            state.culling_ids().collect::<Vec<_>>(),
+            state.ordered().collect::<Vec<_>>()
+        );
+
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(4),
+            modifiers: SelectionModifiers::new(true, false),
+        });
+        assert_eq!(state.culling_ids().collect::<Vec<_>>(), vec![id(2), id(4)]);
+
+        state.apply(LighttableSelectionAction::SetLayout(
+            LighttableLayout::CullingDynamic,
+        ));
+        assert_eq!(state.culling_ids().collect::<Vec<_>>(), vec![id(2), id(4)]);
     }
 
     #[test]

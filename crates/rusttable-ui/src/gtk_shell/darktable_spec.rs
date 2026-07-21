@@ -386,6 +386,15 @@ impl LayoutMetrics {
         self.content_width_px(window_width_px)
             .saturating_sub(self.side_panel_widths.preferred_px)
     }
+
+    /// Position of the right rail divider inside an already border-adjusted grid.
+    #[must_use]
+    pub const fn preferred_right_panel_position_for_content_width(
+        self,
+        content_width_px: u16,
+    ) -> u16 {
+        content_width_px.saturating_sub(self.side_panel_widths.preferred_px)
+    }
 }
 
 /// An opaque sRGB color token from Darktable's default theme.
@@ -609,6 +618,10 @@ mod tests {
         assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 904);
         assert_eq!(
             LAYOUT_METRICS.preferred_right_panel_position_px(1_224),
+            1_054
+        );
+        assert_eq!(
+            LAYOUT_METRICS.preferred_right_panel_position_for_content_width(1_204),
             1_054
         );
         assert!(

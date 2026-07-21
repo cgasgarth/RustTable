@@ -3,26 +3,28 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use gtk4::accessible::Property;
-use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
 
 use super::darkroom_modules::{DarkroomModuleActionHandler, DarkroomModulesViewModel};
 #[path = "darkroom_interaction.rs"]
 mod darkroom_interaction;
+#[path = "darkroom_viewport.rs"]
+mod darkroom_viewport;
 #[path = "darkroom_controls/panel_widgets.rs"]
 mod panel_widgets;
-use super::{ExposurePanel, PhotoPreview, ThemeRole, apply_theme_role};
+use super::{ExposurePanel, PhotoPreview};
+pub(super) use super::{ThemeRole, apply_theme_role};
 use crate::presentation::PhotoDetailViewModel;
 use crate::viewport_presentation::{
-    DarkroomViewportAction, DarkroomViewportCommand, DarkroomViewportState, DarkroomZoom,
-    ViewportColorMode, ViewportComparison, ViewportGeneration,
+    DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
 };
 use darkroom_interaction::{
     FilmstripState, HistogramView, connect_filmstrip_button, install_filmstrip_keyboard,
     sync_filmstrip_buttons,
 };
+pub(super) use darkroom_viewport::chrome_toggle;
+use darkroom_viewport::{ViewportControls, darkroom_page, sync_viewport_controls};
 use panel_widgets::{left_panel, render_typed_modules_into, right_panel};
 
 /// Stable widget identifiers for the initial darkroom surface.
@@ -134,6 +136,7 @@ pub struct DarkroomView {
     exposure: ExposurePanel,
     rail_status: DarkroomRailStatus,
     histogram: HistogramView,
+    histogram_generation: Rc<Cell<Option<ViewportGeneration>>>,
     module_search: gtk4::SearchEntry,
     module_group: Rc<Cell<DarkroomModuleGroup>>,
     module_group_handler: Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
@@ -165,6 +168,7 @@ impl DarkroomView {
             module_group_handler,
         ) = right_panel(panel_width);
         let histogram = HistogramView::new(histogram);
+        let histogram_generation = Rc::new(Cell::new(None));
         let typed_modules = Rc::new(RefCell::new(None));
         let module_action_handler = Rc::new(RefCell::new(None));
         let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
@@ -183,6 +187,7 @@ impl DarkroomView {
             exposure,
             rail_status,
             histogram,
+            histogram_generation,
             module_search,
             module_group,
             module_group_handler,
@@ -223,6 +228,8 @@ impl DarkroomView {
             .borrow_mut()
             .select(photo_id, edit_revision, generation);
         self.filmstrip_state.borrow_mut().set_generation(generation);
+        self.histogram_generation.set(Some(generation));
+        self.histogram.unavailable();
         self.sync_viewport_projection();
     }
 
@@ -230,6 +237,8 @@ impl DarkroomView {
     pub fn clear_viewport_selection(&self) {
         self.viewport_state.borrow_mut().clear_selection();
         self.filmstrip_state.borrow_mut().clear_selection();
+        self.histogram_generation.set(None);
+        self.histogram.clear();
         self.sync_viewport_projection();
     }
 
@@ -252,6 +261,26 @@ impl DarkroomView {
     /// leaves the visible surface in the explicit unavailable state.
     #[must_use]
     pub fn set_histogram(&self, red: &[f32], green: &[f32], blue: &[f32]) -> bool {
+        let state = self.viewport_state.borrow();
+        let Some(generation) = state.photo_id().map(|_| state.generation()) else {
+            self.histogram.clear();
+            return false;
+        };
+        self.set_histogram_for_generation(red, green, blue, generation)
+    }
+
+    /// Publishes histogram bins only for the currently selected viewport generation.
+    #[must_use]
+    pub fn set_histogram_for_generation(
+        &self,
+        red: &[f32],
+        green: &[f32],
+        blue: &[f32],
+        generation: ViewportGeneration,
+    ) -> bool {
+        if self.histogram_generation.get() != Some(generation) {
+            return false;
+        }
         self.histogram.set_bins(red, green, blue)
     }
 
@@ -481,6 +510,7 @@ impl DarkroomView {
         self.rail_status
             .image_information
             .set_text("image information unavailable");
+        self.histogram_generation.set(None);
         self.histogram.clear();
         self.preview.clear_selection();
     }
@@ -494,431 +524,6 @@ struct DarkroomRailStatus {
     image_information: gtk4::Label,
 }
 
-fn darkroom_page(
-    preview: &PhotoPreview,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-) -> (gtk4::Box, ViewportControls) {
-    let page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    page.set_widget_name("darkroom-page");
-    page.set_hexpand(true);
-    page.set_vexpand(true);
-    apply_theme_role(&page, ThemeRole::Darkroom);
-
-    page.set_focusable(true);
-
-    let projection = gtk4::Label::new(Some("no photo selected"));
-    projection.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[6]);
-    projection.set_halign(gtk4::Align::End);
-    projection.set_valign(gtk4::Align::Start);
-    projection.set_margin_top(8);
-    projection.set_margin_end(10);
-    projection.add_css_class("dim-label");
-    projection.set_accessible_role(gtk4::AccessibleRole::Status);
-    projection.update_property(&[Property::Label("Current viewport projection")]);
-
-    let zoom = gtk4::DropDown::from_strings(&DarkroomZoom::ALL.map(DarkroomZoom::label));
-    zoom.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[3]);
-    zoom.set_tooltip_text(Some("Image zoom level"));
-    zoom.update_property(&[Property::Label("Image zoom level")]);
-
-    let fit = chrome_button(
-        DARKROOM_VIEWPORT_WIDGET_IDS[4],
-        "fit",
-        "Fit image to viewport",
-    );
-    let before_after = chrome_toggle(
-        DARKROOM_VIEWPORT_WIDGET_IDS[5],
-        "before/after",
-        "Compare before and after",
-    );
-    let soft_proof = chrome_toggle(
-        DARKROOM_VIEWPORT_WIDGET_IDS[1],
-        "soft proof",
-        "Toggle soft proof",
-    );
-    let gamut_check = chrome_toggle(
-        DARKROOM_VIEWPORT_WIDGET_IDS[2],
-        "gamut check",
-        "Toggle gamut warning",
-    );
-    let controls = ViewportControls {
-        zoom: zoom.clone(),
-        fit: fit.clone(),
-        before_after: before_after.clone(),
-        soft_proof: soft_proof.clone(),
-        gamut_check: gamut_check.clone(),
-        projection: projection.clone(),
-        canvas: find_image_canvas(preview.widget().upcast_ref()),
-        sync_guard: Rc::new(Cell::new(false)),
-    };
-
-    let top = toolbar("darkroom-toolbar-top", "Darkroom color proofing controls");
-    top.append(&soft_proof);
-    top.append(&gamut_check);
-
-    let bottom = toolbar("darkroom-toolbar-bottom", "Darkroom viewport controls");
-    bottom.append(&zoom);
-    bottom.append(&fit);
-    bottom.append(&before_after);
-
-    let viewport = gtk4::Overlay::new();
-    viewport.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[0]);
-    viewport.set_hexpand(true);
-    viewport.set_vexpand(true);
-    viewport.set_accessible_role(gtk4::AccessibleRole::Group);
-    viewport.update_property(&[Property::Label("Darkroom image viewport")]);
-    viewport.set_child(Some(preview.widget()));
-    viewport.add_overlay(&projection);
-
-    let boundary = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    boundary.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[7]);
-    boundary.update_property(&[Property::Label("Filmstrip boundary")]);
-
-    page.append(&top);
-    page.append(&viewport);
-    page.append(&bottom);
-    page.append(&boundary);
-
-    connect_viewport_controls(&controls, state, handler, preview);
-    install_viewport_input(&page, preview, &controls, state, handler);
-    debug_assert_eq!(DARKROOM_VIEWPORT_FOCUS_ORDER.len(), 5);
-    sync_viewport_controls(&controls, preview, state);
-    (page, controls)
-}
-
-#[derive(Clone)]
-struct ViewportControls {
-    zoom: gtk4::DropDown,
-    fit: gtk4::Button,
-    before_after: gtk4::ToggleButton,
-    soft_proof: gtk4::ToggleButton,
-    gamut_check: gtk4::ToggleButton,
-    projection: gtk4::Label,
-    canvas: Option<gtk4::Picture>,
-    sync_guard: Rc<Cell<bool>>,
-}
-
-fn toolbar(id: &str, accessible_name: &str) -> gtk4::Box {
-    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 2);
-    toolbar.set_widget_name(id);
-    toolbar.add_css_class("dt_darkroom_toolbar");
-    toolbar.set_accessible_role(gtk4::AccessibleRole::Toolbar);
-    toolbar.update_property(&[Property::Label(accessible_name)]);
-    toolbar
-}
-
-fn chrome_toggle(id: &str, label: &str, accessible_name: &str) -> gtk4::ToggleButton {
-    let button = gtk4::ToggleButton::with_label(label);
-    button.set_widget_name(id);
-    button.add_css_class("dt_button");
-    button.set_focus_on_click(false);
-    button.set_tooltip_text(Some(accessible_name));
-    button.update_property(&[Property::Label(accessible_name)]);
-    button
-}
-
-fn connect_viewport_controls(
-    controls: &ViewportControls,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-    preview: &PhotoPreview,
-) {
-    let connect = |action: DarkroomViewportAction, controls: &ViewportControls| {
-        let state = Rc::clone(state);
-        let handler = Rc::clone(handler);
-        let controls = controls.clone();
-        let preview = preview.clone();
-        move || dispatch_viewport_action(&state, &handler, &controls, &preview, action)
-    };
-
-    let fit_action = connect(DarkroomViewportAction::Fit, controls);
-    controls.fit.connect_clicked(move |_| fit_action());
-
-    let before_action = connect(DarkroomViewportAction::ToggleBeforeAfter, controls);
-    controls
-        .before_after
-        .connect_toggled(move |_| before_action());
-
-    let proof_action = connect(DarkroomViewportAction::ToggleSoftProof, controls);
-    controls.soft_proof.connect_toggled(move |_| proof_action());
-
-    let gamut_action = connect(DarkroomViewportAction::ToggleGamutCheck, controls);
-    controls
-        .gamut_check
-        .connect_toggled(move |_| gamut_action());
-
-    let state = Rc::clone(state);
-    let handler = Rc::clone(handler);
-    let controls_clone = controls.clone();
-    let preview = preview.clone();
-    controls.zoom.connect_selected_notify(move |zoom| {
-        let Some(zoom) = usize::try_from(zoom.selected())
-            .ok()
-            .and_then(|index| DarkroomZoom::ALL.get(index).copied())
-        else {
-            return;
-        };
-        dispatch_viewport_action(
-            &state,
-            &handler,
-            &controls_clone,
-            &preview,
-            DarkroomViewportAction::SetZoom(zoom),
-        );
-    });
-}
-
-fn install_viewport_input(
-    page: &gtk4::Box,
-    preview: &PhotoPreview,
-    controls: &ViewportControls,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-) {
-    install_viewport_keyboard(page, preview, controls, state, handler);
-    install_viewport_scroll(preview, controls, state, handler);
-    install_viewport_drag(preview, controls, state, handler);
-}
-
-fn install_viewport_keyboard(
-    page: &gtk4::Box,
-    preview: &PhotoPreview,
-    controls: &ViewportControls,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-) {
-    let key = gtk4::EventControllerKey::new();
-    key.set_propagation_phase(gtk4::PropagationPhase::Capture);
-    let state_for_key = Rc::clone(state);
-    let handler_for_key = Rc::clone(handler);
-    let controls_for_key = controls.clone();
-    let preview_for_key = preview.clone();
-    key.connect_key_pressed(move |_, key, _, _| {
-        let action = match key {
-            gdk::Key::Left => Some(DarkroomViewportAction::Pan {
-                delta_x: -100,
-                delta_y: 0,
-            }),
-            gdk::Key::Right => Some(DarkroomViewportAction::Pan {
-                delta_x: 100,
-                delta_y: 0,
-            }),
-            gdk::Key::Up => Some(DarkroomViewportAction::Pan {
-                delta_x: 0,
-                delta_y: -100,
-            }),
-            gdk::Key::Down => Some(DarkroomViewportAction::Pan {
-                delta_x: 0,
-                delta_y: 100,
-            }),
-            gdk::Key::plus | gdk::Key::KP_Add => Some(DarkroomViewportAction::ZoomIn),
-            gdk::Key::minus | gdk::Key::KP_Subtract => Some(DarkroomViewportAction::ZoomOut),
-            gdk::Key::_0 | gdk::Key::KP_0 => Some(DarkroomViewportAction::Fit),
-            gdk::Key::b => Some(DarkroomViewportAction::ToggleBeforeAfter),
-            gdk::Key::s => Some(DarkroomViewportAction::ToggleSoftProof),
-            gdk::Key::g => Some(DarkroomViewportAction::ToggleGamutCheck),
-            _ => None,
-        };
-        let Some(action) = action else {
-            return gtk4::glib::Propagation::Proceed;
-        };
-        dispatch_viewport_action(
-            &state_for_key,
-            &handler_for_key,
-            &controls_for_key,
-            &preview_for_key,
-            action,
-        );
-        gtk4::glib::Propagation::Stop
-    });
-    page.add_controller(key);
-}
-
-fn install_viewport_scroll(
-    preview: &PhotoPreview,
-    controls: &ViewportControls,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-) {
-    let scroll = gtk4::EventControllerScroll::new(
-        gtk4::EventControllerScrollFlags::VERTICAL | gtk4::EventControllerScrollFlags::HORIZONTAL,
-    );
-    let state_for_scroll = Rc::clone(state);
-    let handler_for_scroll = Rc::clone(handler);
-    let controls_for_scroll = controls.clone();
-    let preview_for_scroll = preview.clone();
-    scroll.connect_scroll(move |scroll, delta_x, delta_y| {
-        let modifiers = scroll.current_event_state();
-        let action = if modifiers
-            .intersects(gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SUPER_MASK)
-        {
-            if delta_y.is_sign_negative() {
-                DarkroomViewportAction::ZoomIn
-            } else {
-                DarkroomViewportAction::ZoomOut
-            }
-        } else {
-            DarkroomViewportAction::Pan {
-                delta_x: rounded_delta(-delta_x * 100.0),
-                delta_y: rounded_delta(-delta_y * 100.0),
-            }
-        };
-        dispatch_viewport_action(
-            &state_for_scroll,
-            &handler_for_scroll,
-            &controls_for_scroll,
-            &preview_for_scroll,
-            action,
-        );
-        gtk4::glib::Propagation::Stop
-    });
-    preview.widget().add_controller(scroll);
-}
-
-fn install_viewport_drag(
-    preview: &PhotoPreview,
-    controls: &ViewportControls,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-) {
-    let drag = gtk4::GestureDrag::new();
-    let drag_delta = Rc::new(RefCell::new((0.0_f64, 0.0_f64)));
-    let drag_delta_begin = Rc::clone(&drag_delta);
-    drag.connect_drag_begin(move |_, _, _| {
-        drag_delta_begin.replace((0.0, 0.0));
-    });
-    let state_for_drag = Rc::clone(state);
-    let handler_for_drag = Rc::clone(handler);
-    let controls_for_drag = controls.clone();
-    let preview_for_drag = preview.clone();
-    drag.connect_drag_update(move |_, offset_x, offset_y| {
-        let mut previous = drag_delta.borrow_mut();
-        let delta_x = rounded_delta(offset_x - previous.0);
-        let delta_y = rounded_delta(offset_y - previous.1);
-        previous.0 = offset_x;
-        previous.1 = offset_y;
-        if delta_x == 0 && delta_y == 0 {
-            return;
-        }
-        dispatch_viewport_action(
-            &state_for_drag,
-            &handler_for_drag,
-            &controls_for_drag,
-            &preview_for_drag,
-            DarkroomViewportAction::Pan { delta_x, delta_y },
-        );
-    });
-    preview.widget().add_controller(drag);
-}
-
-fn dispatch_viewport_action(
-    state: &Rc<RefCell<DarkroomViewportState>>,
-    handler: &Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
-    controls: &ViewportControls,
-    preview: &PhotoPreview,
-    action: DarkroomViewportAction,
-) {
-    if controls.sync_guard.get() {
-        return;
-    }
-    let generation = state.borrow().generation();
-    let command = DarkroomViewportCommand::new(generation, action);
-    if !state.borrow_mut().apply(command) {
-        return;
-    }
-    sync_viewport_controls(controls, preview, state);
-    if let Some(handler) = handler.borrow().as_ref() {
-        handler(command);
-    }
-}
-
-fn sync_viewport_controls(
-    controls: &ViewportControls,
-    preview: &PhotoPreview,
-    state: &Rc<RefCell<DarkroomViewportState>>,
-) {
-    let state = *state.borrow();
-    controls.sync_guard.set(true);
-    controls.zoom.set_selected(state.zoom().index());
-    controls
-        .before_after
-        .set_active(state.comparison() == ViewportComparison::Before);
-    controls
-        .soft_proof
-        .set_active(state.color_mode() == ViewportColorMode::SoftProof);
-    controls
-        .gamut_check
-        .set_active(state.color_mode() == ViewportColorMode::GamutCheck);
-    controls.projection.set_text(&state.projection_label());
-    apply_canvas_projection(controls.canvas.as_ref(), preview, state);
-    controls.sync_guard.set(false);
-}
-
-fn apply_canvas_projection(
-    canvas: Option<&gtk4::Picture>,
-    preview: &PhotoPreview,
-    state: DarkroomViewportState,
-) {
-    let Some(canvas) = canvas else {
-        return;
-    };
-    let Some(percent) = state.zoom().percent() else {
-        canvas.set_size_request(-1, -1);
-        canvas.set_can_shrink(true);
-        canvas.set_halign(gtk4::Align::Fill);
-        canvas.set_valign(gtk4::Align::Fill);
-        return;
-    };
-    let Some(texture) = preview.texture() else {
-        return;
-    };
-    canvas.set_can_shrink(false);
-    canvas.set_size_request(
-        scaled_dimension(texture.width(), percent),
-        scaled_dimension(texture.height(), percent),
-    );
-    canvas.set_halign(pan_alignment(state.pan().x()));
-    canvas.set_valign(pan_alignment(state.pan().y()));
-}
-
-fn pan_alignment(value: i16) -> gtk4::Align {
-    match value.cmp(&0) {
-        std::cmp::Ordering::Less => gtk4::Align::Start,
-        std::cmp::Ordering::Greater => gtk4::Align::End,
-        std::cmp::Ordering::Equal => gtk4::Align::Center,
-    }
-}
-
-fn scaled_dimension(value: i32, percent: u16) -> i32 {
-    let scaled = (i64::from(value) * i64::from(percent) + 50) / 100;
-    i32::try_from(scaled).unwrap_or(i32::MAX).max(1)
-}
-
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-fn rounded_delta(value: f64) -> i32 {
-    if !value.is_finite() {
-        return 0;
-    }
-    value
-        .round()
-        .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
-}
-
-fn find_image_canvas(widget: &gtk4::Widget) -> Option<gtk4::Picture> {
-    if widget.widget_name() == "darkroom-image-canvas" {
-        return widget.clone().downcast::<gtk4::Picture>().ok();
-    }
-    let mut child = widget.first_child();
-    while let Some(current) = child {
-        if let Some(canvas) = find_image_canvas(&current) {
-            return Some(canvas);
-        }
-        child = current.next_sibling();
-    }
-    None
-}
-
 type DarkroomPanelBuild = (
     gtk4::Box,
     gtk4::Box,
@@ -928,15 +533,6 @@ type DarkroomPanelBuild = (
     Rc<Cell<DarkroomModuleGroup>>,
     Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
 );
-
-fn chrome_button(id: &str, label: &str, accessible_name: &str) -> gtk4::Button {
-    let button = gtk4::Button::with_label(label);
-    button.set_widget_name(id);
-    button.add_css_class("dt_button");
-    button.set_focus_on_click(false);
-    button.update_property(&[Property::Label(accessible_name)]);
-    button
-}
 
 #[cfg(test)]
 mod tests {

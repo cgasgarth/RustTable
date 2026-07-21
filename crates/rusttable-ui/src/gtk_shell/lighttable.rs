@@ -17,17 +17,59 @@ pub(super) struct LighttableGridSpec {
     columns: usize,
     thumbnail_width_px: u16,
     thumbnail_height_px: u16,
+    horizontal_offset_px: u16,
 }
 
 #[allow(dead_code)] // geometry helpers are consumed by the future viewport adapter
 impl LighttableGridSpec {
     #[must_use]
-    pub(super) const fn for_zoom(zoom: LighttableZoom) -> Self {
+    pub(super) fn for_zoom(zoom: LighttableZoom) -> Self {
+        let columns = zoom.columns();
+        let (scale_numerator, scale_denominator) = match zoom {
+            LighttableZoom::Small => (3_u32, 4_u32),
+            LighttableZoom::Normal => (1_u32, 1_u32),
+            LighttableZoom::Large => (5_u32, 4_u32),
+        };
+        let nominal_height = u32::from(THUMBNAIL_METRICS.grid_height_px)
+            .saturating_mul(scale_numerator)
+            / scale_denominator;
+        let nominal_width = u32::from(THUMBNAIL_METRICS.grid_width_px)
+            .saturating_mul(scale_numerator)
+            / scale_denominator
+            * u32::try_from(columns).unwrap_or(u32::MAX);
+        Self::for_viewport(
+            zoom,
+            u16::try_from(nominal_width.min(u32::from(u16::MAX))).unwrap_or(u16::MAX),
+            u16::try_from(nominal_height.min(u32::from(u16::MAX))).unwrap_or(u16::MAX),
+        )
+    }
+
+    /// Computes the square thumbtable cells used by Darktable's file-manager
+    /// layout.  Darktable derives the cell size from the viewport on every
+    /// resize: the requested number of images per row controls width, while
+    /// the viewport height prevents cells from becoming taller than the view.
+    #[must_use]
+    pub(super) fn for_viewport(
+        zoom: LighttableZoom,
+        viewport_width_px: u16,
+        viewport_height_px: u16,
+    ) -> Self {
+        let columns = zoom.columns();
+        let columns_u32 = u32::try_from(columns).unwrap_or(u32::MAX);
+        let viewport_width = u32::from(viewport_width_px);
+        let viewport_height = u32::from(viewport_height_px);
+        let cell_size = (viewport_width / columns_u32).min(viewport_height);
+        let used_width = cell_size.saturating_mul(columns_u32);
+        let horizontal_offset =
+            (viewport_width.saturating_sub(used_width) / 2).min(u32::from(u16::MAX));
         Self {
             zoom,
-            columns: zoom.columns(),
-            thumbnail_width_px: scale_dimension(THUMBNAIL_METRICS.grid_width_px, zoom),
-            thumbnail_height_px: scale_dimension(THUMBNAIL_METRICS.grid_height_px, zoom),
+            columns,
+            thumbnail_width_px: u16::try_from(cell_size.min(u32::from(u16::MAX)))
+                .unwrap_or(u16::MAX),
+            thumbnail_height_px: u16::try_from(cell_size.min(u32::from(u16::MAX)))
+                .unwrap_or(u16::MAX),
+            horizontal_offset_px: u16::try_from(horizontal_offset).unwrap_or(u16::MAX),
         }
     }
 
@@ -44,6 +86,19 @@ impl LighttableGridSpec {
     #[must_use]
     pub(super) const fn thumbnail_height_px(self) -> u16 {
         self.thumbnail_height_px
+    }
+
+    #[must_use]
+    pub(super) const fn horizontal_offset_px(self) -> u16 {
+        self.horizontal_offset_px
+    }
+
+    #[must_use]
+    pub(super) fn cell_origin_x_px(self, column: usize) -> u32 {
+        u32::from(self.horizontal_offset_px).saturating_add(
+            u32::from(self.thumbnail_width_px)
+                .saturating_mul(u32::try_from(column).unwrap_or(u32::MAX)),
+        )
     }
 
     #[must_use]
@@ -97,8 +152,20 @@ impl FilmstripSpec {
     #[must_use]
     pub(super) const fn darktable() -> Self {
         Self {
-            width_px: THUMBNAIL_METRICS.filmstrip_width_px,
+            // Darktable's filmstrip thumbtable uses the available panel
+            // height for both dimensions; the image itself is fit inside it.
+            width_px: THUMBNAIL_METRICS.filmstrip_height_px,
             height_px: THUMBNAIL_METRICS.filmstrip_height_px,
+            gap_px: FILMSTRIP_ITEM_GAP_PX,
+            max_children_per_line: FILMSTRIP_MAX_CHILDREN_PER_LINE,
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn for_viewport(viewport_height_px: u16) -> Self {
+        Self {
+            width_px: viewport_height_px,
+            height_px: viewport_height_px,
             gap_px: FILMSTRIP_ITEM_GAP_PX,
             max_children_per_line: FILMSTRIP_MAX_CHILDREN_PER_LINE,
         }
@@ -134,14 +201,6 @@ impl FilmstripSpec {
                     .saturating_sub(1)
                     .saturating_mul(u32::from(self.gap_px)),
             )
-    }
-}
-
-const fn scale_dimension(value: u16, zoom: LighttableZoom) -> u16 {
-    match zoom {
-        LighttableZoom::Small => value.saturating_mul(3) / 4,
-        LighttableZoom::Normal => value,
-        LighttableZoom::Large => value.saturating_mul(5) / 4,
     }
 }
 
@@ -362,7 +421,7 @@ mod tests {
         assert_eq!(
             (normal.thumbnail_width_px(), normal.thumbnail_height_px()),
             (
-                THUMBNAIL_METRICS.grid_width_px,
+                THUMBNAIL_METRICS.grid_height_px,
                 THUMBNAIL_METRICS.grid_height_px
             )
         );
@@ -371,6 +430,11 @@ mod tests {
         assert_eq!(large.columns(), 4);
         assert!(large.thumbnail_width_px() > normal.thumbnail_width_px());
         assert!(large.thumbnail_height_px() > normal.thumbnail_height_px());
+        let resized = LighttableGridSpec::for_viewport(LighttableZoom::Normal, 1_000, 200);
+        assert_eq!(resized.thumbnail_width_px(), 166);
+        assert_eq!(resized.thumbnail_height_px(), 166);
+        assert_eq!(resized.horizontal_offset_px(), 2);
+        assert_eq!(resized.cell_origin_x_px(5), 832);
         assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_rows, 1);
     }
 
@@ -389,11 +453,12 @@ mod tests {
     #[test]
     fn filmstrip_geometry_is_one_unwrapped_row() {
         let spec = super::FilmstripSpec::darktable();
-        assert_eq!(spec.width_px(), THUMBNAIL_METRICS.filmstrip_width_px);
+        assert_eq!(spec.width_px(), THUMBNAIL_METRICS.filmstrip_height_px);
         assert_eq!(spec.height_px(), THUMBNAIL_METRICS.filmstrip_height_px);
         assert_eq!(spec.gap_px(), 4);
         assert_eq!(spec.max_children_per_line(), u32::MAX);
-        assert_eq!(spec.content_width_px(3), 284);
+        assert_eq!(spec.content_width_px(3), 224);
+        assert_eq!(super::FilmstripSpec::for_viewport(80).width_px(), 80);
     }
 
     #[test]
