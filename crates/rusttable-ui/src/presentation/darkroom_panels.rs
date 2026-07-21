@@ -370,6 +370,16 @@ pub enum DarkroomPanelAction {
         revision: Revision,
         direction: HistoryDirection,
     },
+    CreateBranch {
+        target: DarkroomPanelTarget,
+        revision: Revision,
+        name: String,
+    },
+    CreateSnapshot {
+        target: DarkroomPanelTarget,
+        revision: Revision,
+        name: String,
+    },
     SelectSnapshot {
         target: DarkroomPanelTarget,
         revision: Revision,
@@ -404,6 +414,8 @@ impl DarkroomPanelAction {
         match self {
             Self::SelectHistory { target, .. }
             | Self::NavigateHistory { target, .. }
+            | Self::CreateBranch { target, .. }
+            | Self::CreateSnapshot { target, .. }
             | Self::SelectSnapshot { target, .. }
             | Self::RestoreSnapshot { target, .. }
             | Self::ToggleSnapshotCompare { target, .. }
@@ -416,6 +428,8 @@ impl DarkroomPanelAction {
         match self {
             Self::SelectHistory { revision, .. }
             | Self::NavigateHistory { revision, .. }
+            | Self::CreateBranch { revision, .. }
+            | Self::CreateSnapshot { revision, .. }
             | Self::SelectSnapshot { revision, .. }
             | Self::RestoreSnapshot { revision, .. }
             | Self::ToggleSnapshotCompare { revision, .. }
@@ -521,10 +535,12 @@ pub fn build_history_panel(
         }
         DarkroomPanelState::Ready(history) => {
             let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
-            let previous = panel_button("history-previous", "Previous");
-            let next = panel_button("history-next", "Next");
+            let previous = panel_button("history-previous", "Undo");
+            let next = panel_button("history-next", "Redo");
+            let branch = panel_button("history-branch", "New branch");
             actions.append(&previous);
             actions.append(&next);
+            actions.append(&branch);
             body.append(&actions);
             let entries = gtk4::Box::new(gtk4::Orientation::Vertical, 1);
             if history.entries().next().is_none() {
@@ -559,7 +575,22 @@ pub fn build_history_panel(
                     projection.revision(),
                     true,
                 );
-                connect_history_button(&next, handler, target, projection.revision(), false);
+                connect_history_button(
+                    &next,
+                    handler.clone(),
+                    target,
+                    projection.revision(),
+                    false,
+                );
+                let revision = projection.revision();
+                let name = format!("branch-{}", revision.get().saturating_add(1));
+                branch.connect_clicked(move |_| {
+                    handler(DarkroomPanelAction::CreateBranch {
+                        target,
+                        revision,
+                        name: name.clone(),
+                    });
+                });
             }
         }
     }
@@ -581,8 +612,7 @@ pub fn build_snapshots_panel(
         DarkroomPanelState::Ready(snapshots) => {
             let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
             let take = panel_button("snapshot-take", "Take snapshot");
-            take.set_sensitive(false);
-            let compare = gtk4::CheckButton::with_label("Side by side");
+            let compare = gtk4::CheckButton::with_label("Before / after");
             compare.set_widget_name("snapshot-side-by-side");
             compare.set_active(snapshots.side_by_side());
             toolbar.append(&take);
@@ -629,6 +659,18 @@ pub fn build_snapshots_panel(
             }
             if let (Some(handler), Some(target)) = (handler, projection.target()) {
                 let revision = projection.revision();
+                let name = format!("Snapshot {}", revision.get().saturating_add(1));
+                take.set_sensitive(true);
+                take.connect_clicked({
+                    let handler = handler.clone();
+                    move |_| {
+                        handler(DarkroomPanelAction::CreateSnapshot {
+                            target,
+                            revision,
+                            name: name.clone(),
+                        });
+                    }
+                });
                 compare.connect_toggled(move |compare| {
                     handler(DarkroomPanelAction::ToggleSnapshotCompare {
                         target,
@@ -818,5 +860,26 @@ mod tests {
             DarkroomSnapshotsViewModel::new(vec![one], Some(9), false),
             Err(DarkroomPanelError::UnknownSnapshot(9))
         ));
+    }
+
+    #[test]
+    fn history_branch_and_snapshot_actions_share_the_stale_guard() {
+        let current = target(11);
+        let mut router = DarkroomPanelRouter::default();
+        router
+            .reconcile(current, Revision::from_u64(4))
+            .expect("current");
+        let branch = DarkroomPanelAction::CreateBranch {
+            target: current,
+            revision: Revision::from_u64(4),
+            name: "branch-1".to_owned(),
+        };
+        assert!(router.route(&branch).is_ok());
+        let snapshot = DarkroomPanelAction::CreateSnapshot {
+            target: current,
+            revision: Revision::from_u64(5),
+            name: "Snapshot 1".to_owned(),
+        };
+        assert!(router.route(&snapshot).is_ok());
     }
 }

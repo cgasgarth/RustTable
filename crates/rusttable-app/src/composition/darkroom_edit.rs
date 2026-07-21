@@ -7,9 +7,12 @@ use crate::composition::preview_lifecycle::PreviewLifecycle;
 use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
 use rusttable_ui::{DarkroomModuleActionHandler, GtkShell};
 
+pub(super) type DarkroomEditCommitHandler = Rc<dyn Fn()>;
+
 pub(super) struct DarkroomEditBridge {
     pub(super) controller: Rc<RefCell<GtkDarkroomEditController>>,
     pub(super) handler: DarkroomModuleActionHandler,
+    after_commit: Rc<RefCell<Option<DarkroomEditCommitHandler>>>,
 }
 
 pub(super) fn install(
@@ -31,6 +34,8 @@ pub(super) fn install(
     let action_catalog = Rc::clone(&catalog);
     let action_lifecycle = Rc::clone(&lifecycle);
     let slot_for_handler = Rc::clone(&slot);
+    let after_commit = Rc::new(RefCell::new(None::<DarkroomEditCommitHandler>));
+    let after_commit_for_handler = Rc::clone(&after_commit);
     let handler: DarkroomModuleActionHandler = Rc::new(move |action| {
         let result = action_controller.borrow_mut().apply(&action);
         match result {
@@ -48,6 +53,9 @@ pub(super) fn install(
                     action_catalog.borrow().clone(),
                     Rc::clone(&action_lifecycle),
                 );
+                if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
+                    after_commit();
+                }
                 Ok(outcome.revision())
             }
             Err(error) => {
@@ -64,5 +72,12 @@ pub(super) fn install(
     DarkroomEditBridge {
         controller,
         handler,
+        after_commit,
+    }
+}
+
+impl DarkroomEditBridge {
+    pub(super) fn set_after_commit(&self, handler: DarkroomEditCommitHandler) {
+        self.after_commit.replace(Some(handler));
     }
 }
