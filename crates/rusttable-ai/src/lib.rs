@@ -16,8 +16,15 @@
     clippy::useless_conversion
 )]
 
+mod cache;
 mod color;
+mod contracts;
+mod inference;
 mod model;
+mod package;
+mod planning;
+mod qualification;
+mod registry;
 mod tiff;
 mod types;
 mod workflow;
@@ -29,6 +36,29 @@ pub mod rgb {
 
 /// Workflow namespaces kept stable as later AI tasks are added.
 pub mod workflows;
+
+/// Safe native boundary types. No runtime pointers, allocators, or provider handles are exported.
+pub mod native {
+    pub use rusttable_ai_native::{
+        AdapterError, Cancellation, Dimension, GraphMetadata, GraphOptimization, RuntimeAdapter,
+        RuntimeConfiguration, RuntimeIdentity, Session, TensorBuffer, TensorDataType,
+        TensorDescriptor, UnavailableRuntime,
+    };
+}
+
+pub use cache::{SessionCache, SessionKey};
+pub use contracts::{
+    BatchPolicy, BlendWindow, ColorContract, ColorPrimaries, ColorRange, ContractError, DataAsset,
+    DimensionSpec, MODEL_PACKAGE_SCHEMA, ManifestHashes, OnnxContract, RegistryManifest,
+    ResourceContract, TensorContract, TensorDtype, TensorSpec, TileContract, TileCropContract,
+};
+pub use inference::{InferenceError, InferenceOutput, InferenceRequest, InferenceService};
+pub use package::{ModelIdentity, ModelPackage, PackageError, PackageLimits};
+pub use planning::{InferenceLimits, InferencePlan, InferenceTile, PlanningError};
+pub use qualification::{
+    ProviderQualificationReceipt, QualificationError, QualificationFixture, QualificationStore,
+};
+pub use registry::{InstalledModel, ModelRegistry, ModelRegistrySnapshot, RegistryError};
 
 pub use color::{ColorProfile, ColorProfileError, ProfileKind, RgbMatrix};
 pub use model::{

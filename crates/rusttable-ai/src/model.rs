@@ -1,26 +1,42 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::types::{CancellationToken, SuperResolutionScale};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ModelTask {
+    RawBayerDenoise,
+    RawLinearDenoise,
+    RgbDenoise,
     SuperResolution2x,
     SuperResolution4x,
 }
 
 impl ModelTask {
     #[must_use]
-    pub const fn scale(self) -> SuperResolutionScale {
+    pub const fn scale_factor(self) -> u32 {
         match self {
-            Self::SuperResolution2x => SuperResolutionScale::X2,
-            Self::SuperResolution4x => SuperResolutionScale::X4,
+            Self::RawBayerDenoise | Self::RawLinearDenoise | Self::RgbDenoise => 1,
+            Self::SuperResolution2x => 2,
+            Self::SuperResolution4x => 4,
+        }
+    }
+
+    #[must_use]
+    pub const fn super_resolution_scale(self) -> Option<SuperResolutionScale> {
+        match self {
+            Self::SuperResolution2x => Some(SuperResolutionScale::X2),
+            Self::SuperResolution4x => Some(SuperResolutionScale::X4),
+            Self::RawBayerDenoise | Self::RawLinearDenoise | Self::RgbDenoise => None,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Provider {
     Cpu,
     CoreMl,
@@ -45,23 +61,27 @@ impl ProviderPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AlphaPolicy {
     PreserveNearest,
     Opaque,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EdgePadding {
     Mirror,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TensorLayout {
     PlanarNchwRgb,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TransferFunction {
     ExtendedSrgb,
 }
@@ -270,7 +290,7 @@ impl ModelManifest {
         scale: SuperResolutionScale,
         provider: Provider,
     ) -> Result<(), ModelValidationError> {
-        if self.task.scale() != scale {
+        if self.task.super_resolution_scale() != Some(scale) {
             return Err(ModelValidationError::TaskScaleMismatch);
         }
         if self.tile.scale != scale.integer() {

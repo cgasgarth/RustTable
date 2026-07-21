@@ -1,0 +1,12 @@
+[package]
+name = "rusttable-ai-native"
+description = "Narrow, safe seam for optional ONNX Runtime availability."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
