@@ -9,6 +9,7 @@ use rusttable_catalog::{
 use rusttable_core::{AssetId, ContentHash, Edit, EditId, PhotoId, Revision};
 
 use crate::edit_repository::RedbEditRepository;
+use crate::history_repository::stage_history_commit;
 use crate::recipe_repository::RedbRecipeRepository;
 use crate::repository::RedbImportRepository;
 use crate::schema;
@@ -195,11 +196,17 @@ impl RedbCatalogRepository {
             return Err(AtomicCatalogStoreError::Corrupt);
         }
         let prepared = PreparedImport::new(record, edit)?;
+        let (history, expected_history, _) = self
+            .edits
+            .prepare_history(edit)
+            .map_err(|error| map_edit_error(&error))?;
         let transaction = self
             .database
             .begin_write()
             .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
         stage_import(&transaction, &prepared, registration)?;
+        stage_history_commit(&transaction, edit.photo_id(), expected_history, &history)
+            .map_err(|error| map_history_error(&error))?;
         if let Some(hook) = &self.before_commit {
             hook()?;
         }
@@ -313,6 +320,38 @@ fn map_repository_error(error: &RepositoryError) -> AtomicCatalogStoreError {
         RepositoryError::SourceConflict { .. }
         | RepositoryError::PhotoIdConflict { .. }
         | RepositoryError::AssetIdConflict { .. } => AtomicCatalogStoreError::Conflict,
+    }
+}
+
+fn map_edit_error(error: &EditRepositoryError) -> AtomicCatalogStoreError {
+    match error {
+        EditRepositoryError::Unavailable => AtomicCatalogStoreError::Unavailable,
+        EditRepositoryError::CommitFailure => AtomicCatalogStoreError::CommitFailed,
+        EditRepositoryError::NewEditIdConflict { .. }
+        | EditRepositoryError::EditRevisionConflict { .. }
+        | EditRepositoryError::UnknownEdit { .. }
+        | EditRepositoryError::PhotoIdentityMismatch { .. }
+        | EditRepositoryError::BasePhotoRevisionMismatch { .. } => {
+            AtomicCatalogStoreError::Conflict
+        }
+        EditRepositoryError::CorruptPersistedData => AtomicCatalogStoreError::Corrupt,
+    }
+}
+
+fn map_history_error(error: &rusttable_catalog::HistoryRepositoryError) -> AtomicCatalogStoreError {
+    match error {
+        rusttable_catalog::HistoryRepositoryError::Unavailable => {
+            AtomicCatalogStoreError::Unavailable
+        }
+        rusttable_catalog::HistoryRepositoryError::CommitFailure => {
+            AtomicCatalogStoreError::CommitFailed
+        }
+        rusttable_catalog::HistoryRepositoryError::VersionConflict { .. } => {
+            AtomicCatalogStoreError::Conflict
+        }
+        rusttable_catalog::HistoryRepositoryError::CorruptPersistedData => {
+            AtomicCatalogStoreError::Corrupt
+        }
     }
 }
 

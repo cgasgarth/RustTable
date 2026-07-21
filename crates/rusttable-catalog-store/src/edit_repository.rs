@@ -2,10 +2,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use redb::{Database, ReadableDatabase, ReadableTable};
-use rusttable_catalog::{EditRepository, EditRepositoryError};
+use rusttable_catalog::{
+    EditRepository, EditRepositoryError, HistoryCommand, HistoryCommitReceipt,
+    HistoryOperationKind, HistoryOperationSummary, HistoryPayload, HistoryRepository, HistoryState,
+};
 use rusttable_core::{Edit, EditId, Revision};
 
 use crate::edit_codec;
+use crate::history_repository::{RedbHistoryRepository, stage_history_commit};
 use crate::schema::{self, EDITS_TABLE};
 
 /// Durable edit persistence backed by the shared `RustTable` redb catalog file.
@@ -69,6 +73,30 @@ impl EditRepository for RedbEditRepository {
     }
 
     fn commit_new(&mut self, edit: &Edit) -> Result<(), EditRepositoryError> {
+        self.commit_new_with_receipt(edit).map(|_| ())
+    }
+
+    fn commit_replacement(
+        &mut self,
+        expected_edit_revision: Revision,
+        edit: &Edit,
+    ) -> Result<(), EditRepositoryError> {
+        self.commit_replacement_with_receipt(expected_edit_revision, edit)
+            .map(|_| ())
+    }
+}
+
+impl RedbEditRepository {
+    /// Commits a new current edit and exactly one canonical immutable revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict, corruption, availability, or commit error.
+    pub fn commit_new_with_receipt(
+        &mut self,
+        edit: &Edit,
+    ) -> Result<HistoryCommitReceipt, EditRepositoryError> {
+        let (state, expected_history, receipt) = self.prepare_history(edit)?;
         let encoded =
             edit_codec::encode(edit).map_err(|()| EditRepositoryError::CorruptPersistedData)?;
         let key = edit.id().get().to_be_bytes();
@@ -91,16 +119,25 @@ impl EditRepository for RedbEditRepository {
                 .insert(key.as_slice(), encoded.as_slice())
                 .map_err(|_| EditRepositoryError::Unavailable)?;
         }
+        stage_history_commit(&transaction, edit.photo_id(), expected_history, &state)
+            .map_err(|error| map_history_error(&error))?;
         transaction
             .commit()
-            .map_err(|_| EditRepositoryError::CommitFailure)
+            .map_err(|_| EditRepositoryError::CommitFailure)?;
+        Ok(receipt)
     }
 
-    fn commit_replacement(
+    /// Commits one optimistic current-edit replacement and one canonical revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns a conflict, corruption, availability, or commit error.
+    pub fn commit_replacement_with_receipt(
         &mut self,
         expected_edit_revision: Revision,
         edit: &Edit,
-    ) -> Result<(), EditRepositoryError> {
+    ) -> Result<HistoryCommitReceipt, EditRepositoryError> {
+        let (state, expected_history, receipt) = self.prepare_history(edit)?;
         let encoded =
             edit_codec::encode(edit).map_err(|()| EditRepositoryError::CorruptPersistedData)?;
         let key = edit.id().get().to_be_bytes();
@@ -132,9 +169,68 @@ impl EditRepository for RedbEditRepository {
                 .insert(key.as_slice(), encoded.as_slice())
                 .map_err(|_| EditRepositoryError::Unavailable)?;
         }
+        stage_history_commit(&transaction, edit.photo_id(), expected_history, &state)
+            .map_err(|error| map_history_error(&error))?;
         transaction
             .commit()
-            .map_err(|_| EditRepositoryError::CommitFailure)
+            .map_err(|_| EditRepositoryError::CommitFailure)?;
+        Ok(receipt)
+    }
+
+    pub(crate) fn prepare_history(
+        &self,
+        edit: &Edit,
+    ) -> Result<
+        (
+            HistoryState,
+            rusttable_catalog::HistoryVersion,
+            HistoryCommitReceipt,
+        ),
+        EditRepositoryError,
+    > {
+        let repository =
+            RedbHistoryRepository::from_database(Arc::clone(&self.database), edit.photo_id());
+        let mut state = repository
+            .load()
+            .map_err(|error| map_history_error(&error))?
+            .unwrap_or_else(|| HistoryState::new(edit.photo_id()));
+        let expected = state.version();
+        if state
+            .current_revision()
+            .is_some_and(|revision| revision.payload().edit() == edit)
+        {
+            let revision = state
+                .current_pointer()
+                .revision()
+                .ok_or(EditRepositoryError::CorruptPersistedData)?;
+            let receipt = state
+                .receipt(revision)
+                .map_err(|_| EditRepositoryError::CorruptPersistedData)?;
+            return Ok((state, expected, receipt));
+        }
+        let summary = HistoryOperationSummary::new(
+            HistoryOperationKind::Parameter,
+            None,
+            None,
+            "current edit",
+        )
+        .map_err(|_| EditRepositoryError::CorruptPersistedData)?;
+        state
+            .apply(
+                expected,
+                HistoryCommand::Append {
+                    payload: HistoryPayload::new(edit.clone(), Vec::new(), Vec::new(), summary),
+                },
+            )
+            .map_err(|_| EditRepositoryError::CorruptPersistedData)?;
+        let revision = state
+            .current_pointer()
+            .revision()
+            .ok_or(EditRepositoryError::CorruptPersistedData)?;
+        let receipt = state
+            .receipt(revision)
+            .map_err(|_| EditRepositoryError::CorruptPersistedData)?;
+        Ok((state, expected, receipt))
     }
 }
 
@@ -146,6 +242,19 @@ fn map_schema_error(error: &rusttable_catalog::RepositoryError) -> EditRepositor
         | rusttable_catalog::RepositoryError::SourceConflict { .. }
         | rusttable_catalog::RepositoryError::PhotoIdConflict { .. }
         | rusttable_catalog::RepositoryError::AssetIdConflict { .. } => {
+            EditRepositoryError::CorruptPersistedData
+        }
+    }
+}
+
+fn map_history_error(error: &rusttable_catalog::HistoryRepositoryError) -> EditRepositoryError {
+    match error {
+        rusttable_catalog::HistoryRepositoryError::VersionConflict { .. }
+        | rusttable_catalog::HistoryRepositoryError::CommitFailure => {
+            EditRepositoryError::CommitFailure
+        }
+        rusttable_catalog::HistoryRepositoryError::Unavailable => EditRepositoryError::Unavailable,
+        rusttable_catalog::HistoryRepositoryError::CorruptPersistedData => {
             EditRepositoryError::CorruptPersistedData
         }
     }
