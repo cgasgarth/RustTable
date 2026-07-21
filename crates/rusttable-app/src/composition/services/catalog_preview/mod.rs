@@ -10,7 +10,9 @@ use rusttable_import::{
 };
 use rusttable_render::{RenderOutput, RenderTarget};
 
-use crate::{PreviewError, PreviewService};
+pub(crate) mod smoke;
+
+use crate::composition::services::preview::{PreviewError, PreviewService};
 
 /// Resolves one persisted photo and edit into a bounded CPU preview.
 ///

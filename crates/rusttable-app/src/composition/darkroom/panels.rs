@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::composition::preview_lifecycle::PreviewLifecycle;
+use crate::composition::selected_preview::PreviewLifecycle;
 use crate::gtk_controller::{
     DarkroomPanelProjections, GtkCatalogController, GtkDarkroomPanelController,
 };
@@ -11,12 +11,12 @@ use rusttable_core::Revision;
 use rusttable_ui::{DarkroomPanelAction, DarkroomPanelActionHandler, GtkShell};
 
 #[derive(Clone)]
-pub(super) struct DarkroomPanelBridge {
+pub(crate) struct DarkroomPanelBridge {
     controller: Rc<RefCell<GtkDarkroomPanelController>>,
     handler: DarkroomPanelActionHandler,
 }
 
-pub(super) fn install(
+pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
@@ -39,7 +39,7 @@ pub(super) fn install(
         match result {
             Ok(projections) => {
                 if refresh_preview {
-                    super::start_selected_preview(
+                    crate::composition::selected_preview::start_selected_preview(
                         &action_shell,
                         action_catalog.borrow().clone(),
                         Rc::clone(&action_lifecycle),
@@ -72,7 +72,7 @@ pub(super) fn install(
 }
 
 impl DarkroomPanelBridge {
-    pub(super) fn refresh(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
+    pub(crate) fn refresh(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
         let mut controller = self.controller.borrow_mut();
         controller.set_catalog_path(catalog.catalog_path().map(std::path::Path::to_path_buf));
         let target = shell.darkroom_panel_target();
@@ -95,7 +95,7 @@ impl DarkroomPanelBridge {
         }
     }
 
-    pub(super) fn select(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
+    pub(crate) fn select(&self, shell: &GtkShell, catalog: &GtkCatalogController) {
         let Some(target) = shell.darkroom_panel_target() else {
             shell.clear_darkroom_selection("select a photo to view history and snapshots");
             return;

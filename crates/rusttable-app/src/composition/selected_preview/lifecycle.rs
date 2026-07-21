@@ -2,20 +2,20 @@ use rusttable_core::PhotoId;
 
 /// Monotonic identity for one selected-photo preview request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct PreviewSelectionToken {
+pub(crate) struct PreviewSelectionToken {
     generation: u64,
     photo_id: PhotoId,
 }
 
 /// Tracks which asynchronous preview result is still allowed to update the UI.
 #[derive(Debug, Default)]
-pub(super) struct PreviewLifecycle {
+pub(crate) struct PreviewLifecycle {
     next_generation: u64,
     active: Option<PreviewSelectionToken>,
 }
 
 impl PreviewLifecycle {
-    pub(super) fn begin(&mut self, photo_id: PhotoId) -> PreviewSelectionToken {
+    pub(crate) fn begin(&mut self, photo_id: PhotoId) -> PreviewSelectionToken {
         self.next_generation = self.next_generation.saturating_add(1);
         let token = PreviewSelectionToken {
             generation: self.next_generation,
@@ -26,7 +26,7 @@ impl PreviewLifecycle {
     }
 
     #[must_use]
-    pub(super) fn is_current(&self, token: PreviewSelectionToken) -> bool {
+    pub(crate) fn is_current(&self, token: PreviewSelectionToken) -> bool {
         match self.active {
             Some(active) => {
                 active.generation == token.generation && active.photo_id == token.photo_id
@@ -38,7 +38,7 @@ impl PreviewLifecycle {
 
 impl PreviewSelectionToken {
     #[must_use]
-    pub(super) const fn generation(self) -> u64 {
+    pub(crate) const fn generation(self) -> u64 {
         self.generation
     }
 }

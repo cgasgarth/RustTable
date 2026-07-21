@@ -5,7 +5,6 @@
 //! without a display server.
 
 mod collection;
-mod collection_service;
 mod darkroom_edit;
 mod darkroom_panels;
 pub mod export;
@@ -23,8 +22,7 @@ use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 
 use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root};
 
-pub use collection::{CollectionController, CollectionSnapshot};
-pub use collection_service::LibraryCollectionService;
+pub use collection::{CollectionController, CollectionSnapshot, LibraryCollectionService};
 pub use darkroom_edit::{DarkroomEditOutcome, GtkDarkroomEditController};
 pub use darkroom_panels::{
     DarkroomPanelControllerError, DarkroomPanelProjections, GtkDarkroomPanelController,

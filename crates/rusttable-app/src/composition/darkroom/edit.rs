@@ -3,19 +3,19 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::composition::preview_lifecycle::PreviewLifecycle;
+use crate::composition::selected_preview::PreviewLifecycle;
 use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
 use rusttable_ui::{DarkroomModuleActionHandler, GtkShell};
 
-pub(super) type DarkroomEditCommitHandler = Rc<dyn Fn()>;
+pub(crate) type DarkroomEditCommitHandler = Rc<dyn Fn()>;
 
-pub(super) struct DarkroomEditBridge {
-    pub(super) controller: Rc<RefCell<GtkDarkroomEditController>>,
-    pub(super) handler: DarkroomModuleActionHandler,
+pub(crate) struct DarkroomEditBridge {
+    pub(crate) controller: Rc<RefCell<GtkDarkroomEditController>>,
+    pub(crate) handler: DarkroomModuleActionHandler,
     after_commit: Rc<RefCell<Option<DarkroomEditCommitHandler>>>,
 }
 
-pub(super) fn install(
+pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
@@ -48,7 +48,7 @@ pub(super) fn install(
                     "Edit persisted · revision {}",
                     outcome.revision()
                 ));
-                super::start_selected_preview(
+                crate::composition::selected_preview::start_selected_preview(
                     &action_shell,
                     action_catalog.borrow().clone(),
                     Rc::clone(&action_lifecycle),
@@ -77,7 +77,7 @@ pub(super) fn install(
 }
 
 impl DarkroomEditBridge {
-    pub(super) fn set_after_commit(&self, handler: DarkroomEditCommitHandler) {
+    pub(crate) fn set_after_commit(&self, handler: DarkroomEditCommitHandler) {
         self.after_commit.replace(Some(handler));
     }
 }

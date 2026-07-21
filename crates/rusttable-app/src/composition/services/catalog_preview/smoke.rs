@@ -17,7 +17,7 @@ use rusttable_render::{PreviewBounds, RenderOutput, RenderTarget};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{PreviewError, PreviewService};
+use crate::composition::services::preview::{PreviewError, PreviewService};
 
 const RECEIPT_VERSION: u8 = 1;
 const OUTPUT_NAME: &str = "preview.png";
