@@ -43,7 +43,10 @@ pub fn output_limits() -> OutputLimits {
 }
 
 pub fn destination(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("rusttable-metadata-output-{name}"));
+    let path = std::env::temp_dir().join(format!(
+        "rusttable-metadata-output-{}-{name}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_file(&path);
     path
 }
