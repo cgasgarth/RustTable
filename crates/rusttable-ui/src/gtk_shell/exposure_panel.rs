@@ -23,7 +23,9 @@ pub struct ExposurePanel {
     enabled: gtk4::Switch,
     mode: gtk4::DropDown,
     exposure: gtk4::Scale,
+    exposure_value: gtk4::Label,
     black: gtk4::Scale,
+    black_value: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
@@ -38,6 +40,7 @@ impl ExposurePanel {
 
     /// Builds an Exposure panel from an existing typed module state.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn from_state(initial_state: ExposureModuleState) -> Self {
         let state = Rc::new(RefCell::new(initial_state));
         let actions = Rc::new(RefCell::new(None));
@@ -57,25 +60,35 @@ impl ExposurePanel {
         );
         exposure.set_digits(3);
         exposure.set_hexpand(true);
+        exposure.set_draw_value(false);
         exposure.set_tooltip_text(Some(&format!(
             "adjust exposure correction; soft range {EXPOSURE_EV_SOFT_MINIMUM:.0} to \
              {EXPOSURE_EV_SOFT_MAXIMUM:.0} EV"
         )));
         black.set_digits(4);
         black.set_hexpand(true);
+        black.set_draw_value(false);
         black.set_tooltip_text(Some(&format!(
             "adjust black level; soft range {BLACK_LEVEL_SOFT_MINIMUM:.1} to \
              {BLACK_LEVEL_SOFT_MAXIMUM:.1}"
         )));
         let compensate_exposure_bias = gtk4::Switch::new();
         let compensate_highlight_preservation = gtk4::Switch::new();
+        let exposure_value = value_label("exposure-value", "Exposure value");
+        let black_value = value_label("black-value", "Black-level value");
+        let presets = gtk4::Button::with_label("presets");
+        presets.set_widget_name("exposure-presets");
+        presets.set_sensitive(false);
+        presets.set_focusable(false);
+        presets.set_tooltip_text(Some("Exposure presets are unavailable"));
+        presets.update_property(&[Property::Label("Exposure presets unavailable")]);
         let reset = gtk4::Button::with_label("reset");
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
 
         append_switch_row(&content, "enabled", &enabled);
         append_dropdown_row(&content, "mode", &mode);
-        append_scale_row(&content, "exposure", &exposure, "EV");
-        append_scale_row(&content, "black", &black, "");
+        append_scale_row(&content, "exposure", &exposure, &exposure_value, "EV");
+        append_scale_row(&content, "black", &black, &black_value, "");
         append_switch_row(
             &content,
             "compensate exposure bias",
@@ -86,6 +99,7 @@ impl ExposurePanel {
             "compensate highlight preservation",
             &compensate_highlight_preservation,
         );
+        content.append(&presets);
         content.append(&reset);
 
         let expander = gtk4::Expander::builder()
@@ -100,7 +114,13 @@ impl ExposurePanel {
         identify(&enabled, "exposure-enabled", "Enable exposure module");
         identify(&mode, "exposure-mode", "Exposure mode");
         identify(&exposure, "exposure-ev", "Exposure correction in EV");
+        identify(
+            &exposure_value,
+            "exposure-value",
+            "Current exposure correction in EV",
+        );
         identify(&black, "exposure-black", "Exposure black level");
+        identify(&black_value, "black-value", "Current exposure black level");
         identify(
             &compensate_exposure_bias,
             "exposure-bias-compensation",
@@ -119,7 +139,9 @@ impl ExposurePanel {
             enabled,
             mode,
             exposure,
+            exposure_value,
             black,
+            black_value,
             compensate_exposure_bias,
             compensate_highlight_preservation,
             actions,
@@ -206,7 +228,9 @@ impl ExposurePanel {
             enabled: self.enabled.clone(),
             mode: self.mode.clone(),
             exposure: self.exposure.clone(),
+            exposure_value: self.exposure_value.clone(),
             black: self.black.clone(),
+            black_value: self.black_value.clone(),
             compensate_exposure_bias: self.compensate_exposure_bias.clone(),
             compensate_highlight_preservation: self.compensate_highlight_preservation.clone(),
         };
@@ -222,7 +246,9 @@ impl ExposurePanel {
             enabled: self.enabled.clone(),
             mode: self.mode.clone(),
             exposure: self.exposure.clone(),
+            exposure_value: self.exposure_value.clone(),
             black: self.black.clone(),
+            black_value: self.black_value.clone(),
             compensate_exposure_bias: self.compensate_exposure_bias.clone(),
             compensate_highlight_preservation: self.compensate_highlight_preservation.clone(),
         };
@@ -242,7 +268,9 @@ struct ControlSet {
     enabled: gtk4::Switch,
     mode: gtk4::DropDown,
     exposure: gtk4::Scale,
+    exposure_value: gtk4::Label,
     black: gtk4::Scale,
+    black_value: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
 }
@@ -253,7 +281,13 @@ fn sync_controls(state: &Rc<RefCell<ExposureModuleState>>, controls: &ControlSet
     controls.expander.set_expanded(state.expanded());
     controls.mode.set_selected(mode_index(state.mode()));
     controls.exposure.set_value(state.exposure_ev());
+    controls
+        .exposure_value
+        .set_text(&format!("{:.3} EV", state.exposure_ev()));
     controls.black.set_value(state.black_level());
+    controls
+        .black_value
+        .set_text(&format!("{:.4}", state.black_level()));
     controls
         .compensate_exposure_bias
         .set_active(state.compensate_exposure_bias());
@@ -284,7 +318,13 @@ fn append_dropdown_row(container: &gtk4::Box, label: &str, control: &gtk4::DropD
     container.append(&row);
 }
 
-fn append_scale_row(container: &gtk4::Box, label: &str, control: &gtk4::Scale, unit: &str) {
+fn append_scale_row(
+    container: &gtk4::Box,
+    label: &str,
+    control: &gtk4::Scale,
+    value: &gtk4::Label,
+    unit: &str,
+) {
     let row = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     row.add_css_class("dt_module_row");
     let heading_text = if unit.is_empty() {
@@ -292,11 +332,24 @@ fn append_scale_row(container: &gtk4::Box, label: &str, control: &gtk4::Scale, u
     } else {
         format!("{label} ({unit})")
     };
+    let heading_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     let heading = gtk4::Label::new(Some(&heading_text));
     heading.set_halign(gtk4::Align::Start);
-    row.append(&heading);
+    heading.set_hexpand(true);
+    heading_row.append(&heading);
+    heading_row.append(value);
+    row.append(&heading_row);
     row.append(control);
     container.append(&row);
+}
+
+fn value_label(id: &str, accessible_name: &str) -> gtk4::Label {
+    let label = gtk4::Label::new(None);
+    label.set_widget_name(id);
+    label.add_css_class("dt_module_value");
+    label.set_halign(gtk4::Align::End);
+    label.update_property(&[Property::Label(accessible_name)]);
+    label
 }
 
 fn identify(

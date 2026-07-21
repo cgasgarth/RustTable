@@ -152,6 +152,18 @@ button:hover,
   padding: 3px 0 5px 12px;
 }
 
+.dt_rail_separator,
+.dt_toolbar_separator {
+  min-height: 1px;
+  min-width: 1px;
+  background-color: {{border}};
+}
+
+.dt_toolbar_separator {
+  min-height: 18px;
+  background-color: {{border}};
+}
+
 #collection-controls,
 #collection-rule,
 #collection-search-row,
@@ -176,6 +188,16 @@ button:hover,
 #collection-clear {
   min-width: 24px;
   padding: 0;
+}
+
+#collection-status {
+  min-height: 18px;
+  padding: 2px 0;
+}
+
+.dt_collection_status {
+  color: {{foreground}};
+  font-size: 10px;
 }
 
 .dt_background_jobs {
@@ -293,6 +315,14 @@ expander:hover {
 #lighttable-selection-count,
 #display-profile-status {
   font-size: 10px;
+}
+
+#lighttable-toolbar-separator-filter-labels,
+#lighttable-toolbar-separator-labels-rating,
+#lighttable-toolbar-separator-rating-sort,
+#lighttable-toolbar-separator-count-reset {
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 
 .dt_filter_button {
@@ -432,6 +462,65 @@ scale:focus-visible {
 #darkroom-left-panel expander > box,
 #darkroom-right-panel expander > box {
   padding: 3px 2px 4px 10px;
+}
+
+#right-panel {
+  min-width: 150px;
+  max-width: 1500px;
+}
+
+#right-panel expander {
+  margin: 0;
+  padding: 2px 4px;
+  min-width: 142px;
+  background-image: none;
+  box-shadow: none;
+}
+
+#right-panel expander > title {
+  min-height: 19px;
+  padding: 0;
+}
+
+#right-panel expander > box {
+  padding: 3px 0 5px 12px;
+}
+
+#export-rail-content {
+  min-width: 0;
+}
+
+.dt_export_row {
+  min-height: 22px;
+  padding: 1px 0;
+}
+
+.dt_export_row label {
+  font-size: 10px;
+}
+
+#export-destination,
+#export-format,
+#export-size,
+#export-custom-size {
+  min-width: 82px;
+}
+
+#export-destination-row,
+#export-format-row,
+#export-size-row,
+#export-custom-size-row {
+  margin-right: 2px;
+}
+
+#rendered-png-status {
+  min-height: 18px;
+  padding-top: 2px;
+  font-size: 10px;
+}
+
+#rendered-png-progress {
+  min-height: 10px;
 }
 
 .dt_darkroom_module_header {

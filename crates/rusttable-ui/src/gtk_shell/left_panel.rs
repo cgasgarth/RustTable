@@ -35,13 +35,16 @@ impl LeftPanel {
         let modules = panel_slot(PanelSlot::LeftCenter);
         let import = import_module(i18n);
         modules.append(&import.0);
+        modules.append(&module_separator("import-collections"));
         modules.append(&module_with_child(
             "collections",
             "collections",
             collection_controls.widget(),
-            false,
+            true,
         ));
+        modules.append(&module_separator("collections-filters"));
         modules.append(&collection_filters());
+        modules.append(&module_separator("filters-information"));
         modules.append(&image_information());
 
         let scroll = gtk4::ScrolledWindow::builder()
@@ -102,13 +105,13 @@ fn import_module(i18n: &I18n) -> (gtk4::Expander, gtk4::Button) {
 }
 
 fn collection_filters() -> gtk4::Expander {
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    let filter = gtk4::SearchEntry::new();
-    filter.set_widget_name("left-collection-filter-search");
-    filter.set_placeholder_text(Some("filter collection"));
-    filter.set_width_chars(1);
-    filter.set_max_width_chars(10);
-    content.append(&filter);
+    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
+    let status = gtk4::Label::new(Some("collection rules follow the active selection"));
+    status.set_widget_name("left-collection-filter-status");
+    status.set_xalign(0.0);
+    status.set_wrap(true);
+    status.add_css_class("dim-label");
+    content.append(&status);
     module_with_child("collection-filters", "collection filters", &content, false)
 }
 
@@ -118,6 +121,7 @@ fn image_information() -> gtk4::Expander {
         let label = gtk4::Label::new(Some(text));
         label.set_xalign(0.0);
         label.set_wrap(true);
+        label.add_css_class("dim-label");
         content.append(&label);
     }
     module_with_child("image-information", "image information", &content, false)
@@ -130,12 +134,23 @@ fn panel_slot(slot: PanelSlot) -> gtk4::Box {
     slot_widget
 }
 
+fn module_separator(id: &str) -> gtk4::Separator {
+    let separator = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+    separator.set_widget_name(&format!("left-separator-{id}"));
+    separator.add_css_class("dt_rail_separator");
+    separator
+}
+
 fn module(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
+    let (title, disclosure) = module_label(label, expanded);
     let group = gtk4::Expander::builder()
-        .label_widget(&module_label(label))
+        .label_widget(&title)
         .expanded(expanded)
         .build();
     group.set_widget_name(id);
+    group.connect_expanded_notify(move |expander| {
+        disclosure.set_text(if expander.is_expanded() { "⌄" } else { "›" });
+    });
     apply_theme_role(&group, ThemeRole::ModuleGroup);
     group
 }
@@ -148,22 +163,26 @@ fn module_with_child<W: IsA<gtk4::Widget>>(
 ) -> gtk4::Expander {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
     content.append(child);
+    let (title, disclosure) = module_label(label, expanded);
     let group = gtk4::Expander::builder()
-        .label_widget(&module_label(label))
+        .label_widget(&title)
         .expanded(expanded)
         .child(&content)
         .build();
     group.set_widget_name(id);
+    group.connect_expanded_notify(move |expander| {
+        disclosure.set_text(if expander.is_expanded() { "⌄" } else { "›" });
+    });
     apply_theme_role(&group, ThemeRole::ModuleGroup);
     group
 }
 
-fn module_label(text: &str) -> gtk4::Box {
+fn module_label(text: &str, expanded: bool) -> (gtk4::Box, gtk4::Label) {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
     row.set_halign(gtk4::Align::Fill);
     row.set_hexpand(true);
     row.set_width_request(126);
-    let disclosure = gtk4::Label::new(Some("›"));
+    let disclosure = gtk4::Label::new(Some(if expanded { "⌄" } else { "›" }));
     disclosure.set_widget_name("module-disclosure");
     disclosure.add_css_class("dim-label");
     row.append(&disclosure);
@@ -177,7 +196,7 @@ fn module_label(text: &str) -> gtk4::Box {
         icon.add_css_class("dim-label");
         row.append(&icon);
     }
-    row
+    (row, disclosure)
 }
 
 #[cfg(test)]
