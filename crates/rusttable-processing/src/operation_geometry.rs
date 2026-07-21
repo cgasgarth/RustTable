@@ -11,7 +11,25 @@ use crate::operations::{
     },
     lenscorrection::{LensCorrectionConfig, LensCorrectionParametersV1},
     perspective::{PerspectiveConfig, PerspectiveParametersV5},
+    scalepixels::ScalePixelsConfig,
 };
+
+const SCALEPIXELS_PARAMETERS: [&str; 1] = ["pixel_aspect_ratio"];
+
+pub(crate) fn compile_scalepixels(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &SCALEPIXELS_PARAMETERS)?;
+    let ratio = parameter_f32(operation, "pixel_aspect_ratio", 1.0)?;
+    let config =
+        ScalePixelsConfig::new(ratio).map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::ScalePixels { config },
+    })
+}
 
 const FINALSCALE_PARAMETERS: [&str; 12] = [
     "mode",

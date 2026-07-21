@@ -81,6 +81,18 @@ owner = "crates/rusttable-processing/src/registry.rs"
 status = "replaced"
 
 [[operation]]
+rust_id = "rusttable.vignette"
+manifest_name = "vignette"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
+rust_id = "rusttable.graduatednd"
+manifest_name = "graduatednd"
+owner = "crates/rusttable-processing/src/registry.rs"
+status = "replaced"
+
+[[operation]]
 rust_id = "rusttable.colorin"
 manifest_name = "colorin"
 owner = "crates/rusttable-processing/src/registry_color.rs"

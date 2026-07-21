@@ -15,6 +15,7 @@ use crate::operations::{
     enlargecanvas::EnlargeCanvasConfig,
     finalscale::FinalScaleConfig,
     flip::{FlipConfig, FlipMode, OrientationBits},
+    graduatednd::GraduatedNdConfig,
     highlights::HighlightsConfig,
     invert::InvertConfig,
     lenscorrection::LensCorrectionConfig,
@@ -26,6 +27,7 @@ use crate::operations::{
     shadhi::ShadhiConfig,
     soften::SoftenConfig,
     temperature::{TemperatureConfig, WhiteBalanceSource},
+    vignette::VignetteConfig,
 };
 use crate::{FiniteF32, ScalarNarrowingError};
 
@@ -39,15 +41,19 @@ mod operation_geometry;
 mod operation_parameters;
 pub(crate) use operation_geometry::{
     compile_enlargecanvas, compile_finalscale, compile_lenscorrection, compile_perspective,
+    compile_scalepixels,
 };
 #[path = "operation_effects.rs"]
 mod operation_effects;
 #[path = "operation_legacy.rs"]
 mod operation_legacy;
+#[path = "operation_spatial.rs"]
+mod operation_spatial;
 pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
 pub(crate) use operation_legacy::{compile_relight, compile_shadhi};
 pub(crate) use operation_parameters::{parameter_integer, parameter_u32};
+pub(crate) use operation_spatial::{compile_graduatednd, compile_vignette};
 
 pub(crate) use operation_error::compile_opacity;
 
@@ -57,14 +63,13 @@ const RGB_GAIN_PARAMETERS: [&str; 3] = ["red", "green", "blue"];
 const CROP_PARAMETERS: [&str; 6] = ["cx", "cy", "cw", "ch", "ratio_n", "ratio_d"];
 const FLIP_PARAMETERS: [&str; 2] = ["mode", "orientation"];
 const ROTATEPIXELS_PARAMETERS: [&str; 3] = ["rx", "ry", "angle"];
-const SCALEPIXELS_PARAMETERS: [&str; 1] = ["pixel_aspect_ratio"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessingOperation {
-    operation_id: OperationId,
-    enabled: bool,
-    opacity: FiniteF32,
-    kind: ProcessingOperationKind,
+    pub(crate) operation_id: OperationId,
+    pub(crate) enabled: bool,
+    pub(crate) opacity: FiniteF32,
+    pub(crate) kind: ProcessingOperationKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -142,6 +147,12 @@ pub enum ProcessingOperationKind {
     },
     Shadhi {
         config: ShadhiConfig,
+    },
+    Vignette {
+        config: VignetteConfig,
+    },
+    GraduatedNd {
+        config: GraduatedNdConfig,
     },
 }
 
@@ -847,21 +858,6 @@ pub(crate) fn compile_rotatepixels(
         enabled: operation.is_enabled(),
         opacity: compile_opacity(operation)?,
         kind: ProcessingOperationKind::RotatePixels { config },
-    })
-}
-
-pub(crate) fn compile_scalepixels(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
-    reject_unexpected(operation, &SCALEPIXELS_PARAMETERS)?;
-    let ratio = parameter_f32(operation, "pixel_aspect_ratio", 1.0)?;
-    let config =
-        ScalePixelsConfig::new(ratio).map_err(|error| invalid_parameters(operation, error))?;
-    Ok(ProcessingOperation {
-        operation_id: operation.id(),
-        enabled: operation.is_enabled(),
-        opacity: compile_opacity(operation)?,
-        kind: ProcessingOperationKind::ScalePixels { config },
     })
 }
 

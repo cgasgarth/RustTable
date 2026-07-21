@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "a1d4a8d7ebd2776e1f8729541934f09e0fa0735fd00b9c32abea8db71ca833f5"
+snapshot_hash = "ccc07e2bd2f16d042e7ce7d55bfe9456544f25463fb94c064d64b64c469d8fed"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -99,6 +99,14 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.graduatednd"
+compatibility_name = "graduatednd"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.highlights"
 compatibility_name = "highlights"
 descriptor_version = 4
@@ -190,6 +198,14 @@ status = "available"
 rust_id = "rusttable.temperature"
 compatibility_name = "temperature"
 descriptor_version = 1
+parameter_version = 4
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.vignette"
+compatibility_name = "vignette"
+descriptor_version = 4
 parameter_version = 4
 implementation_version = 1
 status = "available"

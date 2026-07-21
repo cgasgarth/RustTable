@@ -607,6 +607,8 @@ fn verify_registry_operations(root: &Path, document: &toml::Value) -> Result {
         "rusttable.shadhi",
         "rusttable.colorin",
         "rusttable.primaries",
+        "rusttable.vignette",
+        "rusttable.graduatednd",
     ];
     if entries.len() != expected.len() {
         return Err(format!(
