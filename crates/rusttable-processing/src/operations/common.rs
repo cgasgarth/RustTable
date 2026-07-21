@@ -1,8 +1,67 @@
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "the shared f32 raster/noise boundary intentionally narrows checked coordinates"
+)]
+
 use std::fmt;
 
 use sha2::{Digest, Sha256};
 
 use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel};
+
+/// Returns the center-sampled normalized full-image coordinate for a pixel.
+///
+/// The coordinate is independent of a tile or row window. Callers pass the
+/// absolute raster index, not the index within a tile.
+pub(crate) fn full_image_coordinate(
+    dimensions: RasterDimensions,
+    absolute_index: usize,
+) -> (f32, f32) {
+    let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
+    let x = absolute_index % width;
+    let y = absolute_index / width;
+    (
+        (2.0 * (x as f32 + 0.5) / dimensions.width() as f32) - 1.0,
+        (2.0 * (y as f32 + 0.5) / dimensions.height() as f32) - 1.0,
+    )
+}
+
+/// Counter-based triangular-PDF noise shared by point operations.
+///
+/// It has no mutable/thread-local state, so changing row or tile scheduling
+/// cannot change the result. The seed is the operation's cache identity; the
+/// caller owns any image-content/revision contribution to that identity.
+pub(crate) fn counter_tpdf(seed: u64, counter: u64) -> f32 {
+    let random = tea_word(seed, counter);
+    let fraction = random as f32 / u32::MAX as f32;
+    if fraction < 0.5 {
+        (2.0 * fraction).sqrt() - 1.0
+    } else {
+        1.0 - (2.0 * (1.0 - fraction)).sqrt()
+    }
+}
+
+fn tea_word(seed: u64, counter: u64) -> u32 {
+    let mut v0 = (seed as u32) ^ counter as u32;
+    let mut v1 = (seed >> 32) as u32 ^ (counter >> 32) as u32;
+    let key = [0xa341_316c_u32, 0xc801_3ea4, 0xad90_777d, 0x7e95_761d];
+    let mut sum = 0_u32;
+    for _ in 0..8 {
+        sum = sum.wrapping_add(0x9e37_79b9);
+        v0 = v0.wrapping_add(
+            ((v1 << 4).wrapping_add(key[0]))
+                ^ v1.wrapping_add(sum)
+                ^ ((v1 >> 5).wrapping_add(key[1])),
+        );
+        v1 = v1.wrapping_add(
+            ((v0 << 4).wrapping_add(key[2]))
+                ^ v0.wrapping_add(sum)
+                ^ ((v0 >> 5).wrapping_add(key[3])),
+        );
+    }
+    v0
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationExecutionError {

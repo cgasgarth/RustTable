@@ -259,6 +259,40 @@ fn apply_operation(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::Vignette { config } => {
+            let seed = u64::try_from(operation_id.get() & u128::from(u64::MAX))
+                .expect("masked operation ID fits")
+                ^ u64::try_from(operation_id.get() >> 64).expect("shifted operation ID fits");
+            let plan = crate::operations::vignette::VignettePlan::new(*config, dimensions)
+                .map_err(|error| operation_error(step_index, operation_id, error))?
+                .with_seed(seed);
+            let candidate = plan
+                .execute_window(pixels, pixel_index_offset)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::GraduatedNd { config } => {
+            let plan = crate::operations::graduatednd::GraduatedNdPlan::new(*config, dimensions)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            let candidate = plan
+                .execute_window(pixels, pixel_index_offset)
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Highlights { config } => {
             let plan = HighlightsPlan::new(
                 *config,

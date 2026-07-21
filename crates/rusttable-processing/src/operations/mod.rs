@@ -17,6 +17,7 @@ pub mod dither;
 pub mod enlargecanvas;
 pub mod finalscale;
 pub mod flip;
+pub mod graduatednd;
 pub mod highlights;
 pub mod invert;
 pub mod lenscorrection;
@@ -28,6 +29,7 @@ pub mod scalepixels;
 pub mod shadhi;
 pub mod soften;
 pub mod temperature;
+pub mod vignette;
 
 pub use common::{
     OperationExecutionError, ReconstructionBudget, ReconstructionDiagnostics, ReconstructionReceipt,

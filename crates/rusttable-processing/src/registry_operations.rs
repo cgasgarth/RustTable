@@ -9,9 +9,9 @@ use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, crop_descriptor,
     dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
-    flip_descriptor, invert_descriptor, linear_offset_descriptor, relight_descriptor,
-    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
-    soften_descriptor, temperature_descriptor,
+    flip_descriptor, graduatednd_descriptor, invert_descriptor, linear_offset_descriptor,
+    relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    shadhi_descriptor, soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -354,6 +354,28 @@ fn prepare_soften(
     )
 }
 
+fn prepare_vignette(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_vignette(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_graduatednd(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_graduatednd(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
@@ -425,6 +447,42 @@ pub fn dither_definition() -> OperationDefinition {
             "iop.dither.cpu.floyd-steinberg-full-image",
         ],
         false,
+    )
+}
+
+pub fn vignette_definition() -> OperationDefinition {
+    compatibility_definition_with_migrations(
+        vignette_descriptor(),
+        prepare_vignette,
+        &[
+            "iop.vignette.params.v1-v4",
+            "iop.vignette.cpu.full-image",
+            "iop.vignette.noise.counter",
+            "iop.vignette.alpha-preserve",
+        ],
+        false,
+        (1..4).map(|version| {
+            MigrationBinding::new(
+                version,
+                version + 1,
+                format!("vignette.migration.v{version}"),
+            )
+        }),
+    )
+}
+
+pub fn graduatednd_definition() -> OperationDefinition {
+    compatibility_definition_with_migrations(
+        graduatednd_descriptor(),
+        prepare_graduatednd,
+        &[
+            "iop.graduatednd.params.v1",
+            "iop.graduatednd.cpu.full-image-line",
+            "iop.graduatednd.presets",
+            "iop.graduatednd.alpha-preserve",
+        ],
+        false,
+        std::iter::empty(),
     )
 }
 
@@ -833,6 +891,8 @@ macro_rules! builtin_operations {
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,
             $crate::registry::soften_definition,
+            $crate::registry::vignette_definition,
+            $crate::registry::graduatednd_definition,
             $crate::registry::crop_definition,
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,

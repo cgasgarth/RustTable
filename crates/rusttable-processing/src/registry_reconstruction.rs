@@ -46,6 +46,12 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
             crate::descriptor::relight_descriptor().id
         }
         crate::ProcessingOperationKind::Shadhi { .. } => crate::descriptor::shadhi_descriptor().id,
+        crate::ProcessingOperationKind::Vignette { .. } => {
+            crate::descriptor::vignette_descriptor().id
+        }
+        crate::ProcessingOperationKind::GraduatedNd { .. } => {
+            crate::descriptor::graduatednd_descriptor().id
+        }
         crate::ProcessingOperationKind::Crop { .. } => crate::descriptor::crop_descriptor().id,
         crate::ProcessingOperationKind::Flip { .. } => crate::descriptor::flip_descriptor().id,
         crate::ProcessingOperationKind::RotatePixels { .. } => {
