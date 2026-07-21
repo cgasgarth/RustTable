@@ -60,13 +60,17 @@ impl CpuPixelpipeSnapshot {
     /// # Errors
     ///
     /// Returns [`CpuPixelpipeSnapshotError::UnsupportedInputEncoding`] when
-    /// the source raster is not transfer-encoded sRGB.
+    /// the source raster is neither transfer-encoded sRGB nor an explicit Lab
+    /// compatibility raster.
     pub fn try_new(
         input: RgbaF32Image,
         graph: CompiledOperationGraph,
         output_mode: CpuPixelpipeOutputMode,
     ) -> Result<Self, CpuPixelpipeSnapshotError> {
-        if input.descriptor().color_encoding() != RgbaF32ColorEncoding::SrgbD65 {
+        if !matches!(
+            input.descriptor().color_encoding(),
+            RgbaF32ColorEncoding::SrgbD65 | RgbaF32ColorEncoding::LabD50
+        ) {
             return Err(CpuPixelpipeSnapshotError::UnsupportedInputEncoding {
                 actual: input.descriptor().color_encoding(),
             });
@@ -405,6 +409,10 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update([22]);
             hasher.update(config.parameters().to_bytes());
         }
+        ProcessingOperationKind::Defringe { config } => {
+            hasher.update([23]);
+            hasher.update(config.parameters().to_bytes());
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }
@@ -448,6 +456,7 @@ const fn encoding_tag(encoding: RgbaF32ColorEncoding) -> u8 {
     match encoding {
         RgbaF32ColorEncoding::SrgbD65 => 0,
         RgbaF32ColorEncoding::LinearSrgbD65 => 1,
+        RgbaF32ColorEncoding::LabD50 => 2,
     }
 }
 

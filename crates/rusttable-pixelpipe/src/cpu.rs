@@ -154,6 +154,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
+                    | rusttable_processing::ProcessingOperationKind::Defringe { .. }
             )
         }) {
             // Both Darktable operations freeze full-image evidence before
@@ -225,6 +226,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
+                    | rusttable_processing::ProcessingOperationKind::Defringe { .. }
             )
         }) {
             scope
@@ -283,6 +285,21 @@ impl CpuPixelpipeExecutor {
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
         validate_input_encoding(input)?;
 
+        if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+            if let Some(node) = request.graph().nodes().find(|node| {
+                matches!(
+                    node.operation().kind(),
+                    rusttable_processing::ProcessingOperationKind::Defringe { .. }
+                )
+            }) && request.graph().nodes().count() == 1
+            {
+                return execute_defringe_image(input, node);
+            }
+            return Err(CpuPixelpipeError::UnsupportedInputEncoding {
+                actual: RgbaF32ColorEncoding::LabD50,
+            });
+        }
+
         if let Some(node) = request.graph().nodes().find(|node| {
             matches!(
                 node.operation().kind(),
@@ -309,6 +326,9 @@ impl CpuPixelpipeExecutor {
 
     fn prepare_plans(request: &CpuPixelpipeSnapshot) -> Result<BasicAdjPlanSet, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
+        if request.input().descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+            return Ok(BasicAdjPlanSet::default());
+        }
         let source = to_processing_source(request.input())?;
         let linear = to_linear_srgb(&source);
         prepare_basicadj_plans(request.graph(), &linear)
@@ -441,9 +461,68 @@ fn censorize_evaluation_error(
     }
 }
 
+fn execute_defringe_image(
+    input: &RgbaF32Image,
+    node: &rusttable_processing::OperationGraphNode,
+) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    let config = match node.operation().kind() {
+        rusttable_processing::ProcessingOperationKind::Defringe { config } => *config,
+        _ => unreachable!("defringe image bridge is only called for defringe"),
+    };
+    let pixels = input
+        .pixels()
+        .iter()
+        .map(|pixel| {
+            rusttable_processing::DefringePixel::new(
+                pixel.red(),
+                pixel.green(),
+                pixel.blue(),
+                pixel.alpha(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let plan =
+        rusttable_processing::DefringePlan::new(config, input.descriptor().dimensions(), 1.0, 1.0)
+            .map_err(|source| defringe_evaluation_error(node, &source))?;
+    let output = plan
+        .execute_with_mask(&pixels, None, node.operation().opacity().get(), || false)
+        .map_err(|source| defringe_evaluation_error(node, &source))?;
+    let output_pixels = output
+        .into_iter()
+        .map(|pixel| {
+            let channels = pixel.channels();
+            RgbaF32Pixel::new(channels[0], channels[1], channels[2], channels[3])
+        })
+        .collect();
+    RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            input.descriptor().dimensions(),
+            RgbaF32ColorEncoding::LabD50,
+        ),
+        output_pixels,
+    )
+    .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+fn defringe_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: &rusttable_processing::DefringeExecutionError,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
 fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError> {
     let actual = input.descriptor().color_encoding();
-    if actual == RgbaF32ColorEncoding::SrgbD65 {
+    if matches!(
+        actual,
+        RgbaF32ColorEncoding::SrgbD65 | RgbaF32ColorEncoding::LabD50
+    ) {
         Ok(())
     } else {
         Err(CpuPixelpipeError::UnsupportedInputEncoding { actual })

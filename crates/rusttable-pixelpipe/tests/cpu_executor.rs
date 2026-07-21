@@ -75,6 +75,24 @@ fn tiled_image() -> RgbaF32Image {
     RgbaF32Image::new(descriptor, pixels).expect("valid tiled input")
 }
 
+fn lab_image() -> RgbaF32Image {
+    let dimensions = RasterDimensions::new(32, 32).expect("nonzero dimensions");
+    let pixels = (0..dimensions.pixel_count())
+        .map(|index| {
+            let x =
+                f32::from(u16::try_from(index % u64::from(dimensions.width())).expect("small x"));
+            let y =
+                f32::from(u16::try_from(index / u64::from(dimensions.width())).expect("small y"));
+            RgbaF32Pixel::new(50.0, (x - 16.0) * 2.0, (y - 16.0) * 2.0, 0.5)
+        })
+        .collect();
+    RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LabD50),
+        pixels,
+    )
+    .expect("valid Lab input")
+}
+
 #[test]
 fn executes_registered_operations_in_authored_order_and_preserves_alpha() {
     let graph = graph(vec![
@@ -112,6 +130,32 @@ fn executes_registered_operations_in_authored_order_and_preserves_alpha() {
     assert!((first.red() - 0.264_041_13).abs() < 0.000_001);
     assert!((first.green() - 0.302_628_25).abs() < 0.000_001);
     assert!((first.blue() - 2.290_086_3).abs() < 0.000_001);
+}
+
+#[test]
+fn executes_deprecated_defringe_only_at_the_typed_lab_boundary() {
+    let graph = graph(vec![operation(
+        475,
+        "rusttable.defringe",
+        &[("radius", 4.0), ("threshold", 20.0), ("mode", 2.0)],
+    )]);
+    let request =
+        CpuPixelpipeSnapshot::try_new(lab_image(), graph, CpuPixelpipeOutputMode::FullExport)
+            .expect("Lab compatibility snapshot");
+    let result = CpuPixelpipeExecutor
+        .execute(&request)
+        .expect("typed Lab defringe execution");
+    assert_eq!(
+        result.image().descriptor().color_encoding(),
+        RgbaF32ColorEncoding::LabD50
+    );
+    assert!(
+        result
+            .image()
+            .pixels()
+            .iter()
+            .all(|pixel| pixel.alpha().to_bits() == 0.5_f32.to_bits())
+    );
 }
 
 #[test]

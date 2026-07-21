@@ -26,6 +26,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Censorize { .. } => {
             crate::descriptor::censorize_descriptor().id
         }
+        crate::ProcessingOperationKind::Defringe { .. } => {
+            crate::descriptor::defringe_descriptor().id
+        }
         crate::ProcessingOperationKind::Highlights { .. } => {
             crate::descriptor::highlights_descriptor().id
         }

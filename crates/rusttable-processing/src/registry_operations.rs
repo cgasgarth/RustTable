@@ -3,6 +3,9 @@
 #[path = "registry_censorize.rs"]
 mod registry_censorize;
 pub use registry_censorize::censorize_definition;
+#[path = "registry_defringe.rs"]
+mod registry_defringe;
+pub use registry_defringe::defringe_definition;
 
 use super::{
     CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,

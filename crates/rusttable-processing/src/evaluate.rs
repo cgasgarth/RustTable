@@ -382,6 +382,13 @@ fn apply_operation_with_plans(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::Defringe { .. } => Err(operation_error(
+            step_index,
+            operation_id,
+            OperationExecutionError::UnsupportedCapability(
+                "defringe requires the four-channel Lab execution seam",
+            ),
+        )),
         ProcessingOperationKind::Temperature { config } => {
             let multipliers = config.multipliers();
             apply_channels(

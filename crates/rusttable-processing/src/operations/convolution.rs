@@ -6,11 +6,167 @@
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
     clippy::missing_errors_doc,
-    clippy::needless_range_loop
+    clippy::needless_range_loop,
+    clippy::similar_names,
+    clippy::too_many_lines
 )]
 
 use super::common::{OperationExecutionError, ReconstructionBudget, checked_bytes, validate_shape};
 use crate::{FiniteF32, LinearRgb, RasterDimensions};
+
+/// Error from the bounded four-channel recursive Gaussian used by Lab
+/// compatibility operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BoundedGaussianError {
+    InvalidSigma,
+    Dimensions,
+    Cancelled,
+}
+
+/// Shared order-one Gaussian with explicit per-channel bounds and clamped
+/// edges. The reduction order is fixed by the row/column traversal.
+pub(crate) fn bounded_gaussian_4c<F: FnMut() -> bool>(
+    input: &[[f32; 4]],
+    dimensions: RasterDimensions,
+    sigma: f32,
+    minimum: [f32; 4],
+    maximum: [f32; 4],
+    mut cancelled: F,
+) -> Result<Vec<[f32; 4]>, BoundedGaussianError> {
+    if !sigma.is_finite() || sigma <= 0.0 {
+        return Err(BoundedGaussianError::InvalidSigma);
+    }
+    let width =
+        usize::try_from(dimensions.width()).map_err(|_| BoundedGaussianError::Dimensions)?;
+    let height =
+        usize::try_from(dimensions.height()).map_err(|_| BoundedGaussianError::Dimensions)?;
+    let expected = width
+        .checked_mul(height)
+        .ok_or(BoundedGaussianError::Dimensions)?;
+    if input.len() != expected {
+        return Err(BoundedGaussianError::Dimensions);
+    }
+    let (a0, a1, a2, a3, b1, b2, coefp, coefn) = gaussian_parameters(sigma);
+    let mut temp = vec![[0.0; 4]; expected];
+    let mut output = vec![[0.0; 4]; expected];
+
+    for x in 0..width {
+        if cancelled() {
+            return Err(BoundedGaussianError::Cancelled);
+        }
+        let first = clamp_channels(input[x], minimum, maximum);
+        let mut xp = first;
+        let mut yb = [0.0; 4];
+        let mut yp = [0.0; 4];
+        for channel in 0..4 {
+            yb[channel] = first[channel] * coefp;
+            yp[channel] = yb[channel];
+        }
+        for y in 0..height {
+            let index = y * width + x;
+            let sample = input[index];
+            let mut value = [0.0; 4];
+            for channel in 0..4 {
+                let current = sample[channel].clamp(minimum[channel], maximum[channel]);
+                value[channel] =
+                    a0 * current + a1 * xp[channel] - b1 * yp[channel] - b2 * yb[channel];
+                xp[channel] = current;
+                yb[channel] = yp[channel];
+                yp[channel] = value[channel];
+            }
+            temp[index] = value;
+        }
+
+        let last = clamp_channels(input[(height - 1) * width + x], minimum, maximum);
+        let mut xn = last;
+        let mut xa = last;
+        let mut yn = last.map(|value| value * coefn);
+        let mut ya = yn;
+        for y in (0..height).rev() {
+            let index = y * width + x;
+            let sample = input[index];
+            let mut value = [0.0; 4];
+            for channel in 0..4 {
+                let current = sample[channel].clamp(minimum[channel], maximum[channel]);
+                value[channel] =
+                    a2 * xn[channel] + a3 * xa[channel] - b1 * yn[channel] - b2 * ya[channel];
+                xa[channel] = xn[channel];
+                xn[channel] = current;
+                ya[channel] = yn[channel];
+                yn[channel] = value[channel];
+                temp[index][channel] += value[channel];
+            }
+        }
+    }
+
+    for y in 0..height {
+        if cancelled() {
+            return Err(BoundedGaussianError::Cancelled);
+        }
+        let row = y * width;
+        let first = clamp_channels(temp[row], minimum, maximum);
+        let mut xp = first;
+        let mut yb = first.map(|value| value * coefp);
+        let mut yp = yb;
+        for x in 0..width {
+            let index = row + x;
+            let sample = temp[index];
+            let mut value = [0.0; 4];
+            for channel in 0..4 {
+                let current = sample[channel].clamp(minimum[channel], maximum[channel]);
+                value[channel] =
+                    a0 * current + a1 * xp[channel] - b1 * yp[channel] - b2 * yb[channel];
+                xp[channel] = current;
+                yb[channel] = yp[channel];
+                yp[channel] = value[channel];
+            }
+            output[index] = value;
+        }
+
+        let last = clamp_channels(temp[row + width - 1], minimum, maximum);
+        let mut xn = last;
+        let mut xa = last;
+        let mut yn = last.map(|value| value * coefn);
+        let mut ya = yn;
+        for x in (0..width).rev() {
+            let index = row + x;
+            let sample = temp[index];
+            let mut value = [0.0; 4];
+            for channel in 0..4 {
+                let current = sample[channel].clamp(minimum[channel], maximum[channel]);
+                value[channel] =
+                    a2 * xn[channel] + a3 * xa[channel] - b1 * yn[channel] - b2 * ya[channel];
+                xa[channel] = xn[channel];
+                xn[channel] = current;
+                ya[channel] = yn[channel];
+                yn[channel] = value[channel];
+                output[index][channel] += value[channel];
+            }
+        }
+    }
+    Ok(output)
+}
+
+fn gaussian_parameters(sigma: f32) -> (f32, f32, f32, f32, f32, f32, f32, f32) {
+    let alpha = 1.695 / sigma;
+    let ema = (-alpha).exp();
+    let ema2 = (-2.0 * alpha).exp();
+    let b1 = -2.0 * ema;
+    let b2 = ema2;
+    let k = (1.0 - ema) * (1.0 - ema) / (1.0 + 2.0 * alpha * ema - ema2);
+    let a0 = k;
+    let a1 = k * (alpha - 1.0) * ema;
+    let a2 = k * (alpha + 1.0) * ema;
+    let a3 = -k * ema2;
+    let denominator = 1.0 + b1 + b2;
+    let coefp = (a0 + a1) / denominator;
+    let coefn = (a2 + a3) / denominator;
+    (a0, a1, a2, a3, b1, b2, coefp, coefn)
+}
+
+fn clamp_channels(value: [f32; 4], minimum: [f32; 4], maximum: [f32; 4]) -> [f32; 4] {
+    std::array::from_fn(|channel| value[channel].clamp(minimum[channel], maximum[channel]))
+}
 
 pub const BOX_ITERATIONS: u8 = 8;
 

@@ -48,6 +48,8 @@ pub(crate) use operation_geometry::{
 };
 #[path = "operation_censorize.rs"]
 mod operation_censorize;
+#[path = "operation_defringe.rs"]
+mod operation_defringe;
 #[path = "operation_effects.rs"]
 mod operation_effects;
 #[path = "operation_grain.rs"]
@@ -59,6 +61,7 @@ mod operation_spatial;
 pub(crate) use operation_basicadj::compile_basicadj;
 pub(crate) use operation_censorize::compile_censorize;
 pub(crate) use operation_compat::{compile_dither, compile_invert};
+pub(crate) use operation_defringe::compile_defringe;
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
 pub(crate) use operation_grain::compile_grain;
 pub(crate) use operation_legacy::{compile_relight, compile_shadhi};
@@ -176,6 +179,9 @@ pub enum ProcessingOperationKind {
     },
     Censorize {
         config: crate::operations::censorize::CensorizeConfig,
+    },
+    Defringe {
+        config: crate::operations::defringe::DefringeConfig,
     },
 }
 
@@ -324,6 +330,10 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_censorize(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_censorize(operation)
+    }
+
+    pub(crate) fn compile_defringe(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_defringe(operation)
     }
 
     pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {
