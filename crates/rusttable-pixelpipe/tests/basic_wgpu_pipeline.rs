@@ -4,8 +4,9 @@ use rusttable_core::{
 };
 use rusttable_gpu::{GpuRuntime, GpuRuntimeConfig};
 use rusttable_pixelpipe::{
-    CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, PixelpipeBackend,
-    PixelpipeExecutionService, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel,
+    CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, CpuTilePlan,
+    PixelpipeBackend, PixelpipeExecutionService, RgbaF32ColorEncoding, RgbaF32Descriptor,
+    RgbaF32Image, RgbaF32Pixel,
 };
 use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
 
@@ -23,6 +24,24 @@ fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
         }),
     )
     .expect("valid operation")
+}
+
+#[test]
+fn tiled_service_falls_back_without_partial_publication() {
+    let snapshot = snapshot();
+    let canonical = CpuPixelpipeExecutor.execute(&snapshot).expect("CPU result");
+    let selected = PixelpipeExecutionService::cpu_only()
+        .execute_tiled(&snapshot, CpuTilePlan::new(1, 1).expect("tile plan"))
+        .expect("tiled service result");
+
+    assert_eq!(selected.image(), canonical.image());
+    assert_eq!(
+        selected.receipt().backend(),
+        PixelpipeBackend::CpuTiledFallback
+    );
+    let tiling = selected.receipt().tiling().expect("tiling receipt");
+    assert_eq!(tiling.tile_count(), 2);
+    assert_eq!(tiling.attempts(), 0);
 }
 
 fn snapshot() -> CpuPixelpipeSnapshot {
