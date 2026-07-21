@@ -352,6 +352,29 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update([17]);
             hasher.update(config.canonical_identity_bytes());
         }
+        ProcessingOperationKind::Bloom { config } => {
+            hasher.update([18]);
+            hasher.update(
+                rusttable_processing::operations::bloom::BloomParametersV1::new(
+                    config.size(),
+                    config.threshold(),
+                    config.strength(),
+                )
+                .to_bytes(),
+            );
+        }
+        ProcessingOperationKind::Soften { config } => {
+            hasher.update([19]);
+            hasher.update(
+                rusttable_processing::operations::soften::SoftenParametersV1::new(
+                    config.size(),
+                    config.saturation(),
+                    config.brightness(),
+                    config.amount(),
+                )
+                .to_bytes(),
+            );
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

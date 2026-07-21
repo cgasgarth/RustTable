@@ -5,6 +5,7 @@ use rusttable_core::{
 };
 
 use crate::operations::{
+    bloom::BloomConfig,
     colorcorrection::ColorCorrectionConfig,
     colorin::ColorInConfig,
     colorout::ColorOutConfig,
@@ -19,6 +20,7 @@ use crate::operations::{
     primaries::PrimariesConfig,
     rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
     scalepixels::ScalePixelsConfig,
+    soften::SoftenConfig,
     temperature::{TemperatureConfig, WhiteBalanceSource},
 };
 use crate::{FiniteF32, ScalarNarrowingError};
@@ -30,6 +32,9 @@ mod operation_geometry;
 pub(crate) use operation_geometry::{
     compile_enlargecanvas, compile_finalscale, compile_lenscorrection, compile_perspective,
 };
+#[path = "operation_effects.rs"]
+mod operation_effects;
+pub(crate) use operation_effects::{compile_bloom, compile_soften};
 
 use operation_error::compile_opacity;
 
@@ -106,6 +111,12 @@ pub enum ProcessingOperationKind {
     },
     Temperature {
         config: TemperatureConfig,
+    },
+    Bloom {
+        config: BloomConfig,
+    },
+    Soften {
+        config: SoftenConfig,
     },
 }
 
@@ -813,7 +824,10 @@ pub(crate) fn compile_scalepixels(
     })
 }
 
-fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), OperationCompileError> {
+pub(crate) fn reject_unexpected(
+    operation: &Operation,
+    allowed: &[&str],
+) -> Result<(), OperationCompileError> {
     if let Some((parameter, _)) = operation
         .parameters()
         .find(|(name, _)| !allowed.iter().any(|allowed| *allowed == name.as_str()))
@@ -827,7 +841,7 @@ fn reject_unexpected(operation: &Operation, allowed: &[&str]) -> Result<(), Oper
     Ok(())
 }
 
-fn parameter_f32(
+pub(crate) fn parameter_f32(
     operation: &Operation,
     name: &'static str,
     default: f64,
@@ -965,7 +979,10 @@ fn parameter_u32(
     u32::try_from(value).map_err(|_| invalid_parameters(operation, format!("{name} must be a u32")))
 }
 
-fn invalid_parameters<E: fmt::Display>(operation: &Operation, error: E) -> OperationCompileError {
+pub(crate) fn invalid_parameters<E: fmt::Display>(
+    operation: &Operation,
+    error: E,
+) -> OperationCompileError {
     OperationCompileError::InvalidParameters {
         operation_id: operation.id(),
         key: operation.key().clone(),

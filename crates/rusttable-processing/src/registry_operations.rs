@@ -7,9 +7,10 @@ use super::{
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, crop_descriptor, enlargecanvas_descriptor,
-    exposure_descriptor, finalscale_descriptor, flip_descriptor, linear_offset_descriptor,
-    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, temperature_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, crop_descriptor,
+    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
+    linear_offset_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    soften_descriptor, temperature_descriptor,
 };
 use rusttable_core::Operation;
 use sha2::{Digest, Sha256};
@@ -286,6 +287,28 @@ fn prepare_lenscorrection(
     )
 }
 
+fn prepare_bloom(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_bloom(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_soften(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        crate::operation::compile_soften(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 fn definition(
     descriptor: OperationDescriptor,
     prepare: CpuPrepare,
@@ -445,6 +468,58 @@ fn geometry_definition_with_traits(
     )
 }
 
+fn full_image_definition(
+    descriptor: OperationDescriptor,
+    prepare: CpuPrepare,
+    evidence: &'static [&'static str],
+) -> OperationDefinition {
+    let compatibility = descriptor.id.compatibility_name.clone();
+    OperationDefinition::new(
+        descriptor,
+        Some(CpuFactory::new(
+            prepare,
+            crate::evaluate::execute_prepared_operation,
+            RoiKind::FullImage,
+            false,
+            true,
+        )),
+        None,
+        Vec::new(),
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.{compatibility}"),
+        ),
+        evidence.iter().map(|id| (*id).to_owned()).collect(),
+    )
+}
+
+pub fn bloom_definition() -> OperationDefinition {
+    full_image_definition(
+        bloom_descriptor(),
+        prepare_bloom,
+        &[
+            "iop.bloom.params.v1",
+            "iop.bloom.cpu",
+            "iop.bloom.convolution",
+            "iop.bloom.alpha-preserve",
+        ],
+    )
+}
+
+pub fn soften_definition() -> OperationDefinition {
+    full_image_definition(
+        soften_descriptor(),
+        prepare_soften,
+        &[
+            "iop.soften.params.v1",
+            "iop.soften.cpu",
+            "iop.soften.convolution",
+            "iop.soften.alpha-preserve",
+        ],
+    )
+}
+
 pub fn crop_definition() -> OperationDefinition {
     geometry_definition(
         crop_descriptor(),
@@ -594,6 +669,8 @@ macro_rules! builtin_operations {
             $crate::registry::linear_offset_definition,
             $crate::registry::rgb_gain_definition,
             $crate::registry::temperature_definition,
+            $crate::registry::bloom_definition,
+            $crate::registry::soften_definition,
             $crate::registry::crop_definition,
             $crate::registry::flip_definition,
             $crate::registry::rotatepixels_definition,

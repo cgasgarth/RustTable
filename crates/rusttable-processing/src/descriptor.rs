@@ -10,6 +10,8 @@ pub use descriptor_color::{
     colorcorrection_descriptor, colorin_descriptor, colorout_descriptor, primaries_descriptor,
 };
 
+#[path = "descriptor_effects.rs"]
+mod descriptor_effects;
 #[path = "descriptor_operations.rs"]
 mod descriptor_operations;
 pub use crate::operations::crop::crop_descriptor;
@@ -20,6 +22,7 @@ pub use crate::operations::lenscorrection::lenscorrection_descriptor;
 pub use crate::operations::perspective::perspective_descriptor;
 pub use crate::operations::rotatepixels::rotatepixels_descriptor;
 pub use crate::operations::scalepixels::scalepixels_descriptor;
+pub use descriptor_effects::{bloom_descriptor, soften_descriptor};
 pub use descriptor_operations::{
     color_reconstruction_descriptor, exposure_descriptor, highlights_descriptor,
     linear_offset_descriptor, rgb_gain_descriptor, temperature_descriptor,
