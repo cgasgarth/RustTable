@@ -64,6 +64,11 @@ fn darkroom_stack_keeps_darktable_regions_and_stable_widget_order() {
             "darkroom-right-module-scroll",
             "darkroom-right-modules",
             "exposure",
+            "darkroom-left-panel-toggle",
+            "darkroom-right-panel-toggle",
+            "darkroom-filmstrip-toggle",
+            "darkroom-status-bar",
+            "darkroom-job-status",
         ]
     );
 }

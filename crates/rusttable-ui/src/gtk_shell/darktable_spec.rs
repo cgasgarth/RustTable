@@ -310,6 +310,8 @@ pub struct DarkroomGeometry {
     pub histogram_height_px: u16,
     /// Separator between the center column and the filmstrip.
     pub filmstrip_separator_px: u8,
+    /// Height of the status and background-job row below the viewport toolbar.
+    pub status_bar_height_px: u8,
 }
 
 /// The two deterministic side-rail modes used by the GTK shell.
@@ -364,7 +366,83 @@ pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
     viewport_minimum_height_px: 200,
     histogram_height_px: 128,
     filmstrip_separator_px: 1,
+    status_bar_height_px: 20,
 };
+
+/// A display-free allocation receipt for the darkroom's named regions.
+///
+/// The receipt is intentionally integer-only so geometry tests do not depend on a
+/// display server, font rasterization, or GTK's allocation timing.  GTK uses the
+/// same preferred widths and minimums when it realizes the Paned hierarchy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DarkroomGeometryReceipt {
+    pub window_width_px: u16,
+    pub window_height_px: u16,
+    pub left_panel_width_px: u16,
+    pub center_width_px: u16,
+    pub right_panel_width_px: u16,
+    pub top_toolbar_height_px: u8,
+    pub viewport_minimum_height_px: u16,
+    pub bottom_toolbar_height_px: u8,
+    pub status_bar_height_px: u8,
+    pub filmstrip_height_px: u16,
+    pub left_panel_visible: bool,
+    pub right_panel_visible: bool,
+    pub filmstrip_visible: bool,
+}
+
+impl DarkroomGeometryReceipt {
+    /// Returns the deterministic darkroom allocation receipt for a desktop size.
+    #[must_use]
+    pub const fn for_window(
+        window_width_px: u16,
+        window_height_px: u16,
+        left_panel_visible: bool,
+        right_panel_visible: bool,
+        filmstrip_visible: bool,
+    ) -> Self {
+        let content_width = LAYOUT_METRICS.content_width_px(window_width_px);
+        let left_panel_width = if left_panel_visible {
+            LAYOUT_METRICS.side_panel_widths.preferred_px
+        } else {
+            0
+        };
+        let right_panel_width = if right_panel_visible {
+            LAYOUT_METRICS.side_panel_widths.preferred_px
+        } else {
+            0
+        };
+        let center_width = content_width
+            .saturating_sub(left_panel_width)
+            .saturating_sub(right_panel_width);
+        let filmstrip_height = if filmstrip_visible {
+            LAYOUT_METRICS.filmstrip_heights.preferred_px
+        } else {
+            0
+        };
+        Self {
+            window_width_px,
+            window_height_px,
+            left_panel_width_px: left_panel_width,
+            center_width_px: center_width,
+            right_panel_width_px: right_panel_width,
+            top_toolbar_height_px: DARKROOM_GEOMETRY.top_toolbar_height_px,
+            viewport_minimum_height_px: DARKROOM_GEOMETRY.viewport_minimum_height_px,
+            bottom_toolbar_height_px: DARKROOM_GEOMETRY.bottom_toolbar_height_px,
+            status_bar_height_px: DARKROOM_GEOMETRY.status_bar_height_px,
+            filmstrip_height_px: filmstrip_height,
+            left_panel_visible,
+            right_panel_visible,
+            filmstrip_visible,
+        }
+    }
+
+    /// Returns the center width after a side-panel visibility change.
+    #[must_use]
+    pub const fn center_width_px(self) -> u16 {
+        self.center_width_px
+    }
+}
 
 /// Pixel bounds for the initial Darktable grid and filmstrip thumbnail surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -618,8 +696,8 @@ pub const DARKTABLE_DESKTOP_SPEC: DarktableDesktopSpec = DarktableDesktopSpec {
 mod tests {
     use super::{
         ColorToken, DARKROOM_GEOMETRY, DARKROOM_RAIL_SCROLL_WIDGET_IDS, DARKTABLE_COLORS,
-        DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarkroomWindowLayout, DesktopRegion,
-        FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
+        DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarkroomGeometryReceipt, DarkroomWindowLayout,
+        DesktopRegion, FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, LAYOUT_METRICS,
         LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, PANEL_SLOTS,
         PanelRole, PanelSlot, THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ViewMode,
         darkroom_window_layout,
@@ -719,6 +797,24 @@ mod tests {
         assert_eq!(DarkroomWindowLayout::Normal.center_minimum_width_px(), 650);
         assert_eq!(DarkroomWindowLayout::Narrow.center_minimum_width_px(), 320);
         assert_eq!(DARKROOM_RAIL_SCROLL_WIDGET_IDS.len(), 2);
+    }
+
+    #[test]
+    fn darkroom_geometry_receipt_is_deterministic_and_visibility_aware() {
+        let full = DarkroomGeometryReceipt::for_window(1_224, 768, true, true, true);
+        assert_eq!(full.left_panel_width_px, 150);
+        assert_eq!(full.center_width_px(), 904);
+        assert_eq!(full.right_panel_width_px, 150);
+        assert_eq!(full.filmstrip_height_px, 120);
+        assert_eq!(full.status_bar_height_px, 20);
+
+        let compact = DarkroomGeometryReceipt::for_window(900, 500, false, true, false);
+        assert_eq!(compact.left_panel_width_px, 0);
+        assert_eq!(compact.center_width_px(), 730);
+        assert_eq!(compact.right_panel_width_px, 150);
+        assert_eq!(compact.filmstrip_height_px, 0);
+        assert!(!compact.left_panel_visible);
+        assert!(!compact.filmstrip_visible);
     }
 
     #[test]

@@ -21,10 +21,10 @@ use super::runtime_layout::{
 };
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
-    DARKTABLE_DESKTOP_SPEC, DarkroomView, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LighttableLayout, LighttableLayoutAction, LighttablePanel, LighttablePhotoState,
-    LighttableToolbar, LighttableToolbarAction, LighttableToolbarState, LighttableZoom,
-    PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole, apply_theme_role,
+    DARKTABLE_DESKTOP_SPEC, DarkroomPanelVisibility, DarkroomView, DarkroomWorkspaceViewModel,
+    ExportPanel, ImportAction, LighttableLayout, LighttableLayoutAction, LighttablePanel,
+    LighttablePhotoState, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
+    LighttableZoom, PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use super::{
     LighttableInteractionState, LighttableSelectionAction, NavigationDirection, SelectionModifiers,
@@ -228,18 +228,49 @@ impl GtkShell {
         let interaction = Rc::clone(&shell.lighttable_interaction);
         let left_panel = shell.left_panel_stack.clone();
         let right_panel = shell.right_panel_stack.clone();
+        let darkroom = shell.darkroom.clone();
         shell
             .workspace
             .connect_visible_child_name_notify(move |workspace| {
                 let darkroom_visible = workspace.visible_child_name().as_deref()
                     == Some(WorkspaceRole::Darkroom.stack_name());
-                filmstrip_root.set_visible(
-                    darkroom_visible || interaction.borrow().layout().shows_filmstrip(),
-                );
+                filmstrip_root.set_visible(if darkroom_visible {
+                    darkroom.filmstrip_visible()
+                } else {
+                    interaction.borrow().layout().shows_filmstrip()
+                });
                 let state = interaction.borrow();
-                left_panel.set_visible(darkroom_visible || state.left_panel_visible());
-                right_panel.set_visible(darkroom_visible || state.right_panel_visible());
+                left_panel.set_visible(if darkroom_visible {
+                    darkroom.left_panel_visible()
+                } else {
+                    state.left_panel_visible()
+                });
+                right_panel.set_visible(if darkroom_visible {
+                    darkroom.right_panel_visible()
+                } else {
+                    state.right_panel_visible()
+                });
             });
+        let workspace = shell.workspace.clone();
+        let left_panel = shell.left_panel_stack.clone();
+        let right_panel = shell.right_panel_stack.clone();
+        let filmstrip_root = shell.filmstrip_root.clone();
+        shell.darkroom.connect_panel_visibility(move |action| {
+            if workspace.visible_child_name().as_deref()
+                != Some(WorkspaceRole::Darkroom.stack_name())
+            {
+                return;
+            }
+            match action.panel() {
+                DarkroomPanelVisibility::Left => left_panel.set_visible(action.visible()),
+                DarkroomPanelVisibility::Right => right_panel.set_visible(action.visible()),
+                DarkroomPanelVisibility::Filmstrip => filmstrip_root.set_visible(action.visible()),
+            }
+        });
+        let darkroom_status = shell.darkroom.clone();
+        shell
+            .export_panel
+            .connect_status(move |status| darkroom_status.set_background_job_status(status));
         let shell_for_layout = shell.clone();
         shell
             .lighttable_layout_controls
@@ -605,6 +636,16 @@ impl GtkShell {
     /// types, keeping the UI crate independent from application composition.
     pub fn set_darkroom_workspace(&self, view_model: &DarkroomWorkspaceViewModel) {
         self.darkroom.set_detail(view_model.detail());
+        self.darkroom.set_status(&format!(
+            "selected · {}",
+            view_model.detail().title().as_str()
+        ));
+        if let Some(projection) = view_model.snapshots_projection() {
+            self.darkroom.set_snapshots_projection(projection, None);
+        }
+        if let Some(projection) = view_model.history_projection() {
+            self.darkroom.set_history_projection(projection, None);
+        }
         self.darkroom_workspace.replace(Some(view_model.clone()));
         self.darkroom_preview.set_detail(view_model.detail());
         render_modules(&self.left_modules, view_model.left_modules(), None);
@@ -625,12 +666,15 @@ impl GtkShell {
         &self,
         frame: &DisplayPresentationFrame,
     ) -> Result<(), super::PhotoPreviewTextureError> {
-        self.darkroom_preview.set_presentation(frame)
+        let result = self.darkroom_preview.set_presentation(frame);
+        self.darkroom.set_status(&frame.status().label());
+        result
     }
 
     /// Projects a pending/failure/fallback status without touching the source edit.
     pub fn set_darkroom_presentation_status(&self, status: PresentationStatus) {
         self.darkroom_preview.set_presentation_status(status);
+        self.darkroom.set_status(&status.label());
     }
 
     /// Switches the central workspace without starting or owning a GTK loop.
@@ -643,10 +687,21 @@ impl GtkShell {
         let darkroom_visible = self.workspace.visible_child_name().as_deref()
             == Some(WorkspaceRole::Darkroom.stack_name());
         let state = self.lighttable_interaction.borrow();
-        self.left_panel_stack
-            .set_visible(darkroom_visible || state.left_panel_visible());
-        self.right_panel_stack
-            .set_visible(darkroom_visible || state.right_panel_visible());
+        self.left_panel_stack.set_visible(if darkroom_visible {
+            self.darkroom.left_panel_visible()
+        } else {
+            state.left_panel_visible()
+        });
+        self.right_panel_stack.set_visible(if darkroom_visible {
+            self.darkroom.right_panel_visible()
+        } else {
+            state.right_panel_visible()
+        });
+        self.filmstrip_root.set_visible(if darkroom_visible {
+            self.darkroom.filmstrip_visible()
+        } else {
+            state.layout().shows_filmstrip()
+        });
     }
 
     fn workspace_render_handle(&self) -> WorkspaceRenderHandle {
@@ -656,6 +711,7 @@ impl GtkShell {
             filmstrip: self.filmstrip.clone(),
             filmstrip_root: self.filmstrip_root.clone(),
             darkroom_preview: self.darkroom_preview.clone(),
+            darkroom: self.darkroom.clone(),
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
             export_panel: self.export_panel.clone(),

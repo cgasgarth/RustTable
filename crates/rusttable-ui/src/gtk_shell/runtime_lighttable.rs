@@ -13,9 +13,9 @@ use super::lighttable::{LighttableCollectionState, LighttableGridSpec};
 use super::runtime::PhotoSelectedHandler;
 use super::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 use super::{
-    ExportPanel, LighttableContentState, LighttableInteractionState, LighttableSelectionAction,
-    PhotoPreview, SelectionModifiers, THUMBNAIL_METRICS, ThemeRole, WorkspaceRole,
-    apply_theme_role,
+    DarkroomView, ExportPanel, LighttableContentState, LighttableInteractionState,
+    LighttableSelectionAction, PhotoPreview, SelectionModifiers, THUMBNAIL_METRICS, ThemeRole,
+    WorkspaceRole, apply_theme_role,
 };
 use crate::external_editor::ExternalEditorPanel;
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
@@ -27,6 +27,7 @@ pub(super) struct WorkspaceRenderHandle {
     pub(super) filmstrip: gtk4::FlowBox,
     pub(super) filmstrip_root: gtk4::Box,
     pub(super) darkroom_preview: PhotoPreview,
+    pub(super) darkroom: DarkroomView,
     pub(super) workspace: gtk4::Stack,
     pub(super) photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     pub(super) export_panel: ExportPanel,
@@ -48,6 +49,7 @@ pub(super) struct PhotoTilePair {
 #[derive(Clone)]
 struct PhotoSelectionContext {
     darkroom_preview: PhotoPreview,
+    darkroom: DarkroomView,
     workspace: gtk4::Stack,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     export_panel: ExportPanel,
@@ -121,6 +123,7 @@ impl WorkspaceRenderHandle {
         let mut rendered_photos = 0;
         let selection = PhotoSelectionContext {
             darkroom_preview: self.darkroom_preview.clone(),
+            darkroom: self.darkroom.clone(),
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
             export_panel: self.export_panel.clone(),
@@ -315,6 +318,10 @@ fn connect_photo_selection(
 
 fn open_photo(context: &PhotoSelectionContext, photo_id: PhotoId, detail: &PhotoDetailViewModel) {
     show_photo_detail(&context.darkroom_preview, detail);
+    context.darkroom.set_detail(detail);
+    context
+        .darkroom
+        .set_status(&format!("selected · {}", detail.title().as_str()));
     context
         .workspace
         .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
@@ -340,6 +347,12 @@ fn select_photo(
         });
     let state = context.interaction.borrow();
     sync_photo_buttons(&context.photo_tiles.borrow(), &state);
+    if let Some(detail) = context.photo_details.borrow().get(&photo_id) {
+        context.darkroom.set_detail(detail);
+        context
+            .darkroom
+            .set_status(&format!("selected · {}", detail.title().as_str()));
+    }
     context
         .export_panel
         .set_selected(state.selected_count() > 0);

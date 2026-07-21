@@ -705,9 +705,35 @@ scale:focus-visible {
   border-bottom: 1px solid {{border}};
 }
 
+#darkroom-toolbar-top {
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-toolbar-top button:checked {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+}
+
 #darkroom-toolbar-bottom {
   border-top: 1px solid {{border}};
   border-bottom: 0;
+}
+
+#darkroom-status-bar {
+  min-height: 20px;
+  padding: 1px 5px;
+  background-color: {{background}};
+  border-top: 1px solid {{border}};
+  color: {{foreground}};
+}
+
+#darkroom-status-bar label {
+  font-size: 10px;
+}
+
+#darkroom-job-status {
+  padding-left: 8px;
+  border-left: 1px solid {{border}};
 }
 
 #darkroom-photo-preview,

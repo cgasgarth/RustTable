@@ -265,6 +265,28 @@ pub(super) fn add_group_buttons(
 }
 
 impl DarkroomRailStatus {
+    pub(super) fn set_snapshots_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomSnapshotsViewModel>,
+        handler: Option<crate::presentation::DarkroomPanelActionHandler>,
+    ) {
+        replace_projection(
+            &self.snapshots_body,
+            &build_snapshots_panel(projection, handler),
+        );
+    }
+
+    pub(super) fn set_history_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomHistoryViewModel>,
+        handler: Option<crate::presentation::DarkroomPanelActionHandler>,
+    ) {
+        replace_projection(
+            &self.history_body,
+            &build_history_panel(projection, handler),
+        );
+    }
+
     pub(super) fn set_detail(&self, detail: &PhotoDetailViewModel, target: DarkroomPanelTarget) {
         let information = DarkroomImageInformationViewModel::new(
             detail.title().as_str(),

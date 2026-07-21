@@ -16,9 +16,13 @@ mod darkroom_interaction;
 mod darkroom_viewport;
 #[path = "darkroom_controls/panel_widgets.rs"]
 mod panel_widgets;
+use super::darkroom_status::DarkroomStatusSurface;
 pub(super) use super::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
 use super::{ExposurePanel, PhotoPreview};
-use crate::presentation::{DarkroomPanelTarget, PhotoDetailViewModel};
+use crate::presentation::{
+    DarkroomHistoryViewModel, DarkroomPanelActionHandler, DarkroomPanelProjection,
+    DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
+};
 use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
 };
@@ -37,7 +41,7 @@ use profile_diagnostics::{
 };
 
 /// Stable widget identifiers for the initial darkroom surface.
-pub const DARKROOM_WIDGET_IDS: [&str; 17] = [
+pub const DARKROOM_WIDGET_IDS: [&str; 22] = [
     "darkroom-page",
     "darkroom-toolbar-top",
     "darkroom-photo-preview",
@@ -55,7 +59,51 @@ pub const DARKROOM_WIDGET_IDS: [&str; 17] = [
     "darkroom-right-module-scroll",
     "darkroom-right-modules",
     "exposure",
+    "darkroom-left-panel-toggle",
+    "darkroom-right-panel-toggle",
+    "darkroom-filmstrip-toggle",
+    "darkroom-status-bar",
+    "darkroom-job-status",
 ];
+
+/// Focus order for layout controls that collapse darkroom regions in place.
+pub const DARKROOM_LAYOUT_FOCUS_ORDER: [&str; 3] = [
+    "darkroom-left-panel-toggle",
+    "darkroom-right-panel-toggle",
+    "darkroom-filmstrip-toggle",
+];
+
+/// Side and bottom regions that can be collapsed without changing the selected edit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DarkroomPanelVisibility {
+    Left,
+    Right,
+    Filmstrip,
+}
+
+/// Typed layout intent emitted by the darkroom chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DarkroomPanelVisibilityAction {
+    panel: DarkroomPanelVisibility,
+    visible: bool,
+}
+
+impl DarkroomPanelVisibilityAction {
+    #[must_use]
+    pub const fn new(panel: DarkroomPanelVisibility, visible: bool) -> Self {
+        Self { panel, visible }
+    }
+
+    #[must_use]
+    pub const fn panel(self) -> DarkroomPanelVisibility {
+        self.panel
+    }
+
+    #[must_use]
+    pub const fn visible(self) -> bool {
+        self.visible
+    }
+}
 
 /// Stable left-to-right focus order for the darkroom rail controls.
 pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 10] = [
@@ -114,6 +162,7 @@ impl DarkroomModuleGroup {
 }
 
 type DarkroomModuleGroupHandler = Box<dyn Fn(DarkroomModuleGroup)>;
+pub(super) type DarkroomPanelVisibilityHandler = Box<dyn Fn(DarkroomPanelVisibilityAction)>;
 type DarkroomFilmstripHandler = Box<dyn Fn(PhotoId, ViewportGeneration)>;
 
 /// Stable identifiers for the darkroom viewport controls and filmstrip boundary.
@@ -167,6 +216,11 @@ pub struct DarkroomView {
     filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
     filmstrip_widget: Rc<RefCell<Option<gtk4::FlowBox>>>,
     profile_diagnostic: ProfileDiagnosticSurface,
+    status_surface: DarkroomStatusSurface,
+    left_panel_visible: Rc<Cell<bool>>,
+    right_panel_visible: Rc<Cell<bool>>,
+    filmstrip_visible: Rc<Cell<bool>>,
+    panel_visibility_handler: Rc<RefCell<Option<DarkroomPanelVisibilityHandler>>>,
 }
 
 impl DarkroomView {
@@ -178,10 +232,22 @@ impl DarkroomView {
         let preview = PhotoPreview::new();
         let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
         let viewport_handler = Rc::new(RefCell::new(None));
-        let (page, viewport_controls) = darkroom_page(&preview, &viewport_state, &viewport_handler);
+        let left_panel_visible = Rc::new(Cell::new(true));
+        let right_panel_visible = Rc::new(Cell::new(true));
+        let filmstrip_visible = Rc::new(Cell::new(true));
+        let panel_visibility_handler = Rc::new(RefCell::new(None));
+        let (page, viewport_controls, status_surface) = darkroom_page(
+            &preview,
+            &viewport_state,
+            &viewport_handler,
+            &left_panel_visible,
+            &right_panel_visible,
+            &filmstrip_visible,
+            &panel_visibility_handler,
+        );
         let profile_diagnostic =
             ProfileDiagnosticSurface::new("darkroom-profile-diagnostic", "Darkroom profile status");
-        page.append(profile_diagnostic.widget());
+        status_surface.append(profile_diagnostic.widget());
         let (left_panel, left_modules, rail_status) = left_panel(panel_width);
         let (
             right_panel,
@@ -222,6 +288,11 @@ impl DarkroomView {
             filmstrip_handler,
             filmstrip_widget,
             profile_diagnostic,
+            status_surface,
+            left_panel_visible,
+            right_panel_visible,
+            filmstrip_visible,
+            panel_visibility_handler,
         };
         view.install_module_search();
         view.render_typed_modules();
@@ -231,6 +302,40 @@ impl DarkroomView {
     #[must_use]
     pub fn page(&self) -> &gtk4::Box {
         &self.page
+    }
+
+    #[must_use]
+    pub fn left_panel_visible(&self) -> bool {
+        self.left_panel_visible.get()
+    }
+
+    #[must_use]
+    pub fn right_panel_visible(&self) -> bool {
+        self.right_panel_visible.get()
+    }
+
+    #[must_use]
+    pub fn filmstrip_visible(&self) -> bool {
+        self.filmstrip_visible.get()
+    }
+
+    /// Connects darkroom-local panel toggles to the shell's layout owner.
+    pub fn connect_panel_visibility<F>(&self, handler: F)
+    where
+        F: Fn(DarkroomPanelVisibilityAction) + 'static,
+    {
+        self.panel_visibility_handler
+            .replace(Some(Box::new(handler)));
+    }
+
+    /// Projects the selected edit into the darkroom status row.
+    pub fn set_status(&self, text: &str) {
+        self.status_surface.set_status(text);
+    }
+
+    /// Projects an existing export/background-job status without owning export work.
+    pub fn set_background_job_status(&self, text: &str) {
+        self.status_surface.set_job_status(text);
     }
 
     #[must_use]
@@ -527,7 +632,40 @@ impl DarkroomView {
             viewport.edit_revision().unwrap_or(Revision::ZERO),
         );
         self.rail_status.set_detail(detail, target);
+        if let Ok(history) = DarkroomPanelProjection::error(
+            target,
+            Revision::ZERO,
+            "edit history unavailable for this selection",
+        ) {
+            self.set_history_projection(&history, None);
+        }
+        if let Ok(snapshots) = DarkroomPanelProjection::error(
+            target,
+            Revision::ZERO,
+            "snapshots unavailable for this selection",
+        ) {
+            self.set_snapshots_projection(&snapshots, None);
+        }
         self.histogram.unavailable();
+    }
+
+    /// Projects the controller-owned snapshot state into the left rail.
+    pub fn set_snapshots_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomSnapshotsViewModel>,
+        handler: Option<DarkroomPanelActionHandler>,
+    ) {
+        self.rail_status
+            .set_snapshots_projection(projection, handler);
+    }
+
+    /// Projects the controller-owned edit history into the left rail.
+    pub fn set_history_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomHistoryViewModel>,
+        handler: Option<DarkroomPanelActionHandler>,
+    ) {
+        self.rail_status.set_history_projection(projection, handler);
     }
 
     /// Restores the explicit no-selection state of every side-rail surface.
@@ -576,7 +714,8 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(unique.len(), DARKROOM_WIDGET_IDS.len());
         assert_eq!(DARKROOM_WIDGET_IDS[0], "darkroom-page");
-        assert_eq!(DARKROOM_WIDGET_IDS.last(), Some(&"exposure"));
+        assert_eq!(DARKROOM_WIDGET_IDS.last(), Some(&"darkroom-job-status"));
+        assert!(DARKROOM_WIDGET_IDS.contains(&"exposure"));
         assert!(DARKROOM_WIDGET_IDS.contains(&"darkroom-left-module-scroll"));
         assert!(DARKROOM_WIDGET_IDS.contains(&"darkroom-right-module-scroll"));
         assert_eq!(DARKROOM_OPERATION_FOCUS_ORDER[0], "module-disclosure");
