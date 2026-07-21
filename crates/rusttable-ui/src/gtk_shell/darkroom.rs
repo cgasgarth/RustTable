@@ -58,7 +58,7 @@ pub const DARKROOM_WIDGET_IDS: [&str; 17] = [
 ];
 
 /// Stable left-to-right focus order for the darkroom rail controls.
-pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 9] = [
+pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 10] = [
     "darkroom-navigation",
     "darkroom-snapshots",
     "darkroom-history",
@@ -68,15 +68,17 @@ pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 9] = [
     "group-favorites",
     "group-technical",
     "group-grading",
+    "group-deprecated",
 ];
 
 /// Stable identifiers for the searchable, grouped module-stack controls.
-pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 7] = [
+pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 8] = [
     "darkroom-module-search",
     "group-active",
     "group-favorites",
     "group-technical",
     "group-grading",
+    "group-deprecated",
     "exposure-presets",
     "exposure-reset",
 ];
@@ -87,6 +89,7 @@ pub(super) enum DarkroomModuleGroup {
     Favorites,
     Technical,
     Grading,
+    Deprecated,
 }
 
 impl DarkroomModuleGroup {
@@ -101,7 +104,12 @@ impl DarkroomModuleGroup {
             Self::Grading => ["color", "contrast", "curve", "exposure", "tone"]
                 .iter()
                 .any(|term| title.contains(term)),
+            Self::Deprecated => false,
         }
+    }
+
+    pub(super) const fn is_deprecated_filter(self) -> bool {
+        matches!(self, Self::Deprecated)
     }
 }
 
@@ -165,8 +173,8 @@ impl DarkroomView {
     /// Builds the initial Darktable darkroom around the immutable preview boundary.
     #[must_use]
     pub fn new(panel_width: i32) -> Self {
-        debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 9);
-        debug_assert_eq!(DARKROOM_MODULE_WIDGET_IDS.len(), 7);
+        debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 10);
+        debug_assert_eq!(DARKROOM_MODULE_WIDGET_IDS.len(), 8);
         let preview = PhotoPreview::new();
         let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
         let viewport_handler = Rc::new(RefCell::new(None));
@@ -589,7 +597,7 @@ mod tests {
             Some(&"module-control")
         );
         assert_eq!(DARKROOM_RAIL_FOCUS_ORDER[0], "darkroom-navigation");
-        assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.last(), Some(&"group-grading"));
+        assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.last(), Some(&"group-deprecated"));
         assert_eq!(DARKROOM_MODULE_WIDGET_IDS[0], "darkroom-module-search");
         assert_eq!(DARKROOM_MODULE_WIDGET_IDS.last(), Some(&"exposure-reset"));
         assert_eq!(

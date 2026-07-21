@@ -315,6 +315,8 @@ pub enum LighttableSelectionAction {
     Clear,
     SetZoom(LighttableZoom),
     SetLayout(LighttableLayout),
+    SetLeftPanelVisible(bool),
+    SetRightPanelVisible(bool),
     SetCullingRestriction(CullingRestriction),
     SetCullingActive(PhotoId),
     PanCulling {
@@ -338,6 +340,8 @@ pub struct LighttableInteractionState {
     columns: usize,
     zoom: LighttableZoom,
     layout: LighttableLayout,
+    left_panel_visible: bool,
+    right_panel_visible: bool,
     culling_restriction: CullingRestriction,
     culling_viewport: CullingViewport,
 }
@@ -353,6 +357,8 @@ impl LighttableInteractionState {
             columns: columns.max(1),
             zoom: LighttableZoom::default(),
             layout: LighttableLayout::default(),
+            left_panel_visible: true,
+            right_panel_visible: true,
             culling_restriction: CullingRestriction::default(),
             culling_viewport: CullingViewport::new(),
         }
@@ -448,6 +454,16 @@ impl LighttableInteractionState {
     }
 
     #[must_use]
+    pub const fn left_panel_visible(&self) -> bool {
+        self.left_panel_visible
+    }
+
+    #[must_use]
+    pub const fn right_panel_visible(&self) -> bool {
+        self.right_panel_visible
+    }
+
+    #[must_use]
     pub const fn culling_viewport(&self) -> CullingViewport {
         self.culling_viewport
     }
@@ -471,6 +487,7 @@ impl LighttableInteractionState {
         self.ordered_ids.iter().copied()
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn apply(&mut self, action: LighttableSelectionAction) -> Option<PhotoId> {
         match action {
             LighttableSelectionAction::Select {
@@ -543,6 +560,14 @@ impl LighttableInteractionState {
                     self.culling_viewport.fit();
                 }
                 self.layout = layout;
+                None
+            }
+            LighttableSelectionAction::SetLeftPanelVisible(visible) => {
+                self.left_panel_visible = visible;
+                None
+            }
+            LighttableSelectionAction::SetRightPanelVisible(visible) => {
+                self.right_panel_visible = visible;
                 None
             }
             LighttableSelectionAction::SetCullingRestriction(restriction) => {
@@ -863,5 +888,27 @@ mod tests {
         });
         state.reconcile_selection([]);
         assert_eq!(state.anchor(), None);
+    }
+
+    #[test]
+    fn mode_and_panel_projection_preserve_selection_and_filmstrip_state() {
+        let mut state = state();
+        state.apply(LighttableSelectionAction::Select {
+            photo_id: id(2),
+            modifiers: SelectionModifiers::default(),
+        });
+        let ordered = state.ordered().collect::<Vec<_>>();
+        let selected = state.selected().collect::<Vec<_>>();
+        state.apply(LighttableSelectionAction::SetLayout(
+            LighttableLayout::Preview,
+        ));
+        state.apply(LighttableSelectionAction::SetLeftPanelVisible(false));
+        state.apply(LighttableSelectionAction::SetRightPanelVisible(false));
+        assert_eq!(state.ordered().collect::<Vec<_>>(), ordered);
+        assert_eq!(state.selected().collect::<Vec<_>>(), selected);
+        assert_eq!(state.filmstrip_ids().collect::<Vec<_>>(), ordered);
+        assert_eq!(state.layout(), LighttableLayout::Preview);
+        assert!(!state.left_panel_visible());
+        assert!(!state.right_panel_visible());
     }
 }

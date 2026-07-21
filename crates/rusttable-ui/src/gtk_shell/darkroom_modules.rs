@@ -21,6 +21,10 @@ use module_widgets::{build_control_row, dispatch_module_action};
 mod reference;
 pub use reference::{DarkroomModuleAvailability, reference_modules};
 
+#[cfg(test)]
+#[path = "darkroom_modules_tests.rs"]
+mod tests;
+
 /// The side of the darkroom shell that owns a module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DarkroomModuleSide {
@@ -379,8 +383,14 @@ impl DarkroomModuleViewModel {
 
     #[must_use]
     pub fn status_text(&self) -> String {
-        if let DarkroomModuleAvailability::Unsupported { reason } = &self.availability {
-            return format!("Unavailable · {reason}");
+        match &self.availability {
+            DarkroomModuleAvailability::Unsupported { reason } => {
+                return format!("Unavailable · {reason}");
+            }
+            DarkroomModuleAvailability::Deprecated { reason } => {
+                return format!("Deprecated · {reason}");
+            }
+            DarkroomModuleAvailability::Supported => {}
         }
         match &self.status {
             DarkroomModuleStatus::Ready => format!("Ready · revision {}", self.revision),
@@ -813,158 +823,4 @@ fn module_matches_query(module: &DarkroomModuleViewModel, query: &str) -> bool {
     query.is_empty()
         || module.title().to_ascii_lowercase().contains(query)
         || module.id().to_ascii_lowercase().contains(query)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn module(id: &str, side: DarkroomModuleSide) -> DarkroomModuleViewModel {
-        let slider = DarkroomControlViewModel::slider(
-            format!("{id}-amount"),
-            "Amount",
-            0.0,
-            1.0,
-            0.01,
-            0.5,
-            0.0,
-        )
-        .expect("valid slider");
-        DarkroomModuleViewModel::new(
-            id,
-            id,
-            side,
-            true,
-            true,
-            true,
-            Revision::from_u64(7),
-            vec![slider],
-        )
-        .expect("valid module")
-    }
-
-    #[test]
-    fn stale_module_action_and_control_validation_are_visible() {
-        let mut model = module("exposure", DarkroomModuleSide::Right);
-        model
-            .set_control(
-                Revision::from_u64(7),
-                "exposure-amount",
-                DarkroomControlValue::Slider(0.75),
-            )
-            .expect("typed control update");
-        let error = model
-            .set_enabled(Revision::from_u64(7), false)
-            .expect_err("stale");
-        assert!(matches!(error, DarkroomModuleError::StaleRevision { .. }));
-        assert!(matches!(model.status(), DarkroomModuleStatus::Stale { .. }));
-    }
-
-    #[test]
-    fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
-        let mut model = DarkroomModuleViewModel::new(
-            "exposure",
-            "Exposure",
-            DarkroomModuleSide::Right,
-            true,
-            true,
-            true,
-            Revision::from_u64(7),
-            vec![
-                DarkroomControlViewModel::slider("amount", "Amount", 0.0, 1.0, 0.01, 0.5, 0.0)
-                    .expect("valid slider"),
-                DarkroomControlViewModel::choice("method", "Method", ["balanced", "preserve"], 0)
-                    .expect("valid choice"),
-                DarkroomControlViewModel::toggle("protect", "Protect", false, true)
-                    .expect("valid toggle"),
-            ],
-        )
-        .expect("valid module");
-        let mut revision = Revision::from_u64(7);
-        revision = model
-            .apply(DarkroomModuleAction::Disclosure {
-                module_id: "exposure".to_owned(),
-                expected_revision: revision,
-                expanded: false,
-            })
-            .expect("disclosure action");
-        revision = model
-            .apply(DarkroomModuleAction::Enable {
-                module_id: "exposure".to_owned(),
-                expected_revision: revision,
-                enabled: false,
-            })
-            .expect("enable action");
-        for (id, value) in [
-            ("amount", DarkroomControlValue::Slider(0.75)),
-            ("method", DarkroomControlValue::Choice(1)),
-            ("protect", DarkroomControlValue::Toggle(true)),
-        ] {
-            revision = model
-                .apply(DarkroomModuleAction::Control {
-                    module_id: "exposure".to_owned(),
-                    expected_revision: revision,
-                    id: id.to_owned(),
-                    value,
-                })
-                .expect("control action");
-        }
-        revision = model
-            .apply(DarkroomModuleAction::Reset {
-                module_id: "exposure".to_owned(),
-                expected_revision: revision,
-            })
-            .expect("reset action");
-        assert_eq!(revision, Revision::from_u64(13));
-        assert_eq!(
-            model.focus_order(),
-            [
-                "exposure-disclosure",
-                "exposure-enabled",
-                "exposure-reset",
-                "amount-widget",
-                "method-widget",
-                "protect-widget",
-            ]
-        );
-        assert_eq!(
-            model.controls().control("amount").expect("amount").value(),
-            DarkroomControlValue::Slider(0.0)
-        );
-        assert_eq!(
-            model.controls().control("method").expect("method").value(),
-            DarkroomControlValue::Choice(0)
-        );
-        assert!(matches!(model.status(), DarkroomModuleStatus::Ready));
-    }
-
-    #[test]
-    fn module_search_matches_title_and_id_without_case_or_whitespace_surprises() {
-        let module = module("color-balance", DarkroomModuleSide::Right);
-
-        assert!(module_matches_query(&module, ""));
-        assert!(module_matches_query(
-            &module,
-            "  COLOR  ".trim().to_ascii_lowercase().as_str()
-        ));
-        assert!(module_matches_query(&module, "balance"));
-        assert!(!module_matches_query(&module, "exposure"));
-    }
-
-    #[test]
-    fn reference_modules_expose_typed_controls_and_truthful_unavailable_state() {
-        let modules = reference_modules().expect("reference module snapshot");
-        let temperature = modules.module("temperature").expect("temperature module");
-        assert!(
-            temperature
-                .controls()
-                .controls()
-                .any(|control| control.id().as_str() == "temperature-kelvin")
-        );
-        assert!(matches!(
-            temperature.availability(),
-            DarkroomModuleAvailability::Unsupported { .. }
-        ));
-        assert!(temperature.status_text().contains("Unavailable"));
-    }
 }

@@ -49,12 +49,12 @@ pub use gtk_shell::{
     DarkroomModuleStatus, DarkroomModuleViewModel, DarkroomModulesViewModel,
     DarkroomWorkspaceViewModel, DarktableTheme, ExportAction, ExportPanel, ExportSize,
     ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
-    LighttableInteractionState, LighttableLayout, LighttableLayoutControls, LighttablePhotoState,
-    LighttableRating, LighttableSelectionAction, LighttableSort, LighttableToolbar,
-    LighttableToolbarAction, LighttableToolbarState, LighttableZoom, ModuleControlKind,
-    ModuleControlViewModel, ModulePanelViewModel, NavigationDirection, SelectionModifiers,
-    ShellLayout, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css,
-    install_darktable_theme,
+    LighttableInteractionState, LighttableLayout, LighttableLayoutAction, LighttableLayoutControls,
+    LighttablePanel, LighttablePhotoState, LighttableRating, LighttableSelectionAction,
+    LighttableSort, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
+    LighttableZoom, ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel,
+    NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole,
+    apply_theme_role, darktable_theme_css, install_darktable_theme,
 };
 pub use import::{
     IMPORT_DIALOG_FOCUS_ORDER, IMPORT_DIALOG_WIDGET_IDS, IMPORT_SESSION_FOCUS_ORDER, ImportAction,

@@ -62,7 +62,9 @@ pub use lighttable_interaction::{
     CullingRestriction, LighttableInteractionState, LighttableLayout, LighttableSelectionAction,
     LighttableZoom, NavigationDirection, PanBounds, SelectionModifiers,
 };
-pub use lighttable_layout_controls::LighttableLayoutControls;
+pub use lighttable_layout_controls::{
+    LighttableLayoutAction, LighttableLayoutControls, LighttablePanel,
+};
 pub use lighttable_toolbar::{
     LighttableColorLabel, LighttableRating, LighttableSort, LighttableToolbar,
     LighttableToolbarAction, LighttableToolbarState,

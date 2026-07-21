@@ -4,7 +4,7 @@
 //! lighttable/darkroom view switcher, module-group panel, and filmstrip. It
 //! deliberately uses GTK widgets directly instead of a framework adapter.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -22,9 +22,9 @@ use super::runtime_layout::{
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
     DARKTABLE_DESKTOP_SPEC, DarkroomView, DarkroomWorkspaceViewModel, ExportPanel, ImportAction,
-    LighttableLayout, LighttablePhotoState, LighttableToolbar, LighttableToolbarAction,
-    LighttableToolbarState, LighttableZoom, PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole,
-    apply_theme_role,
+    LighttableLayout, LighttableLayoutAction, LighttablePanel, LighttablePhotoState,
+    LighttableToolbar, LighttableToolbarAction, LighttableToolbarState, LighttableZoom,
+    PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use super::{
     LighttableInteractionState, LighttableSelectionAction, NavigationDirection, SelectionModifiers,
@@ -67,6 +67,8 @@ pub struct GtkShell {
     filmstrip: gtk4::FlowBox,
     filmstrip_root: gtk4::Box,
     lighttable_layout_controls: super::LighttableLayoutControls,
+    left_panel_stack: gtk4::Stack,
+    right_panel_stack: gtk4::Stack,
     left_modules: gtk4::Box,
     right_modules: gtk4::Box,
     darkroom_workspace: Rc<RefCell<Option<DarkroomWorkspaceViewModel>>>,
@@ -85,6 +87,7 @@ pub struct GtkShell {
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     lighttable_filter: Rc<RefCell<Option<BTreeSet<PhotoId>>>>,
     lighttable_interaction: Rc<RefCell<LighttableInteractionState>>,
+    lighttable_generation: Rc<Cell<u64>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
     photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
@@ -192,6 +195,8 @@ impl GtkShell {
             filmstrip,
             filmstrip_root,
             lighttable_layout_controls,
+            left_panel_stack: left_panel.clone(),
+            right_panel_stack: right_panel.clone(),
             left_modules: darkroom_left_modules,
             right_modules: darkroom_right_modules,
             darkroom_workspace,
@@ -213,6 +218,7 @@ impl GtkShell {
             lighttable_workspace: Rc::new(RefCell::new(None)),
             lighttable_filter: Rc::new(RefCell::new(None)),
             lighttable_interaction: Rc::new(RefCell::new(LighttableInteractionState::new(6))),
+            lighttable_generation: Rc::new(Cell::new(0)),
             photo_selected: Rc::new(RefCell::new(None)),
             photo_tiles: Rc::new(RefCell::new(BTreeMap::new())),
             photo_details: Rc::new(RefCell::new(BTreeMap::new())),
@@ -220,6 +226,8 @@ impl GtkShell {
         shell.install_lighttable_keyboard();
         let filmstrip_root = shell.filmstrip_root.clone();
         let interaction = Rc::clone(&shell.lighttable_interaction);
+        let left_panel = shell.left_panel_stack.clone();
+        let right_panel = shell.right_panel_stack.clone();
         shell
             .workspace
             .connect_visible_child_name_notify(move |workspace| {
@@ -228,13 +236,23 @@ impl GtkShell {
                 filmstrip_root.set_visible(
                     darkroom_visible || interaction.borrow().layout().shows_filmstrip(),
                 );
+                let state = interaction.borrow();
+                left_panel.set_visible(darkroom_visible || state.left_panel_visible());
+                right_panel.set_visible(darkroom_visible || state.right_panel_visible());
             });
         let shell_for_layout = shell.clone();
         shell
             .lighttable_layout_controls
-            .connect_layout(move |layout| {
-                shell_for_layout.set_lighttable_layout(layout);
+            .connect_action(move |action| match action {
+                LighttableLayoutAction::SetLayout(layout) => {
+                    shell_for_layout.set_lighttable_layout(layout);
+                }
+                LighttableLayoutAction::SetPanelVisibility { panel, visible } => {
+                    shell_for_layout.set_lighttable_panel_visibility(panel, visible);
+                }
             });
+        shell.left_panel_stack.set_visible(true);
+        shell.right_panel_stack.set_visible(true);
         shell
     }
 
@@ -344,6 +362,11 @@ impl GtkShell {
 
     /// Applies a collection projection to both the controls and the lighttable.
     pub fn set_collection_filter_state(&self, state: &CollectionFilterState) {
+        if state.controls().generation() < self.lighttable_generation.get() {
+            return;
+        }
+        self.lighttable_generation
+            .set(state.controls().generation());
         self.collection_controls.set_state(state.controls());
         self.lighttable_toolbar.set_state(state.toolbar());
         self.lighttable_interaction
@@ -394,11 +417,25 @@ impl GtkShell {
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
             self.filmstrip_root.set_visible(layout.shows_filmstrip());
+            self.sync_lighttable_panels();
             return;
         };
         let filter = self.lighttable_filter.borrow();
         self.workspace_render_handle()
             .render(view_model, filter.as_ref());
+        self.sync_lighttable_panels();
+    }
+
+    /// Applies a Darktable-style side-panel toggle without changing selection or layout.
+    pub fn set_lighttable_panel_visibility(&self, panel: LighttablePanel, visible: bool) {
+        let action = match panel {
+            LighttablePanel::Left => LighttableSelectionAction::SetLeftPanelVisible(visible),
+            LighttablePanel::Right => LighttableSelectionAction::SetRightPanelVisible(visible),
+        };
+        let _ = self.lighttable_interaction.borrow_mut().apply(action);
+        self.lighttable_layout_controls
+            .set_panel_visibility(panel, visible);
+        self.sync_lighttable_panels();
     }
 
     /// Projects the typed lighttable toolbar state into the persistent header row.
@@ -416,6 +453,7 @@ impl GtkShell {
             toolbar: self.lighttable_toolbar.clone(),
             render: self.workspace_render_handle(),
             lighttable_workspace: Rc::clone(&self.lighttable_workspace),
+            generation: self.lighttable_generation.clone(),
         };
         self.lighttable_toolbar.connect_action(move |action| {
             refresh.apply(&callback(action));
@@ -435,6 +473,7 @@ impl GtkShell {
             toolbar: self.lighttable_toolbar.clone(),
             render: self.workspace_render_handle(),
             lighttable_workspace: Rc::clone(&self.lighttable_workspace),
+            generation: self.lighttable_generation.clone(),
         };
         self.collection_controls.connect_action(move |action| {
             refresh.apply(&callback(action));
@@ -597,6 +636,17 @@ impl GtkShell {
     /// Switches the central workspace without starting or owning a GTK loop.
     pub fn show_workspace(&self, role: WorkspaceRole) {
         self.workspace.set_visible_child_name(role.stack_name());
+        self.sync_lighttable_panels();
+    }
+
+    fn sync_lighttable_panels(&self) {
+        let darkroom_visible = self.workspace.visible_child_name().as_deref()
+            == Some(WorkspaceRole::Darkroom.stack_name());
+        let state = self.lighttable_interaction.borrow();
+        self.left_panel_stack
+            .set_visible(darkroom_visible || state.left_panel_visible());
+        self.right_panel_stack
+            .set_visible(darkroom_visible || state.right_panel_visible());
     }
 
     fn workspace_render_handle(&self) -> WorkspaceRenderHandle {
@@ -746,10 +796,15 @@ struct CollectionRefreshHandle {
     toolbar: LighttableToolbar,
     render: WorkspaceRenderHandle,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
+    generation: Rc<Cell<u64>>,
 }
 
 impl CollectionRefreshHandle {
     fn apply(&self, state: &CollectionFilterState) {
+        if state.controls().generation() < self.generation.get() {
+            return;
+        }
+        self.generation.set(state.controls().generation());
         self.controls.set_state(state.controls());
         self.toolbar.set_state(state.toolbar());
         self.render.lighttable_filter.replace(Some(
