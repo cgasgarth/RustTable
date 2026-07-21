@@ -43,15 +43,14 @@ pub use color::{
     to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
-pub use descriptor::defringe_descriptor;
 pub use descriptor::{
     basicadj_descriptor, bloom_descriptor, censorize_descriptor, color_reconstruction_descriptor,
-    colorin_descriptor, crop_descriptor, dither_descriptor, enlargecanvas_descriptor,
-    exposure_descriptor, finalscale_descriptor, flip_descriptor, graduatednd_descriptor,
-    grain_descriptor, highlights_descriptor, invert_descriptor, lenscorrection_descriptor,
-    linear_offset_descriptor, perspective_descriptor, primaries_descriptor, rgb_gain_descriptor,
-    rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor, temperature_descriptor,
-    vignette_descriptor,
+    colorin_descriptor, crop_descriptor, defringe_descriptor, dither_descriptor,
+    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
+    graduatednd_descriptor, grain_descriptor, highlights_descriptor, invert_descriptor,
+    lenscorrection_descriptor, linear_offset_descriptor, perspective_descriptor,
+    primaries_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, EvaluationError, evaluate, prepare_basicadj_plans,
@@ -83,6 +82,15 @@ pub use operations::censorize::{
     CensorizeConfig, CensorizeExecutionError, CensorizeHistory, CensorizeMask,
     CensorizeParameterError, CensorizeParametersV1, CensorizePixel, CensorizePlan,
     CensorizeReceipt, CensorizeRng, CensorizeStages, gaussian_noise, splitmix32, xoshiro128plus,
+};
+pub use operations::defringe::{
+    DEFRINGE_ALIAS, DEFRINGE_COMPATIBILITY_ID, DEFRINGE_GAUSSIAN_ORDER,
+    DEFRINGE_MAGIC_THRESHOLD_COEFFICIENT, DEFRINGE_PARAMETER_BYTES, DEFRINGE_RADIUS_DEFAULT,
+    DEFRINGE_RADIUS_MAX, DEFRINGE_RADIUS_MIN, DEFRINGE_SCHEMA_VERSION, DEFRINGE_THRESHOLD_DEFAULT,
+    DEFRINGE_THRESHOLD_MAX, DEFRINGE_THRESHOLD_MIN, DefringeAnalysis, DefringeBackend,
+    DefringeBlend, DefringeCodecError, DefringeConfig, DefringeExecutionError, DefringeHistory,
+    DefringeMask, DefringeMode, DefringeOutcome, DefringeParameterError, DefringeParametersV1,
+    DefringePixel, DefringePlan, DefringeReceipt,
 };
 pub use operations::grain::{GrainGpuParameters, GrainPlan};
 pub use output::{

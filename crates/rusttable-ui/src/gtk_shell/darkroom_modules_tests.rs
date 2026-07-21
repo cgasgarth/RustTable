@@ -182,13 +182,9 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     assert!(invert.status_text().contains("Deprecated"));
     let defringe = modules.module("defringe").expect("defringe module");
     assert!(defringe.availability().is_deprecated());
-    assert!(defringe.availability().is_unsupported());
-    assert!(!defringe.enabled());
-    assert!(
-        defringe
-            .status_text()
-            .contains("backend qualification is pending #475")
-    );
+    assert!(defringe.availability().is_supported());
+    assert!(defringe.enabled());
+    assert!(defringe.status_text().contains("Deprecated"));
     assert!(!DarkroomModuleGroup::Active.matches(defringe));
     assert!(DarkroomModuleGroup::Deprecated.matches(defringe));
     assert!(bloom_has_typed_sliders(&modules));
@@ -253,7 +249,7 @@ fn censorize_projects_exact_controls_and_is_cpu_supported() {
 }
 
 #[test]
-fn defringe_descriptor_projects_exact_v1_controls_without_qualifying_processing() {
+fn defringe_descriptor_projects_exact_v1_controls_and_qualifies_processing() {
     let modules = reference_modules().expect("reference modules");
     let defringe = modules.module("defringe").expect("defringe");
     assert_eq!(
@@ -286,7 +282,7 @@ fn defringe_descriptor_projects_exact_v1_controls_without_qualifying_processing(
         ["global_average", "local_average", "static"]
     );
     assert_eq!(mode.value(), DarkroomControlValue::Choice(0));
-    assert!(!defringe.availability().is_supported());
+    assert!(defringe.availability().is_supported());
 }
 
 fn assert_float_eq(actual: f64, expected: f64) {

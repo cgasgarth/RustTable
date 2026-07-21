@@ -1,29 +1,48 @@
-//! Unavailable registry definition for the imported-history-only defringe seam.
+//! Registry binding for the typed, deprecated Lab defringe compatibility node.
 
-use crate::defringe_compatibility::DEFRINGE_OPERATION_KEY;
+use crate::ProcessingOperation;
+use crate::descriptor::{DescriptorId, defringe_descriptor};
 use crate::registry::{
-    DefinitionAvailability, ImplementationIdentity, OperationDefinition, REGISTRY_BUILD_ID,
+    CpuFactory, FactoryError, ImplementationIdentity, OperationDefinition, PreparedCpuOperation,
+    REGISTRY_BUILD_ID, RoiKind,
 };
+use rusttable_core::Operation;
 
-/// Publishes the v1 defringe descriptor without an executor until #475 lands.
-#[must_use]
+fn prepare_defringe(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_defringe(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
 pub fn defringe_definition() -> OperationDefinition {
-    let identity = format!("{REGISTRY_BUILD_ID}.defringe");
     OperationDefinition::new(
-        crate::descriptor::defringe_descriptor(),
-        None,
+        defringe_descriptor(),
+        Some(CpuFactory::new(
+            prepare_defringe,
+            crate::evaluate::execute_prepared_operation,
+            RoiKind::Neighborhood,
+            true,
+            true,
+        )),
         None,
         Vec::new(),
-        ImplementationIdentity::new(identity.clone(), 1, identity),
+        ImplementationIdentity::new(
+            format!("{REGISTRY_BUILD_ID}.defringe"),
+            1,
+            format!("{REGISTRY_BUILD_ID}.defringe"),
+        ),
         vec![
             "iop.defringe.params.v1".to_owned(),
-            "iop.defringe.deprecated-visibility".to_owned(),
-            "iop.defringe.typed-seam".to_owned(),
+            "iop.defringe.cpu.scalar-reference".to_owned(),
+            "iop.defringe.gaussian.bounded-lab".to_owned(),
+            "iop.defringe.fibonacci-lattice".to_owned(),
+            "iop.defringe.mask-blend".to_owned(),
+            "iop.defringe.receipt".to_owned(),
         ],
     )
-    .with_availability(DefinitionAvailability::Unavailable {
-        reason: format!(
-            "backend qualification is pending #475; {DEFRINGE_OPERATION_KEY} is read-only"
-        ),
-    })
 }

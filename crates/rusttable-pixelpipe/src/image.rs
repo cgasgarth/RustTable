@@ -50,6 +50,7 @@ impl fmt::Debug for SourceRasterIdentity {
 pub enum RgbaF32ColorEncoding {
     SrgbD65,
     LinearSrgbD65,
+    LabD50,
 }
 
 /// The alpha representation at the pixelpipe boundary.

@@ -16,6 +16,7 @@ pub mod colorreconstruction;
 mod common;
 pub mod convolution;
 pub mod crop;
+pub mod defringe;
 pub mod dither;
 pub mod enlargecanvas;
 pub mod finalscale;
