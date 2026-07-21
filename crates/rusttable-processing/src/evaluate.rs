@@ -154,6 +154,34 @@ fn apply_operation(
                 value * gain.get()
             },
         ),
+        ProcessingOperationKind::Invert { config } => {
+            let plan = crate::operations::invert::InvertPlan::new(*config, dimensions);
+            let candidate = plan
+                .execute(pixels)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
+        ProcessingOperationKind::Dither { config } => {
+            let plan = crate::operations::dither::DitherPlan::new(*config, dimensions);
+            let candidate = plan
+                .execute(pixels)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Temperature { config } => {
             let multipliers = config.multipliers();
             apply_channels(

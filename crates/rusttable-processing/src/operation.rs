@@ -11,10 +11,12 @@ use crate::operations::{
     colorout::ColorOutConfig,
     colorreconstruction::ColorReconstructionConfig,
     crop::CropConfig,
+    dither::DitherConfig,
     enlargecanvas::EnlargeCanvasConfig,
     finalscale::FinalScaleConfig,
     flip::{FlipConfig, FlipMode, OrientationBits},
     highlights::HighlightsConfig,
+    invert::InvertConfig,
     lenscorrection::LensCorrectionConfig,
     perspective::PerspectiveConfig,
     primaries::PrimariesConfig,
@@ -25,18 +27,24 @@ use crate::operations::{
 };
 use crate::{FiniteF32, ScalarNarrowingError};
 
+#[path = "operation_compat.rs"]
+mod operation_compat;
 #[path = "operation_error.rs"]
 mod operation_error;
 #[path = "operation_geometry.rs"]
 mod operation_geometry;
+#[path = "operation_parameters.rs"]
+mod operation_parameters;
 pub(crate) use operation_geometry::{
     compile_enlargecanvas, compile_finalscale, compile_lenscorrection, compile_perspective,
 };
 #[path = "operation_effects.rs"]
 mod operation_effects;
+pub(crate) use operation_compat::{compile_dither, compile_invert};
 pub(crate) use operation_effects::{compile_bloom, compile_soften};
+pub(crate) use operation_parameters::{parameter_integer, parameter_u32};
 
-use operation_error::compile_opacity;
+pub(crate) use operation_error::compile_opacity;
 
 const EXPOSURE_PARAMETER: &str = "stops";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -66,6 +74,12 @@ pub enum ProcessingOperationKind {
         red: FiniteF32,
         green: FiniteF32,
         blue: FiniteF32,
+    },
+    Invert {
+        config: InvertConfig,
+    },
+    Dither {
+        config: DitherConfig,
     },
     Crop {
         config: CropConfig,
@@ -217,6 +231,14 @@ impl ProcessingOperation {
 
     pub(crate) fn compile_rgb_gain(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_rgb_gain(operation)
+    }
+
+    pub(crate) fn compile_invert(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_invert(operation)
+    }
+
+    pub(crate) fn compile_dither(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_dither(operation)
     }
 
     pub(crate) fn compile_highlights(operation: &Operation) -> Result<Self, OperationCompileError> {
@@ -937,46 +959,6 @@ fn parameter_bool(
             parameter,
         }),
     }
-}
-
-fn parameter_integer(
-    operation: &Operation,
-    name: &'static str,
-    default: f64,
-) -> Result<i32, OperationCompileError> {
-    let value = parameter_f32(operation, name, default)?;
-    if !value.is_finite()
-        || value.fract() != 0.0
-        || value < f32::from(i16::MIN)
-        || value > f32::from(i16::MAX)
-    {
-        return Err(invalid_parameters(
-            operation,
-            format!("{name} must be an exact small integer"),
-        ));
-    }
-    #[allow(clippy::cast_possible_truncation, reason = "range checked above")]
-    Ok(value as i32)
-}
-
-fn parameter_u32(
-    operation: &Operation,
-    name: &'static str,
-    default: i64,
-) -> Result<u32, OperationCompileError> {
-    let parameter = ParameterName::new(name).expect("static processing parameter");
-    let value = match operation.parameter(&parameter) {
-        None => default,
-        Some(ParameterValue::Integer(value)) => *value,
-        Some(_) => {
-            return Err(OperationCompileError::WrongParameterType {
-                operation_id: operation.id(),
-                key: operation.key().clone(),
-                parameter,
-            });
-        }
-    };
-    u32::try_from(value).map_err(|_| invalid_parameters(operation, format!("{name} must be a u32")))
 }
 
 pub(crate) fn invalid_parameters<E: fmt::Display>(

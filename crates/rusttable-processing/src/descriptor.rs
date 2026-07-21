@@ -15,9 +15,11 @@ mod descriptor_effects;
 #[path = "descriptor_operations.rs"]
 mod descriptor_operations;
 pub use crate::operations::crop::crop_descriptor;
+pub use crate::operations::dither::dither_descriptor;
 pub use crate::operations::enlargecanvas::enlargecanvas_descriptor;
 pub use crate::operations::finalscale::finalscale_descriptor;
 pub use crate::operations::flip::flip_descriptor;
+pub use crate::operations::invert::invert_descriptor;
 pub use crate::operations::lenscorrection::lenscorrection_descriptor;
 pub use crate::operations::perspective::perspective_descriptor;
 pub use crate::operations::rotatepixels::rotatepixels_descriptor;

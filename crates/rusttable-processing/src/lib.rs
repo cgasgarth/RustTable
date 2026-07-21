@@ -44,10 +44,10 @@ pub use color::{
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
     bloom_descriptor, color_reconstruction_descriptor, colorin_descriptor, crop_descriptor,
-    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
-    highlights_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
-    perspective_descriptor, primaries_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
-    scalepixels_descriptor, soften_descriptor, temperature_descriptor,
+    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
+    flip_descriptor, highlights_descriptor, invert_descriptor, lenscorrection_descriptor,
+    linear_offset_descriptor, perspective_descriptor, primaries_descriptor, rgb_gain_descriptor,
+    rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor, temperature_descriptor,
 };
 pub use evaluate::{BlendArithmeticStage, EvaluationError, evaluate};
 pub use exposure::{
