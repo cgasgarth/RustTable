@@ -4,11 +4,13 @@
 
 mod cache;
 mod contracts;
+mod dispatch;
 mod point;
 pub mod purpose;
 mod resource;
 mod runtime;
 pub mod shader;
+mod submission;
 pub mod transfer;
 
 pub use contracts::{
@@ -19,6 +21,12 @@ pub use contracts::{
 };
 
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
+pub use dispatch::{
+    BindingResource, CancellationToken, CommandEncoder, DispatchBatch, DispatchError,
+    DispatchFailure, DispatchRegion, EncodedBatch, EncodedDispatch, EncodingReceipt, GridPlan,
+    KernelIdentity, ParameterBlock, ParameterValue, ParityContract, PrepareRequest,
+    PreparedGpuKernel, ReceiptStatus, ScalarValue, Tile, TypedParameters,
+};
 pub use point::{BasicPointError, BasicPointOperation, BasicPointRequest, BasicPointResult};
 pub use resource::{
     DeviceGeneration, GpuResourcePool, InitializationPolicy, PoolError, PoolEvent,
@@ -27,3 +35,9 @@ pub use resource::{
     SubmissionId, SubmissionToken,
 };
 pub use runtime::{GpuInitError, GpuRuntime, GpuRuntimeConfig};
+pub use submission::{
+    AdmissionLimitKind, CancellationOutcome, CompletionOutcome, CompletionReceipt,
+    CompletionSignal, DispatchOutcome, RuntimeSubmissionError, SubmissionBackend, SubmissionError,
+    SubmissionLimits, SubmissionPacket, SubmissionQueue, SubmissionRequest, SubmissionRuntime,
+    SubmissionState,
+};
