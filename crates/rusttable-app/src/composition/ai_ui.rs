@@ -34,6 +34,7 @@ pub(super) fn install_ai_ui_bridges(
     let ai_models_controller = Rc::new(RefCell::new(AiModelsController::new(
         UnavailableAiModelsService,
     )));
+    shell.set_ai_models_state(ai_models_controller.borrow().state());
     let _ = ai_models_controller.borrow_mut().refresh();
     shell.set_ai_models_state(ai_models_controller.borrow().state());
     let ai_models_for_actions = Rc::clone(&ai_models_controller);
