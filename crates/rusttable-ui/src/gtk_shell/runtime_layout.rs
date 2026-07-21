@@ -13,8 +13,9 @@ use super::darkroom::DarkroomModuleGroup;
 use super::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use super::lighttable::empty_collection_state;
 use super::{
-    DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_RIGHT_MODULES, ModuleControlKind,
-    ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role,
+    DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls,
+    ModuleControlKind, ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
+    apply_theme_role,
 };
 
 pub(super) fn right_panel() -> (
@@ -99,7 +100,7 @@ pub(super) fn desktop_body(
     left_panel: &gtk4::Stack,
     right_panel: &gtk4::Stack,
     i18n: &I18n,
-) -> (gtk4::Box, gtk4::FlowBox) {
+) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let center = central_workspace(workspace);
     let (filmstrip_root, filmstrip) = filmstrip(i18n);
@@ -143,7 +144,7 @@ pub(super) fn desktop_body(
     content.set_margin_start(outer_border);
     content.set_margin_end(outer_border);
     content.append(&workspace_with_right_panel);
-    (content, filmstrip)
+    (content, filmstrip, filmstrip_root)
 }
 
 fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
@@ -160,7 +161,12 @@ pub(super) fn workspace_stack(
     initial_workspace: WorkspaceRole,
     i18n: &I18n,
     darkroom_page: &gtk4::Box,
-) -> (gtk4::Stack, gtk4::FlowBox, gtk4::Stack) {
+) -> (
+    gtk4::Stack,
+    gtk4::FlowBox,
+    gtk4::Stack,
+    LighttableLayoutControls,
+) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
@@ -197,7 +203,8 @@ pub(super) fn workspace_stack(
     lighttable_canvas.add_named(&empty_state, Some("empty"));
     lighttable_canvas.set_visible_child_name("empty");
     lighttable_page.append(&lighttable_canvas);
-    lighttable_page.append(&lighttable_footer(i18n));
+    let layout_controls = LighttableLayoutControls::new();
+    lighttable_page.append(&lighttable_footer(i18n, &layout_controls));
 
     workspace.add_titled(
         &lighttable_page,
@@ -210,10 +217,10 @@ pub(super) fn workspace_stack(
         &i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()),
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
-    (workspace, lighttable, lighttable_canvas)
+    (workspace, lighttable, lighttable_canvas, layout_controls)
 }
 
-fn lighttable_footer(i18n: &I18n) -> gtk4::Box {
+fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) -> gtk4::Box {
     let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
@@ -227,6 +234,7 @@ fn lighttable_footer(i18n: &I18n) -> gtk4::Box {
             &i18n.text(message_id, &MessageArgs::new()),
         ));
     }
+    bottom_tools.append(layout_controls.widget());
     bottom_tools.insert_child_after(&gtk4::Button::with_label("100%"), None::<&gtk4::Widget>);
     bottom_tools
 }

@@ -25,6 +25,7 @@ pub(super) struct WorkspaceRenderHandle {
     pub(super) lighttable: gtk4::FlowBox,
     pub(super) lighttable_empty_state: gtk4::Stack,
     pub(super) filmstrip: gtk4::FlowBox,
+    pub(super) filmstrip_root: gtk4::Box,
     pub(super) darkroom_preview: PhotoPreview,
     pub(super) workspace: gtk4::Stack,
     pub(super) photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
@@ -57,6 +58,7 @@ struct PhotoSelectionContext {
 }
 
 impl WorkspaceRenderHandle {
+    #[allow(clippy::too_many_lines)]
     pub(super) fn render(
         &self,
         view_model: &PhotoWorkspaceViewModel,
@@ -74,9 +76,24 @@ impl WorkspaceRenderHandle {
         self.photo_tiles.borrow_mut().clear();
         self.photo_details.borrow_mut().clear();
         let zoom = self.interaction.borrow().zoom();
+        let layout = self.interaction.borrow().layout();
         let grid = LighttableGridSpec::for_zoom(zoom);
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
-        self.lighttable.set_max_children_per_line(columns);
+        self.lighttable
+            .set_max_children_per_line(if layout.shows_culling() {
+                u32::MAX
+            } else {
+                columns
+            });
+        let darkroom_visible = self.workspace.visible_child_name().as_deref()
+            == Some(WorkspaceRole::Darkroom.stack_name());
+        self.filmstrip_root
+            .set_visible(darkroom_visible || layout.shows_filmstrip());
+        if layout.shows_culling() {
+            self.lighttable.add_css_class("dt_culling_surface");
+        } else {
+            self.lighttable.remove_css_class("dt_culling_surface");
+        }
         let browser = super::LibraryBrowserModel::from_workspace(view_model);
         let visible_ids = browser
             .photos()
@@ -86,9 +103,21 @@ impl WorkspaceRenderHandle {
             .collect::<Vec<_>>();
         {
             let mut interaction = self.interaction.borrow_mut();
-            interaction.set_columns(columns as usize);
+            interaction.set_columns(if layout.shows_culling() {
+                1
+            } else {
+                columns as usize
+            });
             interaction.set_order(visible_ids);
         }
+        let display_ids = {
+            let interaction = self.interaction.borrow();
+            if layout.shows_culling() {
+                interaction.culling_ids().collect::<BTreeSet<_>>()
+            } else {
+                interaction.ordered().collect::<BTreeSet<_>>()
+            }
+        };
         let mut rendered_photos = 0;
         let selection = PhotoSelectionContext {
             darkroom_preview: self.darkroom_preview.clone(),
@@ -132,7 +161,10 @@ impl WorkspaceRenderHandle {
             }
             connect_photo_selection(&card, photo.id(), detail.clone(), &selection);
             connect_photo_selection(&filmstrip_item, photo.id(), detail, &selection);
-            self.lighttable.insert(&card, -1);
+            if display_ids.contains(&photo.id()) {
+                self.lighttable.insert(&card, -1);
+                rendered_photos += 1;
+            }
             self.filmstrip.insert(&filmstrip_item, -1);
             self.photo_tiles.borrow_mut().insert(
                 photo.id(),
@@ -142,7 +174,6 @@ impl WorkspaceRenderHandle {
                     filmstrip_button: filmstrip_item,
                 },
             );
-            rendered_photos += 1;
         }
         let collection_state = if rendered_photos == 0 {
             LighttableCollectionState::Empty
@@ -239,8 +270,6 @@ fn connect_photo_selection(
     context: &PhotoSelectionContext,
 ) {
     let photo_details = Rc::clone(&context.photo_details);
-    let darkroom_preview = context.darkroom_preview.clone();
-    let workspace = context.workspace.clone();
     let selection = context.clone();
     let button_for_gesture = button.clone();
     let gesture = gtk4::GestureClick::new();
@@ -256,8 +285,7 @@ fn connect_photo_selection(
         if n_press >= 2
             && let Some(detail) = photo_details.borrow().get(&photo_id)
         {
-            show_photo_detail(&darkroom_preview, detail);
-            workspace.set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
+            open_photo(&selection, photo_id, detail);
         }
     });
     button.add_controller(gesture);
@@ -283,6 +311,18 @@ fn connect_photo_selection(
         gtk4::glib::Propagation::Stop
     });
     button.add_controller(key);
+}
+
+fn open_photo(context: &PhotoSelectionContext, photo_id: PhotoId, detail: &PhotoDetailViewModel) {
+    show_photo_detail(&context.darkroom_preview, detail);
+    context
+        .workspace
+        .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
+    context.export_panel.set_selected(true);
+    context.external_editor_panel.set_selection(1);
+    if let Some(handler) = context.photo_selected.borrow().as_ref() {
+        handler(photo_id);
+    }
 }
 
 fn select_photo(

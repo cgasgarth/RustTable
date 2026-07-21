@@ -17,6 +17,9 @@ use super::{ThemeRole, apply_theme_role};
 #[path = "darkroom_controls/module_widgets.rs"]
 mod module_widgets;
 use module_widgets::{build_control_row, dispatch_module_action};
+#[path = "darkroom_reference.rs"]
+mod reference;
+pub use reference::{DarkroomModuleAvailability, reference_modules};
 
 /// The side of the darkroom shell that owns a module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +161,7 @@ pub struct DarkroomModuleViewModel {
     resettable: bool,
     revision: Revision,
     controls: DarkroomControlsViewModel,
+    availability: DarkroomModuleAvailability,
     status: DarkroomModuleStatus,
 }
 
@@ -198,6 +202,7 @@ impl DarkroomModuleViewModel {
             resettable,
             revision,
             controls,
+            availability: DarkroomModuleAvailability::Supported,
             status: DarkroomModuleStatus::Ready,
         })
     }
@@ -230,6 +235,17 @@ impl DarkroomModuleViewModel {
     #[must_use]
     pub const fn resettable(&self) -> bool {
         self.resettable
+    }
+
+    #[must_use]
+    pub const fn availability(&self) -> &DarkroomModuleAvailability {
+        &self.availability
+    }
+
+    #[must_use]
+    pub fn with_availability(mut self, availability: DarkroomModuleAvailability) -> Self {
+        self.availability = availability;
+        self
     }
 
     #[must_use]
@@ -363,6 +379,9 @@ impl DarkroomModuleViewModel {
 
     #[must_use]
     pub fn status_text(&self) -> String {
+        if let DarkroomModuleAvailability::Unsupported { reason } = &self.availability {
+            return format!("Unavailable · {reason}");
+        }
         match &self.status {
             DarkroomModuleStatus::Ready => format!("Ready · revision {}", self.revision),
             DarkroomModuleStatus::Stale { expected, actual } => {
@@ -561,6 +580,7 @@ pub fn build_module_panel_with_actions(
     let expected_revision = module.revision();
     let current_revision = Rc::new(RefCell::new(expected_revision));
     let module_id = module.id().to_owned();
+    let module_available = module.availability().is_supported();
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     content.set_widget_name(&format!("{}-content", module.id()));
     apply_theme_role(&content, ThemeRole::Module);
@@ -587,6 +607,7 @@ pub fn build_module_panel_with_actions(
     enabled.set_widget_name(&format!("{}-enabled", module.id()));
     enabled.set_label(Some("Enabled"));
     enabled.set_active(module.enabled());
+    enabled.set_sensitive(module_available);
     enabled.set_focusable(true);
     enabled.update_property(&[Property::Label("Enable module")]);
     header.append(&enabled);
@@ -600,7 +621,7 @@ pub fn build_module_panel_with_actions(
     let reset = module.resettable().then(|| {
         let reset = gtk4::Button::with_label("Reset");
         reset.set_widget_name(&format!("{}-reset", module.id()));
-        reset.set_sensitive(module.enabled());
+        reset.set_sensitive(module_available && module.enabled());
         reset.set_focus_on_click(false);
         reset.set_halign(gtk4::Align::End);
         reset.update_property(&[Property::Label("Reset module to defaults")]);
@@ -615,7 +636,7 @@ pub fn build_module_panel_with_actions(
     for control in module.controls().controls() {
         let row = build_control_row(
             control,
-            module.enabled(),
+            module_available && module.enabled(),
             action_handler.clone(),
             status.clone(),
             recover.clone(),
@@ -668,7 +689,7 @@ pub fn build_module_panel_with_actions(
                 reset.set_sensitive(enabled.is_active());
             }
             for row in &control_rows {
-                row.set_sensitive(enabled.is_active());
+                row.set_sensitive(module_available && enabled.is_active());
             }
             dispatch_module_action(
                 &handler_for_enabled,
@@ -928,5 +949,22 @@ mod tests {
         ));
         assert!(module_matches_query(&module, "balance"));
         assert!(!module_matches_query(&module, "exposure"));
+    }
+
+    #[test]
+    fn reference_modules_expose_typed_controls_and_truthful_unavailable_state() {
+        let modules = reference_modules().expect("reference module snapshot");
+        let temperature = modules.module("temperature").expect("temperature module");
+        assert!(
+            temperature
+                .controls()
+                .controls()
+                .any(|control| control.id().as_str() == "temperature-kelvin")
+        );
+        assert!(matches!(
+            temperature.availability(),
+            DarkroomModuleAvailability::Unsupported { .. }
+        ));
+        assert!(temperature.status_text().contains("Unavailable"));
     }
 }
