@@ -2,6 +2,7 @@ mod canonical;
 mod command;
 mod error;
 mod import;
+mod query;
 mod repository;
 mod state;
 mod types;
@@ -14,6 +15,10 @@ pub use canonical::{
 pub use command::HistoryCommand;
 pub use error::HistoryError;
 pub use import::{HistoryImport, HistoryImportError};
+pub use query::{
+    HistoryCommitReceipt, HistoryInvariantReport, HistoryPage, HistoryPageDirection,
+    HistoryPageError, HistoryPageRequest, HistoryReceiptProvenance,
+};
 pub use repository::{
     DurableHistoryError, DurableHistoryService, HistoryRepository, HistoryRepositoryError,
 };

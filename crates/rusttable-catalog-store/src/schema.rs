@@ -4,7 +4,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 use rusttable_catalog::{CanonicalPayload, RepositoryError};
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 7;
+pub const CURRENT_SCHEMA_VERSION: u8 = 8;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -46,6 +46,8 @@ pub(crate) const HISTORY_REVISIONS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_revisions");
 pub(crate) const HISTORY_BLOBS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blobs");
+pub(crate) const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_history_blob_refs");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
 
 pub(crate) fn open(path: &Path) -> Result<Database, RepositoryError> {
@@ -127,7 +129,12 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
         [6] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v7(database)
+            migrate_to_v7(database).and_then(|()| migrate_to_v8(database))
+        }
+        [7] => {
+            drop(schema);
+            drop(transaction);
+            migrate_to_v8(database)
         }
         [5] => {
             drop(schema);
@@ -174,6 +181,7 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
         HISTORY_STATE_TABLE,
         HISTORY_REVISIONS_TABLE,
         HISTORY_BLOBS_TABLE,
+        HISTORY_BLOB_REFS_TABLE,
     ] {
         transaction
             .open_table(table)
@@ -309,6 +317,8 @@ fn migrate_to_v6(database: &Database) -> Result<(), RepositoryError> {
         drop(version);
         open_history_tables(&transaction)?;
         backfill_history_blobs(&transaction)?;
+        backfill_history_blob_refs(&transaction)?;
+        migrate_current_edits_to_history(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -389,6 +399,9 @@ fn open_history_tables(transaction: &redb::WriteTransaction) -> Result<(), Repos
     transaction
         .open_table(HISTORY_BLOBS_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_BLOB_REFS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
     Ok(())
 }
 
@@ -411,12 +424,206 @@ fn migrate_to_v7(database: &Database) -> Result<(), RepositoryError> {
         open_history_tables(&transaction)?;
         backfill_history_blobs(&transaction)?;
         schema
+            .insert(VERSION_KEY, &[7][..])
+            .map_err(|_| RepositoryError::Unavailable)?;
+    }
+    transaction
+        .commit()
+        .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn migrate_to_v8(database: &Database) -> Result<(), RepositoryError> {
+    let transaction = database
+        .begin_write()
+        .map_err(|_| RepositoryError::Unavailable)?;
+    {
+        let mut schema = transaction
+            .open_table(SCHEMA_TABLE)
+            .map_err(|_| RepositoryError::CorruptPersistedData)?;
+        let version = schema
+            .get(VERSION_KEY)
+            .map_err(|_| RepositoryError::CorruptPersistedData)?
+            .ok_or(RepositoryError::CorruptPersistedData)?;
+        if version.value() != [7] {
+            return Err(RepositoryError::CorruptPersistedData);
+        }
+        drop(version);
+        open_history_tables(&transaction)?;
+        backfill_history_blob_refs(&transaction)?;
+        migrate_current_edits_to_history(&transaction)?;
+        schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
     }
     transaction
         .commit()
         .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn backfill_history_blob_refs(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
+    let revisions = transaction
+        .open_table(HISTORY_REVISIONS_TABLE)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    let keys = revisions
+        .iter()
+        .map_err(|_| RepositoryError::CorruptPersistedData)?
+        .map(|entry| {
+            let (_, value) = entry.map_err(|_| RepositoryError::CorruptPersistedData)?;
+            let revision = crate::history_codec::decode_revision(value.value())
+                .map_err(|()| RepositoryError::CorruptPersistedData)?;
+            let payload = CanonicalPayload::from_history(revision.payload())
+                .map_err(|_| RepositoryError::CorruptPersistedData)?;
+            Ok::<_, RepositoryError>([
+                blob_key(payload.edit().id()),
+                blob_key(payload.mask_blend().id()),
+                blob_key(payload.pipeline().id()),
+            ])
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(revisions);
+    let mut counts = std::collections::BTreeMap::<[u8; 43], u64>::new();
+    for group in keys {
+        for key in group {
+            let count = counts.entry(key).or_default();
+            *count = count
+                .checked_add(1)
+                .ok_or(RepositoryError::CorruptPersistedData)?;
+        }
+    }
+    let mut refs = transaction
+        .open_table(HISTORY_BLOB_REFS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    for (key, count) in counts {
+        refs.insert(key.as_slice(), count.to_be_bytes().as_slice())
+            .map_err(|_| RepositoryError::Unavailable)?;
+    }
+    Ok(())
+}
+
+fn migrate_current_edits_to_history(
+    transaction: &redb::WriteTransaction,
+) -> Result<(), RepositoryError> {
+    use rusttable_catalog::{
+        HistoryCommand, HistoryOperationKind, HistoryOperationSummary, HistoryPayload, HistoryState,
+    };
+    use rusttable_core::PhotoId;
+
+    let edits = transaction
+        .open_table(EDITS_TABLE)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    let mut current = std::collections::BTreeMap::<PhotoId, rusttable_core::Edit>::new();
+    for entry in edits
+        .iter()
+        .map_err(|_| RepositoryError::CorruptPersistedData)?
+    {
+        let (_, value) = entry.map_err(|_| RepositoryError::CorruptPersistedData)?;
+        let edit = crate::edit_codec::decode(value.value())
+            .map_err(|()| RepositoryError::CorruptPersistedData)?;
+        if current.get(&edit.photo_id()).is_none_or(|existing| {
+            (edit.revision(), edit.id()) > (existing.revision(), existing.id())
+        }) {
+            current.insert(edit.photo_id(), edit);
+        }
+    }
+    drop(edits);
+    let states = transaction
+        .open_table(HISTORY_STATE_TABLE)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    let mut missing = Vec::new();
+    for (photo_id, edit) in current {
+        if states
+            .get(photo_id.get().to_be_bytes().as_slice())
+            .map_err(|_| RepositoryError::CorruptPersistedData)?
+            .is_none()
+        {
+            missing.push((photo_id, edit));
+        }
+    }
+    drop(states);
+    for (photo_id, edit) in missing {
+        let mut state = HistoryState::new(photo_id);
+        let summary = HistoryOperationSummary::new(
+            HistoryOperationKind::Parameter,
+            None,
+            None,
+            "migrated current edit",
+        )
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+        state
+            .apply(
+                state.version(),
+                HistoryCommand::Append {
+                    payload: HistoryPayload::new(edit, Vec::new(), Vec::new(), summary),
+                },
+            )
+            .map_err(|_| RepositoryError::CorruptPersistedData)?;
+        stage_migrated_history(transaction, &state)?;
+    }
+    Ok(())
+}
+
+fn stage_migrated_history(
+    transaction: &redb::WriteTransaction,
+    state: &rusttable_catalog::HistoryState,
+) -> Result<(), RepositoryError> {
+    let snapshot = state.persistence_snapshot();
+    let metadata = crate::history_codec::encode_meta(&snapshot)
+        .map_err(|()| RepositoryError::CorruptPersistedData)?;
+    let revision = snapshot
+        .revisions()
+        .first()
+        .ok_or(RepositoryError::CorruptPersistedData)?;
+    let encoded = crate::history_codec::encode_revision(revision)
+        .map_err(|()| RepositoryError::CorruptPersistedData)?;
+    let payload = CanonicalPayload::from_history(revision.payload())
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    let mut states = transaction
+        .open_table(HISTORY_STATE_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    states
+        .insert(
+            state.photo_id().get().to_be_bytes().as_slice(),
+            metadata.as_slice(),
+        )
+        .map_err(|_| RepositoryError::Unavailable)?;
+    drop(states);
+    let mut revisions = transaction
+        .open_table(HISTORY_REVISIONS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    revisions
+        .insert(
+            revision_key(state.photo_id(), revision.id()).as_slice(),
+            encoded.as_slice(),
+        )
+        .map_err(|_| RepositoryError::Unavailable)?;
+    drop(revisions);
+    let mut blobs = transaction
+        .open_table(HISTORY_BLOBS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    let mut refs = transaction
+        .open_table(HISTORY_BLOB_REFS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    for blob in [payload.edit(), payload.mask_blend(), payload.pipeline()] {
+        blobs
+            .insert(blob_key(blob.id()).as_slice(), blob.bytes())
+            .map_err(|_| RepositoryError::Unavailable)?;
+        refs.insert(
+            blob_key(blob.id()).as_slice(),
+            1_u64.to_be_bytes().as_slice(),
+        )
+        .map_err(|_| RepositoryError::Unavailable)?;
+    }
+    Ok(())
+}
+
+fn revision_key(
+    photo_id: rusttable_core::PhotoId,
+    revision: rusttable_catalog::HistoryRevisionId,
+) -> [u8; 24] {
+    let mut key = [0; 24];
+    key[..16].copy_from_slice(&photo_id.get().to_be_bytes());
+    key[16..].copy_from_slice(&revision.get().to_be_bytes());
+    key
 }
 
 fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {

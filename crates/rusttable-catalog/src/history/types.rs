@@ -534,7 +534,7 @@ pub enum HistoryExecutionStatus {
     Opaque { reason: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HistoryBlobRefs {
     edit: ContentBlobId,
     mask_blend: ContentBlobId,

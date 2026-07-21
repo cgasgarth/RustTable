@@ -6,6 +6,7 @@ mod codegen;
 mod color;
 mod configuration;
 mod dist;
+mod edit_history;
 mod export_contract;
 mod fixtures;
 mod foundation;

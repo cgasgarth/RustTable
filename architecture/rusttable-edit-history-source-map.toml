@@ -1,0 +1,87 @@
+schema = "rusttable.edit-history-source-map.v1"
+issue = 200
+
+[[responsibility]]
+id = "current-edit-endpoint"
+upstream_path = "src/common/history.c"
+upstream_symbol = "history_end/current history endpoint"
+rust_path = "crates/rusttable-catalog/src/durable_edit.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "operation-envelope"
+upstream_path = "src/develop/imageop.h"
+upstream_symbol = "operation instance parameters and order"
+rust_path = "crates/rusttable-catalog/src/history/canonical.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "mask-blend-bundle"
+upstream_path = "src/develop/blend.c and src/develop/masks"
+upstream_symbol = "blend and mask payload ownership"
+rust_path = "crates/rusttable-catalog/src/history/canonical.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "immutable-revision"
+upstream_path = "src/common/history.c"
+upstream_symbol = "append/write history row"
+rust_path = "crates/rusttable-catalog/src/history/state.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "undo-redo-restore"
+upstream_path = "src/libs/history.c"
+upstream_symbol = "undo redo current selection"
+rust_path = "crates/rusttable-catalog/src/history/command.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "named-snapshots"
+upstream_path = "src/libs/snapshots.c"
+upstream_symbol = "named snapshot cursor"
+rust_path = "crates/rusttable-catalog/src/history/types.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "source-provenance"
+upstream_path = "src/common/exif.cc"
+upstream_symbol = "history snapshot provenance"
+rust_path = "crates/rusttable-catalog/src/history/import.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "redb-transaction"
+upstream_path = "src/common/database.c"
+upstream_symbol = "history/current atomic write boundary"
+rust_path = "crates/rusttable-catalog-store/src/history_repository.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "content-addressed-blobs"
+upstream_path = "src/common/history.c"
+upstream_symbol = "history hash and payload identity"
+rust_path = "crates/rusttable-catalog/src/history/canonical.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "migration-current-only"
+upstream_path = "src/common/database.c"
+upstream_symbol = "schema migration of current history"
+rust_path = "crates/rusttable-catalog-store/src/schema.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "reachability-compaction"
+upstream_path = "src/common/history.c"
+upstream_symbol = "retained history reachability"
+rust_path = "crates/rusttable-catalog-store/src/history_repository.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "history-ui"
+upstream_path = "src/libs/history.c and src/libs/snapshots.c"
+upstream_symbol = "history and snapshot presentation"
+rust_path = "crates/rusttable-catalog/src/history/command.rs"
+status = "deferred"
+owner_issue = 285
