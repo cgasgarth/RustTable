@@ -82,6 +82,7 @@ pub struct CollectionController {
     organization: BTreeMap<PhotoId, PhotoOrganizationState>,
     catalog_state: Option<CatalogState>,
     selected: BTreeSet<PhotoId>,
+    selection_anchor: Option<PhotoId>,
     sort: LighttableSort,
     generation: u64,
 }
@@ -107,6 +108,7 @@ impl CollectionController {
             organization,
             catalog_state: None,
             selected: BTreeSet::new(),
+            selection_anchor: None,
             sort: LighttableSort::Filename,
             generation: 0,
         }
@@ -206,6 +208,7 @@ impl CollectionController {
         let changed = self.selected.len() != 1 || !self.selected.contains(&photo_id);
         self.selected.clear();
         self.selected.insert(photo_id);
+        self.selection_anchor = Some(photo_id);
         changed
     }
 
@@ -216,7 +219,34 @@ impl CollectionController {
         if !self.selected.insert(photo_id) {
             self.selected.remove(&photo_id);
         }
+        self.selection_anchor = Some(photo_id);
         true
+    }
+
+    /// Selects the deterministic visible range from the last single selection.
+    pub fn select_range(&mut self, photo_id: PhotoId, extend: bool) -> bool {
+        if !self.organization.contains_key(&photo_id) {
+            return false;
+        }
+        let anchor = self.selection_anchor.unwrap_or(photo_id);
+        let order = self.snapshot().matching_photo_ids().collect::<Vec<_>>();
+        let Some(left) = order.iter().position(|id| *id == anchor) else {
+            return self.select_only(photo_id);
+        };
+        let Some(right) = order.iter().position(|id| *id == photo_id) else {
+            return false;
+        };
+        let (start, end) = if left <= right {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        let before = self.selected.clone();
+        if !extend {
+            self.selected.clear();
+        }
+        self.selected.extend(order[start..=end].iter().copied());
+        before != self.selected
     }
 
     pub fn set_selected_rating(&mut self, rating: LighttableRating) {
@@ -259,6 +289,7 @@ impl CollectionController {
         self.rule = CollectionRule::new(CollectionProperty::Filename);
         self.sort = LighttableSort::Filename;
         self.selected.clear();
+        self.selection_anchor = None;
     }
 
     fn apply_catalog_command(&mut self, command: CatalogCommand) {
@@ -642,6 +673,33 @@ mod tests {
         assert_eq!(
             selected.color_labels().collect::<Vec<_>>(),
             vec![LighttableColorLabel::Blue]
+        );
+    }
+
+    #[test]
+    fn selection_range_and_toggle_follow_the_same_visible_order_as_the_grid() {
+        let mut controller = controller();
+        assert!(controller.select_only(id(3)));
+        assert!(controller.select_range(id(2), false));
+        assert_eq!(
+            controller
+                .snapshot()
+                .photo_states()
+                .filter(|state| state.selected())
+                .map(rusttable_ui::LighttablePhotoState::photo_id)
+                .collect::<Vec<_>>(),
+            vec![id(3), id(2)]
+        );
+
+        assert!(controller.toggle_selection(id(3)));
+        assert_eq!(
+            controller
+                .snapshot()
+                .photo_states()
+                .filter(|state| state.selected())
+                .map(rusttable_ui::LighttablePhotoState::photo_id)
+                .collect::<Vec<_>>(),
+            vec![id(2)]
         );
     }
 

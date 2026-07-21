@@ -221,6 +221,17 @@ fn lighttable_grid_and_filmstrip_share_selection_and_darkroom_open_route() {
 }
 
 #[test]
+fn gtk_selection_route_projects_preview_and_darkroom_filmstrip_activation() {
+    let runtime = include_str!("../src/gtk_shell/runtime_lighttable.rs");
+    let shell_runtime = include_str!("../src/gtk_shell/runtime.rs");
+
+    assert!(runtime.contains("show_photo_detail(&context.darkroom_preview, detail);"));
+    assert!(runtime.contains("surface == PhotoSurface::Filmstrip && darkroom_visible"));
+    assert!(shell_runtime.contains("render.move_focus(direction, modifiers)"));
+    assert!(runtime.contains("OpenSelected"));
+}
+
+#[test]
 fn lighttable_filter_projection_keeps_matching_ids_and_selection_count() {
     let filter = rusttable_ui::gtk_shell::CollectionFilterState::new(
         rusttable_ui::CollectionControlState::new(rusttable_ui::CollectionProperty::Filename, 5)

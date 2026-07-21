@@ -45,8 +45,8 @@ use std::time::Duration;
 
 use ai_ui::{install_ai_batch_ui_bridge, install_ai_ui_bridges};
 use collection_bridge::{
-    apply_collection_action, apply_lighttable_toolbar_action, collection_filter_state,
-    empty_collection_filter_state,
+    apply_collection_action, apply_lighttable_toolbar_action, apply_photo_selection,
+    collection_filter_state, empty_collection_filter_state,
 };
 use preview_lifecycle::{PreviewLifecycle, PreviewSelectionToken};
 use rusttable_ui::{NeuralRestoreAction, PhotoSelection, PhotoSourceKind};
@@ -257,12 +257,18 @@ fn activate_application(
         Rc::clone(&export_lifecycle),
     );
     let selection_controller = Rc::clone(&catalog_controller);
+    let selection_collection = Rc::clone(active_collection);
     let preview = shell.darkroom_preview().clone();
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
     let export_selection = export_panel.clone();
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
-    shell.set_photo_selected_handler(move |photo_id| {
-        if !selection_controller.borrow_mut().select_photo(photo_id) {
+    shell.set_photo_selected_handler(move |photo_id, modifiers| {
+        let catalog_changed = selection_controller.borrow_mut().select_photo(photo_id);
+        let collection_changed = selection_collection
+            .borrow_mut()
+            .as_mut()
+            .is_some_and(|collection| apply_photo_selection(collection, photo_id, modifiers));
+        if !catalog_changed && !collection_changed {
             return;
         }
         export_selection_lifecycle.borrow_mut().invalidate();
