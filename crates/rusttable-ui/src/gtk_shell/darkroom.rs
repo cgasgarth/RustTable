@@ -29,6 +29,8 @@ use crate::viewport_presentation::{
     DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
 };
 use crate::{HistogramData, HistogramError, HistogramSample};
+use crate::{MaskManagerAction, MaskManagerPanel, MaskManagerSnapshot};
+use crate::{MultiscaleRetouchAction, MultiscaleRetouchPanel, MultiscaleRetouchSnapshot};
 use darkroom_interaction::{
     FilmstripState, HistogramView, connect_filmstrip_button, install_filmstrip_keyboard,
     sync_filmstrip_buttons,
@@ -189,6 +191,8 @@ pub struct DarkroomView {
     exposure: ExposurePanel,
     rgb_denoise: RgbDenoisePanel,
     raw_denoise: RawDenoisePanel,
+    mask_manager: MaskManagerPanel,
+    multiscale_retouch: MultiscaleRetouchPanel,
     rail_status: DarkroomRailStatus,
     histogram: HistogramView,
     histogram_generation: Rc<Cell<Option<ViewportGeneration>>>,
@@ -240,6 +244,8 @@ impl DarkroomView {
             exposure,
             rgb_denoise,
             raw_denoise,
+            mask_manager,
+            multiscale_retouch,
             histogram,
             module_search,
             module_group,
@@ -265,6 +271,8 @@ impl DarkroomView {
             exposure,
             rgb_denoise,
             raw_denoise,
+            mask_manager,
+            multiscale_retouch,
             rail_status,
             histogram,
             histogram_generation,
@@ -622,6 +630,38 @@ impl DarkroomView {
         &self.exposure
     }
 
+    #[must_use]
+    pub fn mask_manager(&self) -> &MaskManagerPanel {
+        &self.mask_manager
+    }
+
+    #[must_use]
+    pub fn multiscale_retouch(&self) -> &MultiscaleRetouchPanel {
+        &self.multiscale_retouch
+    }
+
+    pub fn set_mask_manager_state(&self, state: &MaskManagerSnapshot) {
+        self.mask_manager.set_state(state);
+    }
+
+    pub fn connect_mask_manager_action<F>(&self, handler: F)
+    where
+        F: Fn(MaskManagerAction) + 'static,
+    {
+        self.mask_manager.connect_action(handler);
+    }
+
+    pub fn set_multiscale_retouch_state(&self, state: &MultiscaleRetouchSnapshot) {
+        self.multiscale_retouch.set_state(state);
+    }
+
+    pub fn connect_multiscale_retouch_action<F>(&self, handler: F)
+    where
+        F: Fn(MultiscaleRetouchAction) + 'static,
+    {
+        self.multiscale_retouch.connect_action(handler);
+    }
+
     pub(super) fn module_group_state(&self) -> Rc<Cell<DarkroomModuleGroup>> {
         Rc::clone(&self.module_group)
     }
@@ -637,6 +677,8 @@ impl DarkroomView {
         let exposure = self.exposure.clone();
         let rgb_denoise = self.rgb_denoise.clone();
         let raw_denoise = self.raw_denoise.clone();
+        let mask_manager = self.mask_manager.clone();
+        let multiscale_retouch = self.multiscale_retouch.clone();
         let search = self.module_search.clone();
         self.module_group_handler
             .replace(Some(Box::new(move |group| {
@@ -646,6 +688,8 @@ impl DarkroomView {
                     &exposure,
                     &rgb_denoise,
                     &raw_denoise,
+                    &mask_manager,
+                    &multiscale_retouch,
                     &typed_modules,
                     &module_action_handler,
                     group,
@@ -662,6 +706,8 @@ impl DarkroomView {
             &self.exposure,
             &self.rgb_denoise,
             &self.raw_denoise,
+            &self.mask_manager,
+            &self.multiscale_retouch,
             &self.typed_modules,
             &self.module_action_handler,
             self.module_group.get(),
@@ -677,6 +723,8 @@ impl DarkroomView {
         let exposure = self.exposure.clone();
         let rgb_denoise = self.rgb_denoise.clone();
         let raw_denoise = self.raw_denoise.clone();
+        let mask_manager = self.mask_manager.clone();
+        let multiscale_retouch = self.multiscale_retouch.clone();
         let group = Rc::clone(&self.module_group);
         self.module_search.connect_search_changed(move |search| {
             render_typed_modules_into(
@@ -685,6 +733,8 @@ impl DarkroomView {
                 &exposure,
                 &rgb_denoise,
                 &raw_denoise,
+                &mask_manager,
+                &multiscale_retouch,
                 &typed_modules,
                 &module_action_handler,
                 group.get(),
@@ -787,6 +837,8 @@ type DarkroomPanelBuild = (
     ExposurePanel,
     RgbDenoisePanel,
     RawDenoisePanel,
+    MaskManagerPanel,
+    MultiscaleRetouchPanel,
     gtk4::Stack,
     gtk4::SearchEntry,
     Rc<Cell<DarkroomModuleGroup>>,

@@ -11,7 +11,7 @@ use rusttable_core::Revision;
 
 use super::super::darkroom_modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
-    build_module_column_with_filter,
+    build_module_column_with_filter, build_module_column_without_empty,
 };
 use super::{
     DARKROOM_GEOMETRY, DarkroomModuleGroup, DarkroomModuleGroupHandler, DarkroomRailStatus,
@@ -23,6 +23,7 @@ use crate::presentation::{
     DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, build_history_panel,
     build_image_information_panel, build_snapshots_panel,
 };
+use crate::{MaskManagerPanel, MultiscaleRetouchPanel};
 
 pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatus) {
     let panel = rail("darkroom-left-panel", width, "Darkroom left module rail");
@@ -109,9 +110,13 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     let exposure = ExposurePanel::new();
     let rgb_denoise = RgbDenoisePanel::new();
     let raw_denoise = RawDenoisePanel::new();
+    let mask_manager = MaskManagerPanel::new();
+    let multiscale_retouch = MultiscaleRetouchPanel::new();
     modules.append(exposure.widget());
     modules.append(rgb_denoise.widget());
     modules.append(raw_denoise.widget());
+    modules.append(mask_manager.widget());
+    modules.append(multiscale_retouch.widget());
     let controller_modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     controller_modules.set_widget_name("darkroom-right-controller-modules");
     modules.append(&controller_modules);
@@ -131,6 +136,8 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         exposure,
         rgb_denoise,
         raw_denoise,
+        mask_manager,
+        multiscale_retouch,
         histogram,
         search,
         module_group,
@@ -144,6 +151,8 @@ pub(super) fn render_typed_modules_into(
     exposure: &ExposurePanel,
     rgb_denoise: &RgbDenoisePanel,
     raw_denoise: &RawDenoisePanel,
+    mask_manager: &MaskManagerPanel,
+    multiscale_retouch: &MultiscaleRetouchPanel,
     typed_modules: &Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     action_handler: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
     group: DarkroomModuleGroup,
@@ -162,19 +171,62 @@ pub(super) fn render_typed_modules_into(
     ));
 
     clear_children(right_modules);
-    right_modules.append(exposure.widget());
-    right_modules.append(rgb_denoise.widget());
-    right_modules.append(raw_denoise.widget());
+    let static_modules: [(&str, &str, gtk4::Widget); 5] = [
+        ("exposure", "Exposure", exposure.widget().clone().upcast()),
+        (
+            "rgb-denoise",
+            "RGB AI denoise",
+            rgb_denoise.widget().clone().upcast(),
+        ),
+        (
+            "raw-denoise",
+            "RAW AI denoise",
+            raw_denoise.widget().clone().upcast(),
+        ),
+        (
+            "mask-manager",
+            "Mask manager",
+            mask_manager.widget().clone().upcast(),
+        ),
+        (
+            "multiscale-retouch",
+            "Multiscale retouch",
+            multiscale_retouch.widget().clone().upcast(),
+        ),
+    ];
+    let mut rendered = 0;
+    for (id, title, widget) in static_modules {
+        if crate::gtk_shell::darkroom_modules::search_matches(query, title, id, &[]) {
+            right_modules.append(&widget);
+            rendered += 1;
+        }
+    }
     let filtered_right = modules
         .right_modules()
         .filter(|module| module.id() != "exposure")
         .filter(|module| group.matches(module));
-    right_modules.append(&build_module_column_with_filter(
-        filtered_right,
+    let typed = filtered_right
+        .filter(|module| crate::gtk_shell::darkroom_modules::module_matches_search(module, query))
+        .collect::<Vec<_>>();
+    rendered += typed.len();
+    right_modules.append(&build_module_column_without_empty(
+        typed.into_iter(),
         DarkroomModuleSide::Right,
         query,
         action_handler.as_ref(),
     ));
+    if rendered == 0 {
+        let empty = gtk4::Label::new(Some(if query.trim().is_empty() {
+            "No modules available"
+        } else {
+            "No modules match this search"
+        }));
+        empty.set_widget_name("darkroom-module-search-empty");
+        empty.set_halign(gtk4::Align::Start);
+        empty.add_css_class("dim-label");
+        empty.set_accessible_role(gtk4::AccessibleRole::Status);
+        right_modules.append(&empty);
+    }
 }
 
 fn clear_children(container: &impl IsA<gtk4::Widget>) {

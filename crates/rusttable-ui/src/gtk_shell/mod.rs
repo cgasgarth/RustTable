@@ -10,6 +10,7 @@ mod darkroom;
 mod darkroom_controls;
 mod darkroom_module_actions;
 mod darkroom_modules;
+mod darkroom_static_surfaces;
 mod darkroom_status;
 mod darktable_spec;
 mod export_panel;

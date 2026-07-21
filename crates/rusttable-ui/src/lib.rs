@@ -13,6 +13,8 @@ pub mod import;
 pub mod input;
 pub mod input_mapping;
 pub mod library;
+pub mod mask_manager;
+pub mod multiscale_retouch;
 pub mod neural_restore;
 pub mod presentation;
 pub mod raw_denoise;
@@ -81,6 +83,20 @@ pub use input_mapping::{
     MappingProfile, MappingSnapshot, ResetScope, SoftTakeover,
 };
 pub use library::{LibraryFailureKind, LibraryFailureProjection, LibraryState};
+pub use mask_manager::{
+    MASK_MANAGER_FOCUS_ORDER, MASK_MANAGER_MAX_FEATHER, MaskCombination, MaskConsumptionState,
+    MaskGroupOption, MaskManagerAction, MaskManagerCapability, MaskManagerController,
+    MaskManagerControllerError, MaskManagerPanel, MaskManagerServiceError, MaskManagerServicePort,
+    MaskManagerSnapshot,
+};
+pub use multiscale_retouch::{
+    MULTISCALE_RETOUCH_BANDS, MULTISCALE_RETOUCH_FOCUS_ORDER, MULTISCALE_RETOUCH_MAX_STRENGTH,
+    MultiscaleBand, MultiscaleCapability, MultiscaleProgress, MultiscaleRetouchAction,
+    MultiscaleRetouchController, MultiscaleRetouchControllerError, MultiscaleRetouchPanel,
+    MultiscaleRetouchRequest, MultiscaleRetouchServiceError, MultiscaleRetouchServiceEvent,
+    MultiscaleRetouchServicePort, MultiscaleRetouchSnapshot, MultiscaleRetouchStatus,
+    MultiscaleSourceTarget,
+};
 pub use neural_restore::{PhotoSelection, PhotoSourceKind};
 pub use presentation::{
     ControlId, ControlIdError, ControlValidationError, DARKROOM_LEFT_PANEL_FOCUS_ORDER,

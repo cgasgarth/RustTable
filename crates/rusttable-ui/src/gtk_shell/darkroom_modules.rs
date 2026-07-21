@@ -910,26 +910,9 @@ pub fn build_module_column_with_filter<'a>(
     query: &str,
     action_handler: Option<&DarkroomModuleActionHandler>,
 ) -> gtk4::Box {
-    let column = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
-    column.set_widget_name(side.widget_name());
-    column.set_vexpand(true);
-    let query = if matches!(side, DarkroomModuleSide::Left) {
-        String::new()
-    } else {
-        query.trim().to_ascii_lowercase()
-    };
-    let mut rendered = 0;
-    for module in modules {
-        if !module_matches_query(module, &query) {
-            continue;
-        }
-        column.append(&build_module_panel_with_actions(
-            module,
-            action_handler.cloned(),
-        ));
-        rendered += 1;
-    }
-    if rendered == 0 {
+    let column = build_module_column_without_empty(modules, side, query, action_handler);
+    let query = query.trim().to_ascii_lowercase();
+    if column.first_child().is_none() {
         let empty = gtk4::Label::new(Some(if query.is_empty() {
             "No modules available"
         } else {
@@ -944,8 +927,52 @@ pub fn build_module_column_with_filter<'a>(
     column
 }
 
+pub(super) fn build_module_column_without_empty<'a>(
+    modules: impl Iterator<Item = &'a DarkroomModuleViewModel>,
+    side: DarkroomModuleSide,
+    query: &str,
+    action_handler: Option<&DarkroomModuleActionHandler>,
+) -> gtk4::Box {
+    let column = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    column.set_widget_name(side.widget_name());
+    column.set_vexpand(true);
+    let query = if matches!(side, DarkroomModuleSide::Left) {
+        String::new()
+    } else {
+        query.trim().to_ascii_lowercase()
+    };
+    for module in modules {
+        if !module_matches_query(module, &query) {
+            continue;
+        }
+        column.append(&build_module_panel_with_actions(
+            module,
+            action_handler.cloned(),
+        ));
+    }
+    column
+}
+
+pub(super) fn module_matches_search(module: &DarkroomModuleViewModel, query: &str) -> bool {
+    let query = query.trim().to_ascii_lowercase();
+    module_matches_query(module, &query)
+}
+
 fn module_matches_query(module: &DarkroomModuleViewModel, query: &str) -> bool {
-    query.is_empty()
-        || module.title().to_ascii_lowercase().contains(query)
-        || module.id().to_ascii_lowercase().contains(query)
+    search_matches(query, module.title(), module.id(), &[])
+}
+
+pub(super) fn search_matches(query: &str, title: &str, id: &str, aliases: &[&str]) -> bool {
+    let query = query.trim().to_ascii_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+    let values = std::iter::once(title)
+        .chain(std::iter::once(id))
+        .chain(aliases.iter().copied())
+        .map(str::to_ascii_lowercase)
+        .collect::<Vec<_>>();
+    query
+        .split_whitespace()
+        .all(|token| values.iter().any(|value| value.contains(token)))
 }

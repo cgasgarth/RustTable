@@ -4,6 +4,7 @@ mod catalog_preview_smoke;
 mod collection_bridge;
 mod darkroom_edit;
 mod darkroom_panels;
+mod darkroom_ui;
 mod import_bridge;
 mod preview_bridge;
 mod preview_lifecycle;
@@ -205,6 +206,7 @@ fn activate_application(
     }
     install_action_input(&shell);
     let ai_bridges = install_ai_ui_bridges(&shell);
+    darkroom_ui::install(&shell);
     let neural_controller = ai_bridges.rgb;
     let raw_denoise_controller = ai_bridges.raw;
     let ai_batch_controller = install_ai_batch_ui_bridge(&shell);
