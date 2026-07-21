@@ -1,4 +1,4 @@
-//! `GtkShell` accessors for the AI settings and Neural Restore surfaces.
+//! `GtkShell` accessors for the AI settings and denoise surfaces.
 
 use super::runtime::GtkShell;
 use crate::ai_batch::{AiBatchAction, AiBatchPanel, AiBatchState};
