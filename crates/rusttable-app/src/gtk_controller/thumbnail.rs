@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use directories::ProjectDirs;
 use rusttable_catalog::{EditRepository, ImportRepository};
-use rusttable_catalog_store::{RedbEditRepository, RedbImportRepository};
+use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::{Edit, PhotoId};
 use rusttable_image::{CancellationToken, ColorEncoding, DecodedImage};
 use rusttable_import::RASTER_DECODER_IDENTITY_VERSION;
@@ -15,8 +15,6 @@ use rusttable_render::{
 };
 use rusttable_ui::{PresentationText, PreviewDimensions, Rgba8PreviewMetadata};
 use sha2::{Digest, Sha256};
-
-use crate::workspace::load_selected_preview;
 
 const THUMBNAIL_WIDTH: u32 = 180;
 const THUMBNAIL_HEIGHT: u32 = 120;
@@ -70,8 +68,8 @@ pub enum GtkThumbnailError {
 
 /// Serial background worker that shares one bounded cache lifecycle across a visible batch.
 pub struct GtkThumbnailController {
-    catalog_path: PathBuf,
     source_root: PathBuf,
+    repository: RedbCatalogRepository,
     cache: CacheLifecycle,
     records: BTreeMap<PhotoId, rusttable_catalog::ImportRecord>,
     edits: BTreeMap<PhotoId, Edit>,
@@ -89,16 +87,14 @@ impl GtkThumbnailController {
         cache_root: impl Into<PathBuf>,
     ) -> Result<Self, GtkThumbnailError> {
         let catalog_path = catalog_path.into();
-        let records = RedbImportRepository::open(&catalog_path)
-            .map_err(|_| GtkThumbnailError::Catalog)?
-            .list()
+        let catalog =
+            RedbCatalogRepository::open(&catalog_path).map_err(|_| GtkThumbnailError::Catalog)?;
+        let records = ImportRepository::list(&catalog)
             .map_err(|_| GtkThumbnailError::Catalog)?
             .into_iter()
             .map(|record| (record.photo().id(), record))
             .collect();
-        let edits = RedbEditRepository::open(&catalog_path)
-            .map_err(|_| GtkThumbnailError::Catalog)?
-            .list()
+        let edits = EditRepository::list(&catalog)
             .map_err(|_| GtkThumbnailError::Catalog)?
             .into_iter()
             .map(|edit| (edit.photo_id(), edit))
@@ -108,8 +104,8 @@ impl GtkThumbnailController {
         let (cache, _) =
             CacheStore::open(cache_root, limits).map_err(|_| GtkThumbnailError::Cache)?;
         Ok(Self {
-            catalog_path,
             source_root: source_root.into(),
+            repository: catalog,
             cache: CacheLifecycle::new(cache),
             records,
             edits,
@@ -143,8 +139,12 @@ impl GtkThumbnailController {
             return present(photo_id, entry.image(), GtkThumbnailSource::Cache);
         }
 
-        let preview = load_selected_preview(&self.catalog_path, &self.source_root, photo_id)
-            .map_err(|_| GtkThumbnailError::Preview)?;
+        let preview = crate::workspace::preview_loader::load_selected_preview_from_repository(
+            &self.repository,
+            &self.source_root,
+            photo_id,
+        )
+        .map_err(|_| GtkThumbnailError::Preview)?;
         let (_, dimensions, pixels) = preview.into_parts();
         let source = DecodedImage::new_with_color_encoding(dimensions, pixels, ColorEncoding::Srgb)
             .map_err(|_| GtkThumbnailError::Preview)?;

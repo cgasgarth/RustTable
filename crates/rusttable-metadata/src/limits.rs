@@ -94,7 +94,7 @@ impl MetadataOutputLimits {
     ///
     /// # Errors
     ///
-    /// Returns [`MetadataOutputLimitsError`] when a limit is zero, inconsistent,
+    /// Returns [`crate::MetadataOutputLimitsError`] when a limit is zero, inconsistent,
     /// or cannot be represented by the output format.
     pub const fn new(
         max_payload_bytes: u64,

@@ -37,7 +37,7 @@ pub(crate) fn start_selected_preview(
     let token = lifecycle.borrow_mut().begin(photo_id);
     let generation = ViewportGeneration::new(token.generation());
     shell.begin_darkroom_selection(photo_id, generation);
-    shell.set_darkroom_preview_loading();
+    shell.set_darkroom_preview_loading(generation);
     let (sender, receiver) = mpsc::channel();
     let worker = thread::Builder::new()
         .name("rusttable-preview".to_owned())
@@ -62,9 +62,9 @@ pub(crate) fn start_selected_preview(
     glib::source::timeout_add_local(Duration::from_millis(16), move || {
         match receiver.try_recv() {
             Ok(result) => {
-                if lifecycle.borrow().is_current(result.token) {
+                install_if_current(&lifecycle, result.token, || {
                     install_preview_state(&shell, result.token, result.state, result.histogram);
-                }
+                });
                 ControlFlow::Break
             }
             Err(TryRecvError::Empty) => ControlFlow::Continue,
@@ -79,6 +79,17 @@ pub(crate) fn start_selected_preview(
             }
         }
     });
+}
+
+fn install_if_current(
+    lifecycle: &RefCell<PreviewLifecycle>,
+    token: PreviewSelectionToken,
+    install: impl FnOnce(),
+) {
+    let is_current = lifecycle.borrow().is_current(token);
+    if is_current {
+        install();
+    }
 }
 
 fn histogram_for_preview(state: &GtkPreviewState) -> Option<Result<HistogramData, HistogramError>> {
@@ -141,5 +152,30 @@ fn install_preview_state(
             generation,
             GtkPreviewFailureKind::InvalidRgba8.message(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use rusttable_core::PhotoId;
+
+    use super::{PreviewLifecycle, install_if_current};
+
+    fn photo_id(value: u128) -> PhotoId {
+        PhotoId::new(value).expect("non-zero test photo ID")
+    }
+
+    #[test]
+    fn completion_callback_releases_lifecycle_borrow_before_reentry() {
+        let lifecycle = RefCell::new(PreviewLifecycle::default());
+        let completed = lifecycle.borrow_mut().begin(photo_id(1));
+
+        install_if_current(&lifecycle, completed, || {
+            lifecycle.borrow_mut().begin(photo_id(2));
+        });
+
+        assert!(!lifecycle.borrow().is_current(completed));
     }
 }

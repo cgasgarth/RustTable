@@ -72,14 +72,27 @@ pub fn load_selected_preview(
     source_root: &Path,
     photo_id: PhotoId,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
-    let edit = load_selected_edit(catalog_path, photo_id)?;
     let repository =
         RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
+    load_selected_preview_from_repository(&repository, source_root, photo_id)
+}
+
+/// Renders a selected preview while retaining the caller's live catalog lease.
+///
+/// # Errors
+///
+/// Returns a typed edit-selection, decode, or CPU-render failure.
+pub(crate) fn load_selected_preview_from_repository(
+    repository: &RedbCatalogRepository,
+    source_root: &Path,
+    photo_id: PhotoId,
+) -> Result<SelectedPreview, WorkspacePreviewError> {
+    let edit = current_edit(repository, photo_id)?;
     let output = CatalogPreviewService::new(preview_service())
         .render(
             CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
-            &repository,
-            &repository,
+            repository,
+            repository,
         )
         .map_err(WorkspacePreviewError::Preview)?;
     Ok(selected_preview(photo_id, &output))

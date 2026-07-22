@@ -13,9 +13,11 @@ use rusttable_image::{ImageInput, InputFormat};
 use rusttable_image_io::{FileImageInput, ImageDecoderRegistry};
 use rusttable_import::RasterImportCancellation;
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
+#[cfg(target_os = "linux")]
+use rusttable_ui::HistogramData;
 use rusttable_ui::gtk_shell::{DARKTABLE_DESKTOP_SPEC, DesktopRegion};
 #[cfg(target_os = "linux")]
-use rusttable_ui::gtk_shell::{DarkroomSelectionState, PhotoPreview};
+use rusttable_ui::gtk_shell::{DarkroomSelectionState, GtkShell, WorkspaceRole};
 use rusttable_ui::presentation::{
     PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState,
 };
@@ -226,8 +228,8 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
     let GtkCatalogState::Ready(ready) = catalog.state() else {
         panic!("catalog remains ready after selection");
     };
-    let workspace = ready
-        .workspace()
+    let loading_workspace = ready.workspace().clone();
+    let workspace = loading_workspace
         .clone()
         .with_selected_preview(photo_id, SelectedPreviewState::Ready(metadata))
         .expect("selected detail");
@@ -251,25 +253,47 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
     );
 
     #[cfg(target_os = "linux")]
-    assert_gtk_darkroom_state(detail, photo_id);
+    assert_gtk_darkroom_state(&loading_workspace, detail, photo_id);
 }
 
 #[cfg(target_os = "linux")]
 fn assert_gtk_darkroom_state(
+    loading_workspace: &rusttable_ui::PhotoWorkspaceViewModel,
     detail: &rusttable_ui::PhotoDetailViewModel,
     photo_id: rusttable_core::PhotoId,
 ) {
     if gtk4::init().is_err() {
         return;
     }
-    let darkroom_preview = PhotoPreview::new();
-    darkroom_preview.set_detail(detail);
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.raw-preview-lifecycle"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let generation = ViewportGeneration::new(1);
+    shell.set_photo_workspace(loading_workspace);
+    shell.begin_darkroom_selection(photo_id, generation);
+    shell.set_darkroom_preview_loading(generation);
+    let SelectedPreviewState::Ready(metadata) = detail.selected_preview() else {
+        panic!("successful RAW projection must be ready");
+    };
+    let histogram = HistogramData::from_rgba8(metadata.dimensions(), metadata.pixels())
+        .expect("RAW preview histogram");
+    shell
+        .set_darkroom_preview_result(generation, metadata, Ok(histogram))
+        .expect("install RAW preview result");
+
     assert_eq!(
-        darkroom_preview.selection_state(),
+        shell.darkroom_preview().selection_state(),
         DarkroomSelectionState::Selected(photo_id)
     );
-    assert!(darkroom_preview.texture().is_some());
-    assert_eq!(darkroom_preview.status_label().text(), "rendered");
+    assert!(shell.darkroom_preview().texture().is_some());
+    assert_eq!(shell.darkroom_preview().status_label().text(), "rendered");
+
+    shell.show_workspace(WorkspaceRole::Lighttable);
+    assert!(shell.open_photo(photo_id));
+    assert!(shell.darkroom_preview().texture().is_some());
+    assert_eq!(shell.darkroom_preview().status_label().text(), "rendered");
 }
 
 fn decoder_probe(bytes: &[u8]) -> rusttable_image::ImageProbe {
