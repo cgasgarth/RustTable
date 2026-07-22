@@ -16,7 +16,7 @@ use crate::operations::{
 use crate::{
     BasicAdjAnalysisRaster, BasicAdjPlan, CompiledOperationGraph, EvaluationError, FiniteF32,
     LinearRgb, OperationGraphNode, PipelineStepIndex, ProcessingOperationKind, RasterDimensions,
-    WorkingRgbImage,
+    TerminalOutputFrame, WorkingRgbImage,
 };
 
 /// Purpose-specific choices needed while resolving shape-changing operations.
@@ -193,6 +193,7 @@ impl DiscreteGeometryPlan {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EvaluatedFrame {
     image: WorkingRgbImage,
+    terminal_output: Option<TerminalOutputFrame>,
     alpha: Vec<f32>,
     basicadj_plans: BasicAdjPlanSet,
 }
@@ -219,6 +220,11 @@ impl EvaluatedFrame {
     #[must_use]
     pub const fn image(&self) -> &WorkingRgbImage {
         &self.image
+    }
+
+    #[must_use]
+    pub const fn terminal_output(&self) -> Option<&TerminalOutputFrame> {
+        self.terminal_output.as_ref()
     }
 
     #[must_use]
@@ -264,6 +270,8 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
     let mut alpha = alpha.to_vec();
     let mut dimensions = input.dimensions();
     let mut frame = input.frame();
+    let mut terminal_output = None;
+    let mut terminal_working_pixels = None;
     let mut basicadj = BTreeMap::new();
 
     for step in &plan.steps {
@@ -286,6 +294,12 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
                     }
                     let resolved_plans = plan_set(&basicadj);
                     let plans = provided_basicadj.unwrap_or(&resolved_plans);
+                    if matches!(
+                        node.operation().kind(),
+                        ProcessingOperationKind::ColorOut { .. }
+                    ) {
+                        terminal_working_pixels = Some(pixels.clone());
+                    }
                     apply_operation_with_profile(
                         node.pipeline_step_index(),
                         node.operation(),
@@ -294,6 +308,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
                         0,
                         Some(plans),
                         &mut frame,
+                        &mut terminal_output,
                     )?;
                 }
             }
@@ -311,8 +326,10 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
     let basicadj_plans = provided_basicadj
         .cloned()
         .unwrap_or_else(|| finalized_plan_set(basicadj));
+    let image_pixels = terminal_working_pixels.unwrap_or(pixels);
     Ok(EvaluatedFrame {
-        image: WorkingRgbImage::from_validated_parts_with_frame(dimensions, pixels, frame),
+        image: WorkingRgbImage::from_validated_parts_with_frame(dimensions, image_pixels, frame),
+        terminal_output,
         alpha,
         basicadj_plans,
     })

@@ -17,6 +17,108 @@ use std::fmt;
 pub const COLOROUT_COMPATIBILITY_ID: &str = "colorout";
 pub const COLOROUT_SCHEMA_VERSION: u16 = 7;
 
+/// The immutable color contract published by the terminal output boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TerminalOutputDescriptor {
+    encoding: ColorEncoding,
+    profile_id: Option<ProfileId>,
+    primaries: Option<Primaries>,
+    white_point: WhitePoint,
+    transfer: TransferFunction,
+    intent: RenderingIntent,
+    black_point_compensation: BlackPointCompensation,
+    source_frame: WorkingFrameDescriptor,
+    plan_identity: [u8; 32],
+}
+
+impl TerminalOutputDescriptor {
+    #[must_use]
+    pub const fn encoding(self) -> ColorEncoding {
+        self.encoding
+    }
+
+    #[must_use]
+    pub const fn profile_id(self) -> Option<ProfileId> {
+        self.profile_id
+    }
+
+    #[must_use]
+    pub const fn primaries(self) -> Option<Primaries> {
+        self.primaries
+    }
+
+    #[must_use]
+    pub const fn white_point(self) -> WhitePoint {
+        self.white_point
+    }
+
+    #[must_use]
+    pub const fn transfer(self) -> TransferFunction {
+        self.transfer
+    }
+
+    #[must_use]
+    pub const fn intent(self) -> RenderingIntent {
+        self.intent
+    }
+
+    #[must_use]
+    pub const fn black_point_compensation(self) -> BlackPointCompensation {
+        self.black_point_compensation
+    }
+
+    #[must_use]
+    pub const fn source_frame(self) -> WorkingFrameDescriptor {
+        self.source_frame
+    }
+
+    #[must_use]
+    pub const fn plan_identity(self) -> [u8; 32] {
+        self.plan_identity
+    }
+}
+
+/// Pixel values after the terminal profile transform.
+///
+/// The channel storage uses the finite RGB scalar because the processing
+/// crate's math is f32-based, but this type is deliberately not a
+/// [`crate::WorkingRgbImage`]. Its descriptor states whether the values are already
+/// transfer encoded, so no later stage may apply a second working-to-sRGB
+/// conversion by accident.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminalOutputFrame {
+    pixels: Vec<LinearRgb>,
+    descriptor: TerminalOutputDescriptor,
+}
+
+impl TerminalOutputFrame {
+    #[must_use]
+    pub fn from_pixels(pixels: Vec<LinearRgb>, descriptor: TerminalOutputDescriptor) -> Self {
+        Self::new(pixels, &descriptor)
+    }
+
+    fn new(pixels: Vec<LinearRgb>, descriptor: &TerminalOutputDescriptor) -> Self {
+        Self {
+            pixels,
+            descriptor: *descriptor,
+        }
+    }
+
+    #[must_use]
+    pub const fn descriptor(&self) -> TerminalOutputDescriptor {
+        self.descriptor
+    }
+
+    #[must_use]
+    pub fn pixel_slice(&self) -> &[LinearRgb] {
+        &self.pixels
+    }
+
+    pub fn pixels(&self) -> impl Iterator<Item = &LinearRgb> {
+        self.pixels.iter()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ColorOutProfile {
     Builtin(BuiltinSpace),
@@ -163,6 +265,7 @@ pub struct ColorOutPlan {
     output_encoding: ColorEncoding,
     profile_id: Option<ProfileId>,
     executor: ColorOutExecutor,
+    terminal_descriptor: TerminalOutputDescriptor,
     identity: [u8; 32],
 }
 
@@ -214,6 +317,19 @@ impl ColorOutPlan {
             executor,
         ))
         .map_err(|error| ColorOutPlanError::Serialization(error.to_string()))?;
+        let identity: [u8; 32] = Sha256::digest(bytes).into();
+        let (_, _, white_point, transfer) = profile_parts(&config.output)?;
+        let terminal_descriptor = TerminalOutputDescriptor {
+            encoding: output_encoding,
+            profile_id,
+            primaries: profile_primaries(&config.output),
+            white_point,
+            transfer,
+            intent: config.intent,
+            black_point_compensation: config.black_point_compensation,
+            source_frame,
+            plan_identity: identity,
+        };
         Ok(Self {
             config,
             source_frame,
@@ -222,7 +338,8 @@ impl ColorOutPlan {
             output_encoding,
             profile_id,
             executor,
-            identity: Sha256::digest(bytes).into(),
+            terminal_descriptor,
+            identity,
         })
     }
     #[must_use]
@@ -248,6 +365,10 @@ impl ColorOutPlan {
     #[must_use]
     pub const fn executor(&self) -> ColorOutExecutor {
         self.executor
+    }
+    #[must_use]
+    pub const fn terminal_descriptor(&self) -> TerminalOutputDescriptor {
+        self.terminal_descriptor
     }
     #[must_use]
     pub const fn identity(&self) -> [u8; 32] {
@@ -308,8 +429,10 @@ impl ColorOutPlan {
             ));
             gamut_mask.push(out_of_gamut);
         }
+        let terminal = TerminalOutputFrame::new(output.clone(), &self.terminal_descriptor);
         Ok(ColorOutExecution {
             pixels: output.clone(),
+            terminal,
             gamut_mask,
             receipt: ColorOutReceipt::new(self.identity, input, &output),
         })
@@ -319,6 +442,7 @@ impl ColorOutPlan {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColorOutExecution {
     pixels: Vec<LinearRgb>,
+    terminal: TerminalOutputFrame,
     gamut_mask: Vec<bool>,
     receipt: ColorOutReceipt,
 }
@@ -326,6 +450,14 @@ impl ColorOutExecution {
     #[must_use]
     pub fn pixels(&self) -> &[LinearRgb] {
         &self.pixels
+    }
+    #[must_use]
+    pub const fn terminal(&self) -> &TerminalOutputFrame {
+        &self.terminal
+    }
+    #[must_use]
+    pub const fn terminal_output(&self) -> &TerminalOutputFrame {
+        &self.terminal
     }
     #[must_use]
     pub fn gamut_mask(&self) -> &[bool] {
@@ -526,6 +658,15 @@ fn profile_parts(
         )),
     }
 }
+
+fn profile_primaries(profile: &ColorOutProfile) -> Option<Primaries> {
+    match profile {
+        ColorOutProfile::Builtin(space) => space.primaries(),
+        ColorOutProfile::Matrix { primaries, .. } => Some(*primaries),
+        ColorOutProfile::Missing(_) => None,
+    }
+}
+
 fn profile_id(profile: &ColorOutProfile) -> Result<Option<ProfileId>, ColorOutPlanError> {
     match profile {
         ColorOutProfile::Builtin(space) => {

@@ -6,7 +6,7 @@ use crate::operations::{
 use crate::{
     CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, PreparedCpuOperation,
     ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel,
-    WorkingFrameDescriptor, WorkingRgbImage,
+    TerminalOutputFrame, WorkingFrameDescriptor, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
 use std::fmt;
@@ -14,6 +14,7 @@ mod basicadj;
 mod basicadj_runtime;
 mod frame;
 mod liquify;
+mod output;
 mod spots;
 pub use basicadj::BasicAdjPlanSet;
 pub(crate) use frame::evaluate_graph_at_frame_boundaries_with_plans;
@@ -21,6 +22,7 @@ pub use frame::{
     EvaluatedFrame, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
     evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
 };
+pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
     InvalidExposureScale {
@@ -45,6 +47,9 @@ pub enum EvaluationError {
         operation_id: OperationId,
         reason: String,
     },
+    TerminalOutputRequiresTypedPublication {
+        encoding: rusttable_color::ColorEncoding,
+    },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendArithmeticStage {
@@ -65,7 +70,28 @@ pub fn evaluate(
     pipeline: &CompiledPipeline,
     input: &WorkingRgbImage,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    let (output, frame) = evaluate_steps_with_frame(
+    match evaluate_output(pipeline, input)? {
+        EvaluationOutput::Working(output) => Ok(output),
+        EvaluationOutput::Terminal(output) => {
+            Err(EvaluationError::TerminalOutputRequiresTypedPublication {
+                encoding: output.descriptor().encoding(),
+            })
+        }
+    }
+}
+
+/// Evaluates a pipeline while preserving a terminal colorout as a typed
+/// publication frame.
+///
+/// # Errors
+///
+/// Returns the first operation or terminal-publication error encountered
+/// while evaluating the graph.
+pub fn evaluate_output(
+    pipeline: &CompiledPipeline,
+    input: &WorkingRgbImage,
+) -> Result<EvaluationOutput, EvaluationError> {
+    let (output, frame, terminal) = evaluate_steps_with_frame(
         pipeline.steps().map(|step| (step.index(), step.prepared())),
         input.pixel_slice(),
         input.dimensions(),
@@ -73,10 +99,15 @@ pub fn evaluate(
         input.frame(),
         None,
     )?;
-    Ok(WorkingRgbImage::from_validated_parts_with_frame(
-        input.dimensions(),
-        output,
-        frame,
+    Ok(terminal.map_or_else(
+        || {
+            EvaluationOutput::Working(WorkingRgbImage::from_validated_parts_with_frame(
+                input.dimensions(),
+                output,
+                frame,
+            ))
+        },
+        EvaluationOutput::Terminal,
     ))
 }
 pub(crate) fn evaluate_steps<'a, I>(
@@ -100,7 +131,7 @@ pub(crate) fn evaluate_steps_with_plans<'a, I>(
 where
     I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
 {
-    let (pixels, _) = evaluate_steps_with_frame(
+    let (pixels, _, terminal) = evaluate_steps_with_frame(
         steps,
         input,
         dimensions,
@@ -108,6 +139,11 @@ where
         WorkingFrameDescriptor::srgb(),
         basicadj_plans,
     )?;
+    if let Some(output) = terminal {
+        return Err(EvaluationError::TerminalOutputRequiresTypedPublication {
+            encoding: output.descriptor().encoding(),
+        });
+    }
     Ok(pixels)
 }
 pub(crate) fn evaluate_steps_with_frame<'a, I>(
@@ -117,11 +153,19 @@ pub(crate) fn evaluate_steps_with_frame<'a, I>(
     pixel_index_offset: usize,
     mut frame: WorkingFrameDescriptor,
     basicadj_plans: Option<&BasicAdjPlanSet>,
-) -> Result<(Vec<LinearRgb>, WorkingFrameDescriptor), EvaluationError>
+) -> Result<
+    (
+        Vec<LinearRgb>,
+        WorkingFrameDescriptor,
+        Option<TerminalOutputFrame>,
+    ),
+    EvaluationError,
+>
 where
     I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
 {
     let mut output = input.to_vec();
+    let mut terminal = None;
     for (step_index, operation) in steps {
         apply_operation_with_profile(
             step_index,
@@ -131,9 +175,10 @@ where
             pixel_index_offset,
             basicadj_plans,
             &mut frame,
+            &mut terminal,
         )?;
     }
-    Ok((output, frame))
+    Ok((output, frame, terminal))
 }
 /// Resolves every automatic basicadj node against the full preceding image,
 /// then executes the graph once to establish the next node's analysis input.
@@ -177,10 +222,12 @@ fn apply_operation_with_plans(
         pixel_index_offset,
         basicadj_plans,
         &mut frame,
+        &mut None,
     )
 }
 #[allow(
     clippy::too_many_lines,
+    clippy::too_many_arguments,
     reason = "the operation dispatcher keeps typed graph semantics centralized"
 )]
 pub(crate) fn apply_operation_with_profile(
@@ -191,6 +238,7 @@ pub(crate) fn apply_operation_with_profile(
     pixel_index_offset: usize,
     basicadj_plans: Option<&BasicAdjPlanSet>,
     frame: &mut WorkingFrameDescriptor,
+    terminal: &mut Option<TerminalOutputFrame>,
 ) -> Result<(), EvaluationError> {
     let operation_id = operation.operation_id();
     let opacity = operation.opacity().get();
@@ -603,6 +651,11 @@ pub(crate) fn apply_operation_with_profile(
             )
         }
         ProcessingOperationKind::ColorOut { config } => {
+            if terminal.is_some() {
+                return Err(EvaluationError::TerminalOutputRequiresTypedPublication {
+                    encoding: rusttable_color::ColorEncoding::Unspecified,
+                });
+            }
             let plan = crate::operations::colorout::ColorOutPlan::new_with_working_frame(
                 config.clone(),
                 *frame,
@@ -611,14 +664,9 @@ pub(crate) fn apply_operation_with_profile(
             let execution = plan
                 .execute(pixels)
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
-            apply_reconstruction(
-                pixels,
-                execution.pixels(),
-                opacity,
-                step_index,
-                operation_id,
-                pixel_index_offset,
-            )
+            pixels.copy_from_slice(execution.pixels());
+            *terminal = Some(execution.terminal_output().clone());
+            Ok(())
         }
         ProcessingOperationKind::ColorCorrection { config } => {
             let plan = crate::operations::colorcorrection::ColorCorrectionPlan::new(*config)
@@ -839,7 +887,6 @@ where
     }
     Ok(())
 }
-
 fn blend(
     current: f32,
     candidate: f32,
@@ -876,7 +923,6 @@ fn blend(
         }
     })
 }
-
 fn checked_channel(
     value: f32,
     step_index: PipelineStepIndex,
@@ -933,68 +979,14 @@ impl fmt::Display for EvaluationError {
                 "operation {operation_id} at pipeline step {} failed during reconstruction: {reason}",
                 step_index.get()
             ),
+            Self::TerminalOutputRequiresTypedPublication { encoding } => write!(
+                formatter,
+                "terminal colorout output {encoding:?} requires typed publication"
+            ),
         }
     }
 }
 
 impl std::error::Error for EvaluationError {}
 #[cfg(test)]
-mod tests {
-    use rusttable_core::{
-        Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName,
-        ParameterValue, PhotoId, Revision,
-    };
-
-    use super::*;
-
-    #[test]
-    fn reuses_single_output_slice_across_steps() {
-        let operations = [
-            operation(1, "rusttable.linear_offset", "value", 0.25),
-            operation(2, "rusttable.exposure", "stops", 1.0),
-        ];
-        let edit = Edit::new(
-            EditId::new(1).expect("nonzero edit ID"),
-            PhotoId::new(2).expect("nonzero photo ID"),
-            Revision::ZERO,
-            operations,
-        )
-        .expect("valid edit");
-        let pipeline = CompiledPipeline::compile(&edit).expect("valid pipeline");
-        let mut pixels = vec![LinearRgb::new(
-            FiniteF32::new(0.5).expect("finite"),
-            FiniteF32::new(0.5).expect("finite"),
-            FiniteF32::new(0.5).expect("finite"),
-        )];
-        let pointer = pixels.as_ptr();
-        let capacity = pixels.capacity();
-
-        for step in pipeline.active_steps() {
-            apply_operation_with_plans(
-                step.index(),
-                step.operation(),
-                &mut pixels,
-                RasterDimensions::new(1, 1).expect("test dimensions"),
-                0,
-                None,
-            )
-            .expect("finite operation");
-        }
-
-        assert_eq!(pixels.as_ptr(), pointer);
-        assert_eq!(pixels.capacity(), capacity);
-    }
-
-    fn operation(id: u128, key: &str, parameter: &str, value: f64) -> Operation {
-        Operation::new(
-            OperationId::new(id).expect("nonzero operation ID"),
-            OperationKey::new(key).expect("valid operation key"),
-            true,
-            [(
-                ParameterName::new(parameter).expect("valid parameter name"),
-                ParameterValue::Scalar(FiniteF64::new(value).expect("finite")),
-            )],
-        )
-        .expect("valid operation")
-    }
-}
+mod tests;

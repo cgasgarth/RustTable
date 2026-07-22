@@ -52,9 +52,10 @@ pub use descriptor::{
     soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
-    BasicAdjPlanSet, BlendArithmeticStage, EvaluatedFrame, EvaluationError, FrameBoundaryMode,
-    FrameBoundaryOptions, FrameBoundaryPlan, evaluate, evaluate_graph_at_frame_boundaries,
-    graph_has_discrete_geometry, prepare_basicadj_plans,
+    BasicAdjPlanSet, BlendArithmeticStage, EvaluatedFrame, EvaluationError, EvaluationOutput,
+    FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan, evaluate,
+    evaluate_graph_at_frame_boundaries, evaluate_output, graph_has_discrete_geometry,
+    prepare_basicadj_plans,
 };
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
@@ -98,6 +99,7 @@ pub use operations::clahe::{
     ClaheBlend, ClaheCodecError, ClaheConfig, ClaheExecutionError, ClaheHistory, ClaheMask,
     ClaheOutcome, ClaheParameterError, ClaheParametersV1, ClahePixel, ClahePlan, ClaheReceipt,
 };
+pub use operations::colorout::{TerminalOutputDescriptor, TerminalOutputFrame};
 pub use operations::defringe::{
     DEFRINGE_ALIAS, DEFRINGE_COMPATIBILITY_ID, DEFRINGE_GAUSSIAN_ORDER,
     DEFRINGE_MAGIC_THRESHOLD_COEFFICIENT, DEFRINGE_PARAMETER_BYTES, DEFRINGE_RADIUS_DEFAULT,
@@ -170,7 +172,8 @@ pub use registry::{
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
-    evaluate_graph, evaluate_graph_window, evaluate_graph_with_basicadj_plans,
+    evaluate_graph, evaluate_graph_output_with_basicadj_plans, evaluate_graph_window,
+    evaluate_graph_with_basicadj_plans,
 };
 
 pub use operation_stack::{

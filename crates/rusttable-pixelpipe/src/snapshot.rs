@@ -471,6 +471,9 @@ const fn encoding_tag(encoding: RgbaF32ColorEncoding) -> u8 {
         RgbaF32ColorEncoding::LinearDisplayP3D65 => 3,
         RgbaF32ColorEncoding::External(_) => 4,
         RgbaF32ColorEncoding::LabD50 => 5,
+        RgbaF32ColorEncoding::Rec2020D65 => 6,
+        RgbaF32ColorEncoding::LinearRec2020D65 => 7,
+        RgbaF32ColorEncoding::AcesCgD60 => 8,
     }
 }
 

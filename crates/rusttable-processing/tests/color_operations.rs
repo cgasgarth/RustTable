@@ -178,6 +178,23 @@ fn colorout_applies_transfer_and_preserves_deterministic_gpu_parity() {
         plan.executor(),
         rusttable_processing::operations::colorout::ColorOutExecutor::WgpuMatrix
     );
+    assert_eq!(
+        cpu.terminal().descriptor().encoding(),
+        rusttable_color::ColorEncoding::SrgbD65
+    );
+    assert_eq!(
+        cpu.terminal().descriptor().transfer(),
+        rusttable_color::TransferFunction::Srgb
+    );
+    let rec2020_plan = ColorOutPlan::new_with_working_frame(
+        ColorOutConfig::builtin(BuiltinSpace::SrgbD65),
+        rusttable_processing::WorkingFrameDescriptor::rec2020(),
+    )
+    .expect("working-profile-aware output plan");
+    assert_eq!(
+        rec2020_plan.terminal_descriptor().source_frame(),
+        rusttable_processing::WorkingFrameDescriptor::rec2020()
+    );
     assert_ne!(cpu.receipt().output_digest(), [0; 32]);
 }
 
