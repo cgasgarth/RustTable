@@ -250,6 +250,54 @@ pub fn evaluate_graph(
     evaluate_graph_with_basicadj_plans(graph, input, None)
 }
 
+/// Evaluates a graph while preserving a terminal colorout publication frame.
+///
+/// # Errors
+///
+/// Returns the first graph, operation, or terminal-publication error encountered
+/// while evaluating the graph.
+pub fn evaluate_graph_output_with_basicadj_plans(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+) -> Result<crate::EvaluationOutput, EvaluationError> {
+    if graph_has_discrete_geometry(graph) {
+        let alpha = vec![1.0; input.pixel_slice().len()];
+        let evaluated = evaluate_graph_at_frame_boundaries_with_plans(
+            graph,
+            input,
+            &alpha,
+            FrameBoundaryOptions::new(FrameBoundaryMode::Preview),
+            plans,
+            || false,
+        )?;
+        return Ok(evaluated.terminal_output().cloned().map_or_else(
+            || crate::EvaluationOutput::Working(evaluated.image().clone()),
+            crate::EvaluationOutput::Terminal,
+        ));
+    }
+    let (pixels, frame, terminal) = evaluate_steps_with_frame(
+        graph
+            .nodes()
+            .map(|node| (node.pipeline_step_index(), node.prepared())),
+        input.pixel_slice(),
+        input.dimensions(),
+        0,
+        input.frame(),
+        plans,
+    )?;
+    Ok(terminal.map_or_else(
+        || {
+            crate::EvaluationOutput::Working(WorkingRgbImage::from_validated_parts_with_frame(
+                input.dimensions(),
+                pixels,
+                frame,
+            ))
+        },
+        crate::EvaluationOutput::Terminal,
+    ))
+}
+
 /// Evaluates a graph using one previously resolved automatic-basicadj set.
 /// Supplying this set is what makes tiled and full-frame execution share the
 /// same automatic values.
@@ -262,33 +310,14 @@ pub fn evaluate_graph_with_basicadj_plans(
     input: &WorkingRgbImage,
     plans: Option<&BasicAdjPlanSet>,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    if graph_has_discrete_geometry(graph) {
-        let alpha = vec![1.0; input.pixel_slice().len()];
-        return evaluate_graph_at_frame_boundaries_with_plans(
-            graph,
-            input,
-            &alpha,
-            FrameBoundaryOptions::new(FrameBoundaryMode::Preview),
-            plans,
-            || false,
-        )
-        .map(|evaluated| evaluated.image().clone());
+    match evaluate_graph_output_with_basicadj_plans(graph, input, plans)? {
+        crate::EvaluationOutput::Working(output) => Ok(output),
+        crate::EvaluationOutput::Terminal(output) => {
+            Err(EvaluationError::TerminalOutputRequiresTypedPublication {
+                encoding: output.descriptor().encoding(),
+            })
+        }
     }
-    let (pixels, frame) = evaluate_steps_with_frame(
-        graph
-            .nodes()
-            .map(|node| (node.pipeline_step_index(), node.prepared())),
-        input.pixel_slice(),
-        input.dimensions(),
-        0,
-        input.frame(),
-        plans,
-    )?;
-    Ok(WorkingRgbImage::from_validated_parts_with_frame(
-        input.dimensions(),
-        pixels,
-        frame,
-    ))
 }
 
 /// Evaluates one validated contiguous row window with global diagnostics.

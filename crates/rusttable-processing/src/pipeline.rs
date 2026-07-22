@@ -2,7 +2,9 @@ use std::fmt;
 
 use rusttable_core::{Edit, EditId, OperationId, PhotoId, Revision};
 
-use crate::{OperationCompileError, PreparedCpuOperation, ProcessingOperation};
+use crate::{
+    OperationCompileError, PreparedCpuOperation, ProcessingOperation, ProcessingOperationKind,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PipelineStepIndex(usize);
@@ -58,6 +60,16 @@ pub enum PipelineCompileError {
         operation_id: OperationId,
         source: OperationCompileError,
     },
+    TerminalOutputNotLast {
+        colorout_step_index: PipelineStepIndex,
+        colorout_operation_id: OperationId,
+        following_step_index: PipelineStepIndex,
+        following_operation_id: OperationId,
+    },
+    TerminalOutputRequiresFullOpacity {
+        step_index: PipelineStepIndex,
+        operation_id: OperationId,
+    },
 }
 
 impl CompiledPipeline {
@@ -84,6 +96,7 @@ impl CompiledPipeline {
                 prepared,
             });
         }
+        validate_terminal_output(&steps)?;
         Ok(Self {
             source_edit_id: edit.id(),
             source_photo_id: edit.photo_id(),
@@ -137,6 +150,25 @@ impl fmt::Display for PipelineCompileError {
                 "edit {edit_id} failed at pipeline step {} for operation {operation_id}: {source}",
                 step_index.get()
             ),
+            Self::TerminalOutputNotLast {
+                colorout_step_index,
+                colorout_operation_id,
+                following_step_index,
+                following_operation_id,
+            } => write!(
+                formatter,
+                "terminal colorout at step {} ({colorout_operation_id}) is followed by step {} ({following_operation_id})",
+                colorout_step_index.get(),
+                following_step_index.get(),
+            ),
+            Self::TerminalOutputRequiresFullOpacity {
+                step_index,
+                operation_id,
+            } => write!(
+                formatter,
+                "terminal colorout at step {} ({operation_id}) must have full opacity",
+                step_index.get(),
+            ),
         }
     }
 }
@@ -145,6 +177,46 @@ impl std::error::Error for PipelineCompileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Operation { source, .. } => Some(source),
+            Self::TerminalOutputNotLast { .. } | Self::TerminalOutputRequiresFullOpacity { .. } => {
+                None
+            }
         }
     }
+}
+
+fn validate_terminal_output(steps: &[PipelineStep]) -> Result<(), PipelineCompileError> {
+    let Some((colorout_index, colorout)) = steps.iter().enumerate().find(|(_, step)| {
+        step.operation().is_enabled()
+            && step.operation().opacity().get().to_bits() != 0.0_f32.to_bits()
+            && matches!(
+                step.operation().kind(),
+                ProcessingOperationKind::ColorOut { .. }
+            )
+    }) else {
+        return Ok(());
+    };
+    if colorout.operation().opacity().get().to_bits() != 1.0_f32.to_bits() {
+        return Err(PipelineCompileError::TerminalOutputRequiresFullOpacity {
+            step_index: colorout.index(),
+            operation_id: colorout.operation().operation_id(),
+        });
+    }
+    if let Some((_, following)) =
+        steps
+            .iter()
+            .enumerate()
+            .skip(colorout_index + 1)
+            .find(|(_, step)| {
+                step.operation().is_enabled()
+                    && step.operation().opacity().get().to_bits() != 0.0_f32.to_bits()
+            })
+    {
+        return Err(PipelineCompileError::TerminalOutputNotLast {
+            colorout_step_index: colorout.index(),
+            colorout_operation_id: colorout.operation().operation_id(),
+            following_step_index: following.index(),
+            following_operation_id: following.operation().operation_id(),
+        });
+    }
+    Ok(())
 }

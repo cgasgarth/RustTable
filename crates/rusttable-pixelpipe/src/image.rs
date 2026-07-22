@@ -57,8 +57,27 @@ pub enum RgbaF32ColorEncoding {
     LinearSrgbD65,
     DisplayP3D65,
     LinearDisplayP3D65,
+    Rec2020D65,
+    LinearRec2020D65,
+    AcesCgD60,
     External(rusttable_color::ProfileId),
     LabD50,
+}
+
+impl RgbaF32ColorEncoding {
+    #[must_use]
+    pub const fn transfer(self) -> Option<rusttable_color::TransferFunction> {
+        match self {
+            Self::SrgbD65 | Self::DisplayP3D65 => Some(rusttable_color::TransferFunction::Srgb),
+            Self::Rec2020D65 => Some(rusttable_color::TransferFunction::Rec2020),
+            Self::LinearSrgbD65
+            | Self::LinearDisplayP3D65
+            | Self::LinearRec2020D65
+            | Self::AcesCgD60
+            | Self::LabD50 => Some(rusttable_color::TransferFunction::Linear),
+            Self::External(_) => None,
+        }
+    }
 }
 
 /// Native representation retained after the typed decode-to-f32 bridge.
@@ -268,12 +287,14 @@ impl RgbaF32Image {
             validate_component(pixel_index, RgbaF32Channel::Green, pixel.green())?;
             validate_component(pixel_index, RgbaF32Channel::Blue, pixel.blue())?;
             validate_component(pixel_index, RgbaF32Channel::Alpha, pixel.alpha())?;
-            if descriptor
-                .source_color()
-                .is_some_and(|color| color.transfer() != rusttable_color::TransferFunction::Linear)
-                || descriptor.color_encoding() == RgbaF32ColorEncoding::SrgbD65
-                || descriptor.color_encoding() == RgbaF32ColorEncoding::DisplayP3D65
-            {
+            let transfer_encoded = descriptor
+                .color_encoding()
+                .transfer()
+                .is_some_and(|transfer| transfer != rusttable_color::TransferFunction::Linear)
+                || descriptor.source_color().is_some_and(|color| {
+                    color.transfer() != rusttable_color::TransferFunction::Linear
+                });
+            if transfer_encoded {
                 validate_normalized(pixel_index, RgbaF32Channel::Red, pixel.red())?;
                 validate_normalized(pixel_index, RgbaF32Channel::Green, pixel.green())?;
                 validate_normalized(pixel_index, RgbaF32Channel::Blue, pixel.blue())?;

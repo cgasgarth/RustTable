@@ -37,6 +37,7 @@ pub fn prepare_basicadj_plans(
 
     let mut current = input.pixel_slice().to_vec();
     let mut frame = input.frame();
+    let mut terminal = None;
     let mut plans = BTreeMap::new();
     for node in graph.nodes() {
         let operation = node.operation();
@@ -73,6 +74,7 @@ pub fn prepare_basicadj_plans(
             0,
             Some(&plan_set),
             &mut frame,
+            &mut terminal,
         )?;
     }
 
