@@ -7,6 +7,7 @@ use rusttable_image::{
 };
 
 use crate::input::{enforce_limits, malformed, probe_tiff, validate_tiff};
+use crate::jpeg::JpegDecoder;
 use crate::raw::{decode_raw, is_raw, probe_raw};
 
 /// Maximum amount of a source that any format probe may inspect.
@@ -353,122 +354,9 @@ fn valid_png_bit_depth(color_type: u8, bit_depth: u8) -> bool {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct JpegHeader {
-    dimensions: ImageDimensions,
-}
-
 fn probe_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
-    let header = inspect_jpeg(bytes)?;
-    enforce_limits(limits, header.dimensions)?;
+    let header = crate::jpeg::probe_bounded(bytes, limits, bytes.len() >= PROBE_BUDGET_BYTES)?;
     Ok(ImageProbe::new(InputFormat::Jpeg, header.dimensions))
-}
-
-fn inspect_jpeg(bytes: &[u8]) -> Result<JpegHeader, ImageInputError> {
-    if !bytes.starts_with(&[0xff, 0xd8]) {
-        return Err(malformed_input(InputFormat::Jpeg, "missing JPEG SOI"));
-    }
-    let mut offset = 2_usize;
-    loop {
-        if bytes.get(offset) != Some(&0xff) {
-            return Err(malformed_input(
-                InputFormat::Jpeg,
-                &format!("invalid JPEG marker prefix at offset {offset}"),
-            ));
-        }
-        while bytes.get(offset) == Some(&0xff) {
-            offset += 1;
-        }
-        let marker = *bytes
-            .get(offset)
-            .ok_or_else(|| malformed_input(InputFormat::Jpeg, "truncated JPEG marker"))?;
-        offset += 1;
-        if marker == 0 || marker == 0xd8 || marker == 0xd9 || marker == 0xda {
-            return Err(malformed_input(
-                InputFormat::Jpeg,
-                "JPEG frame header is missing",
-            ));
-        }
-        if matches!(marker, 0xd0..=0xd7 | 0x01) {
-            continue;
-        }
-        let length = usize::from(read_be_u16(
-            bytes,
-            offset,
-            InputFormat::Jpeg,
-            "truncated JPEG segment length",
-        )?);
-        if length < 2 {
-            return Err(malformed_input(
-                InputFormat::Jpeg,
-                "invalid JPEG segment length",
-            ));
-        }
-        let segment_start = offset + 2;
-        let segment_end = segment_start
-            .checked_add(length - 2)
-            .ok_or(ImageInputError::ArithmeticOverflow)?;
-        let segment = bytes.get(segment_start..segment_end).ok_or_else(|| {
-            malformed_input(InputFormat::Jpeg, "JPEG segment exceeds probe budget")
-        })?;
-        if is_jpeg_sof(marker) {
-            if segment.len() < 6 {
-                return Err(malformed_input(
-                    InputFormat::Jpeg,
-                    "truncated JPEG frame header",
-                ));
-            }
-            if segment[0] != 8 {
-                return Err(ImageInputError::UnsupportedFeature {
-                    format: InputFormat::Jpeg,
-                    reason: UnsupportedImageFeature::BitDepth,
-                });
-            }
-            let height = u32::from(read_be_u16_from(segment, 1));
-            let width = u32::from(read_be_u16_from(segment, 3));
-            let components = segment[5];
-            if components != 1 && components != 3 {
-                return Err(ImageInputError::UnsupportedFeature {
-                    format: InputFormat::Jpeg,
-                    reason: UnsupportedImageFeature::ColorModel,
-                });
-            }
-            let dimensions = ImageDimensions::new(width, height).map_err(|_| {
-                malformed_input(InputFormat::Jpeg, "JPEG dimensions must be nonzero")
-            })?;
-            return Ok(JpegHeader { dimensions });
-        }
-        offset = segment_end;
-        while bytes.get(offset) != Some(&0xff) {
-            if offset >= segment_end.saturating_add(8) {
-                return Err(malformed_input(
-                    InputFormat::Jpeg,
-                    "JPEG marker is not within the bounded segment padding",
-                ));
-            }
-            offset += 1;
-        }
-    }
-}
-
-fn is_jpeg_sof(marker: u8) -> bool {
-    matches!(marker, 0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf)
-}
-
-fn read_be_u16(
-    bytes: &[u8],
-    offset: usize,
-    format: InputFormat,
-    message: &str,
-) -> Result<u16, ImageInputError> {
-    let bytes = bytes
-        .get(offset..offset.saturating_add(2))
-        .ok_or_else(|| malformed_input(format, message))?;
-    Ok(read_be_u16_from(bytes, 0))
-}
-
-fn read_be_u16_from(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_be_bytes([bytes[offset], bytes[offset + 1]])
 }
 
 fn probe_classic_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
@@ -476,7 +364,21 @@ fn probe_classic_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, 
 }
 
 fn decode_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
-    decode_standard(bytes, limits, InputFormat::Jpeg)
+    let decoder = JpegDecoder::new();
+    let (dimensions, pixels) = decoder.decode_rgba8(bytes, limits)?;
+    rusttable_image::DecodedImage::new_with_color_encoding(
+        dimensions,
+        pixels,
+        rusttable_image::ColorEncoding::Unspecified,
+    )
+    .map_err(|error| match error {
+        rusttable_image::DecodedImageError::ArithmeticOverflow => {
+            ImageInputError::ArithmeticOverflow
+        }
+        rusttable_image::DecodedImageError::ByteLengthMismatch { expected, actual } => {
+            ImageInputError::DecodedBufferInvariant { expected, actual }
+        }
+    })
 }
 
 fn decode_png(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
@@ -499,28 +401,6 @@ fn decode_classic_tiff(
     validate_tiff(bytes)?;
     let probe = probe_tiff(bytes, limits)?;
     decode_image(bytes, probe, limits, ImageFormat::Tiff)
-}
-
-fn decode_standard(
-    bytes: &[u8],
-    limits: DecodeLimits,
-    format: InputFormat,
-) -> Result<DecodedImage, ImageInputError> {
-    let probe = match format {
-        InputFormat::Jpeg => {
-            let header = inspect_jpeg(bytes)?;
-            enforce_limits(limits, header.dimensions)?;
-            ImageProbe::new(format, header.dimensions)
-        }
-        InputFormat::Png => {
-            let header = inspect_png(bytes)?;
-            enforce_limits(limits, header.dimensions)?;
-            ImageProbe::new(format, header.dimensions)
-        }
-        InputFormat::Tiff => probe_tiff(bytes, limits)?,
-        InputFormat::Raw => return decode_raw(bytes, limits),
-    };
-    decode_image(bytes, probe, limits, image_format(format))
 }
 
 fn decode_image(
@@ -568,15 +448,6 @@ fn decode_image_with_encoding(
             }
         },
     )
-}
-
-fn image_format(format: InputFormat) -> ImageFormat {
-    match format {
-        InputFormat::Jpeg => ImageFormat::Jpeg,
-        InputFormat::Png => ImageFormat::Png,
-        InputFormat::Tiff => ImageFormat::Tiff,
-        InputFormat::Raw => unreachable!("RAW decoding uses the camera-RAW backend"),
-    }
 }
 
 fn malformed_input(format: InputFormat, message: &str) -> ImageInputError {

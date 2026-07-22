@@ -212,6 +212,11 @@ pub enum UnsupportedImageFeature {
     SampleFormat,
     ColorModel,
     PlanarConfiguration,
+    ArithmeticCoding,
+    CodingProcess,
+    Region,
+    Sampling,
+    RestartInterval,
 }
 
 impl fmt::Display for ImageInputError {

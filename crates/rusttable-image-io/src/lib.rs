@@ -2,6 +2,7 @@
 #![doc = "Bounded JPEG, PNG, and classic-TIFF file input/output for `RustTable`."]
 
 mod input;
+pub mod jpeg;
 mod output;
 mod raster_samples;
 pub mod raw;
@@ -11,6 +12,11 @@ mod svg;
 pub mod dng_output;
 
 pub use input::FileImageInput;
+pub use jpeg::{
+    JPEG_PROBE_BUDGET_BYTES, JpegCodingProcess, JpegComponentModel, JpegDecodeError,
+    JpegDecodeMode, JpegDecodeReceipt, JpegDecodeRequest, JpegDecodeResult, JpegDecoder,
+    JpegHeader, JpegMetadataSegment, JpegPixelData, JpegSampling, JpegSof,
+};
 pub use output::FileImageOutput;
 pub use raster_samples::{DecodedRgbSamples, decode_png_rgb_samples};
 pub use raw::{
