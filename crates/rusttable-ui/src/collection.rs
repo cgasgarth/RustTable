@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use rusttable_core::PhotoId;
+use rusttable_core::{ImageMetadata, MetadataEntry, MetadataField, PhotoId};
 use rusttable_i18n::{I18n, MessageArgs, MessageId, normalize_search};
 
 /// The first Darktable collection properties supported by `RustTable`.
@@ -80,9 +80,12 @@ impl CollectionProperty {
 pub struct CollectionItem {
     photo_id: PhotoId,
     path: String,
+    canonical_path: String,
     filmroll: String,
     folders: String,
     filename: String,
+    canonical_filename: String,
+    capture_time_sort_key: Option<i128>,
 }
 
 impl CollectionItem {
@@ -98,14 +101,31 @@ impl CollectionItem {
         let filename = path_ref
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        let canonical_path = normalize_search(&path);
+        let canonical_filename = normalize_search(&filename);
 
         Self {
             photo_id,
             path,
+            canonical_path,
             filmroll: folders.clone(),
             folders,
+            canonical_filename,
             filename,
+            capture_time_sort_key: None,
         }
+    }
+
+    /// Adds the normalized capture timestamp used by the lighttable sort.
+    #[must_use]
+    pub fn with_capture_metadata(mut self, metadata: &ImageMetadata) -> Self {
+        self.capture_time_sort_key = metadata
+            .get(MetadataField::CaptureDateTimeOriginal)
+            .and_then(|entry| match entry {
+                MetadataEntry::CaptureDateTimeOriginal(value) => parse_capture_time(value.as_str()),
+                _ => None,
+            });
+        self
     }
 
     /// Returns the stable photo identity.
@@ -118,6 +138,12 @@ impl CollectionItem {
     #[must_use]
     pub fn path(&self) -> &str {
         &self.path
+    }
+
+    /// Returns the canonical path key used for deterministic sorting.
+    #[must_use]
+    pub fn path_sort_key(&self) -> &str {
+        &self.canonical_path
     }
 
     /// Returns the film-roll value.
@@ -136,6 +162,18 @@ impl CollectionItem {
     #[must_use]
     pub fn filename(&self) -> &str {
         &self.filename
+    }
+
+    /// Returns the canonical filename key used for deterministic sorting.
+    #[must_use]
+    pub fn filename_sort_key(&self) -> &str {
+        &self.canonical_filename
+    }
+
+    /// Returns the normalized capture timestamp, if metadata supplied a valid one.
+    #[must_use]
+    pub const fn capture_time_sort_key(&self) -> Option<i128> {
+        self.capture_time_sort_key
     }
 
     /// Returns the searchable value for one collection property.
@@ -236,9 +274,119 @@ fn contains_case_insensitive(haystack: &str, needle: &str) -> bool {
     needle.is_empty() || normalize_search(haystack).contains(&normalize_search(needle))
 }
 
+fn parse_capture_time(value: &str) -> Option<i128> {
+    let value = value.trim();
+    let (value, offset_minutes) = split_timezone(value)?;
+    let (date, time) = value.split_once('T').or_else(|| value.split_once(' '))?;
+    let year = parse_fixed(date.get(0..4)?)?;
+    let month = parse_fixed(date.get(5..7)?)?;
+    let day = parse_fixed(date.get(8..10)?)?;
+    let date_separator = date.as_bytes().get(4).copied()?;
+    let second_separator = date.as_bytes().get(7).copied()?;
+    if !matches!(date_separator, b':' | b'-') || date_separator != second_separator {
+        return None;
+    }
+    let (hour, minute, second, fraction) = parse_time(time)?;
+    if !(1..=12).contains(&month)
+        || !(1..=days_in_month(year, month)).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return None;
+    }
+
+    let days = days_from_civil(year, month, day);
+    let seconds = i128::from(days) * 86_400
+        + i128::from(hour) * 3_600
+        + i128::from(minute) * 60
+        + i128::from(second.min(59))
+        - i128::from(offset_minutes) * 60;
+    Some(seconds * 1_000_000 + i128::from(fraction) + i128::from(second / 60) * 1_000_000)
+}
+
+fn split_timezone(value: &str) -> Option<(&str, i32)> {
+    if value.ends_with(['Z', 'z']) {
+        return Some((&value[..value.len() - 1], 0));
+    }
+    let Some((index, sign)) = value.char_indices().rev().find_map(|(index, character)| {
+        (index >= 10 && matches!(character, '+' | '-')).then_some((index, character))
+    }) else {
+        return Some((value, 0));
+    };
+    let timezone = &value[index + 1..];
+    let (hours, minutes) = match timezone.split_once(':') {
+        Some((hours, minutes)) => (parse_fixed(hours)?, parse_fixed(minutes)?),
+        None if timezone.len() == 4 => (
+            parse_fixed(timezone.get(..2)?)?,
+            parse_fixed(timezone.get(2..)?)?,
+        ),
+        None => return None,
+    };
+    if hours > 23 || minutes > 59 {
+        return None;
+    }
+    let offset = i32::try_from(hours).ok()?.saturating_mul(60) + i32::try_from(minutes).ok()?;
+    Some((&value[..index], if sign == '+' { offset } else { -offset }))
+}
+
+fn parse_time(value: &str) -> Option<(u32, u32, u32, u32)> {
+    let (hour, remainder) = value.split_once(':')?;
+    let (minute, remainder) = remainder.split_once(':')?;
+    let (second, fraction) = remainder
+        .split_once(['.', ','])
+        .map_or((remainder, ""), |(second, fraction)| (second, fraction));
+    let fraction = if fraction.is_empty() {
+        0
+    } else {
+        if !fraction.bytes().all(|byte| byte.is_ascii_digit()) || fraction.len() > 6 {
+            return None;
+        }
+        let value = parse_fixed(fraction)?;
+        value * 10_u32.pow(u32::try_from(6 - fraction.len()).ok()?)
+    };
+    Some((
+        parse_fixed(hour)?,
+        parse_fixed(minute)?,
+        parse_fixed(second)?,
+        fraction,
+    ))
+}
+
+fn parse_fixed(value: &str) -> Option<u32> {
+    (!value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .then(|| value.parse().ok())?
+}
+
+fn days_in_month(year: u32, month: u32) -> u32 {
+    match month {
+        2 if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) => {
+            29
+        }
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
+}
+
+/// Returns days since 1970-01-01 in the proleptic Gregorian calendar.
+fn days_from_civil(year: u32, month: u32, day: u32) -> i64 {
+    let year = i64::from(year) - i64::from(month <= 2);
+    let era = if year >= 0 {
+        year / 400
+    } else {
+        (year - 399) / 400
+    };
+    let year_of_era = year - era * 400;
+    let month = i64::from(month);
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + i64::from(day) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
 #[cfg(test)]
 mod tests {
-    use rusttable_core::PhotoId;
+    use rusttable_core::{ImageMetadata, MetadataEntry, MetadataText, PhotoId};
 
     use super::{CollectionItem, CollectionProperty, CollectionRule};
 
@@ -254,6 +402,48 @@ mod tests {
         assert_eq!(item.filmroll(), "/photos/2026/holiday");
         assert_eq!(item.folders(), "/photos/2026/holiday");
         assert_eq!(item.filename(), "IMG_0001.CR3");
+    }
+
+    #[test]
+    fn canonical_sort_keys_and_capture_metadata_are_display_independent() {
+        let metadata = ImageMetadata::from_entries([MetadataEntry::CaptureDateTimeOriginal(
+            MetadataText::new("2024:01:02 05:04:05+02:00").expect("capture time"),
+        )])
+        .expect("metadata");
+        let item = CollectionItem::new(
+            PhotoId::new(8).expect("non-zero photo ID"),
+            "/photos/Été/IMG_02.CR3",
+        )
+        .with_capture_metadata(&metadata);
+        let utc = CollectionItem::new(
+            PhotoId::new(9).expect("non-zero photo ID"),
+            "/photos/été/IMG_09.CR3",
+        )
+        .with_capture_metadata(
+            &ImageMetadata::from_entries([MetadataEntry::CaptureDateTimeOriginal(
+                MetadataText::new("2024-01-02T03:04:05Z").expect("capture time"),
+            )])
+            .expect("metadata"),
+        );
+
+        assert_eq!(item.filename_sort_key(), "img_02.cr3");
+        assert_eq!(item.path_sort_key(), "/photos/été/img_02.cr3");
+        assert_eq!(item.capture_time_sort_key(), utc.capture_time_sort_key());
+    }
+
+    #[test]
+    fn invalid_or_missing_capture_metadata_has_no_sort_key() {
+        let invalid = ImageMetadata::from_entries([MetadataEntry::CaptureDateTimeOriginal(
+            MetadataText::new("not-a-date").expect("capture text"),
+        )])
+        .expect("metadata");
+        assert_eq!(item("/photos/missing.jpg").capture_time_sort_key(), None);
+        assert_eq!(
+            item("/photos/invalid.jpg")
+                .with_capture_metadata(&invalid)
+                .capture_time_sort_key(),
+            None
+        );
     }
 
     #[test]

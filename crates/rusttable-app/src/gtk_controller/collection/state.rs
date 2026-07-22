@@ -69,7 +69,7 @@ pub(super) fn ui_sort_direction(
 pub(super) fn collection_item(record: &ImportRecord) -> CollectionItem {
     let path = decode_reference_source(record.source())
         .map_or_else(|_| record.source().as_str().to_owned(), path_string);
-    CollectionItem::new(record.photo().id(), path)
+    CollectionItem::new(record.photo().id(), path).with_capture_metadata(record.metadata())
 }
 
 fn path_string(path: PathBuf) -> String {

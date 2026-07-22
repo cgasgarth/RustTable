@@ -1,5 +1,7 @@
 //! GTK-facing collection state backed by the imported catalog records.
 
+mod ordering;
+mod presentation;
 mod service;
 mod state;
 
@@ -7,8 +9,7 @@ pub use service::LibraryCollectionService;
 pub use state::ActiveLighttableRestoreReport;
 
 use rusttable_catalog::{
-    ActiveLighttableState, CatalogCommand, CatalogState, ColorLabel, ImportRecord,
-    PhotoOrganizationState, Rating,
+    ActiveLighttableState, CatalogCommand, CatalogState, ImportRecord, PhotoOrganizationState,
 };
 use rusttable_core::PhotoId;
 use rusttable_i18n::{CollationProfile, LocaleCollator, LocaleTag};
@@ -18,6 +19,11 @@ use rusttable_ui::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+use ordering::{organization_matches, sort_items};
+use presentation::{
+    apply_fallback_organization, color_from_ui, photo_state, rating_from_ui, shared_labels,
+    uniform_rating,
+};
 use state::{
     active_property, active_sort, active_sort_direction, collection_item, ui_property, ui_sort,
     ui_sort_direction,
@@ -481,26 +487,14 @@ impl CollectionController {
                     && organization_matches(&self.rule, item.photo_id(), &self.organization)
             })
             .collect::<Vec<_>>();
-        if let Ok(collator) = LocaleCollator::new(self.collation_profile.clone()) {
-            matching_items.sort_by(|left, right| {
-                let ordering = match self.sort {
-                    LighttableSort::Filename => collator.compare(
-                        left.value(self.rule.property()),
-                        right.value(self.rule.property()),
-                    ),
-                    LighttableSort::CaptureTime => left.photo_id().cmp(&right.photo_id()),
-                    LighttableSort::Rating => {
-                        organization_rating(&self.organization, right.photo_id())
-                            .cmp(&organization_rating(&self.organization, left.photo_id()))
-                    }
-                };
-                let ordering = match self.sort_direction {
-                    LighttableSortDirection::Ascending => ordering,
-                    LighttableSortDirection::Descending => ordering.reverse(),
-                };
-                ordering.then_with(|| left.photo_id().cmp(&right.photo_id()))
-            });
-        }
+        let collator = LocaleCollator::new(self.collation_profile.clone()).ok();
+        sort_items(
+            &mut matching_items,
+            self.sort,
+            self.sort_direction,
+            &self.organization,
+            collator.as_ref(),
+        );
         let matching_photo_ids: Vec<PhotoId> = matching_items
             .into_iter()
             .map(CollectionItem::photo_id)
@@ -538,193 +532,6 @@ impl CollectionController {
     }
 }
 
-fn rating_from_ui(rating: LighttableRating) -> Rating {
-    Rating::from_u8(rating.stars().unwrap_or(0)).unwrap_or(Rating::Zero)
-}
-
-const fn color_from_ui(label: LighttableColorLabel) -> ColorLabel {
-    match label {
-        LighttableColorLabel::Red => ColorLabel::Red,
-        LighttableColorLabel::Yellow => ColorLabel::Yellow,
-        LighttableColorLabel::Green => ColorLabel::Green,
-        LighttableColorLabel::Blue => ColorLabel::Blue,
-        LighttableColorLabel::Purple => ColorLabel::Purple,
-    }
-}
-
-const fn color_to_ui(label: ColorLabel) -> LighttableColorLabel {
-    match label {
-        ColorLabel::Red => LighttableColorLabel::Red,
-        ColorLabel::Yellow => LighttableColorLabel::Yellow,
-        ColorLabel::Green => LighttableColorLabel::Green,
-        ColorLabel::Blue => LighttableColorLabel::Blue,
-        ColorLabel::Purple => LighttableColorLabel::Purple,
-    }
-}
-
-fn organization_rating(
-    organization: &BTreeMap<PhotoId, PhotoOrganizationState>,
-    photo_id: PhotoId,
-) -> u8 {
-    organization
-        .get(&photo_id)
-        .map_or(0, |state| state.rating.as_u8())
-}
-
-fn organization_matches(
-    rule: &CollectionRule,
-    photo_id: PhotoId,
-    organization: &BTreeMap<PhotoId, PhotoOrganizationState>,
-) -> bool {
-    if rule.search_text().trim().is_empty() {
-        return true;
-    }
-    let Some(state) = organization.get(&photo_id) else {
-        return true;
-    };
-    match rule.property() {
-        CollectionProperty::Rating => {
-            let rating = if state.rejected {
-                "rejected".to_owned()
-            } else {
-                state.rating.as_u8().to_string()
-            };
-            rule.matches_value(&rating)
-        }
-        CollectionProperty::ColorLabel => state.color_labels.iter().any(|label| {
-            rule.matches_value(match label {
-                ColorLabel::Red => "red",
-                ColorLabel::Yellow => "yellow",
-                ColorLabel::Green => "green",
-                ColorLabel::Blue => "blue",
-                ColorLabel::Purple => "purple",
-            })
-        }),
-        CollectionProperty::Filmroll
-        | CollectionProperty::Folders
-        | CollectionProperty::Filename => true,
-    }
-}
-
-fn photo_state(
-    photo_id: PhotoId,
-    organization: &BTreeMap<PhotoId, PhotoOrganizationState>,
-    selected: &BTreeSet<PhotoId>,
-) -> LighttablePhotoState {
-    let state = organization.get(&photo_id);
-    let rating = state.map_or(LighttableRating::Zero, |state| {
-        if state.rejected {
-            LighttableRating::Rejected
-        } else {
-            ui_rating(state.rating)
-        }
-    });
-    let labels = state
-        .into_iter()
-        .flat_map(|state| state.color_labels.iter().copied().map(color_to_ui));
-    LighttablePhotoState::new(photo_id, selected.contains(&photo_id), rating, labels)
-}
-
-fn ui_rating(rating: Rating) -> LighttableRating {
-    match rating {
-        Rating::Zero => LighttableRating::Zero,
-        Rating::One => LighttableRating::One,
-        Rating::Two => LighttableRating::Two,
-        Rating::Three => LighttableRating::Three,
-        Rating::Four => LighttableRating::Four,
-        Rating::Five => LighttableRating::Five,
-    }
-}
-
-fn uniform_rating(states: &[&PhotoOrganizationState]) -> Option<LighttableRating> {
-    let first = states.first()?;
-    let rating = if first.rejected {
-        LighttableRating::Rejected
-    } else {
-        ui_rating(first.rating)
-    };
-    states
-        .iter()
-        .all(|state| {
-            if state.rejected {
-                rating == LighttableRating::Rejected
-            } else {
-                rating == ui_rating(state.rating)
-            }
-        })
-        .then_some(rating)
-}
-
-fn shared_labels(states: &[&PhotoOrganizationState]) -> BTreeSet<LighttableColorLabel> {
-    let Some(first) = states.first() else {
-        return BTreeSet::new();
-    };
-    first
-        .color_labels
-        .iter()
-        .copied()
-        .filter(|label| {
-            states
-                .iter()
-                .all(|state| state.color_labels.contains(label))
-        })
-        .map(color_to_ui)
-        .collect()
-}
-
-fn apply_fallback_organization(
-    organization: &mut BTreeMap<PhotoId, PhotoOrganizationState>,
-    command: CatalogCommand,
-) {
-    match command {
-        CatalogCommand::SetRating { photo_ids, rating } => {
-            for photo_id in photo_ids {
-                if let Some(state) = organization.get_mut(&photo_id) {
-                    state.rating = rating;
-                    state.rejected = false;
-                }
-            }
-        }
-        CatalogCommand::SetRejection {
-            photo_ids,
-            rejected,
-        } => {
-            for photo_id in photo_ids {
-                if let Some(state) = organization.get_mut(&photo_id) {
-                    state.rejected = rejected;
-                }
-            }
-        }
-        CatalogCommand::SetColorLabel {
-            photo_ids,
-            label,
-            enabled,
-        } => {
-            for photo_id in photo_ids {
-                if let Some(state) = organization.get_mut(&photo_id) {
-                    if enabled {
-                        state.color_labels.insert(label);
-                    } else {
-                        state.color_labels.remove(&label);
-                    }
-                }
-            }
-        }
-        CatalogCommand::ToggleColorLabel { photo_ids, label } => {
-            for photo_id in photo_ids {
-                if let Some(state) = organization.get_mut(&photo_id)
-                    && !state.color_labels.insert(label)
-                {
-                    state.color_labels.remove(&label);
-                }
-            }
-        }
-        CatalogCommand::RegisterPhoto(_)
-        | CatalogCommand::CreateEdit(_)
-        | CatalogCommand::ReplaceEdit { .. } => {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use rusttable_catalog::{
@@ -733,7 +540,7 @@ mod tests {
     };
     use std::path::Path;
 
-    use rusttable_core::PhotoId;
+    use rusttable_core::{ImageMetadata, MetadataEntry, MetadataText, PhotoId};
     use rusttable_i18n::LocaleTag;
     use rusttable_ui::{
         CollectionItem, CollectionProperty, LighttableColorLabel, LighttableRating, LighttableSort,
@@ -783,6 +590,104 @@ mod tests {
                 .matching_photo_ids()
                 .collect::<Vec<_>>(),
             vec![id(2), id(1)]
+        );
+    }
+
+    fn item_with_capture(photo_id: u128, path: &str, capture_time: Option<&str>) -> CollectionItem {
+        let item = CollectionItem::new(id(photo_id), path);
+        let Some(capture_time) = capture_time else {
+            return item;
+        };
+        let metadata = ImageMetadata::from_entries([MetadataEntry::CaptureDateTimeOriginal(
+            MetadataText::new(capture_time).expect("capture time"),
+        )])
+        .expect("metadata");
+        item.with_capture_metadata(&metadata)
+    }
+
+    #[test]
+    fn filename_sort_uses_canonical_filename_and_path_keys_not_filter_property() {
+        let mut controller = CollectionController::with_locale(
+            [
+                CollectionItem::new(id(90), "/photos/z/IMG10.CR3"),
+                CollectionItem::new(id(2), "/photos/a/IMG2.CR3"),
+                CollectionItem::new(id(77), "/photos/c/IMG2.CR3"),
+                CollectionItem::new(id(1), "/photos/d/IMG1.CR3"),
+            ],
+            LocaleTag::parse("en-US").expect("valid locale"),
+        );
+        let expected = vec![id(1), id(2), id(77), id(90)];
+
+        assert_eq!(
+            controller
+                .snapshot()
+                .matching_photo_ids()
+                .collect::<Vec<_>>(),
+            expected
+        );
+        controller.set_property(CollectionProperty::Folders);
+        assert_eq!(
+            controller
+                .snapshot()
+                .matching_photo_ids()
+                .collect::<Vec<_>>(),
+            expected
+        );
+        controller.set_property(CollectionProperty::Rating);
+        assert_eq!(
+            controller
+                .snapshot()
+                .matching_photo_ids()
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    #[test]
+    fn capture_sort_normalizes_timezones_and_orders_missing_values_deterministically() {
+        let items = [
+            item_with_capture(90, "/photos/z/late.jpg", Some("2025:01:01 00:00:00")),
+            item_with_capture(
+                5,
+                "/photos/b/equal-b.jpg",
+                Some("2024:01:02 05:04:05+02:00"),
+            ),
+            item_with_capture(42, "/photos/a/equal-a.jpg", Some("2024-01-02T03:04:05Z")),
+            item_with_capture(1, "/photos/missing.jpg", None),
+            item_with_capture(77, "/photos/invalid.jpg", Some("not-a-date")),
+        ];
+        let mut controller = CollectionController::with_locale(
+            items,
+            LocaleTag::parse("en-US").expect("valid locale"),
+        );
+        controller.set_sort(LighttableSort::CaptureTime);
+
+        let ascending = controller
+            .snapshot()
+            .matching_photo_ids()
+            .collect::<Vec<_>>();
+        assert_eq!(ascending, vec![id(77), id(1), id(42), id(5), id(90)]);
+
+        controller.set_sort_direction(LighttableSortDirection::Descending);
+        assert_eq!(
+            controller
+                .snapshot()
+                .matching_photo_ids()
+                .collect::<Vec<_>>(),
+            vec![id(90), id(42), id(5), id(77), id(1)]
+        );
+
+        let state = controller.active_state();
+        let mut rebuilt = CollectionController::new(controller.items().cloned());
+        rebuilt.restore_active_state(&state);
+        let restored = rebuilt.snapshot().matching_photo_ids().collect::<Vec<_>>();
+        assert_eq!(restored, vec![id(90), id(42), id(5), id(77), id(1)]);
+        assert_eq!(
+            restored
+                .chunks(2)
+                .flat_map(|page| page.iter().copied())
+                .collect::<Vec<_>>(),
+            restored
         );
     }
 
