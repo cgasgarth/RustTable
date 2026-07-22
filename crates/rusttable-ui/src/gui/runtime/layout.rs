@@ -71,6 +71,10 @@ pub(super) fn mode_panel_stack(
     let stack = gtk4::Stack::new();
     stack.set_widget_name(id);
     stack.set_transition_type(gtk4::StackTransitionType::None);
+    // Size the rail from the active workspace. The wider inactive lighttable
+    // child otherwise shifts the darkroom child left inside a narrow Paned,
+    // clipping its disclosure arrows and labels while leaving trailing actions.
+    stack.set_hhomogeneous(false);
     let preferred_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
     // Paned allocates a child from its minimum/natural width.  The module
     // contents are intentionally wider than Darktable's rail in places, so
