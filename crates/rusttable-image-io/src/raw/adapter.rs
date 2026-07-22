@@ -14,15 +14,17 @@ use sha2::{Digest, Sha256};
 
 use super::{
     RAWLER_BACKEND_ID, RawCameraIdentity, RawCancellationToken, RawCapabilityError,
-    RawCapabilityKind, RawChannel, RawColorMatrix, RawContainerKind, RawContainerProbe,
-    RawContainerRegistry, RawDecodeError, RawDecodeLimits, RawDecodeReceipt, RawDecodeRequest,
-    RawDecodeResult, RawDimensions, RawFrame, RawFrameParts, RawFrameValidationError, RawHeader,
-    RawIlluminant, RawLevelPattern, RawOpcodeDescriptor, RawOpcodeStage, RawOrientation, RawPlane,
-    RawPlaneLayout, RawPreviewDescriptor, RawPreviewFormat, RawPreviewKind, RawProbeOutcome,
-    RawRect, RawSourceError, RawSourceReceipt,
+    RawCapabilityEvidence, RawCapabilityKind, RawChannel, RawColorMatrix, RawContainerKind,
+    RawContainerProbe, RawContainerRegistry, RawDecodeError, RawDecodeLimits, RawDecodeReceipt,
+    RawDecodeRequest, RawDecodeResult, RawDimensions, RawFrame, RawFrameParts,
+    RawFrameValidationError, RawHeader, RawIlluminant, RawLevelPattern, RawOpcodeDescriptor,
+    RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout, RawPreviewDescriptor,
+    RawPreviewFormat, RawPreviewKind, RawProbeOutcome, RawRect, RawSourceError, RawSourceReceipt,
 };
 
 mod development;
+mod header;
+mod manifest;
 mod preview;
 
 pub(super) use development::{decode_legacy_frame, decode_linear_frame};
@@ -155,7 +157,7 @@ impl RawlerRawDecoder {
     ) -> Result<RawHeader, RawDecodeError> {
         check_cancel(&request.cancellation)?;
         let copy = StableSourceCopy::read(source, request)?;
-        let probe = selected_probe(self.registry, copy.bytes.as_slice())?;
+        let mut probe = selected_probe(self.registry, copy.bytes.as_slice())?;
         if matches!(
             probe.container,
             RawContainerKind::Dng | RawContainerKind::TiffRaw
@@ -163,6 +165,8 @@ impl RawlerRawDecoder {
             return super::dng::probe(copy.bytes.as_slice(), request.limits, &probe);
         }
         let raw_source = RawSource::new_from_shared_vec(Arc::clone(&copy.bytes));
+        let hint = manifest::backend_format_hint(&raw_source, &probe)?;
+        probe.container = super::manifest::container_for_backend_hint(probe.container, hint);
         let dummy = backend_decode(
             &raw_source,
             &RawDecodeParams {
@@ -172,8 +176,9 @@ impl RawlerRawDecoder {
         )
         .map_err(|error| map_backend_error(error, &probe))?;
         validate_backend_declaration(&dummy, request.limits, &probe)?;
+        manifest::validate_manifest_profile(&dummy, &probe, hint)?;
         check_cancel(&request.cancellation)?;
-        header_from_backend(&dummy, &probe)
+        header::header_from_backend(&dummy, &probe)
     }
 
     /// Copies one immutable source through bounded random access and publishes no partial frame.
@@ -190,7 +195,7 @@ impl RawlerRawDecoder {
         check_cancel(&request.cancellation)?;
         let copy = StableSourceCopy::read(source, request)?;
         check_cancel(&request.cancellation)?;
-        let probe = selected_probe(self.registry, copy.bytes.as_slice())?;
+        let mut probe = selected_probe(self.registry, copy.bytes.as_slice())?;
         if matches!(
             probe.container,
             RawContainerKind::Dng | RawContainerKind::TiffRaw
@@ -201,9 +206,12 @@ impl RawlerRawDecoder {
         let params = RawDecodeParams {
             image_index: request.image_index,
         };
+        let hint = manifest::backend_format_hint(&raw_source, &probe)?;
+        probe.container = super::manifest::container_for_backend_hint(probe.container, hint);
         let dummy = backend_decode(&raw_source, &params, true)
             .map_err(|error| map_backend_error(error, &probe))?;
         validate_backend_declaration(&dummy, request.limits, &probe)?;
+        let profile = manifest::validate_manifest_profile(&dummy, &probe, hint)?;
         check_cancel(&request.cancellation)?;
         let decoded = backend_decode(&raw_source, &params, false)
             .map_err(|error| map_backend_error(error, &probe))?;
@@ -223,10 +231,30 @@ impl RawlerRawDecoder {
             .map_err(|_| RawDecodeError::InvalidFrame(RawFrameValidationError::PlaneCount))?;
         let receipt = RawDecodeReceipt {
             backend: RAWLER_BACKEND_ID.to_owned(),
+            backend_format: profile.backend_format.clone(),
             container: probe.container,
+            family: profile.family,
+            camera_profile_id: profile.profile_id.clone(),
+            capability_manifest_sha256: super::manifest::rawler_capability_manifest().sha256,
             camera: frame.parts().camera.clone(),
             compression: frame.parts().compression.clone(),
             bit_depth: frame.parts().bit_depth,
+            sensor_area: RawRect::new(
+                0,
+                0,
+                frame.parts().planes[0].dimensions.width,
+                frame.parts().planes[0].dimensions.height,
+            )
+            .map_err(invalid)?,
+            active_area: frame.parts().active_area,
+            crop_area: frame.parts().crop_area,
+            masked_areas: frame.parts().masked_areas.clone(),
+            black_levels: frame.parts().black_levels.clone(),
+            white_levels: frame.parts().white_levels.clone(),
+            white_balance: frame.parts().white_balance.clone(),
+            color_matrices: frame.parts().color_matrices.clone(),
+            previews: frame.parts().previews.clone(),
+            quirk_ids: profile.quirk_ids.clone(),
             source: RawSourceReceipt {
                 source_bytes: copy.source_bytes,
                 source_sha256: copy.sha256,
@@ -255,51 +283,6 @@ fn selected_probe(
             })
         }
         RawProbeOutcome::Match(probe) => Ok(probe),
-    }
-}
-
-fn header_from_backend(
-    image: &RawImage,
-    probe: &RawContainerProbe,
-) -> Result<RawHeader, RawDecodeError> {
-    let dimensions = dimensions(image.width, image.height)?;
-    let full_area = RawRect::new(0, 0, dimensions.width, dimensions.height).map_err(invalid)?;
-    let active_area = image
-        .active_area
-        .map(convert_rect)
-        .transpose()?
-        .unwrap_or(full_area);
-    let crop_area = image
-        .crop_area
-        .map(convert_rect)
-        .transpose()?
-        .unwrap_or(active_area);
-    let bit_depth = probe
-        .evidence
-        .bit_depth
-        .or_else(|| image.camera.bps.and_then(|value| u8::try_from(value).ok()))
-        .unwrap_or_else(|| u8::try_from(image.bps).unwrap_or_default());
-    Ok(RawHeader {
-        container: probe.container,
-        dimensions,
-        active_area,
-        crop_area,
-        orientation: orientation(image.orientation),
-        camera: RawCameraIdentity {
-            maker: safe_text(&image.make),
-            model: safe_text(&image.model),
-            normalized_maker: safe_text(&image.clean_make),
-            normalized_model: safe_text(&image.clean_model),
-            mode: safe_text(&image.camera.mode),
-        },
-        compression: probe.evidence.compression.clone(),
-        bit_depth,
-    })
-}
-
-impl Default for RawlerRawDecoder {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -871,6 +854,13 @@ fn capability(
         model: safe_text(model),
         mode: safe_text(mode),
         detail: safe_text(detail),
+        evidence: Box::new(RawCapabilityEvidence {
+            signature: probe.evidence.signature.clone(),
+            raw_tags: probe.evidence.raw_tags.clone(),
+            backend_format: String::new(),
+            compression: probe.evidence.compression.clone(),
+            bit_depth: probe.evidence.bit_depth,
+        }),
     })
 }
 

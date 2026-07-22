@@ -107,14 +107,29 @@ pub(super) fn decode(
         .ok_or_else(|| invalid(RawFrameValidationError::ArithmeticOverflow))?;
     let opcodes = frame.parts().opcodes.len();
     let previews = frame.parts().previews.len();
+    let frame_parts = frame.parts();
     Ok(RawDecodeResult {
-        frame,
         receipt: RawDecodeReceipt {
             backend: RAWLER_BACKEND_ID.to_owned(),
+            backend_format: "DNG".to_owned(),
             container: probe.container,
+            family: super::RawVendorFamily::Standardized,
+            camera_profile_id: "rusttable.dng".to_owned(),
+            capability_manifest_sha256: super::manifest::rawler_capability_manifest().sha256,
             camera: camera(&metadata),
             compression: probe.evidence.compression.clone(),
             bit_depth: page.bits_per_sample[0],
+            sensor_area: RawRect::new(0, 0, page.dimensions.width(), page.dimensions.height())
+                .map_err(invalid)?,
+            active_area: active,
+            crop_area: crop,
+            masked_areas: frame_parts.masked_areas.clone(),
+            black_levels: frame_parts.black_levels.clone(),
+            white_levels: frame_parts.white_levels.clone(),
+            white_balance: frame_parts.white_balance.clone(),
+            color_matrices: frame_parts.color_matrices.clone(),
+            previews: frame_parts.previews.clone(),
+            quirk_ids: Vec::new(),
             source: RawSourceReceipt {
                 source_bytes: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
                 source_sha256: Sha256::digest(bytes).into(),
@@ -131,6 +146,7 @@ pub(super) fn decode(
                 output_bytes,
             }),
         },
+        frame,
     })
 }
 
@@ -775,6 +791,13 @@ fn capability(kind: RawCapabilityKind, probe: &RawContainerProbe, detail: &str) 
         model: safe_text(probe.evidence.camera.model.as_deref().unwrap_or_default()),
         mode: "dng".to_owned(),
         detail: safe_text(detail),
+        evidence: Box::new(super::RawCapabilityEvidence {
+            signature: probe.evidence.signature.clone(),
+            raw_tags: probe.evidence.raw_tags.clone(),
+            backend_format: "DNG".to_owned(),
+            compression: probe.evidence.compression.clone(),
+            bit_depth: probe.evidence.bit_depth,
+        }),
     })
 }
 

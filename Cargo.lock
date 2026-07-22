@@ -4244,8 +4244,10 @@ dependencies = [
  "rusttable-image",
  "rusttable-metadata",
  "rusttable-testkit",
+ "serde",
  "sha2",
  "tiff 0.11.3",
+ "toml 0.9.12+spec-1.1.0",
  "usvg",
 ]
 

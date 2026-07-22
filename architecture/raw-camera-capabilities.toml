@@ -1,0 +1,131 @@
+# Generated-family input for the pinned rawler camera manifest.
+#
+# Camera/model rows are expanded from rawler's embedded camera database at runtime and
+# hashed together with this reviewed family policy.  This file owns format-family scope;
+# it deliberately contains no model-name branches or metadata-normalization rules.
+schema = "rusttable.raw-camera-capabilities.v1"
+backend = "rawler-0.7.2"
+reference = "darktable-org/darktable@cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[families]]
+id = "canon"
+maker_aliases = ["CANON"]
+containers = ["cr2", "cr3"]
+backend_formats = ["CR2", "CR3"]
+decoder_path = "rawler::decoders::{cr2,cr3}"
+compression_modes = ["uncompressed", "lossless-jpeg", "canon-crx", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = ["corpus.raw.canon.cr2"]
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "nikon"
+maker_aliases = ["NIKON", "NIKON CORPORATION"]
+containers = ["nef", "nrw"]
+backend_formats = ["NEF", "NRW"]
+decoder_path = "rawler::decoders::{nef,nrw}"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = ["corpus.raw.nikon.nef"]
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "sony"
+maker_aliases = ["SONY"]
+containers = ["arw", "sr2", "srf"]
+backend_formats = ["ARW"]
+decoder_path = "rawler::decoders::arw"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = ["corpus.raw.sony.arw"]
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "fujifilm"
+maker_aliases = ["FUJIFILM", "FUJI PHOTO FILM CO., LTD."]
+containers = ["raf"]
+backend_formats = ["RAF"]
+decoder_path = "rawler::decoders::raf"
+compression_modes = ["uncompressed", "fuji-compressed", "backend-defined"]
+layout = "bayer-or-xtrans"
+bit_depth = 14
+fixture_ids = ["rusttable-testkit.raw.synthetic-compressed-raf"]
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+quirk_ids = ["raf-xtrans-phase-from-raw-metadata"]
+
+[[families]]
+id = "olympus"
+maker_aliases = ["OLYMPUS", "OM DIGITAL SOLUTIONS"]
+containers = ["orf"]
+backend_formats = ["ORF"]
+decoder_path = "rawler::decoders::orf"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = ["corpus.raw.olympus.orf"]
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "panasonic-leica"
+maker_aliases = ["PANASONIC", "LEICA", "LEICA CAMERA AG"]
+containers = ["rw2", "rwl"]
+backend_formats = ["RW2"]
+decoder_path = "rawler::decoders::rw2"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = ["corpus.raw.panasonic.rw2"]
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "pentax"
+maker_aliases = ["PENTAX", "PENTAX CORPORATION", "RICOH IMAGING COMPANY, LTD."]
+containers = ["pef"]
+backend_formats = ["PEF"]
+decoder_path = "rawler::decoders::pef"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = []
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "samsung"
+maker_aliases = ["SAMSUNG"]
+containers = ["srw"]
+backend_formats = ["SRW"]
+decoder_path = "rawler::decoders::srw"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = []
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "hasselblad"
+maker_aliases = ["HASSELBLAD"]
+containers = ["3fr", "fff"]
+backend_formats = ["TFR"]
+decoder_path = "rawler::decoders::tfr"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = []
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "phase-one"
+maker_aliases = ["PHASE ONE", "PHASE ONE A/S", "LEAF"]
+containers = ["iiq"]
+backend_formats = ["IIQ"]
+decoder_path = "rawler::decoders::iiq"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = []
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
+
+[[families]]
+id = "epson"
+maker_aliases = ["SEIKO EPSON CORP.", "EPSON"]
+containers = ["erf"]
+backend_formats = ["ERF"]
+decoder_path = "rawler::decoders::erf"
+compression_modes = ["uncompressed", "lossless-jpeg", "backend-defined"]
+layout = "bayer-or-linear"
+fixture_ids = []
+reference_evidence = ["Darktable/src/imageio/imageio_rawspeed.cc", "Darktable/src/imageio/imageio_libraw.c"]
