@@ -5,10 +5,10 @@ use std::sync::Arc;
 use redb::{Database, ReadableDatabase, ReadableTable, WriteTransaction};
 use rusttable_catalog::{
     CatalogChangeEvent, CatalogCommand, ColorLabel, EditRepository, EditRepositoryError,
-    ImportDetails, ImportRecord, ImportRegistration, ImportRepository, PhotoOrganizationState,
-    Rating, RepositoryError, SourcePath,
+    ImportDetails, ImportMetadataStatus, ImportRecord, ImportRegistration, ImportRepository,
+    PhotoOrganizationState, Rating, RepositoryError, SourcePath,
 };
-use rusttable_core::{AssetId, ContentHash, Edit, EditId, PhotoId, Revision};
+use rusttable_core::{AssetId, ContentHash, Edit, EditId, ImageMetadata, PhotoId, Revision};
 
 use super::RedbImportRepository;
 use super::edit::RedbEditRepository;
@@ -428,6 +428,107 @@ impl RedbCatalogRepository {
         transaction
             .commit()
             .map_err(|_| AtomicCatalogStoreError::CommitFailed)
+    }
+
+    /// Atomically replaces metadata for an existing photo while preserving its photo and edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns before commit on any missing, corrupt, or storage state, leaving the old record
+    /// and import details intact.
+    pub fn refresh_import_metadata(
+        &mut self,
+        photo_id: PhotoId,
+        metadata: ImageMetadata,
+    ) -> Result<ImportRecord, AtomicCatalogStoreError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let photos = transaction
+            .open_table(schema::PHOTO_INDEX_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let source = photos
+            .get(photo_id.get().to_be_bytes().as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .map(|value| value.value().to_vec())
+            .ok_or(AtomicCatalogStoreError::Conflict)?;
+        let records = transaction
+            .open_table(schema::RECORDS_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let record = records
+            .get(source.as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .map(|value| crate::codec::decode(value.value()))
+            .transpose()
+            .map_err(|()| AtomicCatalogStoreError::Corrupt)?
+            .ok_or(AtomicCatalogStoreError::Corrupt)?;
+        if record.photo().id() != photo_id {
+            return Err(AtomicCatalogStoreError::Corrupt);
+        }
+        let details = transaction
+            .open_table(schema::IMPORT_DETAILS_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .get(source.as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .map(|value| crate::import_details_codec::decode(value.value()))
+            .transpose()
+            .map_err(|()| AtomicCatalogStoreError::Corrupt)?
+            .ok_or(AtomicCatalogStoreError::Corrupt)?;
+        drop(records);
+        drop(photos);
+        drop(transaction);
+
+        let edit = self
+            .edits
+            .list()
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .into_iter()
+            .filter(|edit| edit.photo_id() == photo_id)
+            .max_by_key(|edit| (edit.revision().get(), edit.id().get()))
+            .ok_or(AtomicCatalogStoreError::Corrupt)?;
+        let refreshed = record.with_metadata(metadata);
+        let refreshed_details = ImportDetails::new(
+            rusttable_catalog::ImportMetadataSummary::from_record_with_status(
+                &refreshed,
+                ImportMetadataStatus::Available,
+            ),
+            details.receipt().clone(),
+        );
+        if refreshed_details.validate(&refreshed, &edit).is_err() {
+            return Err(AtomicCatalogStoreError::Corrupt);
+        }
+        let encoded_record =
+            crate::codec::encode(&refreshed).map_err(|()| AtomicCatalogStoreError::Corrupt)?;
+        let encoded_details = crate::import_details_codec::encode(&refreshed_details)
+            .map_err(|()| AtomicCatalogStoreError::Corrupt)?;
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        {
+            let mut records = transaction
+                .open_table(schema::RECORDS_TABLE)
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            records
+                .insert(source.as_slice(), encoded_record.as_slice())
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        }
+        {
+            let mut details_table = transaction
+                .open_table(schema::IMPORT_DETAILS_TABLE)
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            details_table
+                .insert(source.as_slice(), encoded_details.as_slice())
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        }
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| AtomicCatalogStoreError::CommitFailed)?;
+        Ok(refreshed)
     }
 }
 

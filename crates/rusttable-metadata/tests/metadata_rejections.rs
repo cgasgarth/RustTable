@@ -1,7 +1,9 @@
 mod support;
 
 use rusttable_image::InputFormat;
-use rusttable_metadata::{ExifMetadataInput, MetadataInput, MetadataInputError, MetadataLimits};
+use rusttable_metadata::{
+    ExifMetadataInput, MetadataInput, MetadataInputError, MetadataLimits, MetadataReadStatus,
+};
 
 fn input() -> ExifMetadataInput {
     ExifMetadataInput::new(MetadataLimits::new(4096, 2048, 16, 16, 4, 32, 128).unwrap())
@@ -41,6 +43,38 @@ fn invalid_orientation_is_rejected_as_a_typed_field_error() {
             field: "orientation"
         })
     ));
+}
+
+#[test]
+fn tolerant_metadata_keeps_valid_fields_when_one_field_is_invalid() {
+    let mut source = support::tiff_with_metadata();
+    source[42] = 9;
+    let result = input().read_bytes_tolerant(InputFormat::Tiff, &source);
+
+    assert!(matches!(
+        result.status(),
+        MetadataReadStatus::Unavailable(MetadataInputError::InvalidField {
+            field: "orientation"
+        })
+    ));
+    assert!(
+        result
+            .metadata()
+            .get(rusttable_core::MetadataField::CameraMake)
+            .is_some()
+    );
+    assert!(
+        result
+            .metadata()
+            .get(rusttable_core::MetadataField::CameraModel)
+            .is_some()
+    );
+    assert_eq!(
+        result
+            .metadata()
+            .get(rusttable_core::MetadataField::Orientation),
+        None
+    );
 }
 
 #[test]

@@ -15,7 +15,7 @@ pub use error::{
     MetadataInputError, MetadataLimitsError, MetadataOutputError, MetadataOutputLimit,
     MetadataOutputLimitsError,
 };
-pub use extract::{ExifMetadataInput, MetadataInput};
+pub use extract::{ExifMetadataInput, MetadataInput, MetadataReadResult, MetadataReadStatus};
 pub use image_output::{MetadataImageOutput, MetadataImageOutputError};
 pub use limits::{MetadataLimits, MetadataOutputLimits};
 pub use output::{CanonicalExifOutput, EncodedExif, MetadataOutput};

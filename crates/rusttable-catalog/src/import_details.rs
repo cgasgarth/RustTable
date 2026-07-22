@@ -8,6 +8,12 @@ use crate::ImportRecord;
 
 pub const IMPORT_DETAILS_VERSION: u8 = 1;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportMetadataStatus {
+    Available,
+    Unavailable,
+}
+
 /// Opaque, deterministic identity for an accepted reference path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ReferencePathIdentity([u8; 32]);
@@ -40,11 +46,20 @@ pub struct ImportMetadataSummary {
     camera_make_available: bool,
     camera_model_available: bool,
     capture_datetime_available: bool,
+    metadata_status: ImportMetadataStatus,
 }
 
 impl ImportMetadataSummary {
     #[must_use]
     pub fn from_record(record: &ImportRecord) -> Self {
+        Self::from_record_with_status(record, ImportMetadataStatus::Available)
+    }
+
+    #[must_use]
+    pub fn from_record_with_status(
+        record: &ImportRecord,
+        metadata_status: ImportMetadataStatus,
+    ) -> Self {
         let metadata = record.metadata();
         let orientation = match metadata.get(MetadataField::Orientation) {
             Some(MetadataEntry::Orientation(value)) => Some(*value),
@@ -60,6 +75,7 @@ impl ImportMetadataSummary {
             capture_datetime_available: metadata
                 .get(MetadataField::CaptureDateTimeOriginal)
                 .is_some(),
+            metadata_status,
         }
     }
 
@@ -80,6 +96,29 @@ impl ImportMetadataSummary {
             camera_make_available,
             camera_model_available,
             capture_datetime_available,
+            metadata_status: ImportMetadataStatus::Available,
+        }
+    }
+
+    #[must_use]
+    pub const fn new_with_status(
+        format: InputFormat,
+        dimensions: ImageDimensions,
+        orientation: Option<Orientation>,
+        camera_make_available: bool,
+        camera_model_available: bool,
+        capture_datetime_available: bool,
+        metadata_status: ImportMetadataStatus,
+    ) -> Self {
+        Self {
+            version: IMPORT_DETAILS_VERSION,
+            format,
+            dimensions,
+            orientation,
+            camera_make_available,
+            camera_model_available,
+            capture_datetime_available,
+            metadata_status,
         }
     }
 
@@ -116,6 +155,22 @@ impl ImportMetadataSummary {
     #[must_use]
     pub const fn capture_datetime_available(self) -> bool {
         self.capture_datetime_available
+    }
+
+    #[must_use]
+    pub const fn metadata_status(self) -> ImportMetadataStatus {
+        self.metadata_status
+    }
+
+    #[must_use]
+    pub fn same_record_facts(self, other: Self) -> bool {
+        self.version == other.version
+            && self.format == other.format
+            && self.dimensions == other.dimensions
+            && self.orientation == other.orientation
+            && self.camera_make_available == other.camera_make_available
+            && self.camera_model_available == other.camera_model_available
+            && self.capture_datetime_available == other.capture_datetime_available
     }
 }
 
@@ -259,6 +314,12 @@ impl ImportDetails {
         self
     }
 
+    #[must_use]
+    pub fn with_metadata_status(mut self, status: ImportMetadataStatus) -> Self {
+        self.summary.metadata_status = status;
+        self
+    }
+
     /// Checks that the durable facts exactly describe one record and its edit.
     ///
     /// # Errors
@@ -270,7 +331,9 @@ impl ImportDetails {
         edit: &Edit,
     ) -> Result<(), ImportDetailsValidationError> {
         let ContentHash::Sha256(content_sha256) = record.photo().primary_asset().content_hash();
-        if self.summary != ImportMetadataSummary::from_record(record)
+        if !self
+            .summary
+            .same_record_facts(ImportMetadataSummary::from_record(record))
             || self.receipt.content_sha256 != content_sha256
             || self.receipt.byte_length != record.photo().primary_asset().byte_length()
             || self.receipt.photo_id != record.photo().id()

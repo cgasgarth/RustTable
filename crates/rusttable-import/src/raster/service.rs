@@ -3,15 +3,15 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusttable_catalog::{
-    ImportCandidate, ImportDetails, ImportMetadataSummary, ImportRecord, ImportRegistration,
-    ImportRegistrationReceipt, ReferencePathIdentity,
+    ImportCandidate, ImportDetails, ImportMetadataStatus, ImportMetadataSummary, ImportRecord,
+    ImportRegistration, ImportRegistrationReceipt, ReferencePathIdentity,
 };
 use rusttable_core::{
     Asset, AssetId, AssetRole, ByteLength, ContentHash, Edit, EditId, FiniteF64, Operation,
     OperationId, OperationKey, ParameterName, ParameterValue, Photo, PhotoId, Revision,
 };
 use rusttable_image::{ImageInput, InputFormat};
-use rusttable_metadata::MetadataInput;
+use rusttable_metadata::{MetadataInput, MetadataReadStatus};
 use sha2::{Digest, Sha256};
 
 use super::model::{
@@ -37,6 +37,8 @@ struct PreparedRaster {
     hash: [u8; 32],
     probe: rusttable_image::ImageProbe,
     metadata: rusttable_core::ImageMetadata,
+    metadata_status: ImportMetadataStatus,
+    metadata_diagnostic: Option<rusttable_metadata::MetadataInputError>,
 }
 
 struct BuiltRasterRegistration {
@@ -184,15 +186,28 @@ impl<'a> RasterImportService<'a> {
             )));
         };
         report(observer, item_id, RasterImportStage::DecodingHeader);
-        let Ok(metadata) = self.metadata_input.read_bytes(probe.format(), &bytes) else {
+        report(observer, item_id, RasterImportStage::Decoding);
+        if self.image_input.decode_bytes(&bytes).is_err() {
             return Err(Box::new(failed_with_evidence(
                 item_id,
                 alias,
                 hash,
                 Some(probe.format()),
-                RasterImportFailure::MetadataInvalid,
+                RasterImportFailure::UnsupportedOrMalformedRaster,
                 observer,
             )));
+        }
+        let (metadata, metadata_status, metadata_diagnostic) = match self
+            .metadata_input
+            .read_bytes_tolerant(probe.format(), &bytes)
+            .into_parts()
+        {
+            (metadata, MetadataReadStatus::Available) => {
+                (metadata, ImportMetadataStatus::Available, None)
+            }
+            (metadata, MetadataReadStatus::Unavailable(error)) => {
+                (metadata, ImportMetadataStatus::Unavailable, Some(error))
+            }
         };
         if cancellation.is_cancelled() {
             report(observer, item_id, RasterImportStage::Cancelled);
@@ -212,6 +227,8 @@ impl<'a> RasterImportService<'a> {
             hash,
             probe,
             metadata,
+            metadata_status,
+            metadata_diagnostic,
         })
     }
 
@@ -235,6 +252,8 @@ impl<'a> RasterImportService<'a> {
             hash,
             probe,
             metadata,
+            metadata_status,
+            metadata_diagnostic,
         } = prepared;
         if cancellation.is_cancelled() {
             report(observer, item_id, RasterImportStage::Cancelled);
@@ -283,9 +302,36 @@ impl<'a> RasterImportService<'a> {
             }
         };
         let (entry, imported) = if let Some(entry) = existing {
+            let entry = if metadata_status == ImportMetadataStatus::Available
+                && entry.metadata_status == ImportMetadataStatus::Unavailable
+            {
+                match catalog.refresh_metadata(&entry, metadata) {
+                    Ok(entry) => entry,
+                    Err(error) => {
+                        return failed_with_evidence(
+                            item_id,
+                            alias,
+                            hash,
+                            Some(probe.format()),
+                            map_catalog_error(error),
+                            observer,
+                        );
+                    }
+                }
+            } else {
+                entry
+            };
             (entry, false)
         } else {
-            let built = match build_entry(&path, &alias, hash, &snapshot, probe, metadata) {
+            let built = match build_entry(
+                &path,
+                &alias,
+                hash,
+                &snapshot,
+                probe,
+                metadata,
+                metadata_status,
+            ) {
                 Ok(built) => built,
                 Err(error) => {
                     return failed_with_evidence(
@@ -334,6 +380,7 @@ impl<'a> RasterImportService<'a> {
         result.photo_id = Some(entry.record.photo().id());
         result.asset_id = Some(entry.record.photo().primary_asset_id());
         result.edit_id = Some(entry.edit.id());
+        result.metadata_status = metadata_diagnostic;
         if cancellation.is_cancelled() {
             result.status = RasterImportStatus::ImportedPreviewPending;
             report(observer, item_id, RasterImportStage::Completed);
@@ -364,6 +411,7 @@ fn build_entry(
     snapshot: &SourceSnapshot,
     probe: rusttable_image::ImageProbe,
     metadata: rusttable_core::ImageMetadata,
+    metadata_status: ImportMetadataStatus,
 ) -> Result<BuiltRasterRegistration, RasterImportFailure> {
     let identity = source_identity(hash, snapshot.byte_length().get(), probe);
     let photo_id = PhotoId::new(derived_id(b"photo", identity))
@@ -404,9 +452,16 @@ fn build_entry(
         edit_id,
     )
     .map_err(|_| RasterImportFailure::InternalInvariant)?;
-    let details = ImportDetails::new(ImportMetadataSummary::from_record(&record), receipt);
+    let details = ImportDetails::new(
+        ImportMetadataSummary::from_record_with_status(&record, metadata_status),
+        receipt,
+    );
     Ok(BuiltRasterRegistration {
-        entry: RasterCatalogEntry { record, edit },
+        entry: RasterCatalogEntry {
+            record,
+            edit,
+            metadata_status,
+        },
         registration: ImportRegistration::new(details, ReferencePathIdentity::new(path_identity)),
     })
 }
@@ -594,6 +649,7 @@ fn receipt(
         asset_id: None,
         edit_id: None,
         status,
+        metadata_status: None,
         preview: None,
     }
 }

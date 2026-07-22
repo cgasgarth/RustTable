@@ -53,9 +53,9 @@ pub use import::{
     ImportRecordError, ImportService,
 };
 pub use import_details::{
-    IMPORT_DETAILS_VERSION, ImportDetails, ImportDetailsValidationError, ImportMetadataSummary,
-    ImportRegistration, ImportRegistrationReceipt, ImportRegistrationReceiptError,
-    ImportRegistrationStatus, ReferencePathIdentity,
+    IMPORT_DETAILS_VERSION, ImportDetails, ImportDetailsValidationError, ImportMetadataStatus,
+    ImportMetadataSummary, ImportRegistration, ImportRegistrationReceipt,
+    ImportRegistrationReceiptError, ImportRegistrationStatus, ReferencePathIdentity,
 };
 pub use organization::{
     CatalogQuery, ColorLabel, OrganizationProjection, PhotoOrganizationState, Rating,

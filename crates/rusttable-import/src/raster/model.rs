@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rusttable_catalog::{ImportRecord, ImportRegistration};
+use rusttable_catalog::{ImportMetadataStatus, ImportRecord, ImportRegistration};
 use rusttable_core::{AssetId, Edit, EditId, PhotoId};
 use rusttable_image::{ImageProbe, InputFormat};
 
@@ -112,6 +112,7 @@ pub enum RasterImportStage {
     Hashing,
     Probing,
     DecodingHeader,
+    Decoding,
     Registering,
     GeneratingPreview,
     Completed,
@@ -147,7 +148,6 @@ pub enum RasterImportFailure {
     SourceChanged,
     SourceTooLarge,
     UnsupportedOrMalformedRaster,
-    MetadataInvalid,
     UnsupportedPathEncoding,
     CatalogUnavailable,
     CatalogConflict,
@@ -185,6 +185,7 @@ pub struct RasterImportReceipt {
     pub asset_id: Option<AssetId>,
     pub edit_id: Option<EditId>,
     pub status: RasterImportStatus,
+    pub metadata_status: Option<rusttable_metadata::MetadataInputError>,
     pub preview: Option<RasterPreviewReceipt>,
 }
 
@@ -222,6 +223,7 @@ impl RasterImportBatch {
 pub struct RasterCatalogEntry {
     pub record: ImportRecord,
     pub edit: Edit,
+    pub metadata_status: ImportMetadataStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,6 +255,17 @@ pub trait AtomicRasterCatalog {
         entry: &RasterCatalogEntry,
         registration: &ImportRegistration,
     ) -> Result<(), AtomicRasterCatalogError>;
+
+    /// Atomically refreshes metadata on an existing photo without replacing its photo or edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed storage failure without publishing a partial record.
+    fn refresh_metadata(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        metadata: rusttable_core::ImageMetadata,
+    ) -> Result<RasterCatalogEntry, AtomicRasterCatalogError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

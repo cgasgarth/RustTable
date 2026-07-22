@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use rusttable_catalog::ImportRegistration;
+use rusttable_catalog::{ImportMetadataStatus, ImportRegistration};
 use rusttable_catalog_store::{AtomicCatalogStoreError, RedbCatalogRepository};
 use rusttable_image::DecodeLimits;
 use rusttable_image_io::FileImageInput;
@@ -88,20 +88,32 @@ impl AtomicRasterCatalog for AppCatalog {
         &self,
         identity: RasterDuplicateIdentity,
     ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError> {
-        self.0
+        let Some((record, edit)) = self
+            .0
             .find_by_content(identity.content_sha256, identity.byte_length)
-            .map(|entry| {
-                entry.and_then(|(record, edit)| {
-                    if record.probe() != identity.probe
-                        || reference_source_identity(record.source()).ok()?
-                            != identity.source_identity
-                    {
-                        return None;
-                    }
-                    Some(RasterCatalogEntry { record, edit })
-                })
-            })
-            .map_err(map_store_error)
+            .map_err(map_store_error)?
+        else {
+            return Ok(None);
+        };
+        if record.probe() != identity.probe
+            || reference_source_identity(record.source())
+                .map_err(|_| AtomicRasterCatalogError::Corrupt)?
+                != identity.source_identity
+        {
+            return Ok(None);
+        }
+        let metadata_status = self
+            .0
+            .find_import_details_by_photo_id(record.photo().id())
+            .map_err(map_store_error)?
+            .map_or(ImportMetadataStatus::Available, |details| {
+                details.summary().metadata_status()
+            });
+        Ok(Some(RasterCatalogEntry {
+            record,
+            edit,
+            metadata_status,
+        }))
     }
 
     fn commit_import(
@@ -112,6 +124,22 @@ impl AtomicRasterCatalog for AppCatalog {
         self.0
             .commit_import_with_edit(&entry.record, &entry.edit, registration)
             .map_err(map_store_error)
+    }
+
+    fn refresh_metadata(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        metadata: rusttable_core::ImageMetadata,
+    ) -> Result<RasterCatalogEntry, AtomicRasterCatalogError> {
+        let record = self
+            .0
+            .refresh_import_metadata(entry.record.photo().id(), metadata)
+            .map_err(map_store_error)?;
+        Ok(RasterCatalogEntry {
+            record,
+            edit: entry.edit.clone(),
+            metadata_status: ImportMetadataStatus::Available,
+        })
     }
 }
 
@@ -130,6 +158,14 @@ impl AtomicRasterCatalog for UnavailableCatalog {
         _entry: &RasterCatalogEntry,
         _registration: &ImportRegistration,
     ) -> Result<(), AtomicRasterCatalogError> {
+        Err(AtomicRasterCatalogError::Unavailable)
+    }
+
+    fn refresh_metadata(
+        &mut self,
+        _entry: &RasterCatalogEntry,
+        _metadata: rusttable_core::ImageMetadata,
+    ) -> Result<RasterCatalogEntry, AtomicRasterCatalogError> {
         Err(AtomicRasterCatalogError::Unavailable)
     }
 }

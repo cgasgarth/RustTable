@@ -4,9 +4,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Barrier, Mutex};
 
-use rusttable_catalog::ImportRegistration;
-use rusttable_core::{ContentHash, ImageMetadata, ParameterName, ParameterValue};
-use rusttable_image::{DecodeLimits, InputFormat};
+use rusttable_catalog::{ImportMetadataStatus, ImportRegistration};
+use rusttable_core::{
+    ContentHash, ImageMetadata, MetadataEntry, MetadataText, ParameterName, ParameterValue,
+};
+use rusttable_image::{
+    DecodeLimits, DecodedImage, ImageInput, ImageInputError, ImageProbe, InputFormat,
+};
 use rusttable_image_io::FileImageInput;
 use rusttable_import::{
     AtomicRasterCatalog, AtomicRasterCatalogError, FileSourceSnapshotReader, ImportSourceLimits,
@@ -15,7 +19,7 @@ use rusttable_import::{
     RasterPreviewError, RasterPreviewPort, RasterPreviewReceipt, SourceSnapshot,
     SourceSnapshotError, SourceSnapshotReader, decode_reference_source,
 };
-use rusttable_metadata::{MetadataInput, MetadataInputError};
+use rusttable_metadata::{MetadataInput, MetadataInputError, MetadataReadResult};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -80,6 +84,25 @@ impl AtomicRasterCatalog for MemoryCatalog {
         }
         self.entries.push(entry.clone());
         Ok(())
+    }
+
+    fn refresh_metadata(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        metadata: ImageMetadata,
+    ) -> Result<RasterCatalogEntry, AtomicRasterCatalogError> {
+        let refreshed = RasterCatalogEntry {
+            record: entry.record.with_metadata(metadata),
+            edit: entry.edit.clone(),
+            metadata_status: ImportMetadataStatus::Available,
+        };
+        let slot = self
+            .entries
+            .iter_mut()
+            .find(|candidate| candidate.record.photo().id() == entry.record.photo().id())
+            .ok_or(AtomicRasterCatalogError::Corrupt)?;
+        *slot = refreshed.clone();
+        Ok(refreshed)
     }
 }
 
@@ -151,6 +174,98 @@ impl MetadataInput for EmptyMetadata {
         _source: &[u8],
     ) -> Result<ImageMetadata, MetadataInputError> {
         Ok(ImageMetadata::empty())
+    }
+}
+
+struct UnavailableMetadata;
+
+impl MetadataInput for UnavailableMetadata {
+    fn read_bytes(
+        &self,
+        _format: InputFormat,
+        _source: &[u8],
+    ) -> Result<ImageMetadata, MetadataInputError> {
+        Err(MetadataInputError::MalformedExif)
+    }
+}
+
+struct PartialMetadata;
+
+impl MetadataInput for PartialMetadata {
+    fn read_bytes(
+        &self,
+        _format: InputFormat,
+        _source: &[u8],
+    ) -> Result<ImageMetadata, MetadataInputError> {
+        Err(MetadataInputError::MalformedExif)
+    }
+
+    fn read_bytes_tolerant(&self, _format: InputFormat, _source: &[u8]) -> MetadataReadResult {
+        MetadataReadResult::unavailable(
+            ImageMetadata::from_entries([MetadataEntry::CameraMake(
+                MetadataText::from_bytes(b"validated camera".to_vec()).unwrap(),
+            )])
+            .unwrap(),
+            MetadataInputError::MalformedExif,
+        )
+    }
+}
+
+struct RefreshableMetadata {
+    unavailable: std::sync::atomic::AtomicBool,
+}
+
+impl RefreshableMetadata {
+    fn new() -> Self {
+        Self {
+            unavailable: std::sync::atomic::AtomicBool::new(true),
+        }
+    }
+
+    fn make_available(&self) {
+        self.unavailable.store(false, Ordering::Release);
+    }
+}
+
+impl MetadataInput for RefreshableMetadata {
+    fn read_bytes(
+        &self,
+        _format: InputFormat,
+        _source: &[u8],
+    ) -> Result<ImageMetadata, MetadataInputError> {
+        if self.unavailable.load(Ordering::Acquire) {
+            Err(MetadataInputError::MalformedExif)
+        } else {
+            Ok(ImageMetadata::from_entries([MetadataEntry::CameraModel(
+                MetadataText::from_bytes(b"reparsed camera".to_vec()).unwrap(),
+            )])
+            .unwrap())
+        }
+    }
+}
+
+struct DecodeFails {
+    delegate: FileImageInput,
+}
+
+impl ImageInput for DecodeFails {
+    fn probe_bytes(&self, bytes: &[u8]) -> Result<ImageProbe, ImageInputError> {
+        self.delegate.probe_bytes(bytes)
+    }
+
+    fn decode_bytes(&self, _bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
+        Err(ImageInputError::MalformedInput {
+            format: InputFormat::Png,
+            message: "test decode failure".to_owned(),
+        })
+    }
+
+    fn probe_path(&self, path: &Path) -> Result<ImageProbe, ImageInputError> {
+        self.delegate.probe_path(path)
+    }
+
+    fn decode_path(&self, path: &Path) -> Result<DecodedImage, ImageInputError> {
+        self.delegate.decode_path(path)
     }
 }
 
@@ -395,6 +510,177 @@ fn cancellation_before_commit_creates_no_catalog_record() {
     assert_eq!(
         batch.receipts().next().unwrap().status,
         RasterImportStatus::Cancelled
+    );
+    assert!(catalog.entries.is_empty());
+}
+
+#[test]
+fn valid_decode_imports_when_metadata_is_unavailable_and_persists_typed_status() {
+    let directory = TempDirectory::new();
+    let path = directory.write("metadata-broken.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let image = FileImageInput::new(
+        DecodeLimits::new(4 * 1024 * 1024, 8_192, 8_192, 32_000_000, 128_000_000)
+            .expect("decode limits"),
+    );
+    let metadata = UnavailableMetadata;
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &FileSourceSnapshotReader,
+        &image,
+        &metadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let receipt = batch.receipts().next().unwrap();
+
+    assert_eq!(receipt.status, RasterImportStatus::Imported);
+    assert_eq!(
+        receipt.metadata_status,
+        Some(MetadataInputError::MalformedExif)
+    );
+    assert_eq!(catalog.entries.len(), 1);
+    assert_eq!(
+        catalog.entries[0].metadata_status,
+        ImportMetadataStatus::Unavailable
+    );
+    assert!(catalog.entries[0].record.metadata().is_empty());
+}
+
+#[test]
+fn unavailable_metadata_keeps_independently_validated_fields() {
+    let directory = TempDirectory::new();
+    let path = directory.write("metadata-partial.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let image = FileImageInput::new(
+        DecodeLimits::new(4 * 1024 * 1024, 8_192, 8_192, 32_000_000, 128_000_000)
+            .expect("decode limits"),
+    );
+    let metadata = PartialMetadata;
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &FileSourceSnapshotReader,
+        &image,
+        &metadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let entry = &catalog.entries[0];
+
+    assert_eq!(
+        batch.receipts().next().unwrap().status,
+        RasterImportStatus::Imported
+    );
+    assert_eq!(
+        entry
+            .record
+            .metadata()
+            .get(rusttable_core::MetadataField::CameraMake),
+        Some(&MetadataEntry::CameraMake(
+            MetadataText::from_bytes(b"validated camera".to_vec()).unwrap()
+        ))
+    );
+}
+
+#[test]
+fn reimport_refreshes_unavailable_metadata_without_duplicate_photo() {
+    let directory = TempDirectory::new();
+    let path = directory.write("metadata-refresh.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let image = FileImageInput::new(
+        DecodeLimits::new(4 * 1024 * 1024, 8_192, 8_192, 32_000_000, 128_000_000)
+            .expect("decode limits"),
+    );
+    let metadata = RefreshableMetadata::new();
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &FileSourceSnapshotReader,
+        &image,
+        &metadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let first = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let first_photo = first.receipts().next().unwrap().photo_id;
+    metadata.make_available();
+    let second = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let second_receipt = second.receipts().next().unwrap();
+
+    assert_eq!(second_receipt.status, RasterImportStatus::AlreadyImported);
+    assert_eq!(second_receipt.photo_id, first_photo);
+    assert_eq!(catalog.entries.len(), 1);
+    assert_eq!(
+        catalog.entries[0].metadata_status,
+        ImportMetadataStatus::Available
+    );
+    assert!(
+        catalog.entries[0]
+            .record
+            .metadata()
+            .get(rusttable_core::MetadataField::CameraModel)
+            .is_some()
+    );
+}
+
+#[test]
+fn full_decode_failure_remains_fatal_before_metadata_registration() {
+    let directory = TempDirectory::new();
+    let path = directory.write("decode-fails.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let image = DecodeFails {
+        delegate: FileImageInput::new(
+            DecodeLimits::new(4 * 1024 * 1024, 8_192, 8_192, 32_000_000, 128_000_000)
+                .expect("decode limits"),
+        ),
+    };
+    let metadata = UnavailableMetadata;
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &FileSourceSnapshotReader,
+        &image,
+        &metadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+
+    assert_eq!(
+        batch.receipts().next().unwrap().status,
+        RasterImportStatus::Failed(
+            rusttable_import::RasterImportFailure::UnsupportedOrMalformedRaster
+        )
     );
     assert!(catalog.entries.is_empty());
 }
