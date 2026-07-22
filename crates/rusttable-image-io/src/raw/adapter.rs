@@ -20,6 +20,7 @@ use super::{
     RawFrameValidationError, RawHeader, RawIlluminant, RawLevelPattern, RawOpcodeDescriptor,
     RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout, RawPreviewDescriptor,
     RawPreviewFormat, RawPreviewKind, RawProbeOutcome, RawRect, RawSourceError, RawSourceReceipt,
+    normalize_backend_metadata,
 };
 
 mod development;
@@ -229,6 +230,8 @@ impl RawlerRawDecoder {
             ))?;
         let plane_count = u8::try_from(frame.parts().planes.len())
             .map_err(|_| RawDecodeError::InvalidFrame(RawFrameValidationError::PlaneCount))?;
+        let metadata = normalize_backend_metadata(&frame, profile, copy.sha256)
+            .map_err(RawDecodeError::Metadata)?;
         let receipt = RawDecodeReceipt {
             backend: RAWLER_BACKEND_ID.to_owned(),
             backend_format: profile.backend_format.clone(),
@@ -263,6 +266,7 @@ impl RawlerRawDecoder {
             plane_count,
             sample_count,
             dng: None,
+            metadata,
         };
         Ok(RawDecodeResult { frame, receipt })
     }

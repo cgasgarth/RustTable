@@ -6,6 +6,7 @@ use super::{
     RawDngReceipt, RawFrame, RawFrameParts, RawFrameValidationError, RawHeader, RawIlluminant,
     RawLevelPattern, RawOpcodeDescriptor, RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout,
     RawPreviewDescriptor, RawPreviewFormat, RawPreviewKind, RawRect, RawSourceReceipt,
+    normalize_dng_metadata,
 };
 use crate::tiff::{
     TiffCompression, TiffDecodeError, TiffDecodeLimits, TiffDecodeRequest, TiffDecoder,
@@ -135,6 +136,9 @@ fn build_receipt(input: &DngReceiptInput<'_>) -> Result<RawDecodeReceipt, RawDec
     let frame_parts = input.frame.parts();
     let opcodes = frame_parts.opcodes.len();
     let previews = frame_parts.previews.len();
+    let source_sha256: [u8; 32] = Sha256::digest(input.bytes).into();
+    let metadata =
+        normalize_dng_metadata(input.frame, source_sha256).map_err(RawDecodeError::Metadata)?;
     Ok(RawDecodeReceipt {
         backend: RAWLER_BACKEND_ID.to_owned(),
         backend_format: "DNG".to_owned(),
@@ -163,7 +167,7 @@ fn build_receipt(input: &DngReceiptInput<'_>) -> Result<RawDecodeReceipt, RawDec
         quirk_ids: Vec::new(),
         source: RawSourceReceipt {
             source_bytes: u64::try_from(input.bytes.len()).unwrap_or(u64::MAX),
-            source_sha256: Sha256::digest(input.bytes).into(),
+            source_sha256,
             stable_copy_used: true,
         },
         plane_count: 1,
@@ -176,6 +180,7 @@ fn build_receipt(input: &DngReceiptInput<'_>) -> Result<RawDecodeReceipt, RawDec
             opcode_count: u8::try_from(opcodes).unwrap_or(u8::MAX),
             output_bytes: input.output_bytes,
         }),
+        metadata,
     })
 }
 

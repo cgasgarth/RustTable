@@ -1,6 +1,7 @@
 use super::{
     RawCameraIdentity, RawColorMatrix, RawCompressionEvidence, RawContainerKind, RawFrame,
-    RawLevelPattern, RawPreviewDescriptor, RawRect, RawSourceReceipt, RawVendorFamily,
+    RawLevelPattern, RawMetadataReceipt, RawPreviewDescriptor, RawRect, RawSourceReceipt,
+    RawVendorFamily,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,7 @@ pub struct RawDecodeReceipt {
     pub plane_count: u8,
     pub sample_count: u64,
     pub dng: Option<RawDngReceipt>,
+    pub metadata: RawMetadataReceipt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

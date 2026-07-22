@@ -1,0 +1,36 @@
+version = 1
+issue = 236
+reference_repository = "darktable-org/darktable"
+reference_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+rust_owner = "rusttable-image-io::raw::metadata"
+policy = "metadata normalization only; safe Rust and the existing rawler boundary; no darktable/RawSpeed code is copied, compiled, linked, or invoked"
+
+[[mapping]]
+upstream_path = "src/common/image.h"
+responsibility = "keep source camera identity separate from normalized camera keys and retain sensor geometry, levels, white balance, and calibration facts"
+rust_path = "crates/rusttable-image-io/src/raw/types/metadata.rs"
+rust_symbol = "RawMetadataRecord"
+
+[[mapping]]
+upstream_path = "src/common/exif.cc"
+responsibility = "reconcile standardized metadata and camera calibration while preserving invalid matrix state"
+rust_path = "crates/rusttable-image-io/src/raw/types/metadata.rs"
+rust_symbol = "normalize_raw_metadata"
+
+[[mapping]]
+upstream_path = "src/iop/rawprepare.c"
+responsibility = "validate sensor dimensions, crop containment, CFA phase, black levels, and white levels before downstream processing"
+rust_path = "crates/rusttable-image-io/src/raw/types/metadata.rs"
+rust_symbol = "RawSensorGeometry"
+
+[[mapping]]
+upstream_path = "src/common/noiseprofiles.c"
+responsibility = "key optional noise calibration by normalized camera identity without exposing camera serial or source path"
+rust_path = "crates/rusttable-image-io/src/raw/types/metadata.rs"
+rust_symbol = "RawNoiseProfile"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_rawspeed.cc"
+responsibility = "publish backend camera-profile identity and decoded sensor metadata provenance"
+rust_path = "crates/rusttable-image-io/src/raw/adapter.rs"
+rust_symbol = "RawlerRawDecoder::decode_source"

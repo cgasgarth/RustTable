@@ -1,14 +1,19 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use serde::{Deserialize, Serialize};
+
 mod errors;
+mod metadata;
 mod receipt;
 #[cfg(test)]
 mod tests;
 
 pub use errors::{
-    RawCapabilityError, RawCapabilityKind, RawDecodeError, RawFrameValidationError, RawSourceError,
+    RawCapabilityError, RawCapabilityKind, RawDecodeError, RawFrameValidationError,
+    RawMetadataError, RawSourceError,
 };
+pub use metadata::*;
 pub use receipt::{RawDecodeReceipt, RawDecodeResult, RawDngReceipt};
 
 /// Stable identity of the only initial camera-RAW backend.
@@ -104,7 +109,7 @@ pub enum RawProbeOutcome {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RawDimensions {
     pub width: u32,
     pub height: u32,
@@ -131,7 +136,7 @@ impl RawDimensions {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RawRect {
     pub x: u32,
     pub y: u32,
@@ -181,7 +186,7 @@ impl RawRect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RawChannel {
     Red,
     Green,
@@ -194,7 +199,7 @@ pub enum RawChannel {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RawCfa {
     pub width: u8,
     pub height: u8,
@@ -226,7 +231,7 @@ impl RawCfa {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RawPlaneLayout {
     Mosaic(RawCfa),
     Linear { channels: Vec<RawChannel> },
@@ -240,7 +245,7 @@ pub struct RawPlane {
     pub samples: Vec<u16>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RawLevelPattern {
     pub repeat_width: u8,
     pub repeat_height: u8,
@@ -248,7 +253,7 @@ pub struct RawLevelPattern {
     pub values: Vec<f32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RawOrientation {
     Normal,
     HorizontalFlip,
@@ -261,7 +266,7 @@ pub enum RawOrientation {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct RawCameraIdentity {
     pub maker: String,
     pub model: String,
@@ -270,7 +275,7 @@ pub struct RawCameraIdentity {
     pub mode: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RawIlluminant {
     Unknown,
     Daylight,
@@ -294,7 +299,7 @@ pub enum RawIlluminant {
     IsoStudioTungsten,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RawColorMatrix {
     pub illuminant: RawIlluminant,
     pub rows: u8,
