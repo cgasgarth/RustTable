@@ -298,9 +298,15 @@ fn status_text(state: &MaskManagerSnapshot) -> String {
 
 fn row(label: &str, widget: &impl IsA<gtk4::Widget>) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 5);
+    row.set_width_request(0);
+    row.set_hexpand(true);
     let label_widget = gtk4::Label::new(Some(label));
     label_widget.set_halign(gtk4::Align::Start);
-    label_widget.set_width_chars(13);
+    label_widget.set_width_chars(1);
+    label_widget.set_hexpand(true);
+    label_widget.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    widget.set_width_request(0);
+    widget.set_hexpand(true);
     row.append(&label_widget);
     row.append(widget);
     row

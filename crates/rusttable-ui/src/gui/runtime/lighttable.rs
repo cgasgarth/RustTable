@@ -12,9 +12,9 @@ use rusttable_core::PhotoId;
 use super::{PhotoSelectedHandler, lighttable_window::ThumbnailWindowChanged};
 use crate::external_editor::ExternalEditorPanel;
 use crate::gui::{
-    DARKTABLE_UI_TOKENS, DarkroomView, ExportPanel, LighttableContentState,
-    LighttableInteractionState, LighttableSelectionAction, PhotoPreview, SelectionModifiers,
-    ThemeRole, WorkspaceRole, apply_theme_role,
+    DARKTABLE_UI_TOKENS, DarkroomView, ExportPanel, LighttableColorLabel, LighttableContentState,
+    LighttableInteractionState, LighttablePhotoState, LighttableRating, LighttableSelectionAction,
+    PhotoPreview, SelectionModifiers, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 use crate::views::lighttable::{FilmstripSpec, LighttableCollectionState, LighttableGridSpec};
@@ -38,6 +38,7 @@ pub(crate) struct WorkspaceRenderHandle {
     pub(super) photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
     pub(super) lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     pub(super) lighttable_filter: Rc<RefCell<Option<Vec<PhotoId>>>>,
+    pub(super) photo_states: Rc<RefCell<BTreeMap<PhotoId, LighttablePhotoState>>>,
 }
 
 #[derive(Clone)]
@@ -179,7 +180,13 @@ impl WorkspaceRenderHandle {
             self.photo_details
                 .borrow_mut()
                 .insert(photo_id, detail.clone());
-            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo_id, photo.title());
+            let organization = self.photo_states.borrow().get(&photo_id).cloned();
+            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(
+                photo_id,
+                photo.title(),
+                photo.secondary(),
+                organization.as_ref(),
+            );
             let grid_thumbnail = ThumbnailSurface::new(
                 &format!("photo-thumbnail-{photo_id}"),
                 &format!("Thumbnail for {}", photo.title()),
@@ -751,7 +758,12 @@ fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk
     badges
 }
 
-fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSurface) {
+fn filmstrip_item(
+    photo_id: PhotoId,
+    title: &str,
+    secondary: Option<&str>,
+    organization: Option<&LighttablePhotoState>,
+) -> (gtk4::Button, ThumbnailSurface) {
     let geometry = FilmstripSpec::darktable();
     let thumbnail = ThumbnailSurface::new(
         &format!("filmstrip-thumbnail-{photo_id}"),
@@ -772,17 +784,63 @@ fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSur
     button.set_focus_on_click(true);
     let surface = gtk4::Overlay::new();
     surface.set_child(Some(thumbnail.widget()));
-    let metadata = gtk4::Label::new(Some(title));
-    metadata.set_widget_name(&format!("filmstrip-metadata-{photo_id}"));
-    metadata.add_css_class("dt_filmstrip_metadata");
-    metadata.set_halign(gtk4::Align::Fill);
-    metadata.set_valign(gtk4::Align::End);
-    metadata.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    metadata.set_single_line_mode(true);
-    metadata.set_tooltip_text(Some(title));
-    surface.add_overlay(&metadata);
+    if let Some(format) = secondary
+        .and_then(|text| text.split('\u{b7}').next())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        let format_label = gtk4::Label::new(Some(format));
+        format_label.set_widget_name(&format!("filmstrip-format-{photo_id}"));
+        format_label.add_css_class("dt_filmstrip_format");
+        format_label.set_halign(gtk4::Align::Start);
+        format_label.set_valign(gtk4::Align::Start);
+        surface.add_overlay(&format_label);
+    }
+    if let Some(organization) = organization {
+        let metadata = filmstrip_organization(photo_id, organization);
+        metadata.set_halign(gtk4::Align::Fill);
+        metadata.set_valign(gtk4::Align::End);
+        surface.add_overlay(&metadata);
+    }
     button.set_child(Some(&surface));
     (button, thumbnail)
+}
+
+fn filmstrip_organization(photo_id: PhotoId, state: &LighttablePhotoState) -> gtk4::Box {
+    let metadata = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+    metadata.set_widget_name(&format!("filmstrip-metadata-{photo_id}"));
+    metadata.add_css_class("dt_filmstrip_metadata");
+    let rating = gtk4::Label::new(Some(match state.rating() {
+        LighttableRating::Rejected => "\u{2715}",
+        rating => match rating.stars().unwrap_or(0) {
+            0 => "\u{2606}\u{2606}\u{2606}\u{2606}\u{2606}",
+            1 => "\u{2605}\u{2606}\u{2606}\u{2606}\u{2606}",
+            2 => "\u{2605}\u{2605}\u{2606}\u{2606}\u{2606}",
+            3 => "\u{2605}\u{2605}\u{2605}\u{2606}\u{2606}",
+            4 => "\u{2605}\u{2605}\u{2605}\u{2605}\u{2606}",
+            _ => "\u{2605}\u{2605}\u{2605}\u{2605}\u{2605}",
+        },
+    }));
+    rating.set_widget_name(&format!("filmstrip-rating-{photo_id}"));
+    rating.set_tooltip_text(Some(state.rating().label()));
+    metadata.append(&rating);
+    let tags = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
+    tags.set_hexpand(true);
+    tags.set_halign(gtk4::Align::End);
+    for label in state.color_labels() {
+        tags.append(&filmstrip_color_tag(photo_id, label));
+    }
+    metadata.append(&tags);
+    metadata
+}
+
+fn filmstrip_color_tag(photo_id: PhotoId, label: LighttableColorLabel) -> gtk4::Label {
+    let tag = gtk4::Label::new(Some("\u{25cf}"));
+    tag.set_widget_name(&format!("filmstrip-{}-tag-{photo_id}", label.label()));
+    tag.add_css_class("dt_filmstrip_color_tag");
+    tag.add_css_class(&format!("dt_color_{}", label.label()));
+    tag.set_tooltip_text(Some(&format!("{} color label", label.label())));
+    tag
 }
 
 fn show_photo_detail(preview: &PhotoPreview, detail: &PhotoDetailViewModel) {

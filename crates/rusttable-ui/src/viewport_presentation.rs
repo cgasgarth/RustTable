@@ -10,6 +10,7 @@ use rusttable_core::{PhotoId, Revision};
 use rusttable_display_profile::{MonitorId, ProfileSelection};
 
 use crate::presentation::{PreviewDimensions, Rgba8PreviewMetadata};
+pub use crate::viewport_navigation::NavigationCrop;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PresentationGeneration(u64);
@@ -742,6 +743,13 @@ impl DarkroomViewportState {
         )
     }
 
+    /// Returns whether a comparison or color-analysis overlay is active.
+    #[must_use]
+    pub const fn has_active_overlay(self) -> bool {
+        matches!(self.comparison, ViewportComparison::Before)
+            || !matches!(self.color_mode, ViewportColorMode::Normal)
+    }
+
     fn set_zoom(&mut self, zoom: DarkroomZoom) -> bool {
         if self.zoom == zoom {
             return false;
@@ -915,5 +923,30 @@ mod tests {
         )));
         assert_eq!(state.comparison(), ViewportComparison::Edited);
         assert_eq!(state.projection_label(), "fit · edited · normal · centered");
+        assert!(!state.has_active_overlay());
+        assert_eq!(state.navigation_crop().width_milli(), 1_000);
+    }
+
+    #[test]
+    fn navigation_crop_tracks_active_zoom_and_pan() {
+        let mut state = DarkroomViewportState::default();
+        let generation = ViewportGeneration::new(9);
+        state.select(PhotoId::new(42).expect("photo"), Revision::ZERO, generation);
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::SetZoom(DarkroomZoom::TwoHundredPercent),
+        )));
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::Pan {
+                delta_x: 1_000,
+                delta_y: -1_000,
+            },
+        )));
+        let crop = state.navigation_crop();
+        assert_eq!(crop.width_milli(), 500);
+        assert_eq!(crop.height_milli(), 500);
+        assert_eq!(crop.x_milli(), 500);
+        assert_eq!(crop.y_milli(), 0);
     }
 }

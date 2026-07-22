@@ -25,21 +25,18 @@ use crate::iop::modules::{
 };
 use crate::presentation::{
     DarkroomHistoryViewModel, DarkroomImageInformationViewModel, DarkroomPanelProjection,
-    DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, build_history_panel,
-    build_image_information_panel, build_snapshots_panel,
+    DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel, Rgba8PreviewMetadata,
+    build_history_panel, build_image_information_panel, build_snapshots_panel,
 };
+use crate::viewport_presentation::{DarkroomViewportState, NavigationCrop};
+use crate::widgets::thumbnail::ThumbnailSurface;
 use crate::{MaskManagerPanel, MultiscaleRetouchPanel};
 
 pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatus) {
     let panel = rail("darkroom-left-panel", width, "Darkroom left module rail");
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     modules.set_widget_name("darkroom-left-modules");
-    let (navigation, navigation_state) = rail_module(
-        "darkroom-navigation",
-        "navigation",
-        true,
-        "select a photo to navigate",
-    );
+    let (navigation, navigation_state) = navigation_module(width);
     let snapshots_projection = DarkroomPanelProjection::<DarkroomSnapshotsViewModel>::empty();
     let history_projection = DarkroomPanelProjection::<DarkroomHistoryViewModel>::empty();
     let image_projection = DarkroomPanelProjection::<DarkroomImageInformationViewModel>::empty();
@@ -432,23 +429,129 @@ fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
     shared_rail(id, width, accessible_name)
 }
 
-fn rail_module(
-    id: &str,
-    title: &str,
-    initially_expanded: bool,
-    state_text: &str,
-) -> (gtk4::Expander, gtk4::Label) {
-    let state = gtk4::Label::new(Some(state_text));
-    state.set_widget_name(&format!("{id}-state"));
-    state.set_halign(gtk4::Align::Start);
-    state.add_css_class("dim-label");
-    state.set_accessible_role(gtk4::AccessibleRole::Status);
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    content.append(&state);
-    let expander = shared_module_expander(id, title, initially_expanded, Some(&content));
-    let title_row = module_title(id, title);
+#[derive(Clone)]
+pub(super) struct NavigationPreview {
+    thumbnail: ThumbnailSurface,
+    crop: Rc<Cell<NavigationCrop>>,
+    indicator: gtk4::DrawingArea,
+    zoom: gtk4::Label,
+}
+
+fn navigation_module(width: i32) -> (gtk4::Expander, NavigationPreview) {
+    let preview_width = width.saturating_sub(10).max(1);
+    let preview_height = preview_width.saturating_mul(2) / 3;
+    let thumbnail = ThumbnailSurface::new(
+        "darkroom-navigation-preview",
+        "Navigation preview for the selected photo",
+        preview_width,
+        preview_height,
+    );
+    thumbnail.set_unavailable();
+    let crop = Rc::new(Cell::new(
+        DarkroomViewportState::default().navigation_crop(),
+    ));
+    let indicator = gtk4::DrawingArea::new();
+    indicator.set_widget_name("darkroom-navigation-crop");
+    indicator.set_can_target(false);
+    indicator.set_visible(false);
+    let crop_for_draw = Rc::clone(&crop);
+    indicator.set_draw_func(move |_, context, width, height| {
+        draw_navigation_crop(context, width, height, crop_for_draw.get());
+    });
+    let surface = gtk4::Overlay::new();
+    surface.set_child(Some(thumbnail.widget()));
+    surface.add_overlay(&indicator);
+    let zoom = gtk4::Label::new(Some("fit"));
+    zoom.set_widget_name("darkroom-navigation-zoom");
+    zoom.set_halign(gtk4::Align::End);
+    zoom.add_css_class("dim-label");
+    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
+    content.append(&surface);
+    content.append(&zoom);
+    let expander =
+        shared_module_expander("darkroom-navigation", "navigation", true, Some(&content));
+    let title_row = module_title("darkroom-navigation", "navigation");
     expander.set_label_widget(Some(&title_row));
-    expander.update_property(&[Property::Label(title)]);
+    expander.update_property(&[Property::Label("navigation")]);
     apply_theme_role(&expander, ThemeRole::ModuleGroup);
-    (expander, state)
+    (
+        expander,
+        NavigationPreview {
+            thumbnail,
+            crop,
+            indicator,
+            zoom,
+        },
+    )
+}
+
+fn draw_navigation_crop(
+    context: &gtk4::cairo::Context,
+    width: i32,
+    height: i32,
+    crop: NavigationCrop,
+) {
+    let width = f64::from(width.max(1));
+    let height = f64::from(height.max(1));
+    let x = width * f64::from(crop.x_milli()) / 1_000.0;
+    let y = height * f64::from(crop.y_milli()) / 1_000.0;
+    let crop_width = width * f64::from(crop.width_milli()) / 1_000.0;
+    let crop_height = height * f64::from(crop.height_milli()) / 1_000.0;
+    context.set_source_rgba(0.0, 0.0, 0.0, 0.48);
+    context.rectangle(0.0, 0.0, width, y);
+    context.rectangle(0.0, y + crop_height, width, height - y - crop_height);
+    context.rectangle(0.0, y, x, crop_height);
+    context.rectangle(x + crop_width, y, width - x - crop_width, crop_height);
+    let _ = context.fill();
+    context.set_line_width(3.0);
+    context.set_source_rgb(0.0, 0.0, 0.0);
+    context.rectangle(
+        x + 1.5,
+        y + 1.5,
+        (crop_width - 3.0).max(1.0),
+        (crop_height - 3.0).max(1.0),
+    );
+    let _ = context.stroke();
+    context.set_line_width(1.0);
+    context.set_source_rgb(1.0, 1.0, 1.0);
+    context.rectangle(
+        x + 1.5,
+        y + 1.5,
+        (crop_width - 3.0).max(1.0),
+        (crop_height - 3.0).max(1.0),
+    );
+    let _ = context.stroke();
+}
+
+impl NavigationPreview {
+    pub(super) fn set_rgba8(
+        &self,
+        metadata: &Rgba8PreviewMetadata,
+    ) -> Result<(), crate::widgets::preview::PhotoPreviewTextureError> {
+        self.thumbnail.set_rgba8(metadata)?;
+        self.indicator.set_visible(true);
+        self.indicator.queue_draw();
+        Ok(())
+    }
+
+    pub(super) fn set_loading(&self) {
+        self.thumbnail.set_loading();
+        self.indicator.set_visible(false);
+    }
+
+    pub(super) fn set_unavailable(&self) {
+        self.thumbnail.set_unavailable();
+        self.indicator.set_visible(false);
+    }
+
+    pub(super) fn set_failed(&self) {
+        self.thumbnail.set_failed();
+        self.indicator.set_visible(false);
+    }
+
+    pub(super) fn sync_viewport(&self, state: DarkroomViewportState) {
+        self.crop.set(state.navigation_crop());
+        self.zoom.set_text(state.zoom().label());
+        self.indicator.queue_draw();
+    }
 }

@@ -11,6 +11,7 @@ mod lighttable_window;
 mod mode_transition;
 mod preview;
 mod selection;
+mod thumbnail;
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -98,6 +99,7 @@ pub struct GtkShell {
     preview_profile_fallback: Rc<Cell<bool>>,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
     lighttable_filter: Rc<RefCell<Option<Vec<PhotoId>>>>,
+    lighttable_photo_states: Rc<RefCell<BTreeMap<PhotoId, LighttablePhotoState>>>,
     lighttable_interaction: Rc<RefCell<LighttableInteractionState>>,
     lighttable_generation: Rc<Cell<u64>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
@@ -243,6 +245,7 @@ impl GtkShell {
             preview_profile_fallback: Rc::new(Cell::new(true)),
             lighttable_workspace: Rc::new(RefCell::new(None)),
             lighttable_filter: Rc::new(RefCell::new(None)),
+            lighttable_photo_states: Rc::new(RefCell::new(BTreeMap::new())),
             lighttable_interaction: Rc::new(RefCell::new(LighttableInteractionState::new(6))),
             lighttable_generation: Rc::new(Cell::new(0)),
             photo_selected: Rc::new(RefCell::new(None)),
@@ -499,6 +502,13 @@ impl GtkShell {
             .set(state.controls().generation());
         self.collection_controls.set_state(state.controls());
         self.lighttable_toolbar.set_state(state.toolbar());
+        self.lighttable_photo_states.replace(
+            state
+                .photo_states()
+                .cloned()
+                .map(|photo| (photo.photo_id(), photo))
+                .collect(),
+        );
         self.lighttable_interaction
             .borrow_mut()
             .reconcile_selection(
@@ -700,93 +710,6 @@ impl GtkShell {
     pub fn set_photo_workspace(&self, view_model: &PhotoWorkspaceViewModel) {
         self.set_lighttable_workspace(view_model);
     }
-    /// Installs a background-rendered thumbnail into the synchronized grid and filmstrip tiles.
-    ///
-    /// # Errors
-    ///
-    /// Returns a typed texture error when validated dimensions exceed GTK's representation.
-    pub fn set_photo_thumbnail(
-        &self,
-        photo_id: PhotoId,
-        metadata: &crate::presentation::Rgba8PreviewMetadata,
-    ) -> Result<(), super::PhotoPreviewTextureError> {
-        let tiles = self.photo_tiles.borrow();
-        let Some(tile) = tiles.get(&photo_id) else {
-            return Ok(());
-        };
-        tile.thumbnails.set_rgba8(metadata)
-    }
-
-    /// Publishes a thumbnail together with the exact edit identity it rendered.
-    ///
-    /// The identity is retained outside the GTK child tree so a GridView/filmstrip rebuild can
-    /// reject a terminal tile that belongs to an older edit revision.
-    ///
-    /// # Errors
-    ///
-    /// Returns a texture adaptation error when the validated RGBA8 payload cannot be installed.
-    pub fn set_photo_thumbnail_for_edit(
-        &self,
-        photo_id: PhotoId,
-        metadata: &crate::presentation::Rgba8PreviewMetadata,
-        edit_id: EditId,
-        edit_revision: Revision,
-    ) -> Result<(), super::PhotoPreviewTextureError> {
-        let result = self.set_photo_thumbnail(photo_id, metadata);
-        if result.is_ok() {
-            self.thumbnail_edit_identities
-                .borrow_mut()
-                .insert(photo_id, (edit_id, edit_revision));
-        }
-        result
-    }
-
-    #[must_use]
-    pub fn photo_thumbnail_edit_identity(&self, photo_id: PhotoId) -> Option<(EditId, Revision)> {
-        self.thumbnail_edit_identities
-            .borrow()
-            .get(&photo_id)
-            .copied()
-    }
-
-    #[must_use]
-    pub fn photo_thumbnail_has_edit_identity(
-        &self,
-        photo_id: PhotoId,
-        edit_id: EditId,
-        edit_revision: Revision,
-    ) -> bool {
-        self.photo_thumbnail_edit_identity(photo_id) == Some((edit_id, edit_revision))
-    }
-
-    pub fn set_photo_thumbnail_loading(&self, photo_id: PhotoId) {
-        self.thumbnail_edit_identities
-            .borrow_mut()
-            .remove(&photo_id);
-        if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
-            tile.thumbnails.set_loading();
-        }
-    }
-    /// Projects a bounded background-rendering failure onto both thumbnail surfaces.
-    pub fn set_photo_thumbnail_failed(&self, photo_id: PhotoId) {
-        self.thumbnail_edit_identities
-            .borrow_mut()
-            .remove(&photo_id);
-        if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
-            tile.thumbnails.set_failed();
-        }
-    }
-
-    /// Removes thumbnail pixels when the edited preview cannot be produced.
-    pub fn set_photo_thumbnail_unavailable(&self, photo_id: PhotoId) {
-        self.thumbnail_edit_identities
-            .borrow_mut()
-            .remove(&photo_id);
-        if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
-            tile.thumbnails.set_unavailable();
-        }
-    }
-
     /// Updates the darkroom image detail and its controller-owned module panels.
     ///
     /// This surface deliberately accepts only `rusttable-ui` presentation
@@ -879,6 +802,7 @@ impl GtkShell {
             photo_details: Rc::clone(&self.photo_details),
             lighttable_workspace: Rc::clone(&self.lighttable_workspace),
             lighttable_filter: Rc::clone(&self.lighttable_filter),
+            photo_states: Rc::clone(&self.lighttable_photo_states),
         }
     }
 
@@ -970,6 +894,13 @@ impl CollectionRefreshHandle {
         self.generation.set(state.controls().generation());
         self.controls.set_state(state.controls());
         self.toolbar.set_state(state.toolbar());
+        self.render.photo_states.replace(
+            state
+                .photo_states()
+                .cloned()
+                .map(|photo| (photo.photo_id(), photo))
+                .collect(),
+        );
         self.render
             .lighttable_filter
             .replace(Some(state.matching_photo_ids().to_vec()));
