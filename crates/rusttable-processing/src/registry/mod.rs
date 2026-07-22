@@ -1,11 +1,15 @@
 //! Static operation definitions, capability discovery, and safe CPU factories.
 
-use crate::descriptor::{DescriptorId, OperationDescriptor, RoiKind};
+use crate::descriptor::{
+    DescriptorId, OperationDescriptor, ParameterDefault, ParameterKind, RoiKind,
+};
 use crate::{
     EvaluationError, LinearRgb, OperationCompileError, PipelineStepIndex, ProcessingOperation,
 };
 use rusttable_color::ColorEncoding;
-use rusttable_core::{Operation, OperationId, OperationKey};
+use rusttable_core::{
+    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterText, ParameterValue,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fmt::Write as _;
@@ -457,6 +461,76 @@ pub enum RegistryLookupError {
     },
 }
 
+/// Materializes one executable registry definition into the edit model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OperationMaterializationError {
+    InvalidOperationKey(String),
+    UnknownOperation(OperationKey),
+    Unavailable {
+        key: OperationKey,
+        reason: String,
+    },
+    MissingFactory {
+        key: OperationKey,
+    },
+    InvalidParameterName(String),
+    InvalidDefault {
+        key: OperationKey,
+        parameter: String,
+    },
+    NonFiniteDefault {
+        key: OperationKey,
+        parameter: String,
+    },
+    InvalidTextDefault {
+        key: OperationKey,
+        parameter: String,
+    },
+    OperationBuild {
+        key: OperationKey,
+        message: String,
+    },
+}
+
+impl fmt::Display for OperationMaterializationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidOperationKey(key) => write!(formatter, "invalid operation key {key}"),
+            Self::UnknownOperation(key) => write!(formatter, "unknown operation {key}"),
+            Self::Unavailable { key, reason } => {
+                write!(formatter, "operation {key} is unavailable: {reason}")
+            }
+            Self::MissingFactory { key } => write!(formatter, "operation {key} has no factory"),
+            Self::InvalidParameterName(parameter) => {
+                write!(formatter, "invalid operation parameter {parameter}")
+            }
+            Self::InvalidDefault { key, parameter } => {
+                write!(
+                    formatter,
+                    "operation {key} has an invalid default for {parameter}"
+                )
+            }
+            Self::NonFiniteDefault { key, parameter } => {
+                write!(
+                    formatter,
+                    "operation {key} has a non-finite default for {parameter}"
+                )
+            }
+            Self::InvalidTextDefault { key, parameter } => {
+                write!(
+                    formatter,
+                    "operation {key} has an invalid text default for {parameter}"
+                )
+            }
+            Self::OperationBuild { key, message } => {
+                write!(formatter, "operation {key} could not be built: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for OperationMaterializationError {}
+
 impl fmt::Display for RegistryLookupError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -615,6 +689,55 @@ impl RegistrySnapshot {
             .map(|index| &self.definitions[*index])
     }
 
+    /// Builds an enabled edit node from the definition's complete default set.
+    ///
+    /// Enum defaults are stored as their descriptor tag index because the processing
+    /// compilers use integer enum values. Composite descriptor defaults use a stable
+    /// text representation until the generic edit payload grows typed composite values.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for unknown, unavailable, non-executable, or malformed
+    /// registry entries without changing any edit state.
+    pub fn materialize_operation(
+        &self,
+        rust_id: &str,
+        operation_id: OperationId,
+    ) -> Result<Operation, OperationMaterializationError> {
+        let key = OperationKey::new(rust_id)
+            .map_err(|_| OperationMaterializationError::InvalidOperationKey(rust_id.to_owned()))?;
+        let Some(definition) = self.definition(rust_id) else {
+            return Err(OperationMaterializationError::UnknownOperation(key));
+        };
+        if let DefinitionAvailability::Unavailable { reason } = definition.availability() {
+            return Err(OperationMaterializationError::Unavailable {
+                key,
+                reason: reason.clone(),
+            });
+        }
+        if definition.cpu().is_none() {
+            return Err(OperationMaterializationError::MissingFactory { key });
+        }
+        let parameters = definition
+            .descriptor()
+            .parameters
+            .iter()
+            .map(|parameter| {
+                let name = ParameterName::new(parameter.id.clone()).map_err(|_| {
+                    OperationMaterializationError::InvalidParameterName(parameter.id.clone())
+                })?;
+                let value = materialize_default(&key, parameter)?;
+                Ok((name, value))
+            })
+            .collect::<Result<Vec<_>, OperationMaterializationError>>()?;
+        Operation::new(operation_id, key.clone(), true, parameters).map_err(|error| {
+            OperationMaterializationError::OperationBuild {
+                key,
+                message: error.to_string(),
+            }
+        })
+    }
+
     /// Returns definitions in the registry's declared darktable processing order.
     ///
     /// The canonical definition slice remains identity-sorted for stable lookup and hashing;
@@ -758,6 +881,77 @@ impl RegistrySnapshot {
         }
         receipt
     }
+}
+
+fn materialize_default(
+    key: &OperationKey,
+    parameter: &crate::descriptor::ParameterDescriptor,
+) -> Result<ParameterValue, OperationMaterializationError> {
+    let invalid = || OperationMaterializationError::InvalidDefault {
+        key: key.clone(),
+        parameter: parameter.id.clone(),
+    };
+    let value = match (&parameter.kind, &parameter.default) {
+        (ParameterKind::Bool, ParameterDefault::Bool(value)) => ParameterValue::Bool(*value),
+        (ParameterKind::Integer { .. }, ParameterDefault::Integer(value)) => {
+            ParameterValue::Integer(*value)
+        }
+        (ParameterKind::Scalar { .. }, ParameterDefault::Scalar(value)) => {
+            ParameterValue::Scalar(FiniteF64::new(*value).map_err(|_| {
+                OperationMaterializationError::NonFiniteDefault {
+                    key: key.clone(),
+                    parameter: parameter.id.clone(),
+                }
+            })?)
+        }
+        (ParameterKind::Enum { tags }, ParameterDefault::Enum(value)) => {
+            let index = tags
+                .iter()
+                .position(|tag| tag == value)
+                .ok_or_else(invalid)?;
+            ParameterValue::Integer(i64::try_from(index).map_err(|_| invalid())?)
+        }
+        (ParameterKind::Text { .. }, ParameterDefault::Text(value))
+        | (ParameterKind::ProfileRef, ParameterDefault::ProfileRef(value))
+        | (ParameterKind::FileRef, ParameterDefault::FileRef(value))
+        | (ParameterKind::ContentRef, ParameterDefault::ContentRef(value)) => {
+            ParameterValue::Text(ParameterText::new(value.clone()).map_err(|_| {
+                OperationMaterializationError::InvalidTextDefault {
+                    key: key.clone(),
+                    parameter: parameter.id.clone(),
+                }
+            })?)
+        }
+        (ParameterKind::Vector { .. }, ParameterDefault::Vector(values))
+        | (ParameterKind::Matrix { .. }, ParameterDefault::Matrix(values)) => {
+            let value = values
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            ParameterValue::Text(ParameterText::new(format!("[{value}]")).map_err(|_| {
+                OperationMaterializationError::InvalidTextDefault {
+                    key: key.clone(),
+                    parameter: parameter.id.clone(),
+                }
+            })?)
+        }
+        (ParameterKind::Curve { .. }, ParameterDefault::Curve(points)) => {
+            let value = points
+                .iter()
+                .map(|(x, y)| format!("{x}:{y}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            ParameterValue::Text(ParameterText::new(format!("[{value}]")).map_err(|_| {
+                OperationMaterializationError::InvalidTextDefault {
+                    key: key.clone(),
+                    parameter: parameter.id.clone(),
+                }
+            })?)
+        }
+        _ => return Err(invalid()),
+    };
+    Ok(value)
 }
 
 mod basicadj;

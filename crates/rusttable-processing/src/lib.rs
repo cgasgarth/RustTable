@@ -160,9 +160,9 @@ pub use registry::closure::{
 pub use registry::{
     BUILTIN_OPERATIONS, CpuFactory, DefinitionAvailability, DeviceCapabilitySnapshot,
     ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
-    OperationCapability, OperationDefinition, OperationDefinitionFactory, PreparedCpuOperation,
-    RegistryBuildError, RegistryLookupError, RegistrySnapshot, RegistryValidationError,
-    builtin_registry,
+    OperationCapability, OperationDefinition, OperationDefinitionFactory,
+    OperationMaterializationError, PreparedCpuOperation, RegistryBuildError, RegistryLookupError,
+    RegistrySnapshot, RegistryValidationError, builtin_registry,
 };
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
