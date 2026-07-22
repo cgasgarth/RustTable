@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
 
-use rusttable_core::OperationId;
+use rusttable_core::{FiniteF64, OperationId};
 use rusttable_image::Orientation;
 use sha2::{Digest, Sha256};
 
 use super::{BasicAdjPlanSet, apply_operation_with_profile};
 use crate::operations::{
+    clipping::{ClippingInterpolation, ClippingPlan},
     crop::{CropPlan, CropPlanMode},
     enlargecanvas::{CanvasFill, EnlargeCanvasPlan},
     finalscale::FinalScalePlan,
     flip::FlipPlan,
+    lenscorrection::LensCorrectionPlan,
+    perspective::{BoundaryMode, Interpolation, PerspectivePlan, Point},
     rotatepixels::{RotatePixelsInterpolation, RotatePixelsPlan},
     scalepixels::ScalePixelsPlan,
 };
@@ -24,6 +27,39 @@ use crate::{
 pub enum FrameBoundaryMode {
     Preview,
     Export,
+}
+
+/// Sampling policy owned by a distortion boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DistortionSamplingPolicy {
+    Perspective {
+        interpolation: Interpolation,
+        border: BoundaryMode,
+    },
+    Clipping {
+        interpolation: ClippingInterpolation,
+        border: DistortionBorderMode,
+    },
+    LensCorrection {
+        interpolation: DistortionInterpolation,
+        border: DistortionBorderMode,
+    },
+}
+
+/// Border behavior used by the established distortion samplers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DistortionBorderMode {
+    Clamp,
+    Reflect,
+}
+
+/// Common interpolation names for the plan/receipt contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DistortionInterpolation {
+    Nearest,
+    Bilinear,
+    Bicubic,
+    Lanczos,
 }
 
 /// Immutable policy used to resolve every geometry boundary in one graph.
@@ -72,6 +108,7 @@ pub struct FrameBoundaryPlan {
     output_dimensions: RasterDimensions,
     steps: Vec<FramePlanStep>,
     boundary_count: usize,
+    identity: [u8; 32],
 }
 
 impl FrameBoundaryPlan {
@@ -108,14 +145,12 @@ impl FrameBoundaryPlan {
             dimensions = boundary.output_dimensions();
             steps.push(FramePlanStep::Boundary {
                 node_index: index,
-                plan: boundary,
+                plan: Box::new(boundary),
             });
             if matches!(
                 steps.last(),
-                Some(FramePlanStep::Boundary {
-                    plan: DiscreteGeometryPlan::Flip(_),
-                    ..
-                })
+                Some(FramePlanStep::Boundary { plan, .. })
+                    if matches!(plan.as_ref(), FrameBoundaryOperation::Discrete(DiscreteGeometryPlan::Flip(_)))
             ) {
                 source_orientation = Orientation::Normal;
             }
@@ -129,11 +164,13 @@ impl FrameBoundaryPlan {
                 dimensions,
             });
         }
+        let identity = plan_identity(source_dimensions, dimensions, options, &steps);
         Ok(Self {
             source_dimensions,
             output_dimensions: dimensions,
             steps,
             boundary_count,
+            identity,
         })
     }
 
@@ -151,6 +188,12 @@ impl FrameBoundaryPlan {
     pub const fn boundary_count(&self) -> usize {
         self.boundary_count
     }
+
+    /// Stable identity for all resolved frame-boundary plans and policies.
+    #[must_use]
+    pub const fn identity(&self) -> [u8; 32] {
+        self.identity
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -162,7 +205,7 @@ enum FramePlanStep {
     },
     Boundary {
         node_index: usize,
-        plan: DiscreteGeometryPlan,
+        plan: Box<FrameBoundaryOperation>,
     },
 }
 
@@ -174,6 +217,173 @@ enum DiscreteGeometryPlan {
     Scale(ScalePixelsPlan),
     FinalScale(FinalScalePlan),
     EnlargeCanvas(EnlargeCanvasPlan),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum FrameBoundaryOperation {
+    Discrete(DiscreteGeometryPlan),
+    Distortion(DistortionPlan),
+}
+
+impl FrameBoundaryOperation {
+    const fn output_dimensions(&self) -> RasterDimensions {
+        match self {
+            Self::Discrete(plan) => plan.output_dimensions(),
+            Self::Distortion(plan) => plan.output_dimensions(),
+        }
+    }
+
+    const fn identity(&self) -> [u8; 32] {
+        match self {
+            Self::Discrete(plan) => discrete_plan_identity(plan),
+            Self::Distortion(plan) => plan.identity(),
+        }
+    }
+}
+
+/// One checked output-driven distortion plan.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DistortionPlan {
+    Perspective(PerspectivePlan),
+    Clipping(ClippingPlan),
+    LensCorrection(LensCorrectionPlan),
+}
+
+impl DistortionPlan {
+    #[must_use]
+    pub const fn source_dimensions(&self) -> RasterDimensions {
+        match self {
+            Self::Perspective(plan) => plan.source_dimensions(),
+            Self::Clipping(plan) => plan.source_dimensions(),
+            Self::LensCorrection(plan) => plan.source_dimensions(),
+        }
+    }
+
+    #[must_use]
+    pub const fn output_dimensions(&self) -> RasterDimensions {
+        match self {
+            Self::Perspective(plan) => plan.output_dimensions(),
+            Self::Clipping(plan) => plan.output_dimensions(),
+            Self::LensCorrection(plan) => plan.output_dimensions(),
+        }
+    }
+
+    #[must_use]
+    pub const fn identity(&self) -> [u8; 32] {
+        match self {
+            Self::Perspective(plan) => plan.identity(),
+            Self::Clipping(plan) => plan.identity(),
+            Self::LensCorrection(plan) => plan.identity(),
+        }
+    }
+
+    /// Returns the policy used by the operation's sampler and border path.
+    #[must_use]
+    pub const fn sampling_policy(&self) -> DistortionSamplingPolicy {
+        match self {
+            Self::Perspective(plan) => DistortionSamplingPolicy::Perspective {
+                interpolation: plan.interpolation(),
+                border: plan.boundary_mode(),
+            },
+            Self::Clipping(plan) => DistortionSamplingPolicy::Clipping {
+                interpolation: plan.interpolation(),
+                border: DistortionBorderMode::Clamp,
+            },
+            Self::LensCorrection(_) => DistortionSamplingPolicy::LensCorrection {
+                interpolation: DistortionInterpolation::Bilinear,
+                border: DistortionBorderMode::Clamp,
+            },
+        }
+    }
+
+    /// Maps a source ROI to the operation's output ROI.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded ROI error when the source ROI is outside the plan's
+    /// source frame or the mapped enclosure cannot be represented.
+    pub fn output_roi(&self, input: rusttable_image::Roi) -> Result<rusttable_image::Roi, String> {
+        match self {
+            Self::Perspective(plan) => plan.output_roi(input).map_err(|error| error.to_string()),
+            Self::Clipping(plan) => plan
+                .modify_roi_out(input)
+                .map_err(|error| error.to_string()),
+            Self::LensCorrection(plan) => plan
+                .modify_roi_out(input)
+                .map_err(|error| error.to_string()),
+        }
+    }
+
+    /// Computes the source ROI, including the sampler halo, for one output ROI.
+    ///
+    /// # Errors
+    ///
+    /// Returns a bounded ROI error when the output ROI is outside the plan's
+    /// output frame or inverse mapping fails.
+    pub fn input_roi(&self, output: rusttable_image::Roi) -> Result<rusttable_image::Roi, String> {
+        match self {
+            Self::Perspective(plan) => plan.input_roi(output).map_err(|error| error.to_string()),
+            Self::Clipping(plan) => plan
+                .modify_roi_in(output)
+                .map_err(|error| error.to_string()),
+            Self::LensCorrection(plan) => plan
+                .modify_roi_in(output)
+                .map_err(|error| error.to_string()),
+        }
+    }
+
+    /// Maps a source coordinate into output space.
+    ///
+    /// # Errors
+    ///
+    /// Returns a coordinate error when the transform is non-finite or cannot
+    /// be represented by the selected plan.
+    pub fn forward_point(&self, point: [f64; 2]) -> Result<[f64; 2], String> {
+        match self {
+            Self::Perspective(plan) => plan
+                .forward_point(Point::new(point[0], point[1]))
+                .map(|point| [point.x(), point.y()])
+                .map_err(|error| format!("{error:?}")),
+            Self::Clipping(plan) => plan
+                .forward_point(Point::new(point[0], point[1]))
+                .map(|point| [point.x(), point.y()])
+                .map_err(|error| format!("{error:?}")),
+            Self::LensCorrection(plan) => plan
+                .forward_point([narrow_coordinate(point[0])?, narrow_coordinate(point[1])?])
+                .map(|point| [f64::from(point[0]), f64::from(point[1])])
+                .map_err(|error| error.to_string()),
+        }
+    }
+
+    /// Maps an output coordinate back to the source for inverse sampling.
+    ///
+    /// # Errors
+    ///
+    /// Returns a coordinate error when the inverse transform is non-finite or
+    /// does not converge.
+    pub fn back_point(&self, point: [f64; 2]) -> Result<[f64; 2], String> {
+        match self {
+            Self::Perspective(plan) => plan
+                .back_point(Point::new(point[0], point[1]))
+                .map(|point| [point.x(), point.y()])
+                .map_err(|error| format!("{error:?}")),
+            Self::Clipping(plan) => plan
+                .back_point(Point::new(point[0], point[1]))
+                .map(|point| [point.x(), point.y()])
+                .map_err(|error| format!("{error:?}")),
+            Self::LensCorrection(plan) => plan
+                .back_point([narrow_coordinate(point[0])?, narrow_coordinate(point[1])?])
+                .map(|point| [f64::from(point[0]), f64::from(point[1])])
+                .map_err(|error| error.to_string()),
+        }
+    }
+}
+
+fn narrow_coordinate(value: f64) -> Result<f32, String> {
+    let finite = FiniteF64::new(value).map_err(|_| "coordinate is non-finite".to_owned())?;
+    FiniteF32::try_from(finite)
+        .map(FiniteF32::get)
+        .map_err(|_| "coordinate is outside the f32 range".to_owned())
 }
 
 impl DiscreteGeometryPlan {
@@ -196,6 +406,7 @@ pub struct EvaluatedFrame {
     terminal_output: Option<TerminalOutputFrame>,
     alpha: Vec<f32>,
     basicadj_plans: BasicAdjPlanSet,
+    frame_plan_identity: [u8; 32],
 }
 
 #[must_use]
@@ -212,6 +423,29 @@ pub fn graph_has_discrete_geometry(graph: &CompiledOperationGraph) -> bool {
                     | ProcessingOperationKind::ScalePixels { .. }
                     | ProcessingOperationKind::FinalScale { .. }
                     | ProcessingOperationKind::EnlargeCanvas { .. }
+            )
+    })
+}
+
+/// Returns whether the graph contains a frame-replacing discrete or
+/// inverse-mapped distortion operation.
+#[must_use]
+pub fn graph_has_frame_geometry(graph: &CompiledOperationGraph) -> bool {
+    graph.nodes().any(|node| {
+        let operation = node.operation();
+        operation.is_enabled()
+            && operation.opacity().get().to_bits() != 0.0_f32.to_bits()
+            && matches!(
+                operation.kind(),
+                ProcessingOperationKind::Crop { .. }
+                    | ProcessingOperationKind::Flip { .. }
+                    | ProcessingOperationKind::RotatePixels { .. }
+                    | ProcessingOperationKind::ScalePixels { .. }
+                    | ProcessingOperationKind::FinalScale { .. }
+                    | ProcessingOperationKind::EnlargeCanvas { .. }
+                    | ProcessingOperationKind::Perspective { .. }
+                    | ProcessingOperationKind::Clipping { .. }
+                    | ProcessingOperationKind::LensCorrection { .. }
             )
     })
 }
@@ -235,6 +469,12 @@ impl EvaluatedFrame {
     #[must_use]
     pub const fn basicadj_plans(&self) -> &BasicAdjPlanSet {
         &self.basicadj_plans
+    }
+
+    /// Identity of the resolved frame-boundary plan used for this output.
+    #[must_use]
+    pub const fn frame_plan_identity(&self) -> [u8; 32] {
+        self.frame_plan_identity
     }
 }
 
@@ -332,6 +572,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
         terminal_output,
         alpha,
         basicadj_plans,
+        frame_plan_identity: plan.identity(),
     })
 }
 
@@ -339,7 +580,7 @@ fn plan_boundary(
     node: &OperationGraphNode,
     dimensions: RasterDimensions,
     options: FrameBoundaryOptions,
-) -> Result<Option<DiscreteGeometryPlan>, EvaluationError> {
+) -> Result<Option<FrameBoundaryOperation>, EvaluationError> {
     let operation = node.operation();
     if !operation.is_enabled() || operation.opacity().get().to_bits() == 0.0_f32.to_bits() {
         return Ok(None);
@@ -353,13 +594,16 @@ fn plan_boundary(
             | ProcessingOperationKind::ScalePixels { .. }
             | ProcessingOperationKind::FinalScale { .. }
             | ProcessingOperationKind::EnlargeCanvas { .. }
+            | ProcessingOperationKind::Perspective { .. }
+            | ProcessingOperationKind::Clipping { .. }
+            | ProcessingOperationKind::LensCorrection { .. }
     ) {
         return Ok(None);
     }
     if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
         return Err(node_error(
             node,
-            "discrete geometry requires full opacity at a frame boundary".to_owned(),
+            "geometry requires full opacity at a frame boundary".to_owned(),
         ));
     }
     let boundary = match kind {
@@ -370,39 +614,79 @@ fn plan_boundary(
             };
             CropPlan::new_with_mode(*config, dimensions, mode)
                 .map(DiscreteGeometryPlan::Crop)
+                .map(FrameBoundaryOperation::Discrete)
                 .map_err(|error| node_error(node, error.to_string()))?
         }
         ProcessingOperationKind::Flip { config } => {
             FlipPlan::new(dimensions, config.clone(), options.source_orientation)
                 .map(DiscreteGeometryPlan::Flip)
+                .map(FrameBoundaryOperation::Discrete)
                 .map_err(|error| node_error(node, error.to_string()))?
         }
         ProcessingOperationKind::RotatePixels { config } => {
             RotatePixelsPlan::new(dimensions, config.clone(), options.rotate_interpolation)
                 .map(DiscreteGeometryPlan::Rotate)
+                .map(FrameBoundaryOperation::Discrete)
                 .map_err(|error| node_error(node, error.to_string()))?
         }
         ProcessingOperationKind::ScalePixels { config } => {
             ScalePixelsPlan::new(config.clone(), dimensions)
                 .map(DiscreteGeometryPlan::Scale)
+                .map(FrameBoundaryOperation::Discrete)
                 .map_err(|error| node_error(node, error.to_string()))?
         }
         ProcessingOperationKind::FinalScale { config } => {
             FinalScalePlan::from_config(dimensions, config.clone())
                 .map(DiscreteGeometryPlan::FinalScale)
+                .map(FrameBoundaryOperation::Discrete)
                 .map_err(|error| node_error(node, error.to_string()))?
         }
         ProcessingOperationKind::EnlargeCanvas { config } => {
             EnlargeCanvasPlan::new(*config, dimensions)
                 .map(DiscreteGeometryPlan::EnlargeCanvas)
+                .map(FrameBoundaryOperation::Discrete)
                 .map_err(|error| node_error(node, error.to_string()))?
         }
-        _ => unreachable!("checked discrete geometry kind"),
+        ProcessingOperationKind::Perspective { config } => {
+            PerspectivePlan::new(config.clone(), dimensions, Interpolation::Bilinear)
+                .map(DistortionPlan::Perspective)
+                .map(FrameBoundaryOperation::Distortion)
+                .map_err(|error| node_error(node, error.to_string()))?
+        }
+        ProcessingOperationKind::Clipping { config } => {
+            ClippingPlan::new(dimensions, config.clone(), ClippingInterpolation::Bilinear)
+                .map(DistortionPlan::Clipping)
+                .map(FrameBoundaryOperation::Distortion)
+                .map_err(|error| node_error(node, error.to_string()))?
+        }
+        ProcessingOperationKind::LensCorrection { config } => {
+            LensCorrectionPlan::new(dimensions, config.clone())
+                .map(DistortionPlan::LensCorrection)
+                .map(FrameBoundaryOperation::Distortion)
+                .map_err(|error| node_error(node, error.to_string()))?
+        }
+        _ => unreachable!("checked frame-boundary geometry kind"),
     };
     Ok(Some(boundary))
 }
 
 fn execute_boundary<F: Fn() -> bool>(
+    plan: &FrameBoundaryOperation,
+    pixels: &[LinearRgb],
+    alpha: &[f32],
+    cancelled: &F,
+) -> Result<(Vec<LinearRgb>, Vec<f32>), String> {
+    match plan {
+        FrameBoundaryOperation::Discrete(plan) => {
+            execute_discrete_boundary(plan, pixels, alpha, cancelled)
+        }
+        FrameBoundaryOperation::Distortion(plan) => {
+            execute_distortion_boundary(plan, pixels, alpha, cancelled)
+        }
+    }
+}
+
+fn execute_discrete_boundary<F: Fn() -> bool>(
     plan: &DiscreteGeometryPlan,
     pixels: &[LinearRgb],
     alpha: &[f32],
@@ -475,6 +759,79 @@ fn execute_boundary<F: Fn() -> bool>(
             Ok((rgb.pixels().to_vec(), red_plane(alpha.pixels())))
         }
     }
+}
+
+fn execute_distortion_boundary<F: Fn() -> bool>(
+    plan: &DistortionPlan,
+    pixels: &[LinearRgb],
+    alpha: &[f32],
+    cancelled: &F,
+) -> Result<(Vec<LinearRgb>, Vec<f32>), String> {
+    let source_width = usize::try_from(plan.source_dimensions().width())
+        .map_err(|_| "distortion source width overflowed".to_owned())?;
+    match plan {
+        DistortionPlan::Perspective(plan) => {
+            let rgb = plan
+                .execute_with_cancel(pixels, cancelled)
+                .map_err(display)?;
+            let alpha = plan.execute_plane(alpha, cancelled).map_err(display)?;
+            Ok((rgb.pixels().to_vec(), alpha))
+        }
+        DistortionPlan::Clipping(plan) => {
+            let rgb = plan
+                .execute_with_cancel(pixels, cancelled)
+                .map_err(display)?;
+            let alpha = plan
+                .execute_plane_with_cancel(alpha, source_width, cancelled)
+                .map_err(display)?;
+            Ok((rgb.pixels().to_vec(), alpha))
+        }
+        DistortionPlan::LensCorrection(plan) => {
+            let rgb = plan
+                .execute_with_cancel(pixels, cancelled)
+                .map_err(display)?;
+            let alpha = plan
+                .execute_plane_with_cancel(alpha, source_width, cancelled)
+                .map_err(display)?;
+            Ok((rgb.pixels().to_vec(), alpha))
+        }
+    }
+}
+
+const fn discrete_plan_identity(plan: &DiscreteGeometryPlan) -> [u8; 32] {
+    match plan {
+        DiscreteGeometryPlan::Crop(plan) => plan.identity(),
+        DiscreteGeometryPlan::Flip(plan) => plan.identity(),
+        DiscreteGeometryPlan::Rotate(plan) => plan.identity(),
+        DiscreteGeometryPlan::Scale(plan) => plan.identity(),
+        DiscreteGeometryPlan::FinalScale(plan) => plan.identity(),
+        DiscreteGeometryPlan::EnlargeCanvas(plan) => plan.identity(),
+    }
+}
+
+fn plan_identity(
+    source: RasterDimensions,
+    output: RasterDimensions,
+    options: FrameBoundaryOptions,
+    steps: &[FramePlanStep],
+) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rusttable.processing.frame-boundary.v2");
+    hasher.update(source.width().to_le_bytes());
+    hasher.update(source.height().to_le_bytes());
+    hasher.update(output.width().to_le_bytes());
+    hasher.update(output.height().to_le_bytes());
+    hasher.update([match options.mode {
+        FrameBoundaryMode::Preview => 0,
+        FrameBoundaryMode::Export => 1,
+    }]);
+    for step in steps {
+        if let FramePlanStep::Boundary { node_index, plan } = step {
+            hasher.update((*node_index as u64).to_le_bytes());
+            hasher.update(plan.identity());
+        }
+    }
+    hasher.finalize().into()
 }
 
 fn resolve_basicadj<F: Fn() -> bool>(

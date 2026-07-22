@@ -102,6 +102,7 @@ pub struct CpuPipelineReceipt {
     output_identity: PixelIdentity,
     snapshot_identity: CpuPixelpipeSnapshotIdentity,
     basicadj_plan_identity: [u8; 32],
+    frame_plan_identity: [u8; 32],
     output_mode: CpuPixelpipeOutputMode,
     working_profile: WorkingFrameDescriptor,
     nodes: Vec<CpuNodeReceipt>,
@@ -117,6 +118,7 @@ impl CpuPipelineReceipt {
         pixel_identities: (PixelIdentity, PixelIdentity),
         snapshot_identity: CpuPixelpipeSnapshotIdentity,
         basicadj_plan_identity: [u8; 32],
+        frame_plan_identity: [u8; 32],
         output_mode: CpuPixelpipeOutputMode,
         working_profile: WorkingFrameDescriptor,
         nodes: Vec<CpuNodeReceipt>,
@@ -130,6 +132,7 @@ impl CpuPipelineReceipt {
             output_identity: pixel_identities.1,
             snapshot_identity,
             basicadj_plan_identity,
+            frame_plan_identity,
             output_mode,
             working_profile,
             nodes,
@@ -208,6 +211,12 @@ impl CpuPipelineReceipt {
     #[must_use]
     pub const fn basicadj_plan_identity(&self) -> [u8; 32] {
         self.basicadj_plan_identity
+    }
+
+    /// Returns the resolved frame-boundary identity used by geometry output.
+    #[must_use]
+    pub const fn frame_plan_identity(&self) -> [u8; 32] {
+        self.frame_plan_identity
     }
 
     #[must_use]

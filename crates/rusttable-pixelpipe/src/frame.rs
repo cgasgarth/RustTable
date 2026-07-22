@@ -1,6 +1,6 @@
 use rusttable_processing::{
     FrameBoundaryMode, FrameBoundaryOptions, WorkingRgbImage, encode_working_to_srgb,
-    evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
+    evaluate_graph_at_frame_boundaries, graph_has_frame_geometry,
 };
 
 use crate::{
@@ -8,15 +8,15 @@ use crate::{
     CpuPixelpipeSnapshot, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel,
 };
 
-pub(crate) fn has_discrete_geometry(request: &CpuPixelpipeSnapshot) -> bool {
-    graph_has_discrete_geometry(request.graph())
+pub(crate) fn has_frame_geometry(request: &CpuPixelpipeSnapshot) -> bool {
+    graph_has_frame_geometry(request.graph())
 }
 
 pub(crate) fn execute_frame_image(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
     scope: Option<&CancellationScope>,
-) -> Result<(RgbaF32Image, [u8; 32]), CpuPixelpipeError> {
+) -> Result<(RgbaF32Image, [u8; 32], [u8; 32]), CpuPixelpipeError> {
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         return Err(CpuPixelpipeError::UnsupportedInputEncoding {
             actual: RgbaF32ColorEncoding::LabD50,
@@ -65,7 +65,11 @@ pub(crate) fn execute_frame_image(
     let pixels = output_pixels(request.output_mode(), evaluated.image(), evaluated.alpha());
     let image = RgbaF32Image::new(descriptor, pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-    Ok((image, evaluated.basicadj_plans().identity()))
+    Ok((
+        image,
+        evaluated.basicadj_plans().identity(),
+        evaluated.frame_plan_identity(),
+    ))
 }
 
 fn output_pixels(

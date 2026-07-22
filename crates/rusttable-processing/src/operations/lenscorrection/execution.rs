@@ -10,6 +10,16 @@ impl LensCorrectionPlan {
         &self,
         input: &[LinearRgb],
     ) -> Result<LensCorrectionExecution, LensCorrectionExecutionError> {
+        self.execute_with_cancel(input, || false)
+    }
+
+    /// Executes a tightly packed linear-RGB image with a cancellation check
+    /// at every output row.
+    pub fn execute_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        cancelled: F,
+    ) -> Result<LensCorrectionExecution, LensCorrectionExecutionError> {
         let packed = input
             .iter()
             .flat_map(|pixel| [pixel.red().get(), pixel.green().get(), pixel.blue().get()])
@@ -18,7 +28,7 @@ impl LensCorrectionPlan {
             .map_err(|_| LensCorrectionExecutionError::ArithmeticOverflow)?
             .checked_mul(3)
             .ok_or(LensCorrectionExecutionError::ArithmeticOverflow)?;
-        let values = self.execute_interleaved_with_cancel(&packed, 3, stride, || false)?;
+        let values = self.execute_interleaved_with_cancel(&packed, 3, stride, cancelled)?;
         let mut pixels = Vec::with_capacity(values.len() / 3);
         for channels in values.as_chunks::<3>().0 {
             pixels.push(LinearRgb::new(
@@ -126,7 +136,18 @@ impl LensCorrectionPlan {
         input: &[f32],
         stride: usize,
     ) -> Result<Vec<f32>, LensCorrectionExecutionError> {
-        self.execute_interleaved(input, 1, stride)
+        self.execute_plane_with_cancel(input, stride, || false)
+    }
+
+    /// Executes a single-channel mask with the same inverse mapping and a
+    /// cancellation check at every output row.
+    pub fn execute_plane_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[f32],
+        stride: usize,
+        cancelled: F,
+    ) -> Result<Vec<f32>, LensCorrectionExecutionError> {
+        self.execute_interleaved_with_cancel(input, 1, stride, cancelled)
     }
 
     fn vignetting_gain(&self, point: [f32; 2]) -> Result<f32, LensCorrectionExecutionError> {
