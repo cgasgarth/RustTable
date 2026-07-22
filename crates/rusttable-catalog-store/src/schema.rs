@@ -8,6 +8,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use rusttable_catalog::{CanonicalPayload, RepositoryError};
 use sha2::{Digest, Sha256};
 
+mod duplicates;
 #[path = "schema/history_migration.rs"]
 mod history_migration;
 #[path = "schema/metadata.rs"]
@@ -17,10 +18,12 @@ mod tag_schema;
 #[path = "schema/validation.rs"]
 mod validation;
 
+pub(crate) use duplicates::*;
+use history_migration::{blob_key, open_history_tables};
 pub(crate) use metadata_schema::*;
 pub(crate) use tag_schema::*;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 12;
+pub const CURRENT_SCHEMA_VERSION: u8 = 13;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -150,6 +153,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(SOURCE_RECONCILIATION_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
+        open_duplicate_tables(&transaction)?;
         transaction
             .open_table(RECIPES_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -180,7 +184,9 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
         .get(VERSION_KEY)
         .map_err(|_| RepositoryError::CorruptPersistedData)?
         .ok_or(RepositoryError::CorruptPersistedData)?;
-    match version.value() {
+    let version_value = version.value().to_vec();
+    drop(version);
+    match version_value.as_slice() {
         [CURRENT_SCHEMA_VERSION] => {
             drop(schema);
             drop(transaction);
@@ -214,11 +220,17 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             drop(schema);
             drop(transaction);
             migrate_metadata_and_tags_to_v12(database)
+                .and_then(|()| migrate_duplicates_to_v13(database))
         }
         [11] => {
             drop(schema);
             drop(transaction);
-            migrate_tags_to_v12(database)
+            migrate_tags_to_v12(database).and_then(|()| migrate_duplicates_to_v13(database))
+        }
+        [12] => {
+            drop(schema);
+            drop(transaction);
+            migrate_duplicates_to_v13(database)
         }
         [5] => {
             drop(schema);
@@ -296,6 +308,8 @@ fn migrate_legacy_to_v4(database: &Database) -> Result<(), RepositoryError> {
         open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
+        open_duplicate_tables(&transaction)?;
+        backfill_duplicate_evidence(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -335,6 +349,8 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
         open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
+        open_duplicate_tables(&transaction)?;
+        backfill_duplicate_evidence(&transaction)?;
         transaction
             .open_table(SOURCE_RECONCILIATION_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -356,6 +372,8 @@ fn migrate_to_v5(database: &Database) -> Result<(), RepositoryError> {
     open_organization_tables(&transaction)?;
     open_metadata_tables(&transaction)?;
     open_tag_tables(&transaction)?;
+    open_duplicate_tables(&transaction)?;
+    backfill_duplicate_evidence(&transaction)?;
     transaction
         .open_table(SOURCE_RECONCILIATION_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
@@ -391,6 +409,8 @@ fn migrate_to_v6(database: &Database) -> Result<(), RepositoryError> {
         open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
+        open_duplicate_tables(&transaction)?;
+        backfill_duplicate_evidence(&transaction)?;
         backfill_history_blobs(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
@@ -458,31 +478,6 @@ fn backfill_history_blobs(transaction: &redb::WriteTransaction) -> Result<(), Re
     Ok(())
 }
 
-fn blob_key(id: rusttable_catalog::ContentBlobId) -> [u8; 43] {
-    let mut key = [0; 43];
-    key[0] = id.kind().tag();
-    key[1..3].copy_from_slice(&id.schema().to_be_bytes());
-    key[3..11].copy_from_slice(&id.length().to_be_bytes());
-    key[11..].copy_from_slice(&id.digest());
-    key
-}
-
-fn open_history_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
-    transaction
-        .open_table(HISTORY_STATE_TABLE)
-        .map_err(|_| RepositoryError::Unavailable)?;
-    transaction
-        .open_table(HISTORY_REVISIONS_TABLE)
-        .map_err(|_| RepositoryError::Unavailable)?;
-    transaction
-        .open_table(HISTORY_BLOBS_TABLE)
-        .map_err(|_| RepositoryError::Unavailable)?;
-    transaction
-        .open_table(HISTORY_BLOB_REFS_TABLE)
-        .map_err(|_| RepositoryError::Unavailable)?;
-    Ok(())
-}
-
 fn migrate_to_v7(database: &Database) -> Result<(), RepositoryError> {
     let transaction = database
         .begin_write()
@@ -533,6 +528,8 @@ fn migrate_to_v8(database: &Database) -> Result<(), RepositoryError> {
         open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
+        open_duplicate_tables(&transaction)?;
+        backfill_duplicate_evidence(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
         transaction
@@ -582,6 +579,7 @@ fn migrate_to_v10(database: &Database) -> Result<(), RepositoryError> {
         .map_err(|_| RepositoryError::Unavailable)?;
     open_metadata_tables(&transaction)?;
     open_tag_tables(&transaction)?;
+    open_duplicate_tables(&transaction)?;
     let existing = {
         let paths = transaction
             .open_table(REFERENCE_PATH_INDEX_TABLE)
@@ -662,6 +660,7 @@ fn migrate_to_v10(database: &Database) -> Result<(), RepositoryError> {
     }
     drop(reconciliation);
     drop(canonical);
+    backfill_duplicate_evidence(&transaction)?;
     let mut schema = transaction
         .open_table(SCHEMA_TABLE)
         .map_err(|_| RepositoryError::CorruptPersistedData)?;

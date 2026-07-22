@@ -10,6 +10,7 @@ pub const fn dependency_direction() -> &'static str {
 mod collections;
 mod command;
 mod develop;
+mod duplicates;
 mod durable_edit;
 mod edit_repository;
 mod error;
@@ -35,6 +36,12 @@ pub use collections::{
 };
 pub use command::{CatalogChangeEvent, CatalogCommand};
 pub use develop::{DevelopInput, DevelopInputError, DevelopSelection};
+pub use duplicates::{
+    DUPLICATE_EVIDENCE_VERSION, DuplicateClassification, DuplicateEvidence, DuplicateMatch,
+    DuplicateSearchResult, EmbeddedPhotoIdentity, ExactContentIdentity, MAX_DUPLICATE_CANDIDATES,
+    MAX_DUPLICATE_MATCHES, PROBABLE_VISUAL_HAMMING_THRESHOLD, VisualFingerprint,
+    classify_duplicate,
+};
 pub use durable_edit::{DurableEditError, DurableEditOutcome, DurableEditService};
 pub use edit_repository::{EditRepository, EditRepositoryError};
 pub use error::CatalogError;

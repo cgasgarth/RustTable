@@ -4,9 +4,10 @@ use std::sync::Arc;
 
 use redb::{Database, ReadableDatabase, ReadableTable, WriteTransaction};
 use rusttable_catalog::{
-    CatalogChangeEvent, CatalogCommand, ColorLabel, EditRepository, EditRepositoryError,
-    ImportDetails, ImportMetadataStatus, ImportRecord, ImportRegistration, ImportRepository,
-    PhotoOrganizationState, Rating, ReferencePathIdentity, RepositoryError, SourcePath,
+    CatalogChangeEvent, CatalogCommand, ColorLabel, DuplicateEvidence, EditRepository,
+    EditRepositoryError, ImportDetails, ImportMetadataStatus, ImportRecord, ImportRegistration,
+    ImportRepository, PhotoOrganizationState, Rating, ReferencePathIdentity, RepositoryError,
+    SourcePath,
 };
 use rusttable_core::{AssetId, ContentHash, Edit, EditId, ImageMetadata, PhotoId, Revision};
 
@@ -15,6 +16,10 @@ use super::edit::RedbEditRepository;
 use super::history::stage_history_commit;
 use super::recipe::RedbRecipeRepository;
 use crate::schema;
+
+mod duplicates;
+
+use duplicates::stage_duplicate_evidence;
 
 /// Shared redb catalog adapter for application compositions that need imports and edits.
 pub struct RedbCatalogRepository {
@@ -492,7 +497,12 @@ impl RedbCatalogRepository {
         edit: &Edit,
         registration: &ImportRegistration,
     ) -> Result<(), AtomicCatalogStoreError> {
-        if registration.details().validate(record, edit).is_err() {
+        if registration.details().validate(record, edit).is_err()
+            || registration.duplicate_evidence().is_some_and(|evidence| {
+                evidence.source() != registration.reference_path_identity()
+                    || !evidence.describes(record)
+            })
+        {
             return Err(AtomicCatalogStoreError::Corrupt);
         }
         let prepared = PreparedImport::new(record, edit)?;
@@ -505,6 +515,9 @@ impl RedbCatalogRepository {
             .begin_write()
             .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
         stage_import(&transaction, &prepared, registration)?;
+        if let Some(evidence) = registration.duplicate_evidence() {
+            stage_duplicate_evidence(&transaction, evidence, false)?;
+        }
         stage_history_commit(&transaction, edit.photo_id(), expected_history, &history)
             .map_err(|error| map_history_error(&error))?;
         if let Some(hook) = &self.before_commit {
@@ -555,7 +568,12 @@ impl RedbCatalogRepository {
             // path-derived registration as an explicit replacement.
             return self.commit_import_with_edit(record, replacement_edit, registration);
         }
-        if registration.details().validate(record, &edit).is_err() {
+        if registration.details().validate(record, &edit).is_err()
+            || registration.duplicate_evidence().is_some_and(|evidence| {
+                evidence.source() != registration.reference_path_identity()
+                    || !evidence.describes(record)
+            })
+        {
             return Err(AtomicCatalogStoreError::Corrupt);
         }
         let prepared =
@@ -631,6 +649,9 @@ impl RedbCatalogRepository {
             )
             .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
         drop(references);
+        if let Some(evidence) = registration.duplicate_evidence() {
+            stage_duplicate_evidence(&transaction, evidence, true)?;
+        }
         if let Some(hook) = &self.before_commit {
             hook()?;
         }
@@ -662,6 +683,10 @@ impl RedbCatalogRepository {
     ///
     /// Returns before commit on any missing, corrupt, or storage state, leaving the old record
     /// and import details intact.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "metadata, duplicate evidence, and import details share one auditable transaction"
+    )]
     pub fn refresh_import_metadata(
         &mut self,
         photo_id: PhotoId,
@@ -701,6 +726,14 @@ impl RedbCatalogRepository {
             .transpose()
             .map_err(|()| AtomicCatalogStoreError::Corrupt)?
             .ok_or(AtomicCatalogStoreError::Corrupt)?;
+        let duplicate_evidence = transaction
+            .open_table(schema::DUPLICATE_EVIDENCE_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .get(photo_id.get().to_be_bytes().as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .map(|value| crate::duplicate_codec::decode(value.value()))
+            .transpose()
+            .map_err(|()| AtomicCatalogStoreError::Corrupt)?;
         drop(records);
         drop(photos);
         drop(transaction);
@@ -721,6 +754,9 @@ impl RedbCatalogRepository {
             ),
             details.receipt().clone(),
         );
+        let refreshed_duplicate_evidence = duplicate_evidence.map(|evidence| {
+            DuplicateEvidence::from_record(&refreshed, evidence.source(), evidence.visual())
+        });
         if refreshed_details.validate(&refreshed, &edit).is_err() {
             return Err(AtomicCatalogStoreError::Corrupt);
         }
@@ -747,6 +783,9 @@ impl RedbCatalogRepository {
             details_table
                 .insert(source.as_slice(), encoded_details.as_slice())
                 .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        }
+        if let Some(evidence) = refreshed_duplicate_evidence {
+            stage_duplicate_evidence(&transaction, evidence, true)?;
         }
         if let Some(hook) = &self.before_commit {
             hook()?;

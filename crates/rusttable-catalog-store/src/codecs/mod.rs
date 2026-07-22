@@ -326,6 +326,7 @@ mod tests {
         ImportRecord::new(&candidate, photo).unwrap()
     }
 }
+pub(crate) mod duplicates;
 pub(crate) mod edit;
 pub(crate) mod history;
 pub(crate) mod import_details;

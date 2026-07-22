@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rusttable_catalog::{
-    ImportMetadataStatus, ImportRecord, ImportRegistration, ReferencePathIdentity,
+    DuplicateEvidence, DuplicateSearchResult, ImportMetadataStatus, ImportRecord,
+    ImportRegistration, ReferencePathIdentity,
 };
 use rusttable_core::{AssetId, Edit, EditId, PhotoId};
 use rusttable_image::{ImageProbe, InputFormat};
@@ -189,6 +190,7 @@ pub struct RasterImportReceipt {
     pub status: RasterImportStatus,
     pub metadata_status: Option<rusttable_metadata::MetadataInputError>,
     pub preview: Option<RasterPreviewReceipt>,
+    pub duplicates: DuplicateSearchResult,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -259,6 +261,16 @@ pub trait AtomicRasterCatalog {
         &self,
         identity: RasterDuplicateIdentity,
     ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError>;
+
+    /// Returns bounded, reviewable duplicate classifications without changing catalog state.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed storage failure without importing or discarding the candidate.
+    fn find_duplicates(
+        &self,
+        evidence: DuplicateEvidence,
+    ) -> Result<DuplicateSearchResult, AtomicRasterCatalogError>;
 
     /// Atomically persists the source, photo, and default edit.
     ///

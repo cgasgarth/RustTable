@@ -4,7 +4,9 @@ use redb::{ReadableTable, WriteTransaction};
 use rusttable_catalog::{CanonicalPayload, ContentBlobId, ContentBlobKind, RepositoryError};
 use rusttable_core::PhotoId;
 
-use super::{HISTORY_BLOB_REFS_TABLE, HISTORY_BLOBS_TABLE, HISTORY_REVISIONS_TABLE};
+use super::{
+    HISTORY_BLOB_REFS_TABLE, HISTORY_BLOBS_TABLE, HISTORY_REVISIONS_TABLE, HISTORY_STATE_TABLE,
+};
 
 type BlobKey = [u8; 43];
 type BlobCounts = BTreeMap<BlobKey, u64>;
@@ -12,6 +14,24 @@ type BlobRecords = BTreeMap<BlobKey, Vec<u8>>;
 type PhotoBlobCounts = BTreeMap<PhotoId, BlobCounts>;
 
 const LEGACY_MIGRATION_NAME: &str = "history_blob_refs";
+
+pub(super) fn open_history_tables(
+    transaction: &redb::WriteTransaction,
+) -> Result<(), RepositoryError> {
+    transaction
+        .open_table(HISTORY_STATE_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_REVISIONS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_BLOBS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_BLOB_REFS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    Ok(())
+}
 
 struct HistoryGraph {
     expected_refs: BlobCounts,
@@ -289,7 +309,7 @@ fn decode_revision_key(
     Ok((photo_id, revision_id))
 }
 
-fn blob_key(id: ContentBlobId) -> BlobKey {
+pub(super) fn blob_key(id: ContentBlobId) -> BlobKey {
     let mut key = [0; 43];
     key[0] = id.kind().tag();
     key[1..3].copy_from_slice(&id.schema().to_be_bytes());

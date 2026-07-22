@@ -1,7 +1,7 @@
 use redb::{Database, TableDefinition};
 use rusttable_catalog::RepositoryError;
 
-use super::{CURRENT_SCHEMA_VERSION, SCHEMA_TABLE, VERSION_KEY};
+use super::{SCHEMA_TABLE, VERSION_KEY};
 
 pub(crate) const TAG_STATE_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_tag_state");
@@ -23,7 +23,7 @@ pub(crate) fn migrate_tags_to_v12(database: &Database) -> Result<(), RepositoryE
         .open_table(SCHEMA_TABLE)
         .map_err(|_| RepositoryError::CorruptPersistedData)?;
     schema
-        .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+        .insert(VERSION_KEY, &[12][..])
         .map_err(|_| RepositoryError::Unavailable)?;
     drop(schema);
     transaction

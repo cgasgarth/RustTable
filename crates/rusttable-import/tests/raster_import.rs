@@ -1,10 +1,15 @@
+mod support;
+
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Barrier, Mutex};
 
-use rusttable_catalog::{ImportMetadataStatus, ImportRegistration, ReferencePathIdentity};
+use rusttable_catalog::{
+    DuplicateClassification, DuplicateEvidence, DuplicateSearchResult, ImportMetadataStatus,
+    ImportRegistration, ReferencePathIdentity, classify_duplicate,
+};
 use rusttable_core::{
     ContentHash, ImageMetadata, MetadataEntry, MetadataText, ParameterName, ParameterValue,
 };
@@ -20,6 +25,7 @@ use rusttable_import::{
     SourceSnapshotError, SourceSnapshotReader, decode_reference_source,
 };
 use rusttable_metadata::{MetadataInput, MetadataInputError, MetadataReadResult};
+use support::ConstantImageInput;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -53,7 +59,10 @@ impl Drop for TempDirectory {
 #[derive(Default)]
 struct MemoryCatalog {
     entries: Vec<RasterCatalogEntry>,
+    duplicate_evidence: Vec<DuplicateEvidence>,
     fail_commit: bool,
+    fail_duplicate_query: bool,
+    cancel_on_duplicate_query: Option<RasterImportCancellation>,
 }
 
 impl AtomicRasterCatalog for MemoryCatalog {
@@ -91,22 +100,45 @@ impl AtomicRasterCatalog for MemoryCatalog {
             .cloned())
     }
 
+    fn find_duplicates(
+        &self,
+        evidence: DuplicateEvidence,
+    ) -> Result<DuplicateSearchResult, AtomicRasterCatalogError> {
+        if self.fail_duplicate_query {
+            return Err(AtomicRasterCatalogError::Corrupt);
+        }
+        if let Some(cancellation) = &self.cancel_on_duplicate_query {
+            cancellation.cancel();
+        }
+        Ok(DuplicateSearchResult::from_candidates(
+            self.duplicate_evidence
+                .iter()
+                .filter_map(|existing| classify_duplicate(evidence, *existing)),
+            false,
+        ))
+    }
+
     fn commit_import(
         &mut self,
         entry: &RasterCatalogEntry,
-        _registration: &ImportRegistration,
+        registration: &ImportRegistration,
     ) -> Result<(), AtomicRasterCatalogError> {
         if self.fail_commit {
             return Err(AtomicRasterCatalogError::CommitFailed);
         }
         self.entries.push(entry.clone());
+        self.duplicate_evidence.push(
+            registration
+                .duplicate_evidence()
+                .expect("raster registration evidence"),
+        );
         Ok(())
     }
 
     fn replace_import(
         &mut self,
         entry: &RasterCatalogEntry,
-        _registration: &ImportRegistration,
+        registration: &ImportRegistration,
     ) -> Result<(), AtomicRasterCatalogError> {
         let slot = self
             .entries
@@ -114,6 +146,15 @@ impl AtomicRasterCatalog for MemoryCatalog {
             .find(|candidate| candidate.record.photo().id() == entry.record.photo().id())
             .ok_or(AtomicRasterCatalogError::Conflict)?;
         slot.record = entry.record.clone();
+        let evidence = registration
+            .duplicate_evidence()
+            .expect("raster registration evidence");
+        let persisted = self
+            .duplicate_evidence
+            .iter_mut()
+            .find(|candidate| candidate.photo_id() == evidence.photo_id())
+            .ok_or(AtomicRasterCatalogError::Corrupt)?;
+        *persisted = evidence;
         Ok(())
     }
 
@@ -205,6 +246,25 @@ impl MetadataInput for EmptyMetadata {
         _source: &[u8],
     ) -> Result<ImageMetadata, MetadataInputError> {
         Ok(ImageMetadata::empty())
+    }
+}
+
+struct IdentityMetadata;
+
+impl MetadataInput for IdentityMetadata {
+    fn read_bytes(
+        &self,
+        _format: InputFormat,
+        _source: &[u8],
+    ) -> Result<ImageMetadata, MetadataInputError> {
+        ImageMetadata::from_entries([
+            MetadataEntry::CameraMake(MetadataText::new("Example").unwrap()),
+            MetadataEntry::CameraModel(MetadataText::new("Camera 1").unwrap()),
+            MetadataEntry::CaptureDateTimeOriginal(
+                MetadataText::new("2026:07:22 10:11:12").unwrap(),
+            ),
+        ])
+        .map_err(|_| MetadataInputError::InvalidField { field: "test" })
     }
 }
 
@@ -489,6 +549,109 @@ fn duplicate_content_keeps_distinct_paths_and_preserves_selection_order() {
     assert_ne!(receipts[0].photo_id, receipts[1].photo_id);
     assert_eq!(batch.first_selected_photo(), receipts[0].photo_id);
     assert_eq!(catalog.entries.len(), 2);
+    let duplicate = receipts[1].duplicates.matches().next().unwrap();
+    assert_eq!(
+        duplicate.classification(),
+        DuplicateClassification::ExactContent
+    );
+    assert_eq!(duplicate.photo_id(), receipts[0].photo_id.unwrap());
+}
+
+#[test]
+fn visually_equivalent_distinct_content_is_probable_and_both_photos_import() {
+    let directory = TempDirectory::new();
+    let first = directory.write("first.png", b"first encoded representation");
+    let second = directory.write("second.png", b"second encoded representation");
+    let request = RasterImportRequest::new([first, second]).unwrap();
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &FileSourceSnapshotReader,
+        &ConstantImageInput,
+        &EmptyMetadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let receipts = batch.receipts().collect::<Vec<_>>();
+
+    assert_eq!(catalog.entries.len(), 2);
+    assert_ne!(receipts[0].photo_id, receipts[1].photo_id);
+    assert_eq!(
+        receipts[1]
+            .duplicates
+            .matches()
+            .next()
+            .unwrap()
+            .classification(),
+        DuplicateClassification::ProbableVisual
+    );
+}
+
+#[test]
+fn embedded_identity_outranks_visual_similarity_for_distinct_encodings() {
+    let directory = TempDirectory::new();
+    let first = directory.write("first.png", b"first encoded representation");
+    let second = directory.write("second.png", b"second encoded representation");
+    let request = RasterImportRequest::new([first, second]).unwrap();
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &FileSourceSnapshotReader,
+        &ConstantImageInput,
+        &IdentityMetadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let receipts = batch.receipts().collect::<Vec<_>>();
+
+    assert_eq!(catalog.entries.len(), 2);
+    assert_eq!(
+        receipts[1]
+            .duplicates
+            .matches()
+            .next()
+            .unwrap()
+            .classification(),
+        DuplicateClassification::EmbeddedIdentity
+    );
+}
+
+#[test]
+fn duplicate_query_error_fails_before_catalog_mutation() {
+    let directory = TempDirectory::new();
+    let path = directory.write("photo.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let mut catalog = MemoryCatalog {
+        fail_duplicate_query: true,
+        ..MemoryCatalog::default()
+    };
+
+    let batch = service().import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+
+    assert_eq!(
+        batch.receipts().next().unwrap().status,
+        RasterImportStatus::Failed(rusttable_import::RasterImportFailure::CatalogCorrupt)
+    );
+    assert!(catalog.entries.is_empty());
+    assert!(catalog.duplicate_evidence.is_empty());
 }
 
 #[test]
@@ -514,6 +677,7 @@ fn catalog_commit_failure_leaves_no_partial_photo_or_edit() {
         RasterImportStatus::Failed(rusttable_import::RasterImportFailure::CatalogCommitFailed)
     ));
     assert!(catalog.entries.is_empty());
+    assert!(catalog.duplicate_evidence.is_empty());
 }
 
 #[test]
@@ -543,6 +707,34 @@ fn cancellation_before_commit_creates_no_catalog_record() {
         RasterImportStatus::Cancelled
     );
     assert!(catalog.entries.is_empty());
+    assert!(catalog.duplicate_evidence.is_empty());
+}
+
+#[test]
+fn cancellation_during_duplicate_query_prevents_catalog_commit() {
+    let directory = TempDirectory::new();
+    let path = directory.write("photo.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let cancellation = RasterImportCancellation::default();
+    let mut catalog = MemoryCatalog {
+        cancel_on_duplicate_query: Some(cancellation.clone()),
+        ..MemoryCatalog::default()
+    };
+
+    let batch = service().import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &cancellation,
+        &|_| {},
+    );
+
+    assert_eq!(
+        batch.receipts().next().unwrap().status,
+        RasterImportStatus::Cancelled
+    );
+    assert!(catalog.entries.is_empty());
+    assert!(catalog.duplicate_evidence.is_empty());
 }
 
 #[test]
@@ -665,6 +857,15 @@ fn reimport_refreshes_unavailable_metadata_without_duplicate_photo() {
 
     assert_eq!(second_receipt.status, RasterImportStatus::AlreadyImported);
     assert_eq!(second_receipt.photo_id, first_photo);
+    assert_eq!(
+        second_receipt
+            .duplicates
+            .matches()
+            .next()
+            .unwrap()
+            .classification(),
+        DuplicateClassification::Source
+    );
     assert_eq!(catalog.entries.len(), 1);
     assert_eq!(
         catalog.entries[0].metadata_status,

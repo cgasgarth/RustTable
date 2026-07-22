@@ -4,7 +4,7 @@ use rusttable_core::{
 };
 use rusttable_image::{ImageDimensions, InputFormat};
 
-use crate::ImportRecord;
+use crate::{DuplicateEvidence, ImportRecord};
 
 pub const IMPORT_DETAILS_VERSION: u8 = 1;
 
@@ -352,6 +352,7 @@ impl ImportDetails {
 pub struct ImportRegistration {
     details: ImportDetails,
     reference_path_identity: ReferencePathIdentity,
+    duplicate_evidence: Option<DuplicateEvidence>,
 }
 
 impl ImportRegistration {
@@ -363,6 +364,7 @@ impl ImportRegistration {
         Self {
             details,
             reference_path_identity,
+            duplicate_evidence: None,
         }
     }
 
@@ -374,6 +376,17 @@ impl ImportRegistration {
     #[must_use]
     pub const fn reference_path_identity(&self) -> ReferencePathIdentity {
         self.reference_path_identity
+    }
+
+    #[must_use]
+    pub const fn duplicate_evidence(&self) -> Option<DuplicateEvidence> {
+        self.duplicate_evidence
+    }
+
+    #[must_use]
+    pub fn with_duplicate_evidence(mut self, evidence: DuplicateEvidence) -> Self {
+        self.duplicate_evidence = Some(evidence);
+        self
     }
 }
 
