@@ -23,7 +23,7 @@ pub(crate) enum BoundedGaussianError {
     Cancelled,
 }
 
-/// Shared order-one Gaussian with explicit per-channel bounds and clamped
+/// Shared order-zero Gaussian with explicit per-channel bounds and clamped
 /// edges. The reduction order is fixed by the row/column traversal.
 pub(crate) fn bounded_gaussian_4c<F: FnMut() -> bool>(
     input: &[[f32; 4]],
@@ -31,6 +31,19 @@ pub(crate) fn bounded_gaussian_4c<F: FnMut() -> bool>(
     sigma: f32,
     minimum: [f32; 4],
     maximum: [f32; 4],
+    cancelled: F,
+) -> Result<Vec<[f32; 4]>, BoundedGaussianError> {
+    bounded_gaussian_4c_order(input, dimensions, sigma, minimum, maximum, 0, cancelled)
+}
+
+/// Darktable-compatible bounded Gaussian with the persisted order selector.
+pub(crate) fn bounded_gaussian_4c_order<F: FnMut() -> bool>(
+    input: &[[f32; 4]],
+    dimensions: RasterDimensions,
+    sigma: f32,
+    minimum: [f32; 4],
+    maximum: [f32; 4],
+    order: u32,
     mut cancelled: F,
 ) -> Result<Vec<[f32; 4]>, BoundedGaussianError> {
     if !sigma.is_finite() || sigma <= 0.0 {
@@ -46,7 +59,7 @@ pub(crate) fn bounded_gaussian_4c<F: FnMut() -> bool>(
     if input.len() != expected {
         return Err(BoundedGaussianError::Dimensions);
     }
-    let (a0, a1, a2, a3, b1, b2, coefp, coefn) = gaussian_parameters(sigma);
+    let (a0, a1, a2, a3, b1, b2, coefp, coefn) = gaussian_parameters(sigma, order);
     let mut temp = vec![[0.0; 4]; expected];
     let mut output = vec![[0.0; 4]; expected];
 
@@ -147,17 +160,38 @@ pub(crate) fn bounded_gaussian_4c<F: FnMut() -> bool>(
     Ok(output)
 }
 
-fn gaussian_parameters(sigma: f32) -> (f32, f32, f32, f32, f32, f32, f32, f32) {
+fn gaussian_parameters(sigma: f32, order: u32) -> (f32, f32, f32, f32, f32, f32, f32, f32) {
     let alpha = 1.695 / sigma;
     let ema = (-alpha).exp();
     let ema2 = (-2.0 * alpha).exp();
     let b1 = -2.0 * ema;
     let b2 = ema2;
-    let k = (1.0 - ema) * (1.0 - ema) / (1.0 + 2.0 * alpha * ema - ema2);
-    let a0 = k;
-    let a1 = k * (alpha - 1.0) * ema;
-    let a2 = k * (alpha + 1.0) * ema;
-    let a3 = -k * ema2;
+    let (a0, a1, a2, a3) = match order {
+        1 => {
+            let a0 = (1.0 - ema) * (1.0 - ema);
+            (a0, 0.0, -a0, 0.0)
+        }
+        2 => {
+            let k = -(ema2 - 1.0) / (2.0 * alpha * ema);
+            let mut kn = -2.0 * (-1.0 + 3.0 * ema - 3.0 * ema2 + ema * ema * ema);
+            kn /= 3.0 * ema + 1.0 + 3.0 * ema2 + ema * ema * ema;
+            (
+                kn,
+                -kn * (1.0 + k * alpha) * ema,
+                kn * (1.0 - k * alpha) * ema,
+                -kn * ema2,
+            )
+        }
+        _ => {
+            let k = (1.0 - ema) * (1.0 - ema) / (1.0 + 2.0 * alpha * ema - ema2);
+            (
+                k,
+                k * (alpha - 1.0) * ema,
+                k * (alpha + 1.0) * ema,
+                -k * ema2,
+            )
+        }
+    };
     let denominator = 1.0 + b1 + b2;
     let coefp = (a0 + a1) / denominator;
     let coefn = (a2 + a3) / denominator;

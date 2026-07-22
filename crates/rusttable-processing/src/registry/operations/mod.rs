@@ -575,9 +575,11 @@ pub fn shadhi_definition() -> OperationDefinition {
         &[
             "iop.shadhi.params.v1-v5",
             "iop.shadhi.migrations.v1-v5",
-            "iop.shadhi.cpu.rgb-gaussian",
-            "iop.shadhi.shared-gaussian-plan",
-            "iop.shadhi.alpha-preserve",
+            "iop.shadhi.cpu.lab-gaussian",
+            "iop.shadhi.cpu.lab-bilateral",
+            "iop.shadhi.shared-full-image-plan",
+            "iop.shadhi.masks-blending-cancellation",
+            "iop.shadhi.alpha-spare-preserve",
         ],
         true,
         (1..5).map(|from| {

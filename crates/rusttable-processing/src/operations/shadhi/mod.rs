@@ -1,10 +1,9 @@
-//! Legacy Darktable shadows/highlights compatibility at the typed RGB boundary.
+//! Legacy Darktable shadows/highlights compatibility at the typed Lab boundary.
 //!
-//! Darktable's `src/iop/shadhi.c` is a Lab operation and its current default
-//! bilateral path is not available in `RustTable`.  The safe implementation
-//! therefore executes only the deterministic Gaussian variant on linear RGB,
-//! using shared convolution and scalar plan infrastructure.  Lab, CFA, and
-//! WGPU compatibility are deliberately not advertised.
+//! Darktable's `src/iop/shadhi.c` consumes four-channel D50 Lab pixels.  The
+//! plan below keeps that contract explicit: RGB callers cross the shared Lab
+//! boundary in the evaluator, while direct callers can exercise the exact Lab
+//! equations and the full-image filter plan.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -16,11 +15,7 @@
 
 use std::fmt;
 
-use crate::operations::common::{
-    OperationExecutionError, ReconstructionBudget, from_luma_chroma, luma, validate_shape,
-};
-use crate::operations::convolution::GaussianKernel;
-use crate::{FiniteF32, LinearRgb, RasterDimensions};
+use crate::FiniteF32;
 
 pub const SHADHI_COMPATIBILITY_ID: &str = "shadhi";
 pub const SHADHI_SCHEMA_VERSION: u16 = 5;
@@ -41,6 +36,25 @@ pub const SHADHI_DEFAULT_SHADOWS_COLOR: f32 = 100.0;
 pub const SHADHI_DEFAULT_HIGHLIGHTS_COLOR: f32 = 50.0;
 pub const SHADHI_DEFAULT_FLAGS: u32 = 127;
 pub const SHADHI_DEFAULT_LOW_APPROXIMATION: f32 = 0.000_001;
+
+const UNBOUND_L: u32 = 1;
+const UNBOUND_A: u32 = 2;
+const UNBOUND_B: u32 = 4;
+const UNBOUND_SHADOWS_L: u32 = UNBOUND_L;
+const UNBOUND_SHADOWS_A: u32 = UNBOUND_A;
+const UNBOUND_SHADOWS_B: u32 = UNBOUND_B;
+const UNBOUND_HIGHLIGHTS_L: u32 = UNBOUND_L << 3;
+const UNBOUND_HIGHLIGHTS_A: u32 = UNBOUND_A << 3;
+const UNBOUND_HIGHLIGHTS_B: u32 = UNBOUND_B << 3;
+const UNBOUND_GAUSSIAN: u32 = 64;
+const UNBOUND_BILATERAL: u32 = 128;
+const LAB_MINIMUM: [f32; 4] = [0.0, -128.0, -128.0, 0.0];
+const LAB_MAXIMUM: [f32; 4] = [100.0, 128.0, 128.0, 1.0];
+const BILATERAL_RANGE_SIGMA: f32 = 100.0;
+const MAX_BILATERAL_SUPPORT: i32 = 32;
+
+mod execution;
+pub use execution::{ShadhiPixel, ShadhiPlan, ShadhiReceipt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShadhiAlgorithm {
@@ -343,7 +357,7 @@ impl TryFrom<ShadhiParametersV5> for ShadhiConfig {
     type Error = ShadhiParameterError;
 
     fn try_from(parameters: ShadhiParametersV5) -> Result<Self, Self::Error> {
-        if parameters.order > 3 {
+        if parameters.order > 2 {
             return Err(ShadhiParameterError::InvalidOrder(parameters.order));
         }
         Ok(Self {
@@ -409,122 +423,6 @@ fn bounded(
         return Err(ShadhiParameterError::OutOfRange(name));
     }
     Ok(value)
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ShadhiPlan {
-    config: ShadhiConfig,
-    dimensions: RasterDimensions,
-    kernel: GaussianKernel,
-}
-
-impl ShadhiPlan {
-    pub fn new(
-        config: ShadhiConfig,
-        dimensions: RasterDimensions,
-    ) -> Result<Self, OperationExecutionError> {
-        if config.shadhi_algo() == ShadhiAlgorithm::Bilateral {
-            return Err(OperationExecutionError::UnsupportedCapability(
-                "shadhi bilateral mode requires the unavailable Lab/bilateral boundary",
-            ));
-        }
-        let diagonal = (dimensions.width() as f32).hypot(dimensions.height() as f32);
-        let radius = (diagonal * config.radius() * 0.01).ceil().clamp(1.0, 256.0) as u32;
-        let kernel = GaussianKernel::from_box_radius(radius).map_err(|_| {
-            OperationExecutionError::MemoryBudgetExceeded {
-                required: usize::MAX,
-                budget: ReconstructionBudget::default().maximum_bytes(),
-            }
-        })?;
-        Ok(Self {
-            config,
-            dimensions,
-            kernel,
-        })
-    }
-
-    #[must_use]
-    pub const fn radius_pixels(&self) -> u32 {
-        self.kernel.support()
-    }
-
-    /// Executes a deterministic Gaussian RGB approximation of Darktable's
-    /// Lab shadows/highlights overlay. Alpha is outside this three-channel
-    /// image contract and is preserved by the pixelpipe bridge.
-    pub fn execute(&self, input: &[LinearRgb]) -> Result<Vec<LinearRgb>, OperationExecutionError> {
-        validate_shape(self.dimensions, input)?;
-        if self.config.shadows().to_bits() == 0.0f32.to_bits()
-            && self.config.highlights().to_bits() == 0.0f32.to_bits()
-        {
-            return Ok(input.to_vec());
-        }
-        let blurred =
-            self.kernel
-                .apply_rgb(input, self.dimensions, ReconstructionBudget::default())?;
-        let whitepoint = (1.0 - self.config.whitepoint() / 100.0).max(0.01);
-        let compress = (self.config.compress() / 100.0).clamp(0.0, 0.99);
-        let shadows = (self.config.shadows() / 100.0).clamp(-1.0, 1.0) * 2.0;
-        let highlights = (self.config.highlights() / 100.0).clamp(-1.0, 1.0) * 2.0;
-        let shadow_cc =
-            ((self.config.shadows_ccorrect() / 100.0 - 0.5) * sign(shadows) + 0.5).clamp(0.0, 1.0);
-        let highlight_cc = ((self.config.highlights_ccorrect() / 100.0 - 0.5) * sign(-highlights)
-            + 0.5)
-            .clamp(0.0, 1.0);
-        input
-            .iter()
-            .zip(blurred)
-            .enumerate()
-            .map(|(index, (source, base))| {
-                let source_luma = (luma(*source) / whitepoint).clamp(0.0, 1.0);
-                let base_luma = (luma(base) / whitepoint).clamp(0.0, 1.0);
-                let shadow_mask = ((1.0 - base_luma - compress) / (1.0 - compress)).clamp(0.0, 1.0);
-                let highlight_mask = ((base_luma - compress) / (1.0 - compress)).clamp(0.0, 1.0);
-                let mut target = source_luma;
-                target = overlay(target, base_luma, shadows, shadow_mask);
-                target = overlay(target, base_luma, highlights, highlight_mask);
-                target = target.clamp(0.0, 1.0) * whitepoint;
-                let source_chroma = (
-                    source.red().get() - luma(*source),
-                    source.blue().get() - luma(*source),
-                );
-                let base_chroma = (
-                    base.red().get() - luma(base),
-                    base.blue().get() - luma(base),
-                );
-                let chroma = (
-                    source_chroma.0 * (1.0 - shadow_cc) + base_chroma.0 * shadow_cc,
-                    source_chroma.1 * (1.0 - highlight_cc) + base_chroma.1 * highlight_cc,
-                );
-                from_luma_chroma(target, chroma).ok_or(OperationExecutionError::NonFiniteResult {
-                    pixel: index,
-                    channel: crate::RgbChannel::Red,
-                })
-            })
-            .collect()
-    }
-}
-
-fn sign(value: f32) -> f32 {
-    if value < 0.0 { -1.0 } else { 1.0 }
-}
-
-fn overlay(source: f32, base: f32, amount: f32, mask: f32) -> f32 {
-    let mut remaining = amount.abs();
-    let direction = sign(amount);
-    let mut value = source;
-    while remaining > 0.0 {
-        let chunk = remaining.min(1.0);
-        let reflected = (base - 0.5) * direction + 0.5;
-        let overlay = if value > 0.5 {
-            1.0 - (1.0 - 2.0 * (value - 0.5)) * (1.0 - reflected)
-        } else {
-            2.0 * value * reflected
-        };
-        let opacity = chunk * mask;
-        value += (overlay - value) * opacity;
-        remaining -= chunk;
-    }
-    value
 }
 
 #[derive(Debug, Clone, Copy)]

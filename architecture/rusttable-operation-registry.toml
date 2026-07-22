@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "fe60f8030e4c0fd20a753e40c21719e502b6f174689db0fe41a229a75233c1af"
+snapshot_hash = "7a379b3641e6c63d338e30877aacaac546c419ebf5eeeaca3c7bc21c12535e47"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -25,6 +25,14 @@ descriptor_version = 1
 parameter_version = 1
 implementation_version = 1
 status = "available"
+
+[[operation]]
+rust_id = "rusttable.borders"
+compatibility_name = "borders"
+descriptor_version = 4
+parameter_version = 4
+implementation_version = 1
+status = "unavailable"
 
 [[operation]]
 rust_id = "rusttable.censorize"
@@ -201,6 +209,14 @@ descriptor_version = 2
 parameter_version = 2
 implementation_version = 1
 status = "available"
+
+[[operation]]
+rust_id = "rusttable.overlay"
+compatibility_name = "overlay"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "unavailable"
 
 [[operation]]
 rust_id = "rusttable.primaries"
