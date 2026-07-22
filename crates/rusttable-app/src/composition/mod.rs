@@ -3,6 +3,7 @@ mod collection_bridge;
 mod darkroom;
 mod import_bridge;
 pub(crate) mod selected_preview;
+mod selection_restore;
 pub(crate) mod services;
 mod thumbnails;
 
@@ -53,6 +54,7 @@ use collection_bridge::{
 };
 use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
 use selected_preview::{PreviewLifecycle, start_selected_preview};
+use selection_restore::{bind_persisted_darkroom_selection, first_persisted_selected_photo};
 use thumbnails::{ThumbnailLifecycle, refresh_active_thumbnail, start_workspace_thumbnails};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
@@ -252,6 +254,10 @@ fn activate_application(
     if let Some(controller) = active_collection.borrow().as_ref() {
         shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
     }
+    let persisted_darkroom_photo = active_collection
+        .borrow()
+        .as_ref()
+        .and_then(first_persisted_selected_photo);
     let collection_for_actions = Rc::clone(active_collection);
     let collection_catalog_for_actions = Rc::clone(active_catalog);
     shell.connect_collection_action(move |action| {
@@ -450,6 +456,7 @@ fn activate_application(
         Rc::clone(thumbnail_lifecycle),
         diagnostics.clone(),
     );
+    bind_persisted_darkroom_selection(&shell, persisted_darkroom_photo);
     shell.present();
     active_shell.replace(Some(shell));
     if let Some(request) = native_bridge.borrow_mut().mark_ready() {
