@@ -4098,6 +4098,7 @@ dependencies = [
  "rusttable-image",
  "serde",
  "sha2",
+ "tracing",
 ]
 
 [[package]]

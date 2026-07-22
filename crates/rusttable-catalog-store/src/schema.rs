@@ -8,6 +8,9 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use rusttable_catalog::{CanonicalPayload, RepositoryError};
 use sha2::{Digest, Sha256};
 
+#[path = "schema/history_migration.rs"]
+mod history_migration;
+
 pub const CURRENT_SCHEMA_VERSION: u8 = 10;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
@@ -167,7 +170,15 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
         .map_err(|_| RepositoryError::CorruptPersistedData)?
         .ok_or(RepositoryError::CorruptPersistedData)?;
     match version.value() {
-        [CURRENT_SCHEMA_VERSION] => validate_tables(&transaction),
+        [CURRENT_SCHEMA_VERSION] => {
+            drop(schema);
+            drop(transaction);
+            history_migration::repair_legacy_blob_refs(database)?;
+            let transaction = database
+                .begin_read()
+                .map_err(|_| RepositoryError::Unavailable)?;
+            validate_tables(&transaction)
+        }
         [6] => {
             drop(schema);
             drop(transaction);
