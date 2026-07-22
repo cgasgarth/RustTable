@@ -31,6 +31,10 @@ fn corpus_raf_maps_to_an_owned_validated_sensor_frame() {
     assert_eq!(parts.planes[0].dimensions.width, 768);
     assert_eq!(parts.planes[0].dimensions.height, 6);
     assert_eq!(parts.bit_depth, 14);
+    assert_eq!(parts.white_balance[0], Some(2.116));
+    assert_eq!(parts.white_balance[1], Some(1.0));
+    assert_eq!(parts.white_balance[2], Some(1.715));
+    assert_eq!(parts.white_balance[3], None);
     match &parts.planes[0].layout {
         RawPlaneLayout::Mosaic(cfa) => {
             assert_eq!((cfa.width, cfa.height), (6, 6));

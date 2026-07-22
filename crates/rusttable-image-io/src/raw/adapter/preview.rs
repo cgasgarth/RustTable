@@ -1,8 +1,9 @@
 //! Linear RAW development shared by the native frame and legacy image boundaries.
 //!
-//! The stage order follows Darktable's `rawprepare` -> temperature -> demosaic
-//! -> input color profile lineage. Rawler supplies the bounded sensor
-//! development primitives; persisted white balance belongs to processing.
+//! The stage order follows Darktable's `rawprepare` -> as-shot white balance
+//! -> demosaic -> input color profile lineage. Rawler supplies the bounded
+//! sensor development primitives; persisted white balance belongs to
+//! processing.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
@@ -107,6 +108,7 @@ fn development_steps(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<
         steps.push(ProcessingStep::CropActiveArea);
     }
     steps.extend([
+        ProcessingStep::WhiteBalance,
         ProcessingStep::Demosaic,
         ProcessingStep::Calibrate,
         ProcessingStep::CropDefault,
@@ -122,6 +124,7 @@ fn development_stages(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec
         stages.push(DecodeStage::RawActiveAreaCrop);
     }
     stages.extend([
+        DecodeStage::RawWhiteBalance,
         DecodeStage::RawCfa,
         DecodeStage::RawDemosaic,
         DecodeStage::RawColorCalibration,
@@ -375,13 +378,14 @@ mod tests {
     }
 
     #[test]
-    fn decoder_development_does_not_apply_untracked_white_balance() {
+    fn decoder_development_applies_declared_as_shot_white_balance() {
         let steps = development_steps(None, None);
         assert_eq!(
             steps,
             vec![
                 ProcessingStep::Rescale,
                 ProcessingStep::CropActiveArea,
+                ProcessingStep::WhiteBalance,
                 ProcessingStep::Demosaic,
                 ProcessingStep::Calibrate,
                 ProcessingStep::CropDefault

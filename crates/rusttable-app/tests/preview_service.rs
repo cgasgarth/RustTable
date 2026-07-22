@@ -5,7 +5,7 @@ use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
     PhotoId, Revision,
 };
-use rusttable_image::DecodeLimits;
+use rusttable_image::{DecodeLimits, DecodeStage};
 use rusttable_image_io::FileImageInput;
 use rusttable_import::{FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotReader};
 use rusttable_render::{PreviewBounds, RenderTarget, render_prepared_cpu_pixelpipe};
@@ -96,7 +96,30 @@ fn raw_preview_and_export_share_one_linear_frame_boundary() {
         frame.image().descriptor().color_encoding(),
         rusttable_image::ColorEncoding::LinearSrgb
     );
-    assert!(!frame.receipt().processing_stages().is_empty());
+    assert!(
+        frame
+            .receipt()
+            .processing_stages()
+            .contains(&DecodeStage::RawWhiteBalance)
+    );
+    let linear = frame.rgba_f32_pixels().expect("linear RAW pixels");
+    let channel_means = linear.iter().fold([0.0_f64; 3], |mut sum, pixel| {
+        for channel in 0..3 {
+            sum[channel] += f64::from(pixel[channel]);
+        }
+        sum
+    });
+    let count = linear.iter().fold(0.0_f64, |count, _| count + 1.0);
+    let channel_means = channel_means.map(|value| value / count);
+    let spread = channel_means
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max)
+        - channel_means.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(
+        spread < 0.01,
+        "neutral blue-sky/gray-building RAW reference is green/cyan: means {channel_means:?}"
+    );
 
     let preview = service
         .render_bytes(fixture.bytes(), &edit)

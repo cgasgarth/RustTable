@@ -64,7 +64,7 @@ impl Drop for SmokeDirectory {
     clippy::too_many_lines,
     reason = "the focused smoke test keeps the import-to-darkroom evidence in one ordered path"
 )]
-fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
+fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation() {
     let fixture = deterministic_compressed_raf();
     let directory = SmokeDirectory::new();
     let source = directory.source(fixture.source_name());
@@ -236,6 +236,29 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
     assert!(
         mean_rgb >= 32.0,
         "selected RAW preview must not be near-black; mean RGB was {mean_rgb:.2}"
+    );
+    let channel_means = preview
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .fold([0.0_f64; 3], |mut sum, pixel| {
+            for channel in 0..3 {
+                sum[channel] += f64::from(pixel[channel]);
+            }
+            sum
+        })
+        .map(|value| {
+            value / f64::from(preview.dimensions().width() * preview.dimensions().height())
+        });
+    let spread = channel_means
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max)
+        - channel_means.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(
+        spread <= 8.0,
+        "cold-launch neutral blue-sky/gray-building presentation is green/cyan: means {channel_means:?}"
     );
 
     let source = DecodedImage::new_with_color_encoding(

@@ -396,6 +396,7 @@ fn raw_frame_is_linear_and_receipt_exposes_every_development_stage() {
         &[
             DecodeStage::RawRescale,
             DecodeStage::RawActiveAreaCrop,
+            DecodeStage::RawWhiteBalance,
             DecodeStage::RawCfa,
             DecodeStage::RawDemosaic,
             DecodeStage::RawColorCalibration,
