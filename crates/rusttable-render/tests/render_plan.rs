@@ -32,6 +32,7 @@ fn full_resolution_plan_preserves_source_and_identity_sampling() {
     let plan = RenderPlan::for_source(source, RenderTarget::FullResolution);
 
     assert_eq!(plan.source_dimensions(), source);
+    assert_eq!(plan.evaluation_dimensions(), source);
     assert_eq!(plan.output_dimensions(), source);
     assert_eq!(plan.sampling(), RenderSampling::Identity);
 }
@@ -46,6 +47,7 @@ fn preview_plan_fits_without_upscaling_using_integer_arithmetic() {
         plan.output_dimensions(),
         ImageDimensions::new(2, 1).unwrap()
     );
+    assert_eq!(plan.evaluation_dimensions(), source);
     assert_eq!(plan.sampling(), RenderSampling::Filtered);
 }
 
