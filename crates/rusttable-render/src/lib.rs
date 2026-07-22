@@ -4,11 +4,15 @@
 use std::fmt;
 
 use rusttable_core::{Edit, EditId, PhotoId, Revision};
-use rusttable_image::{ColorEncoding, DecodedImage, DecodedImageError, ImageDimensions};
+use rusttable_image::{
+    ColorEncoding, DecodedImage, DecodedImageError, ImageDimensions, SourceColor,
+    SourceColorFallback,
+};
 use rusttable_processing::{
     CompiledPipeline, DisplayP3Channel, DisplayP3Rgb, DisplayP3RgbImage, EvaluationError,
     GamutClipReport, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb,
-    evaluate, to_linear_srgb, to_linear_srgb_from_display_p3,
+    evaluate, linear_display_p3_to_working, linear_srgb_to_working, to_linear_srgb,
+    to_linear_srgb_from_display_p3,
 };
 
 pub mod diagnostics;
@@ -59,7 +63,10 @@ pub enum SourceColorPolicy {
 pub enum SourceColorDecision {
     DeclaredSrgb,
     DeclaredDisplayP3,
+    EmbeddedProfile,
+    EmbeddedChromaticities,
     AssumedSrgb,
+    AssumedLinearRec709,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,6 +119,7 @@ pub struct RenderOutput {
     image: DecodedImage,
     plan: RenderPlan,
     source_color_decision: SourceColorDecision,
+    source_color: SourceColor,
     clipping: GamutClipReport,
     provenance: RenderProvenance,
 }
@@ -130,6 +138,11 @@ impl RenderOutput {
     #[must_use]
     pub const fn source_color_decision(&self) -> SourceColorDecision {
         self.source_color_decision
+    }
+
+    #[must_use]
+    pub const fn source_color(&self) -> SourceColor {
+        self.source_color
     }
 
     #[must_use]
@@ -197,6 +210,15 @@ pub fn render_edit_with_plan(
         });
     }
     let source_color_decision = source_color_decision(input.color_encoding(), policy)?;
+    let source_color = if input.color_encoding() == ColorEncoding::Unspecified {
+        SourceColor::fallback(SourceColorFallback::EncodedSrgb)
+    } else {
+        SourceColor::from_encoding(input.color_encoding()).map_err(|_| {
+            RenderError::SourceColor {
+                actual: input.color_encoding(),
+            }
+        })?
+    };
     let pipeline = CompiledPipeline::compile(edit).map_err(|source| RenderError::Pipeline {
         source: Box::new(source),
     })?;
@@ -211,7 +233,9 @@ pub fn render_edit_with_plan(
     let (source, alpha) = source_image(render_input);
     let working = match source {
         SourceImage::Srgb(source) => to_linear_srgb(&source),
+        SourceImage::LinearSrgb(source) => linear_srgb_to_working(&source),
         SourceImage::DisplayP3(source) => to_linear_srgb_from_display_p3(&source),
+        SourceImage::LinearDisplayP3(source) => linear_display_p3_to_working(&source),
     };
     let evaluated =
         evaluate(&pipeline, &working).map_err(|source| RenderError::Evaluation { source })?;
@@ -228,6 +252,7 @@ pub fn render_edit_with_plan(
         image,
         plan,
         source_color_decision,
+        source_color,
         clipping: encoded.clipping(),
         provenance: RenderProvenance::new(
             pipeline.source_edit_id(),
@@ -324,7 +349,9 @@ fn source_color_decision(
 
 enum SourceImage {
     Srgb(SourceRgbImage),
+    LinearSrgb(SourceRgbImage),
     DisplayP3(DisplayP3RgbImage),
+    LinearDisplayP3(DisplayP3RgbImage),
 }
 
 fn source_image(input: &DecodedImage) -> (SourceImage, Vec<f32>) {
@@ -352,13 +379,14 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<f32>) {
                 ));
                 alpha.push(f32::from(pixel[3]) / 255.0);
             }
-            (
-                SourceImage::DisplayP3(
-                    DisplayP3RgbImage::new(dimensions, source_pixels)
-                        .expect("decoded pixels match dimensions"),
-                ),
-                alpha,
-            )
+            let source = DisplayP3RgbImage::new(dimensions, source_pixels)
+                .expect("decoded pixels match dimensions");
+            let source = if input.color_encoding() == ColorEncoding::LinearDisplayP3D65 {
+                SourceImage::LinearDisplayP3(source)
+            } else {
+                SourceImage::DisplayP3(source)
+            };
+            (source, alpha)
         }
         ColorEncoding::Unspecified | ColorEncoding::Srgb | ColorEncoding::LinearSrgb => {
             let mut source_pixels = Vec::with_capacity(pixel_count);
@@ -373,13 +401,14 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<f32>) {
                 ));
                 alpha.push(f32::from(pixel[3]) / 255.0);
             }
-            (
-                SourceImage::Srgb(
-                    SourceRgbImage::new(dimensions, source_pixels)
-                        .expect("decoded pixels match dimensions"),
-                ),
-                alpha,
-            )
+            let source = SourceRgbImage::new(dimensions, source_pixels)
+                .expect("decoded pixels match dimensions");
+            let source = if input.color_encoding() == ColorEncoding::LinearSrgb {
+                SourceImage::LinearSrgb(source)
+            } else {
+                SourceImage::Srgb(source)
+            };
+            (source, alpha)
         }
         _ => unreachable!("source_image is called only after source-color validation"),
     }

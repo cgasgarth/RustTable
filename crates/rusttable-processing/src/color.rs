@@ -431,6 +431,26 @@ pub fn to_linear_srgb(source: &SourceRgbImage) -> WorkingRgbImage {
     }
 }
 
+/// Preserves already-linear sRGB samples at the working-space boundary.
+#[must_use]
+pub fn linear_srgb_to_working(source: &SourceRgbImage) -> WorkingRgbImage {
+    let pixels = source
+        .pixels
+        .iter()
+        .map(|pixel| {
+            LinearRgb::new(
+                FiniteF32::from_proven_finite(pixel.red().get()),
+                FiniteF32::from_proven_finite(pixel.green().get()),
+                FiniteF32::from_proven_finite(pixel.blue().get()),
+            )
+        })
+        .collect();
+    WorkingRgbImage {
+        dimensions: source.dimensions,
+        pixels,
+    }
+}
+
 /// Converts declared Display P3 values to unclipped linear sRGB.
 ///
 /// The transfer curve is the sRGB/Display P3 curve. The fixed D65 matrix is
@@ -439,6 +459,19 @@ pub fn to_linear_srgb(source: &SourceRgbImage) -> WorkingRgbImage {
 /// and multiplication order are intentionally RustTable-owned and fixed.
 #[must_use]
 pub fn to_linear_srgb_from_display_p3(source: &DisplayP3RgbImage) -> WorkingRgbImage {
+    display_p3_to_working(source, true)
+}
+
+/// Converts already-linear Display P3 values to unclipped linear sRGB.
+#[must_use]
+pub fn linear_display_p3_to_working(source: &DisplayP3RgbImage) -> WorkingRgbImage {
+    display_p3_to_working(source, false)
+}
+
+fn display_p3_to_working(
+    source: &DisplayP3RgbImage,
+    decode_transfer_function: bool,
+) -> WorkingRgbImage {
     const RED: [f32; 3] = [1.224_940_2, -0.224_940_18, 0.0];
     const GREEN: [f32; 3] = [-0.042_056_955, 1.042_057, 0.0];
     const BLUE: [f32; 3] = [-0.019_637_555, -0.078_636_05, 1.098_273_6];
@@ -446,9 +479,16 @@ pub fn to_linear_srgb_from_display_p3(source: &DisplayP3RgbImage) -> WorkingRgbI
         .pixels
         .iter()
         .map(|pixel| {
-            let red = decode_transfer(pixel.red().get()).get();
-            let green = decode_transfer(pixel.green().get()).get();
-            let blue = decode_transfer(pixel.blue().get()).get();
+            let decode = |value| {
+                if decode_transfer_function {
+                    decode_transfer(value).get()
+                } else {
+                    value
+                }
+            };
+            let red = decode(pixel.red().get());
+            let green = decode(pixel.green().get());
+            let blue = decode(pixel.blue().get());
             LinearRgb::new(
                 FiniteF32::from_proven_finite(RED[0] * red + RED[1] * green + RED[2] * blue),
                 FiniteF32::from_proven_finite(GREEN[0] * red + GREEN[1] * green + GREEN[2] * blue),

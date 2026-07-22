@@ -1,6 +1,7 @@
 use rusttable_core::Edit;
 use rusttable_image::{
-    ColorEncoding, DecodeLimits, DecodedFrame, DecodedImage, ImageInput, SampleType,
+    ColorEncoding, DecodeLimits, DecodedFrame, DecodedImage, ImageInput, SampleType, SourceColor,
+    SourceColorEvidence, SourceColorFallback,
 };
 use rusttable_image_io::FileImageInput;
 use rusttable_pixelpipe::{
@@ -138,18 +139,15 @@ fn render_frame_with_target(
         input.image().descriptor().dimensions().height(),
     )
     .expect("decoded images have nonzero dimensions");
-    let source_color_decision = source_color_decision(input.image().descriptor().color_encoding())
-        .inspect_err(|_| {
-            tracing::error!(
-                target: "rusttable.preview",
-                stage = "processing",
-                cause = "unsupported_frame_color"
-            );
-        })?;
-    let encoding = match input.sample_type() {
-        SampleType::F16 | SampleType::F32 => RgbaF32ColorEncoding::LinearSrgbD65,
-        SampleType::U8 | SampleType::U16 => RgbaF32ColorEncoding::SrgbD65,
-    };
+    let source_color = input.source_color();
+    let source_color_decision = source_color_decision(source_color).inspect_err(|_| {
+        tracing::error!(
+            target: "rusttable.preview",
+            stage = "processing",
+            cause = "unsupported_frame_color"
+        );
+    })?;
+    let encoding = pixelpipe_encoding(source_color);
     let representation = match input.sample_type() {
         SampleType::U8 => RgbaF32SourceRepresentation::U8,
         SampleType::U16 => RgbaF32SourceRepresentation::U16,
@@ -158,7 +156,8 @@ fn render_frame_with_target(
     };
     let pixelpipe_input = RgbaF32Image::new(
         RgbaF32Descriptor::with_source_representation(dimensions, encoding, representation)
-            .with_source_orientation(input.image().descriptor().orientation()),
+            .with_source_orientation(input.image().descriptor().orientation())
+            .with_source_color(source_color),
         source_pixels
             .iter()
             .copied()
@@ -194,10 +193,11 @@ fn render_frame_with_target(
         .iter()
         .map(|pixel| pixel.alpha())
         .collect();
-    let prepared = PreparedCpuPixelpipeResult::new(
+    let prepared = PreparedCpuPixelpipeResult::new_with_source_color(
         working,
         alpha,
         source_color_decision,
+        source_color,
         RenderProvenance::new(
             edit.id(),
             edit.photo_id(),
@@ -222,7 +222,16 @@ fn render_decoded_with_target(
     edit: &Edit,
     target: RenderTarget,
 ) -> Result<RenderOutput, PreviewError> {
-    let source_color_decision = source_color_decision(input.color_encoding()).inspect_err(|_| {
+    let source_color = if input.color_encoding() == ColorEncoding::Unspecified {
+        SourceColor::fallback(SourceColorFallback::EncodedSrgb)
+    } else {
+        SourceColor::from_encoding(input.color_encoding()).map_err(|_| {
+            PreviewError::UnsupportedPixelpipeColor {
+                actual: input.color_encoding(),
+            }
+        })?
+    };
+    let source_color_decision = source_color_decision(source_color).inspect_err(|_| {
         tracing::error!(target: "rusttable.preview", stage = "processing", cause = "unsupported_color");
     })?;
     let dimensions = RasterDimensions::new(input.dimensions().width(), input.dimensions().height())
@@ -230,8 +239,9 @@ fn render_decoded_with_target(
     let (source_pixels, remainder) = input.pixels().as_chunks::<4>();
     debug_assert!(remainder.is_empty(), "decoded images are packed RGBA8");
     let pixelpipe_input = RgbaF32Image::new(
-        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::SrgbD65)
-            .with_source_orientation(input.source_orientation()),
+        RgbaF32Descriptor::new(dimensions, pixelpipe_encoding(source_color))
+            .with_source_orientation(input.source_orientation())
+            .with_source_color(source_color),
         source_pixels
             .iter()
             .map(|pixel| {
@@ -287,10 +297,11 @@ fn render_decoded_with_target(
         .iter()
         .map(|pixel| pixel.alpha())
         .collect();
-    let prepared = PreparedCpuPixelpipeResult::new(
+    let prepared = PreparedCpuPixelpipeResult::new_with_source_color(
         working,
         alpha,
         source_color_decision,
+        source_color,
         RenderProvenance::new(
             edit.id(),
             edit.photo_id(),
@@ -308,14 +319,38 @@ fn render_decoded_with_target(
     })
 }
 
-fn source_color_decision(encoding: ColorEncoding) -> Result<SourceColorDecision, PreviewError> {
-    match encoding {
-        ColorEncoding::Srgb | ColorEncoding::LinearSrgb => Ok(SourceColorDecision::DeclaredSrgb),
-        ColorEncoding::Unspecified => Ok(SourceColorDecision::AssumedSrgb),
-        ColorEncoding::DisplayP3D65 | ColorEncoding::LinearDisplayP3D65 => {
-            Err(PreviewError::UnsupportedPixelpipeColor { actual: encoding })
+fn source_color_decision(source: SourceColor) -> Result<SourceColorDecision, PreviewError> {
+    match source.evidence() {
+        SourceColorEvidence::EmbeddedIcc => Ok(SourceColorDecision::EmbeddedProfile),
+        SourceColorEvidence::EmbeddedChromaticities
+        | SourceColorEvidence::EmbeddedContainerMetadata => {
+            Ok(SourceColorDecision::EmbeddedChromaticities)
         }
-        _ => Err(PreviewError::UnsupportedPixelpipeColor { actual: encoding }),
+        SourceColorEvidence::Fallback(SourceColorFallback::EncodedSrgb) => {
+            Ok(SourceColorDecision::AssumedSrgb)
+        }
+        SourceColorEvidence::Fallback(SourceColorFallback::LinearRec709) => {
+            Ok(SourceColorDecision::AssumedLinearRec709)
+        }
+        SourceColorEvidence::DeclaredEncoding => match source.encoding() {
+            ColorEncoding::SrgbD65 | ColorEncoding::LinearSrgbD65 => {
+                Ok(SourceColorDecision::DeclaredSrgb)
+            }
+            ColorEncoding::DisplayP3D65 | ColorEncoding::LinearDisplayP3D65 => {
+                Ok(SourceColorDecision::DeclaredDisplayP3)
+            }
+            actual => Err(PreviewError::UnsupportedPixelpipeColor { actual }),
+        },
+    }
+}
+
+fn pixelpipe_encoding(source: SourceColor) -> RgbaF32ColorEncoding {
+    match source.encoding() {
+        ColorEncoding::LinearSrgbD65 => RgbaF32ColorEncoding::LinearSrgbD65,
+        ColorEncoding::DisplayP3D65 => RgbaF32ColorEncoding::DisplayP3D65,
+        ColorEncoding::LinearDisplayP3D65 => RgbaF32ColorEncoding::LinearDisplayP3D65,
+        ColorEncoding::External(profile) => RgbaF32ColorEncoding::External(profile),
+        _ => RgbaF32ColorEncoding::SrgbD65,
     }
 }
 

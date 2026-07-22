@@ -55,14 +55,14 @@ fn with_fixture<T>(name: &str, bytes: &[u8], operation: impl FnOnce(&Path) -> T)
 }
 
 #[test]
-fn png_preserves_rgba_samples_without_claiming_color_encoding() {
+fn png_preserves_rgba_samples_with_srgb_fallback() {
     let result = with_fixture("png", &fixture("png"), |path| input().decode_path(path));
     let image = result.expect("reviewed PNG should decode");
 
     assert_eq!(image.dimensions().width(), 2);
     assert_eq!(image.dimensions().height(), 1);
     assert_eq!(image.layout(), PixelLayout::Rgba8StraightAlpha);
-    assert_eq!(image.color_encoding(), ColorEncoding::Unspecified);
+    assert_eq!(image.color_encoding(), ColorEncoding::SrgbD65);
     assert_eq!(image.pixels(), &[255, 0, 0, 255, 0, 255, 0, 255]);
 }
 
@@ -74,7 +74,7 @@ fn jpeg_decodes_to_opaque_rgba8() {
     assert_eq!(image.dimensions().width(), 2);
     assert_eq!(image.dimensions().height(), 1);
     assert_eq!(image.layout(), PixelLayout::Rgba8StraightAlpha);
-    assert_eq!(image.color_encoding(), ColorEncoding::Unspecified);
+    assert_eq!(image.color_encoding(), ColorEncoding::SrgbD65);
     assert_eq!(image.pixels().len(), 8);
     assert!(
         image

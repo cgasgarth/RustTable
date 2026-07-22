@@ -192,6 +192,7 @@ impl std::error::Error for ProvenancedRenderError {
 pub struct RenderReceipt {
     context: RenderRequestContext,
     source_color_decision: SourceColorDecision,
+    source_color: rusttable_image::SourceColor,
     render_provenance: RenderProvenance,
     clipping: GamutClipReport,
     output_dimensions: ImageDimensions,
@@ -205,6 +206,7 @@ impl RenderReceipt {
         Self {
             context,
             source_color_decision: output.source_color_decision(),
+            source_color: output.source_color(),
             render_provenance: output.provenance(),
             clipping: output.clipping(),
             output_dimensions: output.image().dimensions(),
@@ -225,6 +227,11 @@ impl RenderReceipt {
     #[must_use]
     pub const fn source_color_decision(&self) -> SourceColorDecision {
         self.source_color_decision
+    }
+
+    #[must_use]
+    pub const fn source_color(&self) -> rusttable_image::SourceColor {
+        self.source_color
     }
 
     #[must_use]
@@ -251,12 +258,13 @@ impl RenderReceipt {
     #[must_use]
     pub fn canonical_encoding(&self) -> String {
         format!(
-            "render-receipt-v1\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\n",
+            "render-receipt-v2\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color-decision={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\n",
             self.context.source,
             self.context.edit,
             self.context.policy,
             self.context.plan,
             self.source_color_decision,
+            self.source_color,
             self.render_provenance,
             self.clipping,
             self.output_dimensions,

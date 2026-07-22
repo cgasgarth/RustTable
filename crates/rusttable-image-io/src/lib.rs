@@ -9,6 +9,7 @@ pub mod png;
 mod raster_samples;
 pub mod raw;
 mod registry;
+mod source_color;
 mod svg;
 pub mod tiff;
 

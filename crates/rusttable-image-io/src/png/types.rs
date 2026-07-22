@@ -260,6 +260,7 @@ pub struct PngProfileInventory {
     pub bytes: u64,
     pub sha256: [u8; 32],
     pub profile_id: rusttable_color::ProfileId,
+    pub data: Vec<u8>,
 }
 
 /// Non-pixel PNG metadata inventory.

@@ -69,7 +69,12 @@ impl CpuPixelpipeSnapshot {
     ) -> Result<Self, CpuPixelpipeSnapshotError> {
         if !matches!(
             input.descriptor().color_encoding(),
-            RgbaF32ColorEncoding::SrgbD65 | RgbaF32ColorEncoding::LabD50
+            RgbaF32ColorEncoding::SrgbD65
+                | RgbaF32ColorEncoding::LinearSrgbD65
+                | RgbaF32ColorEncoding::DisplayP3D65
+                | RgbaF32ColorEncoding::LinearDisplayP3D65
+                | RgbaF32ColorEncoding::External(_)
+                | RgbaF32ColorEncoding::LabD50
         ) {
             return Err(CpuPixelpipeSnapshotError::UnsupportedInputEncoding {
                 actual: input.descriptor().color_encoding(),
@@ -134,6 +139,7 @@ fn snapshot_identity(
     hasher.update(input.descriptor().dimensions().width().to_le_bytes());
     hasher.update(input.descriptor().dimensions().height().to_le_bytes());
     hasher.update([encoding_tag(input.descriptor().color_encoding())]);
+    write_source_color(&mut hasher, input.descriptor().source_color());
     hasher.update([input.descriptor().source_orientation() as u8]);
     hasher.update([mode_tag(output_mode)]);
     write_u128(&mut hasher, graph.source_edit_id().get());
@@ -461,8 +467,51 @@ const fn encoding_tag(encoding: RgbaF32ColorEncoding) -> u8 {
     match encoding {
         RgbaF32ColorEncoding::SrgbD65 => 0,
         RgbaF32ColorEncoding::LinearSrgbD65 => 1,
-        RgbaF32ColorEncoding::LabD50 => 2,
+        RgbaF32ColorEncoding::DisplayP3D65 => 2,
+        RgbaF32ColorEncoding::LinearDisplayP3D65 => 3,
+        RgbaF32ColorEncoding::External(_) => 4,
+        RgbaF32ColorEncoding::LabD50 => 5,
     }
+}
+
+fn write_source_color(hasher: &mut Sha256, source: Option<rusttable_image::SourceColor>) {
+    let Some(source) = source else {
+        hasher.update([0]);
+        return;
+    };
+    hasher.update([1]);
+    hasher.update(postcard::to_allocvec(&source.encoding()).expect("color encoding serializes"));
+    hasher.update(postcard::to_allocvec(&source.transfer()).expect("transfer serializes"));
+    for pair in [
+        source.primaries().red(),
+        source.primaries().green(),
+        source.primaries().blue(),
+    ] {
+        hasher.update(pair.0.get().to_bits().to_le_bytes());
+        hasher.update(pair.1.get().to_bits().to_le_bytes());
+    }
+    let (white_x, white_y) = source.white_point().xy();
+    hasher.update(white_x.to_bits().to_le_bytes());
+    hasher.update(white_y.to_bits().to_le_bytes());
+    if let Some(profile) = source.profile() {
+        hasher.update([1]);
+        hasher.update(profile.sha256());
+        hasher.update(profile.size().to_le_bytes());
+    } else {
+        hasher.update([0]);
+    }
+    hasher.update([match source.evidence() {
+        rusttable_image::SourceColorEvidence::DeclaredEncoding => 0,
+        rusttable_image::SourceColorEvidence::EmbeddedIcc => 1,
+        rusttable_image::SourceColorEvidence::EmbeddedChromaticities => 2,
+        rusttable_image::SourceColorEvidence::EmbeddedContainerMetadata => 3,
+        rusttable_image::SourceColorEvidence::Fallback(
+            rusttable_image::SourceColorFallback::EncodedSrgb,
+        ) => 4,
+        rusttable_image::SourceColorEvidence::Fallback(
+            rusttable_image::SourceColorFallback::LinearRec709,
+        ) => 5,
+    }]);
 }
 
 const fn mode_tag(mode: CpuPixelpipeOutputMode) -> u8 {

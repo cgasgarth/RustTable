@@ -12,4 +12,4 @@ pub use types::{
     PngProfileInventory, PngSampleLayout, PngTextInventory,
 };
 
-pub(crate) use decode::{decode_legacy_rgba8, decode_png_probe, is_png_signature};
+pub(crate) use decode::{decode_png_probe, is_png_signature};

@@ -1,6 +1,8 @@
 use std::fmt;
 
-use rusttable_image::{ColorEncoding, DecodedImage, ImageDimensions};
+use rusttable_image::{
+    ColorEncoding, DecodedImage, ImageDimensions, SourceColor, SourceColorFallback,
+};
 use rusttable_processing::{WorkingRgbImage, encode_linear_srgb};
 
 use crate::{
@@ -18,6 +20,7 @@ pub struct PreparedCpuPixelpipeResult {
     pixels: WorkingRgbImage,
     alpha: Vec<f32>,
     source_color_decision: SourceColorDecision,
+    source_color: SourceColor,
     provenance: RenderProvenance,
 }
 
@@ -28,10 +31,52 @@ impl PreparedCpuPixelpipeResult {
     ///
     /// Returns an error when alpha does not provide exactly one value for each
     /// already-validated working pixel.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the hard-coded Display P3 color encoding is rejected by
+    /// the color contract, which would indicate an internal invariant failure.
     pub fn new(
         pixels: WorkingRgbImage,
         alpha: Vec<f32>,
         source_color_decision: SourceColorDecision,
+        provenance: RenderProvenance,
+    ) -> Result<Self, PreparedCpuPixelpipeResultError> {
+        let source_color = match source_color_decision {
+            SourceColorDecision::DeclaredDisplayP3 => {
+                SourceColor::declared(ColorEncoding::DisplayP3D65)
+                    .expect("published Display P3 is valid")
+            }
+            SourceColorDecision::AssumedLinearRec709 => {
+                SourceColor::fallback(SourceColorFallback::LinearRec709)
+            }
+            SourceColorDecision::DeclaredSrgb
+            | SourceColorDecision::EmbeddedProfile
+            | SourceColorDecision::EmbeddedChromaticities
+            | SourceColorDecision::AssumedSrgb => {
+                SourceColor::fallback(SourceColorFallback::EncodedSrgb)
+            }
+        };
+        Self::new_with_source_color(
+            pixels,
+            alpha,
+            source_color_decision,
+            source_color,
+            provenance,
+        )
+    }
+
+    /// Creates a prepared result with the exact decoded source-color evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when alpha does not provide exactly one value for each
+    /// already-validated working pixel.
+    pub fn new_with_source_color(
+        pixels: WorkingRgbImage,
+        alpha: Vec<f32>,
+        source_color_decision: SourceColorDecision,
+        source_color: SourceColor,
         provenance: RenderProvenance,
     ) -> Result<Self, PreparedCpuPixelpipeResultError> {
         let expected = pixels.dimensions().pixel_count();
@@ -45,6 +90,7 @@ impl PreparedCpuPixelpipeResult {
             pixels,
             alpha,
             source_color_decision,
+            source_color,
             provenance,
         })
     }
@@ -62,6 +108,11 @@ impl PreparedCpuPixelpipeResult {
     #[must_use]
     pub const fn source_color_decision(&self) -> SourceColorDecision {
         self.source_color_decision
+    }
+
+    #[must_use]
+    pub const fn source_color(&self) -> SourceColor {
+        self.source_color
     }
 
     #[must_use]
@@ -111,6 +162,7 @@ pub fn render_prepared_cpu_pixelpipe(
         image,
         plan,
         source_color_decision: prepared.source_color_decision(),
+        source_color: prepared.source_color(),
         clipping: encoded.clipping(),
         provenance: prepared.provenance(),
     })

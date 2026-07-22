@@ -6,15 +6,16 @@ use rusttable_export::{
     CollisionPolicy, PngCollisionResult, PngExportLimits, PngPublishCompletion, PngPublishControl,
     PngPublishError, PngPublishProgress, PngPublishStage, PngPublisher,
 };
-use rusttable_image::{DecodeLimits, DecodedImage, ImageDimensions, ImageInput};
+use rusttable_image::{ColorEncoding, DecodeLimits, DecodedImage, ImageDimensions, ImageInput};
 use rusttable_image_io::FileImageInput;
 
 static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn image() -> DecodedImage {
-    DecodedImage::new(
+    DecodedImage::new_with_color_encoding(
         ImageDimensions::new(2, 1).expect("dimensions"),
         vec![255, 0, 0, 255, 0, 255, 0, 128],
+        ColorEncoding::SrgbD65,
     )
     .expect("pixels match dimensions")
 }

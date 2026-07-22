@@ -4218,6 +4218,7 @@ name = "rusttable-image"
 version = "0.1.0"
 dependencies = [
  "rusttable-color",
+ "sha2",
 ]
 
 [[package]]
@@ -4230,6 +4231,7 @@ dependencies = [
  "image",
  "jpeg-decoder",
  "png",
+ "postcard",
  "rawler",
  "resvg",
  "rusttable-color",
