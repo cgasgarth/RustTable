@@ -51,6 +51,29 @@ fn renders_a_persisted_import_and_two_operation_edit_from_a_fresh_catalog() {
     assert!(output.image().dimensions().width() <= 64);
     assert!(output.image().dimensions().height() <= 64);
     assert!(!output.image().pixels().is_empty());
+
+    let rendered = CatalogPreviewService::new(preview_service())
+        .render_with_receipt(
+            CatalogPreviewRequest::new(&workspace.source_root, photo_id, edit_id)
+                .with_generation(7),
+            &repository,
+            &repository,
+        )
+        .expect("persisted receipt renders");
+    assert_eq!(rendered.receipt().render().source().photo_id(), photo_id);
+    assert_eq!(
+        rendered
+            .receipt()
+            .render()
+            .render_provenance()
+            .source_edit_id(),
+        edit_id
+    );
+    assert_eq!(rendered.receipt().generation(), 7);
+    assert_eq!(
+        rendered.receipt().output_transform(),
+        rusttable_app::PreviewOutputTransform::SrgbDisplayFallback
+    );
 }
 
 #[test]

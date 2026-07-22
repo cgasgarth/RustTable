@@ -8,7 +8,10 @@ use rusttable_import::{
     FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReadError,
     SourceSnapshotReader, decode_reference_source,
 };
-use rusttable_render::{RenderOutput, RenderTarget};
+use rusttable_render::{
+    RenderOutput, RenderReceipt, RenderRequestContext, RenderSourceProvenance, RenderTarget,
+    SourceColorPolicy,
+};
 
 pub(crate) mod smoke;
 
@@ -41,6 +44,25 @@ impl CatalogPreviewService {
         imports: &dyn ImportRepository,
         edits: &dyn EditRepository,
     ) -> Result<RenderOutput, CatalogPreviewError> {
+        self.render_with_receipt(request, imports, edits)
+            .map(CatalogPreviewRender::into_output)
+    }
+
+    /// Renders the exact persisted edit and returns the immutable publication receipt.
+    ///
+    /// The receipt binds the edit revision, imported source evidence, source-color
+    /// decision, explicit output transform, and publication generation. Consumers
+    /// may downsample the returned output, but must not substitute an embedded preview.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog, snapshot, decode, or render error.
+    pub fn render_with_receipt(
+        &self,
+        request: CatalogPreviewRequest<'_>,
+        imports: &dyn ImportRepository,
+        edits: &dyn EditRepository,
+    ) -> Result<CatalogPreviewRender, CatalogPreviewError> {
         let record = imports
             .find_by_photo_id(request.photo_id)
             .map_err(|error| {
@@ -65,7 +87,7 @@ impl CatalogPreviewService {
                 edit_id: request.edit_id,
                 }
             })?;
-        self.render_record(request.source_root, &record, &edit)
+        self.render_record_with_receipt(request, &record, &edit)
     }
 
     /// Renders a caller-provided edit without reading or writing an edit record.
@@ -98,6 +120,32 @@ impl CatalogPreviewService {
                 }
             })?;
         self.render_record(source_root, &record, edit)
+    }
+
+    /// Renders a transient edit with the same source and output receipt as a persisted edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog, snapshot, decode, or render error.
+    pub fn render_edit_with_receipt(
+        &self,
+        source_root: &Path,
+        edit: &Edit,
+        imports: &dyn ImportRepository,
+        generation: u64,
+    ) -> Result<CatalogPreviewRender, CatalogPreviewError> {
+        let record = imports
+            .find_by_photo_id(edit.photo_id())
+            .map_err(CatalogPreviewError::ImportRepository)?
+            .ok_or(CatalogPreviewError::UnknownPhoto {
+                photo_id: edit.photo_id(),
+            })?;
+        self.render_record_with_receipt(
+            CatalogPreviewRequest::new(source_root, edit.photo_id(), edit.id())
+                .with_generation(generation),
+            &record,
+            edit,
+        )
     }
 
     /// Renders the exact persisted edit at source resolution for publication.
@@ -158,6 +206,17 @@ impl CatalogPreviewService {
         })
     }
 
+    fn render_record_with_receipt(
+        &self,
+        request: CatalogPreviewRequest<'_>,
+        record: &ImportRecord,
+        edit: &Edit,
+    ) -> Result<CatalogPreviewRender, CatalogPreviewError> {
+        self.render_snapshot_with_receipt(request, record, edit, |preview, bytes, edit| {
+            preview.render_bytes(bytes, edit)
+        })
+    }
+
     fn render_record_for_target(
         &self,
         source_root: &Path,
@@ -177,9 +236,25 @@ impl CatalogPreviewService {
         edit: &Edit,
         render: impl FnOnce(&PreviewService, &[u8], &Edit) -> Result<RenderOutput, PreviewError>,
     ) -> Result<RenderOutput, CatalogPreviewError> {
+        self.render_snapshot_with_receipt(
+            CatalogPreviewRequest::new(source_root, edit.photo_id(), edit.id()),
+            record,
+            edit,
+            render,
+        )
+        .map(CatalogPreviewRender::into_output)
+    }
+
+    fn render_snapshot_with_receipt(
+        &self,
+        request: CatalogPreviewRequest<'_>,
+        record: &ImportRecord,
+        edit: &Edit,
+        render: impl FnOnce(&PreviewService, &[u8], &Edit) -> Result<RenderOutput, PreviewError>,
+    ) -> Result<CatalogPreviewRender, CatalogPreviewError> {
         validate_edit_ownership(record, edit)?;
         let source = decode_reference_source(record.source())
-            .unwrap_or_else(|_| source_root.join(record.source().as_str()));
+            .unwrap_or_else(|_| request.source_root.join(record.source().as_str()));
         let limits = ImportSourceLimits::new(64 * 1024 * 1024)
             .map_err(|_| CatalogPreviewError::SourceLimits)?;
         let snapshot_reader = FileSourceSnapshotReader;
@@ -193,7 +268,94 @@ impl CatalogPreviewService {
         snapshot_reader
             .revalidate(&snapshot, limits)
             .map_err(CatalogPreviewError::Snapshot)?;
-        Ok(output)
+        let asset = record.photo().primary_asset();
+        let source_provenance = RenderSourceProvenance::new(
+            record.photo().id(),
+            asset.id(),
+            asset.content_hash(),
+            asset.byte_length(),
+            record.probe(),
+        );
+        let context = RenderRequestContext::new(
+            source_provenance,
+            edit,
+            SourceColorPolicy::AssumeSrgbWhenUnspecified,
+            output.plan(),
+        );
+        let render_receipt = RenderReceipt::new(context, &output);
+        Ok(CatalogPreviewRender {
+            output,
+            receipt: CatalogPreviewReceipt {
+                render: render_receipt,
+                output_transform: PreviewOutputTransform::SrgbDisplayFallback,
+                generation: request.generation,
+            },
+        })
+    }
+}
+
+/// The display output encoding used by the current application composition.
+///
+/// Monitor ICC conversion remains owned by the display-profile workstream; until
+/// that transform is available, the receipt makes the sRGB fallback explicit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewOutputTransform {
+    SrgbDisplayFallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogPreviewReceipt {
+    render: RenderReceipt,
+    output_transform: PreviewOutputTransform,
+    generation: u64,
+}
+
+impl CatalogPreviewReceipt {
+    #[must_use]
+    pub const fn render(&self) -> &RenderReceipt {
+        &self.render
+    }
+
+    #[must_use]
+    pub const fn output_transform(&self) -> PreviewOutputTransform {
+        self.output_transform
+    }
+
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    #[must_use]
+    pub fn identity_hash(&self) -> [u8; 32] {
+        self.render.identity_hash()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogPreviewRender {
+    output: RenderOutput,
+    receipt: CatalogPreviewReceipt,
+}
+
+impl CatalogPreviewRender {
+    #[must_use]
+    pub const fn output(&self) -> &RenderOutput {
+        &self.output
+    }
+
+    #[must_use]
+    pub const fn receipt(&self) -> &CatalogPreviewReceipt {
+        &self.receipt
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (RenderOutput, CatalogPreviewReceipt) {
+        (self.output, self.receipt)
+    }
+
+    fn into_output(self) -> RenderOutput {
+        self.output
     }
 }
 
@@ -214,6 +376,7 @@ pub struct CatalogPreviewRequest<'a> {
     source_root: &'a Path,
     photo_id: PhotoId,
     edit_id: EditId,
+    generation: u64,
 }
 
 impl<'a> CatalogPreviewRequest<'a> {
@@ -223,6 +386,7 @@ impl<'a> CatalogPreviewRequest<'a> {
             source_root,
             photo_id,
             edit_id,
+            generation: 0,
         }
     }
 
@@ -239,6 +403,17 @@ impl<'a> CatalogPreviewRequest<'a> {
     #[must_use]
     pub const fn edit_id(self) -> EditId {
         self.edit_id
+    }
+
+    #[must_use]
+    pub const fn with_generation(mut self, generation: u64) -> Self {
+        self.generation = generation;
+        self
+    }
+
+    #[must_use]
+    pub const fn generation(self) -> u64 {
+        self.generation
     }
 }
 

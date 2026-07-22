@@ -19,10 +19,11 @@ pub use platform::macos;
 
 pub use composition::services::preview::{PreviewError, PreviewService};
 pub use composition::{
-    CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService,
-    CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError, CatalogPreviewSmokePorts,
-    CatalogPreviewSmokeReceipt, CatalogPreviewSmokeRequest, CatalogPreviewSmokeResult,
-    CatalogPreviewSmokeService, CatalogPreviewSmokeStage, CatalogPreviewSmokeStatus, run,
+    CatalogPreviewError, CatalogPreviewReceipt, CatalogPreviewRender, CatalogPreviewRequest,
+    CatalogPreviewService, CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError,
+    CatalogPreviewSmokePorts, CatalogPreviewSmokeReceipt, CatalogPreviewSmokeRequest,
+    CatalogPreviewSmokeResult, CatalogPreviewSmokeService, CatalogPreviewSmokeStage,
+    CatalogPreviewSmokeStatus, PreviewOutputTransform, run,
 };
 pub use extensions::ApplicationExtensions;
 pub use lifecycle::{

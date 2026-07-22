@@ -138,6 +138,14 @@ fn render_frame_with_target(
         input.image().descriptor().dimensions().height(),
     )
     .expect("decoded images have nonzero dimensions");
+    let source_color_decision = source_color_decision(input.image().descriptor().color_encoding())
+        .inspect_err(|_| {
+            tracing::error!(
+                target: "rusttable.preview",
+                stage = "processing",
+                cause = "unsupported_frame_color"
+            );
+        })?;
     let encoding = match input.sample_type() {
         SampleType::F16 | SampleType::F32 => RgbaF32ColorEncoding::LinearSrgbD65,
         SampleType::U8 | SampleType::U16 => RgbaF32ColorEncoding::SrgbD65,
@@ -188,7 +196,7 @@ fn render_frame_with_target(
     let prepared = PreparedCpuPixelpipeResult::new(
         working,
         alpha,
-        SourceColorDecision::DeclaredSrgb,
+        source_color_decision,
         RenderProvenance::new(
             edit.id(),
             edit.photo_id(),

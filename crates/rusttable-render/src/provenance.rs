@@ -199,7 +199,9 @@ pub struct RenderReceipt {
 }
 
 impl RenderReceipt {
-    pub(crate) const fn new(context: RenderRequestContext, output: &crate::RenderOutput) -> Self {
+    /// Builds a receipt for a completed render and its immutable request context.
+    #[must_use]
+    pub const fn new(context: RenderRequestContext, output: &crate::RenderOutput) -> Self {
         Self {
             context,
             source_color_decision: output.source_color_decision(),

@@ -8,10 +8,11 @@ use rusttable_core::PhotoId;
 use rusttable_image::ImageDimensions;
 
 use crate::CatalogPreviewError;
+use crate::CatalogPreviewReceipt;
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{GtkCatalogController, GtkCatalogState};
 use crate::workspace::preview_loader::WorkspacePreviewError;
-use crate::workspace::{SelectedPreview, load_selected_preview};
+use crate::workspace::{SelectedPreview, preview_loader::load_selected_preview_with_generation};
 
 /// Stateless adapter for rendering the photo selected by the GTK catalog controller.
 #[derive(Debug, Default)]
@@ -32,6 +33,14 @@ impl GtkPreviewController {
     pub(crate) fn render_selected_with_diagnostics(
         catalog: &GtkCatalogController,
         diagnostics: &AppDiagnostics,
+    ) -> GtkPreviewState {
+        Self::render_selected_with_generation(catalog, diagnostics, 0)
+    }
+
+    pub(crate) fn render_selected_with_generation(
+        catalog: &GtkCatalogController,
+        diagnostics: &AppDiagnostics,
+        generation: u64,
     ) -> GtkPreviewState {
         let Some(photo_id) = catalog.selected_photo() else {
             return GtkPreviewState::failed(None, GtkPreviewFailureKind::NoSelection);
@@ -54,10 +63,11 @@ impl GtkPreviewController {
             );
         };
 
-        let result = load_selected_preview(
+        let result = load_selected_preview_with_generation(
             ready.location().catalog_path(),
             ready.location().source_root(),
             photo_id,
+            generation,
         );
         match result {
             Ok(preview) => Self::from_loaded_preview(preview, diagnostics),
@@ -82,7 +92,7 @@ impl GtkPreviewController {
         preview: SelectedPreview,
         diagnostics: &AppDiagnostics,
     ) -> GtkPreviewState {
-        let (photo_id, dimensions, pixels) = preview.into_parts();
+        let (photo_id, dimensions, pixels, receipt) = preview.into_render_parts();
         GtkPreview::new(photo_id, dimensions, pixels).map_or_else(
             |kind| {
                 diagnostics.preview_failure(
@@ -97,13 +107,20 @@ impl GtkPreviewController {
                 );
                 GtkPreviewState::failed(Some(photo_id), kind)
             },
-            GtkPreviewState::Ready,
+            |mut ready| {
+                ready.receipt = Some(receipt);
+                GtkPreviewState::Ready(ready)
+            },
         )
     }
 }
 
 /// Complete state that a GTK view can render without knowing about the catalog or renderer.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "the ready state owns validated pixels and GTK publishes the enum by value"
+)]
 pub enum GtkPreviewState {
     Ready(GtkPreview),
     Failed(GtkPreviewFailure),
@@ -138,6 +155,7 @@ pub struct GtkPreview {
     dimensions: ImageDimensions,
     pixels: Vec<u8>,
     status: GtkPreviewStatus,
+    receipt: Option<CatalogPreviewReceipt>,
 }
 
 impl GtkPreview {
@@ -159,6 +177,7 @@ impl GtkPreview {
             dimensions,
             pixels,
             status: GtkPreviewStatus::Rendered,
+            receipt: None,
         })
     }
 
@@ -180,6 +199,11 @@ impl GtkPreview {
     #[must_use]
     pub const fn status(&self) -> GtkPreviewStatus {
         self.status
+    }
+
+    #[must_use]
+    pub const fn receipt(&self) -> Option<&CatalogPreviewReceipt> {
+        self.receipt.as_ref()
     }
 }
 

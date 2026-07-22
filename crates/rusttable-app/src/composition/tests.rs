@@ -24,6 +24,7 @@ use super::{CollectionController, apply_collection_action, collection_filter_sta
 #[cfg(not(target_os = "macos"))]
 use super::{
     GtkCatalogController, MacApplicationBridge, apply_selection_projection, dispatch_open_request,
+    thumbnails::ThumbnailLifecycle,
 };
 
 #[cfg(not(target_os = "macos"))]
@@ -161,6 +162,7 @@ fn native_open_import_dispatches_selection_through_active_projection() {
         &active_shell,
         &active_catalog,
         &active_collection,
+        &Rc::new(RefCell::new(ThumbnailLifecycle::default())),
         &crate::diagnostics::AppDiagnostics::default(),
     );
 

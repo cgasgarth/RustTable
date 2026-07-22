@@ -9,9 +9,12 @@ use rusttable_app::gtk_controller::{
 use rusttable_app::gtk_preview_controller::{GtkPreviewController, GtkPreviewState};
 use rusttable_app::gtk_thumbnail_controller::{GtkThumbnailController, GtkThumbnailSource};
 use rusttable_app::workspace::run_raster_import;
-use rusttable_image::{ImageInput, InputFormat, SampleType};
+use rusttable_image::{
+    CancellationToken, ColorEncoding, DecodedImage, ImageInput, InputFormat, SampleType,
+};
 use rusttable_image_io::{FileImageInput, ImageDecoderRegistry};
 use rusttable_import::RasterImportCancellation;
+use rusttable_render::{MipmapLevel, ThumbnailGenerator, ThumbnailRequest, ThumbnailSize};
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
 #[cfg(target_os = "linux")]
 use rusttable_ui::HistogramData;
@@ -191,10 +194,15 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
         )
     });
     assert!(
-        matches!(concurrent_preview, GtkPreviewState::Ready(_)),
+        matches!(&concurrent_preview, GtkPreviewState::Ready(_)),
         "concurrent preview state: {concurrent_preview:?}"
     );
-    assert!(concurrent_thumbnail.is_ok());
+    let concurrent_thumbnail = concurrent_thumbnail.expect("concurrent RAW thumbnail worker");
+    assert_eq!(
+        concurrent_thumbnail.render_receipt_identity(),
+        preview_receipt_identity(&concurrent_preview),
+        "concurrent views must share the same persisted render receipt"
+    );
 
     let preview = GtkPreviewController::new().render_selected(&catalog);
     let GtkPreviewState::Ready(preview) = preview else {
@@ -228,6 +236,27 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
     assert!(
         mean_rgb >= 32.0,
         "selected RAW preview must not be near-black; mean RGB was {mean_rgb:.2}"
+    );
+
+    let source = DecodedImage::new_with_color_encoding(
+        preview.dimensions(),
+        preview.pixels().to_vec(),
+        ColorEncoding::Srgb,
+    )
+    .expect("darkroom output is a valid thumbnail source");
+    let request = ThumbnailRequest::new(
+        MipmapLevel::zero(),
+        ThumbnailSize::fit(180, 120).expect("bounded thumbnail request"),
+    );
+    let expected =
+        ThumbnailGenerator::generate(&source, request, 2 * 1024 * 1024, &CancellationToken::new())
+            .expect("downsample edited RAW render");
+    assert_eq!(thumbnail.metadata().pixels(), expected.pixels());
+    assert_eq!(
+        thumbnail.render_receipt_identity(),
+        preview
+            .receipt()
+            .map(rusttable_app::CatalogPreviewReceipt::identity_hash)
     );
 
     let mut darkroom_panels = GtkDarkroomPanelController::new(Some(catalog_path.clone()));
@@ -321,6 +350,15 @@ fn assert_gtk_darkroom_state(
     assert!(shell.open_photo(photo_id));
     assert!(shell.darkroom_preview().texture().is_some());
     assert_eq!(shell.darkroom_preview().status_label().text(), "rendered");
+}
+
+fn preview_receipt_identity(state: &GtkPreviewState) -> Option<[u8; 32]> {
+    match state {
+        GtkPreviewState::Ready(preview) => preview
+            .receipt()
+            .map(rusttable_app::CatalogPreviewReceipt::identity_hash),
+        GtkPreviewState::Failed(_) => None,
+    }
 }
 
 fn decoder_probe(bytes: &[u8]) -> rusttable_image::ImageProbe {

@@ -59,9 +59,10 @@ pub(crate) fn start_selected_preview(
     let worker = thread::Builder::new()
         .name("rusttable-preview".to_owned())
         .spawn(move || {
-            let state = GtkPreviewController::render_selected_with_diagnostics(
+            let state = GtkPreviewController::render_selected_with_generation(
                 &catalog,
                 &worker_diagnostics,
+                token.generation(),
             );
             let histogram = histogram_for_preview(&state);
             let _ = sender.send(PreviewResult {
