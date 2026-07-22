@@ -100,7 +100,11 @@ fn registry_frame_keeps_adjacent_sixteen_bit_tiff_samples_distinct() {
 
     assert_eq!(frame.sample_type(), SampleType::U16);
     let pixels = frame.rgba_f32_pixels().expect("f32 bridge");
-    assert!(pixels.windows(2).any(|pair| pair[0][0] != pair[1][0]));
+    assert!(
+        pixels
+            .windows(2)
+            .any(|pair| (pair[0][0] - pair[1][0]).abs() > 0.0)
+    );
     assert_eq!(
         frame.receipt().descriptor().format().sample_type(),
         SampleType::U16

@@ -398,7 +398,7 @@ fn preserves_extended_linear_input_for_full_export() {
     let result = CpuPixelpipeExecutor
         .execute(&request)
         .expect("linear input");
-    assert_eq!(result.image().pixels()[0].red(), 1.5);
+    assert!((result.image().pixels()[0].red() - 1.5).abs() < f32::EPSILON);
 }
 
 #[test]

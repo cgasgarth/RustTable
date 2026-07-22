@@ -246,6 +246,11 @@ impl ImageDecoderRegistry {
     }
 
     /// Decodes one source without projecting its native sample representation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the selected decoder's typed probe, decode, limit, or contract
+    /// failure.
     pub fn decode_frame_bytes(
         &self,
         bytes: &[u8],
@@ -531,7 +536,7 @@ fn tiff_sample_bytes(samples: TiffSampleData) -> Vec<u8> {
         }
         TiffSampleData::F32(values) => values.into_iter().flat_map(f32::to_ne_bytes).collect(),
         TiffSampleData::U32(values) => values.into_iter().flat_map(u32::to_ne_bytes).collect(),
-        TiffSampleData::I8(values) => values.into_iter().map(|value| value as u8).collect(),
+        TiffSampleData::I8(values) => values.into_iter().map(i8::cast_unsigned).collect(),
         TiffSampleData::I16(values) => values.into_iter().flat_map(i16::to_ne_bytes).collect(),
         TiffSampleData::I32(values) => values.into_iter().flat_map(i32::to_ne_bytes).collect(),
     }
