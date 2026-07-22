@@ -656,6 +656,22 @@ impl DarkroomViewportState {
         self.reset_view();
     }
 
+    /// Reconciles the edit revision of a completed render without resetting viewport controls.
+    pub fn set_edit_revision(
+        &mut self,
+        edit_revision: Revision,
+        generation: ViewportGeneration,
+    ) -> bool {
+        if self.generation != generation || self.photo_id.is_none() {
+            return false;
+        }
+        if self.edit_revision == Some(edit_revision) {
+            return false;
+        }
+        self.edit_revision = Some(edit_revision);
+        true
+    }
+
     /// Clears selection while leaving a truthful empty/no-photo viewport.
     pub fn clear_selection(&mut self) {
         self.photo_id = None;

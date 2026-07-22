@@ -211,6 +211,10 @@ impl ThumbnailKey {
         self.photo_id
     }
     #[must_use]
+    pub const fn edit_id(self) -> EditId {
+        self.edit_id
+    }
+    #[must_use]
     pub const fn edit_revision(self) -> Revision {
         self.edit_revision
     }

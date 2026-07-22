@@ -150,9 +150,19 @@ impl GtkDarkroomEditController {
             .revised(operations)
             .map_err(|error| persistence_error(error.to_string()))?;
         let mut repository = self.open_repository()?;
-        repository
-            .commit_replacement(current.revision(), &replacement)
-            .map_err(|error| persistence_error(error.to_string()))?;
+        if let Err(error) = repository.commit_replacement(current.revision(), &replacement) {
+            tracing::error!(
+                target: "rusttable.gtk.darkroom.edit",
+                photo_id = %photo_id,
+                edit_id = %current.id(),
+                current_revision = %current.revision(),
+                expected_revision = %action.expected_revision(),
+                requested_revision = %replacement.revision(),
+                cause = ?error,
+                "darkroom edit persistence failed; keeping the last published edit"
+            );
+            return Err(persistence_error(error.to_string()));
+        }
         let projected = project_edit(&replacement)?;
         self.modules = Some(projected.clone());
         Ok(DarkroomEditOutcome {

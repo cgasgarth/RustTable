@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 use rusttable_catalog::{EditRepository, ImportRepository};
 use rusttable_catalog_store::RedbCatalogRepository;
-use rusttable_core::{Edit, PhotoId};
+use rusttable_core::{Edit, EditId, PhotoId, Revision};
 use rusttable_image::{CancellationToken, ColorEncoding, DecodedImage};
 use rusttable_import::RASTER_DECODER_IDENTITY_VERSION;
 use rusttable_render::{
@@ -41,6 +41,8 @@ pub struct GtkThumbnail {
     cache_identity: [u8; 32],
     render_receipt_identity: Option<[u8; 32]>,
     output_transform: PreviewOutputTransform,
+    edit_id: EditId,
+    edit_revision: Revision,
 }
 
 impl GtkThumbnail {
@@ -72,6 +74,16 @@ impl GtkThumbnail {
     #[must_use]
     pub const fn output_transform(&self) -> PreviewOutputTransform {
         self.output_transform
+    }
+
+    #[must_use]
+    pub const fn edit_id(&self) -> EditId {
+        self.edit_id
+    }
+
+    #[must_use]
+    pub const fn edit_revision(&self) -> Revision {
+        self.edit_revision
     }
 }
 
@@ -152,13 +164,52 @@ impl GtkThumbnailController {
         photo_id: PhotoId,
         generation: u64,
     ) -> Result<GtkThumbnail, GtkThumbnailError> {
+        let edit = self
+            .edits
+            .get(&photo_id)
+            .ok_or(GtkThumbnailError::MissingEdit)?;
+        self.render_for_edit(photo_id, edit.id(), edit.revision(), generation)
+    }
+
+    /// Loads or renders one thumbnail for the exact edit identity captured by the preview.
+    ///
+    /// The worker never reselects a newer edit while it is rendering. If the persisted edit
+    /// changed between scheduling and execution, the request fails and the caller keeps the
+    /// shared surfaces in their explicit loading state until a new request is scheduled.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the captured photo/edit, cache, render, or presentation cannot
+    /// be resolved.
+    pub fn render_with_generation_for_edit(
+        &mut self,
+        photo_id: PhotoId,
+        edit_id: EditId,
+        edit_revision: Revision,
+        generation: u64,
+    ) -> Result<GtkThumbnail, GtkThumbnailError> {
+        self.render_for_edit(photo_id, edit_id, edit_revision, generation)
+    }
+
+    fn render_for_edit(
+        &mut self,
+        photo_id: PhotoId,
+        edit_id: EditId,
+        edit_revision: Revision,
+        generation: u64,
+    ) -> Result<GtkThumbnail, GtkThumbnailError> {
         let record = self
             .records
             .get(&photo_id)
             .ok_or(GtkThumbnailError::MissingPhoto)?;
         let edit = self
             .edits
-            .get(&photo_id)
+            .values()
+            .find(|edit| {
+                edit.photo_id() == photo_id
+                    && edit.id() == edit_id
+                    && edit.revision() == edit_revision
+            })
             .ok_or(GtkThumbnailError::MissingEdit)?;
         let request = thumbnail_request()?;
         let key = thumbnail_key(record, edit, request);
@@ -175,6 +226,8 @@ impl GtkThumbnailController {
                 GtkThumbnailSource::Cache,
                 key.digest(),
                 None,
+                key.edit_id(),
+                key.edit_revision(),
             );
         }
 
@@ -206,6 +259,8 @@ impl GtkThumbnailController {
             GtkThumbnailSource::Render,
             key.digest(),
             render_receipt_identity,
+            key.edit_id(),
+            key.edit_revision(),
         )
     }
 }
@@ -266,6 +321,8 @@ fn present(
     source: GtkThumbnailSource,
     cache_identity: [u8; 32],
     render_receipt_identity: Option<[u8; 32]>,
+    edit_id: EditId,
+    edit_revision: Revision,
 ) -> Result<GtkThumbnail, GtkThumbnailError> {
     let dimensions =
         PreviewDimensions::new(image.dimensions().width(), image.dimensions().height())
@@ -281,6 +338,8 @@ fn present(
         cache_identity,
         render_receipt_identity,
         output_transform: PreviewOutputTransform::SrgbDisplayFallback,
+        edit_id,
+        edit_revision,
     })
 }
 
@@ -290,6 +349,8 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    use rusttable_catalog::EditRepository;
+    use rusttable_catalog_store::RedbCatalogRepository;
     use rusttable_import::RasterImportCancellation;
 
     use super::{
@@ -403,5 +464,63 @@ mod tests {
             cached.output_transform(),
             crate::PreviewOutputTransform::SrgbDisplayFallback
         );
+    }
+
+    #[test]
+    fn changed_edit_revision_cannot_reuse_the_previous_thumbnail_cache_entry() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("edited.png");
+        let catalog = directory.0.join("catalog.redb");
+        let cache = directory.0.join("cache");
+        fs::write(
+            &source,
+            decode_base64(include_str!(
+                "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+            )),
+        )
+        .expect("fixture source");
+        let batch = run_raster_import(
+            &catalog,
+            vec![source],
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let photo_id = batch.first_selected_photo().expect("imported photo");
+
+        let mut first = GtkThumbnailController::open(&catalog, &directory.0, &cache)
+            .expect("open first controller");
+        let old = first.render(photo_id).expect("old thumbnail");
+        let old_identity = (old.edit_id(), old.edit_revision(), old.cache_identity());
+        drop(first);
+
+        let mut repository = RedbCatalogRepository::open(&catalog).expect("open catalog");
+        let persisted = repository
+            .list()
+            .expect("list edits")
+            .into_iter()
+            .find(|edit| edit.photo_id() == photo_id)
+            .expect("persisted edit");
+        let replacement = persisted
+            .revised(persisted.operations().cloned().collect::<Vec<_>>())
+            .expect("advance edit revision");
+        repository
+            .commit_replacement(persisted.revision(), &replacement)
+            .expect("persist replacement");
+        drop(repository);
+
+        let mut second = GtkThumbnailController::open(&catalog, &directory.0, &cache)
+            .expect("reopen edited controller");
+        let current = second.render(photo_id).expect("current thumbnail");
+        assert_eq!(current.source(), GtkThumbnailSource::Render);
+        assert_ne!(
+            (
+                current.edit_id(),
+                current.edit_revision(),
+                current.cache_identity()
+            ),
+            old_identity
+        );
+        assert_eq!(current.edit_id(), old.edit_id());
+        assert!(current.edit_revision() > old.edit_revision());
     }
 }

@@ -3,6 +3,7 @@ use crate::presentation::{
 };
 use crate::viewport_presentation::DisplayPresentationFrame;
 use crate::{HistogramData, HistogramError, ViewportGeneration};
+use rusttable_core::{EditId, Revision};
 use rusttable_display_profile::{
     DisplayProfileReceipt, DisplayProfileSnapshot, ProfileSelection, SelectionStatus,
 };
@@ -114,6 +115,31 @@ impl GtkShell {
         Ok(())
     }
 
+    /// Installs a completed unprofiled preview while recording its edit identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture adaptation error when the validated RGBA8 payload cannot be installed.
+    pub fn set_darkroom_preview_result_for_edit(
+        &self,
+        generation: ViewportGeneration,
+        metadata: &Rgba8PreviewMetadata,
+        histogram: Result<HistogramData, HistogramError>,
+        edit_id: EditId,
+        edit_revision: Revision,
+    ) -> Result<(), crate::gtk_shell::PhotoPreviewTextureError> {
+        self.darkroom
+            .set_viewport_edit_revision(edit_revision, generation);
+        tracing::debug!(
+            target: "rusttable.gtk.preview",
+            photo_id = ?self.darkroom.viewport_state().photo_id(),
+            edit_id = %edit_id,
+            edit_revision = %edit_revision,
+            "publishing selected preview edit identity"
+        );
+        self.set_darkroom_preview_result(generation, metadata, histogram)
+    }
+
     /// Installs a generation-checked, typed color-presentation frame and its histogram.
     ///
     /// The frame carries the selected photo and active monitor-profile generation. GTK receives
@@ -180,6 +206,32 @@ impl GtkShell {
         self.darkroom.sync_viewport_projection();
         self.darkroom.set_status(&frame.status().label());
         Ok(())
+    }
+
+    /// Installs a completed preview and records the edit identity that owns the shared viewport.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture adaptation error when the validated presentation frame cannot be
+    /// installed.
+    pub fn set_darkroom_presentation_result_for_edit(
+        &self,
+        generation: ViewportGeneration,
+        frame: &DisplayPresentationFrame,
+        histogram: Result<HistogramData, HistogramError>,
+        edit_id: EditId,
+        edit_revision: Revision,
+    ) -> Result<(), crate::gtk_shell::PhotoPreviewTextureError> {
+        self.darkroom
+            .set_viewport_edit_revision(edit_revision, generation);
+        tracing::debug!(
+            target: "rusttable.gtk.preview",
+            photo_id = %frame.ticket().request().photo_id(),
+            edit_id = %edit_id,
+            edit_revision = %edit_revision,
+            "publishing selected preview edit identity"
+        );
+        self.set_darkroom_presentation_result(generation, frame, histogram)
     }
 
     /// Projects a preview failure and removes any histogram that belonged to its frame.

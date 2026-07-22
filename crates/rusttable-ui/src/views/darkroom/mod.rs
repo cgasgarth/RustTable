@@ -378,6 +378,21 @@ impl DarkroomView {
         self.sync_viewport_projection();
     }
 
+    /// Updates the selected viewport's edit revision after the completed render is validated.
+    pub fn set_viewport_edit_revision(
+        &self,
+        edit_revision: Revision,
+        generation: ViewportGeneration,
+    ) {
+        if self
+            .viewport_state
+            .borrow_mut()
+            .set_edit_revision(edit_revision, generation)
+        {
+            self.sync_viewport_projection();
+        }
+    }
+
     /// Restores truthful no-photo state and resets transient viewport controls.
     pub fn clear_viewport_selection(&self) {
         self.viewport_state.borrow_mut().clear_selection();

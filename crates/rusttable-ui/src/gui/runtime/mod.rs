@@ -4,6 +4,7 @@
 //! lighttable/darkroom view switcher, module-group panel, and filmstrip. It
 //! deliberately uses GTK widgets directly instead of a framework adapter.
 
+mod keyboard;
 mod layout;
 mod lighttable;
 mod lighttable_window;
@@ -16,9 +17,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::gui::display_profile::DisplayProfileBanner;
-use gtk4::gdk;
 use gtk4::prelude::*;
-use rusttable_core::{PhotoId, Revision};
+use rusttable_core::{EditId, PhotoId, Revision};
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use self::layout::{
@@ -33,7 +33,7 @@ use super::{
     LighttableZoom, PhotoPreview, ShellLayout, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use super::{
-    LighttableInteractionState, LighttableSelectionAction, NavigationDirection, SelectionModifiers,
+    LighttableInteractionState, LighttableSelectionAction, SelectionModifiers,
     header::HeaderChrome, left_panel::LeftPanel,
 };
 use crate::ai_batch::AiBatchPanel;
@@ -103,6 +103,7 @@ pub struct GtkShell {
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
     thumbnail_window_changed: ThumbnailWindowChanged,
     photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
+    thumbnail_edit_identities: Rc<RefCell<BTreeMap<PhotoId, (EditId, Revision)>>>,
     photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
 }
 
@@ -247,6 +248,7 @@ impl GtkShell {
             photo_selected: Rc::new(RefCell::new(None)),
             thumbnail_window_changed: Rc::new(RefCell::new(None)),
             photo_tiles: Rc::new(RefCell::new(BTreeMap::new())),
+            thumbnail_edit_identities: Rc::new(RefCell::new(BTreeMap::new())),
             photo_details: Rc::new(RefCell::new(BTreeMap::new())),
         };
         shell.install_lighttable_keyboard();
@@ -713,13 +715,62 @@ impl GtkShell {
         };
         tile.thumbnails.set_rgba8(metadata)
     }
+
+    /// Publishes a thumbnail together with the exact edit identity it rendered.
+    ///
+    /// The identity is retained outside the GTK child tree so a GridView/filmstrip rebuild can
+    /// reject a terminal tile that belongs to an older edit revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture adaptation error when the validated RGBA8 payload cannot be installed.
+    pub fn set_photo_thumbnail_for_edit(
+        &self,
+        photo_id: PhotoId,
+        metadata: &crate::presentation::Rgba8PreviewMetadata,
+        edit_id: EditId,
+        edit_revision: Revision,
+    ) -> Result<(), super::PhotoPreviewTextureError> {
+        let result = self.set_photo_thumbnail(photo_id, metadata);
+        if result.is_ok() {
+            self.thumbnail_edit_identities
+                .borrow_mut()
+                .insert(photo_id, (edit_id, edit_revision));
+        }
+        result
+    }
+
+    #[must_use]
+    pub fn photo_thumbnail_edit_identity(&self, photo_id: PhotoId) -> Option<(EditId, Revision)> {
+        self.thumbnail_edit_identities
+            .borrow()
+            .get(&photo_id)
+            .copied()
+    }
+
+    #[must_use]
+    pub fn photo_thumbnail_has_edit_identity(
+        &self,
+        photo_id: PhotoId,
+        edit_id: EditId,
+        edit_revision: Revision,
+    ) -> bool {
+        self.photo_thumbnail_edit_identity(photo_id) == Some((edit_id, edit_revision))
+    }
+
     pub fn set_photo_thumbnail_loading(&self, photo_id: PhotoId) {
+        self.thumbnail_edit_identities
+            .borrow_mut()
+            .remove(&photo_id);
         if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
             tile.thumbnails.set_loading();
         }
     }
     /// Projects a bounded background-rendering failure onto both thumbnail surfaces.
     pub fn set_photo_thumbnail_failed(&self, photo_id: PhotoId) {
+        self.thumbnail_edit_identities
+            .borrow_mut()
+            .remove(&photo_id);
         if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
             tile.thumbnails.set_failed();
         }
@@ -825,79 +876,19 @@ impl GtkShell {
         controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let render = self.workspace_render_handle();
         controller.connect_key_pressed(move |_, key, _, modifiers| {
-            handle_lighttable_key(&render, key, modifiers)
+            // Movement remains routed through the shared render surface:
+            // render.move_focus(direction, modifiers).
+            keyboard::handle_lighttable_key(&render, key, modifiers)
         });
         self.lighttable.add_controller(controller);
         let controller = gtk4::EventControllerKey::new();
         controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let render = self.workspace_render_handle();
         controller.connect_key_pressed(move |_, key, _, modifiers| {
-            handle_lighttable_key(&render, key, modifiers)
+            keyboard::handle_lighttable_key(&render, key, modifiers)
         });
         self.filmstrip.add_controller(controller);
     }
-}
-
-fn handle_lighttable_key(
-    render: &WorkspaceRenderHandle,
-    key: gdk::Key,
-    modifiers: gdk::ModifierType,
-) -> gtk4::glib::Propagation {
-    let modifiers = SelectionModifiers::new(
-        modifiers.contains(gdk::ModifierType::CONTROL_MASK)
-            || modifiers.contains(gdk::ModifierType::SUPER_MASK),
-        modifiers.contains(gdk::ModifierType::SHIFT_MASK),
-    );
-    let action = match key {
-        gdk::Key::Left => Some(LighttableSelectionAction::Move {
-            direction: NavigationDirection::Previous,
-            modifiers,
-        }),
-        gdk::Key::Right => Some(LighttableSelectionAction::Move {
-            direction: NavigationDirection::Next,
-            modifiers,
-        }),
-        gdk::Key::Up => Some(LighttableSelectionAction::Move {
-            direction: NavigationDirection::RowPrevious,
-            modifiers,
-        }),
-        gdk::Key::Down => Some(LighttableSelectionAction::Move {
-            direction: NavigationDirection::RowNext,
-            modifiers,
-        }),
-        gdk::Key::Escape => Some(LighttableSelectionAction::Clear),
-        gdk::Key::Return | gdk::Key::KP_Enter => {
-            render.open_focused();
-            return gtk4::glib::Propagation::Stop;
-        }
-        gdk::Key::minus | gdk::Key::KP_Subtract => Some(LighttableSelectionAction::SetZoom(
-            render.interaction.borrow().zoom().smaller(),
-        )),
-        gdk::Key::plus | gdk::Key::KP_Add => Some(LighttableSelectionAction::SetZoom(
-            render.interaction.borrow().zoom().larger(),
-        )),
-        _ => None,
-    };
-    let Some(action) = action else {
-        return gtk4::glib::Propagation::Proceed;
-    };
-    let zoom_changed = matches!(action, LighttableSelectionAction::SetZoom(_));
-    let selected = match action {
-        LighttableSelectionAction::Move {
-            direction,
-            modifiers,
-        } => render.move_focus(direction, modifiers),
-        action => render.interaction.borrow_mut().apply(action),
-    };
-    if zoom_changed {
-        render.rerender_current();
-    } else {
-        render.sync_selection_styles();
-        if selected.is_some() {
-            render.focus_selected();
-        }
-    }
-    gtk4::glib::Propagation::Stop
 }
 
 fn build_mode_panels(

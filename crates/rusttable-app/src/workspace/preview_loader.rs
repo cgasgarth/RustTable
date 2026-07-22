@@ -115,6 +115,37 @@ pub(crate) fn load_selected_preview_from_repository_with_generation(
     generation: u64,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
     let edit = current_edit(repository, photo_id)?;
+    load_selected_preview_from_repository_for_edit_with_generation(
+        repository,
+        source_root,
+        photo_id,
+        edit.id(),
+        edit.revision(),
+        generation,
+    )
+}
+
+/// Renders the exact edit identity captured when a preview/thumbnail request was scheduled.
+pub(crate) fn load_selected_preview_from_repository_for_edit_with_generation(
+    repository: &RedbCatalogRepository,
+    source_root: &Path,
+    photo_id: PhotoId,
+    edit_id: rusttable_core::EditId,
+    edit_revision: rusttable_core::Revision,
+    generation: u64,
+) -> Result<SelectedPreview, WorkspacePreviewError> {
+    let edit = repository
+        .list()
+        .map_err(|error| {
+            WorkspacePreviewError::Preview(CatalogPreviewError::EditRepository(error))
+        })?
+        .into_iter()
+        .find(|candidate| {
+            candidate.photo_id() == photo_id
+                && candidate.id() == edit_id
+                && candidate.revision() == edit_revision
+        })
+        .ok_or(WorkspacePreviewError::MissingEdit { photo_id })?;
     let rendered = CatalogPreviewService::new(preview_service())
         .render_with_receipt(
             CatalogPreviewRequest::new(source_root, photo_id, edit.id())

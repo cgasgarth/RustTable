@@ -321,6 +321,18 @@ impl CatalogPreviewReceipt {
         self.output_transform
     }
 
+    /// Returns the exact edit identity used by the completed render.
+    #[must_use]
+    pub const fn edit_id(&self) -> EditId {
+        self.render.context().edit().source_edit_id()
+    }
+
+    /// Returns the revision used by the completed render.
+    #[must_use]
+    pub const fn edit_revision(&self) -> rusttable_core::Revision {
+        self.render.context().edit().edit_revision()
+    }
+
     #[must_use]
     pub const fn generation(&self) -> u64 {
         self.generation

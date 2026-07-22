@@ -9,6 +9,14 @@ use rusttable_render::{
 };
 
 fn key(edit_revision: u64, provenance: ThumbnailProvenance) -> ThumbnailKey {
+    key_for_edit(EditId::new(3).expect("edit"), edit_revision, provenance)
+}
+
+fn key_for_edit(
+    edit_id: EditId,
+    edit_revision: u64,
+    provenance: ThumbnailProvenance,
+) -> ThumbnailKey {
     let size = ThumbnailSize::fit(128, 96).expect("valid size");
     let request = ThumbnailRequest::new(MipmapLevel::new(2).expect("valid level"), size)
         .with_orientation(Orientation::Rotate90)
@@ -17,7 +25,7 @@ fn key(edit_revision: u64, provenance: ThumbnailProvenance) -> ThumbnailKey {
         ContentHash::Sha256([7; 32]),
         PhotoId::new(1).expect("photo"),
         AssetId::new(2).expect("asset"),
-        EditId::new(3).expect("edit"),
+        edit_id,
         Revision::from_u64(4),
         Revision::from_u64(edit_revision),
         10,
@@ -176,6 +184,7 @@ fn lifecycle_rebuilds_keys_and_invalidates_only_the_affected_edit() {
     let invalidation = lifecycle
         .apply(CacheChangeEvent::EditChanged {
             photo_id: first.photo_id(),
+            edit_id: first.edit_id(),
             edit_revision: first.edit_revision(),
         })
         .expect("invalidate");
@@ -193,6 +202,51 @@ fn lifecycle_rebuilds_keys_and_invalidates_only_the_affected_edit() {
             .store()
             .keys()
             .any(|cache_key| cache_key == second)
+    );
+    fs::remove_dir_all(directory).expect("cleanup");
+}
+
+#[test]
+fn lifecycle_invalidation_matches_edit_id_and_revision_not_revision_alone() {
+    let directory = tempfile_dir("edit-identity");
+    let first = key_for_edit(
+        EditId::new(3).expect("edit"),
+        5,
+        ThumbnailProvenance::PipelineRender,
+    );
+    let same_revision_other_edit = key_for_edit(
+        EditId::new(4).expect("edit"),
+        5,
+        ThumbnailProvenance::PipelineRender,
+    );
+    {
+        let (mut store, _) = CacheStore::open(&directory, limits()).expect("open");
+        store
+            .put(first, &image(), CacheTime::from_seconds(20))
+            .expect("put first");
+        store
+            .put(
+                same_revision_other_edit,
+                &image(),
+                CacheTime::from_seconds(20),
+            )
+            .expect("put second");
+    }
+    let (store, _) = CacheStore::open(&directory, limits()).expect("reopen");
+    let mut lifecycle = CacheLifecycle::new(store);
+    lifecycle
+        .apply(CacheChangeEvent::EditChanged {
+            photo_id: first.photo_id(),
+            edit_id: first.edit_id(),
+            edit_revision: first.edit_revision(),
+        })
+        .expect("invalidate identity");
+    assert!(lifecycle.store().keys().all(|key| key != first));
+    assert!(
+        lifecycle
+            .store()
+            .keys()
+            .any(|key| key == same_revision_other_edit)
     );
     fs::remove_dir_all(directory).expect("cleanup");
 }
