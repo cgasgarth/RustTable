@@ -8,14 +8,20 @@ use rusttable_ui::{ImportRequest, is_raw_path};
 
 use super::{
     CollectionController, GtkCatalogController, MacApplicationBridge, dispatch_open_request,
+    thumbnails::ThumbnailLifecycle,
 };
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the import bridge keeps the application ports explicit at this composition boundary"
+)]
 pub(super) fn dispatch_import_request(
     _shell: &rusttable_ui::GtkShell,
     native_bridge: &Rc<RefCell<MacApplicationBridge>>,
     active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
     active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
+    thumbnail_lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
     request: &ImportRequest,
     diagnostics: &AppDiagnostics,
 ) {
@@ -39,6 +45,7 @@ pub(super) fn dispatch_import_request(
             active_shell,
             active_catalog,
             active_collection,
+            thumbnail_lifecycle,
             diagnostics,
         );
     }

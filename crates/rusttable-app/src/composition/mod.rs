@@ -4,6 +4,7 @@ mod darkroom;
 mod import_bridge;
 mod selected_preview;
 pub(crate) mod services;
+mod thumbnails;
 
 pub use services::catalog_preview::smoke::{
     CatalogPreviewSmokeCancellation, CatalogPreviewSmokeError, CatalogPreviewSmokePorts,
@@ -11,7 +12,8 @@ pub use services::catalog_preview::smoke::{
     CatalogPreviewSmokeService, CatalogPreviewSmokeStage, CatalogPreviewSmokeStatus,
 };
 pub use services::catalog_preview::{
-    CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService,
+    CatalogPreviewError, CatalogPreviewReceipt, CatalogPreviewRender, CatalogPreviewRequest,
+    CatalogPreviewService, PreviewOutputTransform,
 };
 
 use crate::diagnostics::AppDiagnostics;
@@ -20,7 +22,6 @@ use crate::gtk_export::{
     ExportCancellation, ExportCollisionSelection, ExportCompletion, ExportRequest, ExportRunError,
     ExportSettings, ExportSizeSelection, ExportStage, ExportStatus, run_with_progress,
 };
-use crate::gtk_thumbnail_controller::{GtkThumbnailController, default_thumbnail_cache_root};
 use crate::lifecycle::run_with_bootstrap;
 use crate::macos::{
     COMMAND_QUIT_ACCELERATORS, MacApplicationBridge, MacApplicationCommand, MacOpenRequest,
@@ -52,6 +53,7 @@ use collection_bridge::{
 };
 use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
 use selected_preview::{PreviewLifecycle, start_selected_preview};
+use thumbnails::{ThumbnailLifecycle, start_workspace_thumbnails};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,12 +98,14 @@ pub fn run() -> Result<(), DesktopRunError> {
             let active_catalog = Rc::new(RefCell::new(None::<Rc<RefCell<GtkCatalogController>>>));
             let active_collection = Rc::new(RefCell::new(None::<CollectionController>));
             let native_bridge = Rc::new(RefCell::new(MacApplicationBridge::default()));
+            let thumbnail_lifecycle = Rc::new(RefCell::new(ThumbnailLifecycle::default()));
             connect_application_signals(
                 &application,
                 Rc::clone(&active_shell),
                 Rc::clone(&active_catalog),
                 Rc::clone(&active_collection),
                 Rc::clone(&native_bridge),
+                Rc::clone(&thumbnail_lifecycle),
                 diagnostics,
             );
             let exit_code = application.run();
@@ -130,6 +134,7 @@ fn connect_application_signals(
     active_catalog: Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: Rc<RefCell<Option<CollectionController>>>,
     native_bridge: Rc<RefCell<MacApplicationBridge>>,
+    thumbnail_lifecycle: Rc<RefCell<ThumbnailLifecycle>>,
     diagnostics: AppDiagnostics,
 ) {
     application.connect_startup({
@@ -142,6 +147,7 @@ fn connect_application_signals(
         let active_catalog = Rc::clone(&active_catalog);
         let active_collection = Rc::clone(&active_collection);
         let native_bridge = Rc::clone(&native_bridge);
+        let thumbnail_lifecycle = Rc::clone(&thumbnail_lifecycle);
         let diagnostics = diagnostics.clone();
         move |_, files, _hint| {
             let delivery = native_bridge
@@ -153,6 +159,7 @@ fn connect_application_signals(
                     &active_shell,
                     &active_catalog,
                     &active_collection,
+                    &thumbnail_lifecycle,
                     &diagnostics,
                 );
             }
@@ -169,6 +176,7 @@ fn connect_application_signals(
             &active_catalog,
             &active_collection,
             &native_bridge,
+            &thumbnail_lifecycle,
             &diagnostics,
         );
     });
@@ -181,6 +189,7 @@ fn activate_application(
     active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
     native_bridge: &Rc<RefCell<MacApplicationBridge>>,
+    thumbnail_lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
     diagnostics: &AppDiagnostics,
 ) {
     if let Some(shell) = active_shell.borrow().as_ref() {
@@ -230,7 +239,7 @@ fn activate_application(
     if let Some(controller) = active_collection.borrow().as_ref() {
         shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
     }
-    start_workspace_thumbnails(&shell, &catalog_controller.borrow());
+    start_workspace_thumbnails(&shell, &catalog_controller.borrow(), thumbnail_lifecycle);
     let collection_for_actions = Rc::clone(active_collection);
     shell.connect_collection_action(move |action| {
         let mut controller = collection_for_actions.borrow_mut();
@@ -265,6 +274,7 @@ fn activate_application(
     let import_active_shell = Rc::clone(active_shell);
     let import_active_catalog = Rc::clone(active_catalog);
     let import_active_collection = Rc::clone(active_collection);
+    let import_thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     let import_diagnostics = diagnostics.clone();
     shell.connect_import_action(move |action| {
         if let ImportAction::Import(request) = action {
@@ -274,6 +284,7 @@ fn activate_application(
                 &import_active_shell,
                 &import_active_catalog,
                 &import_active_collection,
+                &import_thumbnail_lifecycle,
                 &request,
                 &import_diagnostics,
             );
@@ -294,8 +305,16 @@ fn activate_application(
     let history_refresh_bridge = darkroom_panel_bridge.clone();
     let history_refresh_shell = shell.clone();
     let history_refresh_catalog = Rc::clone(&catalog_controller);
+    let thumbnail_refresh_shell = shell.clone();
+    let thumbnail_refresh_catalog = Rc::clone(&catalog_controller);
+    let thumbnail_refresh_lifecycle = Rc::clone(thumbnail_lifecycle);
     darkroom_bridge.set_after_commit(Rc::new(move || {
         history_refresh_bridge.refresh(&history_refresh_shell, &history_refresh_catalog.borrow());
+        start_workspace_thumbnails(
+            &thumbnail_refresh_shell,
+            &thumbnail_refresh_catalog.borrow(),
+            &thumbnail_refresh_lifecycle,
+        );
     }));
     let export_selection = export_panel.clone();
     let export_selection_lifecycle = Rc::clone(&export_lifecycle);
@@ -375,6 +394,7 @@ fn activate_application(
             active_shell,
             active_catalog,
             active_collection,
+            thumbnail_lifecycle,
             diagnostics,
         );
     }
@@ -518,6 +538,7 @@ fn dispatch_open_request(
     active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
     active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
+    thumbnail_lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
     diagnostics: &AppDiagnostics,
 ) {
     let Some(catalog) = active_catalog.borrow().as_ref().cloned() else {
@@ -530,7 +551,7 @@ fn dispatch_open_request(
     if let Some(path) = request.catalog_path() {
         *catalog.borrow_mut() = GtkCatalogController::load_catalog_at(path.to_path_buf());
         refresh_catalog_shell(&shell, &catalog, active_collection);
-        start_workspace_thumbnails(&shell, &catalog.borrow());
+        start_workspace_thumbnails(&shell, &catalog.borrow(), thumbnail_lifecycle);
         if catalog.borrow().opened_successfully() {
             record_recent_path(path);
         }
@@ -562,6 +583,7 @@ fn dispatch_open_request(
     });
 
     let active_collection = Rc::clone(active_collection);
+    let thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     glib::timeout_add_local(Duration::from_millis(16), move || {
         match receiver.try_recv() {
             Ok(batch) => {
@@ -572,7 +594,7 @@ fn dispatch_open_request(
                 if let Some(photo_id) = selected_photo {
                     let _ = shell.open_photo(photo_id);
                 }
-                start_workspace_thumbnails(&shell, &catalog.borrow());
+                start_workspace_thumbnails(&shell, &catalog.borrow(), &thumbnail_lifecycle);
                 ControlFlow::Break
             }
             Err(TryRecvError::Empty) => ControlFlow::Continue,
@@ -615,77 +637,6 @@ fn refresh_catalog_shell(
         shell.set_collection_filter_state(&collection_filter_state(&collection.snapshot()));
     }
     drop(controller);
-}
-
-enum ThumbnailWorkerMessage {
-    Ready(crate::gtk_thumbnail_controller::GtkThumbnail),
-    Failed(rusttable_core::PhotoId),
-    Finished,
-}
-
-fn start_workspace_thumbnails(shell: &rusttable_ui::GtkShell, catalog: &GtkCatalogController) {
-    let crate::gtk_controller::GtkCatalogState::Ready(ready) = catalog.state() else {
-        return;
-    };
-    let catalog_path = ready.location().catalog_path().to_path_buf();
-    let source_root = ready.location().source_root().to_path_buf();
-    let photo_ids = ready
-        .workspace()
-        .cards()
-        .map(rusttable_ui::PhotoCardViewModel::id)
-        .collect::<Vec<_>>();
-    let (sender, receiver) = mpsc::channel();
-    let worker = thread::Builder::new()
-        .name("rusttable-thumbnails".to_owned())
-        .spawn(move || {
-            let Ok(mut controller) = GtkThumbnailController::open(
-                catalog_path,
-                source_root,
-                default_thumbnail_cache_root(),
-            ) else {
-                for photo_id in photo_ids {
-                    let _ = sender.send(ThumbnailWorkerMessage::Failed(photo_id));
-                }
-                let _ = sender.send(ThumbnailWorkerMessage::Finished);
-                return;
-            };
-            for photo_id in photo_ids {
-                let message = controller.render(photo_id).map_or_else(
-                    |_| ThumbnailWorkerMessage::Failed(photo_id),
-                    ThumbnailWorkerMessage::Ready,
-                );
-                if sender.send(message).is_err() {
-                    return;
-                }
-            }
-            let _ = sender.send(ThumbnailWorkerMessage::Finished);
-        });
-    if worker.is_err() {
-        return;
-    }
-
-    let shell = shell.clone();
-    glib::timeout_add_local(Duration::from_millis(16), move || {
-        loop {
-            match receiver.try_recv() {
-                Ok(ThumbnailWorkerMessage::Ready(thumbnail)) => {
-                    if shell
-                        .set_photo_thumbnail(thumbnail.photo_id(), thumbnail.metadata())
-                        .is_err()
-                    {
-                        shell.set_photo_thumbnail_failed(thumbnail.photo_id());
-                    }
-                }
-                Ok(ThumbnailWorkerMessage::Failed(photo_id)) => {
-                    shell.set_photo_thumbnail_failed(photo_id);
-                }
-                Ok(ThumbnailWorkerMessage::Finished) | Err(TryRecvError::Disconnected) => {
-                    return ControlFlow::Break;
-                }
-                Err(TryRecvError::Empty) => return ControlFlow::Continue,
-            }
-        }
-    });
 }
 
 #[derive(Debug, Default)]

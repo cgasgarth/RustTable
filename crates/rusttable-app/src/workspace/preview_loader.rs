@@ -6,7 +6,10 @@ use rusttable_core::{Edit, PhotoId};
 use rusttable_image::{DecodeLimits, ImageDimensions};
 use rusttable_render::{PreviewBounds, RenderTarget};
 
-use crate::{CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService, PreviewService};
+use crate::{
+    CatalogPreviewError, CatalogPreviewReceipt, CatalogPreviewRequest, CatalogPreviewService,
+    PreviewService,
+};
 
 const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_DECODE_DIMENSION: u32 = 16_384;
@@ -20,12 +23,25 @@ pub struct SelectedPreview {
     photo_id: PhotoId,
     dimensions: ImageDimensions,
     pixels: Vec<u8>,
+    receipt: CatalogPreviewReceipt,
 }
 
 impl SelectedPreview {
     #[must_use]
     pub fn into_parts(self) -> (PhotoId, ImageDimensions, Vec<u8>) {
         (self.photo_id, self.dimensions, self.pixels)
+    }
+
+    #[must_use]
+    pub(crate) fn into_render_parts(
+        self,
+    ) -> (PhotoId, ImageDimensions, Vec<u8>, CatalogPreviewReceipt) {
+        (self.photo_id, self.dimensions, self.pixels, self.receipt)
+    }
+
+    #[must_use]
+    pub const fn receipt(&self) -> &CatalogPreviewReceipt {
+        &self.receipt
     }
 }
 
@@ -72,30 +88,43 @@ pub fn load_selected_preview(
     source_root: &Path,
     photo_id: PhotoId,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
-    let repository =
-        RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
-    load_selected_preview_from_repository(&repository, source_root, photo_id)
+    load_selected_preview_with_generation(catalog_path, source_root, photo_id, 0)
 }
 
-/// Renders a selected preview while retaining the caller's live catalog lease.
-///
-/// # Errors
-///
-/// Returns a typed edit-selection, decode, or CPU-render failure.
-pub(crate) fn load_selected_preview_from_repository(
+/// Renders the selected persisted edit and records the caller's publication generation.
+pub(crate) fn load_selected_preview_with_generation(
+    catalog_path: &Path,
+    source_root: &Path,
+    photo_id: PhotoId,
+    generation: u64,
+) -> Result<SelectedPreview, WorkspacePreviewError> {
+    let repository =
+        RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
+    load_selected_preview_from_repository_with_generation(
+        &repository,
+        source_root,
+        photo_id,
+        generation,
+    )
+}
+
+pub(crate) fn load_selected_preview_from_repository_with_generation(
     repository: &RedbCatalogRepository,
     source_root: &Path,
     photo_id: PhotoId,
+    generation: u64,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
     let edit = current_edit(repository, photo_id)?;
-    let output = CatalogPreviewService::new(preview_service())
-        .render(
-            CatalogPreviewRequest::new(source_root, photo_id, edit.id()),
+    let rendered = CatalogPreviewService::new(preview_service())
+        .render_with_receipt(
+            CatalogPreviewRequest::new(source_root, photo_id, edit.id())
+                .with_generation(generation),
             repository,
             repository,
         )
         .map_err(WorkspacePreviewError::Preview)?;
-    Ok(selected_preview(photo_id, &output))
+    let (output, receipt) = rendered.into_parts();
+    Ok(selected_preview(photo_id, &output, receipt))
 }
 
 /// Resolves the selected persisted edit and renders it at source resolution.
@@ -172,10 +201,11 @@ pub fn load_preview_for_edit(
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
     let repository =
         RedbCatalogRepository::open(catalog_path).map_err(WorkspacePreviewError::Catalog)?;
-    let output = CatalogPreviewService::new(preview_service())
-        .render_edit(source_root, edit, &repository)
+    let rendered = CatalogPreviewService::new(preview_service())
+        .render_edit_with_receipt(source_root, edit, &repository, 0)
         .map_err(WorkspacePreviewError::Preview)?;
-    Ok(selected_preview(photo_id, &output))
+    let (output, receipt) = rendered.into_parts();
+    Ok(selected_preview(photo_id, &output, receipt))
 }
 
 /// Loads the exact current persisted edit for one selected catalog photo.
@@ -209,11 +239,16 @@ fn select_current_edit(edits: Vec<Edit>, photo_id: PhotoId) -> Option<Edit> {
         .max_by_key(|edit| (edit.revision().get(), edit.id().get()))
 }
 
-fn selected_preview(photo_id: PhotoId, output: &rusttable_render::RenderOutput) -> SelectedPreview {
+fn selected_preview(
+    photo_id: PhotoId,
+    output: &rusttable_render::RenderOutput,
+    receipt: CatalogPreviewReceipt,
+) -> SelectedPreview {
     SelectedPreview {
         photo_id,
         dimensions: output.image().dimensions(),
         pixels: output.image().pixels().to_vec(),
+        receipt,
     }
 }
 

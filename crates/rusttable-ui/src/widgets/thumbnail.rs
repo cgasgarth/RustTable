@@ -189,6 +189,11 @@ impl ThumbnailPair {
         self.filmstrip.set_state(state)
     }
 
+    pub(crate) fn set_loading(&self) {
+        self.lighttable.set_loading();
+        self.filmstrip.set_loading();
+    }
+
     #[must_use]
     pub(crate) fn state(&self) -> ThumbnailState {
         self.lighttable.state()

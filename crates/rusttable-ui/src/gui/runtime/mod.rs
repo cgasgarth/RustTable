@@ -694,12 +694,10 @@ impl GtkShell {
         self.workspace_render_handle()
             .render(view_model, Some(&matching_photo_ids));
     }
-
     /// Compatibility spelling for updating the lighttable presentation model.
     pub fn set_photo_workspace(&self, view_model: &PhotoWorkspaceViewModel) {
         self.set_lighttable_workspace(view_model);
     }
-
     /// Installs a background-rendered thumbnail into the synchronized grid and filmstrip tiles.
     ///
     /// # Errors
@@ -716,14 +714,17 @@ impl GtkShell {
         };
         tile.thumbnails.set_rgba8(metadata)
     }
-
+    pub fn set_photo_thumbnail_loading(&self, photo_id: PhotoId) {
+        if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
+            tile.thumbnails.set_loading();
+        }
+    }
     /// Projects a bounded background-rendering failure onto both thumbnail surfaces.
     pub fn set_photo_thumbnail_failed(&self, photo_id: PhotoId) {
         if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
             tile.thumbnails.set_failed();
         }
     }
-
     /// Updates the darkroom image detail and its controller-owned module panels.
     ///
     /// This surface deliberately accepts only `rusttable-ui` presentation

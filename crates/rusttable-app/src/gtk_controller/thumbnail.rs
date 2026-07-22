@@ -16,12 +16,14 @@ use rusttable_render::{
 use rusttable_ui::{PresentationText, PreviewDimensions, Rgba8PreviewMetadata};
 use sha2::{Digest, Sha256};
 
+use crate::PreviewOutputTransform;
+
 const THUMBNAIL_WIDTH: u32 = 180;
 const THUMBNAIL_HEIGHT: u32 = 120;
 const MAX_THUMBNAIL_BYTES: u64 = 2 * 1024 * 1024;
 const CACHE_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const RENDERER_VERSION: u32 = 1;
-const PROFILE_VERSION: u32 = 1;
+const PROFILE_VERSION: u32 = 2;
 
 /// Whether the visible thumbnail came from durable cache or a fresh bounded render.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +38,9 @@ pub struct GtkThumbnail {
     photo_id: PhotoId,
     metadata: Rgba8PreviewMetadata,
     source: GtkThumbnailSource,
+    cache_identity: [u8; 32],
+    render_receipt_identity: Option<[u8; 32]>,
+    output_transform: PreviewOutputTransform,
 }
 
 impl GtkThumbnail {
@@ -52,6 +57,21 @@ impl GtkThumbnail {
     #[must_use]
     pub const fn source(&self) -> GtkThumbnailSource {
         self.source
+    }
+
+    #[must_use]
+    pub const fn cache_identity(&self) -> [u8; 32] {
+        self.cache_identity
+    }
+
+    #[must_use]
+    pub const fn render_receipt_identity(&self) -> Option<[u8; 32]> {
+        self.render_receipt_identity
+    }
+
+    #[must_use]
+    pub const fn output_transform(&self) -> PreviewOutputTransform {
+        self.output_transform
     }
 }
 
@@ -119,6 +139,19 @@ impl GtkThumbnailController {
     /// Returns a closed error when catalog identity, preview rendering, cache publication, or
     /// presentation validation fails.
     pub fn render(&mut self, photo_id: PhotoId) -> Result<GtkThumbnail, GtkThumbnailError> {
+        self.render_with_generation(photo_id, 0)
+    }
+
+    /// Loads or renders one visible thumbnail for a checked publication generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog, cache, render, or presentation error.
+    pub fn render_with_generation(
+        &mut self,
+        photo_id: PhotoId,
+        generation: u64,
+    ) -> Result<GtkThumbnail, GtkThumbnailError> {
         let record = self
             .records
             .get(&photo_id)
@@ -136,16 +169,24 @@ impl GtkThumbnailController {
             .get(key, now)
             .map_err(|_| GtkThumbnailError::Cache)?
         {
-            return present(photo_id, entry.image(), GtkThumbnailSource::Cache);
+            return present(
+                photo_id,
+                entry.image(),
+                GtkThumbnailSource::Cache,
+                key.digest(),
+                None,
+            );
         }
 
-        let preview = crate::workspace::preview_loader::load_selected_preview_from_repository(
+        let preview = crate::workspace::preview_loader::load_selected_preview_from_repository_with_generation(
             &self.repository,
             &self.source_root,
             photo_id,
+            generation,
         )
         .map_err(|_| GtkThumbnailError::Preview)?;
-        let (_, dimensions, pixels) = preview.into_parts();
+        let (_, dimensions, pixels, receipt) = preview.into_render_parts();
+        let render_receipt_identity = Some(receipt.identity_hash());
         let source = DecodedImage::new_with_color_encoding(dimensions, pixels, ColorEncoding::Srgb)
             .map_err(|_| GtkThumbnailError::Preview)?;
         let thumbnail = ThumbnailGenerator::generate(
@@ -159,7 +200,13 @@ impl GtkThumbnailController {
             .store_mut()
             .put(key, &thumbnail, now)
             .map_err(|_| GtkThumbnailError::Cache)?;
-        present(photo_id, &thumbnail, GtkThumbnailSource::Render)
+        present(
+            photo_id,
+            &thumbnail,
+            GtkThumbnailSource::Render,
+            key.digest(),
+            render_receipt_identity,
+        )
     }
 }
 
@@ -193,7 +240,7 @@ fn thumbnail_key(
         edit.revision(),
         u32::from(RASTER_DECODER_IDENTITY_VERSION),
         RENDERER_VERSION,
-        [0; 32],
+        output_transform_identity(),
         PROFILE_VERSION,
         configuration_identity(request),
         request,
@@ -203,16 +250,22 @@ fn thumbnail_key(
 fn configuration_identity(request: ThumbnailRequest) -> [u8; 32] {
     let (width, height) = request.size().dimensions();
     let mut bytes = Vec::with_capacity(16);
-    bytes.extend_from_slice(b"GTKTHUMB1");
+    bytes.extend_from_slice(b"GTKTHUMB2:sRGB-display-fallback");
     bytes.extend_from_slice(&width.to_be_bytes());
     bytes.extend_from_slice(&height.to_be_bytes());
     Sha256::digest(bytes).into()
+}
+
+fn output_transform_identity() -> [u8; 32] {
+    Sha256::digest(b"rusttable.srgb-display-fallback.v1").into()
 }
 
 fn present(
     photo_id: PhotoId,
     image: &DecodedImage,
     source: GtkThumbnailSource,
+    cache_identity: [u8; 32],
+    render_receipt_identity: Option<[u8; 32]>,
 ) -> Result<GtkThumbnail, GtkThumbnailError> {
     let dimensions =
         PreviewDimensions::new(image.dimensions().width(), image.dimensions().height())
@@ -225,6 +278,9 @@ fn present(
         photo_id,
         metadata,
         source,
+        cache_identity,
+        render_receipt_identity,
+        output_transform: PreviewOutputTransform::SrgbDisplayFallback,
     })
 }
 
@@ -340,5 +396,12 @@ mod tests {
         let cached = reopened.render(photo_id).expect("read cached thumbnail");
         assert_eq!(cached.source(), GtkThumbnailSource::Cache);
         assert_eq!(cached.metadata(), rendered.metadata());
+        assert_eq!(cached.cache_identity(), rendered.cache_identity());
+        assert!(rendered.render_receipt_identity().is_some());
+        assert!(cached.render_receipt_identity().is_none());
+        assert_eq!(
+            cached.output_transform(),
+            crate::PreviewOutputTransform::SrgbDisplayFallback
+        );
     }
 }
