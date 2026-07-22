@@ -11,7 +11,7 @@ pub use model::{
     RasterPreviewPort, RasterPreviewReceipt,
 };
 pub use reference::{
-    decode_reference_source, encode_reference_source, reference_path_identity,
-    reference_source_identity,
+    decode_reference_source, encode_reference_source, normalize_reference_path,
+    reference_path_identity, reference_source_identity,
 };
 pub use service::RasterImportService;

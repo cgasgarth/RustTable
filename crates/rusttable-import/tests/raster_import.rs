@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Barrier, Mutex};
 
-use rusttable_catalog::{ImportMetadataStatus, ImportRegistration};
+use rusttable_catalog::{ImportMetadataStatus, ImportRegistration, ReferencePathIdentity};
 use rusttable_core::{
     ContentHash, ImageMetadata, MetadataEntry, MetadataText, ParameterName, ParameterValue,
 };
@@ -57,6 +57,23 @@ struct MemoryCatalog {
 }
 
 impl AtomicRasterCatalog for MemoryCatalog {
+    fn find_by_source(
+        &self,
+        identity: ReferencePathIdentity,
+    ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError> {
+        Ok(self
+            .entries
+            .iter()
+            .find(|entry| {
+                rusttable_import::reference_path_identity(
+                    &decode_reference_source(entry.record.source()).expect("reference source"),
+                )
+                .expect("path identity")
+                    == identity.as_bytes()
+            })
+            .cloned())
+    }
+
     fn find_by_content(
         &self,
         identity: RasterDuplicateIdentity,
@@ -83,6 +100,20 @@ impl AtomicRasterCatalog for MemoryCatalog {
             return Err(AtomicRasterCatalogError::CommitFailed);
         }
         self.entries.push(entry.clone());
+        Ok(())
+    }
+
+    fn replace_import(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        _registration: &ImportRegistration,
+    ) -> Result<(), AtomicRasterCatalogError> {
+        let slot = self
+            .entries
+            .iter_mut()
+            .find(|candidate| candidate.record.photo().id() == entry.record.photo().id())
+            .ok_or(AtomicRasterCatalogError::Conflict)?;
+        slot.record = entry.record.clone();
         Ok(())
     }
 
@@ -436,7 +467,7 @@ fn raster_import_real_png_jpeg_tiff_is_ordered_signature_first_and_neutral() {
 }
 
 #[test]
-fn duplicate_content_reuses_one_photo_and_preserves_selection_order() {
+fn duplicate_content_keeps_distinct_paths_and_preserves_selection_order() {
     let directory = TempDirectory::new();
     let bytes = fixture("rgba-2x1.png.b64");
     let first = directory.write("first.png", &bytes);
@@ -454,10 +485,10 @@ fn duplicate_content_reuses_one_photo_and_preserves_selection_order() {
     let receipts = batch.receipts().collect::<Vec<_>>();
 
     assert_eq!(receipts[0].status, RasterImportStatus::Imported);
-    assert_eq!(receipts[1].status, RasterImportStatus::AlreadyImported);
-    assert_eq!(receipts[0].photo_id, receipts[1].photo_id);
+    assert_eq!(receipts[1].status, RasterImportStatus::Imported);
+    assert_ne!(receipts[0].photo_id, receipts[1].photo_id);
     assert_eq!(batch.first_selected_photo(), receipts[0].photo_id);
-    assert_eq!(catalog.entries.len(), 1);
+    assert_eq!(catalog.entries.len(), 2);
 }
 
 #[test]

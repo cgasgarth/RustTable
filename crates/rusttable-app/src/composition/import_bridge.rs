@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::diagnostics::AppDiagnostics;
+use rusttable_import::normalize_reference_path;
 use rusttable_ui::{ImportRequest, is_raw_path};
 
 use super::{
@@ -58,6 +59,7 @@ fn effective_import_paths(
 ) -> Vec<PathBuf> {
     paths
         .into_iter()
+        .map(|path| normalize_reference_path(&path).unwrap_or(path))
         .filter(|path| !request.ignore_nonraws() || is_raw_path(path))
         .filter(|path| !request.select_new() || !existing.contains(path))
         .collect()

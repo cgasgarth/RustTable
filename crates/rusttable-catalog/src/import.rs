@@ -175,6 +175,18 @@ impl ImportRecord {
             metadata,
         }
     }
+
+    /// Returns the record with the same photo, evidence, and metadata under a
+    /// newly validated canonical source key.
+    #[must_use]
+    pub fn with_source(&self, source: SourcePath) -> Self {
+        Self {
+            photo: self.photo.clone(),
+            source,
+            probe: self.probe,
+            metadata: self.metadata.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

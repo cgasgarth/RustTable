@@ -14,7 +14,8 @@ pub use raster::{
     RasterImportObserver, RasterImportProgress, RasterImportReceipt, RasterImportRequest,
     RasterImportRequestError, RasterImportService, RasterImportStage, RasterImportStatus,
     RasterPreviewError, RasterPreviewPort, RasterPreviewReceipt, decode_reference_source,
-    encode_reference_source, reference_path_identity, reference_source_identity,
+    encode_reference_source, normalize_reference_path, reference_path_identity,
+    reference_source_identity,
 };
 pub use request::SourceImportRequest;
 pub use service::{SourceImportError, SourceImportService};

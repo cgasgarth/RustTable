@@ -1,5 +1,6 @@
 mod support;
 
+use redb::{Database, TableDefinition};
 use rusttable_catalog::{
     EditRepository, ImportDetails, ImportMetadataStatus, ImportMetadataSummary, ImportRegistration,
     ImportRegistrationReceipt, ImportRepository, ReferencePathIdentity,
@@ -38,6 +39,18 @@ fn registration(
     .expect("safe receipt");
     let details = ImportDetails::new(ImportMetadataSummary::from_record(record), receipt);
     ImportRegistration::new(details, ReferencePathIdentity::new([path_identity; 32]))
+}
+
+fn reference_source(path: &str, marker: char) -> rusttable_catalog::SourcePath {
+    let hash = marker.to_string().repeat(64);
+    let mut encoded_path = String::new();
+    for byte in path.bytes() {
+        use std::fmt::Write as _;
+
+        write!(&mut encoded_path, "{byte:02x}").expect("string formatting");
+    }
+    rusttable_catalog::SourcePath::new(&format!("reference-v1/{hash}/{encoded_path}"))
+        .expect("reference source")
 }
 
 #[test]
@@ -211,4 +224,74 @@ fn unavailable_metadata_status_and_refresh_are_atomic_and_same_photo() {
     );
     assert_eq!(ImportRepository::list(&repository).unwrap().len(), 1);
     support::remove(&path);
+}
+
+#[test]
+fn source_identity_migration_rebuilds_normalized_path_index_and_reports_ambiguity() {
+    const SCHEMA: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_schema");
+    const VERSION_KEY: &[u8] = b"schema-version";
+    let path = support::temp_path("source-identity-migration");
+    let physical = "/photos/./roll/../same.jpg";
+    let first = support::record(reference_source(physical, 'a').as_str(), 51, 52, 11);
+    let second = support::record(reference_source(physical, 'b').as_str(), 53, 54, 12);
+    {
+        let mut repository = RedbCatalogRepository::open(&path).expect("open");
+        let first_edit = edit(first.photo().id(), 55);
+        let second_edit = edit(second.photo().id(), 56);
+        repository
+            .commit_import_with_edit(
+                &first,
+                &first_edit,
+                &registration(&first, &first_edit, "first.jpg", 1),
+            )
+            .expect("first commit");
+        repository
+            .commit_import_with_edit(
+                &second,
+                &second_edit,
+                &registration(&second, &second_edit, "second.jpg", 2),
+            )
+            .expect("second commit");
+    }
+    {
+        let database = Database::open(&path).expect("raw reopen");
+        let transaction = database.begin_write().expect("write version");
+        let mut schema = transaction.open_table(SCHEMA).expect("schema");
+        schema
+            .insert(VERSION_KEY, &[9][..])
+            .expect("legacy version");
+        drop(schema);
+        transaction.commit().expect("version commit");
+    }
+
+    let repository = RedbCatalogRepository::open(&path).expect("migrate");
+    let identity = rusttable_import_path_identity(physical);
+    assert!(
+        repository
+            .find_by_reference_path(identity.into())
+            .expect("path lookup")
+            .is_some()
+    );
+    let report = repository
+        .source_reconciliation_report()
+        .expect("reconciliation report");
+    assert_eq!(report.migrated_entries, 1);
+    assert_eq!(report.ambiguous_entries, 1);
+    assert_eq!(report.invalid_entries, 0);
+    assert_eq!(
+        ImportRepository::list(&repository).expect("all rows").len(),
+        2
+    );
+    support::remove(&path);
+}
+
+fn rusttable_import_path_identity(path: &str) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+
+    let normalized = "/photos/same.jpg";
+    let mut hasher = Sha256::new();
+    hasher.update(b"rusttable-reference-path-v1\0");
+    hasher.update(normalized.as_bytes());
+    let _ = path;
+    hasher.finalize().into()
 }

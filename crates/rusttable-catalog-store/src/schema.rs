@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 use rusttable_catalog::{CanonicalPayload, RepositoryError};
+use sha2::{Digest, Sha256};
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 9;
+pub const CURRENT_SCHEMA_VERSION: u8 = 10;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -27,6 +28,8 @@ pub(crate) const IMPORT_DETAILS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_import_details");
 pub(crate) const REFERENCE_PATH_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_reference_path_index");
+pub(crate) const SOURCE_RECONCILIATION_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_source_reconciliation");
 pub(crate) const RECIPES_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_export_recipes");
 pub(crate) const RECIPE_HEADS_TABLE: TableDefinition<&[u8], &[u8]> =
@@ -133,6 +136,9 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
             .open_table(REFERENCE_PATH_INDEX_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
         transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
+        transaction
             .open_table(RECIPES_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
         transaction
@@ -143,7 +149,6 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
-        open_organization_tables(&transaction)?;
     }
     transaction
         .commit()
@@ -176,7 +181,12 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
         [8] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v9(database)
+            migrate_to_v9(database).and_then(|()| migrate_to_v10(database))
+        }
+        [9] => {
+            drop(schema);
+            drop(transaction);
+            migrate_to_v10(database)
         }
         [5] => {
             drop(schema);
@@ -212,6 +222,7 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
         EDITS_TABLE,
         IMPORT_DETAILS_TABLE,
         REFERENCE_PATH_INDEX_TABLE,
+        SOURCE_RECONCILIATION_TABLE,
         RECIPES_TABLE,
         RECIPE_HEADS_TABLE,
         RECIPE_REFERENCES_TABLE,
@@ -251,6 +262,9 @@ fn migrate_legacy_to_v4(database: &Database) -> Result<(), RepositoryError> {
         if !is_legacy {
             return Err(RepositoryError::CorruptPersistedData);
         }
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
         transaction
             .open_table(RECORDS_TABLE)
             .map_err(|_| RepositoryError::CorruptPersistedData)?;
@@ -318,6 +332,9 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
         open_organization_tables(&transaction)?;
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -334,6 +351,9 @@ fn migrate_to_v5(database: &Database) -> Result<(), RepositoryError> {
     open_collection_tables(&transaction)?;
     open_history_tables(&transaction)?;
     open_organization_tables(&transaction)?;
+    transaction
+        .open_table(SOURCE_RECONCILIATION_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
     let mut schema = transaction
         .open_table(SCHEMA_TABLE)
         .map_err(|_| RepositoryError::CorruptPersistedData)?;
@@ -367,6 +387,9 @@ fn migrate_to_v6(database: &Database) -> Result<(), RepositoryError> {
         backfill_history_blobs(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -471,6 +494,9 @@ fn migrate_to_v7(database: &Database) -> Result<(), RepositoryError> {
         drop(version);
         open_history_tables(&transaction)?;
         backfill_history_blobs(&transaction)?;
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
         schema
             .insert(VERSION_KEY, &[7][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -500,6 +526,9 @@ fn migrate_to_v8(database: &Database) -> Result<(), RepositoryError> {
         open_organization_tables(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -526,13 +555,187 @@ fn migrate_to_v9(database: &Database) -> Result<(), RepositoryError> {
         }
         drop(version);
         open_organization_tables(&transaction)?;
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
         schema
-            .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+            .insert(VERSION_KEY, &[9][..])
             .map_err(|_| RepositoryError::Unavailable)?;
     }
     transaction
         .commit()
         .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn migrate_to_v10(database: &Database) -> Result<(), RepositoryError> {
+    let transaction = database
+        .begin_write()
+        .map_err(|_| RepositoryError::Unavailable)?;
+    let existing = {
+        let paths = transaction
+            .open_table(REFERENCE_PATH_INDEX_TABLE)
+            .map_err(|_| RepositoryError::CorruptPersistedData)?;
+        paths
+            .iter()
+            .map_err(|_| RepositoryError::CorruptPersistedData)?
+            .map(|entry| {
+                let (key, value) = entry.map_err(|_| RepositoryError::CorruptPersistedData)?;
+                Ok::<_, RepositoryError>((key.value().to_vec(), value.value().to_vec()))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    if existing.is_empty() {
+        transaction
+            .open_table(SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| RepositoryError::Unavailable)?;
+        let mut schema = transaction
+            .open_table(SCHEMA_TABLE)
+            .map_err(|_| RepositoryError::CorruptPersistedData)?;
+        schema
+            .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+            .map_err(|_| RepositoryError::Unavailable)?;
+        drop(schema);
+        return transaction
+            .commit()
+            .map_err(|_| RepositoryError::CommitFailure);
+    }
+    let mut canonical = transaction
+        .open_table(REFERENCE_PATH_INDEX_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    let mut reconciliation = transaction
+        .open_table(SOURCE_RECONCILIATION_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    let mut owners = BTreeMap::<[u8; 32], Vec<u8>>::new();
+    let mut sequence = 0_u64;
+    for (old_identity, source) in existing {
+        let Ok(path) = decode_reference_path(&source) else {
+            let key = format!("invalid/{sequence}").into_bytes();
+            reconciliation
+                .insert(key.as_slice(), source.as_slice())
+                .map_err(|_| RepositoryError::Unavailable)?;
+            sequence = sequence.saturating_add(1);
+            continue;
+        };
+        let Some(identity) = canonical_path_identity(&path) else {
+            let key = format!("invalid/{sequence}").into_bytes();
+            reconciliation
+                .insert(key.as_slice(), source.as_slice())
+                .map_err(|_| RepositoryError::Unavailable)?;
+            sequence = sequence.saturating_add(1);
+            continue;
+        };
+        if let Some(previous_source) = owners.get(&identity) {
+            if previous_source != &source {
+                let mut key = b"ambiguous/".to_vec();
+                key.extend_from_slice(&identity);
+                key.extend_from_slice(&sequence.to_be_bytes());
+                reconciliation
+                    .insert(key.as_slice(), source.as_slice())
+                    .map_err(|_| RepositoryError::Unavailable)?;
+                sequence = sequence.saturating_add(1);
+                continue;
+            }
+        } else {
+            owners.insert(identity, source.clone());
+            canonical
+                .insert(identity.as_slice(), source.as_slice())
+                .map_err(|_| RepositoryError::Unavailable)?;
+        }
+        if old_identity.as_slice() != identity.as_slice() {
+            let mut key = b"migrated/".to_vec();
+            key.extend_from_slice(&identity);
+            reconciliation
+                .insert(key.as_slice(), old_identity.as_slice())
+                .map_err(|_| RepositoryError::Unavailable)?;
+        }
+    }
+    drop(reconciliation);
+    drop(canonical);
+    let mut schema = transaction
+        .open_table(SCHEMA_TABLE)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    schema
+        .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+        .map_err(|_| RepositoryError::Unavailable)?;
+    drop(schema);
+    transaction
+        .commit()
+        .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn decode_reference_path(source: &[u8]) -> Result<PathBuf, ()> {
+    let source = std::str::from_utf8(source).map_err(|_| ())?;
+    let mut components = source.split('/');
+    if components.next() != Some("reference-v1")
+        || components.next().is_none()
+        || components.next().is_none()
+        || components.next().is_some()
+    {
+        return Err(());
+    }
+    let encoded = source.split('/').nth(2).ok_or(())?;
+    let bytes = decode_hex(encoded)?;
+    let path = String::from_utf8(bytes).map_err(|_| ())?;
+    Ok(PathBuf::from(path))
+}
+
+fn canonical_path_identity(path: &Path) -> Option<[u8; 32]> {
+    let mut normalized = PathBuf::new();
+    let mut components = 0_usize;
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(Path::new(std::path::MAIN_SEPARATOR_STR)),
+            Component::CurDir => {}
+            Component::Normal(value) => {
+                normalized.push(value);
+                components = components.saturating_add(1);
+            }
+            Component::ParentDir => {
+                if components == 0 {
+                    if path.is_absolute() {
+                        continue;
+                    }
+                    return None;
+                }
+                normalized.pop();
+                components = components.saturating_sub(1);
+            }
+        }
+    }
+    let value = normalized.to_str()?;
+    if value.is_empty() || (path.is_relative() && components == 0) {
+        return None;
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"rusttable-reference-path-v1\0");
+    hasher.update(value.as_bytes());
+    Some(hasher.finalize().into())
+}
+
+fn decode_hex(encoded: &str) -> Result<Vec<u8>, ()> {
+    if !encoded.len().is_multiple_of(2) {
+        return Err(());
+    }
+    encoded
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| {
+            let high = match pair[0] {
+                b'0'..=b'9' => pair[0] - b'0',
+                b'a'..=b'f' => pair[0] - b'a' + 10,
+                _ => return Err(()),
+            };
+            let low = match pair[1] {
+                b'0'..=b'9' => pair[1] - b'0',
+                b'a'..=b'f' => pair[1] - b'a' + 10,
+                _ => return Err(()),
+            };
+            Ok((high << 4) | low)
+        })
+        .collect()
 }
 
 fn backfill_history_blob_refs(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {

@@ -15,11 +15,10 @@ use rusttable_metadata::{MetadataInput, MetadataReadStatus};
 use sha2::{Digest, Sha256};
 
 use super::model::{
-    AtomicRasterCatalog, AtomicRasterCatalogError, RASTER_DECODER_IDENTITY_VERSION,
-    RasterCatalogEntry, RasterDuplicateIdentity, RasterImportBatch, RasterImportCancellation,
-    RasterImportFailure, RasterImportItemId, RasterImportObserver, RasterImportProgress,
-    RasterImportReceipt, RasterImportRequest, RasterImportStage, RasterImportStatus,
-    RasterPreviewPort,
+    AtomicRasterCatalog, AtomicRasterCatalogError, RasterCatalogEntry, RasterImportBatch,
+    RasterImportCancellation, RasterImportFailure, RasterImportItemId, RasterImportObserver,
+    RasterImportProgress, RasterImportReceipt, RasterImportRequest, RasterImportStage,
+    RasterImportStatus, RasterPreviewPort,
 };
 use super::reference::{ReferenceSourceError, encode_reference_source, reference_path_identity};
 use crate::{
@@ -236,6 +235,10 @@ impl<'a> RasterImportService<'a> {
         clippy::too_many_lines,
         reason = "ordered commit, cancellation, and preview boundaries remain explicit"
     )]
+    #[expect(
+        clippy::if_not_else,
+        reason = "the changed-source path is the exceptional branch after the idempotent fast path"
+    )]
     fn register_prepared(
         &self,
         prepared: PreparedRaster,
@@ -280,15 +283,20 @@ impl<'a> RasterImportService<'a> {
         }
         report(observer, item_id, RasterImportStage::Registering);
         let byte_length = snapshot.byte_length().get();
-        let source_identity = source_identity(hash, byte_length, probe);
-        let duplicate_identity = RasterDuplicateIdentity {
-            content_sha256: hash,
-            byte_length,
-            decoder_identity_version: RASTER_DECODER_IDENTITY_VERSION,
-            probe,
-            source_identity,
+        let path_identity = match reference_path_identity(&path) {
+            Ok(identity) => identity,
+            Err(error) => {
+                return failed_with_evidence(
+                    item_id,
+                    alias,
+                    hash,
+                    Some(probe.format()),
+                    map_reference_error(error),
+                    observer,
+                );
+            }
         };
-        let existing = match catalog.find_by_content(duplicate_identity) {
+        let existing = match catalog.find_by_source(path_identity.into()) {
             Ok(existing) => existing,
             Err(error) => {
                 return failed_with_evidence(
@@ -302,26 +310,82 @@ impl<'a> RasterImportService<'a> {
             }
         };
         let (entry, imported) = if let Some(entry) = existing {
-            let entry = if metadata_status == ImportMetadataStatus::Available
-                && entry.metadata_status == ImportMetadataStatus::Unavailable
-            {
-                match catalog.refresh_metadata(&entry, metadata) {
-                    Ok(entry) => entry,
+            let content_matches = entry.record.photo().primary_asset().content_hash()
+                == ContentHash::Sha256(hash)
+                && entry.record.photo().primary_asset().byte_length().get() == byte_length
+                && entry.record.probe() == probe;
+            if !content_matches {
+                let built = match build_entry(
+                    &path,
+                    &alias,
+                    hash,
+                    &snapshot,
+                    probe,
+                    metadata,
+                    metadata_status,
+                ) {
+                    Ok(built) => built,
                     Err(error) => {
                         return failed_with_evidence(
                             item_id,
                             alias,
                             hash,
                             Some(probe.format()),
-                            map_catalog_error(error),
+                            error,
                             observer,
                         );
                     }
+                };
+                if cancellation.is_cancelled() {
+                    report(observer, item_id, RasterImportStage::Cancelled);
+                    return evidence_receipt(
+                        item_id,
+                        alias,
+                        hash,
+                        probe.format(),
+                        RasterImportStatus::Cancelled,
+                    );
                 }
+                if let Err(error) = catalog.replace_import(&built.entry, &built.registration) {
+                    return failed_with_evidence(
+                        item_id,
+                        alias,
+                        hash,
+                        Some(probe.format()),
+                        map_catalog_error(error),
+                        observer,
+                    );
+                }
+                (
+                    RasterCatalogEntry {
+                        record: built.entry.record,
+                        edit: entry.edit,
+                        metadata_status,
+                    },
+                    true,
+                )
             } else {
-                entry
-            };
-            (entry, false)
+                let entry = if metadata_status == ImportMetadataStatus::Available
+                    && entry.metadata_status == ImportMetadataStatus::Unavailable
+                {
+                    match catalog.refresh_metadata(&entry, metadata) {
+                        Ok(entry) => entry,
+                        Err(error) => {
+                            return failed_with_evidence(
+                                item_id,
+                                alias,
+                                hash,
+                                Some(probe.format()),
+                                map_catalog_error(error),
+                                observer,
+                            );
+                        }
+                    }
+                } else {
+                    entry
+                };
+                (entry, false)
+            }
         } else {
             let built = match build_entry(
                 &path,
@@ -413,14 +477,14 @@ fn build_entry(
     metadata: rusttable_core::ImageMetadata,
     metadata_status: ImportMetadataStatus,
 ) -> Result<BuiltRasterRegistration, RasterImportFailure> {
-    let identity = source_identity(hash, snapshot.byte_length().get(), probe);
-    let photo_id = PhotoId::new(derived_id(b"photo", identity))
+    let path_identity = reference_path_identity(path).map_err(map_reference_error)?;
+    let photo_id = PhotoId::new(derived_id(b"photo", path_identity))
         .ok_or(RasterImportFailure::InternalInvariant)?;
-    let asset_id = AssetId::new(derived_id(b"asset", identity))
+    let asset_id = AssetId::new(derived_id(b"asset", path_identity))
         .ok_or(RasterImportFailure::InternalInvariant)?;
-    let edit_id =
-        EditId::new(derived_id(b"edit", identity)).ok_or(RasterImportFailure::InternalInvariant)?;
-    let source = encode_reference_source(path, identity).map_err(map_reference_error)?;
+    let edit_id = EditId::new(derived_id(b"edit", path_identity))
+        .ok_or(RasterImportFailure::InternalInvariant)?;
+    let source = encode_reference_source(path, path_identity).map_err(map_reference_error)?;
     let candidate = ImportCandidate::new(
         photo_id,
         asset_id,
@@ -441,8 +505,7 @@ fn build_entry(
         Photo::new(photo_id, [asset]).map_err(|_| RasterImportFailure::InternalInvariant)?;
     let record =
         ImportRecord::new(&candidate, photo).map_err(|_| RasterImportFailure::InternalInvariant)?;
-    let edit = neutral_edit(edit_id, photo_id, identity)?;
-    let path_identity = reference_path_identity(path).map_err(map_reference_error)?;
+    let edit = neutral_edit(edit_id, photo_id, path_identity)?;
     let receipt = ImportRegistrationReceipt::new(
         alias.to_owned(),
         hash,
@@ -464,29 +527,6 @@ fn build_entry(
         },
         registration: ImportRegistration::new(details, ReferencePathIdentity::new(path_identity)),
     })
-}
-
-fn source_identity(
-    hash: [u8; 32],
-    byte_length: u64,
-    probe: rusttable_image::ImageProbe,
-) -> [u8; 32] {
-    let dimensions = probe.dimensions();
-    let mut hasher = Sha256::new();
-    hasher.update(b"rusttable-raster-source-identity-v1\0");
-    hasher.update([RASTER_DECODER_IDENTITY_VERSION]);
-    hasher.update([match probe.format() {
-        InputFormat::Jpeg => 1,
-        InputFormat::Png => 2,
-        InputFormat::Tiff => 3,
-        InputFormat::Raw => 4,
-        InputFormat::OpenExr => 5,
-    }]);
-    hasher.update(dimensions.width().to_be_bytes());
-    hasher.update(dimensions.height().to_be_bytes());
-    hasher.update(byte_length.to_be_bytes());
-    hasher.update(hash);
-    hasher.finalize().into()
 }
 
 fn neutral_edit(
@@ -611,9 +651,9 @@ fn map_reference_error(error: ReferenceSourceError) -> RasterImportFailure {
         ReferenceSourceError::UnsupportedPathEncoding => {
             RasterImportFailure::UnsupportedPathEncoding
         }
-        ReferenceSourceError::InvalidEncoding | ReferenceSourceError::InvalidSourcePath => {
-            RasterImportFailure::InternalInvariant
-        }
+        ReferenceSourceError::InvalidEncoding
+        | ReferenceSourceError::InvalidSourcePath
+        | ReferenceSourceError::PathEscapesRoot => RasterImportFailure::InternalInvariant,
     }
 }
 
