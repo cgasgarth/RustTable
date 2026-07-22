@@ -24,6 +24,7 @@ usvg.workspace = true
 
 [dev-dependencies]
 rusttable-testkit.workspace = true
+tiff.workspace = true
 
 [lints]
 workspace = true

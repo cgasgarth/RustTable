@@ -1,8 +1,13 @@
-use rusttable_image::{DecodeLimits, ImageInputError, InputFormat};
+use rusttable_image::{DecodeLimits, ImageInputError, InputFormat, SampleType};
 use rusttable_image_io::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 
 fn limits() -> DecodeLimits {
     DecodeLimits::new(1_000_000, 2, 1, 2, 8).expect("valid test limits")
+}
+
+fn precision_limits() -> DecodeLimits {
+    DecodeLimits::new(4_000_000, 4_096, 4_096, 16_777_216, 64 * 1024 * 1024)
+        .expect("valid precision limits")
 }
 
 #[test]
@@ -73,6 +78,59 @@ fn standard_registry_selects_png_without_a_path_or_extension() {
 
     assert_eq!(probe.format(), InputFormat::Png);
     assert_eq!(decoded.dimensions(), probe.dimensions());
+}
+
+#[test]
+fn registry_frame_keeps_adjacent_sixteen_bit_tiff_samples_distinct() {
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    {
+        let mut encoder = tiff::encoder::TiffEncoder::new(&mut cursor).expect("TIFF encoder");
+        encoder
+            .write_image::<tiff::encoder::colortype::RGB16>(
+                2,
+                1,
+                &[0x8000, 0x8000, 0x8000, 0x8001, 0x8001, 0x8001],
+            )
+            .expect("TIFF fixture");
+    }
+    let bytes = cursor.into_inner();
+    let frame = ImageDecoderRegistry::standard()
+        .decode_frame_bytes(&bytes, precision_limits())
+        .expect("typed TIFF frame");
+
+    assert_eq!(frame.sample_type(), SampleType::U16);
+    let pixels = frame.rgba_f32_pixels().expect("f32 bridge");
+    assert!(pixels.windows(2).any(|pair| pair[0][0] != pair[1][0]));
+    assert_eq!(
+        frame.receipt().descriptor().format().sample_type(),
+        SampleType::U16
+    );
+}
+
+#[test]
+fn registry_frame_keeps_float_exr_values_outside_display_range() {
+    use exr::prelude::{f16, write_rgb_file};
+
+    let path = std::env::temp_dir().join(format!(
+        "rusttable-registry-precision-{}.exr",
+        std::process::id()
+    ));
+    write_rgb_file(&path, 2, 1, |x, _| {
+        let value = if x == 0 { -0.25 } else { 2.5 };
+        let value = f16::from_f32(value);
+        (value, value, value)
+    })
+    .expect("EXR fixture");
+    let bytes = std::fs::read(&path).expect("EXR bytes");
+    std::fs::remove_file(path).expect("remove EXR fixture");
+
+    let frame = ImageDecoderRegistry::standard()
+        .decode_frame_bytes(&bytes, precision_limits())
+        .expect("typed EXR frame");
+    assert_eq!(frame.sample_type(), SampleType::F16);
+    let pixels = frame.rgba_f32_pixels().expect("finite f32 bridge");
+    assert!(pixels[0][0] < 0.0);
+    assert!(pixels[1][0] > 1.0);
 }
 
 #[test]

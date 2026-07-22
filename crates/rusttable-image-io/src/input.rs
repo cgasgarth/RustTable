@@ -3,7 +3,8 @@ use std::io::Read;
 use std::path::Path;
 
 use rusttable_image::{
-    DecodeLimits, DecodedImage, ImageDimensions, ImageInput, ImageInputError, ImageProbe,
+    DecodeLimits, DecodedFrame, DecodedImage, ImageDimensions, ImageInput, ImageInputError,
+    ImageProbe,
 };
 
 use crate::ImageDecoderRegistry;
@@ -70,6 +71,11 @@ impl FileImageInput {
         self.enforce_source_limit(bytes)?;
         self.registry.decode_bytes(bytes, self.limits)
     }
+
+    fn decode_frame_bytes_inner(&self, bytes: &[u8]) -> Result<DecodedFrame, ImageInputError> {
+        self.enforce_source_limit(bytes)?;
+        self.registry.decode_frame_bytes(bytes, self.limits)
+    }
 }
 
 impl ImageInput for FileImageInput {
@@ -79,6 +85,10 @@ impl ImageInput for FileImageInput {
 
     fn decode_bytes(&self, bytes: &[u8]) -> Result<DecodedImage, ImageInputError> {
         self.decode_bytes_inner(bytes)
+    }
+
+    fn decode_frame_bytes(&self, bytes: &[u8]) -> Result<DecodedFrame, ImageInputError> {
+        self.decode_frame_bytes_inner(bytes)
     }
 
     fn probe_path(&self, path: &Path) -> Result<ImageProbe, ImageInputError> {

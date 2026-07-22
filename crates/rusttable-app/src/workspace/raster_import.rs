@@ -194,6 +194,7 @@ impl RasterPreviewPort for AppPreview {
 fn preview_error_cause(error: &crate::PreviewError) -> &'static str {
     match error {
         crate::PreviewError::Decode(_) => "decode",
+        crate::PreviewError::DecodedFrame => "decoded_frame",
         crate::PreviewError::UnsupportedPixelpipeColor { .. } => "unsupported_color",
         crate::PreviewError::PixelpipeInput(_) => "pixelpipe_input",
         crate::PreviewError::PixelpipeSnapshot(_) => "pixelpipe_snapshot",

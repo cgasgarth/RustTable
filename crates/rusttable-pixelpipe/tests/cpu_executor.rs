@@ -3,10 +3,10 @@ use rusttable_core::{
     ParameterValue, PhotoId, Revision,
 };
 use rusttable_pixelpipe::{
-    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
-    CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError,
-    CpuTilePlan, CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor,
-    RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
+    CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuTilePlan,
+    CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
+    RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{
     CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
@@ -385,7 +385,7 @@ fn rejects_a_nonfinite_rgba_component_at_the_descriptor_boundary() {
 }
 
 #[test]
-fn rejects_linear_input_until_a_linear_request_mode_exists() {
+fn preserves_extended_linear_input_for_full_export() {
     let descriptor = RgbaF32Descriptor::new(
         RasterDimensions::new(1, 1).expect("nonzero dimensions"),
         RgbaF32ColorEncoding::LinearSrgbD65,
@@ -395,12 +395,10 @@ fn rejects_linear_input_until_a_linear_request_mode_exists() {
     let request =
         CpuPixelpipeRequest::new(input, graph(Vec::new()), CpuPixelpipeOutputMode::FullExport);
 
-    assert_eq!(
-        CpuPixelpipeExecutor.execute(&request),
-        Err(CpuPixelpipeError::UnsupportedInputEncoding {
-            actual: RgbaF32ColorEncoding::LinearSrgbD65,
-        })
-    );
+    let result = CpuPixelpipeExecutor
+        .execute(&request)
+        .expect("linear input");
+    assert_eq!(result.image().pixels()[0].red(), 1.5);
 }
 
 #[test]

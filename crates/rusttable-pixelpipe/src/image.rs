@@ -22,8 +22,12 @@ pub struct SourceRasterIdentity([u8; 32]);
 
 impl SourceRasterIdentity {
     #[must_use]
-    pub(crate) fn from_components(components: impl IntoIterator<Item = f32>) -> Self {
+    pub(crate) fn from_components(
+        representation: RgbaF32SourceRepresentation,
+        components: impl IntoIterator<Item = f32>,
+    ) -> Self {
         let mut hasher = Sha256::new();
+        hasher.update([representation.tag()]);
         for component in components {
             hasher.update(component.to_bits().to_le_bytes());
         }
@@ -53,6 +57,26 @@ pub enum RgbaF32ColorEncoding {
     LabD50,
 }
 
+/// Native representation retained after the typed decode-to-f32 bridge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RgbaF32SourceRepresentation {
+    U8,
+    U16,
+    F16,
+    F32,
+}
+
+impl RgbaF32SourceRepresentation {
+    const fn tag(self) -> u8 {
+        match self {
+            Self::U8 => 1,
+            Self::U16 => 2,
+            Self::F16 => 3,
+            Self::F32 => 4,
+        }
+    }
+}
+
 /// The alpha representation at the pixelpipe boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RgbaF32AlphaMode {
@@ -65,6 +89,7 @@ pub struct RgbaF32Descriptor {
     dimensions: RasterDimensions,
     color_encoding: RgbaF32ColorEncoding,
     alpha_mode: RgbaF32AlphaMode,
+    source_representation: RgbaF32SourceRepresentation,
 }
 
 impl RgbaF32Descriptor {
@@ -74,6 +99,21 @@ impl RgbaF32Descriptor {
             dimensions,
             color_encoding,
             alpha_mode: RgbaF32AlphaMode::Straight,
+            source_representation: RgbaF32SourceRepresentation::F32,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_source_representation(
+        dimensions: RasterDimensions,
+        color_encoding: RgbaF32ColorEncoding,
+        source_representation: RgbaF32SourceRepresentation,
+    ) -> Self {
+        Self {
+            dimensions,
+            color_encoding,
+            alpha_mode: RgbaF32AlphaMode::Straight,
+            source_representation,
         }
     }
 
@@ -90,6 +130,11 @@ impl RgbaF32Descriptor {
     #[must_use]
     pub const fn alpha_mode(self) -> RgbaF32AlphaMode {
         self.alpha_mode
+    }
+
+    #[must_use]
+    pub const fn source_representation(self) -> RgbaF32SourceRepresentation {
+        self.source_representation
     }
 }
 
@@ -197,6 +242,7 @@ impl RgbaF32Image {
             validate_normalized(pixel_index, RgbaF32Channel::Alpha, pixel.alpha())?;
         }
         let source_identity = SourceRasterIdentity::from_components(
+            descriptor.source_representation(),
             pixels
                 .iter()
                 .flat_map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]),

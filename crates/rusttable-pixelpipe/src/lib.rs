@@ -65,7 +65,7 @@ pub use histogram::{
 pub use host_pool::temporary_buffer_request;
 pub use image::{
     RgbaF32AlphaMode, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel, SourceRasterIdentity,
+    RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation, SourceRasterIdentity,
 };
 pub use mode::{
     AnalysisRequest, ApproximationId, ApproximationId as FailureApproximationId, BackendPolicy,

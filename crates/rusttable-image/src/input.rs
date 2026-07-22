@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
-use crate::{DecodeError, DecodeReceipt, DecodeResult};
+use crate::{DecodeError, DecodeReceipt, DecodeResult, DecodedFrame};
 use crate::{ImageDescriptor, ImageDimensions, InputFormat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -284,13 +284,16 @@ pub trait ImageInput: Send + Sync {
     /// Returns a typed error for unsupported signatures, malformed bytes, or limits.
     fn decode_bytes(&self, bytes: &[u8]) -> Result<crate::DecodedImage, ImageInputError>;
 
-    /// Decodes bytes and publishes the storage-neutral owned image plus a
-    /// receipt binding it to the probed format and source length.
+    /// Decodes one source into the native typed frame contract.
+    ///
+    /// Implementations with a native decoder should override this method. The
+    /// default keeps older image inputs source-compatible by making their
+    /// explicit RGBA8 projection visible at this boundary.
     ///
     /// # Errors
     ///
-    /// Returns the underlying input failure or a typed contract failure.
-    fn decode_result_bytes(&self, bytes: &[u8]) -> Result<DecodeResult, ImageInputError> {
+    /// Returns the underlying probe, decode, allocation, or contract error.
+    fn decode_frame_bytes(&self, bytes: &[u8]) -> Result<DecodedFrame, ImageInputError> {
         let probe = self.probe_bytes(bytes)?;
         let image = self.decode_bytes(bytes)?;
         let source_bytes =
@@ -298,8 +301,18 @@ pub trait ImageInput: Send + Sync {
         let owned = image.into_owned();
         let receipt = DecodeReceipt::new(probe.format(), source_bytes, owned.descriptor().clone())
             .map_err(|reason| ImageInputError::DecodeContract { reason })?;
-        DecodeResult::new(owned, receipt)
+        DecodedFrame::new(owned, receipt)
             .map_err(|reason| ImageInputError::DecodeContract { reason })
+    }
+
+    /// Decodes bytes and publishes the storage-neutral owned image plus a
+    /// receipt binding it to the probed format and source length.
+    ///
+    /// # Errors
+    ///
+    /// Returns the underlying input failure or a typed contract failure.
+    fn decode_result_bytes(&self, bytes: &[u8]) -> Result<DecodeResult, ImageInputError> {
+        self.decode_frame_bytes(bytes)
     }
 
     /// Probes a path using the bounded, signature-selected input contract.

@@ -327,7 +327,7 @@ enum SourceImage {
     DisplayP3(DisplayP3RgbImage),
 }
 
-fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
+fn source_image(input: &DecodedImage) -> (SourceImage, Vec<f32>) {
     let dimensions = RasterDimensions::new(input.dimensions().width(), input.dimensions().height())
         .expect("validated decoded dimensions are nonzero");
     let pixel_count = usize::try_from(
@@ -350,7 +350,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
                     DisplayP3Channel::new(f32::from(pixel[2]) / 255.0)
                         .expect("normalized byte is valid Display P3"),
                 ));
-                alpha.push(pixel[3]);
+                alpha.push(f32::from(pixel[3]) / 255.0);
             }
             (
                 SourceImage::DisplayP3(
@@ -371,7 +371,7 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<u8>) {
                     SrgbChannel::new(f32::from(pixel[2]) / 255.0)
                         .expect("normalized byte is valid sRGB"),
                 ));
-                alpha.push(pixel[3]);
+                alpha.push(f32::from(pixel[3]) / 255.0);
             }
             (
                 SourceImage::Srgb(
@@ -430,17 +430,28 @@ fn center_index(output_index: u64, source_extent: u64, output_extent: u64) -> u6
         .min(source_extent.saturating_sub(1))
 }
 
-fn quantized_pixels(encoded: &rusttable_processing::EncodedSrgbOutput, alpha: &[u8]) -> Vec<u8> {
+fn quantized_pixels(encoded: &rusttable_processing::EncodedSrgbOutput, alpha: &[f32]) -> Vec<u8> {
     let mut pixels = Vec::with_capacity(alpha.len() * 4);
     for (encoded_pixel, &alpha) in encoded.image().pixels().zip(alpha) {
         pixels.extend([
             quantize(encoded_pixel.red()),
             quantize(encoded_pixel.green()),
             quantize(encoded_pixel.blue()),
-            alpha,
+            quantize_alpha(alpha),
         ]);
     }
     pixels
+}
+
+fn quantize_alpha(value: f32) -> u8 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "alpha is bounded at the presentation boundary"
+    )]
+    {
+        (value.clamp(0.0, 1.0) * 255.0).round() as u8
+    }
 }
 
 fn quantize(channel: SrgbChannel) -> u8 {
