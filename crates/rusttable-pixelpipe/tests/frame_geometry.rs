@@ -2,16 +2,20 @@ use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
-use rusttable_image::Orientation;
+use rusttable_image::{ImageDimensions, Orientation, Roi};
 use rusttable_pixelpipe::{
     CancellationReason, CancellationScope, CpuPixelpipeError, CpuPixelpipeExecutor,
     CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, CpuTilePlan, PipelineGeneration,
     RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel,
     RgbaF32SourceRepresentation,
 };
+use rusttable_processing::operations::clipping::{
+    ClippingConfig, ClippingInterpolation, ClippingParametersV5, ClippingPlan,
+};
 use rusttable_processing::{
-    CompiledOperationGraph, FiniteF32, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
-    LinearRgb, RasterDimensions, WorkingRgbImage, evaluate_graph,
+    CompiledOperationGraph, DistortionBorderMode, DistortionPlan, DistortionSamplingPolicy,
+    FiniteF32, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan, LinearRgb,
+    RasterDimensions, WorkingRgbImage, evaluate_graph,
 };
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
@@ -595,6 +599,166 @@ fn cancellation_prevents_geometry_publication() {
         .expect_err("cancelled geometry");
 
     assert!(matches!(error, CpuPixelpipeError::Cancelled(_)));
+}
+
+#[test]
+fn distortion_operations_publish_frame_plans_and_receipts() {
+    let input = image(7, 5);
+    let executor = CpuPixelpipeExecutor;
+    for (id, key, parameters) in [
+        (
+            20,
+            "rusttable.ashift",
+            vec![(
+                "rotation",
+                ParameterValue::Scalar(FiniteF64::new(8.0).expect("finite")),
+            )],
+        ),
+        (
+            21,
+            "rusttable.clipping",
+            vec![
+                (
+                    "angle",
+                    ParameterValue::Scalar(FiniteF64::new(90.0).expect("finite")),
+                ),
+                ("crop_auto", ParameterValue::Bool(false)),
+            ],
+        ),
+        (22, "rusttable.lenscorrection", Vec::new()),
+    ] {
+        let graph = graph(vec![typed_operation(id, key, parameters)]);
+        let expected = FrameBoundaryPlan::new(
+            &graph,
+            RasterDimensions::new(7, 5).expect("dimensions"),
+            FrameBoundaryOptions::new(FrameBoundaryMode::Export),
+        )
+        .expect("distortion plan");
+        assert_eq!(expected.boundary_count(), 1);
+        assert_ne!(expected.identity(), [0; 32]);
+
+        let result = executor
+            .execute(&CpuPixelpipeSnapshot::new(
+                input.clone(),
+                graph,
+                CpuPixelpipeOutputMode::FullExport,
+            ))
+            .expect("distortion execution");
+        assert_eq!(
+            result.image().descriptor().dimensions(),
+            expected.output_dimensions()
+        );
+        assert_eq!(result.receipt().frame_plan_identity(), expected.identity());
+        assert_eq!(
+            result.receipt().output_descriptor(),
+            result.image().descriptor()
+        );
+        assert!(
+            result
+                .image()
+                .pixels()
+                .iter()
+                .all(|pixel| pixel.alpha().is_finite())
+        );
+    }
+}
+
+#[test]
+fn distortion_plan_exposes_inverse_roi_policy_and_coordinate_alignment() {
+    let dimensions = RasterDimensions::new(100, 60).expect("dimensions");
+    let parameters = ClippingParametersV5 {
+        angle: 90.0,
+        crop_auto: false,
+        ..ClippingParametersV5::default()
+    };
+    let clipping = ClippingPlan::new(
+        dimensions,
+        ClippingConfig::new(parameters).expect("clipping config"),
+        ClippingInterpolation::Bilinear,
+    )
+    .expect("clipping plan");
+    let plan = DistortionPlan::Clipping(clipping);
+    assert_eq!(
+        plan.sampling_policy(),
+        DistortionSamplingPolicy::Clipping {
+            interpolation: ClippingInterpolation::Bilinear,
+            border: DistortionBorderMode::Clamp,
+        }
+    );
+
+    let output = plan
+        .output_roi(Roi::full(
+            ImageDimensions::new(100, 60).expect("image dimensions"),
+        ))
+        .expect("output ROI");
+    let input = plan.input_roi(output).expect("input ROI with halo");
+    assert!(input.width() <= 100 && input.height() <= 60);
+
+    let source_point = [20.0, 15.0];
+    let output_point = plan.forward_point(source_point).expect("forward map");
+    let restored = plan.back_point(output_point).expect("inverse map");
+    assert!((restored[0] - source_point[0]).abs() < 1.0e-6);
+    assert!((restored[1] - source_point[1]).abs() < 1.0e-6);
+}
+
+#[test]
+fn distortion_full_frame_and_tiled_paths_are_consistent_and_cancel_cleanly() {
+    let graph = graph(vec![typed_operation(
+        23,
+        "rusttable.clipping",
+        vec![
+            (
+                "angle",
+                ParameterValue::Scalar(FiniteF64::new(90.0).expect("finite")),
+            ),
+            ("crop_auto", ParameterValue::Bool(false)),
+        ],
+    )]);
+    let input = image(7, 5);
+    let snapshot =
+        CpuPixelpipeSnapshot::new(input.clone(), graph, CpuPixelpipeOutputMode::FullExport);
+    let executor = CpuPixelpipeExecutor;
+    let full = executor.execute(&snapshot).expect("full frame");
+    let tiled = executor
+        .execute_tiled(&snapshot, CpuTilePlan::new(3, 2).expect("tile plan"))
+        .expect("tiled frame");
+    assert_eq!(full.image(), tiled.image());
+    assert_eq!(
+        full.receipt().output_identity(),
+        tiled.receipt().output_identity()
+    );
+    assert_eq!(
+        full.receipt().frame_plan_identity(),
+        tiled.receipt().frame_plan_identity()
+    );
+
+    let scope = CancellationScope::root(PipelineGeneration::new(870).expect("generation"));
+    scope.cancel(CancellationReason::EditChanged);
+    let error = executor
+        .execute_with_cancellation(&snapshot, &scope)
+        .expect_err("cancelled distortion");
+    assert!(matches!(error, CpuPixelpipeError::Cancelled(_)));
+}
+
+#[test]
+fn invalid_distortion_fails_before_output_publication() {
+    let graph = graph(vec![typed_operation(
+        24,
+        "rusttable.clipping",
+        vec![
+            ("k_type", ParameterValue::Integer(99)),
+            ("crop_auto", ParameterValue::Bool(true)),
+        ],
+    )]);
+    let error = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeSnapshot::new(
+            image(7, 5),
+            graph,
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect_err("invalid clipping mode");
+    assert!(matches!(error, CpuPixelpipeError::Evaluation { .. }));
+    assert!(!error.to_string().contains("GeometryRequiresFrameBoundary"));
 }
 
 fn encode_srgb(value: f32) -> f32 {

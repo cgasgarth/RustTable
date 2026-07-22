@@ -20,8 +20,9 @@ mod spots;
 pub use basicadj::BasicAdjPlanSet;
 pub(crate) use frame::evaluate_graph_at_frame_boundaries_with_plans;
 pub use frame::{
+    DistortionBorderMode, DistortionInterpolation, DistortionPlan, DistortionSamplingPolicy,
     EvaluatedFrame, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
-    evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
+    evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry, graph_has_frame_geometry,
 };
 use lab_boundary::{apply_defringe, apply_shadhi};
 pub use output::EvaluationOutput;

@@ -12,7 +12,7 @@ use rusttable_processing::{
     evaluate_graph_with_basicadj_plans, prepare_basicadj_plans, to_linear_srgb,
 };
 
-use crate::frame::{execute_frame_image, has_discrete_geometry};
+use crate::frame::{execute_frame_image, has_frame_geometry};
 use crate::{
     CancellationError, CancellationScope, CancellationStage, CpuNodeReceipt, CpuPipelineReceipt,
     CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError, PixelIdentity, RgbaF32Channel,
@@ -102,13 +102,19 @@ impl CpuPixelpipeExecutor {
         &self,
         request: &CpuPixelpipeSnapshot,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
-        if has_discrete_geometry(request) {
-            let (image, plan_identity) = execute_frame_image(request, request.input(), None)?;
-            return Ok(Self::result_for(request, image, plan_identity));
+        if has_frame_geometry(request) {
+            let (image, basicadj_identity, frame_plan_identity) =
+                execute_frame_image(request, request.input(), None)?;
+            return Ok(Self::result_for(
+                request,
+                image,
+                basicadj_identity,
+                frame_plan_identity,
+            ));
         }
         let plans = Self::prepare_plans(request)?;
         let image = Self::execute_image(request, request.input(), &plans)?;
-        Ok(Self::result_for(request, image, plans.identity()))
+        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
     }
 
     /// Executes with a generation-owned cancellation scope. The scope is
@@ -123,14 +129,19 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Allocation)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        if has_discrete_geometry(request) {
-            let (image, plan_identity) =
+        if has_frame_geometry(request) {
+            let (image, basicadj_identity, frame_plan_identity) =
                 execute_frame_image(request, request.input(), Some(scope))?;
             scope
                 .child(CancellationStage::Publication)
                 .check()
                 .map_err(CpuPixelpipeError::Cancelled)?;
-            return Ok(Self::result_for(request, image, plan_identity));
+            return Ok(Self::result_for(
+                request,
+                image,
+                basicadj_identity,
+                frame_plan_identity,
+            ));
         }
         let plans = Self::prepare_plans(request)?;
         let image = Self::execute_image(request, request.input(), &plans)?;
@@ -138,7 +149,7 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Publication)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        Ok(Self::result_for(request, image, plans.identity()))
+        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
     }
 
     /// Executes a point-operation graph in deterministic, row-major tiles.
@@ -167,6 +178,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
                     | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
                     | rusttable_processing::ProcessingOperationKind::Perspective { .. }
+                    | rusttable_processing::ProcessingOperationKind::Clipping { .. }
                     | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
@@ -210,7 +222,7 @@ impl CpuPixelpipeExecutor {
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-        Ok(Self::result_for(request, image, plans.identity()))
+        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
     }
 
     /// Executes row-major tiles with a mandatory check before every tile and
@@ -240,6 +252,7 @@ impl CpuPixelpipeExecutor {
                     | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
                     | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
                     | rusttable_processing::ProcessingOperationKind::Perspective { .. }
+                    | rusttable_processing::ProcessingOperationKind::Clipping { .. }
                     | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
@@ -295,7 +308,7 @@ impl CpuPixelpipeExecutor {
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-        Ok(Self::result_for(request, image, plans.identity()))
+        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
     }
 
     fn execute_image(
@@ -368,6 +381,7 @@ impl CpuPixelpipeExecutor {
         request: &CpuPixelpipeSnapshot,
         image: RgbaF32Image,
         basicadj_plan_identity: [u8; 32],
+        frame_plan_identity: [u8; 32],
     ) -> CpuPixelpipeResult {
         let receipt = CpuPipelineReceipt::new(
             request.input().descriptor(),
@@ -376,6 +390,7 @@ impl CpuPixelpipeExecutor {
             (pixel_identity(request.input()), pixel_identity(&image)),
             request.identity(),
             basicadj_plan_identity,
+            frame_plan_identity,
             request.output_mode(),
             working_profile(request),
             request

@@ -52,10 +52,11 @@ pub use descriptor::{
     soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
-    BasicAdjPlanSet, BlendArithmeticStage, EvaluatedFrame, EvaluationError, EvaluationOutput,
+    BasicAdjPlanSet, BlendArithmeticStage, DistortionBorderMode, DistortionInterpolation,
+    DistortionPlan, DistortionSamplingPolicy, EvaluatedFrame, EvaluationError, EvaluationOutput,
     FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan, evaluate,
     evaluate_graph_at_frame_boundaries, evaluate_output, graph_has_discrete_geometry,
-    prepare_basicadj_plans,
+    graph_has_frame_geometry, prepare_basicadj_plans,
 };
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,

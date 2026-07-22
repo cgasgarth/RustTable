@@ -3,7 +3,7 @@ use std::fmt;
 use crate::evaluate::{
     BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions,
     evaluate_graph_at_frame_boundaries_with_plans, evaluate_steps, evaluate_steps_with_frame,
-    graph_has_discrete_geometry,
+    graph_has_frame_geometry,
 };
 use crate::{
     CompiledOperationGraph, EvaluationError, LinearRgb, RasterDimensions, WorkingRgbImage,
@@ -261,7 +261,7 @@ pub fn evaluate_graph_output_with_basicadj_plans(
     input: &WorkingRgbImage,
     plans: Option<&BasicAdjPlanSet>,
 ) -> Result<crate::EvaluationOutput, EvaluationError> {
-    if graph_has_discrete_geometry(graph) {
+    if graph_has_frame_geometry(graph) {
         let alpha = vec![1.0; input.pixel_slice().len()];
         let evaluated = evaluate_graph_at_frame_boundaries_with_plans(
             graph,

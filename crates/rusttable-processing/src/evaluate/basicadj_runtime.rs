@@ -4,7 +4,7 @@ use sha2::Digest;
 
 use super::{
     BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions, apply_operation_with_profile,
-    graph_has_discrete_geometry,
+    graph_has_frame_geometry,
 };
 use crate::{BasicAdjAnalysisRaster, BasicAdjPlan, CompiledOperationGraph, EvaluationError};
 
@@ -22,7 +22,7 @@ pub fn prepare_basicadj_plans(
     graph: &CompiledOperationGraph,
     input: &crate::WorkingRgbImage,
 ) -> Result<BasicAdjPlanSet, EvaluationError> {
-    if graph_has_discrete_geometry(graph) {
+    if graph_has_frame_geometry(graph) {
         let alpha = vec![1.0; input.pixel_slice().len()];
         return super::evaluate_graph_at_frame_boundaries_with_plans(
             graph,

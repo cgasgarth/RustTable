@@ -384,6 +384,16 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update([17]);
             hasher.update(config.canonical_identity_bytes());
         }
+        ProcessingOperationKind::Clipping { config } => {
+            hasher.update([21]);
+            hasher.update(config.parameters().to_bytes());
+            if let Some(source) = config.opaque_source() {
+                hasher.update([1]);
+                hasher.update(source);
+            } else {
+                hasher.update([0]);
+            }
+        }
         ProcessingOperationKind::Bloom { config } => {
             hasher.update([18]);
             hasher.update(
