@@ -5,7 +5,10 @@ use rusttable_image::{ColorEncoding, ImageDimensions, ImageProbe};
 use rusttable_processing::GamutClipReport;
 use sha2::{Digest, Sha256};
 
-use crate::{RenderError, RenderPlan, RenderProvenance, SourceColorDecision, SourceColorPolicy};
+use crate::{
+    RenderError, RenderPlan, RenderProvenance, SourceColorDecision, SourceColorPolicy,
+    SrgbFallbackContract,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenderSourceProvenance {
@@ -199,6 +202,7 @@ pub struct RenderReceipt {
     output_dimensions: ImageDimensions,
     output_encoding: ColorEncoding,
     working_profile: rusttable_processing::WorkingFrameDescriptor,
+    presentation: SrgbFallbackContract,
 }
 
 impl RenderReceipt {
@@ -214,6 +218,7 @@ impl RenderReceipt {
             output_dimensions: output.image().dimensions(),
             output_encoding: output.image().color_encoding(),
             working_profile: output.working_profile(),
+            presentation: output.presentation(),
         }
     }
 
@@ -262,11 +267,16 @@ impl RenderReceipt {
         self.working_profile
     }
 
+    #[must_use]
+    pub const fn presentation(&self) -> SrgbFallbackContract {
+        self.presentation
+    }
+
     /// Returns the stable receipt representation used by export artifacts.
     #[must_use]
     pub fn canonical_encoding(&self) -> String {
         format!(
-            "render-receipt-v2\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color-decision={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\nworking-profile={:?}|{:?}\n",
+            "render-receipt-v3\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color-decision={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\nworking-profile={:?}|{:?}\npresentation={:?}\n",
             self.context.source,
             self.context.edit,
             self.context.policy,
@@ -279,6 +289,7 @@ impl RenderReceipt {
             self.output_encoding,
             self.working_profile.encoding(),
             self.working_profile.provenance(),
+            self.presentation,
         )
     }
 

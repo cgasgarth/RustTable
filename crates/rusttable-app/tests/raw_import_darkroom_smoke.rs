@@ -8,13 +8,16 @@ use rusttable_app::gtk_controller::{
 };
 use rusttable_app::gtk_preview_controller::{GtkPreviewController, GtkPreviewState};
 use rusttable_app::gtk_thumbnail_controller::{GtkThumbnailController, GtkThumbnailSource};
-use rusttable_app::workspace::run_raster_import;
+use rusttable_app::workspace::{load_selected_export_render, run_raster_import};
 use rusttable_image::{
     CancellationToken, ColorEncoding, DecodedImage, ImageInput, InputFormat, SampleType,
 };
 use rusttable_image_io::{FileImageInput, ImageDecoderRegistry};
 use rusttable_import::RasterImportCancellation;
-use rusttable_render::{MipmapLevel, ThumbnailGenerator, ThumbnailRequest, ThumbnailSize};
+use rusttable_render::{
+    MipmapLevel, RenderTarget, SrgbFallbackContract, ThumbnailGenerator, ThumbnailRequest,
+    ThumbnailSize,
+};
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
 #[cfg(target_os = "linux")]
 use rusttable_ui::HistogramData;
@@ -276,8 +279,8 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
         .sum::<f64>()
         / f64::from(preview.dimensions().width() * preview.dimensions().height() * 3);
     assert!(
-        mean_rgb >= 32.0,
-        "selected RAW preview must not be near-black; mean RGB was {mean_rgb:.2}"
+        (230.0..=235.0).contains(&mean_rgb),
+        "scene-referred RAW fallback mean must remain in its deterministic acceptance window; mean RGB was {mean_rgb:.2}"
     );
     let channel_means = preview
         .pixels()
@@ -302,6 +305,27 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
         spread <= 8.0,
         "cold-launch neutral blue-sky/gray-building presentation is green/cyan: means {channel_means:?}"
     );
+    assert_eq!(
+        preview
+            .receipt()
+            .expect("RAW preview receipt")
+            .render()
+            .presentation(),
+        SrgbFallbackContract::SceneReferredRawV1
+    );
+
+    let export = load_selected_export_render(
+        &catalog_path,
+        &directory.0,
+        photo_id,
+        RenderTarget::FullResolution,
+    )
+    .expect("selected RAW export render");
+    assert_eq!(
+        export.presentation(),
+        SrgbFallbackContract::SceneReferredRawV1
+    );
+    assert_eq!(export.image().pixels(), preview.pixels());
 
     let reselected = GtkPreviewController::new().render_selected(&catalog);
     let GtkPreviewState::Ready(reselected) = reselected else {

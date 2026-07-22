@@ -7,7 +7,7 @@ use rusttable_processing::{WorkingRgbImage, encode_working_to_srgb};
 
 use crate::{
     RenderError, RenderOutput, RenderPlan, RenderProvenance, RenderTarget, SourceColorDecision,
-    quantized_pixels, resampling,
+    SrgbFallbackContract, quantized_pixels, resampling,
 };
 
 /// Immutable canonical CPU pixelpipe output ready for final rendering.
@@ -22,6 +22,7 @@ pub struct PreparedCpuPixelpipeResult {
     source_color_decision: SourceColorDecision,
     source_color: SourceColor,
     provenance: RenderProvenance,
+    presentation: SrgbFallbackContract,
 }
 
 impl PreparedCpuPixelpipeResult {
@@ -92,6 +93,7 @@ impl PreparedCpuPixelpipeResult {
             source_color_decision,
             source_color,
             provenance,
+            presentation: SrgbFallbackContract::Colorimetric,
         })
     }
 
@@ -118,6 +120,17 @@ impl PreparedCpuPixelpipeResult {
     #[must_use]
     pub const fn provenance(&self) -> RenderProvenance {
         self.provenance
+    }
+
+    #[must_use]
+    pub const fn presentation(&self) -> SrgbFallbackContract {
+        self.presentation
+    }
+
+    #[must_use]
+    pub const fn with_presentation(mut self, presentation: SrgbFallbackContract) -> Self {
+        self.presentation = presentation;
+        self
     }
 }
 
@@ -147,7 +160,8 @@ pub fn render_prepared_cpu_pixelpipe(
     let plan = RenderPlan::for_source(source_dimensions, target);
     let (pixels, alpha) = resampling::resample_working(prepared.pixels(), prepared.alpha(), plan)
         .map_err(|source| RenderError::Resampling { source })?;
-    let encoded = encode_working_to_srgb(&pixels);
+    let presented = prepared.presentation().apply(&pixels);
+    let encoded = encode_working_to_srgb(&presented);
     let image = DecodedImage::new_with_color_encoding(
         plan.output_dimensions(),
         quantized_pixels(&encoded, &alpha),
@@ -163,6 +177,7 @@ pub fn render_prepared_cpu_pixelpipe(
         clipping: encoded.clipping(),
         provenance: prepared.provenance(),
         working_profile: pixels.frame(),
+        presentation: prepared.presentation(),
     })
 }
 

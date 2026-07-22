@@ -17,7 +17,8 @@ use rusttable_processing::{
 };
 use rusttable_render::{
     PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, PreviewBounds, RenderOutput,
-    RenderProvenance, RenderTarget, SourceColorDecision, render_prepared_cpu_pixelpipe,
+    RenderProvenance, RenderTarget, SourceColorDecision, SrgbFallbackContract,
+    render_prepared_cpu_pixelpipe,
 };
 
 /// Production CPU preview boundary used by the application composition.
@@ -187,6 +188,11 @@ fn prepare_frame(
     input: &DecodedFrame,
     edit: &Edit,
 ) -> Result<PreparedCpuPixelpipeResult, PreviewError> {
+    let presentation = if input.raw_source().is_some() {
+        SrgbFallbackContract::SceneReferredRawV1
+    } else {
+        SrgbFallbackContract::Colorimetric
+    };
     let mut graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
     let (source_pixels, dimensions, representation) = source_frame_pixels(input, &mut graph)?;
     let source_color = input.source_color();
@@ -252,7 +258,8 @@ fn prepare_frame(
             edit.revision(),
         ),
     )
-    .map_err(PreviewError::Prepared)?;
+    .map_err(PreviewError::Prepared)?
+    .with_presentation(presentation);
     Ok(prepared)
 }
 

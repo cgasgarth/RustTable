@@ -296,8 +296,9 @@ impl CatalogPreviewService {
 
 /// The display output encoding used by the current application composition.
 ///
-/// Monitor ICC conversion remains owned by the display-profile workstream; until
-/// that transform is available, the receipt makes the sRGB fallback explicit.
+/// Monitor ICC conversion remains owned by the display-profile workstream. The
+/// nested render receipt identifies whether this is colorimetric sRGB or the
+/// versioned scene-referred RAW fallback shared by preview, filmstrip, and export.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewOutputTransform {
     SrgbDisplayFallback,
