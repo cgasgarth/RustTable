@@ -16,6 +16,7 @@ mod error;
 mod history;
 mod import;
 mod import_details;
+mod metadata;
 mod organization;
 mod repository;
 mod restore;
@@ -58,6 +59,14 @@ pub use import_details::{
     IMPORT_DETAILS_VERSION, ImportDetails, ImportDetailsValidationError, ImportMetadataStatus,
     ImportMetadataSummary, ImportRegistration, ImportRegistrationReceipt,
     ImportRegistrationReceiptError, ImportRegistrationStatus, ReferencePathIdentity,
+};
+pub use metadata::{
+    CATALOG_METADATA_SCHEMA_VERSION, CatalogMetadataBatch, CatalogMetadataBatchEdit,
+    CatalogMetadataBatchReceipt, CatalogMetadataCandidate, CatalogMetadataConflict,
+    CatalogMetadataDiagnostic, CatalogMetadataDocument, CatalogMetadataEdit, CatalogMetadataError,
+    CatalogMetadataField, CatalogMetadataIndexTerm, CatalogMetadataKey, CatalogMetadataPrivacy,
+    CatalogMetadataProvenance, CatalogMetadataRepository, CatalogMetadataSource,
+    CatalogMetadataValue, CatalogMetadataValues,
 };
 pub use organization::{
     CatalogQuery, ColorLabel, OrganizationProjection, PhotoOrganizationState, Rating,

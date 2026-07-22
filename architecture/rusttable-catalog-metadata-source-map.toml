@@ -1,0 +1,60 @@
+schema = "rusttable.catalog-metadata-source-map.v1"
+issue = 211
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+policy = "behavioral reference only; no darktable code is copied, compiled, linked, or invoked"
+
+[durable_schema]
+catalog_schema_version = 11
+document_schema_version = 1
+documents = "rusttable_metadata_documents: photo-id bytes -> validated postcard document"
+index = "rusttable_metadata_index: sha256(key) + sha256(value) + photo-id -> empty; selected non-sensitive values only"
+revision = "rusttable_metadata_revision: singleton big-endian u64"
+atomicity = "documents, derived index entries, and catalog metadata revision commit in one redb write transaction"
+rebuild = "discard every derived index row and derive canonical rows from validated documents"
+
+[[responsibility]]
+id = "typed-field-registry"
+upstream_path = "src/common/metadata.c;src/common/metadata.h"
+upstream_symbol = "dt_metadata_t/key/tagname/type/visibility/private"
+rust_path = "crates/rusttable-catalog/src/metadata.rs"
+rust_symbol = "CatalogMetadataKey/CatalogMetadataValue/CatalogMetadataPrivacy"
+status = "replaced"
+
+[[responsibility]]
+id = "source-reconciliation"
+upstream_path = "src/common/metadata.c"
+upstream_symbol = "dt_metadata_set_imported/dt_metadata_set_list"
+rust_path = "crates/rusttable-catalog/src/metadata.rs"
+rust_symbol = "CatalogMetadataDocument::reconcile/CatalogMetadataProvenance"
+status = "replaced"
+
+[[responsibility]]
+id = "batch-editing"
+upstream_path = "src/common/metadata.c;src/libs/metadata.c"
+upstream_symbol = "dt_metadata_set_list_id/dt_metadata_clear/bulk undo"
+rust_path = "crates/rusttable-catalog/src/metadata.rs"
+rust_symbol = "CatalogMetadataBatch/CatalogMetadataEdit"
+status = "replaced"
+
+[[responsibility]]
+id = "atomic-persistence"
+upstream_path = "src/common/metadata.c"
+upstream_symbol = "main.meta_data transaction and lookup behavior"
+rust_path = "crates/rusttable-catalog-store/src/repositories/metadata.rs"
+rust_symbol = "RedbCatalogMetadataRepository"
+status = "replaced"
+
+[[responsibility]]
+id = "display-and-edit-ui"
+upstream_path = "src/libs/metadata.c;src/libs/metadata_view.c;src/libs/image_infos.c"
+upstream_symbol = "metadata editor and metadata display"
+rust_path = "excluded from issue 211; paired UI issue 966"
+status = "excluded"
+
+[[responsibility]]
+id = "file-writeback"
+upstream_path = "src/common/metadata_export.c"
+upstream_symbol = "XMP/EXIF/IPTC output"
+rust_path = "excluded from issue 211"
+status = "excluded"

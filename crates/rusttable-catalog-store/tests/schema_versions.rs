@@ -1,8 +1,10 @@
 mod support;
 
 use redb::{Database, ReadableDatabase, TableDefinition};
+use rusttable_catalog::ImportRepository as _;
 use rusttable_catalog_store::{
-    CURRENT_SCHEMA_VERSION, RedbCatalogRepository, RedbImportRepository,
+    CURRENT_SCHEMA_VERSION, RedbCatalogMetadataRepository, RedbCatalogRepository,
+    RedbImportRepository,
 };
 use std::path::Path;
 
@@ -99,4 +101,28 @@ fn unsupported_schema_versions_fail_closed() {
     write_version(&newer, &[CURRENT_SCHEMA_VERSION + 1]);
     assert!(RedbImportRepository::open(&newer).is_err());
     support::remove(&newer);
+}
+
+#[test]
+fn schema_v10_adds_catalog_metadata_tables_without_import_rewrites() {
+    let path = support::temp_path("schema-v10-metadata");
+    let mut imports = RedbImportRepository::open(&path).unwrap();
+    let record = support::record("preserved.raw", 41, 42, 3);
+    imports.commit(&record).unwrap();
+    drop(imports);
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_write().unwrap();
+    {
+        let mut schema = transaction.open_table(SCHEMA).unwrap();
+        schema.insert(VERSION_KEY, &[10][..]).unwrap();
+    }
+    transaction.commit().unwrap();
+    drop(database);
+    drop(RedbCatalogMetadataRepository::open(&path).unwrap());
+    let imports = RedbImportRepository::open(&path).unwrap();
+    assert_eq!(
+        imports.find_by_photo_id(record.photo().id()).unwrap(),
+        Some(record)
+    );
+    support::remove(&path);
 }
