@@ -186,28 +186,38 @@ fn coefficients(
     destination: u32,
     kernel: FinalScaleKernel,
 ) -> Vec<ResampleTap> {
-    let coordinate = f64::from(destination) * f64::from(source_size) / f64::from(destination_size);
-    let base = coordinate.floor() as i64;
-    let offsets: Vec<i64> = match kernel {
-        FinalScaleKernel::Nearest => vec![i64::from(coordinate.fract() >= 0.5)],
-        FinalScaleKernel::Bilinear => vec![0, 1],
-        FinalScaleKernel::Bicubic => vec![-1, 0, 1, 2],
-        FinalScaleKernel::Lanczos => vec![-2, -1, 0, 1, 2, 3],
+    let source_per_destination = f64::from(source_size) / f64::from(destination_size);
+    let coordinate = (f64::from(destination) + 0.5) * source_per_destination - 0.5;
+    let mut taps = if kernel == FinalScaleKernel::Nearest {
+        vec![ResampleTap {
+            index: reflect(coordinate.round() as i64, source_size),
+            weight: 1.0,
+        }]
+    } else {
+        // Widen the reconstruction kernel while reducing. This is the
+        // separable low-pass form of darktable's normalized interpolation:
+        // every destination pixel integrates the source footprint instead of
+        // selecting a single source coordinate.
+        let footprint_scale = source_per_destination.max(1.0);
+        let support = f64::from(kernel.support()) * footprint_scale;
+        let first = (coordinate - support).ceil() as i64;
+        let last = (coordinate + support).floor() as i64;
+        (first..=last)
+            .map(|source_index| {
+                let distance = (coordinate - source_index as f64) / footprint_scale;
+                let weight = match kernel {
+                    FinalScaleKernel::Bilinear => (1.0 - distance.abs()).max(0.0) as f32,
+                    FinalScaleKernel::Bicubic => cubic_weight(distance),
+                    FinalScaleKernel::Lanczos => lanczos_weight(distance, 3.0),
+                    FinalScaleKernel::Nearest => unreachable!("nearest handled above"),
+                } / footprint_scale as f32;
+                ResampleTap {
+                    index: reflect(source_index, source_size),
+                    weight,
+                }
+            })
+            .collect::<Vec<_>>()
     };
-    let mut taps = offsets
-        .into_iter()
-        .map(|offset| {
-            let index = reflect(base + offset, source_size);
-            let distance = coordinate - (base + offset) as f64;
-            let weight = match kernel {
-                FinalScaleKernel::Nearest => 1.0_f32,
-                FinalScaleKernel::Bilinear => (1.0 - distance.abs()) as f32,
-                FinalScaleKernel::Bicubic => cubic_weight(distance),
-                FinalScaleKernel::Lanczos => lanczos_weight(distance, 3.0),
-            };
-            ResampleTap { index, weight }
-        })
-        .collect::<Vec<_>>();
     let sum: f32 = taps.iter().map(|tap| tap.weight).sum();
     if sum != 0.0 && sum.is_finite() {
         for tap in &mut taps {

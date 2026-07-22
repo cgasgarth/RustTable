@@ -16,12 +16,16 @@ fn edit() -> Edit {
 }
 
 fn source() -> RenderSourceProvenance {
+    source_for(ImageDimensions::new(1, 1).unwrap())
+}
+
+fn source_for(dimensions: ImageDimensions) -> RenderSourceProvenance {
     RenderSourceProvenance::new(
         PhotoId::new(2).unwrap(),
         AssetId::new(3).unwrap(),
         ContentHash::Sha256([7; 32]),
         ByteLength::from_bytes(42),
-        ImageProbe::new(InputFormat::Png, ImageDimensions::new(1, 1).unwrap()),
+        ImageProbe::new(InputFormat::Png, dimensions),
     )
 }
 
@@ -67,4 +71,49 @@ fn successful_render_owns_source_bound_receipt_and_plan() {
         output.receipt().working_profile().encoding(),
         ColorEncoding::LinearSrgbD65
     );
+}
+
+#[test]
+fn preview_resampling_policy_is_visible_in_receipt_cache_identity() {
+    let dimensions = ImageDimensions::new(4, 2).unwrap();
+    let input = rusttable_image::DecodedImage::new_with_color_encoding(
+        dimensions,
+        vec![
+            0, 0, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 128, 128, 128, 255, 200,
+            200, 200, 255, 64, 64, 64, 255, 32, 32, 32, 255,
+        ],
+        ColorEncoding::Srgb,
+    )
+    .unwrap();
+    let full_plan = RenderPlan::for_source(dimensions, RenderTarget::FullResolution);
+    let preview_plan = RenderPlan::for_source(
+        dimensions,
+        RenderTarget::PreviewFit(PreviewBounds::new(2, 2).unwrap()),
+    );
+    let full = render_edit_with_provenance(
+        &edit(),
+        &input,
+        SourceColorPolicy::RequireDeclaredSrgb,
+        full_plan,
+        source_for(dimensions),
+    )
+    .unwrap();
+    let preview = render_edit_with_provenance(
+        &edit(),
+        &input,
+        SourceColorPolicy::RequireDeclaredSrgb,
+        preview_plan,
+        source_for(dimensions),
+    )
+    .unwrap();
+
+    assert_ne!(
+        full.receipt().identity_hash(),
+        preview.receipt().identity_hash()
+    );
+    let encoding = preview.receipt().canonical_encoding();
+    assert!(encoding.contains("Filtered"));
+    assert!(encoding.contains("Bicubic"));
+    assert!(encoding.contains("Reflect"));
+    assert!(encoding.contains("Premultiplied"));
 }

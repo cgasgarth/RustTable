@@ -22,7 +22,7 @@ const THUMBNAIL_WIDTH: u32 = 180;
 const THUMBNAIL_HEIGHT: u32 = 120;
 const MAX_THUMBNAIL_BYTES: u64 = 2 * 1024 * 1024;
 const CACHE_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
-const RENDERER_VERSION: u32 = 1;
+const RENDERER_VERSION: u32 = 2;
 const PROFILE_VERSION: u32 = 2;
 
 /// Whether the visible thumbnail came from durable cache or a fresh bounded render.
@@ -307,7 +307,9 @@ fn thumbnail_key(
 fn configuration_identity(request: ThumbnailRequest) -> [u8; 32] {
     let (width, height) = request.size().dimensions();
     let mut bytes = Vec::with_capacity(16);
-    bytes.extend_from_slice(b"GTKTHUMB2:sRGB-display-fallback");
+    bytes.extend_from_slice(
+        b"GTKTHUMB3:sRGB-display-fallback:preview-bicubic-support-2-reflect-premultiplied",
+    );
     bytes.extend_from_slice(&width.to_be_bytes());
     bytes.extend_from_slice(&height.to_be_bytes());
     Sha256::digest(bytes).into()
