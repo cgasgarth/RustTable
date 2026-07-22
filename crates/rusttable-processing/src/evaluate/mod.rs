@@ -23,7 +23,7 @@ pub use frame::{
     EvaluatedFrame, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
     evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
 };
-use lab_boundary::apply_defringe;
+use lab_boundary::{apply_defringe, apply_shadhi};
 pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
@@ -532,19 +532,10 @@ pub(crate) fn apply_operation_with_profile(
             )
         }
         ProcessingOperationKind::Shadhi { config } => {
-            let plan = crate::operations::shadhi::ShadhiPlan::new(*config, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
-            let candidate = plan
-                .execute(pixels)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
-            apply_reconstruction(
-                pixels,
-                &candidate,
-                opacity,
-                step_index,
-                operation_id,
-                pixel_index_offset,
-            )
+            let candidate = apply_shadhi(*config, pixels, dimensions, frame.encoding(), opacity)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
         }
         ProcessingOperationKind::Vignette { config } => {
             let seed = u64::try_from(operation_id.get() & u128::from(u64::MAX))

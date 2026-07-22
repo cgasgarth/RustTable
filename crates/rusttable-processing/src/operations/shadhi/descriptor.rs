@@ -19,7 +19,7 @@ pub fn shadhi_descriptor() -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new("shadhi", "rusttable.shadhi", 5, 5, 1).expect("static ID"),
         parameters: vec![
-            scalar("order", 0.0, 3.0, 0.0, "order", ParameterRole::Processing),
+            integer("order", 0, 2, 0, "order", ParameterRole::Processing),
             scalar(
                 "radius",
                 0.1,
@@ -100,22 +100,33 @@ pub fn shadhi_descriptor() -> OperationDescriptor {
                 "epsilon",
                 ParameterRole::Processing,
             ),
-            scalar(
-                "shadhi_algo",
-                0.0,
-                1.0,
-                1.0,
-                "algorithm",
-                ParameterRole::Processing,
-            ),
+            ParameterDescriptor {
+                id: "shadhi_algo".to_owned(),
+                kind: ParameterKind::Enum {
+                    tags: vec!["gaussian".to_owned(), "bilateral".to_owned()],
+                },
+                default: ParameterDefault::Enum("bilateral".to_owned()),
+                required: false,
+                introduced_version: 5,
+                removed_version: None,
+                unit: Some("algorithm".to_owned()),
+                step: None,
+                precision: 0,
+                role: ParameterRole::Processing,
+                cache_affecting: true,
+                animatable: false,
+                ui_hint: Some("combo".to_owned()),
+                condition: None,
+            },
         ],
         flags: OperationFlags::FULL_IMAGE
             .insert(OperationFlags::DETERMINISTIC_CPU)
             .insert(OperationFlags::HISTORY_VISIBLE)
             .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::MASKS)
             .insert(OperationFlags::BLENDING)
             .insert(OperationFlags::ANALYSIS),
-        stage: "scene-linear-rgb-compat".to_owned(),
+        stage: "display-referred-lab".to_owned(),
         roi: RoiKind::FullImage,
         tiling: TilingContract {
             overlap_pixels: 256,
@@ -129,17 +140,21 @@ pub fn shadhi_descriptor() -> OperationDescriptor {
         capability: CapabilityContract {
             cpu_supported: true,
             gpu_tier: None,
-            required_features: vec!["linear-rgb".to_owned(), "gaussian-blur".to_owned()],
-            required_formats: vec!["rgb-f32".to_owned()],
+            required_features: vec![
+                "lab-boundary".to_owned(),
+                "gaussian-blur".to_owned(),
+                "bilateral-filter".to_owned(),
+            ],
+            required_formats: vec!["lab-f32x4".to_owned()],
             deterministic_cpu: true,
             deterministic_gpu: false,
-            fallback_to_cpu: false,
-            precision: "f32".to_owned(),
+            fallback_to_cpu: true,
+            precision: "f32 scalar Lab Gaussian/bilateral".to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
         },
-        io: rgb_io(),
+        io: lab_io(),
         mask_blend: MaskBlendContract {
-            consumes_mask: false,
+            consumes_mask: true,
             publishes_mask: false,
             blend_if: true,
             geometry: false,
@@ -184,11 +199,37 @@ fn scalar(
     }
 }
 
-fn rgb_io() -> InputOutputContract {
+fn integer(
+    id: &str,
+    minimum: i64,
+    maximum: i64,
+    default: i64,
+    unit: &str,
+    role: ParameterRole,
+) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Integer { minimum, maximum },
+        default: ParameterDefault::Integer(default),
+        required: false,
+        introduced_version: 1,
+        removed_version: None,
+        unit: Some(unit.to_owned()),
+        step: Some(1.0),
+        precision: 0,
+        role,
+        cache_affecting: true,
+        animatable: false,
+        ui_hint: Some("slider".to_owned()),
+        condition: None,
+    }
+}
+
+fn lab_io() -> InputOutputContract {
     let image = ImagePredicate {
-        channels: 3,
+        channels: 4,
         alpha: AlphaPolicy::Preserve,
-        encodings: vec![ColorEncoding::LinearSrgbD65],
+        encodings: vec![ColorEncoding::LabD50],
         nonfinite: NonFinitePolicy::Reject,
     };
     InputOutputContract {
