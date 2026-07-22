@@ -81,6 +81,27 @@ pub enum MetadataInputError {
         limit: u64,
         actual: u64,
     },
+    TiffValueSizeOverflow {
+        kind: u16,
+        count: u64,
+        element_size: u8,
+    },
+    TiffOffsetOverflow {
+        offset: u64,
+        length: u64,
+    },
+    TiffValueTruncated {
+        kind: u16,
+        count: u64,
+        offset: u64,
+        required: u64,
+        available: u64,
+    },
+    TiffStructureTruncated {
+        offset: u64,
+        required: u64,
+        available: u64,
+    },
     MalformedExif,
     InvalidField {
         field: &'static str,
