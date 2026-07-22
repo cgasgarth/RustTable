@@ -108,6 +108,22 @@ fn collection_actions_project_filter_transitions_for_the_lighttable() {
 }
 
 #[test]
+fn cold_start_binds_the_first_persisted_selection_in_collection_order() {
+    let mut controller = CollectionController::new([
+        CollectionItem::new(id(1), "/photos/2026/z-last.RAF"),
+        CollectionItem::new(id(2), "/photos/2026/a-first.RAF"),
+    ]);
+    assert!(controller.select_only(id(1)));
+    assert!(controller.toggle_selection(id(2)));
+
+    assert_eq!(
+        super::first_persisted_selected_photo(&controller),
+        Some(id(2)),
+        "cold launch must follow the visible collection order, not PhotoId order"
+    );
+}
+
+#[test]
 fn gtk_application_advertises_native_file_open_events() {
     let application = super::create_application();
     assert!(
