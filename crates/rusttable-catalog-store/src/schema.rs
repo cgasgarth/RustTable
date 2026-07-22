@@ -7,7 +7,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
 use rusttable_catalog::{CanonicalPayload, RepositoryError};
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 8;
+pub const CURRENT_SCHEMA_VERSION: u8 = 9;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -17,6 +17,10 @@ pub(crate) const PHOTO_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_index");
 pub(crate) const ASSET_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_asset_index");
+pub(crate) const PHOTO_ORGANIZATION_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_photo_organization");
+pub(crate) const ORGANIZATION_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_organization_revision");
 pub(crate) const EDITS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_edits");
 pub(crate) const IMPORT_DETAILS_TABLE: TableDefinition<&[u8], &[u8]> =
@@ -52,6 +56,7 @@ pub(crate) const HISTORY_BLOBS_TABLE: TableDefinition<&[u8], &[u8]> =
 pub(crate) const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blob_refs");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
+pub(crate) const ORGANIZATION_REVISION_KEY: &[u8] = b"organization-revision";
 const DATABASE_OPEN_RETRIES: u8 = 8;
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(2);
 
@@ -117,6 +122,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(ASSET_INDEX_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
+        open_organization_tables(&transaction)?;
         transaction
             .open_table(EDITS_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -137,6 +143,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
+        open_organization_tables(&transaction)?;
     }
     transaction
         .commit()
@@ -165,6 +172,11 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             drop(schema);
             drop(transaction);
             migrate_to_v8(database)
+        }
+        [8] => {
+            drop(schema);
+            drop(transaction);
+            migrate_to_v9(database)
         }
         [5] => {
             drop(schema);
@@ -195,6 +207,8 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
         RECORDS_TABLE,
         PHOTO_INDEX_TABLE,
         ASSET_INDEX_TABLE,
+        PHOTO_ORGANIZATION_TABLE,
+        ORGANIZATION_REVISION_TABLE,
         EDITS_TABLE,
         IMPORT_DETAILS_TABLE,
         REFERENCE_PATH_INDEX_TABLE,
@@ -266,6 +280,7 @@ fn migrate_legacy_to_v4(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
+        open_organization_tables(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -302,6 +317,7 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
+        open_organization_tables(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -317,6 +333,7 @@ fn migrate_to_v5(database: &Database) -> Result<(), RepositoryError> {
         .map_err(|_| RepositoryError::Unavailable)?;
     open_collection_tables(&transaction)?;
     open_history_tables(&transaction)?;
+    open_organization_tables(&transaction)?;
     let mut schema = transaction
         .open_table(SCHEMA_TABLE)
         .map_err(|_| RepositoryError::CorruptPersistedData)?;
@@ -346,6 +363,7 @@ fn migrate_to_v6(database: &Database) -> Result<(), RepositoryError> {
         }
         drop(version);
         open_history_tables(&transaction)?;
+        open_organization_tables(&transaction)?;
         backfill_history_blobs(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
@@ -479,8 +497,35 @@ fn migrate_to_v8(database: &Database) -> Result<(), RepositoryError> {
         }
         drop(version);
         open_history_tables(&transaction)?;
+        open_organization_tables(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
+        schema
+            .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+            .map_err(|_| RepositoryError::Unavailable)?;
+    }
+    transaction
+        .commit()
+        .map_err(|_| RepositoryError::CommitFailure)
+}
+
+fn migrate_to_v9(database: &Database) -> Result<(), RepositoryError> {
+    let transaction = database
+        .begin_write()
+        .map_err(|_| RepositoryError::Unavailable)?;
+    {
+        let mut schema = transaction
+            .open_table(SCHEMA_TABLE)
+            .map_err(|_| RepositoryError::CorruptPersistedData)?;
+        let version = schema
+            .get(VERSION_KEY)
+            .map_err(|_| RepositoryError::CorruptPersistedData)?
+            .ok_or(RepositoryError::CorruptPersistedData)?;
+        if version.value() != [8] {
+            return Err(RepositoryError::CorruptPersistedData);
+        }
+        drop(version);
+        open_organization_tables(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -677,6 +722,16 @@ fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), Re
         .map_err(|_| RepositoryError::Unavailable)?;
     transaction
         .open_table(COLLECTION_INTEGRITY_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    Ok(())
+}
+
+fn open_organization_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
+    transaction
+        .open_table(PHOTO_ORGANIZATION_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(ORGANIZATION_REVISION_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
     Ok(())
 }

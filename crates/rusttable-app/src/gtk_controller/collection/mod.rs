@@ -138,6 +138,20 @@ impl CollectionController {
         locale: LocaleTag,
     ) -> Self {
         let records = records.into_iter().collect::<Vec<_>>();
+        Self::from_import_records_with_locale_and_organization(
+            records.iter().copied(),
+            locale,
+            &BTreeMap::new(),
+        )
+    }
+
+    #[must_use]
+    pub fn from_import_records_with_locale_and_organization<'a>(
+        records: impl IntoIterator<Item = &'a ImportRecord>,
+        locale: LocaleTag,
+        persisted: &BTreeMap<PhotoId, PhotoOrganizationState>,
+    ) -> Self {
+        let records = records.into_iter().collect::<Vec<_>>();
         let mut controller =
             Self::with_locale(records.iter().map(|record| collection_item(record)), locale);
         let mut catalog_state = CatalogState::new();
@@ -155,11 +169,15 @@ impl CollectionController {
         }
         controller.organization = catalog_state
             .photos()
-            .filter_map(|photo| {
-                catalog_state
-                    .organization(photo.id())
-                    .cloned()
-                    .map(|state| (photo.id(), state))
+            .map(|photo| {
+                (
+                    photo.id(),
+                    persisted
+                        .get(&photo.id())
+                        .cloned()
+                        .or_else(|| catalog_state.organization(photo.id()).cloned())
+                        .unwrap_or_else(|| PhotoOrganizationState::new(photo.id())),
+                )
             })
             .collect();
         controller.catalog_state = Some(catalog_state);
@@ -253,40 +271,83 @@ impl CollectionController {
         before != self.selected
     }
 
-    pub fn set_selected_rating(&mut self, rating: LighttableRating) {
-        let photo_ids = self.selected.iter().copied().collect::<Vec<_>>();
+    #[must_use]
+    pub fn selected_photo_ids(&self) -> impl ExactSizeIterator<Item = PhotoId> + '_ {
+        self.selected.iter().copied()
+    }
+
+    #[must_use]
+    pub fn organization_command_for_rating(
+        &self,
+        rating: LighttableRating,
+    ) -> Option<CatalogCommand> {
+        let photo_ids = self.selected_photo_ids().collect::<Vec<_>>();
         if photo_ids.is_empty() {
-            return;
+            return None;
         }
         match rating {
-            LighttableRating::Rejected => {
-                self.apply_catalog_command(CatalogCommand::SetRejection {
-                    photo_ids,
-                    rejected: true,
-                });
-            }
-            value => {
-                self.apply_catalog_command(CatalogCommand::SetRejection {
-                    photo_ids: photo_ids.clone(),
-                    rejected: false,
-                });
-                self.apply_catalog_command(CatalogCommand::SetRating {
-                    photo_ids,
-                    rating: rating_from_ui(value),
-                });
-            }
+            LighttableRating::Rejected => Some(CatalogCommand::SetRejection {
+                rejected: !photo_ids.iter().all(|photo_id| {
+                    self.organization
+                        .get(photo_id)
+                        .is_some_and(|state| state.rejected)
+                }),
+                photo_ids,
+            }),
+            value => Some(CatalogCommand::SetRating {
+                photo_ids,
+                rating: rating_from_ui(value),
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn organization_command_for_color_label(
+        &self,
+        label: LighttableColorLabel,
+    ) -> Option<CatalogCommand> {
+        let photo_ids = self.selected_photo_ids().collect::<Vec<_>>();
+        (!photo_ids.is_empty()).then_some(CatalogCommand::ToggleColorLabel {
+            photo_ids,
+            label: color_from_ui(label),
+        })
+    }
+
+    pub fn replace_organization(
+        &mut self,
+        states: impl IntoIterator<Item = PhotoOrganizationState>,
+    ) {
+        let persisted = states
+            .into_iter()
+            .map(|state| (state.photo_id, state))
+            .collect::<BTreeMap<_, _>>();
+        self.organization = self
+            .items
+            .iter()
+            .map(|item| {
+                let photo_id = item.photo_id();
+                (
+                    photo_id,
+                    persisted
+                        .get(&photo_id)
+                        .cloned()
+                        .unwrap_or_else(|| PhotoOrganizationState::new(photo_id)),
+                )
+            })
+            .collect();
+        self.catalog_state = None;
+    }
+
+    pub fn set_selected_rating(&mut self, rating: LighttableRating) {
+        if let Some(command) = self.organization_command_for_rating(rating) {
+            self.apply_catalog_command(command);
         }
     }
 
     pub fn toggle_selected_color_label(&mut self, label: LighttableColorLabel) {
-        let photo_ids = self.selected.iter().copied().collect::<Vec<_>>();
-        if photo_ids.is_empty() {
-            return;
+        if let Some(command) = self.organization_command_for_color_label(label) {
+            self.apply_catalog_command(command);
         }
-        self.apply_catalog_command(CatalogCommand::ToggleColorLabel {
-            photo_ids,
-            label: color_from_ui(label),
-        });
     }
 
     pub fn clear_reset(&mut self) {
@@ -521,6 +582,7 @@ fn apply_fallback_organization(
             for photo_id in photo_ids {
                 if let Some(state) = organization.get_mut(&photo_id) {
                     state.rating = rating;
+                    state.rejected = false;
                 }
             }
         }

@@ -139,3 +139,40 @@ fn toggle_label_has_stable_projection() {
         .unwrap();
     assert!(state.organization(id).unwrap().color_labels.is_empty());
 }
+
+#[test]
+fn numeric_rating_unrejects_without_losing_the_previous_rejection_transition() {
+    let mut state = state();
+    let id = PhotoId::new(1).unwrap();
+    state
+        .apply(
+            state.revision(),
+            CatalogCommand::SetRating {
+                photo_ids: vec![id],
+                rating: Rating::Five,
+            },
+        )
+        .unwrap();
+    state
+        .apply(
+            state.revision(),
+            CatalogCommand::SetRejection {
+                photo_ids: vec![id],
+                rejected: true,
+            },
+        )
+        .unwrap();
+    state
+        .apply(
+            state.revision(),
+            CatalogCommand::SetRating {
+                photo_ids: vec![id],
+                rating: Rating::Two,
+            },
+        )
+        .unwrap();
+
+    let organization = state.organization(id).unwrap();
+    assert_eq!(organization.rating, Rating::Two);
+    assert!(!organization.rejected);
+}

@@ -6,6 +6,7 @@ mod repositories;
 mod schema;
 
 use codecs as codec;
+use codecs::organization as organization_codec;
 use codecs::{
     edit as edit_codec, history as history_codec, import_details as import_details_codec,
 };
