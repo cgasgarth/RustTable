@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![doc = "Bounded JPEG, PNG, and classic-TIFF file input/output for `RustTable`."]
+#![doc = "Bounded pure-Rust JPEG, PNG, TIFF, and `BigTIFF` file input/output for `RustTable`."]
 
 mod input;
 pub mod jpeg;
@@ -9,6 +9,7 @@ mod raster_samples;
 pub mod raw;
 mod registry;
 mod svg;
+pub mod tiff;
 
 pub mod dng_output;
 
@@ -41,3 +42,10 @@ pub use raw::{
 pub use registry::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 pub use rusttable_image::{DecoderDescriptor, DecoderIdentity};
 pub use svg::{ManagedSvgAsset, SVG_SCHEMA_VERSION, SvgError, SvgLimits, SvgRaster};
+pub use tiff::{
+    TIFF_BACKEND_ID, TiffAlphaSample, TiffByteOrder, TiffChunkKind, TiffChunkLayout,
+    TiffCompression, TiffContainer, TiffDataLocation, TiffDecodeError, TiffDecodeLimits,
+    TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult, TiffDecoder,
+    TiffHeader, TiffMetadataInventory, TiffPage, TiffPhotometric, TiffPixelData, TiffPredictor,
+    TiffSampleData, TiffSampleFormat, TiffStorageLayout,
+};

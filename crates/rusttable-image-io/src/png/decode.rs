@@ -168,7 +168,13 @@ fn decode_pixels(
     parsed: &ParsedPng,
     limits: PngDecodeLimits,
 ) -> Result<PngPixelData, PngDecodeError> {
-    let max = usize::try_from(limits.max_decompressed_bytes.min(usize::MAX as u64))
+    // `png` charges ancillary chunks against its allocation budget as well as
+    // decoded scanlines. RustTable validates those categories independently,
+    // so pass the backend their combined bounded allowance.
+    let backend_bytes = limits
+        .max_decompressed_bytes
+        .saturating_add(limits.max_metadata_bytes.min(limits.max_source_bytes));
+    let max = usize::try_from(backend_bytes.min(usize::MAX as u64))
         .map_err(|_| PngDecodeError::Input(ImageInputError::ArithmeticOverflow))?;
     let mut decoder =
         Decoder::new_with_limits(BufReader::new(Cursor::new(bytes)), Limits { bytes: max });

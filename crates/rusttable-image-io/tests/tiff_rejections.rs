@@ -65,48 +65,35 @@ fn with_bytes<T>(name: &str, bytes: Vec<u8>, operation: impl FnOnce(&Path) -> T)
 }
 
 #[test]
-fn bigtiff_is_a_typed_unsupported_feature() {
+fn truncated_bigtiff_is_malformed() {
     let result = with_bytes("bigtiff", fixture("bigtiff"), |path| {
         input(1_000_000).probe_path(path)
     });
 
-    assert_eq!(
+    assert!(matches!(
         result,
-        Err(ImageInputError::UnsupportedFeature {
-            format: rusttable_image::InputFormat::Tiff,
-            reason: rusttable_image::UnsupportedImageFeature::BigTiff,
-        })
-    );
+        Err(ImageInputError::MalformedInput { .. })
+    ));
 }
 
 #[test]
-fn multiple_pages_are_not_silently_truncated() {
+fn recursive_page_chain_is_rejected() {
     let result = with_bytes("multi", fixture("multi"), |path| {
         input(1_000_000).probe_path(path)
     });
 
-    assert_eq!(
-        result,
-        Err(ImageInputError::UnsupportedFeature {
-            format: rusttable_image::InputFormat::Tiff,
-            reason: rusttable_image::UnsupportedImageFeature::MultipleImages,
-        })
+    assert!(
+        matches!(result, Err(ImageInputError::MalformedInput { message, .. }) if message.contains("cycle"))
     );
 }
 
 #[test]
-fn high_bit_depth_is_rejected_before_decoder_conversion() {
+fn high_bit_depth_is_accepted_by_probe() {
     let result = with_bytes("16bit", fixture("16bit"), |path| {
         input(1_000_000).probe_path(path)
     });
 
-    assert_eq!(
-        result,
-        Err(ImageInputError::UnsupportedFeature {
-            format: rusttable_image::InputFormat::Tiff,
-            reason: rusttable_image::UnsupportedImageFeature::BitDepth,
-        })
-    );
+    assert_eq!(result.expect("16-bit TIFF probes").dimensions().width(), 2);
 }
 
 #[test]
@@ -155,7 +142,7 @@ fn tiff_dimension_and_decoded_byte_limits_are_checked_before_decode() {
     assert_eq!(
         bytes,
         Err(ImageInputError::DecodedByteLimit {
-            actual: 8,
+            actual: 6,
             limit: 4,
         })
     );

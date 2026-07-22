@@ -1,15 +1,12 @@
-use std::io::Cursor;
-
-use image::{ImageFormat, ImageReader};
 use rusttable_image::{
-    DecodeLimits, DecodedImage, DecoderDescriptor, DecoderIdentity, ImageDimensions,
-    ImageInputError, ImageProbe, InputFormat,
+    DecodeLimits, DecodedImage, DecoderDescriptor, DecoderIdentity, ImageInputError, ImageProbe,
+    InputFormat,
 };
 
-use crate::input::{enforce_limits, probe_tiff, validate_tiff};
 use crate::jpeg::JpegDecoder;
 use crate::png::{decode_legacy_rgba8, decode_png_probe, is_png_signature};
 use crate::raw::{decode_raw, is_raw, probe_raw};
+use crate::tiff::{decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature};
 
 /// Maximum amount of a source that any format probe may inspect.
 pub const PROBE_BUDGET_BYTES: usize = 64 * 1024;
@@ -100,11 +97,11 @@ builtin_decoders! {
     },
     Tiff {
         id: "rusttable.decoder.tiff.v1",
-        implementation: "image-tiff-0.25",
-        matches: is_tiff,
-        probe: probe_classic_tiff,
-        decode: decode_classic_tiff,
-        full_source_probe: false
+        implementation: "tiff-0.11.3-pure-rust",
+        matches: is_tiff_signature,
+        probe: decode_tiff_probe,
+        decode: decode_tiff,
+        full_source_probe: true
     }
 }
 
@@ -242,20 +239,9 @@ fn is_jpeg(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0xff, 0xd8])
 }
 
-fn is_tiff(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[b'I', b'I', 0x2a, 0x00])
-        || bytes.starts_with(&[b'M', b'M', 0x00, 0x2a])
-        || bytes.starts_with(&[b'I', b'I', 0x2b, 0x00])
-        || bytes.starts_with(&[b'M', b'M', 0x00, 0x2b])
-}
-
 fn probe_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
     let header = crate::jpeg::probe_bounded(bytes, limits, bytes.len() >= PROBE_BUDGET_BYTES)?;
     Ok(ImageProbe::new(InputFormat::Jpeg, header.dimensions))
-}
-
-fn probe_classic_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
-    probe_tiff(bytes, limits)
 }
 
 fn decode_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
@@ -293,40 +279,11 @@ fn decode_png(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageI
     })
 }
 
-fn decode_classic_tiff(
-    bytes: &[u8],
-    limits: DecodeLimits,
-) -> Result<DecodedImage, ImageInputError> {
-    validate_tiff(bytes)?;
-    let probe = probe_tiff(bytes, limits)?;
-    decode_image(bytes, probe, limits, ImageFormat::Tiff)
-}
-
-fn decode_image(
-    bytes: &[u8],
-    probe: ImageProbe,
-    limits: DecodeLimits,
-    format: ImageFormat,
-) -> Result<DecodedImage, ImageInputError> {
-    let decoded = ImageReader::with_format(Cursor::new(bytes), format)
-        .decode()
-        .map_err(|error| ImageInputError::MalformedInput {
-            format: probe.format(),
-            message: error.to_string(),
-        })?
-        .to_rgba8();
-    let dimensions = ImageDimensions::new(decoded.width(), decoded.height())
-        .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    enforce_limits(limits, dimensions)?;
-    if dimensions != probe.dimensions() {
-        return Err(ImageInputError::MalformedInput {
-            format: probe.format(),
-            message: "decoded dimensions differ from the container probe".to_owned(),
-        });
-    }
+fn decode_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
+    let (dimensions, pixels) = decode_tiff_rgba8(bytes, limits)?;
     DecodedImage::new_with_color_encoding(
         dimensions,
-        decoded.into_raw(),
+        pixels,
         rusttable_image::ColorEncoding::Unspecified,
     )
     .map_err(|error| match error {

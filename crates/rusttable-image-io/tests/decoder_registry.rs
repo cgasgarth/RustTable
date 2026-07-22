@@ -1,4 +1,4 @@
-use rusttable_image::{DecodeLimits, ImageInputError, InputFormat, UnsupportedImageFeature};
+use rusttable_image::{DecodeLimits, ImageInputError, InputFormat};
 use rusttable_image_io::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 
 fn limits() -> DecodeLimits {
@@ -170,7 +170,7 @@ fn camera_raw_signature_selects_the_raw_decoder_before_decode() {
 }
 
 #[test]
-fn bigtiff_signature_is_rejected_without_decoder_fallback() {
+fn malformed_bigtiff_signature_never_falls_back() {
     let bytes = decode_base64(include_str!("fixtures/bigtiff.tiff.b64"));
     let registry = ImageDecoderRegistry::standard();
 
@@ -179,16 +179,16 @@ fn bigtiff_signature_is_rejected_without_decoder_fallback() {
 
     assert!(matches!(
         probe,
-        Err(ImageInputError::UnsupportedFeature {
+        Err(ImageInputError::MalformedInput {
             format: InputFormat::Tiff,
-            reason: UnsupportedImageFeature::BigTiff,
+            ..
         })
     ));
     assert!(matches!(
         decode,
-        Err(ImageInputError::UnsupportedFeature {
+        Err(ImageInputError::MalformedInput {
             format: InputFormat::Tiff,
-            reason: UnsupportedImageFeature::BigTiff,
+            ..
         })
     ));
 }

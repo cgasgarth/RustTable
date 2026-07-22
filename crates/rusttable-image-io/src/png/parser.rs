@@ -197,7 +197,10 @@ pub(crate) fn parse(
         if seen_idat {
             idat_done = true;
         }
-        if seen_idat && kind != *b"fcTL" && kind != *b"fdAT" {
+        // Keep accepting late pHYs metadata emitted by established image tools.
+        // It cannot affect pixel decoding, and `idat_done` still prevents image
+        // data from resuming after the ancillary chunk.
+        if seen_idat && kind != *b"fcTL" && kind != *b"fdAT" && kind != *b"pHYs" {
             return Err(PngDecodeError::Malformed(format!(
                 "{} is not allowed after IDAT",
                 ascii_kind(kind)
