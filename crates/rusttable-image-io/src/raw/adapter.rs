@@ -153,6 +153,12 @@ impl RawlerRawDecoder {
         check_cancel(&request.cancellation)?;
         let copy = StableSourceCopy::read(source, request)?;
         let probe = selected_probe(self.registry, copy.bytes.as_slice())?;
+        if matches!(
+            probe.container,
+            RawContainerKind::Dng | RawContainerKind::TiffRaw
+        ) {
+            return super::dng::probe(copy.bytes.as_slice(), request.limits, &probe);
+        }
         let raw_source = RawSource::new_from_shared_vec(Arc::clone(&copy.bytes));
         let dummy = backend_decode(
             &raw_source,
@@ -182,6 +188,12 @@ impl RawlerRawDecoder {
         let copy = StableSourceCopy::read(source, request)?;
         check_cancel(&request.cancellation)?;
         let probe = selected_probe(self.registry, copy.bytes.as_slice())?;
+        if matches!(
+            probe.container,
+            RawContainerKind::Dng | RawContainerKind::TiffRaw
+        ) {
+            return super::dng::decode(copy.bytes.as_slice(), request, &probe);
+        }
         let raw_source = RawSource::new_from_shared_vec(Arc::clone(&copy.bytes));
         let params = RawDecodeParams {
             image_index: request.image_index,
@@ -219,6 +231,7 @@ impl RawlerRawDecoder {
             },
             plane_count,
             sample_count,
+            dng: None,
         };
         Ok(RawDecodeResult { frame, receipt })
     }

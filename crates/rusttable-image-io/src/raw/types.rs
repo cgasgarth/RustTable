@@ -1,6 +1,13 @@
-use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+mod errors;
+mod receipt;
+
+pub use errors::{
+    RawCapabilityError, RawCapabilityKind, RawDecodeError, RawFrameValidationError, RawSourceError,
+};
+pub use receipt::{RawDecodeReceipt, RawDecodeResult, RawDngReceipt};
 
 /// Stable identity of the only initial camera-RAW backend.
 pub const RAWLER_BACKEND_ID: &str = "rawler-0.7.2";
@@ -731,124 +738,6 @@ pub struct RawSourceReceipt {
     pub source_sha256: [u8; 32],
     pub stable_copy_used: bool,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RawDecodeReceipt {
-    pub backend: String,
-    pub container: RawContainerKind,
-    pub camera: RawCameraIdentity,
-    pub compression: RawCompressionEvidence,
-    pub bit_depth: u8,
-    pub source: RawSourceReceipt,
-    pub plane_count: u8,
-    pub sample_count: u64,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RawDecodeResult {
-    pub frame: RawFrame,
-    pub receipt: RawDecodeReceipt,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RawCapabilityKind {
-    Container,
-    Camera,
-    Compression,
-    Layout,
-    SampleType,
-    ImageIndex,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RawCapabilityError {
-    pub missing: RawCapabilityKind,
-    pub container: Option<RawContainerKind>,
-    pub maker: String,
-    pub model: String,
-    pub mode: String,
-    pub detail: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RawSourceError {
-    Empty,
-    TooLarge { actual: u64, limit: u64 },
-    LengthConversion,
-    AllocationFailure,
-    Read { offset: u64, requested: usize },
-    Changed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RawFrameValidationError {
-    ZeroDimensions,
-    EmptyArea,
-    AreaOutOfBounds,
-    ArithmeticOverflow,
-    DimensionLimit { width: u32, height: u32 },
-    PixelLimit { actual: u64, limit: u64 },
-    SampleLimit { actual: u64, limit: u64 },
-    DecodedByteLimit { actual: u64, limit: u64 },
-    PlaneCount,
-    PlaneLayout,
-    PlaneSize { expected: u64, actual: u64 },
-    InvalidCfa,
-    InvalidCfaPhase,
-    InvalidLevels,
-    InvalidMatrix,
-    InvalidPreviewRange,
-    BitDepth,
-    MetadataLimit,
-    MetadataByteLimit,
-    NonFiniteMetadata,
-    UnsafeCameraIdentity,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RawDecodeError {
-    Cancelled,
-    Source(RawSourceError),
-    UnsupportedSignature {
-        signature: Vec<u8>,
-    },
-    Malformed {
-        container: Option<RawContainerKind>,
-        message: String,
-    },
-    Capability(RawCapabilityError),
-    InvalidFrame(RawFrameValidationError),
-    Backend {
-        container: RawContainerKind,
-        message: String,
-    },
-}
-
-impl fmt::Display for RawDecodeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Cancelled => formatter.write_str("RAW decode cancelled"),
-            Self::Source(error) => write!(formatter, "RAW source failed: {error:?}"),
-            Self::UnsupportedSignature { .. } => {
-                formatter.write_str("RAW signature is unsupported")
-            }
-            Self::Malformed { container, message } => {
-                write!(formatter, "malformed RAW {container:?}: {message}")
-            }
-            Self::Capability(error) => write!(
-                formatter,
-                "RAW capability {:?} is unavailable for {} {}: {}",
-                error.missing, error.maker, error.model, error.detail
-            ),
-            Self::InvalidFrame(error) => write!(formatter, "invalid RAW frame: {error:?}"),
-            Self::Backend { container, message } => {
-                write!(formatter, "{container:?} backend failed: {message}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for RawDecodeError {}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RawCapabilityKey {
