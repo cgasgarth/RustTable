@@ -256,7 +256,7 @@ pub(super) fn workspace_stack(
     darkroom_page: &gtk4::Box,
 ) -> (
     gtk4::Stack,
-    gtk4::FlowBox,
+    gtk4::GridView,
     gtk4::Stack,
     LighttableLayoutControls,
     LighttableToolbar,
@@ -269,11 +269,7 @@ pub(super) fn workspace_stack(
     workspace.set_widget_name("center-workspace");
     apply_theme_role(&workspace, ThemeRole::Workspace);
 
-    let lighttable = gtk4::FlowBox::builder()
-        .max_children_per_line(6)
-        .selection_mode(gtk4::SelectionMode::None)
-        .valign(gtk4::Align::Start)
-        .build();
+    let lighttable = gtk4::GridView::builder().valign(gtk4::Align::Start).build();
     lighttable.set_widget_name("lighttable-grid");
     apply_theme_role(&lighttable, ThemeRole::Lighttable);
     let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);

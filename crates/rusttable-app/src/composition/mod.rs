@@ -212,6 +212,17 @@ fn activate_application(
         application,
         I18n::new(resolved_locale.locale().clone()).unwrap_or_default(),
     );
+    let thumbnail_window_shell = shell.clone();
+    let thumbnail_window_catalog = Rc::clone(&catalog_controller);
+    let thumbnail_window_lifecycle = Rc::clone(thumbnail_lifecycle);
+    shell.connect_thumbnail_window_changed(move || {
+        let shell = thumbnail_window_shell.clone();
+        let catalog = Rc::clone(&thumbnail_window_catalog);
+        let lifecycle = Rc::clone(&thumbnail_window_lifecycle);
+        glib::idle_add_local_once(move || {
+            start_workspace_thumbnails(&shell, &catalog.borrow(), &lifecycle);
+        });
+    });
     shell.set_import_existing_paths(catalog_controller.borrow().existing_source_paths());
     let mut display_profiles = rusttable_display_profile::DisplayProfileService::new();
     let profile_receipt = display_profiles
@@ -239,7 +250,6 @@ fn activate_application(
     if let Some(controller) = active_collection.borrow().as_ref() {
         shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
     }
-    start_workspace_thumbnails(&shell, &catalog_controller.borrow(), thumbnail_lifecycle);
     let collection_for_actions = Rc::clone(active_collection);
     shell.connect_collection_action(move |action| {
         let mut controller = collection_for_actions.borrow_mut();

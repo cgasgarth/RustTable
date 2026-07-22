@@ -6,12 +6,13 @@
 
 mod layout;
 mod lighttable;
+mod lighttable_window;
 mod mode_transition;
 mod preview;
 mod selection;
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::gui::display_profile::DisplayProfileBanner;
@@ -53,6 +54,7 @@ use crate::viewport_presentation::{
 };
 
 use self::lighttable::{PhotoTilePair, WorkspaceRenderHandle};
+use self::lighttable_window::ThumbnailWindowChanged;
 
 pub(super) type PhotoSelectedHandler = Box<dyn Fn(PhotoId, SelectionModifiers)>;
 
@@ -68,7 +70,7 @@ pub struct GtkShell {
     window: gtk4::ApplicationWindow,
     layout: ShellLayout,
     workspace: gtk4::Stack,
-    lighttable: gtk4::FlowBox,
+    lighttable: gtk4::GridView,
     lighttable_empty_state: gtk4::Stack,
     pub(crate) darkroom: DarkroomView,
     darkroom_preview: PhotoPreview,
@@ -95,10 +97,11 @@ pub struct GtkShell {
     display_profile_banner: DisplayProfileBanner,
     preview_profile_fallback: Rc<Cell<bool>>,
     lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
-    lighttable_filter: Rc<RefCell<Option<BTreeSet<PhotoId>>>>,
+    lighttable_filter: Rc<RefCell<Option<Vec<PhotoId>>>>,
     lighttable_interaction: Rc<RefCell<LighttableInteractionState>>,
     lighttable_generation: Rc<Cell<u64>>,
     photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
+    thumbnail_window_changed: ThumbnailWindowChanged,
     photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
     photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
 }
@@ -242,6 +245,7 @@ impl GtkShell {
             lighttable_interaction: Rc::new(RefCell::new(LighttableInteractionState::new(6))),
             lighttable_generation: Rc::new(Cell::new(0)),
             photo_selected: Rc::new(RefCell::new(None)),
+            thumbnail_window_changed: Rc::new(RefCell::new(None)),
             photo_tiles: Rc::new(RefCell::new(BTreeMap::new())),
             photo_details: Rc::new(RefCell::new(BTreeMap::new())),
         };
@@ -505,13 +509,8 @@ impl GtkShell {
                             .is_some_and(LighttablePhotoState::selected)
                     }),
             );
-        self.lighttable_filter.replace(Some(
-            state
-                .matching_photo_ids()
-                .iter()
-                .copied()
-                .collect::<BTreeSet<_>>(),
-        ));
+        self.lighttable_filter
+            .replace(Some(state.matching_photo_ids().to_vec()));
         self.refresh_lighttable(state.matching_photo_ids());
     }
 
@@ -527,7 +526,7 @@ impl GtkShell {
         };
         let filter = self.lighttable_filter.borrow();
         self.workspace_render_handle()
-            .render(view_model, filter.as_ref());
+            .render(view_model, filter.as_deref());
     }
 
     /// Switches the visible lighttable surface and reconciles its culling set.
@@ -545,7 +544,7 @@ impl GtkShell {
         };
         let filter = self.lighttable_filter.borrow();
         self.workspace_render_handle()
-            .render(view_model, filter.as_ref());
+            .render(view_model, filter.as_deref());
         self.sync_lighttable_panels();
     }
 
@@ -677,7 +676,7 @@ impl GtkShell {
         matching_photo_ids: impl IntoIterator<Item = PhotoId>,
     ) {
         self.lighttable_generation.set(0);
-        let matching_photo_ids = matching_photo_ids.into_iter().collect::<BTreeSet<_>>();
+        let matching_photo_ids = matching_photo_ids.into_iter().collect::<Vec<_>>();
         self.lighttable_filter
             .replace(Some(matching_photo_ids.clone()));
         self.lighttable_workspace.replace(Some(view_model.clone()));
@@ -690,7 +689,7 @@ impl GtkShell {
         let Some(view_model) = workspace.as_ref() else {
             return;
         };
-        let matching_photo_ids = matching_photo_ids.iter().copied().collect::<BTreeSet<_>>();
+        let matching_photo_ids = matching_photo_ids.to_vec();
         self.workspace_render_handle()
             .render(view_model, Some(&matching_photo_ids));
     }
@@ -725,6 +724,7 @@ impl GtkShell {
             tile.thumbnails.set_failed();
         }
     }
+
     /// Updates the darkroom image detail and its controller-owned module panels.
     ///
     /// This surface deliberately accepts only `rusttable-ui` presentation
@@ -809,6 +809,7 @@ impl GtkShell {
             darkroom: self.darkroom.clone(),
             workspace: self.workspace.clone(),
             photo_selected: Rc::clone(&self.photo_selected),
+            thumbnail_window_changed: Rc::clone(&self.thumbnail_window_changed),
             export_panel: self.export_panel.clone(),
             external_editor_panel: self.external_editor_panel.clone(),
             photo_tiles: Rc::clone(&self.photo_tiles),
@@ -967,22 +968,14 @@ impl CollectionRefreshHandle {
         self.generation.set(state.controls().generation());
         self.controls.set_state(state.controls());
         self.toolbar.set_state(state.toolbar());
-        self.render.lighttable_filter.replace(Some(
-            state
-                .matching_photo_ids()
-                .iter()
-                .copied()
-                .collect::<BTreeSet<_>>(),
-        ));
+        self.render
+            .lighttable_filter
+            .replace(Some(state.matching_photo_ids().to_vec()));
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
             return;
         };
-        let matching_photo_ids = state
-            .matching_photo_ids()
-            .iter()
-            .copied()
-            .collect::<BTreeSet<_>>();
+        let matching_photo_ids = state.matching_photo_ids().to_vec();
         self.render.interaction.borrow_mut().reconcile_selection(
             state
                 .matching_photo_ids()
