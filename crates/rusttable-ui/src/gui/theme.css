@@ -229,12 +229,26 @@ button:disabled:hover,
   background-color: transparent;
 }
 
+.dt_module_expander > title > .dt_darkroom_section_title,
+.dt_module_group > title > .dt_darkroom_section_title {
+  min-width: 0;
+  min-height: {{module_title_height}}px;
+  padding: 0;
+}
+
 .dt_darkroom_section_label {
   min-width: 0;
   padding: 0;
   color: {{foreground}};
   font-size: {{base_font_pt}}pt;
   font-weight: 500;
+}
+
+.dt_module_expander > title > .dt_darkroom_section_title > .dt_darkroom_section_label,
+.dt_module_group > title > .dt_darkroom_section_title > .dt_darkroom_section_label {
+  min-width: 0;
+  padding: 0;
+  color: {{foreground}};
 }
 
 .dt_module_expander > box,

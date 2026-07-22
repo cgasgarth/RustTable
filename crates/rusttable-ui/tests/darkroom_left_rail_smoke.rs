@@ -37,14 +37,25 @@ fn cold_launch_left_rail_survives_selected_raw_mode_switch() {
         "selected RAW must open in darkroom"
     );
     shell.begin_darkroom_selection(photo_id, ViewportGeneration::new(1));
+    shell.present();
+    settle_gtk();
     let expected = shell.darkroom_panel_target().expect("darkroom target");
     assert_eq!(expected.photo_id(), photo_id);
 
     assert_left_rail_is_populated(&shell, expected);
     shell.show_workspace(WorkspaceRole::Lighttable);
+    settle_gtk();
     assert_left_rail_is_populated(&shell, expected);
     shell.show_workspace(WorkspaceRole::Darkroom);
+    settle_gtk();
     assert_left_rail_is_populated(&shell, expected);
+}
+
+fn settle_gtk() {
+    let context = gtk4::glib::MainContext::default();
+    while context.pending() {
+        context.iteration(false);
+    }
 }
 
 fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget) {
@@ -96,8 +107,18 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
             .downcast::<gtk4::Expander>()
             .expect("left-rail section expander");
         let title_row = expander.label_widget().expect("section title row");
-        let title_label = find_label(&title_row).expect("section title label");
+        let title_label = find_widget(&title_row, &format!("{id}-label"))
+            .expect("section title label")
+            .downcast::<gtk4::Label>()
+            .expect("section title widget is a label");
         assert_eq!(title_label.text().as_str(), expected_title, "section {id}");
+        assert!(title_label.is_visible(), "section label is hidden {id}");
+        assert!(
+            title_label.allocated_width() > 0 && title_label.allocated_height() > 0,
+            "section label has no rendered allocation {id}: {}x{}",
+            title_label.allocated_width(),
+            title_label.allocated_height()
+        );
         assert!(
             title_label.has_css_class("dt_darkroom_section_label"),
             "section label lost Darktable typography class {id}"
@@ -113,20 +134,6 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         DarkroomSelectionState::Selected(photo_id) if photo_id == expected.photo_id()
     ));
     assert!(direct_children.len() >= 5, "left rail must not be blank");
-}
-
-fn find_label(root: &gtk4::Widget) -> Option<gtk4::Label> {
-    if let Ok(label) = root.clone().downcast::<gtk4::Label>() {
-        return Some(label);
-    }
-    let mut child = root.first_child();
-    while let Some(current) = child {
-        if let Some(found) = find_label(&current) {
-            return Some(found);
-        }
-        child = current.next_sibling();
-    }
-    None
 }
 
 fn child_names(widget: &gtk4::Widget) -> Vec<String> {
