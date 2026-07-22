@@ -135,6 +135,7 @@ pub(super) fn desktop_body(
         let preferred_width = i32::from(layout.side_panel_widths.preferred_px);
         move |paned| paned.set_position(preferred_width)
     });
+    connect_left_rail_constraints(&split);
     connect_geometry_refresh(&split, std::rc::Rc::clone(geometry_changed));
     let workspace_with_right_panel = gtk4::Paned::builder()
         .orientation(gtk4::Orientation::Horizontal)
@@ -208,6 +209,26 @@ fn connect_right_rail_constraints(paned: &gtk4::Paned) {
             .saturating_sub(paned.position())
             .clamp(minimum, maximum);
         let position = width.saturating_sub(rail_width);
+        if paned.position() != position {
+            paned.set_position(position);
+        }
+    };
+    paned.connect_position_notify(move |paned| clamp(paned));
+    paned.connect_notify_local(Some("width"), move |paned, _| clamp(paned));
+}
+
+fn connect_left_rail_constraints(paned: &gtk4::Paned) {
+    let clamp = |paned: &gtk4::Paned| {
+        let width = paned.allocated_width();
+        if width <= 0 {
+            return;
+        }
+        let layout = DARKTABLE_DESKTOP_SPEC.layout;
+        let minimum = i32::from(layout.side_panel_widths.minimum_px);
+        let maximum = width
+            .saturating_sub(i32::from(layout.center_minimum_width_px))
+            .max(minimum);
+        let position = paned.position().clamp(minimum, maximum);
         if paned.position() != position {
             paned.set_position(position);
         }

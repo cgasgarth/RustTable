@@ -31,8 +31,7 @@ use crate::widgets::preview::PhotoPreview;
 use crate::{MaskManagerAction, MaskManagerPanel, MaskManagerSnapshot};
 use crate::{MultiscaleRetouchAction, MultiscaleRetouchPanel, MultiscaleRetouchSnapshot};
 use interaction::{
-    FilmstripState, HistogramView, connect_filmstrip_button, install_filmstrip_keyboard,
-    sync_filmstrip_buttons,
+    FilmstripState, HistogramView, install_filmstrip_keyboard, sync_filmstrip_buttons,
 };
 use panel_widgets::{left_panel, render_typed_modules_into, right_panel};
 use status::DarkroomStatusSurface;
@@ -202,6 +201,7 @@ pub struct DarkroomView {
     filmstrip_state: Rc<RefCell<FilmstripState>>,
     filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
     filmstrip_widget: Rc<RefCell<Option<gtk4::FlowBox>>>,
+    filmstrip_keyboard_installed: Rc<Cell<bool>>,
     profile_diagnostic: ProfileDiagnosticSurface,
     status_surface: DarkroomStatusSurface,
     left_panel_visible: Rc<Cell<bool>>,
@@ -256,6 +256,7 @@ impl DarkroomView {
         let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
         let filmstrip_handler = Rc::new(RefCell::new(None));
         let filmstrip_widget = Rc::new(RefCell::new(None));
+        let filmstrip_keyboard_installed = Rc::new(Cell::new(false));
         let view = Self {
             page,
             preview,
@@ -282,6 +283,7 @@ impl DarkroomView {
             filmstrip_state,
             filmstrip_handler,
             filmstrip_widget,
+            filmstrip_keyboard_installed,
             profile_diagnostic,
             status_surface,
             left_panel_visible,
@@ -542,23 +544,25 @@ impl DarkroomView {
             selected,
             generation,
         );
-        install_filmstrip_keyboard(
-            filmstrip,
-            &self.filmstrip_state,
-            &self.internal_filmstrip_handler(),
-        );
-        let handler = self.internal_filmstrip_handler();
-        let buttons = interaction::filmstrip_buttons(filmstrip);
-        for (photo_id, button) in buttons {
-            connect_filmstrip_button(
-                &button,
-                photo_id,
+        if !self.filmstrip_keyboard_installed.replace(true) {
+            install_filmstrip_keyboard(
                 filmstrip,
                 &self.filmstrip_state,
-                &handler,
+                &self.internal_filmstrip_handler(),
             );
         }
         self.sync_filmstrip_selection();
+    }
+
+    /// Mirrors the shell-owned click route into darkroom state without adding a
+    /// second click controller to the same filmstrip buttons.
+    #[must_use]
+    pub fn select_filmstrip_photo(&self, photo_id: PhotoId) -> bool {
+        let selected = self.filmstrip_state.borrow_mut().select(photo_id).is_some();
+        if selected {
+            self.sync_filmstrip_selection();
+        }
+        selected
     }
 
     fn internal_filmstrip_handler(&self) -> interaction::FilmstripHandler {

@@ -158,7 +158,7 @@ pub(super) fn darkroom_page(
         sync_guard: Rc::new(Cell::new(false)),
     };
 
-    let top = toolbar("darkroom-toolbar-top", "Darkroom color proofing controls");
+    let top = toolbar("darkroom-toolbar-top", "Darkroom viewport controls");
     let left_panel = layout_toggle(
         "darkroom-left-panel-toggle",
         "left panel",
@@ -183,9 +183,13 @@ pub(super) fn darkroom_page(
     top.append(&soft_proof);
     top.append(&gamut_check);
     let bottom = toolbar("darkroom-toolbar-bottom", "Darkroom viewport controls");
-    bottom.append(&zoom);
-    bottom.append(&fit);
-    bottom.append(&before_after);
+    // Darktable exposes one compact viewport chrome surface here. Keep the
+    // legacy bottom-toolbar widget ID for shell/test discovery, but do not
+    // reserve a second row that squeezes the image viewport.
+    top.append(&zoom);
+    top.append(&fit);
+    top.append(&before_after);
+    bottom.set_visible(false);
 
     let viewport = gtk4::Overlay::new();
     viewport.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[0]);

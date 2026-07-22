@@ -87,6 +87,12 @@ impl WorkspaceRenderHandle {
         let zoom = self.interaction.borrow().zoom();
         let layout = self.interaction.borrow().layout();
         let grid = lighttable_grid_for_allocation(&self.lighttable, zoom);
+        // GridView keeps its children start-aligned. Apply the same centered
+        // offset used by the display-free card receipt so a small collection
+        // occupies the darktable thumbtable surface instead of pinning to the
+        // upper-left corner.
+        self.lighttable
+            .set_margin_start(i32::from(grid.horizontal_offset_px()));
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
         self.lighttable.set_min_columns(if layout.shows_culling() {
             1
@@ -204,6 +210,10 @@ impl WorkspaceRenderHandle {
                 },
             );
         }
+        // The shell owns and rebuilds these buttons; darkroom owns the
+        // generation-tagged selection state. Rebind the latter after every
+        // projection without duplicating the shell's click controllers.
+        self.darkroom.install_filmstrip_interaction(&self.filmstrip);
         let previous_thumbnail_states = Rc::new(RefCell::new(previous_thumbnail_states));
         let previous_details = Rc::new(previous_details);
         let photo_tiles = Rc::clone(&self.photo_tiles);
@@ -598,6 +608,7 @@ fn select_photo(
     let darkroom_visible = context.workspace.visible_child_name().as_deref()
         == Some(WorkspaceRole::Darkroom.stack_name());
     if surface == PhotoSurface::Filmstrip && darkroom_visible {
+        let _ = context.darkroom.select_filmstrip_photo(photo_id);
         if let Some(detail) = detail.as_ref() {
             open_photo(context, photo_id, detail);
         }

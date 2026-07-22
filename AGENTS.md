@@ -33,6 +33,12 @@
 - Extended coverage and distribution run after merge or for releases. Do not recreate validation schedulers, timing budgets, wave planners, or receipt graphs.
 - Run independent hosted jobs in parallel and use caches; do not impose local elapsed-time caps.
 
+### Visual comparison workflow
+- For GTK visual parity reviews, the orchestrator uses computer use only to capture screenshots of the installed RustTable and original Darktable apps; Gemini visual-analysis workers do not use computer use.
+- Capture matched screenshots locally and pass them to Gemini as image inputs. Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state for each comparison pair.
+- Capture the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize. Ask Gemini to report concrete geometry/style/render differences and map them to RustTable components.
+- Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.
+
 ## Issues and pull requests
 
 - GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.

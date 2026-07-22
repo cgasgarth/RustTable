@@ -70,10 +70,10 @@ window,
 
 .dt_view_switcher button {
   min-height: 26px;
-  min-width: 72px;
-  padding: 1px 8px;
+  min-width: 68px;
+  padding: 1px 7px;
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: 3px;
   background-color: transparent;
   background-image: none;
   box-shadow: none;
@@ -85,8 +85,10 @@ window,
 }
 
 .dt_view_switcher button.active {
-  color: #ffffffff;
-  font-weight: bold;
+  color: {{foreground}};
+  font-weight: normal;
+  border-color: {{active_image_marker}};
+  background-color: {{button_background}};
 }
 
 .dt_toolbar button,
@@ -169,9 +171,25 @@ button:disabled:hover,
 .dt_module_expander > title,
 .dt_module_group > title {
   min-height: {{module_title_height}}px;
-  padding: 1px {{module_padding}}px;
+  padding: 1px 4px;
   font-size: {{base_font_pt}}pt;
   font-weight: bold;
+}
+
+/* GTK4 renders the disclosure arrow and label as siblings in the title box.
+ * Keep them in one compact hit target instead of letting title padding push the
+ * text away from the arrow at narrow rail widths. */
+.dt_module_expander > title > arrow,
+.dt_module_group > title > arrow {
+  min-width: 14px;
+  margin: 0 3px 0 0;
+}
+
+.dt_module_expander > title > label,
+.dt_module_group > title > label {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .dt_module_expander > box,
@@ -191,6 +209,13 @@ button:disabled:hover,
   font-size: {{compact_font_pt}}pt;
 }
 
+.dt_module_expander > box > box > button.selected,
+#history-entries button.selected {
+  border-left: 2px solid {{active_image_marker}};
+  color: {{active_image_marker}};
+  font-weight: bold;
+}
+
 .dt_module_row scale,
 .dt_module_row dropdown,
 .dt_module_row switch,
@@ -205,7 +230,7 @@ button:disabled:hover,
 
 .dt_field,
 .dt_module_row dropdown {
-  min-width: 76px;
+  min-width: 48px;
   padding: 0 3px;
   background-color: {{active_field_background}};
 }
@@ -763,6 +788,17 @@ scale:focus-visible {
   padding: 0 3px;
 }
 
+.dt_module_header checkbutton:checked,
+.dt_darkroom_module_header checkbutton:checked {
+  color: {{active_image_marker}};
+}
+
+.dt_module_header checkbutton:checked check,
+.dt_darkroom_module_header checkbutton:checked check {
+  background-color: {{active_image_marker}};
+  border-color: {{active_image_marker}};
+}
+
 .dt_module_row {
   min-height: {{module_row_height}}px;
   padding: 1px 0;
@@ -787,6 +823,7 @@ scale:focus-visible {
 
 #darkroom-histogram {
   min-height: {{histogram_height}}px;
+  min-width: 0;
   background: linear-gradient(to top, #1d1d1dff, #383838ff);
   border-bottom: 1px solid {{border}};
 }
@@ -813,7 +850,7 @@ scale:focus-visible {
 .dt_darkroom_toolbar {
   min-height: {{toolbar_height}}px;
   min-width: 0;
-  padding: 1px 3px;
+  padding: 2px 4px;
   background-color: {{background}};
   border-bottom: 1px solid {{border}};
 }
@@ -915,11 +952,15 @@ scale:focus-visible {
 
 .dt_photo_card {
   margin: 2px;
+  border-radius: 3px;
+  box-shadow: 0 1px 2px #00000066;
 }
 
 .dt_filmstrip_item {
   margin: 2px 1px;
   border-top: 2px solid transparent;
+  border-radius: 3px;
+  box-shadow: 0 1px 2px #00000066;
 }
 
 .dt_filmstrip_item.dt_selected {

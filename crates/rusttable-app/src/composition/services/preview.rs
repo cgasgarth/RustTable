@@ -224,9 +224,15 @@ fn source_frame_pixels(
     input: &DecodedFrame,
     graph: &mut CompiledOperationGraph,
 ) -> Result<(Vec<[f32; 4]>, RasterDimensions, RgbaF32SourceRepresentation), PreviewError> {
-    if let Some(raw_source) = input.raw_source() {
-        let temperature = pre_demosaic_temperature(graph).map_err(PreviewError::RawPipeline)?;
-        let plan = RawPipelinePlan::new(raw_source, temperature, DemosaicAlgorithm::Bilinear)
+    let temperature = pre_demosaic_temperature(graph).map_err(PreviewError::RawPipeline)?;
+    // The native RAW decoder has already run raw color calibration while
+    // constructing `DecodedFrame::image()`. Re-demosaicing that frame here
+    // would discard the decoder's camera matrix/white-balance work and yields
+    // the green/cyan cast seen on camera RAWs. Keep the native RAW path only
+    // when an edit explicitly requires a pre-demosaic temperature operation;
+    // otherwise use the calibrated linear frame as the pixelpipe input.
+    if let (Some(raw_source), Some(temperature)) = (input.raw_source(), temperature) {
+        let plan = RawPipelinePlan::new(raw_source, Some(temperature), DemosaicAlgorithm::Bilinear)
             .map_err(PreviewError::RawPipeline)?;
         let execution = plan
             .execute(raw_source)

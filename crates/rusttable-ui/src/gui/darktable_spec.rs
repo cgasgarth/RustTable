@@ -360,12 +360,12 @@ pub const DARKROOM_OPERATION_FOCUS_ORDER: [&str; 5] = [
 ];
 
 pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
-    top_toolbar_height_px: 34,
-    bottom_toolbar_height_px: 34,
-    viewport_minimum_height_px: 260,
+    top_toolbar_height_px: 28,
+    bottom_toolbar_height_px: 28,
+    viewport_minimum_height_px: 200,
     histogram_height_px: 180,
     filmstrip_separator_px: 1,
-    status_bar_height_px: 24,
+    status_bar_height_px: 20,
 };
 
 /// A display-free allocation receipt for the darkroom's named regions.
@@ -652,15 +652,15 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     window_width_px: 1_280,
     window_height_px: 768,
     outer_border_px: 10,
-    header_height_px: 40,
+    header_height_px: 32,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
     toolbar_padding_horizontal: EmHundredths::new(28),
     toolbar_button_minimum: EmHundredths::new(170),
     center_minimum_width_px: 650,
     side_panel_widths: SidePanelWidths {
-        minimum_px: 180,
-        preferred_px: 220,
+        minimum_px: 150,
+        preferred_px: 150,
         maximum_px: 1_500,
     },
     filmstrip_heights: FilmstripHeights {
@@ -777,13 +777,13 @@ mod tests {
     #[test]
     fn panel_metrics_preserve_darktable_resize_bounds() {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
-        assert_eq!(LAYOUT_METRICS.header_height_px, 40);
+        assert_eq!(LAYOUT_METRICS.header_height_px, 32);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 220);
-        assert!(LAYOUT_METRICS.side_panel_widths.accepts(180));
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 150);
+        assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
-        assert!(!LAYOUT_METRICS.side_panel_widths.accepts(179));
+        assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
         assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
@@ -794,11 +794,14 @@ mod tests {
         assert_eq!(LAYOUT_METRICS.window_width_px, 1_280);
         assert_eq!(LAYOUT_METRICS.window_height_px, 768);
         assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_204);
-        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 764);
-        assert_eq!(LAYOUT_METRICS.preferred_right_panel_position_px(1_224), 984);
+        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 904);
+        assert_eq!(
+            LAYOUT_METRICS.preferred_right_panel_position_px(1_224),
+            1_054
+        );
         assert_eq!(
             LAYOUT_METRICS.preferred_right_panel_position_for_content_width(1_204),
-            984
+            1_054
         );
         assert!(
             LAYOUT_METRICS.preferred_center_width_px(1_224)
@@ -818,16 +821,16 @@ mod tests {
     #[test]
     fn darkroom_geometry_receipt_is_deterministic_and_visibility_aware() {
         let full = DarkroomGeometryReceipt::for_window(1_224, 768, true, true, true);
-        assert_eq!(full.left_panel_width_px, 220);
-        assert_eq!(full.center_width_px(), 764);
-        assert_eq!(full.right_panel_width_px, 220);
+        assert_eq!(full.left_panel_width_px, 150);
+        assert_eq!(full.center_width_px(), 904);
+        assert_eq!(full.right_panel_width_px, 150);
         assert_eq!(full.filmstrip_height_px, 120);
-        assert_eq!(full.status_bar_height_px, 24);
+        assert_eq!(full.status_bar_height_px, 20);
 
         let compact = DarkroomGeometryReceipt::for_window(900, 500, false, true, false);
         assert_eq!(compact.left_panel_width_px, 0);
-        assert_eq!(compact.center_width_px(), 660);
-        assert_eq!(compact.right_panel_width_px, 220);
+        assert_eq!(compact.center_width_px(), 730);
+        assert_eq!(compact.right_panel_width_px, 150);
         assert_eq!(compact.filmstrip_height_px, 0);
         assert!(!compact.left_panel_visible);
         assert!(!compact.filmstrip_visible);

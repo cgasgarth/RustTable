@@ -51,7 +51,9 @@ impl HistogramView {
         let selected_sample = Rc::new(RefCell::new(None));
         let chart = gtk4::DrawingArea::new();
         chart.set_widget_name("darkroom-histogram-chart");
-        chart.set_content_width(220);
+        // The right rail is a live Paned allocation. A fixed content width makes
+        // GTK widen the rail back to the old natural size during reflow.
+        chart.set_content_width(0);
         chart.set_content_height(128);
         chart.set_hexpand(true);
         chart.set_vexpand(true);
@@ -227,8 +229,28 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
         let bin_count = u32::try_from(data.bins().len()).expect("histogram bins are bounded");
         let bin_width = width / f64::from(bin_count);
         for (channel, color) in channels {
-            context.set_source_rgba(color.0, color.1, color.2, color.3);
-            context.set_line_width(1.0);
+            let mut first = true;
+            for (index, bin) in data.bins().iter().enumerate() {
+                let index = u32::try_from(index).expect("histogram bin index is bounded");
+                let x = (f64::from(index) + 0.5) * bin_width;
+                let y = height - (f64::from(bin.channel(channel)) / f64::from(maximum) * height);
+                if first {
+                    context.move_to(x, height);
+                    context.line_to(x, y);
+                    first = false;
+                } else {
+                    context.line_to(x, y);
+                }
+            }
+            if !first {
+                context.line_to(width, height);
+                context.close_path();
+                context.set_source_rgba(color.0, color.1, color.2, color.3 * 0.24);
+                let _ = context.fill();
+            }
+            // The filled trace above uses the source path once; redraw the
+            // trace from the bins so the curve remains crisp at rail widths.
+            context.new_path();
             for (index, bin) in data.bins().iter().enumerate() {
                 let index = u32::try_from(index).expect("histogram bin index is bounded");
                 let x = (f64::from(index) + 0.5) * bin_width;
@@ -239,6 +261,8 @@ fn install_histogram_draw(chart: &gtk4::DrawingArea, data: &Rc<RefCell<Option<Hi
                     context.line_to(x, y);
                 }
             }
+            context.set_source_rgba(color.0, color.1, color.2, color.3);
+            context.set_line_width(1.0);
             let _ = context.stroke();
         }
     });
@@ -399,23 +423,6 @@ pub(super) fn install_filmstrip_keyboard(
         gtk4::glib::Propagation::Stop
     });
     filmstrip.add_controller(key);
-}
-
-pub(super) fn connect_filmstrip_button(
-    button: &gtk4::Button,
-    photo_id: PhotoId,
-    filmstrip: &gtk4::FlowBox,
-    state: &Rc<RefCell<FilmstripState>>,
-    handler: &FilmstripHandler,
-) {
-    let filmstrip = filmstrip.clone();
-    let state = Rc::clone(state);
-    let handler = Rc::clone(handler);
-    button.connect_clicked(move |_| {
-        let selection = state.borrow_mut().select(photo_id);
-        sync_filmstrip_buttons(&filmstrip, state.borrow().selected());
-        emit_selection(&handler, selection);
-    });
 }
 
 fn emit_selection(handler: &FilmstripHandler, selection: Option<FilmstripSelection>) {
