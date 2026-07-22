@@ -107,6 +107,20 @@ pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
     button
 }
 
+/// Disabled until the owning module exposes an action handler, but retained in
+/// the title row so rail geometry matches Darktable's action affordance slot.
+pub(crate) fn module_action_button(id: &str, accessible_name: &str) -> gtk4::Button {
+    let button = gtk4::Button::with_label("⋮");
+    button.set_widget_name(id);
+    button.set_size_request(20, 20);
+    button.set_focusable(false);
+    button.set_sensitive(false);
+    button.add_css_class("dt_module_action");
+    button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
+    button.set_tooltip_text(Some(accessible_name));
+    button
+}
+
 pub(crate) fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
     let dropdown = gtk4::DropDown::from_strings(values);
     dropdown.set_widget_name(id);

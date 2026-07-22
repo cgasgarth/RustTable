@@ -85,10 +85,10 @@ window,
 }
 
 .dt_view_switcher button.active {
-  color: {{foreground}};
-  font-weight: normal;
-  border-color: {{active_image_marker}};
-  background-color: {{button_background}};
+  color: #ffffffff;
+  font-weight: bold;
+  border-color: transparent;
+  background-color: transparent;
 }
 
 .dt_toolbar button,
@@ -190,6 +190,35 @@ button:disabled:hover,
   min-width: 0;
   margin: 0;
   padding: 0;
+}
+
+.dt_module_expander > title > box,
+.dt_module_group > title > box {
+  min-width: 0;
+  min-height: {{module_title_height}}px;
+  padding: 0;
+}
+
+.dt_module_expander > title > box > label,
+.dt_module_group > title > box > label {
+  min-width: 0;
+  padding: 0;
+}
+
+.dt_module_action {
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+.dt_module_action:disabled {
+  color: #858585ff;
+  background-color: transparent;
+  border-color: transparent;
 }
 
 .dt_module_expander > box,

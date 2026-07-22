@@ -251,8 +251,8 @@ impl LighttableToolbarState {
     #[must_use]
     pub fn selection_summary(&self) -> String {
         format!(
-            "{} selected · {} of {}",
-            self.selected_count, self.visible_count, self.total_count
+            "{} images selected of {}",
+            self.selected_count, self.total_count
         )
     }
 }
@@ -276,7 +276,7 @@ impl LighttableToolbar {
     #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn new() -> Self {
-        let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+        let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
         root.set_widget_name(LIGHTTABLE_TOOLBAR.widget_name);
         root.set_hexpand(true);
         root.set_valign(gtk4::Align::Center);
@@ -288,6 +288,7 @@ impl LighttableToolbar {
             &["film roll", "folders", "filename"],
         );
         property.set_accessible_role(gtk4::AccessibleRole::ComboBox);
+        property.set_width_request(94);
         property.set_tooltip_text(Some("collection filter property"));
         root.append(&property);
 
@@ -295,8 +296,9 @@ impl LighttableToolbar {
         search.set_widget_name(LIGHTTABLE_TOOLBAR.filter_entry_name);
         search.set_placeholder_text(Some("search collection"));
         search.set_accessible_role(gtk4::AccessibleRole::SearchBox);
-        search.set_hexpand(true);
-        search.set_max_width_chars(18);
+        search.set_hexpand(false);
+        search.set_width_request(132);
+        search.set_max_width_chars(16);
         root.append(&search);
         root.append(&toolbar_separator("filter-labels"));
 
@@ -337,7 +339,7 @@ impl LighttableToolbar {
         for rating in LighttableRating::STARS {
             let button = shared_button(
                 &format!("lighttable-rating-{}", rating.stars().unwrap_or(0)),
-                "★",
+                "☆",
             );
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_rating_filter");
@@ -365,7 +367,7 @@ impl LighttableToolbar {
         count.set_accessible_role(gtk4::AccessibleRole::Status);
         root.append(&count);
         root.append(&toolbar_separator("count-reset"));
-        let reset = shared_button("lighttable-reset", "reset");
+        let reset = shared_button("lighttable-reset", "↺");
         reset.add_css_class("dt_filter_button");
         reset.update_property(&[Property::Label(
             "clear collection filter, sort, and selection",
@@ -412,8 +414,8 @@ impl LighttableToolbar {
         self.sort_direction.set_label(symbol);
         self.sort_direction.set_tooltip_text(Some(tooltip));
         self.count.set_text(&format!(
-            "{} selected · {} of {}",
-            state.selected_count, state.visible_count, state.total_count
+            "{} images selected of {}",
+            state.selected_count, state.total_count
         ));
         self.reset.set_sensitive(
             state.has_active_filter()
@@ -559,7 +561,7 @@ mod tests {
             vec![LighttableColorLabel::Blue]
         );
         assert!(state.has_active_filter());
-        assert_eq!(state.selection_summary(), "2 selected · 4 of 12");
+        assert_eq!(state.selection_summary(), "2 images selected of 12");
     }
 
     #[test]

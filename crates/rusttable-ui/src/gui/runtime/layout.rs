@@ -10,7 +10,8 @@ use crate::import::ImportSessionPanel;
 
 use crate::gui::darkroom_modules::DarkroomModuleGroup;
 use crate::gui::darktable_components::{
-    button, dropdown, module_expander as shared_module_expander, module_row, slider, switch,
+    button, dropdown, module_action_button, module_expander as shared_module_expander, module_row,
+    slider, switch,
 };
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use crate::gui::{
@@ -126,7 +127,7 @@ pub(super) fn desktop_body(
         .hexpand(true)
         .vexpand(true)
         .resize_start_child(false)
-        .shrink_start_child(false)
+        .shrink_start_child(true)
         .shrink_end_child(false)
         .position(i32::from(layout.side_panel_widths.preferred_px))
         .build();
@@ -407,17 +408,19 @@ fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
         .valign(gtk4::Align::Center)
         .build();
     photos.set_widget_name(PanelSlot::Bottom.identifier());
+    // Darktable centers a short active strip while keeping one horizontal row
+    // for larger collections. A full-width wrapper supplies the available
+    // surface while the FlowBox keeps its natural item width.
     photos.set_halign(gtk4::Align::Start);
+    photos.set_hexpand(false);
     photos.set_vexpand(false);
 
-    let scroll = gtk4::ScrolledWindow::new();
-    scroll.set_widget_name("filmstrip-scroll");
-    scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Never);
-    scroll.set_hexpand(true);
-    scroll.set_vexpand(false);
-    scroll.set_height_request(height);
-    scroll.set_child(Some(&photos));
-    strip.append(&scroll);
+    let strip_surface = gtk4::Grid::new();
+    strip_surface.set_halign(gtk4::Align::Fill);
+    strip_surface.set_hexpand(true);
+    strip_surface.attach(&photos, 0, 0, 1, 1);
+
+    strip.append(&strip_surface);
     (strip, photos)
 }
 
@@ -493,6 +496,17 @@ pub(super) fn render_modules<'a>(
 
 fn module_group(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
     let group_widget = shared_module_expander(id, label, expanded, None::<&gtk4::Widget>);
+    let title = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    title.set_hexpand(true);
+    let title_label = gtk4::Label::new(Some(label));
+    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_hexpand(true);
+    title.append(&title_label);
+    title.append(&module_action_button(
+        &format!("{id}-actions"),
+        "Module actions unavailable",
+    ));
+    group_widget.set_label_widget(Some(&title));
     apply_theme_role(&group_widget, ThemeRole::ModuleGroup);
     group_widget
 }

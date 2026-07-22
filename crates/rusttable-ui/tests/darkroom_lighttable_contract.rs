@@ -176,6 +176,24 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
 }
 
 #[test]
+fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
+    let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
+    let runtime_lighttable = include_str!("../src/gui/runtime/lighttable.rs");
+    let components = include_str!("../src/gui/darktable_components.rs");
+    let css = include_str!("../src/gui/theme.css");
+
+    assert!(runtime_layout.contains(".shrink_start_child(true)"));
+    assert!(runtime_layout.contains("photos.set_halign(gtk4::Align::Start)"));
+    assert!(runtime_layout.contains("let strip_surface = gtk4::Grid::new"));
+    assert!(runtime_lighttable.contains("centered_for_visible_count"));
+    assert!(runtime_lighttable.contains("connect_filmstrip_resize"));
+    assert!(runtime_lighttable.contains(".parent()"));
+    assert!(components.contains("module_action_button"));
+    assert!(css.contains(".dt_module_action"));
+    assert!(css.contains(".dt_view_switcher button.active"));
+}
+
+#[test]
 fn gtk_workspace_ownership_keeps_lighttable_rail_and_darkroom_refresh_separate() {
     let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
     let runtime_shell = include_str!("../src/gui/runtime/mod.rs");
