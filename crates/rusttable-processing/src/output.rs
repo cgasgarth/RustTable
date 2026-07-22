@@ -1,4 +1,8 @@
-use crate::{FiniteF32, RasterDimensions, RgbChannel, SrgbChannel, WorkingRgbImage};
+use crate::operations::colorout::{ColorOutConfig, ColorOutPlan};
+use crate::{
+    FiniteF32, RasterDimensions, RgbChannel, SrgbChannel, WorkingFrameDescriptor, WorkingRgbImage,
+};
+use rusttable_color::{BuiltinSpace, ColorEncoding};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EncodedSrgb {
@@ -159,6 +163,103 @@ pub fn encode_linear_srgb(input: &WorkingRgbImage) -> EncodedSrgbOutput {
         image: EncodedSrgbImage::new(input.dimensions(), pixels),
         clipping,
     }
+}
+
+/// Converts the active working profile to transfer-encoded sRGB for preview.
+///
+/// Unlike [`encode_linear_srgb`], this applies the profile-aware output matrix
+/// before the sRGB transfer curve. The descriptor is part of the conversion,
+/// so a Rec.2020 frame cannot be silently interpreted as linear sRGB.
+///
+/// # Panics
+///
+/// Panics only if an internally validated working descriptor cannot produce a
+/// finite sRGB output plan.
+#[must_use]
+pub fn encode_working_to_srgb(input: &WorkingRgbImage) -> EncodedSrgbOutput {
+    let plan = ColorOutPlan::new_with_working_frame(
+        ColorOutConfig::builtin(BuiltinSpace::SrgbD65),
+        input.frame(),
+    )
+    .expect("validated working descriptor plans to sRGB");
+    let execution = plan
+        .execute(input.pixel_slice())
+        .expect("finite working pixels transform to sRGB");
+    let mut clipping = GamutClipReport::default();
+    let pixels = execution
+        .pixels()
+        .iter()
+        .map(|pixel| {
+            EncodedSrgb::new(
+                clamp_encoded(pixel.red().get(), RgbChannel::Red, &mut clipping),
+                clamp_encoded(pixel.green().get(), RgbChannel::Green, &mut clipping),
+                clamp_encoded(pixel.blue().get(), RgbChannel::Blue, &mut clipping),
+            )
+        })
+        .collect();
+    EncodedSrgbOutput {
+        image: EncodedSrgbImage::new(input.dimensions(), pixels),
+        clipping,
+    }
+}
+
+/// Converts the active working profile to linear sRGB for a file-output
+/// boundary while retaining the explicit sRGB frame descriptor.
+///
+/// # Panics
+///
+/// Panics only if an internally validated working descriptor cannot produce a
+/// finite sRGB output plan.
+#[must_use]
+pub fn convert_working_to_linear_srgb(input: &WorkingRgbImage) -> WorkingRgbImage {
+    if input.frame() == WorkingFrameDescriptor::srgb()
+        || input.frame().encoding() == ColorEncoding::LinearSrgbD65
+            && input.frame().primaries() == WorkingFrameDescriptor::srgb().primaries()
+            && input.frame().white_point() == WorkingFrameDescriptor::srgb().white_point()
+    {
+        return input.clone();
+    }
+    let plan = ColorOutPlan::new_with_working_frame(
+        ColorOutConfig::builtin(BuiltinSpace::SrgbD65),
+        input.frame(),
+    )
+    .expect("validated working descriptor plans to sRGB");
+    let execution = plan
+        .execute(input.pixel_slice())
+        .expect("finite working pixels transform to sRGB");
+    let decode = |value: f32| {
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let pixels = execution
+        .pixels()
+        .iter()
+        .map(|pixel| {
+            crate::LinearRgb::new(
+                FiniteF32::new(decode(pixel.red().get())).expect("finite red"),
+                FiniteF32::new(decode(pixel.green().get())).expect("finite green"),
+                FiniteF32::new(decode(pixel.blue().get())).expect("finite blue"),
+            )
+        })
+        .collect();
+    WorkingRgbImage::new_with_frame(input.dimensions(), pixels, WorkingFrameDescriptor::srgb())
+        .expect("converted pixel count matches input")
+}
+
+fn clamp_encoded(value: f32, channel: RgbChannel, clipping: &mut GamutClipReport) -> SrgbChannel {
+    let clipped = if value < 0.0 {
+        clipping.below_zero.increment(channel);
+        0.0
+    } else if value > 1.0 {
+        clipping.above_one.increment(channel);
+        1.0
+    } else {
+        value
+    };
+    SrgbChannel::new(clipped).expect("clipped finite encoded sRGB is normalized")
 }
 
 fn encode_channel(

@@ -60,6 +60,34 @@ fn cache_identity_changes_for_mask_graph_ancestry() {
 }
 
 #[test]
+fn cache_identity_changes_for_working_profile_identity() {
+    let base = key(1);
+    let changed = CacheKey::builder()
+        .source(SourceIdentity::new([1; 32]))
+        .source_descriptor([1, 1, 2])
+        .snapshot(PipelineSnapshotIdentity::new([1; 32]))
+        .generation(PipelineGeneration::new(1).expect("generation"))
+        .purpose(PipelinePurpose::Preview)
+        .quality(CacheQuality::Normal)
+        .precision(CachePrecision::F32)
+        .node(NodeBoundary::whole(
+            ImplementationIdentity::new("rusttable.test", 1, "build").expect("identity"),
+        ))
+        .output(OutputIdentity::new(
+            ImageDimensions::new(4, 4).expect("dimensions"),
+            Roi::full(ImageDimensions::new(4, 4).expect("dimensions")),
+            PixelFormat::rgba8(),
+            ColorIdentity::new(ColorEncoding::SrgbD65, 1).expect("color"),
+            [1; 32],
+        ))
+        .parameters(1, [1, 9])
+        .working_profile_identity([9; 32])
+        .build()
+        .expect("complete key");
+    assert_ne!(base, changed);
+}
+
+#[test]
 fn canonical_key_equality_is_authoritative_and_diagnostic_hash_is_stable() {
     let first = key(1);
     let same = key(1);

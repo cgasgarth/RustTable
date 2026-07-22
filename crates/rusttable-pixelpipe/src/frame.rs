@@ -1,5 +1,5 @@
 use rusttable_processing::{
-    FrameBoundaryMode, FrameBoundaryOptions, WorkingRgbImage, encode_linear_srgb,
+    FrameBoundaryMode, FrameBoundaryOptions, WorkingRgbImage, encode_working_to_srgb,
     evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
 };
 
@@ -74,7 +74,7 @@ fn output_pixels(
     alpha: &[f32],
 ) -> Vec<RgbaF32Pixel> {
     match mode {
-        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(evaluated)
+        CpuPixelpipeOutputMode::Preview => encode_working_to_srgb(evaluated)
             .image()
             .pixels()
             .zip(alpha)

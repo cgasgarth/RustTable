@@ -2,9 +2,134 @@ use std::fmt;
 
 use crate::{FiniteF32, FiniteF32Error};
 pub use rusttable_color::ColorEncoding;
+use rusttable_color::{Primaries, ProfileId, TransferFunction, WhitePoint};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 pub type SourceColorSpace = ColorEncoding;
 pub type WorkingColorSpace = ColorEncoding;
+
+/// Provenance for the profile currently installed in a working frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum WorkingProfileProvenance {
+    Selected,
+    FallbackRec2020,
+}
+
+/// The immutable color contract carried by every linear working frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct WorkingFrameDescriptor {
+    encoding: ColorEncoding,
+    primaries: Primaries,
+    white_point: WhitePoint,
+    transfer: TransferFunction,
+    profile_id: Option<ProfileId>,
+    provenance: WorkingProfileProvenance,
+}
+
+impl WorkingFrameDescriptor {
+    #[must_use]
+    pub fn new(
+        encoding: ColorEncoding,
+        primaries: Primaries,
+        white_point: WhitePoint,
+        transfer: TransferFunction,
+        profile_id: Option<ProfileId>,
+        provenance: WorkingProfileProvenance,
+    ) -> Self {
+        debug_assert_eq!(transfer, TransferFunction::Linear);
+        Self {
+            encoding,
+            primaries,
+            white_point,
+            transfer,
+            profile_id,
+            provenance,
+        }
+    }
+
+    #[must_use]
+    pub const fn srgb() -> Self {
+        Self::builtin(
+            rusttable_color::BuiltinSpace::SrgbD65,
+            WorkingProfileProvenance::Selected,
+        )
+    }
+
+    #[must_use]
+    pub const fn rec2020() -> Self {
+        Self::builtin(
+            rusttable_color::BuiltinSpace::Rec2020D65,
+            WorkingProfileProvenance::Selected,
+        )
+    }
+
+    #[must_use]
+    pub const fn fallback_rec2020() -> Self {
+        Self::builtin(
+            rusttable_color::BuiltinSpace::Rec2020D65,
+            WorkingProfileProvenance::FallbackRec2020,
+        )
+    }
+
+    #[must_use]
+    pub const fn builtin(
+        space: rusttable_color::BuiltinSpace,
+        provenance: WorkingProfileProvenance,
+    ) -> Self {
+        let primaries = match space.primaries() {
+            Some(value) => value,
+            None => Primaries::srgb(),
+        };
+        Self {
+            encoding: space.encoding(true),
+            primaries,
+            white_point: space.white_point(),
+            transfer: TransferFunction::Linear,
+            profile_id: None,
+            provenance,
+        }
+    }
+
+    #[must_use]
+    pub const fn encoding(self) -> ColorEncoding {
+        self.encoding
+    }
+
+    #[must_use]
+    pub const fn primaries(self) -> Primaries {
+        self.primaries
+    }
+
+    #[must_use]
+    pub const fn white_point(self) -> WhitePoint {
+        self.white_point
+    }
+
+    #[must_use]
+    pub const fn transfer(self) -> TransferFunction {
+        self.transfer
+    }
+
+    #[must_use]
+    pub const fn profile_id(self) -> Option<ProfileId> {
+        self.profile_id
+    }
+
+    #[must_use]
+    pub const fn provenance(self) -> WorkingProfileProvenance {
+        self.provenance
+    }
+
+    #[must_use]
+    /// # Panics
+    ///
+    /// Panics only if the closed working-frame descriptor cannot be serialized,
+    /// which indicates an internal contract change without a schema update.
+    pub fn identity(self) -> [u8; 32] {
+        Sha256::digest(postcard::to_allocvec(&self).expect("working descriptor serializes")).into()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RasterDimensions {
@@ -354,6 +479,7 @@ impl DisplayP3RgbImage {
 pub struct WorkingRgbImage {
     dimensions: RasterDimensions,
     pixels: Vec<LinearRgb>,
+    frame: WorkingFrameDescriptor,
 }
 
 impl WorkingRgbImage {
@@ -373,7 +499,32 @@ impl WorkingRgbImage {
                 actual: pixels.len(),
             });
         }
-        Ok(Self { dimensions, pixels })
+        Ok(Self {
+            dimensions,
+            pixels,
+            frame: WorkingFrameDescriptor::srgb(),
+        })
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error when the pixel count does not match the dimensions.
+    pub fn new_with_frame(
+        dimensions: RasterDimensions,
+        pixels: Vec<LinearRgb>,
+        frame: WorkingFrameDescriptor,
+    ) -> Result<Self, ImageBuildError> {
+        if u64::try_from(pixels.len()) != Ok(dimensions.pixel_count()) {
+            return Err(ImageBuildError::PixelCountMismatch {
+                expected: dimensions.pixel_count(),
+                actual: pixels.len(),
+            });
+        }
+        Ok(Self {
+            dimensions,
+            pixels,
+            frame,
+        })
     }
 
     #[must_use]
@@ -383,7 +534,12 @@ impl WorkingRgbImage {
 
     #[must_use]
     pub const fn space(&self) -> WorkingColorSpace {
-        WorkingColorSpace::LinearSrgb
+        self.frame.encoding()
+    }
+
+    #[must_use]
+    pub const fn frame(&self) -> WorkingFrameDescriptor {
+        self.frame
     }
 
     #[must_use]
@@ -400,11 +556,16 @@ impl WorkingRgbImage {
         self.pixels.get(index)
     }
 
-    pub(crate) fn from_validated_parts(
+    pub(crate) fn from_validated_parts_with_frame(
         dimensions: RasterDimensions,
         pixels: Vec<LinearRgb>,
+        frame: WorkingFrameDescriptor,
     ) -> Self {
-        Self { dimensions, pixels }
+        Self {
+            dimensions,
+            pixels,
+            frame,
+        }
     }
 }
 
@@ -428,6 +589,7 @@ pub fn to_linear_srgb(source: &SourceRgbImage) -> WorkingRgbImage {
     WorkingRgbImage {
         dimensions: source.dimensions,
         pixels,
+        frame: WorkingFrameDescriptor::srgb(),
     }
 }
 
@@ -448,6 +610,7 @@ pub fn linear_srgb_to_working(source: &SourceRgbImage) -> WorkingRgbImage {
     WorkingRgbImage {
         dimensions: source.dimensions,
         pixels,
+        frame: WorkingFrameDescriptor::srgb(),
     }
 }
 
@@ -499,6 +662,7 @@ fn display_p3_to_working(
     WorkingRgbImage {
         dimensions: source.dimensions,
         pixels,
+        frame: WorkingFrameDescriptor::srgb(),
     }
 }
 

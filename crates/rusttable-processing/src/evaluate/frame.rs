@@ -4,7 +4,7 @@ use rusttable_core::OperationId;
 use rusttable_image::Orientation;
 use sha2::{Digest, Sha256};
 
-use super::{BasicAdjPlanSet, apply_operation_with_plans};
+use super::{BasicAdjPlanSet, apply_operation_with_profile};
 use crate::operations::{
     crop::{CropPlan, CropPlanMode},
     enlargecanvas::{CanvasFill, EnlargeCanvasPlan},
@@ -263,6 +263,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
     let mut pixels = input.pixel_slice().to_vec();
     let mut alpha = alpha.to_vec();
     let mut dimensions = input.dimensions();
+    let mut frame = input.frame();
     let mut basicadj = BTreeMap::new();
 
     for step in &plan.steps {
@@ -285,13 +286,14 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
                     }
                     let resolved_plans = plan_set(&basicadj);
                     let plans = provided_basicadj.unwrap_or(&resolved_plans);
-                    apply_operation_with_plans(
+                    apply_operation_with_profile(
                         node.pipeline_step_index(),
                         node.operation(),
                         &mut pixels,
                         dimensions,
                         0,
                         Some(plans),
+                        &mut frame,
                     )?;
                 }
             }
@@ -310,7 +312,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
         .cloned()
         .unwrap_or_else(|| finalized_plan_set(basicadj));
     Ok(EvaluatedFrame {
-        image: WorkingRgbImage::from_validated_parts(dimensions, pixels),
+        image: WorkingRgbImage::from_validated_parts_with_frame(dimensions, pixels, frame),
         alpha,
         basicadj_plans,
     })

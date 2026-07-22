@@ -63,6 +63,35 @@ fn colorin_uses_linear_working_encoding_and_is_deterministic() {
     assert_eq!(first, second);
     assert_ne!(first.receipt().input_digest(), [0; 32]);
     assert_ne!(first.receipt().output_digest(), [0; 32]);
+    assert_eq!(
+        plan.output_frame().encoding(),
+        rusttable_color::ColorEncoding::LinearRec2020D65
+    );
+    assert_eq!(
+        plan.output_frame().provenance(),
+        rusttable_processing::WorkingProfileProvenance::Selected
+    );
+}
+
+#[test]
+fn colorin_invalid_working_evidence_uses_explicit_rec2020_fallback() {
+    let config = ColorInConfig::new(
+        BuiltinSpace::SrgbD65.into(),
+        ColorInProfile::Missing("invalid-working.icc".to_owned()),
+        rusttable_color::RenderingIntent::Perceptual,
+        rusttable_processing::operations::colorin::ColorInNormalization::Off,
+        true,
+    )
+    .expect("input evidence is valid");
+    let plan = ColorInPlan::new(config).expect("fallback plan");
+    assert_eq!(
+        plan.output_frame().encoding(),
+        rusttable_color::ColorEncoding::LinearRec2020D65
+    );
+    assert_eq!(
+        plan.output_frame().provenance(),
+        rusttable_processing::WorkingProfileProvenance::FallbackRec2020
+    );
 }
 
 #[test]

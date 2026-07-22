@@ -543,7 +543,11 @@ impl<'a> PipelinePreparer<'a> {
 
 fn validate_boundaries(snapshot: &PipelineSnapshot) -> Result<(), PreparationError> {
     if snapshot.input().color().encoding() == ColorEncoding::Unspecified
-        || snapshot.working_color().encoding() != ColorEncoding::LinearSrgbD65
+        || (!snapshot.working_color().encoding().is_linear()
+            && !matches!(
+                snapshot.working_color().encoding(),
+                ColorEncoding::External(_)
+            ))
         || snapshot.output().color().encoding() == ColorEncoding::Unspecified
     {
         return Err(PreparationError::Snapshot(ContractError::UntaggedColor));

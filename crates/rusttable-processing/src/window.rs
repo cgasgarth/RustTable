@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::evaluate::{
     BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions,
-    evaluate_graph_at_frame_boundaries_with_plans, evaluate_steps, evaluate_steps_with_plans,
+    evaluate_graph_at_frame_boundaries_with_plans, evaluate_steps, evaluate_steps_with_frame,
     graph_has_discrete_geometry,
 };
 use crate::{
@@ -274,18 +274,20 @@ pub fn evaluate_graph_with_basicadj_plans(
         )
         .map(|evaluated| evaluated.image().clone());
     }
-    let pixels = evaluate_steps_with_plans(
+    let (pixels, frame) = evaluate_steps_with_frame(
         graph
             .nodes()
             .map(|node| (node.pipeline_step_index(), node.prepared())),
         input.pixel_slice(),
         input.dimensions(),
         0,
+        input.frame(),
         plans,
     )?;
-    Ok(WorkingRgbImage::from_validated_parts(
+    Ok(WorkingRgbImage::from_validated_parts_with_frame(
         input.dimensions(),
         pixels,
+        frame,
     ))
 }
 
