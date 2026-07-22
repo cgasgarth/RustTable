@@ -1,4 +1,4 @@
-use crate::RasterMaskDescriptor;
+use crate::{MaskRoi, RasterMaskDescriptor};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -67,6 +67,49 @@ impl MaskRaster {
             hasher.update(value.to_bits().to_le_bytes());
         }
         hasher.finalize().into()
+    }
+
+    /// Returns a dense row-major copy for a checked half-open ROI.
+    pub fn crop(&self, roi: MaskRoi) -> Result<Self, MaskExecutionError> {
+        let right = roi
+            .x()
+            .checked_add(roi.width())
+            .ok_or(MaskExecutionError::ArithmeticOverflow)?;
+        let bottom = roi
+            .y()
+            .checked_add(roi.height())
+            .ok_or(MaskExecutionError::ArithmeticOverflow)?;
+        if roi.width() == 0 || roi.height() == 0 || right > self.width || bottom > self.height {
+            return Err(MaskExecutionError::InvalidRoi);
+        }
+        let source_width =
+            usize::try_from(self.width).map_err(|_| MaskExecutionError::ArithmeticOverflow)?;
+        let x = usize::try_from(roi.x()).map_err(|_| MaskExecutionError::ArithmeticOverflow)?;
+        let y = usize::try_from(roi.y()).map_err(|_| MaskExecutionError::ArithmeticOverflow)?;
+        let width =
+            usize::try_from(roi.width()).map_err(|_| MaskExecutionError::ArithmeticOverflow)?;
+        let height =
+            usize::try_from(roi.height()).map_err(|_| MaskExecutionError::ArithmeticOverflow)?;
+        let mut values = Vec::with_capacity(
+            width
+                .checked_mul(height)
+                .ok_or(MaskExecutionError::ArithmeticOverflow)?,
+        );
+        for row in y..y + height {
+            let start = row
+                .checked_mul(source_width)
+                .and_then(|value| value.checked_add(x))
+                .ok_or(MaskExecutionError::ArithmeticOverflow)?;
+            let end = start
+                .checked_add(width)
+                .ok_or(MaskExecutionError::ArithmeticOverflow)?;
+            values.extend_from_slice(
+                self.values
+                    .get(start..end)
+                    .ok_or(MaskExecutionError::InvalidRoi)?,
+            );
+        }
+        Self::new(roi.width(), roi.height(), values)
     }
 
     /// Applies one exact modifier without mutating the published raster.
@@ -163,6 +206,7 @@ pub enum MaskExecutionError {
     MissingPublishedRaster([u8; 32]),
     MemoryBudgetExceeded { required: usize, budget: usize },
     OpaqueSource { version: u16 },
+    AmbiguousConsumer { operation: u128 },
 }
 
 impl fmt::Display for MaskExecutionError {
@@ -190,6 +234,9 @@ impl fmt::Display for MaskExecutionError {
                 formatter,
                 "mask source version {version} is opaque and blocking"
             ),
+            Self::AmbiguousConsumer { operation } => {
+                write!(formatter, "operation {operation} has multiple mask edges")
+            }
         }
     }
 }
@@ -224,7 +271,7 @@ impl RasterMaskPublication {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct StoredMask {
     publication: RasterMaskPublication,
     last_used: u64,
@@ -232,7 +279,7 @@ struct StoredMask {
 
 /// Bounded deterministic host/GPU-neutral store. A consumer receives a clone
 /// lease; no consumer can mutate or invalidate the published value.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RasterMaskStore {
     budget: usize,
     resident: usize,
@@ -265,6 +312,20 @@ impl RasterMaskStore {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Stable identity of resident raster content, excluding LRU state.
+    #[must_use]
+    pub fn identity(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(b"rusttable.mask-store.v1");
+        hasher.update((self.budget as u64).to_le_bytes());
+        for (key, entry) in &self.entries {
+            hasher.update(key);
+            hasher.update(entry.publication.descriptor().cache_identity());
+            hasher.update(entry.publication.raster().identity());
+        }
+        hasher.finalize().into()
     }
 
     /// Publishes atomically and evicts least-recently-used entries by full

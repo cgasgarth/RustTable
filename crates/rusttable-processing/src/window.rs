@@ -2,11 +2,12 @@ use std::fmt;
 
 use crate::evaluate::{
     BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions,
-    evaluate_graph_at_frame_boundaries_with_plans, evaluate_steps, evaluate_steps_with_frame,
-    graph_has_frame_geometry,
+    evaluate_graph_at_frame_boundaries_with_plans_and_masks, evaluate_steps,
+    evaluate_steps_with_frame_and_masks, graph_has_frame_geometry,
 };
 use crate::{
-    CompiledOperationGraph, EvaluationError, LinearRgb, RasterDimensions, WorkingRgbImage,
+    CompiledOperationGraph, EvaluationError, LinearRgb, OperationMaskSet, RasterDimensions,
+    WorkingRgbImage,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -261,14 +262,32 @@ pub fn evaluate_graph_output_with_basicadj_plans(
     input: &WorkingRgbImage,
     plans: Option<&BasicAdjPlanSet>,
 ) -> Result<crate::EvaluationOutput, EvaluationError> {
+    evaluate_graph_output_with_basicadj_plans_and_masks(graph, input, plans, None)
+}
+
+/// Evaluates a graph with detached, evaluated mask planes keyed by operation.
+/// The mask is applied after each operation's normal opacity blend, matching
+/// darktable's post-operation blend semantics while keeping all operation
+/// implementations on the shared dispatch path.
+///
+/// # Errors
+///
+/// Returns the first operation or terminal-publication error encountered.
+pub fn evaluate_graph_output_with_basicadj_plans_and_masks(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
+) -> Result<crate::EvaluationOutput, EvaluationError> {
     if graph_has_frame_geometry(graph) {
         let alpha = vec![1.0; input.pixel_slice().len()];
-        let evaluated = evaluate_graph_at_frame_boundaries_with_plans(
+        let evaluated = evaluate_graph_at_frame_boundaries_with_plans_and_masks(
             graph,
             input,
             &alpha,
             FrameBoundaryOptions::new(FrameBoundaryMode::Preview),
             plans,
+            masks,
             || false,
         )?;
         return Ok(evaluated.terminal_output().cloned().map_or_else(
@@ -276,7 +295,7 @@ pub fn evaluate_graph_output_with_basicadj_plans(
             crate::EvaluationOutput::Terminal,
         ));
     }
-    let (pixels, frame, terminal) = evaluate_steps_with_frame(
+    let (pixels, frame, terminal) = evaluate_steps_with_frame_and_masks(
         graph
             .nodes()
             .map(|node| (node.pipeline_step_index(), node.prepared())),
@@ -285,6 +304,7 @@ pub fn evaluate_graph_output_with_basicadj_plans(
         0,
         input.frame(),
         plans,
+        masks,
     )?;
     Ok(terminal.map_or_else(
         || {
@@ -310,7 +330,22 @@ pub fn evaluate_graph_with_basicadj_plans(
     input: &WorkingRgbImage,
     plans: Option<&BasicAdjPlanSet>,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    match evaluate_graph_output_with_basicadj_plans(graph, input, plans)? {
+    evaluate_graph_with_basicadj_plans_and_masks(graph, input, plans, None)
+}
+
+/// Evaluates a graph using one previously resolved automatic-basicadj set and
+/// explicit evaluated operation masks.
+///
+/// # Errors
+///
+/// Returns the first operation or terminal-publication error encountered.
+pub fn evaluate_graph_with_basicadj_plans_and_masks(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
+) -> Result<WorkingRgbImage, EvaluationError> {
+    match evaluate_graph_output_with_basicadj_plans_and_masks(graph, input, plans, masks)? {
         crate::EvaluationOutput::Working(output) => Ok(output),
         crate::EvaluationOutput::Terminal(output) => {
             Err(EvaluationError::TerminalOutputRequiresTypedPublication {

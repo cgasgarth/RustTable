@@ -18,8 +18,8 @@ use crate::operations::{
 };
 use crate::{
     BasicAdjAnalysisRaster, BasicAdjPlan, CompiledOperationGraph, EvaluationError, FiniteF32,
-    LinearRgb, OperationGraphNode, PipelineStepIndex, ProcessingOperationKind, RasterDimensions,
-    TerminalOutputFrame, WorkingRgbImage,
+    LinearRgb, OperationGraphNode, OperationMaskSet, PipelineStepIndex, ProcessingOperationKind,
+    RasterDimensions, TerminalOutputFrame, WorkingRgbImage,
 };
 
 /// Purpose-specific choices needed while resolving shape-changing operations.
@@ -492,7 +492,28 @@ pub fn evaluate_graph_at_frame_boundaries<F: Fn() -> bool>(
     options: FrameBoundaryOptions,
     cancelled: F,
 ) -> Result<EvaluatedFrame, EvaluationError> {
-    evaluate_graph_at_frame_boundaries_with_plans(graph, input, alpha, options, None, cancelled)
+    evaluate_graph_at_frame_boundaries_with_plans_and_masks(
+        graph, input, alpha, options, None, None, cancelled,
+    )
+}
+
+/// Evaluates frame-boundary graphs with detached operation mask rasters.
+///
+/// # Errors
+///
+/// Returns the first frame-boundary, operation, mask-shape, or cancellation
+/// error encountered while evaluating the graph.
+pub fn evaluate_graph_at_frame_boundaries_with_masks<F: Fn() -> bool>(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    alpha: &[f32],
+    options: FrameBoundaryOptions,
+    masks: Option<&OperationMaskSet>,
+    cancelled: F,
+) -> Result<EvaluatedFrame, EvaluationError> {
+    evaluate_graph_at_frame_boundaries_with_plans_and_masks(
+        graph, input, alpha, options, None, masks, cancelled,
+    )
 }
 
 pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
@@ -501,6 +522,26 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
     alpha: &[f32],
     options: FrameBoundaryOptions,
     provided_basicadj: Option<&BasicAdjPlanSet>,
+    cancelled: F,
+) -> Result<EvaluatedFrame, EvaluationError> {
+    evaluate_graph_at_frame_boundaries_with_plans_and_masks(
+        graph,
+        input,
+        alpha,
+        options,
+        provided_basicadj,
+        None,
+        cancelled,
+    )
+}
+
+pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() -> bool>(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    alpha: &[f32],
+    options: FrameBoundaryOptions,
+    provided_basicadj: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
     cancelled: F,
 ) -> Result<EvaluatedFrame, EvaluationError> {
     let plan = FrameBoundaryPlan::new(graph, input.dimensions(), options)?;
@@ -549,6 +590,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans<F: Fn() -> bool>(
                         Some(plans),
                         &mut frame,
                         &mut terminal_output,
+                        masks,
                     )?;
                 }
             }

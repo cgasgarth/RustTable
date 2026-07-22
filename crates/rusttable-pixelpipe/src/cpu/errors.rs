@@ -23,6 +23,12 @@ impl fmt::Display for CpuPixelpipeError {
             Self::TileAssembly { source } => {
                 write!(formatter, "invalid CPU tile assembly: {source}")
             }
+            Self::MaskEvaluation { source } => {
+                write!(formatter, "CPU mask graph evaluation failed: {source}")
+            }
+            Self::MaskBinding { source } => {
+                write!(formatter, "CPU mask tile binding failed: {source}")
+            }
         }
     }
 }
@@ -37,6 +43,8 @@ impl std::error::Error for CpuPixelpipeError {
             Self::Evaluation { source } => Some(source),
             Self::TilePlan { source } => Some(source),
             Self::TileAssembly { source } => Some(source),
+            Self::MaskEvaluation { source } => Some(source),
+            Self::MaskBinding { source } => Some(source),
         }
     }
 }

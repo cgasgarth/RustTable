@@ -1,5 +1,6 @@
 use std::fmt;
 
+use rusttable_masks::{MaskGraph, RasterMaskStore};
 use rusttable_processing::{CompiledOperationGraph, OperationGraphInput, ProcessingOperationKind};
 use sha2::{Digest, Sha256};
 
@@ -35,6 +36,8 @@ pub struct CpuPixelpipeSnapshot {
     input: RgbaF32Image,
     graph: CompiledOperationGraph,
     output_mode: CpuPixelpipeOutputMode,
+    mask_graph: Option<MaskGraph>,
+    mask_store: Option<RasterMaskStore>,
     identity: CpuPixelpipeSnapshotIdentity,
 }
 
@@ -46,13 +49,16 @@ impl CpuPixelpipeSnapshot {
         graph: CompiledOperationGraph,
         output_mode: CpuPixelpipeOutputMode,
     ) -> Self {
-        let identity = snapshot_identity(&input, &graph, output_mode);
-        Self {
+        let mut snapshot = Self {
             input,
             graph,
             output_mode,
-            identity,
-        }
+            mask_graph: None,
+            mask_store: None,
+            identity: CpuPixelpipeSnapshotIdentity([0; 32]),
+        };
+        snapshot.refresh_identity();
+        snapshot
     }
 
     /// Builds a snapshot while enforcing the initial CPU input boundary.
@@ -98,6 +104,32 @@ impl CpuPixelpipeSnapshot {
         self.output_mode
     }
 
+    /// Attaches the immutable mask graph used by CPU evaluation.
+    #[must_use]
+    pub fn with_mask_graph(mut self, graph: MaskGraph) -> Self {
+        self.mask_graph = Some(graph);
+        self.refresh_identity();
+        self
+    }
+
+    /// Attaches the bounded publication store used by generated mask nodes.
+    #[must_use]
+    pub fn with_mask_store(mut self, store: RasterMaskStore) -> Self {
+        self.mask_store = Some(store);
+        self.refresh_identity();
+        self
+    }
+
+    #[must_use]
+    pub const fn mask_graph(&self) -> Option<&MaskGraph> {
+        self.mask_graph.as_ref()
+    }
+
+    #[must_use]
+    pub const fn mask_store(&self) -> Option<&RasterMaskStore> {
+        self.mask_store.as_ref()
+    }
+
     #[must_use]
     pub const fn source_identity(&self) -> SourceRasterIdentity {
         self.input.source_identity()
@@ -106,6 +138,16 @@ impl CpuPixelpipeSnapshot {
     #[must_use]
     pub const fn identity(&self) -> CpuPixelpipeSnapshotIdentity {
         self.identity
+    }
+
+    fn refresh_identity(&mut self) {
+        self.identity = snapshot_identity(
+            &self.input,
+            &self.graph,
+            self.output_mode,
+            self.mask_graph.as_ref(),
+            self.mask_store.as_ref(),
+        );
     }
 }
 
@@ -132,6 +174,8 @@ fn snapshot_identity(
     input: &RgbaF32Image,
     graph: &CompiledOperationGraph,
     output_mode: CpuPixelpipeOutputMode,
+    mask_graph: Option<&MaskGraph>,
+    mask_store: Option<&RasterMaskStore>,
 ) -> CpuPixelpipeSnapshotIdentity {
     let mut hasher = Sha256::new();
     hasher.update(b"rusttable.cpu-pixelpipe.snapshot.v1");
@@ -142,6 +186,18 @@ fn snapshot_identity(
     write_source_color(&mut hasher, input.descriptor().source_color());
     hasher.update([input.descriptor().source_orientation() as u8]);
     hasher.update([mode_tag(output_mode)]);
+    if let Some(mask_graph) = mask_graph {
+        hasher.update([1]);
+        hasher.update(mask_graph.identity());
+    } else {
+        hasher.update([0]);
+    }
+    if let Some(mask_store) = mask_store {
+        hasher.update([1]);
+        hasher.update(mask_store.identity());
+    } else {
+        hasher.update([0]);
+    }
     write_u128(&mut hasher, graph.source_edit_id().get());
     write_u128(&mut hasher, graph.source_photo_id().get());
     hasher.update(graph.base_photo_revision().get().to_le_bytes());
