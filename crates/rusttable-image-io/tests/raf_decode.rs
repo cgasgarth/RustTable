@@ -125,6 +125,18 @@ fn compressed_raf_probe_and_decode_are_deterministic() {
 }
 
 #[test]
+fn compressed_raf_linear_frame_uses_the_typed_storage_budget() {
+    let input = FileImageInput::new(limits());
+    let frame = input
+        .decode_linear_frame_bytes(&synthetic_compressed_raf())
+        .expect("linear RAW frame should fit the typed storage budget");
+
+    assert_eq!(frame.sample_type(), rusttable_image::SampleType::F32);
+    assert_eq!(frame.image().descriptor().dimensions().width(), 640);
+    assert_eq!(frame.image().descriptor().dimensions().height(), 6);
+}
+
+#[test]
 fn truncated_compressed_raf_returns_typed_error() {
     let input = FileImageInput::new(limits());
     let mut bytes = synthetic_compressed_raf();

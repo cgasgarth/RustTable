@@ -89,6 +89,16 @@ impl DecodeLimits {
         self.decoded_bytes
     }
 
+    /// Returns the derived cap for a four-channel F32 typed frame.
+    ///
+    /// The common decoded-byte cap is defined for the legacy RGBA8 image
+    /// boundary. Linear RAW preview/export frames retain four-byte float
+    /// samples, so their safe storage envelope is four times that cap.
+    #[must_use]
+    pub const fn max_typed_frame_bytes(self) -> u64 {
+        self.decoded_bytes.saturating_mul(4)
+    }
+
     /// Validates an arbitrary typed image descriptor against these limits.
     ///
     /// # Errors

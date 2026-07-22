@@ -21,10 +21,10 @@ pub(crate) fn decode_linear_frame(
     let actual = pixel_count
         .checked_mul(16)
         .ok_or(ImageInputError::ArithmeticOverflow)?;
-    if actual > limits.max_decoded_bytes() {
+    if actual > limits.max_typed_frame_bytes() {
         return Err(ImageInputError::DecodedByteLimit {
             actual,
-            limit: limits.max_decoded_bytes(),
+            limit: limits.max_typed_frame_bytes(),
         });
     }
     let pixels = developed
