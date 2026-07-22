@@ -259,9 +259,9 @@ impl LighttableZoom {
     #[must_use]
     pub const fn columns(self) -> usize {
         match self {
-            Self::Small => 8,
-            Self::Normal => 6,
-            Self::Large => 4,
+            Self::Small => 7,
+            Self::Normal => 5,
+            Self::Large => 3,
         }
     }
 
@@ -771,7 +771,7 @@ mod tests {
         );
         let _ = state.apply(LighttableSelectionAction::SetZoom(LighttableZoom::Large));
         assert_eq!(state.zoom(), LighttableZoom::Large);
-        assert_eq!(state.zoom().columns(), 4);
+        assert_eq!(state.zoom().columns(), 3);
         assert_eq!(state.zoom().larger(), LighttableZoom::Large);
         assert_eq!(state.zoom().smaller(), LighttableZoom::Normal);
     }
@@ -881,7 +881,7 @@ mod tests {
         state.apply(LighttableSelectionAction::SetLayout(
             LighttableLayout::Zoomable,
         ));
-        assert_eq!(state.columns(), 4);
+        assert_eq!(state.columns(), 3);
         assert_eq!(state.layout(), LighttableLayout::Zoomable);
 
         let bounds = PanBounds::new(-10, 20, -5, 15);

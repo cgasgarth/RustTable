@@ -8,7 +8,9 @@
 
 use gtk4::prelude::*;
 
-use super::{ColorToken, DARKTABLE_COLORS};
+use super::{
+    ColorToken, DARKROOM_GEOMETRY, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS,
+};
 
 const DARKTABLE_THEME_TEMPLATE: &str = include_str!("theme.css");
 
@@ -117,10 +119,59 @@ pub fn darktable_theme_css() -> String {
         ("{{hovered_thumbnail}}", colors.hovered_thumbnail),
         ("{{active_image_marker}}", colors.active_image_marker),
     ];
-    replacements.into_iter().fold(
+    let css = replacements.into_iter().fold(
         DARKTABLE_THEME_TEMPLATE.to_owned(),
         |css, (placeholder, color)| css.replace(placeholder, &css_color(color)),
-    )
+    );
+    let tokens = DARKTABLE_UI_TOKENS;
+    let dimensions = [
+        ("{{base_font_pt}}", i32::from(tokens.typography.base_pt)),
+        (
+            "{{compact_font_pt}}",
+            i32::from(tokens.typography.compact_pt),
+        ),
+        ("{{micro_font_pt}}", i32::from(tokens.typography.micro_pt)),
+        (
+            "{{heading_font_pt}}",
+            i32::from(tokens.typography.heading_pt),
+        ),
+        (
+            "{{rail_min_width}}",
+            i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px),
+        ),
+        ("{{control_height}}", tokens.controls.control_height),
+        ("{{module_row_height}}", tokens.controls.module_row_height),
+        (
+            "{{module_title_height}}",
+            tokens.controls.module_title_height,
+        ),
+        ("{{toolbar_height}}", tokens.controls.toolbar_height),
+        ("{{status_height}}", tokens.controls.status_height),
+        ("{{control_gap}}", tokens.controls.control_gap),
+        ("{{module_gap}}", tokens.controls.module_gap),
+        ("{{module_padding}}", tokens.controls.module_padding),
+        (
+            "{{histogram_height}}",
+            i32::from(DARKROOM_GEOMETRY.histogram_height_px),
+        ),
+        (
+            "{{card_min_width}}",
+            i32::from(tokens.cards.minimum_width_px),
+        ),
+        (
+            "{{card_preferred_width}}",
+            i32::from(tokens.cards.preferred_width_px),
+        ),
+        (
+            "{{card_metadata_height}}",
+            i32::from(tokens.cards.metadata_height_px),
+        ),
+    ];
+    dimensions
+        .into_iter()
+        .fold(css, |css, (placeholder, value)| {
+            css.replace(placeholder, &value.to_string())
+        })
 }
 
 /// Installs the theme for a GTK display.
@@ -152,7 +203,7 @@ mod tests {
         assert!(css.contains("#ffbb00ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
-        assert!(css.contains("font-size: 11px"));
+        assert!(css.contains("font-size: 12pt"));
         assert!(!css.contains("font-size: 0.85em"));
         assert!(css.contains(".dt_view_switcher"));
         assert!(css.contains("button:disabled"));

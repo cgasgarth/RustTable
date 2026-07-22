@@ -7,7 +7,7 @@ pub(crate) mod toolbar;
 use gtk4::prelude::*;
 
 use crate::gui::darktable_spec::{
-    FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, THUMBNAIL_METRICS,
+    DARKTABLE_UI_TOKENS, FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, THUMBNAIL_METRICS,
 };
 use crate::gui::{ThemeRole, apply_theme_role};
 use interaction::LighttableZoom;
@@ -20,6 +20,7 @@ use interaction::LighttableZoom;
 pub(crate) struct LighttableGridSpec {
     zoom: LighttableZoom,
     columns: usize,
+    card_width_px: u16,
     thumbnail_width_px: u16,
     thumbnail_height_px: u16,
     horizontal_offset_px: u16,
@@ -35,18 +36,21 @@ impl LighttableGridSpec {
             LighttableZoom::Normal => (1_u32, 1_u32),
             LighttableZoom::Large => (5_u32, 4_u32),
         };
-        let nominal_height = u32::from(THUMBNAIL_METRICS.grid_height_px)
+        let nominal_card_width = u32::from(DARKTABLE_UI_TOKENS.cards.preferred_width_px)
             .saturating_mul(scale_numerator)
             / scale_denominator;
-        let nominal_width = u32::from(THUMBNAIL_METRICS.grid_width_px)
-            .saturating_mul(scale_numerator)
-            / scale_denominator
-            * u32::try_from(columns).unwrap_or(u32::MAX);
-        Self::for_viewport(
+        let card_width_px = u16::try_from(nominal_card_width).unwrap_or(u16::MAX);
+        let thumbnail_width_px = DARKTABLE_UI_TOKENS.cards.image_width_px(card_width_px);
+        Self {
             zoom,
-            u16::try_from(nominal_width.min(u32::from(u16::MAX))).unwrap_or(u16::MAX),
-            u16::try_from(nominal_height.min(u32::from(u16::MAX))).unwrap_or(u16::MAX),
-        )
+            columns,
+            card_width_px,
+            thumbnail_width_px,
+            thumbnail_height_px: DARKTABLE_UI_TOKENS
+                .cards
+                .image_height_px(thumbnail_width_px),
+            horizontal_offset_px: 0,
+        }
     }
 
     /// Computes the square thumbtable cells used by Darktable's file-manager
@@ -60,20 +64,32 @@ impl LighttableGridSpec {
         viewport_height_px: u16,
     ) -> Self {
         let columns = zoom.columns();
+        let card_width_px = DARKTABLE_UI_TOKENS
+            .cards
+            .width_for_viewport(viewport_width_px, columns);
+        let thumbnail_width_px = DARKTABLE_UI_TOKENS.cards.image_width_px(card_width_px);
+        let available_image_height = viewport_height_px
+            .saturating_sub(DARKTABLE_UI_TOKENS.cards.metadata_height_px)
+            .max(1);
+        let thumbnail_height_px = DARKTABLE_UI_TOKENS
+            .cards
+            .image_height_px(thumbnail_width_px)
+            .min(available_image_height);
         let columns_u32 = u32::try_from(columns).unwrap_or(u32::MAX);
-        let viewport_width = u32::from(viewport_width_px);
-        let viewport_height = u32::from(viewport_height_px);
-        let cell_size = (viewport_width / columns_u32).min(viewport_height);
-        let used_width = cell_size.saturating_mul(columns_u32);
+        let used_width = u32::from(card_width_px)
+            .saturating_mul(columns_u32)
+            .saturating_add(
+                u32::from(DARKTABLE_UI_TOKENS.cards.item_gap_px)
+                    .saturating_mul(columns_u32.saturating_sub(1)),
+            );
         let horizontal_offset =
-            (viewport_width.saturating_sub(used_width) / 2).min(u32::from(u16::MAX));
+            (u32::from(viewport_width_px).saturating_sub(used_width) / 2).min(u32::from(u16::MAX));
         Self {
             zoom,
             columns,
-            thumbnail_width_px: u16::try_from(cell_size.min(u32::from(u16::MAX)))
-                .unwrap_or(u16::MAX),
-            thumbnail_height_px: u16::try_from(cell_size.min(u32::from(u16::MAX)))
-                .unwrap_or(u16::MAX),
+            card_width_px,
+            thumbnail_width_px,
+            thumbnail_height_px,
             horizontal_offset_px: u16::try_from(horizontal_offset).unwrap_or(u16::MAX),
         }
     }
@@ -81,6 +97,11 @@ impl LighttableGridSpec {
     #[must_use]
     pub(crate) const fn columns(self) -> usize {
         self.columns
+    }
+
+    #[must_use]
+    pub(crate) const fn card_width_px(self) -> u16 {
+        self.card_width_px
     }
 
     #[must_use]
@@ -101,8 +122,9 @@ impl LighttableGridSpec {
     #[must_use]
     pub(crate) fn cell_origin_x_px(self, column: usize) -> u32 {
         u32::from(self.horizontal_offset_px).saturating_add(
-            u32::from(self.thumbnail_width_px)
-                .saturating_mul(u32::try_from(column).unwrap_or(u32::MAX)),
+            (u32::from(self.card_width_px)
+                .saturating_add(u32::from(DARKTABLE_UI_TOKENS.cards.item_gap_px)))
+            .saturating_mul(u32::try_from(column).unwrap_or(u32::MAX)),
         )
     }
 
@@ -406,7 +428,7 @@ fn attach_label(
 mod tests {
     use super::interaction::LighttableZoom;
     use super::{EMPTY_STATE_ROWS, LighttableCollectionState, LighttableGridSpec};
-    use crate::gtk_shell::{LIGHTTABLE_COMPOSITION, THUMBNAIL_METRICS};
+    use crate::gtk_shell::{DARKTABLE_UI_TOKENS, LIGHTTABLE_COMPOSITION, THUMBNAIL_METRICS};
 
     #[test]
     fn guidance_keeps_darktable_two_column_sections() {
@@ -422,24 +444,24 @@ mod tests {
     #[test]
     fn grid_spec_uses_darktable_thumbnail_geometry_with_bounded_density() {
         let normal = LighttableGridSpec::for_zoom(LighttableZoom::Normal);
-        assert_eq!(normal.columns(), 6);
+        assert_eq!(normal.columns(), 5);
         assert_eq!(
             (normal.thumbnail_width_px(), normal.thumbnail_height_px()),
-            (
-                THUMBNAIL_METRICS.grid_height_px,
-                THUMBNAIL_METRICS.grid_height_px
-            )
+            (184, 138)
         );
 
         let large = LighttableGridSpec::for_zoom(LighttableZoom::Large);
-        assert_eq!(large.columns(), 4);
+        assert_eq!(large.columns(), 3);
         assert!(large.thumbnail_width_px() > normal.thumbnail_width_px());
         assert!(large.thumbnail_height_px() > normal.thumbnail_height_px());
         let resized = LighttableGridSpec::for_viewport(LighttableZoom::Normal, 1_000, 200);
-        assert_eq!(resized.thumbnail_width_px(), 166);
-        assert_eq!(resized.thumbnail_height_px(), 166);
-        assert_eq!(resized.horizontal_offset_px(), 2);
-        assert_eq!(resized.cell_origin_x_px(5), 832);
+        assert_eq!(resized.card_width_px(), 195);
+        assert_eq!(resized.thumbnail_width_px(), 183);
+        assert_eq!(resized.thumbnail_height_px(), 137);
+        assert_eq!(resized.horizontal_offset_px(), 0);
+        assert_eq!(resized.cell_origin_x_px(4), 804);
+        assert_eq!(DARKTABLE_UI_TOKENS.cards.preferred_width_px, 196);
+        assert_eq!(THUMBNAIL_METRICS.grid_width_px, 196);
         assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_rows, 1);
     }
 
@@ -449,9 +471,9 @@ mod tests {
         assert_eq!(spec.rows_for(7), 2);
         assert_eq!(
             spec.position_for(7),
-            super::GridPosition { row: 1, column: 1 }
+            super::GridPosition { row: 1, column: 2 }
         );
-        assert_eq!(spec.visible_range(1, 1, 20), 6..12);
+        assert_eq!(spec.visible_range(1, 1, 20), 5..10);
         assert_eq!(spec.visible_range(8, 2, 20), 20..20);
     }
 
@@ -462,7 +484,7 @@ mod tests {
         assert_eq!(spec.height_px(), THUMBNAIL_METRICS.filmstrip_height_px);
         assert_eq!(spec.gap_px(), 4);
         assert_eq!(spec.max_children_per_line(), u32::MAX);
-        assert_eq!(spec.content_width_px(3), 224);
+        assert_eq!(spec.content_width_px(3), 242);
         assert_eq!(super::FilmstripSpec::for_viewport(80).width_px(), 80);
     }
 

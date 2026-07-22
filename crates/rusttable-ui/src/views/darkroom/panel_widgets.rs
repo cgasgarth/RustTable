@@ -14,6 +14,7 @@ use super::{
     chrome_toggle,
 };
 use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
+use crate::gui::DARKTABLE_UI_TOKENS;
 use crate::gui::darktable_components::{
     module_expander as shared_module_expander, rail as shared_rail,
     rail_scroll as shared_rail_scroll,
@@ -97,7 +98,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         .vexpand(false)
         .build();
     groups_scroll.set_widget_name("darkroom-module-groups-scroll");
-    groups_scroll.set_height_request(26);
+    groups_scroll.set_height_request(DARKTABLE_UI_TOKENS.controls.toolbar_height);
     groups_scroll.set_min_content_width(width);
     groups_scroll.set_propagate_natural_width(false);
     panel.append(&groups_scroll);

@@ -135,12 +135,13 @@ fn darkroom_viewport_contract_exposes_live_histogram_and_truthful_overlay_slots(
 
 #[test]
 fn darkroom_geometry_keeps_both_rails_and_a_visible_center_at_supported_sizes() {
-    for (window_width, minimum_center_width) in [(640, 320), (900, 320), (1_224, 650)] {
-        let geometry = DarkroomGeometryReceipt::for_window(window_width, 768, true, true, true);
+    for (window_width, window_height) in [(1_280, 768), (1_366, 768), (1_440, 900)] {
+        let geometry =
+            DarkroomGeometryReceipt::for_window(window_width, window_height, true, true, true);
 
-        assert_eq!(geometry.left_panel_width_px, 150);
-        assert_eq!(geometry.right_panel_width_px, 150);
-        assert!(geometry.center_width_px() >= minimum_center_width);
+        assert_eq!(geometry.left_panel_width_px, 220);
+        assert_eq!(geometry.right_panel_width_px, 220);
+        assert!(geometry.center_width_px() >= 650);
         assert!(geometry.center_width_px() > geometry.right_panel_width_px);
     }
 }
@@ -167,7 +168,7 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
     let darkroom_panels = include_str!("../src/views/darkroom/panel_widgets.rs");
 
     assert!(runtime_layout.contains(".propagate_natural_width(false)"));
-    assert!(runtime_layout.contains(".shrink_end_child(false)"));
+    assert!(runtime_layout.contains("connect_right_rail_constraints"));
     assert!(runtime_layout.contains("gtk4::glib::idle_add_local_once"));
     assert!(darkroom_panels.contains("darkroom-module-groups-scroll"));
     assert!(darkroom_panels.contains(".propagate_natural_width(false)"));
@@ -242,8 +243,8 @@ fn lighttable_contract_has_one_filter_row_and_plain_bottom_filmstrip() {
             "export",
         ]
     );
-    assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 92);
-    assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 72);
+    assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 104);
+    assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 78);
     assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
 }
 

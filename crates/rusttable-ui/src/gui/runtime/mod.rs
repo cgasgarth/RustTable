@@ -243,6 +243,10 @@ impl GtkShell {
             photo_details: Rc::new(RefCell::new(BTreeMap::new())),
         };
         shell.install_lighttable_keyboard();
+        self::lighttable::connect_lighttable_resize(
+            &shell.lighttable,
+            shell.workspace_render_handle(),
+        );
         let filmstrip_root = shell.filmstrip_root.clone();
         let interaction = Rc::clone(&shell.lighttable_interaction);
         let left_panel = shell.left_panel_stack.clone();

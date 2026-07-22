@@ -12,9 +12,9 @@ use rusttable_core::PhotoId;
 use super::PhotoSelectedHandler;
 use crate::external_editor::ExternalEditorPanel;
 use crate::gui::{
-    DarkroomView, ExportPanel, LighttableContentState, LighttableInteractionState,
-    LighttableSelectionAction, PhotoPreview, SelectionModifiers, THUMBNAIL_METRICS, ThemeRole,
-    WorkspaceRole, apply_theme_role,
+    DARKTABLE_UI_TOKENS, DarkroomView, ExportPanel, LighttableContentState,
+    LighttableInteractionState, LighttableSelectionAction, PhotoPreview, SelectionModifiers,
+    THUMBNAIL_METRICS, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
 use crate::views::lighttable::{LighttableCollectionState, LighttableGridSpec};
@@ -85,7 +85,7 @@ impl WorkspaceRenderHandle {
         self.photo_details.borrow_mut().clear();
         let zoom = self.interaction.borrow().zoom();
         let layout = self.interaction.borrow().layout();
-        let grid = LighttableGridSpec::for_zoom(zoom);
+        let grid = lighttable_grid_for_allocation(&self.lighttable, zoom);
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
         self.lighttable
             .set_max_children_per_line(if layout.shows_culling() {
@@ -326,6 +326,35 @@ impl WorkspaceRenderHandle {
     }
 }
 
+pub(super) fn connect_lighttable_resize(lighttable: &gtk4::FlowBox, render: WorkspaceRenderHandle) {
+    let last_geometry = Rc::new(std::cell::Cell::new((0_u16, 0_u16)));
+    let pending = Rc::new(std::cell::Cell::new(false));
+    let lighttable = lighttable.clone();
+    let measured_lighttable = lighttable.clone();
+    let schedule: Rc<dyn Fn()> = Rc::new(move || {
+        let grid = lighttable_grid_for_allocation(
+            &measured_lighttable,
+            render.interaction.borrow().zoom(),
+        );
+        let geometry = (grid.card_width_px(), grid.thumbnail_height_px());
+        if geometry == last_geometry.get() || pending.replace(true) {
+            return;
+        }
+        last_geometry.set(geometry);
+        let pending = Rc::clone(&pending);
+        let render = render.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            pending.set(false);
+            render.rerender_current();
+        });
+    });
+    lighttable.connect_notify_local(Some("width"), {
+        let schedule = Rc::clone(&schedule);
+        move |_, _| schedule()
+    });
+    lighttable.connect_notify_local(Some("height"), move |_, _| schedule());
+}
+
 fn sync_photo_buttons(
     photo_tiles: &BTreeMap<PhotoId, PhotoTilePair>,
     interaction: &LighttableInteractionState,
@@ -511,14 +540,28 @@ fn lighttable_card(
     apply_theme_role(&button, ThemeRole::PhotoCard);
     button.set_child(Some(&card));
     button.set_size_request(
-        i32::from(grid.thumbnail_width_px()).saturating_add(12),
-        i32::from(grid.thumbnail_height_px()).saturating_add(42),
+        i32::from(grid.card_width_px()),
+        i32::from(grid.thumbnail_height_px())
+            .saturating_add(i32::from(DARKTABLE_UI_TOKENS.cards.metadata_height_px)),
     );
     button.set_tooltip_text(Some(title));
     button.set_accessible_role(gtk4::AccessibleRole::Button);
     button.update_property(&[Property::Label(&format!("Select {title}"))]);
     button.set_focus_on_click(true);
     (button, thumbnail)
+}
+
+fn lighttable_grid_for_allocation(
+    lighttable: &gtk4::FlowBox,
+    zoom: crate::gui::LighttableZoom,
+) -> LighttableGridSpec {
+    let width = u16::try_from(lighttable.allocated_width()).unwrap_or(0);
+    let height = u16::try_from(lighttable.allocated_height()).unwrap_or(0);
+    if width > 0 && height > 0 {
+        LighttableGridSpec::for_viewport(zoom, width.saturating_sub(12), height)
+    } else {
+        LighttableGridSpec::for_zoom(zoom)
+    }
 }
 
 fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk4::Box {

@@ -3,7 +3,7 @@
 * {
   color: {{foreground}};
   font-family: sans-serif, "Arial Unicode MS";
-  font-size: 11px;
+  font-size: {{base_font_pt}}pt;
   font-weight: normal;
 }
 
@@ -42,13 +42,13 @@ window,
 
 .dt_brand_title {
   color: {{foreground}};
-  font-size: 14px;
+  font-size: {{heading_font_pt}}pt;
   font-weight: 500;
 }
 
 .dt_brand_version {
   color: {{foreground}};
-  font-size: 8px;
+  font-size: {{micro_font_pt}}pt;
 }
 
 #header-center {
@@ -98,7 +98,7 @@ entry,
 dropdown,
 spinbutton,
 textview {
-  min-height: 22px;
+  min-height: {{control_height}}px;
   padding: 1px 4px;
   border: 1px solid {{button_background}};
   border-radius: 2px;
@@ -144,7 +144,7 @@ button:disabled:hover,
 
 #left-panel,
 #right-panel {
-  min-width: 150px;
+  min-width: {{rail_min_width}}px;
   background-color: {{background}};
   border: 0;
 }
@@ -153,7 +153,7 @@ button:disabled:hover,
  * inner scrollers absorb long module contents; the center is never asked to
  * size itself from an expanded module's natural width. */
 .dt_rail {
-  min-width: 150px;
+  min-width: {{rail_min_width}}px;
   background-color: {{background}};
 }
 
@@ -168,27 +168,27 @@ button:disabled:hover,
 
 .dt_module_expander > title,
 .dt_module_group > title {
-  min-height: 20px;
-  padding: 1px 4px;
-  font-size: 11px;
+  min-height: {{module_title_height}}px;
+  padding: 1px {{module_padding}}px;
+  font-size: {{base_font_pt}}pt;
   font-weight: bold;
 }
 
 .dt_module_expander > box,
 .dt_module_group > box {
   min-width: 0;
-  padding: 3px 4px 5px;
+  padding: {{module_gap}}px {{module_padding}}px {{module_padding}}px;
 }
 
 .dt_module_row {
   min-width: 0;
-  min-height: 20px;
+  min-height: {{module_row_height}}px;
   padding: 1px 0;
 }
 
 .dt_module_row label {
   min-width: 0;
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_module_row scale,
@@ -196,7 +196,7 @@ button:disabled:hover,
 .dt_module_row switch,
 .dt_module_row entry {
   min-width: 0;
-  min-height: 20px;
+  min-height: {{control_height}}px;
 }
 
 .dt_module_row scale {
@@ -211,7 +211,7 @@ button:disabled:hover,
 }
 
 .dt_button {
-  min-height: 22px;
+  min-height: {{control_height}}px;
   min-width: 0;
   padding: 1px 5px;
 }
@@ -230,11 +230,11 @@ button:disabled:hover,
 
 #left-center,
 #left-bottom {
-  min-width: 150px;
+  min-width: {{rail_min_width}}px;
 }
 
 #left-module-scroll {
-  min-width: 150px;
+  min-width: {{rail_min_width}}px;
   background-color: {{background}};
 }
 
@@ -294,19 +294,19 @@ button:disabled:hover,
 }
 
 #collection-status {
-  min-height: 18px;
+  min-height: {{status_height}}px;
   padding: 2px 0;
 }
 
 .dt_collection_status {
   color: {{foreground}};
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_background_jobs {
-  min-height: 18px;
+  min-height: {{status_height}}px;
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
   border-top: 1px solid {{border}};
 }
 
@@ -335,7 +335,7 @@ button:disabled:hover,
 }
 
 #lighttable-collection-toolbar {
-  min-height: 28px;
+  min-height: {{toolbar_height}}px;
   margin: 0;
   padding: 1px 4px;
   border-bottom: 1px solid {{border}};
@@ -346,7 +346,7 @@ button:disabled:hover,
 }
 
 #lighttable-layout-controls button {
-  min-height: 20px;
+  min-height: {{control_height}}px;
   padding: 0 4px;
   background-color: transparent;
   color: {{foreground}};
@@ -373,7 +373,7 @@ button:disabled:hover,
 .dt_empty_state {
   min-width: 38em;
   min-height: 14em;
-  font-size: 14px;
+  font-size: {{base_font_pt}}pt;
   color: {{foreground}};
 }
 
@@ -409,7 +409,7 @@ expander:hover {
 .dt_section_label,
 .dt_section_expander,
 .dt_module_group > title {
-  min-height: 19px;
+  min-height: {{module_title_height}}px;
   padding: 1px 4px;
   color: {{foreground}};
   background-color: transparent;
@@ -417,7 +417,7 @@ expander:hover {
 }
 
 .dt_toolbar {
-  min-height: 28px;
+  min-height: {{toolbar_height}}px;
   padding: 1px 4px;
   background-color: {{background}};
   color: {{foreground}};
@@ -435,7 +435,7 @@ expander:hover {
 #lighttable-collection-toolbar dropdown,
 .dt_filter_button,
 #center-bottom button {
-  min-height: 21px;
+  min-height: {{control_height}}px;
   padding: 0 3px;
   border: 0;
   border-radius: 1px;
@@ -456,22 +456,22 @@ expander:hover {
 
 #lighttable-selection-count,
 #display-profile-status {
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 #header-profile-diagnostic,
 #darkroom-profile-diagnostic {
   min-width: 0;
-  min-height: 18px;
+  min-height: {{status_height}}px;
   margin: 0 4px;
   padding: 1px 4px;
   border-left: 1px solid {{border}};
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 #header-profile-diagnostic label,
 #darkroom-profile-diagnostic label {
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_profile_diagnostic.profile-diagnostic-ready {
@@ -556,8 +556,8 @@ spinbutton,
 }
 
 .dt_thumbnail_image {
-  min-width: 8em;
-  min-height: 5em;
+  min-width: {{card_min_width}}px;
+  min-height: 7em;
   background-color: {{thumbnail_background}};
   color: {{foreground}};
 }
@@ -569,7 +569,7 @@ spinbutton,
 
 .dt_thumbnail_placeholder {
   color: {{foreground}};
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 #photo-thumbnail {
@@ -578,9 +578,9 @@ spinbutton,
 }
 
 #photo-organization {
-  min-height: 14px;
+  min-height: {{card_metadata_height}}px;
   padding: 0 2px;
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 #bottom #photo-thumbnail {
@@ -614,7 +614,7 @@ scale:focus-visible {
 
 #darkroom-left-panel,
 #darkroom-right-panel {
-  min-width: 150px;
+  min-width: {{rail_min_width}}px;
   background-color: {{background}};
 }
 
@@ -625,7 +625,7 @@ scale:focus-visible {
 
 #darkroom-viewport {
   min-width: 0;
-  min-height: 200px;
+  min-height: 260px;
 }
 
 #darkroom-left-panel {
@@ -646,7 +646,7 @@ scale:focus-visible {
 
 #darkroom-left-panel expander > title,
 #darkroom-right-panel expander > title {
-  min-height: 18px;
+  min-height: {{module_title_height}}px;
   padding: 0;
   font-weight: bold;
 }
@@ -657,19 +657,19 @@ scale:focus-visible {
 }
 
 #right-panel {
-  min-width: 150px;
+  min-width: {{rail_min_width}}px;
 }
 
 #right-panel expander {
   margin: 0;
   padding: 2px 4px;
-  min-width: 142px;
+  min-width: 0;
   background-image: none;
   box-shadow: none;
 }
 
 #right-panel expander > title {
-  min-height: 19px;
+  min-height: {{module_title_height}}px;
   padding: 0;
 }
 
@@ -683,7 +683,7 @@ scale:focus-visible {
 }
 
 #right-panel #export > title {
-  min-height: 19px;
+  min-height: {{module_title_height}}px;
   padding: 1px 4px;
 }
 
@@ -698,12 +698,12 @@ scale:focus-visible {
 }
 
 .dt_export_row {
-  min-height: 22px;
+  min-height: {{module_row_height}}px;
   padding: 1px 0;
 }
 
 .dt_export_label {
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
   color: #919191ff;
 }
 
@@ -726,15 +726,15 @@ scale:focus-visible {
 }
 
 #export-actions button {
-  min-height: 22px;
+  min-height: {{control_height}}px;
   min-width: 0;
   padding: 1px 4px;
 }
 
 #rendered-png-status {
-  min-height: 18px;
+  min-height: {{status_height}}px;
   padding-top: 2px;
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 #rendered-png-progress {
@@ -742,7 +742,7 @@ scale:focus-visible {
 }
 
 .dt_darkroom_module_header {
-  min-height: 18px;
+  min-height: {{module_title_height}}px;
   padding: 1px 3px;
   border: 0;
   border-bottom: 1px solid {{border}};
@@ -758,36 +758,36 @@ scale:focus-visible {
 }
 
 .dt_module_row {
-  min-height: 18px;
+  min-height: {{module_row_height}}px;
   padding: 1px 0;
 }
 
 .dt_module_row label {
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_module_row switch,
 .dt_module_row dropdown,
 .dt_module_row scale {
-  min-height: 18px;
+  min-height: {{control_height}}px;
 }
 
 #darkroom-histogram {
-  min-height: 92px;
+  min-height: {{histogram_height}}px;
   background: linear-gradient(to top, #1d1d1dff, #383838ff);
   border-bottom: 1px solid {{border}};
 }
 
 #darkroom-module-groups {
-  min-height: 25px;
+  min-height: {{toolbar_height}}px;
   padding: 1px 2px;
   border-bottom: 1px solid {{border}};
 }
 
 #darkroom-module-groups button,
 .dt_darkroom_toolbar button {
-  min-height: 20px;
-  min-width: 20px;
+  min-height: {{control_height}}px;
+  min-width: {{control_height}}px;
   padding: 0 3px;
   border: 0;
   border-radius: 0;
@@ -798,7 +798,7 @@ scale:focus-visible {
 }
 
 .dt_darkroom_toolbar {
-  min-height: 28px;
+  min-height: {{toolbar_height}}px;
   min-width: 0;
   padding: 1px 3px;
   background-color: {{background}};
@@ -820,7 +820,7 @@ scale:focus-visible {
 }
 
 #darkroom-status-bar {
-  min-height: 20px;
+  min-height: {{status_height}}px;
   padding: 1px 5px;
   background-color: {{background}};
   border-top: 1px solid {{border}};
@@ -828,7 +828,7 @@ scale:focus-visible {
 }
 
 #darkroom-status-bar label {
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 #darkroom-job-status {
@@ -854,7 +854,7 @@ scale:focus-visible {
   background-color: #181818dd;
   border: 1px solid {{border}};
   color: {{foreground}};
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .darkroom_viewport_badge.warning {
@@ -870,7 +870,7 @@ scale:focus-visible {
 }
 
 #darkroom-preview-title {
-  font-size: 11px;
+  font-size: {{base_font_pt}}pt;
   font-weight: bold;
 }
 
@@ -880,7 +880,7 @@ scale:focus-visible {
 
 .dt_thumbnail_placeholder {
   color: {{foreground}};
-  font-size: 10px;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_thumbnail_indicators {
@@ -892,7 +892,7 @@ scale:focus-visible {
 
 .dt_thumbnail_indicators label {
   color: #eeeeeeff;
-  font-size: 9px;
+  font-size: {{micro_font_pt}}pt;
   font-weight: bold;
 }
 
