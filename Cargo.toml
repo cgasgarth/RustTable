@@ -53,6 +53,7 @@ exr = { version = "=1.74.2", default-features = false }
 pdf-writer = "=0.15.0"
 futures = "=0.3.32"
 gtk4 = { version = "=0.11.4", features = ["v4_10"] }
+half = "=2.7.1"
 fluent-bundle = "=0.16.0"
 fluent-syntax = "=0.12.0"
 fixed_decimal = "=0.7.2"
@@ -120,7 +121,7 @@ serde = { version = "=1.0.228", features = ["derive"] }
 serde_json = "=1.0.150"
 sha2 = { version = "=0.10.9", default-features = false }
 zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
-tiff = "=0.11.3"
+tiff = { version = "=0.11.3", default-features = false, features = ["deflate", "jpeg", "lzw", "zstd"] }
 tracing = "=0.1.44"
 tokio = { version = "=1.51.1", features = ["macros", "rt", "time"] }
 toml = "=0.9.12"
