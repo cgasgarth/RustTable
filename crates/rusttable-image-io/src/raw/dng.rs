@@ -105,48 +105,77 @@ pub(super) fn decode(
     let output_bytes = sample_count
         .checked_mul(2)
         .ok_or_else(|| invalid(RawFrameValidationError::ArithmeticOverflow))?;
-    let opcodes = frame.parts().opcodes.len();
-    let previews = frame.parts().previews.len();
-    let frame_parts = frame.parts();
-    Ok(RawDecodeResult {
-        receipt: RawDecodeReceipt {
-            backend: RAWLER_BACKEND_ID.to_owned(),
-            backend_format: "DNG".to_owned(),
-            container: probe.container,
-            family: super::RawVendorFamily::Standardized,
-            camera_profile_id: "rusttable.dng".to_owned(),
-            capability_manifest_sha256: super::manifest::rawler_capability_manifest().sha256,
-            camera: camera(&metadata),
-            compression: probe.evidence.compression.clone(),
-            bit_depth: page.bits_per_sample[0],
-            sensor_area: RawRect::new(0, 0, page.dimensions.width(), page.dimensions.height())
-                .map_err(invalid)?,
-            active_area: active,
-            crop_area: crop,
-            masked_areas: frame_parts.masked_areas.clone(),
-            black_levels: frame_parts.black_levels.clone(),
-            white_levels: frame_parts.white_levels.clone(),
-            white_balance: frame_parts.white_balance.clone(),
-            color_matrices: frame_parts.color_matrices.clone(),
-            previews: frame_parts.previews.clone(),
-            quirk_ids: Vec::new(),
-            source: RawSourceReceipt {
-                source_bytes: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
-                source_sha256: Sha256::digest(bytes).into(),
-                stable_copy_used: true,
-            },
-            plane_count: 1,
-            sample_count,
-            dng: Some(RawDngReceipt {
-                version: metadata.version,
-                backward_version: metadata.backward_version,
-                selected_ifd: page.ifd_offset,
-                preview_count: u8::try_from(previews).unwrap_or(u8::MAX),
-                opcode_count: u8::try_from(opcodes).unwrap_or(u8::MAX),
-                output_bytes,
-            }),
+    let receipt = build_receipt(&DngReceiptInput {
+        bytes,
+        probe,
+        page: &page,
+        metadata: &metadata,
+        frame: &frame,
+        active,
+        crop,
+        sample_count,
+        output_bytes,
+    })?;
+    Ok(RawDecodeResult { frame, receipt })
+}
+
+struct DngReceiptInput<'a> {
+    bytes: &'a [u8],
+    probe: &'a RawContainerProbe,
+    page: &'a crate::tiff::TiffPage,
+    metadata: &'a TiffDngMetadata,
+    frame: &'a RawFrame,
+    active: RawRect,
+    crop: RawRect,
+    sample_count: u64,
+    output_bytes: u64,
+}
+
+fn build_receipt(input: &DngReceiptInput<'_>) -> Result<RawDecodeReceipt, RawDecodeError> {
+    let frame_parts = input.frame.parts();
+    let opcodes = frame_parts.opcodes.len();
+    let previews = frame_parts.previews.len();
+    Ok(RawDecodeReceipt {
+        backend: RAWLER_BACKEND_ID.to_owned(),
+        backend_format: "DNG".to_owned(),
+        container: input.probe.container,
+        family: super::RawVendorFamily::Standardized,
+        camera_profile_id: "rusttable.dng".to_owned(),
+        capability_manifest_sha256: super::manifest::rawler_capability_manifest().sha256,
+        camera: camera(input.metadata),
+        compression: input.probe.evidence.compression.clone(),
+        bit_depth: input.page.bits_per_sample[0],
+        sensor_area: RawRect::new(
+            0,
+            0,
+            input.page.dimensions.width(),
+            input.page.dimensions.height(),
+        )
+        .map_err(invalid)?,
+        active_area: input.active,
+        crop_area: input.crop,
+        masked_areas: frame_parts.masked_areas.clone(),
+        black_levels: frame_parts.black_levels.clone(),
+        white_levels: frame_parts.white_levels.clone(),
+        white_balance: frame_parts.white_balance.clone(),
+        color_matrices: frame_parts.color_matrices.clone(),
+        previews: frame_parts.previews.clone(),
+        quirk_ids: Vec::new(),
+        source: RawSourceReceipt {
+            source_bytes: u64::try_from(input.bytes.len()).unwrap_or(u64::MAX),
+            source_sha256: Sha256::digest(input.bytes).into(),
+            stable_copy_used: true,
         },
-        frame,
+        plane_count: 1,
+        sample_count: input.sample_count,
+        dng: Some(RawDngReceipt {
+            version: input.metadata.version,
+            backward_version: input.metadata.backward_version,
+            selected_ifd: input.page.ifd_offset,
+            preview_count: u8::try_from(previews).unwrap_or(u8::MAX),
+            opcode_count: u8::try_from(opcodes).unwrap_or(u8::MAX),
+            output_bytes: input.output_bytes,
+        }),
     })
 }
 
