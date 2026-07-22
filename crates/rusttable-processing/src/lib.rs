@@ -36,9 +36,9 @@ mod window;
 pub use color::{
     DisplayP3Channel, DisplayP3ChannelError, DisplayP3Rgb, DisplayP3RgbImage, ImageBuildError,
     LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel, SourceColorSpace, SourceRgb,
-    SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingRgbImage,
-    linear_display_p3_to_working, linear_srgb_to_working, to_linear_srgb,
-    to_linear_srgb_from_display_p3,
+    SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingFrameDescriptor,
+    WorkingProfileProvenance, WorkingRgbImage, linear_display_p3_to_working,
+    linear_srgb_to_working, to_linear_srgb, to_linear_srgb_from_display_p3,
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
@@ -152,7 +152,7 @@ pub use operations::watermark::{
 };
 pub use output::{
     ChannelCounts, EncodedSrgb, EncodedSrgbImage, EncodedSrgbOutput, GamutClipReport,
-    encode_linear_srgb,
+    convert_working_to_linear_srgb, encode_linear_srgb, encode_working_to_srgb,
 };
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
 pub use rawprepare::{NormalizedRaw, RawPrepareConfig, RawPrepareError, RawPreparePlan};

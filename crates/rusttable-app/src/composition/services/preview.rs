@@ -185,8 +185,12 @@ fn render_frame_with_target(
         })
         .collect();
     let output_dimensions = result.image().descriptor().dimensions();
-    let working = WorkingRgbImage::new(output_dimensions, pixels)
-        .expect("CPU pixelpipe result dimensions match its validated pixels");
+    let working = WorkingRgbImage::new_with_frame(
+        output_dimensions,
+        pixels,
+        result.receipt().working_profile(),
+    )
+    .expect("CPU pixelpipe result dimensions match its validated pixels");
     let alpha = result
         .image()
         .pixels()
@@ -289,8 +293,12 @@ fn render_decoded_with_target(
         })
         .collect();
     let output_dimensions = result.image().descriptor().dimensions();
-    let working = WorkingRgbImage::new(output_dimensions, pixels)
-        .expect("CPU pixelpipe result dimensions match its validated pixels");
+    let working = WorkingRgbImage::new_with_frame(
+        output_dimensions,
+        pixels,
+        result.receipt().working_profile(),
+    )
+    .expect("CPU pixelpipe result dimensions match its validated pixels");
     let alpha = result
         .image()
         .pixels()

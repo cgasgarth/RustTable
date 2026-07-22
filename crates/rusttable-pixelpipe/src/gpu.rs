@@ -4,7 +4,7 @@ use rusttable_gpu::{
 };
 use rusttable_processing::{
     BasicAdjPlan, FiniteF32, GrainPlan, LinearRgb, RasterDimensions, SourceRgb, SourceRgbImage,
-    SrgbChannel, WorkingRgbImage, encode_linear_srgb, prepare_basicadj_plans, to_linear_srgb,
+    SrgbChannel, WorkingRgbImage, encode_working_to_srgb, prepare_basicadj_plans, to_linear_srgb,
 };
 use sha2::{Digest, Sha256};
 
@@ -537,7 +537,7 @@ fn execute_gpu_image(
                 )
             })
             .collect(),
-        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+        CpuPixelpipeOutputMode::Preview => encode_working_to_srgb(&working)
             .image()
             .pixels()
             .zip(input.pixels())
@@ -663,7 +663,7 @@ fn image_from_packed(
                 )
             })
             .collect(),
-        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+        CpuPixelpipeOutputMode::Preview => encode_working_to_srgb(&working)
             .image()
             .pixels()
             .zip(input.pixels())

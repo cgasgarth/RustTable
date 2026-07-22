@@ -1,7 +1,5 @@
 #![allow(clippy::missing_errors_doc, clippy::match_same_arms)]
 
-use std::fmt;
-
 use rusttable_color::{
     BuiltinSpace, Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion, RenderingIntent,
 };
@@ -10,8 +8,8 @@ use rusttable_processing::operations::colorin::{
 };
 use rusttable_processing::{
     BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, SourceRgb, SourceRgbImage, SrgbChannel,
-    WorkingRgbImage, encode_linear_srgb, evaluate_graph_with_basicadj_plans,
-    prepare_basicadj_plans, to_linear_srgb,
+    WorkingRgbImage, convert_working_to_linear_srgb, encode_working_to_srgb,
+    evaluate_graph_with_basicadj_plans, prepare_basicadj_plans, to_linear_srgb,
 };
 
 use crate::frame::{execute_frame_image, has_discrete_geometry};
@@ -20,6 +18,8 @@ use crate::{
     CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError, PixelIdentity, RgbaF32Channel,
     RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
+
+mod errors;
 
 /// The typed presentation boundary requested from a CPU pixelpipe execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -377,6 +377,7 @@ impl CpuPixelpipeExecutor {
             request.identity(),
             basicadj_plan_identity,
             request.output_mode(),
+            working_profile(request),
             request
                 .graph()
                 .nodes()
@@ -387,6 +388,22 @@ impl CpuPixelpipeExecutor {
         );
         CpuPixelpipeResult { image, receipt }
     }
+}
+
+fn working_profile(request: &CpuPixelpipeSnapshot) -> rusttable_processing::WorkingFrameDescriptor {
+    request
+        .graph()
+        .nodes()
+        .filter_map(|node| match node.operation().kind() {
+            rusttable_processing::ProcessingOperationKind::ColorIn { config } => {
+                ColorInPlan::new(config.clone())
+                    .ok()
+                    .map(|plan| plan.output_frame())
+            }
+            _ => None,
+        })
+        .fold(None, |_, value| Some(value))
+        .unwrap_or_else(rusttable_processing::WorkingFrameDescriptor::srgb)
 }
 
 fn execute_censorize_image(
@@ -442,7 +459,7 @@ fn execute_censorize_image(
             },
         })?;
     let output_pixels = match request.output_mode() {
-        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+        CpuPixelpipeOutputMode::Preview => encode_working_to_srgb(&working)
             .image()
             .pixels()
             .zip(&output)
@@ -585,7 +602,7 @@ fn execute_clahe_image(
             },
         })?;
     let output_pixels = match request.output_mode() {
-        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(&working)
+        CpuPixelpipeOutputMode::Preview => encode_working_to_srgb(&working)
             .image()
             .pixels()
             .zip(&output)
@@ -770,7 +787,7 @@ fn output_pixels(
     input: &RgbaF32Image,
 ) -> Vec<RgbaF32Pixel> {
     match mode {
-        CpuPixelpipeOutputMode::Preview => encode_linear_srgb(evaluated)
+        CpuPixelpipeOutputMode::Preview => encode_working_to_srgb(evaluated)
             .image()
             .pixels()
             .zip(input.pixels())
@@ -783,7 +800,7 @@ fn output_pixels(
                 )
             })
             .collect(),
-        CpuPixelpipeOutputMode::FullExport => evaluated
+        CpuPixelpipeOutputMode::FullExport => convert_working_to_linear_srgb(evaluated)
             .pixels()
             .zip(input.pixels())
             .map(|(rgb, source)| {
@@ -930,69 +947,3 @@ fn pixel_identity(image: &RgbaF32Image) -> PixelIdentity {
             .flat_map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]),
     )
 }
-
-impl fmt::Display for CpuPixelpipeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Cancelled(error) => error.fmt(formatter),
-            Self::UnsupportedInputEncoding { actual } => {
-                write!(formatter, "CPU pixelpipe does not accept {actual:?} input")
-            }
-            Self::SourceColorPlan(message) => {
-                write!(formatter, "CPU source-color plan failed: {message}")
-            }
-            Self::InputBridge { source } => write!(formatter, "invalid CPU input bridge: {source}"),
-            Self::Evaluation { source } => {
-                write!(formatter, "CPU operation evaluation failed: {source}")
-            }
-            Self::OutputBoundary { source } => {
-                write!(formatter, "invalid CPU output boundary: {source}")
-            }
-            Self::TilePlan { source } => write!(formatter, "invalid CPU tile plan: {source}"),
-            Self::TileAssembly { source } => {
-                write!(formatter, "invalid CPU tile assembly: {source}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for CpuPixelpipeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Cancelled(_) => None,
-            Self::UnsupportedInputEncoding { .. } => None,
-            Self::SourceColorPlan(_) => None,
-            Self::InputBridge { source } | Self::OutputBoundary { source } => Some(source),
-            Self::Evaluation { source } => Some(source),
-            Self::TilePlan { source } => Some(source),
-            Self::TileAssembly { source } => Some(source),
-        }
-    }
-}
-
-impl fmt::Display for CpuTileAssemblyError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::PixelIndexOverflow => formatter.write_str("CPU tile pixel index overflowed"),
-            Self::PixelIndexExceedsPlatform { index } => {
-                write!(
-                    formatter,
-                    "CPU tile pixel index {index} exceeds this platform"
-                )
-            }
-            Self::RowEndOverflow => formatter.write_str("CPU tile row end overflowed"),
-            Self::SourceRowOutsideInput => {
-                formatter.write_str("CPU tile source row is out of bounds")
-            }
-            Self::DestinationRowOutsideOutput => {
-                formatter.write_str("CPU tile destination row is out of bounds")
-            }
-            Self::TileUnavailable => formatter.write_str("CPU tile grid omitted a planned tile"),
-            Self::TileOutputDimensionsMismatch => {
-                formatter.write_str("CPU tile output dimensions do not match its input tile")
-            }
-        }
-    }
-}
-
-impl std::error::Error for CpuTileAssemblyError {}

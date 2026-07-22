@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use sha2::Digest;
 
 use super::{
-    BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions, apply_operation_with_plans,
+    BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions, apply_operation_with_profile,
     graph_has_discrete_geometry,
 };
 use crate::{BasicAdjAnalysisRaster, BasicAdjPlan, CompiledOperationGraph, EvaluationError};
@@ -36,6 +36,7 @@ pub fn prepare_basicadj_plans(
     }
 
     let mut current = input.pixel_slice().to_vec();
+    let mut frame = input.frame();
     let mut plans = BTreeMap::new();
     for node in graph.nodes() {
         let operation = node.operation();
@@ -64,13 +65,14 @@ pub fn prepare_basicadj_plans(
             plans: plans.clone(),
             identity: [0; 32],
         };
-        apply_operation_with_plans(
+        apply_operation_with_profile(
             node.pipeline_step_index(),
             operation,
             &mut current,
             input.dimensions(),
             0,
             Some(&plan_set),
+            &mut frame,
         )?;
     }
 

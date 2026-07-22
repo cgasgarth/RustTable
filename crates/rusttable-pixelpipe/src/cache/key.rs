@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Version of the structured in-memory cache identity.
-pub const CACHE_KEY_SCHEMA_VERSION: u16 = 3;
+pub const CACHE_KEY_SCHEMA_VERSION: u16 = 4;
 
 /// The precision identity used by a cache key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -200,6 +200,7 @@ pub enum CacheKeyComponent {
     Schema,
     Mode,
     MaskGraph,
+    WorkingProfile,
 }
 
 /// A complete output-affecting pixelpipe cache identity.
@@ -227,6 +228,7 @@ pub struct CacheKey {
     analysis_identity: [u8; 32],
     backend_identity: [u8; 32],
     mode_identity: [u8; 32],
+    working_profile_identity: [u8; 32],
 }
 
 impl Hash for CacheKey {
@@ -275,6 +277,7 @@ impl CacheKey {
             analysis_identity: [0; 32],
             backend_identity: implementation_identity(snapshot.implementation()),
             mode_identity: [0; 32],
+            working_profile_identity: transform_identity(snapshot.working_color()),
         }
     }
 
@@ -333,6 +336,7 @@ impl CacheKey {
             analysis_identity: [0; 32],
             backend_identity: [0; 32],
             mode_identity: plan.identity().as_bytes(),
+            working_profile_identity: [0; 32],
         }
     }
 
@@ -426,6 +430,7 @@ impl CacheKey {
         bytes.extend_from_slice(&self.analysis_identity);
         bytes.extend_from_slice(&self.backend_identity);
         bytes.extend_from_slice(&self.mode_identity);
+        bytes.extend_from_slice(&self.working_profile_identity);
         bytes
     }
 
@@ -448,6 +453,7 @@ impl CacheKey {
             CacheKeyComponent::MaskGraph,
             CacheKeyComponent::Backend,
             CacheKeyComponent::Mode,
+            CacheKeyComponent::WorkingProfile,
             CacheKeyComponent::Schema,
         ]
     }
@@ -488,6 +494,7 @@ pub struct CacheKeyBuilder {
     analysis_identity: [u8; 32],
     backend_identity: [u8; 32],
     mode_identity: [u8; 32],
+    working_profile_identity: [u8; 32],
 }
 
 impl Default for CacheKeyBuilder {
@@ -514,6 +521,7 @@ impl Default for CacheKeyBuilder {
             analysis_identity: [0; 32],
             backend_identity: [0; 32],
             mode_identity: [0; 32],
+            working_profile_identity: [0; 32],
         }
     }
 }
@@ -620,6 +628,11 @@ impl CacheKeyBuilder {
         self.mode_identity = value;
         self
     }
+    #[must_use]
+    pub const fn working_profile_identity(mut self, value: [u8; 32]) -> Self {
+        self.working_profile_identity = value;
+        self
+    }
 
     /// Builds a complete key and rejects incomplete or malformed identity.
     pub fn build(self) -> Result<CacheKey, CacheKeyError> {
@@ -648,6 +661,7 @@ impl CacheKeyBuilder {
             analysis_identity: self.analysis_identity,
             backend_identity: self.backend_identity,
             mode_identity: self.mode_identity,
+            working_profile_identity: self.working_profile_identity,
         };
         if key.params_version == 0 || key.node.first > key.node.last {
             return Err(CacheKeyError::Invalid("version or node range"));

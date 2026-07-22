@@ -197,6 +197,7 @@ pub struct RenderReceipt {
     clipping: GamutClipReport,
     output_dimensions: ImageDimensions,
     output_encoding: ColorEncoding,
+    working_profile: rusttable_processing::WorkingFrameDescriptor,
 }
 
 impl RenderReceipt {
@@ -211,6 +212,7 @@ impl RenderReceipt {
             clipping: output.clipping(),
             output_dimensions: output.image().dimensions(),
             output_encoding: output.image().color_encoding(),
+            working_profile: output.working_profile(),
         }
     }
 
@@ -254,11 +256,16 @@ impl RenderReceipt {
         self.output_encoding
     }
 
+    #[must_use]
+    pub const fn working_profile(&self) -> rusttable_processing::WorkingFrameDescriptor {
+        self.working_profile
+    }
+
     /// Returns the stable receipt representation used by export artifacts.
     #[must_use]
     pub fn canonical_encoding(&self) -> String {
         format!(
-            "render-receipt-v2\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color-decision={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\n",
+            "render-receipt-v2\nsource={:?}\nedit={:?}\npolicy={:?}\nplan={:?}\nsource-color-decision={:?}\nsource-color={:?}\nrender={:?}\nclip={:?}\noutput={:?}|{:?}\nworking-profile={:?}|{:?}\n",
             self.context.source,
             self.context.edit,
             self.context.policy,
@@ -269,6 +276,8 @@ impl RenderReceipt {
             self.clipping,
             self.output_dimensions,
             self.output_encoding,
+            self.working_profile.encoding(),
+            self.working_profile.provenance(),
         )
     }
 

@@ -7,7 +7,9 @@
 )]
 
 use super::common::OperationExecutionError;
-use crate::{FiniteF32 as ProcessingFiniteF32, LinearRgb};
+use crate::{
+    FiniteF32 as ProcessingFiniteF32, LinearRgb, WorkingFrameDescriptor, WorkingProfileProvenance,
+};
 use rusttable_color::{
     Adaptation, AdaptationMethod, AlphaTransform, BlackPointCompensation,
     BuiltinColorTransformPlanner, BuiltinSpace, ColorEncoding, ColorRole, ColorTransformPlanner,
@@ -78,9 +80,7 @@ impl ColorInConfig {
         normalization: ColorInNormalization,
         blue_mapping: bool,
     ) -> Result<Self, ColorInConfigError> {
-        if matches!(&input, ColorInProfile::Missing(_))
-            || matches!(&working, ColorInProfile::Missing(_))
-        {
+        if matches!(&input, ColorInProfile::Missing(_)) {
             return Err(ColorInConfigError::MissingProfileEvidence);
         }
         Ok(Self {
@@ -159,6 +159,7 @@ pub struct ColorInPlan {
     transform: TransformPlan,
     output_encoding: ColorEncoding,
     output_primaries: Option<rusttable_color::Primaries>,
+    output_frame: WorkingFrameDescriptor,
     identity: [u8; 32],
 }
 
@@ -169,8 +170,15 @@ impl ColorInPlan {
         // The working-space side of colorin is an internal linear space. Keep
         // its encoding linear so the planner does not append a display
         // transfer encode to the processing graph.
+        let (resolved_working, provenance) = match &config.working {
+            ColorInProfile::Missing(_) => (
+                ColorInProfile::Builtin(BuiltinSpace::Rec2020D65),
+                WorkingProfileProvenance::FallbackRec2020,
+            ),
+            _ => (config.working.clone(), WorkingProfileProvenance::Selected),
+        };
         let (target_encoding, target_matrix, target_white, _) =
-            profile_parts(&config.working, true)?;
+            profile_parts(&resolved_working, true)?;
         let request = ColorTransformRequest::new(
             source_encoding,
             target_encoding,
@@ -185,7 +193,7 @@ impl ColorInPlan {
         )
         .map_err(ColorInPlanError::Request)?;
         let transform = if matches!(
-            (&config.input, &config.working),
+            (&config.input, &resolved_working),
             (ColorInProfile::Builtin(_), ColorInProfile::Builtin(_))
         ) {
             BuiltinColorTransformPlanner
@@ -225,7 +233,8 @@ impl ColorInPlan {
         let identity = plan_identity(&config, &transform)?;
         Ok(Self {
             output_encoding: target_encoding,
-            output_primaries: profile_primaries(&config.working),
+            output_primaries: profile_primaries(&resolved_working),
+            output_frame: profile_frame(&resolved_working, provenance),
             config,
             transform,
             identity,
@@ -247,6 +256,11 @@ impl ColorInPlan {
     #[must_use]
     pub const fn output_primaries(&self) -> Option<rusttable_color::Primaries> {
         self.output_primaries
+    }
+
+    #[must_use]
+    pub const fn output_frame(&self) -> WorkingFrameDescriptor {
+        self.output_frame
     }
     #[must_use]
     pub const fn identity(&self) -> [u8; 32] {
@@ -459,6 +473,28 @@ fn profile_primaries(profile: &ColorInProfile) -> Option<rusttable_color::Primar
         ColorInProfile::Builtin(space) => space.primaries(),
         ColorInProfile::Matrix { primaries, .. } => Some(*primaries),
         ColorInProfile::Missing(_) => None,
+    }
+}
+
+fn profile_frame(
+    profile: &ColorInProfile,
+    provenance: WorkingProfileProvenance,
+) -> WorkingFrameDescriptor {
+    match profile {
+        ColorInProfile::Builtin(space) => WorkingFrameDescriptor::builtin(*space, provenance),
+        ColorInProfile::Matrix {
+            id,
+            primaries,
+            transfer: _,
+        } => WorkingFrameDescriptor::new(
+            ColorEncoding::External(*id),
+            *primaries,
+            primaries.white(),
+            TransferFunction::Linear,
+            Some(*id),
+            provenance,
+        ),
+        ColorInProfile::Missing(_) => WorkingFrameDescriptor::fallback_rec2020(),
     }
 }
 

@@ -5,6 +5,7 @@ use rusttable_core::OperationId;
 use crate::{
     CpuPixelpipeOutputMode, CpuPixelpipeSnapshotIdentity, RgbaF32Descriptor, SourceRasterIdentity,
 };
+use rusttable_processing::WorkingFrameDescriptor;
 
 /// Identifies the deterministic CPU implementation that produced a result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -102,6 +103,7 @@ pub struct CpuPipelineReceipt {
     snapshot_identity: CpuPixelpipeSnapshotIdentity,
     basicadj_plan_identity: [u8; 32],
     output_mode: CpuPixelpipeOutputMode,
+    working_profile: WorkingFrameDescriptor,
     nodes: Vec<CpuNodeReceipt>,
 }
 
@@ -116,6 +118,7 @@ impl CpuPipelineReceipt {
         snapshot_identity: CpuPixelpipeSnapshotIdentity,
         basicadj_plan_identity: [u8; 32],
         output_mode: CpuPixelpipeOutputMode,
+        working_profile: WorkingFrameDescriptor,
         nodes: Vec<CpuNodeReceipt>,
     ) -> Self {
         Self {
@@ -128,6 +131,7 @@ impl CpuPipelineReceipt {
             snapshot_identity,
             basicadj_plan_identity,
             output_mode,
+            working_profile,
             nodes,
         }
     }
@@ -192,6 +196,11 @@ impl CpuPipelineReceipt {
     #[must_use]
     pub const fn output_mode(&self) -> CpuPixelpipeOutputMode {
         self.output_mode
+    }
+
+    #[must_use]
+    pub const fn working_profile(&self) -> WorkingFrameDescriptor {
+        self.working_profile
     }
 
     /// Returns the frozen automatic-basicadj resolution identity used by the

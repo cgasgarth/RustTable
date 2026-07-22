@@ -21,6 +21,7 @@ pub struct PipelineSnapshotInput {
     publication_generation: PublicationGeneration,
     source: SourceDescriptor,
     input: PipelineInput,
+    working: ColorIdentity,
     stack: OperationStackSnapshot,
     output: crate::OutputSpec,
     purpose: PipelinePurpose,
@@ -51,6 +52,7 @@ impl PipelineSnapshotInput {
             publication_generation: PublicationGeneration::new(generation.get()),
             source,
             input,
+            working: ColorIdentity::working(),
             stack,
             output,
             purpose,
@@ -64,6 +66,12 @@ impl PipelineSnapshotInput {
     #[must_use]
     pub fn with_input(mut self, input: PipelineInput) -> Self {
         self.input = input;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_working_color(mut self, working: ColorIdentity) -> Self {
+        self.working = working;
         self
     }
 
@@ -162,7 +170,7 @@ impl PipelineSnapshot {
             publication_generation: input.publication_generation,
             source: input.source,
             input: input.input,
-            working: ColorIdentity::working(),
+            working: input.working,
             output: input.output,
             stack: input.stack,
             purpose: input.purpose,

@@ -3,7 +3,7 @@ use std::fmt;
 use rusttable_image::{
     ColorEncoding, DecodedImage, ImageDimensions, SourceColor, SourceColorFallback,
 };
-use rusttable_processing::{WorkingRgbImage, encode_linear_srgb};
+use rusttable_processing::{WorkingRgbImage, encode_working_to_srgb};
 
 use crate::{
     RenderError, RenderOutput, RenderPlan, RenderProvenance, RenderSampling, RenderTarget,
@@ -145,7 +145,7 @@ pub fn render_prepared_cpu_pixelpipe(
     let source_dimensions = ImageDimensions::new(dimensions.width(), dimensions.height())
         .expect("processing dimensions are nonzero by type");
     let plan = RenderPlan::for_source(source_dimensions, target);
-    let encoded = encode_linear_srgb(prepared.pixels());
+    let encoded = encode_working_to_srgb(prepared.pixels());
     let full = DecodedImage::new_with_color_encoding(
         source_dimensions,
         quantized_pixels(&encoded, prepared.alpha()),
@@ -165,6 +165,7 @@ pub fn render_prepared_cpu_pixelpipe(
         source_color: prepared.source_color(),
         clipping: encoded.clipping(),
         provenance: prepared.provenance(),
+        working_profile: prepared.pixels().frame(),
     })
 }
 

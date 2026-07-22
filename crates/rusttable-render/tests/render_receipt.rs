@@ -63,4 +63,8 @@ fn successful_render_owns_source_bound_receipt_and_plan() {
     );
     assert_eq!(output.receipt().clipping(), output.output().clipping());
     assert_eq!(output.receipt().output_encoding(), ColorEncoding::Srgb);
+    assert_eq!(
+        output.receipt().working_profile().encoding(),
+        ColorEncoding::LinearSrgbD65
+    );
 }

@@ -10,8 +10,8 @@ use rusttable_image::{
 };
 use rusttable_processing::{
     CompiledPipeline, DisplayP3Channel, DisplayP3Rgb, DisplayP3RgbImage, EvaluationError,
-    GamutClipReport, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb,
-    evaluate, linear_display_p3_to_working, linear_srgb_to_working, to_linear_srgb,
+    GamutClipReport, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel, evaluate,
+    linear_display_p3_to_working, linear_srgb_to_working, to_linear_srgb,
     to_linear_srgb_from_display_p3,
 };
 
@@ -122,6 +122,7 @@ pub struct RenderOutput {
     source_color: SourceColor,
     clipping: GamutClipReport,
     provenance: RenderProvenance,
+    working_profile: rusttable_processing::WorkingFrameDescriptor,
 }
 
 impl RenderOutput {
@@ -153,6 +154,11 @@ impl RenderOutput {
     #[must_use]
     pub const fn provenance(&self) -> RenderProvenance {
         self.provenance
+    }
+
+    #[must_use]
+    pub const fn working_profile(&self) -> rusttable_processing::WorkingFrameDescriptor {
+        self.working_profile
     }
 }
 
@@ -239,7 +245,7 @@ pub fn render_edit_with_plan(
     };
     let evaluated =
         evaluate(&pipeline, &working).map_err(|source| RenderError::Evaluation { source })?;
-    let encoded = encode_linear_srgb(&evaluated);
+    let encoded = rusttable_processing::encode_working_to_srgb(&evaluated);
     let pixels = quantized_pixels(&encoded, &alpha);
     let image = DecodedImage::new_with_color_encoding(
         plan.output_dimensions(),
@@ -260,6 +266,7 @@ pub fn render_edit_with_plan(
             pipeline.base_photo_revision(),
             pipeline.revision(),
         ),
+        working_profile: evaluated.frame(),
     })
 }
 

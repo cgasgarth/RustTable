@@ -5,7 +5,8 @@ use crate::operations::{
 };
 use crate::{
     CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, PreparedCpuOperation,
-    ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel, WorkingRgbImage,
+    ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel,
+    WorkingFrameDescriptor, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
 use std::fmt;
@@ -64,15 +65,18 @@ pub fn evaluate(
     pipeline: &CompiledPipeline,
     input: &WorkingRgbImage,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    let output = evaluate_steps(
+    let (output, frame) = evaluate_steps_with_frame(
         pipeline.steps().map(|step| (step.index(), step.prepared())),
         input.pixel_slice(),
         input.dimensions(),
         0,
+        input.frame(),
+        None,
     )?;
-    Ok(WorkingRgbImage::from_validated_parts(
+    Ok(WorkingRgbImage::from_validated_parts_with_frame(
         input.dimensions(),
         output,
+        frame,
     ))
 }
 pub(crate) fn evaluate_steps<'a, I>(
@@ -96,18 +100,40 @@ pub(crate) fn evaluate_steps_with_plans<'a, I>(
 where
     I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
 {
+    let (pixels, _) = evaluate_steps_with_frame(
+        steps,
+        input,
+        dimensions,
+        pixel_index_offset,
+        WorkingFrameDescriptor::srgb(),
+        basicadj_plans,
+    )?;
+    Ok(pixels)
+}
+pub(crate) fn evaluate_steps_with_frame<'a, I>(
+    steps: I,
+    input: &[LinearRgb],
+    dimensions: RasterDimensions,
+    pixel_index_offset: usize,
+    mut frame: WorkingFrameDescriptor,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
+) -> Result<(Vec<LinearRgb>, WorkingFrameDescriptor), EvaluationError>
+where
+    I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
+{
     let mut output = input.to_vec();
     for (step_index, operation) in steps {
-        apply_operation_with_plans(
+        apply_operation_with_profile(
             step_index,
             operation.operation(),
             &mut output,
             dimensions,
             pixel_index_offset,
             basicadj_plans,
+            &mut frame,
         )?;
     }
-    Ok(output)
+    Ok((output, frame))
 }
 /// Resolves every automatic basicadj node against the full preceding image,
 /// then executes the graph once to establish the next node's analysis input.
@@ -133,7 +159,6 @@ pub(crate) fn execute_prepared_operation(
         None,
     )
 }
-
 #[allow(clippy::too_many_lines)]
 fn apply_operation_with_plans(
     step_index: PipelineStepIndex,
@@ -142,6 +167,30 @@ fn apply_operation_with_plans(
     dimensions: RasterDimensions,
     pixel_index_offset: usize,
     basicadj_plans: Option<&BasicAdjPlanSet>,
+) -> Result<(), EvaluationError> {
+    let mut frame = WorkingFrameDescriptor::srgb();
+    apply_operation_with_profile(
+        step_index,
+        operation,
+        pixels,
+        dimensions,
+        pixel_index_offset,
+        basicadj_plans,
+        &mut frame,
+    )
+}
+#[allow(
+    clippy::too_many_lines,
+    reason = "the operation dispatcher keeps typed graph semantics centralized"
+)]
+pub(crate) fn apply_operation_with_profile(
+    step_index: PipelineStepIndex,
+    operation: &ProcessingOperation,
+    pixels: &mut [LinearRgb],
+    dimensions: RasterDimensions,
+    pixel_index_offset: usize,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
+    frame: &mut WorkingFrameDescriptor,
 ) -> Result<(), EvaluationError> {
     let operation_id = operation.operation_id();
     let opacity = operation.opacity().get();
@@ -534,14 +583,13 @@ fn apply_operation_with_plans(
                 step_index,
                 operation_id,
                 pixel_index_offset,
-            )
+            )?;
+            *frame = plan.output_frame();
+            Ok(())
         }
         ProcessingOperationKind::Primaries { config } => {
-            let plan = crate::operations::primaries::PrimariesPlan::new(
-                *config,
-                rusttable_color::Primaries::srgb(),
-            )
-            .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let plan = crate::operations::primaries::PrimariesPlan::new(*config, frame.primaries())
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             let execution = plan
                 .execute(pixels)
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
@@ -555,8 +603,11 @@ fn apply_operation_with_plans(
             )
         }
         ProcessingOperationKind::ColorOut { config } => {
-            let plan = crate::operations::colorout::ColorOutPlan::new(config.clone())
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let plan = crate::operations::colorout::ColorOutPlan::new_with_working_frame(
+                config.clone(),
+                *frame,
+            )
+            .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             let execution = plan
                 .execute(pixels)
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
@@ -887,7 +938,6 @@ impl fmt::Display for EvaluationError {
 }
 
 impl std::error::Error for EvaluationError {}
-
 #[cfg(test)]
 mod tests {
     use rusttable_core::{

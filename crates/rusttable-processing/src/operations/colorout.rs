@@ -1,7 +1,7 @@
 #![allow(clippy::missing_errors_doc, clippy::must_use_candidate)]
 
 use super::common::OperationExecutionError;
-use crate::{FiniteF32, LinearRgb};
+use crate::{FiniteF32, LinearRgb, WorkingFrameDescriptor};
 use rusttable_color::{
     Adaptation, AdaptationMethod, AlphaTransform, BlackPointCompensation,
     BuiltinColorTransformPlanner, BuiltinSpace, ColorEncoding, ColorRole, ColorTransformPlanner,
@@ -157,6 +157,7 @@ impl std::error::Error for ColorOutPlanError {}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColorOutPlan {
     config: ColorOutConfig,
+    source_frame: WorkingFrameDescriptor,
     transform: TransformPlan,
     proof_transform: Option<TransformPlan>,
     output_encoding: ColorEncoding,
@@ -167,15 +168,30 @@ pub struct ColorOutPlan {
 
 impl ColorOutPlan {
     pub fn new(config: ColorOutConfig) -> Result<Self, ColorOutPlanError> {
+        Self::new_with_working_frame(config, WorkingFrameDescriptor::srgb())
+    }
+
+    pub fn new_with_working_frame(
+        config: ColorOutConfig,
+        source_frame: WorkingFrameDescriptor,
+    ) -> Result<Self, ColorOutPlanError> {
         let transform = build_transform(
             &config.output,
+            source_frame,
             config.intent,
             config.black_point_compensation,
         )?;
         let proof_transform = config
             .proof
             .as_ref()
-            .map(|profile| build_transform(profile, config.intent, config.black_point_compensation))
+            .map(|profile| {
+                build_transform(
+                    profile,
+                    source_frame,
+                    config.intent,
+                    config.black_point_compensation,
+                )
+            })
             .transpose()?;
         let output_encoding = profile_encoding(&config.output, false)?;
         let profile_id = profile_id(&config.output)?;
@@ -190,6 +206,7 @@ impl ColorOutPlan {
         let bytes = postcard::to_allocvec(&(
             COLOROUT_SCHEMA_VERSION,
             &config,
+            source_frame,
             &transform,
             &proof_transform,
             output_encoding,
@@ -199,6 +216,7 @@ impl ColorOutPlan {
         .map_err(|error| ColorOutPlanError::Serialization(error.to_string()))?;
         Ok(Self {
             config,
+            source_frame,
             transform,
             proof_transform,
             output_encoding,
@@ -210,6 +228,10 @@ impl ColorOutPlan {
     #[must_use]
     pub const fn config(&self) -> &ColorOutConfig {
         &self.config
+    }
+    #[must_use]
+    pub const fn source_frame(&self) -> WorkingFrameDescriptor {
+        self.source_frame
     }
     #[must_use]
     pub const fn transform(&self) -> &TransformPlan {
@@ -406,11 +428,12 @@ pub const fn wgpu_passes() -> [&'static str; 2] {
 
 fn build_transform(
     profile: &ColorOutProfile,
+    source_frame: WorkingFrameDescriptor,
     intent: RenderingIntent,
     bpc: BlackPointCompensation,
 ) -> Result<TransformPlan, ColorOutPlanError> {
     let request = ColorTransformRequest::new(
-        ColorEncoding::LinearSrgbD65,
+        source_frame.encoding(),
         profile_encoding(profile, false)?,
         ColorRole::Export,
         intent,
@@ -422,17 +445,24 @@ fn build_transform(
         COLOROUT_SCHEMA_VERSION,
     )
     .map_err(|error| ColorOutPlanError::Request(error.to_string()))?;
-    if matches!(profile, ColorOutProfile::Builtin(_)) {
+    if matches!(profile, ColorOutProfile::Builtin(_)) && source_frame.encoding().builtin().is_some()
+    {
         return BuiltinColorTransformPlanner
             .plan(&request)
             .map_err(|error| ColorOutPlanError::Request(error.to_string()));
     }
     let (_, matrix, white, transfer) = profile_parts(profile)?;
-    let source = BuiltinSpace::SrgbD65
-        .to_xyz_matrix()
-        .ok_or(ColorOutPlanError::Matrix)?;
+    let source = rgb_to_xyz_matrix(
+        [
+            pair(source_frame.primaries().red()),
+            pair(source_frame.primaries().green()),
+            pair(source_frame.primaries().blue()),
+        ],
+        source_frame.white_point(),
+    )
+    .map_err(|_| ColorOutPlanError::Matrix)?;
     let mut steps = vec![TransformStep::Matrix(source)];
-    let source_white = BuiltinSpace::SrgbD65.white_point();
+    let source_white = source_frame.white_point();
     if source_white != white {
         steps.push(TransformStep::Adaptation(
             Adaptation::between(source_white, white, AdaptationMethod::Bradford)
