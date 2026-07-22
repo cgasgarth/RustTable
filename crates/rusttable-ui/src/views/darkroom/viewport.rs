@@ -514,7 +514,12 @@ pub(super) fn sync_viewport_controls(
     controls
         .gamut_check
         .set_active(state.color_mode() == ViewportColorMode::GamutCheck);
-    controls.projection.set_text(&state.projection_label());
+    let overlay_active = state.has_active_overlay();
+    let projection = overlay_active.then(|| state.projection_label());
+    controls
+        .projection
+        .set_text(projection.as_deref().unwrap_or_default());
+    controls.projection.set_visible(overlay_active);
     controls
         .overlay_before
         .set_visible(state.comparison() == ViewportComparison::Before);

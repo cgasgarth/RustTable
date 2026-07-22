@@ -8,8 +8,10 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_ui::gtk_shell::{GtkShell, WorkspaceRole};
 use rusttable_ui::{
-    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
-    PresentationText, ViewportGeneration,
+    CollectionControlState, CollectionFilterState, CollectionProperty, LighttableColorLabel,
+    LighttablePhotoState, LighttableRating, LighttableToolbarState, PhotoCardViewModel,
+    PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel, PresentationText,
+    PreviewDimensions, Rgba8PreviewMetadata, ViewportGeneration,
 };
 
 fn main() {
@@ -38,19 +40,7 @@ fn app_shell_transition_paints_darkroom_titles() {
         .downcast::<gtk4::Paned>()
         .expect("desktop left split is a paned");
     let photo_id = PhotoId::new(949).expect("test photo id");
-    let title = PresentationText::new("Alex_Benes.RAF").expect("test title");
-    let workspace = PhotoWorkspaceViewModel::new(
-        vec![PhotoCardViewModel::new(photo_id, title.clone(), None)],
-        vec![PhotoDetailViewModel::new(
-            photo_id,
-            title,
-            vec![PhotoFactViewModel::new(
-                PresentationText::new("camera").expect("test fact label"),
-                PresentationText::new("Fujifilm X-T5").expect("test fact value"),
-            )],
-        )],
-    )
-    .expect("test workspace");
+    let workspace = test_workspace(photo_id);
 
     shell.present();
     let transitioned = Rc::new(Cell::new(false));
@@ -59,8 +49,12 @@ fn app_shell_transition_paints_darkroom_titles() {
         let transitioned = Rc::clone(&transitioned);
         move || {
             shell.set_photo_workspace(&workspace);
+            shell.set_collection_filter_state(&test_collection(photo_id));
             assert!(shell.open_photo(photo_id), "selected photo opens darkroom");
             shell.begin_darkroom_selection(photo_id, ViewportGeneration::new(1));
+            shell
+                .set_photo_thumbnail(photo_id, &thumbnail_metadata())
+                .expect("bounded navigation and filmstrip thumbnail");
             shell.show_workspace(WorkspaceRole::Lighttable);
             gtk4::glib::idle_add_local_once(move || {
                 shell.show_workspace(WorkspaceRole::Darkroom);
@@ -94,6 +88,72 @@ fn app_shell_transition_paints_darkroom_titles() {
     );
     assert_darkroom_titles_are_allocated(&shell);
     assert_darkroom_chrome_matches_runtime_geometry(&shell);
+}
+
+fn test_workspace(photo_id: PhotoId) -> PhotoWorkspaceViewModel {
+    let title = PresentationText::new("Alex_Benes.RAF").expect("test title");
+    PhotoWorkspaceViewModel::new(
+        vec![PhotoCardViewModel::new(
+            photo_id,
+            title.clone(),
+            Some(PresentationText::new("RAW · 6048 × 4038").expect("secondary metadata")),
+        )],
+        vec![PhotoDetailViewModel::new(
+            photo_id,
+            title,
+            vec![
+                PhotoFactViewModel::new(
+                    PresentationText::new("Camera").expect("test fact label"),
+                    PresentationText::new("Fujifilm X-T5").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
+                    PresentationText::new("Format").expect("test fact label"),
+                    PresentationText::new("RAW").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
+                    PresentationText::new("Dimensions").expect("test fact label"),
+                    PresentationText::new("6048 × 4038").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
+                    PresentationText::new("File size").expect("test fact label"),
+                    PresentationText::new("23.6 MB").expect("test fact value"),
+                ),
+            ],
+        )],
+    )
+    .expect("test workspace")
+}
+
+fn test_collection(photo_id: PhotoId) -> CollectionFilterState {
+    CollectionFilterState::new(
+        CollectionControlState::new(CollectionProperty::Filename, 1),
+        vec![photo_id],
+    )
+    .with_lighttable_state(
+        [LighttablePhotoState::new(
+            photo_id,
+            true,
+            LighttableRating::Three,
+            [LighttableColorLabel::Red, LighttableColorLabel::Blue],
+        )],
+        LighttableToolbarState::new(1),
+    )
+}
+
+fn thumbnail_metadata() -> Rgba8PreviewMetadata {
+    let dimensions = PreviewDimensions::new(32, 20).expect("thumbnail dimensions");
+    let mut pixels = Vec::with_capacity(32 * 20 * 4);
+    for y in 0..20_u8 {
+        for x in 0..32_u8 {
+            pixels.extend_from_slice(&[x.saturating_mul(7), y.saturating_mul(11), 180, 255]);
+        }
+    }
+    Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("thumbnail ready").expect("thumbnail status"),
+        pixels,
+    )
+    .expect("thumbnail metadata")
 }
 
 fn settle_gtk_until(done: impl Fn() -> bool, state: impl Fn() -> String) {
@@ -158,9 +218,34 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
 fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
     let root: gtk4::Widget = shell.window().clone().upcast();
     assert_toolbar_and_status_geometry(&root);
+    assert_navigation_rendering(&root);
     assert_right_rail_geometry(&root);
     assert_filmstrip_rendering(&root);
     assert_right_rail_resize(&root);
+}
+
+fn assert_navigation_rendering(root: &gtk4::Widget) {
+    let navigation = find_widget(root, "darkroom-navigation-preview").expect("navigation preview");
+    let crop = find_widget(root, "darkroom-navigation-crop").expect("navigation crop indicator");
+    let projection = find_widget(root, "darkroom-viewport-projection")
+        .expect("inactive viewport projection watermark");
+    assert!(navigation.is_visible() && crop.is_visible());
+    assert!(
+        navigation.allocated_width() >= 120 && navigation.allocated_height() >= 80,
+        "navigation preview must keep useful geometry: {}x{}",
+        navigation.allocated_width(),
+        navigation.allocated_height()
+    );
+    assert!(
+        !projection.is_visible(),
+        "default fit/edited/normal state must not paint a viewport watermark"
+    );
+    let rendered = render_widget(root);
+    let crop_bounds = crop.compute_bounds(root).expect("navigation crop bounds");
+    assert!(
+        rendered.bright_pixels(crop_bounds) >= 40,
+        "navigation crop frame must paint over the thumbnail"
+    );
 }
 
 fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
@@ -201,7 +286,19 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
         .expect("centered image status")
         .downcast::<gtk4::Label>()
         .expect("image status label");
-    assert_eq!(status_text.text(), "Alex_Benes.RAF  ·  Fujifilm X-T5");
+    assert_eq!(status_text.text(), "Fujifilm X-T5 · RAW · 6048 × 4038");
+    assert!(!status_text.text().contains("MB"));
+    for (id, expected) in [
+        ("darkroom-module-order", "module order"),
+        ("darkroom-pipeline-state", "revision 0 · RAW"),
+    ] {
+        let label = find_widget(root, id)
+            .expect("pipeline affordance")
+            .downcast::<gtk4::Label>()
+            .expect("pipeline affordance label");
+        assert!(label.is_visible());
+        assert_eq!(label.text(), expected);
+    }
 }
 
 fn assert_right_rail_geometry(root: &gtk4::Widget) {
@@ -252,11 +349,20 @@ fn assert_right_rail_geometry(root: &gtk4::Widget) {
 fn assert_filmstrip_rendering(root: &gtk4::Widget) {
     let filmstrip_item = find_widget_with_prefix(root, "filmstrip-photo-").expect("filmstrip item");
     assert!(filmstrip_item.has_css_class("dt_selected"));
-    let filmstrip_metadata = find_widget_with_prefix(root, "filmstrip-metadata-")
-        .expect("filmstrip metadata")
+    let filmstrip_metadata =
+        find_widget_with_prefix(root, "filmstrip-metadata-").expect("filmstrip metadata");
+    let filmstrip_rating = find_widget_with_prefix(root, "filmstrip-rating-")
+        .expect("filmstrip rating")
         .downcast::<gtk4::Label>()
-        .expect("filmstrip metadata label");
-    assert_eq!(filmstrip_metadata.text(), "Alex_Benes.RAF");
+        .expect("filmstrip rating label");
+    let filmstrip_format = find_widget_with_prefix(root, "filmstrip-format-")
+        .expect("filmstrip format")
+        .downcast::<gtk4::Label>()
+        .expect("filmstrip format label");
+    assert_eq!(filmstrip_rating.text(), "★★★☆☆");
+    assert_eq!(filmstrip_format.text(), "RAW");
+    assert!(find_widget_with_prefix(root, "filmstrip-red-tag-").is_some());
+    assert!(find_widget_with_prefix(root, "filmstrip-blue-tag-").is_some());
     let visible_split = find_widget(root, "desktop-left-split").expect("visible center split");
     let rendered = render_widget(&visible_split);
     let metadata_bounds = filmstrip_metadata
@@ -270,10 +376,10 @@ fn assert_filmstrip_rendering(root: &gtk4::Widget) {
         .compute_bounds(&visible_split)
         .expect("selected filmstrip bounds");
     let selection_marker =
-        gtk4::graphene::Rect::new(item_bounds.x(), item_bounds.y(), item_bounds.width(), 3.0);
+        gtk4::graphene::Rect::new(item_bounds.x(), item_bounds.y(), 3.0, item_bounds.height());
     assert!(
         rendered.bright_pixels(selection_marker) >= 20,
-        "selected filmstrip item must paint a light top marker"
+        "selected filmstrip item must paint one light frame"
     );
     let boundary = find_widget(root, "darkroom-filmstrip-boundary").expect("filmstrip boundary");
     let boundary_bounds = boundary
@@ -306,6 +412,25 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
         },
     );
     assert!((120..=180).contains(&histogram.allocated_height()));
+    let panel_bounds = right_panel
+        .compute_bounds(root)
+        .expect("right panel bounds");
+    for id in [
+        "rgb-denoise-model",
+        "rgb-denoise-provider",
+        "raw-denoise-model",
+    ] {
+        let field = find_widget(root, id).expect("narrow right-rail field");
+        let bounds = field.compute_bounds(root).expect("right-rail field bounds");
+        assert!(
+            bounds.width() >= 40.0,
+            "{id} must retain a usable value width"
+        );
+        assert!(
+            bounds.x() + bounds.width() <= panel_bounds.x() + panel_bounds.width() + 1.0,
+            "{id} must stay inside the narrow right rail: {bounds:?} vs {panel_bounds:?}"
+        );
+    }
     right_split.set_position(split_width.saturating_sub(150));
     settle_gtk_until(
         || histogram.allocated_width() <= 170,

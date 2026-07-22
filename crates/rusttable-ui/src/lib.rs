@@ -19,6 +19,7 @@ pub mod neural_restore;
 pub mod presentation;
 pub mod raw_denoise;
 pub mod rgb_denoise;
+mod viewport_navigation;
 pub mod viewport_presentation;
 pub mod views;
 pub mod widgets;

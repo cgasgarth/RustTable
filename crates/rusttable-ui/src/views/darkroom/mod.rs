@@ -21,6 +21,7 @@ use crate::libs::histogram::{HistogramData, HistogramError, HistogramSample};
 use crate::presentation::{
     DarkroomControlValue, DarkroomHistoryViewModel, DarkroomPanelActionHandler,
     DarkroomPanelProjection, DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
+    Rgba8PreviewMetadata,
 };
 use crate::raw_denoise::{RawDenoiseAction, RawDenoisePanel, RawDenoiseViewModel};
 use crate::rgb_denoise::{RgbDenoiseAction, RgbDenoisePanel, RgbDenoiseViewModel};
@@ -377,10 +378,12 @@ impl DarkroomView {
         self.viewport_state
             .borrow_mut()
             .select(photo_id, edit_revision, generation);
+        self.status_surface.set_revision(edit_revision);
         self.filmstrip_state.borrow_mut().set_generation(generation);
         self.histogram_generation.set(Some(generation));
         self.histogram.loading(generation);
         self.viewport_controls.clear_histogram_sample();
+        self.rail_status.navigation.set_loading();
         self.sync_viewport_projection();
     }
 
@@ -395,6 +398,7 @@ impl DarkroomView {
             .borrow_mut()
             .set_edit_revision(edit_revision, generation)
         {
+            self.status_surface.set_revision(edit_revision);
             self.sync_viewport_projection();
         }
     }
@@ -406,6 +410,7 @@ impl DarkroomView {
         self.histogram_generation.set(None);
         self.histogram.clear();
         self.viewport_controls.clear_histogram_sample();
+        self.rail_status.navigation.set_unavailable();
         self.sync_viewport_projection();
     }
 
@@ -420,6 +425,33 @@ impl DarkroomView {
     /// Reapplies the current projection after the orchestrator installs a new texture.
     pub fn sync_viewport_projection(&self) {
         sync_viewport_controls(&self.viewport_controls, &self.preview, &self.viewport_state);
+        self.rail_status
+            .navigation
+            .sync_viewport(*self.viewport_state.borrow());
+    }
+
+    /// Installs the bounded thumbnail generated alongside the selected preview.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture adaptation error if GTK cannot represent the validated thumbnail.
+    pub fn set_navigation_preview(
+        &self,
+        metadata: &Rgba8PreviewMetadata,
+    ) -> Result<(), crate::widgets::preview::PhotoPreviewTextureError> {
+        self.rail_status.navigation.set_rgba8(metadata)
+    }
+
+    pub(crate) fn set_navigation_preview_loading(&self) {
+        self.rail_status.navigation.set_loading();
+    }
+
+    pub(crate) fn set_navigation_preview_unavailable(&self) {
+        self.rail_status.navigation.set_unavailable();
+    }
+
+    pub(crate) fn set_navigation_preview_failed(&self) {
+        self.rail_status.navigation.set_failed();
     }
 
     /// Projects the same typed profile decision used by the header into the darkroom status row.
@@ -805,17 +837,9 @@ impl DarkroomView {
 
     /// Projects a selected image into the side-rail states without inventing unavailable data.
     pub fn set_detail(&self, detail: &PhotoDetailViewModel) {
-        let mut image_information = detail.title().as_str().to_owned();
-        for fact in detail.facts().take(3) {
-            image_information.push_str("  ·  ");
-            image_information.push_str(fact.value().as_str());
-        }
-        self.status_surface
-            .set_image_information(&image_information);
         let viewport = self.viewport_state.borrow();
-        self.rail_status
-            .navigation
-            .set_text("filmstrip navigation ready");
+        self.status_surface
+            .set_detail(detail, viewport.edit_revision().unwrap_or(Revision::ZERO));
         let target = DarkroomPanelTarget::new(
             detail.id(),
             viewport.generation(),
@@ -853,10 +877,9 @@ impl DarkroomView {
 
     /// Restores the explicit no-selection state of every side-rail surface.
     pub fn clear_detail(&self) {
-        self.rail_status
-            .navigation
-            .set_text("select a photo to navigate");
+        self.rail_status.navigation.set_unavailable();
         self.rail_status.clear_detail();
+        self.status_surface.clear_detail();
         self.histogram_generation.set(None);
         self.histogram.clear();
         self.viewport_controls.clear_histogram_sample();
@@ -866,7 +889,7 @@ impl DarkroomView {
 
 #[derive(Clone)]
 struct DarkroomRailStatus {
-    navigation: gtk4::Label,
+    navigation: panel_widgets::NavigationPreview,
     snapshots_body: gtk4::Box,
     history_body: gtk4::Box,
     image_information_body: gtk4::Box,

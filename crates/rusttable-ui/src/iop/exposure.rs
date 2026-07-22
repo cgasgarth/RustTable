@@ -459,6 +459,8 @@ fn value_label(id: &str, accessible_name: &str) -> gtk4::Label {
     label.set_widget_name(id);
     label.add_css_class("dt_module_value");
     label.set_halign(gtk4::Align::End);
+    label.set_width_chars(1);
+    label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     label.update_property(&[Property::Label(accessible_name)]);
     label
 }

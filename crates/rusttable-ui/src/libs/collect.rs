@@ -158,6 +158,12 @@ impl CollectionFilterState {
         self.photo_states.get(&photo_id)
     }
 
+    /// Returns organization and selection state for every projected photo.
+    #[must_use]
+    pub fn photo_states(&self) -> impl ExactSizeIterator<Item = &LighttablePhotoState> {
+        self.photo_states.values()
+    }
+
     /// Returns selected IDs from the same projection used to render the grid and filmstrip.
     pub fn selected_photo_ids(&self) -> impl Iterator<Item = PhotoId> + '_ {
         self.photo_states
