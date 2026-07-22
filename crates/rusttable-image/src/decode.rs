@@ -4,6 +4,33 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 
+/// Explicit RAW development stages retained in decode evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DecodeStage {
+    RawRescale,
+    RawActiveAreaCrop,
+    RawCfa,
+    RawDemosaic,
+    RawWhiteBalance,
+    RawColorCalibration,
+    RawDefaultCrop,
+}
+
+impl DecodeStage {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::RawRescale => "raw.rescale",
+            Self::RawActiveAreaCrop => "raw.active_area_crop",
+            Self::RawCfa => "raw.cfa",
+            Self::RawDemosaic => "raw.demosaic",
+            Self::RawWhiteBalance => "raw.white_balance",
+            Self::RawColorCalibration => "raw.color_calibration",
+            Self::RawDefaultCrop => "raw.default_crop",
+        }
+    }
+}
+
 /// A request independent of any particular decoder implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodeRequest {
@@ -83,6 +110,7 @@ pub struct DecodeReceipt {
     source_bytes: u64,
     descriptor: ImageDescriptor,
     source_color: SourceColor,
+    processing_stages: Vec<DecodeStage>,
 }
 
 impl DecodeReceipt {
@@ -106,6 +134,7 @@ impl DecodeReceipt {
             source_bytes,
             descriptor,
             source_color,
+            processing_stages: Vec::new(),
         })
     }
 
@@ -131,7 +160,15 @@ impl DecodeReceipt {
             source_bytes,
             descriptor,
             source_color,
+            processing_stages: Vec::new(),
         })
+    }
+
+    /// Retains the explicit processing stages used to produce this frame.
+    #[must_use]
+    pub fn with_processing_stages(mut self, stages: impl IntoIterator<Item = DecodeStage>) -> Self {
+        self.processing_stages = stages.into_iter().collect();
+        self
     }
 
     #[must_use]
@@ -152,6 +189,12 @@ impl DecodeReceipt {
     #[must_use]
     pub const fn source_color(&self) -> SourceColor {
         self.source_color
+    }
+
+    /// Returns the ordered, explicit processing stages used by the decoder.
+    #[must_use]
+    pub fn processing_stages(&self) -> &[DecodeStage] {
+        &self.processing_stages
     }
 }
 

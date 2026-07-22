@@ -1,6 +1,6 @@
 use rusttable_core::Edit;
 use rusttable_image::{
-    ColorEncoding, DecodeLimits, DecodedFrame, DecodedImage, ImageInput, SampleType, SourceColor,
+    ColorEncoding, DecodeLimits, DecodedFrame, DecodedImage, SampleType, SourceColor,
     SourceColorEvidence, SourceColorFallback,
 };
 use rusttable_image_io::FileImageInput;
@@ -46,7 +46,7 @@ impl PreviewService {
         )
         .entered();
         let input = FileImageInput::new(self.limits)
-            .decode_frame_bytes(source)
+            .decode_linear_frame_bytes(source)
             .map_err(|error| {
                 tracing::error!(target: "rusttable.preview", stage = "decode", cause = "decode_failed");
                 PreviewError::Decode(error)
@@ -86,7 +86,7 @@ impl PreviewService {
         target: RenderTarget,
     ) -> Result<RenderOutput, PreviewError> {
         let input = FileImageInput::new(self.limits)
-            .decode_frame_bytes(source)
+            .decode_linear_frame_bytes(source)
             .map_err(|error| {
                 tracing::error!(target: "rusttable.preview", stage = "decode", cause = "decode_failed");
                 PreviewError::Decode(error)

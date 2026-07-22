@@ -74,6 +74,24 @@ impl FileImageInput {
 
     fn decode_frame_bytes_inner(&self, bytes: &[u8]) -> Result<DecodedFrame, ImageInputError> {
         self.enforce_source_limit(bytes)?;
+        if crate::raw::is_raw(bytes) {
+            return crate::raw::decode_raw_legacy_frame(bytes, self.limits);
+        }
+        self.registry.decode_frame_bytes(bytes, self.limits)
+    }
+
+    /// Decodes the canonical scene-linear RAW frame used by preview and export.
+    ///
+    /// The [`ImageInput`] compatibility method retains its historical RGBA8
+    /// projection for existing catalog/UI callers. New renderers use this
+    /// method so preview and export share one checked F32 RAW input.
+    ///
+    /// # Errors
+    ///
+    /// Returns the selected decoder's typed probe, decode, limit, or contract
+    /// failure.
+    pub fn decode_linear_frame_bytes(&self, bytes: &[u8]) -> Result<DecodedFrame, ImageInputError> {
+        self.enforce_source_limit(bytes)?;
         self.registry.decode_frame_bytes(bytes, self.limits)
     }
 }
