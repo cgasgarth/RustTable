@@ -231,10 +231,12 @@ impl GtkThumbnailController {
             );
         }
 
-        let preview = crate::workspace::preview_loader::load_selected_preview_from_repository_with_generation(
+        let preview = crate::workspace::preview_loader::load_selected_preview_from_repository_for_edit_with_generation(
             &self.repository,
             &self.source_root,
             photo_id,
+            edit_id,
+            edit_revision,
             generation,
         )
         .map_err(|_| GtkThumbnailError::Preview)?;

@@ -328,6 +328,7 @@ fn activate_application(
         &shell,
         &catalog_controller,
         &preview_lifecycle,
+        thumbnail_lifecycle,
         &display_profile_state,
         diagnostics,
     );
@@ -335,6 +336,7 @@ fn activate_application(
         &shell,
         &catalog_controller,
         &preview_lifecycle,
+        thumbnail_lifecycle,
         &display_profile_state,
         diagnostics,
     );
@@ -361,6 +363,7 @@ fn activate_application(
     let selection_diagnostics = diagnostics.clone();
     let selection_profile_state = Rc::clone(&display_profile_state);
     let selection_preview_lifecycle = Rc::clone(&preview_lifecycle);
+    let selection_thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
         let projection = apply_selection_projection(
             &selection_controller,
@@ -431,6 +434,7 @@ fn activate_application(
             &darkroom_selection_shell,
             catalog,
             Rc::clone(&selection_preview_lifecycle),
+            &selection_thumbnail_lifecycle,
             selection_diagnostics.clone(),
             selection_profile_state.borrow().as_ref(),
         );
@@ -443,6 +447,7 @@ fn activate_application(
         display_profiles,
         display_profile_state,
         preview_lifecycle,
+        Rc::clone(thumbnail_lifecycle),
         diagnostics.clone(),
     );
     shell.present();
@@ -465,6 +470,7 @@ fn install_display_profile_refresh(
     display_profiles: Rc<RefCell<rusttable_display_profile::DisplayProfileService>>,
     display_profile_state: Rc<RefCell<Option<rusttable_display_profile::DisplayProfileSnapshot>>>,
     preview_lifecycle: Rc<RefCell<PreviewLifecycle>>,
+    thumbnail_lifecycle: Rc<RefCell<ThumbnailLifecycle>>,
     diagnostics: AppDiagnostics,
 ) {
     let shell = shell.clone();
@@ -490,6 +496,7 @@ fn install_display_profile_refresh(
                     &shell,
                     catalog.borrow().clone(),
                     Rc::clone(&preview_lifecycle),
+                    &thumbnail_lifecycle,
                     diagnostics.clone(),
                     snapshot.as_ref(),
                 );
