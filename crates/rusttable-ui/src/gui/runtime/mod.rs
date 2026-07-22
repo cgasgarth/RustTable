@@ -325,6 +325,9 @@ impl GtkShell {
                 LighttableLayoutAction::SetLayout(layout) => {
                     shell_for_layout.set_lighttable_layout(layout);
                 }
+                LighttableLayoutAction::SetZoom(zoom) => {
+                    shell_for_layout.set_lighttable_zoom(zoom);
+                }
                 LighttableLayoutAction::SetPanelVisibility { panel, visible } => {
                     shell_for_layout.set_lighttable_panel_visibility(panel, visible);
                 }
@@ -536,6 +539,7 @@ impl GtkShell {
             .lighttable_interaction
             .borrow_mut()
             .apply(LighttableSelectionAction::SetZoom(zoom));
+        self.lighttable_layout_controls.set_zoom(zoom);
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
             return;

@@ -158,13 +158,13 @@ pub(super) fn darkroom_page(
     let top = toolbar("darkroom-toolbar-top", "Darkroom viewport controls");
     let left_panel = layout_toggle(
         "darkroom-left-panel-toggle",
-        "view-sidebar-start-symbolic",
+        "sidebar-show-symbolic",
         "Show or hide the left darkroom panel",
         left_panel_visible.get(),
     );
     let right_panel = layout_toggle(
         "darkroom-right-panel-toggle",
-        "view-sidebar-end-symbolic",
+        "sidebar-show-right-symbolic",
         "Show or hide the right darkroom panel",
         right_panel_visible.get(),
     );

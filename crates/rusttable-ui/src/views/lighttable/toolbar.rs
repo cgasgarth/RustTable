@@ -50,6 +50,16 @@ impl LighttableColorLabel {
             Self::Purple => "purple",
         }
     }
+
+    const fn rgba(self) -> (f64, f64, f64, f64) {
+        match self {
+            Self::Red => (0.85, 0.29, 0.27, 1.0),
+            Self::Yellow => (0.82, 0.66, 0.20, 1.0),
+            Self::Green => (0.29, 0.62, 0.35, 1.0),
+            Self::Blue => (0.30, 0.50, 0.71, 1.0),
+            Self::Purple => (0.56, 0.35, 0.66, 1.0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -304,7 +314,8 @@ impl LighttableToolbar {
 
         let mut label_buttons = Vec::new();
         for label in LighttableColorLabel::ALL {
-            let button = shared_button(&format!("lighttable-color-{}", label.index()), "●");
+            let button = shared_button(&format!("lighttable-color-{}", label.index()), "");
+            button.set_child(Some(&color_label_swatch(label)));
             button.set_accessible_role(gtk4::AccessibleRole::Button);
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_color_filter");
@@ -502,6 +513,26 @@ impl LighttableToolbar {
     }
 }
 
+fn color_label_swatch(label: LighttableColorLabel) -> gtk4::DrawingArea {
+    let swatch = gtk4::DrawingArea::new();
+    swatch.set_content_width(12);
+    swatch.set_content_height(12);
+    swatch.set_draw_func(move |_, context, width, height| {
+        let (red, green, blue, alpha) = label.rgba();
+        context.set_source_rgba(red, green, blue, alpha);
+        context.arc(
+            f64::from(width) / 2.0,
+            f64::from(height) / 2.0,
+            f64::from(width.min(height)) / 2.0 - 1.5,
+            0.0,
+            std::f64::consts::TAU,
+        );
+        context.set_line_width(1.5);
+        let _ = context.stroke();
+    });
+    swatch
+}
+
 impl Default for LighttableToolbar {
     fn default() -> Self {
         Self::new()
@@ -582,6 +613,10 @@ mod tests {
         assert!(source.contains("AccessibleRole::Status"));
         assert!(source.contains("clear collection filter"));
         assert_eq!(LighttableColorLabel::ALL.len(), 5);
+        let colors = LighttableColorLabel::ALL.map(LighttableColorLabel::rgba);
+        assert_eq!(colors[0], (0.85, 0.29, 0.27, 1.0));
+        assert_eq!(colors[4], (0.56, 0.35, 0.66, 1.0));
+        assert!(colors.windows(2).all(|pair| pair[0] != pair[1]));
         assert_eq!(LighttableRating::STARS.len(), 5);
     }
 

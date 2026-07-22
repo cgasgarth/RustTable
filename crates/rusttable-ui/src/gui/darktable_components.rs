@@ -153,7 +153,7 @@ pub(crate) fn module_action_button(id: &str, accessible_name: &str) -> gtk4::But
 }
 
 fn module_info_button(id: &str, accessible_name: &str) -> gtk4::Button {
-    module_header_button(id, "dialog-information-symbolic", accessible_name)
+    module_header_button(id, "help-about-symbolic", accessible_name)
 }
 
 fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {
@@ -232,10 +232,10 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
         .vexpand(true)
         .build();
     scroll.set_widget_name(id);
-    // A processing module may have a wider natural control row than the live
-    // Paned allocation. Let the scroller absorb that width instead of forcing
-    // the entire rail child to remain wider and render clipped after a drag.
+    // Wider module rows may scroll at compact panel widths, but the scrollbars
+    // consume layout space so they cannot cover the final module status row.
     scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
+    scroll.set_overlay_scrolling(false);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
     let allocated_content = width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE);
     scroll.set_min_content_width(allocated_content);
@@ -244,5 +244,6 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     scroll.add_css_class("dt_rail_scroll");
     child.set_width_request(0);
     child.set_hexpand(true);
+    child.set_margin_bottom(MODULE_GAP);
     scroll
 }

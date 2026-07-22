@@ -429,16 +429,35 @@ button:disabled:hover,
   margin-left: 6px;
 }
 
-#lighttable-layout-controls button {
+#lighttable-layout-mode-group button,
+#lighttable-zoom-controls button {
+  min-width: 28px;
   min-height: {{control_height}}px;
-  padding: 0 4px;
+  padding: 0 5px;
   background-color: transparent;
   color: {{foreground}};
 }
 
-#lighttable-layout-controls button:checked {
+#lighttable-layout-mode-group button:checked {
   background-color: {{selected_thumbnail}};
   color: {{background}};
+}
+
+#lighttable-zoom-columns {
+  min-width: 34px;
+  padding: 0 5px;
+  border: 1px solid {{border}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_segmented_group button {
+  margin: 0;
+  border-radius: 0;
+  border-right-width: 0;
+}
+
+.dt_segmented_group button:last-child {
+  border-right-width: 1px;
 }
 
 #lighttable-grid.dt_culling_surface {

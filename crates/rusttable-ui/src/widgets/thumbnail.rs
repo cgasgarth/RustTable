@@ -273,6 +273,15 @@ impl ThumbnailPair {
         self.lighttable.state()
     }
 
+    /// Returns the last real thumbnail pixels while a higher-resolution preview is pending.
+    #[must_use]
+    pub(crate) fn ready_metadata(&self) -> Option<Rgba8PreviewMetadata> {
+        match self.state() {
+            ThumbnailState::Ready(metadata) => Some(metadata),
+            ThumbnailState::Loading | ThumbnailState::Unavailable | ThumbnailState::Failed => None,
+        }
+    }
+
     pub(crate) fn filmstrip(&self) -> ThumbnailSurface {
         self.filmstrip.clone()
     }

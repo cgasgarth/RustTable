@@ -10,8 +10,8 @@ use crate::import::ImportSessionPanel;
 
 use crate::gui::darkroom_modules::DarkroomModuleGroup;
 use crate::gui::darktable_components::{
-    button, dropdown, module_action_button, module_expander as shared_module_expander, module_row,
-    slider, switch,
+    dropdown, module_action_button, module_expander as shared_module_expander, module_row, slider,
+    switch,
 };
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use crate::gui::{
@@ -374,28 +374,11 @@ pub(super) fn workspace_stack(
     )
 }
 
-fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) -> gtk4::Box {
+fn lighttable_footer(_i18n: &I18n, layout_controls: &LighttableLayoutControls) -> gtk4::Box {
     let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
     bottom_tools.add_css_class("dt_lighttable_footer");
-    for (index, (message_id, icon_name)) in [
-        (MessageId::WorkspaceFit, "zoom-fit-best-symbolic"),
-        (MessageId::WorkspaceBeforeAfter, "view-dual-symbolic"),
-        (
-            MessageId::WorkspaceSoftProof,
-            "applications-graphics-symbolic",
-        ),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let label = i18n.text(message_id, &MessageArgs::new());
-        let control = button(&format!("lighttable-footer-{index}"), "");
-        control.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
-        control.set_tooltip_text(Some(&label));
-        bottom_tools.append(&control);
-    }
     let leading_space = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     leading_space.set_hexpand(true);
     bottom_tools.append(&leading_space);
@@ -403,7 +386,6 @@ fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) ->
     let trailing_space = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     trailing_space.set_hexpand(true);
     bottom_tools.append(&trailing_space);
-    bottom_tools.append(&button("lighttable-zoom-reset", "100%"));
     bottom_tools
 }
 
@@ -430,7 +412,7 @@ mod tests {
             count += 1;
             child = widget.next_sibling();
         }
-        assert_eq!(count, 7);
+        assert_eq!(count, 3);
     }
 }
 

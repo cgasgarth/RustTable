@@ -100,6 +100,7 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
     );
     assert!(components.contains("DARKTABLE_UI_TOKENS"));
     assert!(components.contains("PolicyType::Automatic, gtk4::PolicyType::Automatic"));
+    assert!(components.contains("set_overlay_scrolling(false)"));
     assert!(darkroom_panels.contains("DARKROOM_GEOMETRY.histogram_height_px"));
     assert!(darkroom_panels.contains("connect_notify_local(Some(\"width\")"));
     assert!(layout.contains("connect_right_rail_constraints"));

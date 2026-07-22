@@ -357,7 +357,6 @@ fn assert_right_rail_geometry(root: &gtk4::Widget) {
     let search_y = search.compute_bounds(root).expect("search bounds").y();
     let modules_y = modules.compute_bounds(root).expect("module bounds").y();
     assert!(histogram_y < groups_y && groups_y < search_y && search_y < modules_y);
-    let full_render = render_widget(root);
     for id in [
         "darkroom-left-panel-toggle",
         "group-active",
@@ -365,10 +364,24 @@ fn assert_right_rail_geometry(root: &gtk4::Widget) {
     ] {
         let button = find_widget(root, id).expect("icon button");
         let icon = button.first_child().expect("symbolic icon");
-        let icon_bounds = icon.compute_bounds(root).expect("icon bounds");
         assert!(
-            full_render.bright_pixels(icon_bounds) + full_render.dark_pixels(icon_bounds) >= 4,
-            "{id} must render a contrasting symbolic icon instead of fallback text"
+            icon.is_visible() && icon.is_mapped(),
+            "{id} icon must be mapped"
+        );
+        assert!(
+            icon.allocated_width() > 0 && icon.allocated_height() > 0,
+            "{id} icon must have a positive allocation"
+        );
+        let image = icon
+            .downcast::<gtk4::Image>()
+            .expect("icon button must use a GTK symbolic image");
+        let icon_name = image.icon_name().expect("symbolic image must name an icon");
+        let theme = gtk4::IconTheme::for_display(
+            &gtk4::gdk::Display::default().expect("test display remains active"),
+        );
+        assert!(
+            theme.has_icon(&icon_name),
+            "{id} must use an installed symbolic icon, got {icon_name}"
         );
     }
     let soft_proof = find_widget(root, "darkroom-soft-proof").expect("soft-proof control");
@@ -553,10 +566,6 @@ impl RenderedWidget {
                         .is_some_and(|channel| channel >= threshold)
             })
             .count()
-    }
-
-    fn dark_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
-        self.pixels_with_channel_at_most(bounds, 64)
     }
 
     fn pixels_with_channel_at_most(&self, bounds: gtk4::graphene::Rect, threshold: u8) -> usize {
