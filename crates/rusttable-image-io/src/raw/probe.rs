@@ -2,6 +2,7 @@ use super::{
     RawCameraEvidence, RawCompression, RawCompressionEvidence, RawContainerKind, RawContainerProbe,
     RawProbeEvidence, RawProbeOutcome,
 };
+use crate::tiff::{TiffCompression, TiffDecodeLimits, TiffDecoder, TiffPhotometric};
 
 /// Shared upper bound for camera-RAW signature and container probing.
 pub const RAW_PROBE_BUDGET_BYTES: usize = 64 * 1024;
@@ -31,8 +32,12 @@ impl RawContainerRegistry {
         if let Some(container) = direct_signature(bytes) {
             return direct_probe(bytes, container);
         }
-        if is_classic_tiff(bytes) {
-            return probe_tiff_raw(bytes);
+        if is_tiff(bytes) {
+            return if bytes.get(2..4) == Some(&[43, 0]) || bytes.get(2..4) == Some(&[0, 43]) {
+                probe_bigtiff_raw(bytes)
+            } else {
+                probe_tiff_raw(bytes)
+            };
         }
         RawProbeOutcome::NoMatch
     }
@@ -182,8 +187,73 @@ fn is_cr3(bytes: &[u8]) -> bool {
             .any(|brand| brand == b"crx ")
 }
 
-fn is_classic_tiff(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[b'I', b'I', 42, 0]) || bytes.starts_with(&[b'M', b'M', 0, 42])
+fn is_tiff(bytes: &[u8]) -> bool {
+    matches!(
+        bytes.get(..4),
+        Some([b'I', b'I', 42 | 43, 0] | [b'M', b'M', 0, 42 | 43])
+    )
+}
+
+fn probe_bigtiff_raw(bytes: &[u8]) -> RawProbeOutcome {
+    let Ok(header) = TiffDecoder::new().inspect_bytes(bytes, TiffDecodeLimits::standard()) else {
+        return RawProbeOutcome::NoMatch;
+    };
+    let Some(page) = header.pages.iter().find(|page| {
+        !page.reduced_image
+            && matches!(
+                page.photometric,
+                TiffPhotometric::Cfa | TiffPhotometric::LinearRaw
+            )
+    }) else {
+        return RawProbeOutcome::NoMatch;
+    };
+    let metadata = page.dng.clone().unwrap_or_default();
+    let raw_tags = [
+        metadata.version.is_some().then_some(50_706),
+        metadata.cfa_repeat.is_some().then_some(33_421),
+        metadata.cfa_pattern.is_some().then_some(33_422),
+        metadata.active_area.is_some().then_some(50_829),
+        (!metadata.black_levels.is_empty()).then_some(50_714),
+        (!metadata.white_levels.is_empty()).then_some(50_717),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if page.photometric == TiffPhotometric::Cfa
+        && (metadata.cfa_repeat.is_none() || metadata.cfa_pattern.is_none())
+    {
+        return RawProbeOutcome::NoMatch;
+    }
+    RawProbeOutcome::Match(RawContainerProbe {
+        container: if metadata.version.is_some() {
+            RawContainerKind::Dng
+        } else {
+            RawContainerKind::TiffRaw
+        },
+        evidence: RawProbeEvidence {
+            signature: bytes.iter().copied().take(16).collect(),
+            raw_tags,
+            camera: RawCameraEvidence {
+                maker: metadata.make.clone(),
+                model: metadata.model.clone(),
+            },
+            compression: RawCompressionEvidence {
+                compression: tiff_compression(page.compression),
+                container_code: None,
+            },
+            bit_depth: page.bits_per_sample.first().copied(),
+        },
+    })
+}
+
+fn tiff_compression(compression: TiffCompression) -> RawCompression {
+    match compression {
+        TiffCompression::None => RawCompression::Uncompressed,
+        TiffCompression::Jpeg => RawCompression::LosslessJpeg,
+        TiffCompression::Deflate | TiffCompression::AdobeDeflate => RawCompression::Deflate,
+        TiffCompression::JpegXl => RawCompression::JpegXl,
+        _ => RawCompression::Unknown,
+    }
 }
 
 fn probe_tiff_raw(bytes: &[u8]) -> RawProbeOutcome {
@@ -232,16 +302,15 @@ struct TiffRawSummary {
     raw_tags: Vec<u16>,
     compression: Option<u32>,
     bit_depth: Option<u8>,
+    linear_raw: bool,
 }
 
 impl TiffRawSummary {
     fn proves_raw(&self) -> bool {
-        self.raw_tags.iter().any(|tag| {
-            matches!(
-                tag,
-                33421 | 33422 | 50706 | 50710 | 50711 | 50713 | 50714 | 50717 | 50829 | 50830
-            )
-        })
+        let dng = self.raw_tags.contains(&50706);
+        let cfa = self.raw_tags.contains(&33421) && self.raw_tags.contains(&33422);
+        cfa || self.linear_raw
+            || (dng && (self.raw_tags.contains(&50713) || self.raw_tags.contains(&50714)))
     }
 
     fn container(&self) -> RawContainerKind {
@@ -321,6 +390,11 @@ fn inspect_tiff_at(bytes: &[u8], base: usize) -> Result<TiffRawSummary, ()> {
                 259 => {
                     summary.compression =
                         read_first_unsigned(bytes, base, entry, ty, value_count, order);
+                }
+                262 => {
+                    summary.linear_raw =
+                        read_first_unsigned(bytes, base, entry, ty, value_count, order)
+                            == Some(34_892);
                 }
                 271 => summary.maker = read_ascii(bytes, base, entry, ty, value_count, order),
                 272 => summary.model = read_ascii(bytes, base, entry, ty, value_count, order),

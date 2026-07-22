@@ -8,6 +8,8 @@ use super::types::{
     TiffPage, TiffPhotometric, TiffPredictor, TiffSampleFormat, TiffStorageLayout,
 };
 
+mod dng;
+
 const TAG_SUBFILE_TYPE: u16 = 254;
 const TAG_WIDTH: u16 = 256;
 const TAG_HEIGHT: u16 = 257;
@@ -36,7 +38,6 @@ const TAG_EXIF_IFD: u16 = 34_665;
 const TAG_GPS_IFD: u16 = 34_853;
 const TAG_XMP: u16 = 700;
 const TAG_YCBCR_SUBSAMPLING: u16 = 530;
-
 #[derive(Debug)]
 pub(crate) struct ParsedTiff {
     pub header: TiffHeader,
@@ -402,6 +403,7 @@ impl Parser<'_> {
             })
             .transpose()?;
         let metadata = self.metadata(entries)?;
+        let dng = self.dng_metadata(entries)?;
         let reduced_image = self
             .unsigned_values_optional(entries, TAG_SUBFILE_TYPE)?
             .and_then(|values| values.first().copied())
@@ -422,6 +424,7 @@ impl Parser<'_> {
             orientation,
             alpha,
             chunks,
+            dng,
             color_map,
             ycbcr_subsampling,
             metadata,
@@ -450,6 +453,7 @@ impl Parser<'_> {
             .collect()
     }
 
+    #[allow(clippy::too_many_lines)]
     fn chunks(
         &mut self,
         entries: &[Entry],
@@ -532,6 +536,11 @@ impl Parser<'_> {
             u64::from(self.limits.max_chunks),
         )?;
         let mut compressed_bytes = 0_u64;
+        let locations = offsets
+            .iter()
+            .zip(&counts)
+            .map(|(&offset, &length)| TiffDataLocation { offset, length })
+            .collect();
         for (&offset, &count) in offsets.iter().zip(&counts) {
             if count == 0 {
                 return Err(malformed("TIFF chunk has zero byte count"));
@@ -551,6 +560,7 @@ impl Parser<'_> {
             height,
             count: expected,
             compressed_bytes,
+            locations,
         })
     }
 
@@ -793,6 +803,7 @@ fn photometric(value: u16) -> Result<TiffPhotometric, TiffDecodeError> {
         8 => Ok(TiffPhotometric::CieLab),
         9 => Ok(TiffPhotometric::IccLab),
         32_803 => Ok(TiffPhotometric::Cfa),
+        34_892 => Ok(TiffPhotometric::LinearRaw),
         _ => Err(unsupported("photometric interpretation", u64::from(value))),
     }
 }
@@ -806,6 +817,7 @@ fn compression(value: u16) -> Result<TiffCompression, TiffDecodeError> {
         32_946 => Ok(TiffCompression::AdobeDeflate),
         32_773 => Ok(TiffCompression::PackBits),
         50_000 => Ok(TiffCompression::Zstd),
+        52_546 => Ok(TiffCompression::JpegXl),
         2..=4 => Err(unsupported("CCITT fax compression", u64::from(value))),
         6 => Err(unsupported("old-style JPEG compression", u64::from(value))),
         34_761 => Err(unsupported("JBIG compression", u64::from(value))),
@@ -888,6 +900,20 @@ fn read_u32(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<u32, Ti
     })
 }
 
+fn read_i16(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<i16, TiffDecodeError> {
+    Ok(match order {
+        TiffByteOrder::Little => i16::from_le_bytes(read_u16(bytes, offset, order)?.to_le_bytes()),
+        TiffByteOrder::Big => i16::from_be_bytes(read_u16(bytes, offset, order)?.to_be_bytes()),
+    })
+}
+
+fn read_i32(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<i32, TiffDecodeError> {
+    Ok(match order {
+        TiffByteOrder::Little => i32::from_le_bytes(read_u32(bytes, offset, order)?.to_le_bytes()),
+        TiffByteOrder::Big => i32::from_be_bytes(read_u32(bytes, offset, order)?.to_be_bytes()),
+    })
+}
+
 fn read_u64(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<u64, TiffDecodeError> {
     let value: [u8; 8] = bytes
         .get(
@@ -907,6 +933,16 @@ fn read_u64(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<u64, Ti
 
 fn to_usize(value: u64, name: &str) -> Result<usize, TiffDecodeError> {
     usize::try_from(value).map_err(|_| malformed(&format!("{name} does not fit host size")))
+}
+
+fn groups4(values: &[u32], name: &str) -> Result<Vec<[u32; 4]>, TiffDecodeError> {
+    if !values.len().is_multiple_of(4) {
+        return Err(malformed(&format!("{name} count is not divisible by four")));
+    }
+    Ok(values
+        .chunks(4)
+        .map(|chunk| [chunk[0], chunk[1], chunk[2], chunk[3]])
+        .collect())
 }
 
 fn usize_to_u64(value: usize) -> Result<u64, TiffDecodeError> {

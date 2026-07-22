@@ -238,9 +238,10 @@ fn backend_source(
     // exposing samples. Substitute an equivalent channel-count interpretation
     // so RustTable receives exact stored samples and retains the real descriptor.
     let substitute = match page.photometric {
-        TiffPhotometric::WhiteIsZero | TiffPhotometric::Palette | TiffPhotometric::Cfa => {
-            Some(1_u16)
-        }
+        TiffPhotometric::WhiteIsZero
+        | TiffPhotometric::Palette
+        | TiffPhotometric::Cfa
+        | TiffPhotometric::LinearRaw => Some(1_u16),
         TiffPhotometric::CieLab => Some(2),
         _ => None,
     };

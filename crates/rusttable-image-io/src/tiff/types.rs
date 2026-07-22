@@ -37,13 +37,16 @@ pub enum TiffPhotometric {
     CieLab,
     IccLab,
     Cfa,
+    LinearRaw,
 }
 
 impl TiffPhotometric {
     #[must_use]
     pub const fn color_samples(self) -> u16 {
         match self {
-            Self::WhiteIsZero | Self::BlackIsZero | Self::Palette | Self::Cfa => 1,
+            Self::WhiteIsZero | Self::BlackIsZero | Self::Palette | Self::Cfa | Self::LinearRaw => {
+                1
+            }
             Self::Rgb | Self::YCbCr | Self::CieLab | Self::IccLab => 3,
             Self::Cmyk => 4,
         }
@@ -59,6 +62,7 @@ pub enum TiffCompression {
     AdobeDeflate,
     Zstd,
     Jpeg,
+    JpegXl,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -94,6 +98,33 @@ pub struct TiffChunkLayout {
     pub height: u32,
     pub count: u32,
     pub compressed_bytes: u64,
+    pub locations: Vec<TiffDataLocation>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TiffDngMatrix {
+    pub illuminant: u16,
+    pub coefficients: Vec<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TiffDngMetadata {
+    pub version: Option<[u8; 4]>,
+    pub backward_version: Option<[u8; 4]>,
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub active_area: Option<[u32; 4]>,
+    pub default_crop_origin: Option<[f32; 2]>,
+    pub default_crop_size: Option<[f32; 2]>,
+    pub masked_areas: Vec<[u32; 4]>,
+    pub cfa_repeat: Option<(u8, u8)>,
+    pub cfa_pattern: Option<Vec<u8>>,
+    pub black_repeat: Option<(u8, u8)>,
+    pub black_levels: Vec<f32>,
+    pub white_levels: Vec<f32>,
+    pub as_shot_neutral: Vec<f32>,
+    pub matrices: Vec<TiffDngMatrix>,
+    pub opcodes: Vec<(u16, Vec<u8>)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,7 +144,7 @@ pub struct TiffMetadataInventory {
     pub metadata_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TiffPage {
     pub index: usize,
     pub ifd_offset: u64,
@@ -130,12 +161,13 @@ pub struct TiffPage {
     pub orientation: Orientation,
     pub alpha: Vec<TiffAlphaSample>,
     pub chunks: TiffChunkLayout,
+    pub dng: Option<TiffDngMetadata>,
     pub color_map: Option<Vec<u16>>,
     pub ycbcr_subsampling: Option<(u16, u16)>,
     pub metadata: TiffMetadataInventory,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TiffHeader {
     pub container: TiffContainer,
     pub byte_order: TiffByteOrder,

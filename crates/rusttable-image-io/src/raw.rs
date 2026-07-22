@@ -1,6 +1,7 @@
 //! Pure-Rust camera-RAW container, capability, and sensor-frame boundary.
 
 mod adapter;
+mod dng;
 mod manifest;
 mod probe;
 mod types;

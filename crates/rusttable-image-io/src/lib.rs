@@ -41,7 +41,7 @@ pub use raw::{
     RawCapabilityKind, RawCapabilityManifest, RawCapabilityResolveError, RawCfa, RawChannel,
     RawColorMatrix, RawCompression, RawCompressionEvidence, RawContainerKind, RawContainerProbe,
     RawContainerRegistry, RawDecodeError, RawDecodeLimits, RawDecodeLimitsError, RawDecodeReceipt,
-    RawDecodeRequest, RawDecodeResult, RawDimensions, RawFrame, RawFrameParts,
+    RawDecodeRequest, RawDecodeResult, RawDimensions, RawDngReceipt, RawFrame, RawFrameParts,
     RawFrameValidationError, RawHeader, RawIlluminant, RawLevelPattern, RawOpcodeDescriptor,
     RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout, RawPreviewDescriptor,
     RawPreviewFormat, RawPreviewKind, RawProbeEvidence, RawProbeOutcome, RawRect, RawSourceError,
@@ -54,6 +54,6 @@ pub use tiff::{
     TIFF_BACKEND_ID, TiffAlphaSample, TiffByteOrder, TiffChunkKind, TiffChunkLayout,
     TiffCompression, TiffContainer, TiffDataLocation, TiffDecodeError, TiffDecodeLimits,
     TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult, TiffDecoder,
-    TiffHeader, TiffMetadataInventory, TiffPage, TiffPhotometric, TiffPixelData, TiffPredictor,
-    TiffSampleData, TiffSampleFormat, TiffStorageLayout,
+    TiffDngMatrix, TiffDngMetadata, TiffHeader, TiffMetadataInventory, TiffPage, TiffPhotometric,
+    TiffPixelData, TiffPredictor, TiffSampleData, TiffSampleFormat, TiffStorageLayout,
 };
