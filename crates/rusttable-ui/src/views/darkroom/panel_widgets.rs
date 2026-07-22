@@ -433,6 +433,8 @@ fn rail_module(
     let title_label = gtk4::Label::new(Some(title));
     title_label.set_halign(gtk4::Align::Start);
     title_label.set_hexpand(true);
+    title_label.set_width_chars(1);
+    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_row.append(&title_label);
     title_row.append(&module_action_button(
         &format!("{id}-actions"),

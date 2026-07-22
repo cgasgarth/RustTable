@@ -24,5 +24,10 @@ name = "exposure_gtk_boundary"
 path = "tests/exposure_gtk_boundary.rs"
 harness = false
 
+[[test]]
+name = "darkroom_left_rail_smoke"
+path = "tests/darkroom_left_rail_smoke.rs"
+harness = false
+
 [lints]
 workspace = true
