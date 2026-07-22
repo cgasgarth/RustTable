@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use rusttable_catalog::EditRepository;
 use rusttable_catalog_store::RedbCatalogRepository;
-use rusttable_core::{Edit, FiniteF64, Operation, ParameterText, ParameterValue};
+use rusttable_core::{Edit, FiniteF64, Operation, OperationId, ParameterText, ParameterValue};
 use rusttable_processing::builtin_registry;
 use rusttable_processing::defringe_compatibility::DefringeMode;
 use rusttable_ui::presentation::{DarkroomControlKind, DarkroomControlValue};
@@ -14,6 +14,7 @@ use rusttable_ui::{
 };
 
 use rusttable_core::{PhotoId, Revision};
+use sha2::{Digest, Sha256};
 
 /// Result published after one durable darkroom action.
 #[derive(Debug, Clone, PartialEq)]
@@ -296,46 +297,182 @@ fn rewrite_operations(
     module: &DarkroomModuleViewModel,
     action: &DarkroomModuleAction,
 ) -> Result<Vec<Operation>, DarkroomModuleError> {
-    let operation = edit.operations().find(|operation| {
-        builtin_registry()
+    let registry = builtin_registry();
+    let target = edit.operations().find(|operation| {
+        registry
             .definition(operation.key().as_str())
             .is_some_and(|definition| definition.descriptor().id.compatibility_name == module.id())
     });
-    let Some(target) = operation else {
-        return Err(DarkroomModuleError::MissingOperation {
-            module_id: module.id().to_owned(),
-        });
+    let Some(target) = target else {
+        let definition = registry
+            .definitions()
+            .iter()
+            .find(|definition| definition.descriptor().id.compatibility_name == module.id())
+            .ok_or_else(|| DarkroomModuleError::MissingOperation {
+                module_id: module.id().to_owned(),
+            })?;
+        let key = definition.descriptor().id.rust_id.as_str();
+        let operation_id = materialized_operation_id(edit, key);
+        let operation = registry
+            .materialize_operation(key, operation_id)
+            .map_err(|error| materialization_error(module.id(), error.to_string()))?;
+        let operation = rewrite_target_operation(&operation, module, action)?;
+        let mut operations = edit.operations().cloned().collect::<Vec<_>>();
+        let insertion = operations
+            .iter()
+            .position(|candidate| canonical_rank(candidate) > canonical_rank(&operation))
+            .unwrap_or(operations.len());
+        operations.insert(insertion, operation);
+        return Ok(operations);
     };
+
     edit.operations()
         .map(|operation| {
             if operation.id() != target.id() {
                 return Ok(operation.clone());
             }
-            let enabled = match action {
-                DarkroomModuleAction::Enable { enabled, .. } => *enabled,
-                _ => operation.is_enabled(),
-            };
-            let parameters = operation
-                .parameters()
-                .map(|(name, value)| {
-                    let control_id = control_parameter_id(module.id(), name.as_str());
-                    let replacement = module
-                        .controls()
-                        .control(&control_id)
-                        .and_then(|control| parameter_from_control(control, value));
-                    (name.clone(), replacement.unwrap_or_else(|| value.clone()))
-                })
-                .collect::<Vec<_>>();
-            Operation::new_with_opacity(
-                operation.id(),
-                operation.key().clone(),
-                enabled,
-                operation.opacity(),
-                parameters,
-            )
-            .map_err(|error| persistence_error(error.to_string()))
+            let completed = complete_operation_defaults(operation)
+                .map_err(|error| materialization_error(module.id(), error.to_string()))?;
+            rewrite_target_operation(&completed, module, action)
         })
         .collect()
+}
+
+fn complete_operation_defaults(
+    operation: &Operation,
+) -> Result<Operation, rusttable_processing::OperationMaterializationError> {
+    let defaults =
+        builtin_registry().materialize_operation(operation.key().as_str(), operation.id())?;
+    let mut parameters = defaults
+        .parameters()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    for (name, value) in operation.parameters() {
+        if let Some((_, default)) = parameters
+            .iter_mut()
+            .find(|(candidate, _)| candidate == name)
+        {
+            *default = value.clone();
+        } else {
+            parameters.push((name.clone(), value.clone()));
+        }
+    }
+    Operation::new_with_opacity(
+        operation.id(),
+        operation.key().clone(),
+        operation.is_enabled(),
+        operation.opacity(),
+        parameters,
+    )
+    .map_err(
+        |error| rusttable_processing::OperationMaterializationError::OperationBuild {
+            key: operation.key().clone(),
+            message: error.to_string(),
+        },
+    )
+}
+
+fn rewrite_target_operation(
+    operation: &Operation,
+    module: &DarkroomModuleViewModel,
+    action: &DarkroomModuleAction,
+) -> Result<Operation, DarkroomModuleError> {
+    let enabled = match action {
+        DarkroomModuleAction::Enable { enabled, .. } => *enabled,
+        _ => operation.is_enabled(),
+    };
+    let mut parameters = operation
+        .parameters()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    for control in module.controls().controls() {
+        let Some((_, value)) = parameters.iter_mut().find(|(name, _)| {
+            control_parameter_id(module.id(), name.as_str()) == control.id().as_str()
+        }) else {
+            continue;
+        };
+        if let Some(replacement) = parameter_from_control(control, value) {
+            *value = replacement;
+        }
+    }
+    Operation::new_with_opacity(
+        operation.id(),
+        operation.key().clone(),
+        enabled,
+        operation.opacity(),
+        parameters,
+    )
+    .map_err(|error| persistence_error(error.to_string()))
+}
+
+fn materialized_operation_id(edit: &Edit, key: &str) -> OperationId {
+    let mut digest = Sha256::new();
+    digest.update(b"rusttable.darkroom.materialized-operation.v1\0");
+    digest.update(edit.id().get().to_be_bytes());
+    digest.update(edit.photo_id().get().to_be_bytes());
+    digest.update(key.as_bytes());
+    let bytes = digest.finalize();
+    let mut id_bytes = [0_u8; 16];
+    id_bytes.copy_from_slice(&bytes[..16]);
+    let id = u128::from_be_bytes(id_bytes);
+    OperationId::new(if id == 0 { 1 } else { id }).expect("materialized operation ID is nonzero")
+}
+
+fn canonical_rank(operation: &Operation) -> usize {
+    const ORDER: &[&str] = &[
+        "invert",
+        "temperature",
+        "rasterfile",
+        "highlights",
+        "ashift",
+        "rotatepixels",
+        "scalepixels",
+        "lens",
+        "flip",
+        "enlargecanvas",
+        "clipping",
+        "liquify",
+        "spots",
+        "retouch",
+        "exposure",
+        "mask_manager",
+        "crop",
+        "graduatednd",
+        "colorin",
+        "censorize",
+        "primaries",
+        "rgbgain",
+        "defringe",
+        "basicadj",
+        "relight",
+        "colorcorrection",
+        "bloom",
+        "shadhi",
+        "grain",
+        "soften",
+        "vignette",
+        "colorreconstruct",
+        "finalscale",
+        "colorout",
+        "clahe",
+        "dither",
+    ];
+    let name = builtin_registry()
+        .definition(operation.key().as_str())
+        .map_or(operation.key().as_str(), |definition| {
+            definition.descriptor().id.compatibility_name.as_str()
+        });
+    ORDER
+        .iter()
+        .position(|candidate| *candidate == name)
+        .unwrap_or(ORDER.len())
+}
+
+fn materialization_error(module_id: &str, message: String) -> DarkroomModuleError {
+    DarkroomModuleError::Unsupported {
+        module_id: module_id.to_owned(),
+        reason: message,
+    }
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -410,6 +547,84 @@ mod tests {
             .expect("operation")],
         )
         .expect("edit")
+    }
+
+    #[test]
+    fn first_control_on_imported_two_node_edit_materializes_registry_defaults() {
+        let original = Edit::from_parts(
+            EditId::new(101).expect("edit id"),
+            PhotoId::new(202).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(3),
+            [
+                Operation::new(
+                    OperationId::new(11).expect("exposure id"),
+                    OperationKey::new("rusttable.exposure").expect("exposure key"),
+                    true,
+                    [(
+                        ParameterName::new("stops").expect("stops"),
+                        ParameterValue::Scalar(FiniteF64::new(0.0).expect("finite")),
+                    )],
+                )
+                .expect("exposure"),
+                Operation::new(
+                    OperationId::new(12).expect("RGB gain id"),
+                    OperationKey::new("rusttable.rgb_gain").expect("RGB gain key"),
+                    true,
+                    [
+                        (ParameterName::new("red").expect("red"), scalar(1.0)),
+                        (ParameterName::new("green").expect("green"), scalar(1.0)),
+                        (ParameterName::new("blue").expect("blue"), scalar(1.0)),
+                    ],
+                )
+                .expect("RGB gain"),
+            ],
+        )
+        .expect("imported edit");
+        let mut modules = project_edit(&original).expect("projection");
+        let module = modules.module_mut("bloom").expect("bloom module");
+        let action = DarkroomModuleAction::Control {
+            module_id: "bloom".to_owned(),
+            expected_revision: original.revision(),
+            id: "bloom-strength".to_owned(),
+            value: DarkroomControlValue::Slider(50.0),
+        };
+        module.apply(action.clone()).expect("first control");
+
+        let operations = rewrite_operations(&original, module, &action).expect("materialization");
+        let replacement = original.revised(operations).expect("history revision");
+        let operations = replacement.operations().collect::<Vec<_>>();
+        assert_eq!(operations.len(), 3);
+        assert_eq!(
+            operations[0].id(),
+            OperationId::new(11).expect("exposure id")
+        );
+        assert_eq!(
+            operations[1].id(),
+            OperationId::new(12).expect("RGB gain id")
+        );
+        let bloom = operations[2];
+        assert_eq!(
+            bloom.id(),
+            materialized_operation_id(&original, "rusttable.bloom")
+        );
+        assert_eq!(bloom.parameters().count(), 3);
+        assert_eq!(
+            bloom.parameter(&ParameterName::new("size").expect("size")),
+            Some(&scalar(20.0))
+        );
+        assert_eq!(
+            bloom.parameter(&ParameterName::new("threshold").expect("threshold")),
+            Some(&scalar(90.0))
+        );
+        assert_eq!(
+            bloom.parameter(&ParameterName::new("strength").expect("strength")),
+            Some(&scalar(50.0))
+        );
+    }
+
+    fn scalar(value: f64) -> ParameterValue {
+        ParameterValue::Scalar(FiniteF64::new(value).expect("finite"))
     }
 
     #[test]
