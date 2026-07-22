@@ -22,7 +22,10 @@ use super::{
     RawRect, RawSourceError, RawSourceReceipt,
 };
 
+mod development;
 mod preview;
+
+pub(super) use development::{decode_legacy_frame, decode_linear_frame};
 
 const COPY_CHUNK_BYTES: usize = 64 * 1024;
 

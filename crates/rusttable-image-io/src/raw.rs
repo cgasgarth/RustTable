@@ -14,7 +14,7 @@ pub use manifest::{
 pub use probe::{RAW_PROBE_BUDGET_BYTES, RawContainerRegistry};
 pub use types::*;
 
-use rusttable_image::{DecodeLimits, DecodedImage, ImageInputError, ImageProbe};
+use rusttable_image::{DecodeLimits, DecodedFrame, DecodedImage, ImageInputError, ImageProbe};
 
 pub(crate) fn is_raw(bytes: &[u8]) -> bool {
     !matches!(
@@ -32,4 +32,18 @@ pub(crate) fn decode_raw(
     limits: DecodeLimits,
 ) -> Result<DecodedImage, ImageInputError> {
     adapter::decode_legacy_preview(bytes, limits)
+}
+
+pub(crate) fn decode_raw_frame(
+    bytes: &[u8],
+    limits: DecodeLimits,
+) -> Result<DecodedFrame, ImageInputError> {
+    adapter::decode_linear_frame(bytes, limits)
+}
+
+pub(crate) fn decode_raw_legacy_frame(
+    bytes: &[u8],
+    limits: DecodeLimits,
+) -> Result<DecodedFrame, ImageInputError> {
+    adapter::decode_legacy_frame(bytes, limits)
 }

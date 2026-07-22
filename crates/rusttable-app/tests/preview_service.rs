@@ -6,8 +6,10 @@ use rusttable_core::{
     PhotoId, Revision,
 };
 use rusttable_image::DecodeLimits;
+use rusttable_image_io::FileImageInput;
 use rusttable_import::{FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotReader};
-use rusttable_render::PreviewBounds;
+use rusttable_render::{PreviewBounds, RenderTarget};
+use rusttable_testkit::fixtures::deterministic_compressed_raf;
 
 #[test]
 fn renders_the_committed_png_fixture_through_the_production_cpu_path() {
@@ -77,6 +79,41 @@ fn applies_registered_edits_through_the_production_cpu_pixelpipe() {
 
     assert_ne!(adjusted.image().pixels(), empty.image().pixels());
     assert_eq!(adjusted.provenance().source_edit_id(), adjusted_edit.id());
+}
+
+#[test]
+fn raw_preview_and_export_share_one_linear_frame_boundary() {
+    let fixture = deterministic_compressed_raf();
+    let edit = edit([]);
+    let limits = DecodeLimits::new(32 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024)
+        .expect("valid limits");
+    let service = PreviewService::new(limits, PreviewBounds::new(64, 64).expect("bounds"));
+    let frame = FileImageInput::new(limits)
+        .decode_linear_frame_bytes(fixture.bytes())
+        .expect("linear RAW frame");
+
+    assert_eq!(
+        frame.image().descriptor().color_encoding(),
+        rusttable_image::ColorEncoding::LinearSrgb
+    );
+    assert!(!frame.receipt().processing_stages().is_empty());
+
+    let preview = service
+        .render_bytes(fixture.bytes(), &edit)
+        .expect("RAW preview render");
+    let export = service
+        .render_full_resolution_bytes(fixture.bytes(), &edit)
+        .expect("RAW export render");
+    let direct_export = service
+        .render_decoded_frame_for_target(&frame, &edit, RenderTarget::FullResolution)
+        .expect("direct RAW export render");
+
+    assert_eq!(preview.source_color(), export.source_color());
+    assert_eq!(
+        preview.source_color().encoding(),
+        rusttable_image::ColorEncoding::LinearSrgb
+    );
+    assert_eq!(export.image(), direct_export.image());
 }
 
 #[test]

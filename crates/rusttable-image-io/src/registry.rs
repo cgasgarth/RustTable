@@ -11,7 +11,7 @@ use crate::openexr::{
     is_exr_signature,
 };
 use crate::png::{decode_png_probe, is_png_signature};
-use crate::raw::{decode_raw, is_raw, probe_raw};
+use crate::raw::{decode_raw, decode_raw_frame as decode_native_raw_frame, is_raw, probe_raw};
 use crate::tiff::{
     TiffDecodeRequest, TiffPhotometric, TiffSampleData, TiffStorageLayout,
     decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature,
@@ -578,10 +578,7 @@ fn decode_tiff_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame,
 }
 
 fn decode_raw_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
-    let image = decode_raw(bytes, limits)?.into_owned();
-    let source_color = SourceColor::from_encoding(image.descriptor().color_encoding())
-        .map_err(|error| source_color_error(InputFormat::Raw, error))?;
-    frame(bytes, InputFormat::Raw, image, source_color, None)
+    decode_native_raw_frame(bytes, limits)
 }
 
 fn tiff_sample_bytes(samples: TiffSampleData) -> Vec<u8> {

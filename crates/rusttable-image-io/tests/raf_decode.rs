@@ -106,7 +106,7 @@ fn compressed_raf_probe_and_decode_are_deterministic() {
     assert_eq!(probe.dimensions().height(), 6);
     assert_eq!(decoded.dimensions().width(), 640);
     assert_eq!(decoded.dimensions().height(), 6);
-    assert_eq!(decoded.color_encoding(), ColorEncoding::Srgb);
+    assert_eq!(decoded.color_encoding(), ColorEncoding::LinearSrgb);
     assert_eq!(decoded.pixels().len(), 640 * 6 * 4);
     assert_eq!(decoded.pixels(), decoded_again.pixels());
     let mean_rgb = decoded

@@ -1,9 +1,8 @@
-//! Display-safe RAW development for the legacy decoded-image boundary.
+//! Linear RAW development shared by the native frame and legacy image boundaries.
 //!
 //! The stage order follows Darktable's `rawprepare` -> demosaic -> input color
-//! profile -> tone/display transform lineage. Rawler supplies the bounded
-//! sensor development primitives; `RustTable` owns the deterministic display
-//! tone map and explicit sRGB output contract used by GTK previews.
+//! profile lineage. Rawler supplies the bounded sensor development primitives;
+//! display encoding remains an explicit downstream render concern.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
@@ -15,8 +14,8 @@ use rawler::imgop::{
 };
 use rawler::rawsource::RawSource;
 use rusttable_image::{
-    ColorEncoding, DecodeLimits, DecodedImage, DecodedImageError, ImageDimensions, ImageInputError,
-    InputFormat, Orientation,
+    ColorEncoding, DecodeLimits, DecodeStage, DecodedImage, DecodedImageError, ImageDimensions,
+    ImageInputError, InputFormat, Orientation,
 };
 
 use super::{
@@ -24,10 +23,35 @@ use super::{
     validate_backend_declaration,
 };
 
+pub(super) struct DevelopedRawLinear {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) pixels: Vec<[f32; 4]>,
+    pub(super) orientation: Orientation,
+    pub(super) stages: Vec<DecodeStage>,
+}
+
 pub(super) fn developed_raw_preview(
     bytes: &[u8],
     limits: DecodeLimits,
 ) -> Result<DecodedImage, ImageInputError> {
+    let developed = developed_raw_linear(bytes, limits)?;
+    let dimensions = ImageDimensions::new(developed.width, developed.height)
+        .map_err(|_| ImageInputError::ArithmeticOverflow)?;
+    enforce_output_limit(dimensions, limits)?;
+    DecodedImage::new_with_source_orientation(
+        dimensions,
+        linear_rgba8(&developed.pixels),
+        ColorEncoding::LinearSrgb,
+        developed.orientation,
+    )
+    .map_err(decoded_image_error)
+}
+
+pub(super) fn developed_raw_linear(
+    bytes: &[u8],
+    limits: DecodeLimits,
+) -> Result<DevelopedRawLinear, ImageInputError> {
     let raw_limits = raw_limits(limits)?;
     let probe =
         selected_probe(super::RawContainerRegistry::standard(), bytes).map_err(raw_input_error)?;
@@ -51,20 +75,16 @@ pub(super) fn developed_raw_preview(
     .map_err(|error| malformed(&format!("RAW development failed: {error}")))?;
 
     let (width, height, pixels) = linear_rgb(developed)?;
-    let pixels = display_map(&pixels)
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-    let dimensions =
-        ImageDimensions::new(width, height).map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    enforce_output_limit(dimensions, limits)?;
-    DecodedImage::new_with_source_orientation(
-        dimensions,
-        pixels,
-        ColorEncoding::Srgb,
-        image_orientation(orientation),
-    )
-    .map_err(decoded_image_error)
+    Ok(DevelopedRawLinear {
+        width,
+        height,
+        pixels: pixels
+            .into_iter()
+            .map(|pixel| [pixel[0], pixel[1], pixel[2], 1.0])
+            .collect(),
+        orientation: image_orientation(orientation),
+        stages: development_stages(raw.active_area, raw.crop_area),
+    })
 }
 
 fn development_steps(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<ProcessingStep> {
@@ -82,6 +102,23 @@ fn development_steps(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<
     steps
 }
 
+fn development_stages(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<DecodeStage> {
+    let can_adapt_default_crop =
+        active_area.is_none_or(|active| crop_area.is_none_or(|crop| contains_rect(active, crop)));
+    let mut stages = vec![DecodeStage::RawRescale];
+    if can_adapt_default_crop {
+        stages.push(DecodeStage::RawActiveAreaCrop);
+    }
+    stages.extend([
+        DecodeStage::RawCfa,
+        DecodeStage::RawDemosaic,
+        DecodeStage::RawWhiteBalance,
+        DecodeStage::RawColorCalibration,
+        DecodeStage::RawDefaultCrop,
+    ]);
+    stages
+}
+
 fn contains_rect(outer: Rect, inner: Rect) -> bool {
     inner.p.x >= outer.p.x
         && inner.p.y >= outer.p.y
@@ -90,7 +127,7 @@ fn contains_rect(outer: Rect, inner: Rect) -> bool {
 }
 
 fn linear_rgb(intermediate: Intermediate) -> Result<(u32, u32, Vec<[f32; 3]>), ImageInputError> {
-    match intermediate {
+    let (width, height, pixels) = match intermediate {
         Intermediate::Monochrome(pixels) => Ok((
             axis(pixels.width)?,
             axis(pixels.height)?,
@@ -108,49 +145,19 @@ fn linear_rgb(intermediate: Intermediate) -> Result<(u32, u32, Vec<[f32; 3]>), I
                 .map(|value| [value[0], value[1].midpoint(value[3]), value[2]])
                 .collect(),
         )),
+    }?;
+    if pixels
+        .iter()
+        .flat_map(|pixel| pixel.iter())
+        .any(|value| !value.is_finite())
+    {
+        return Err(malformed("RAW development produced a non-finite sample"));
     }
+    Ok((width, height, pixels))
 }
 
 fn axis(value: usize) -> Result<u32, ImageInputError> {
     u32::try_from(value).map_err(|_| ImageInputError::ArithmeticOverflow)
-}
-
-fn display_map(linear: &[[f32; 3]]) -> Vec<[u8; 4]> {
-    let mut luminance = linear
-        .iter()
-        .step_by((linear.len() / 65_536).max(1))
-        .map(|pixel| scene_luminance(*pixel))
-        .filter(|value| value.is_finite() && *value > 0.000_001)
-        .collect::<Vec<_>>();
-    luminance.sort_by(f32::total_cmp);
-    let reference = luminance
-        .get(luminance.len().saturating_mul(3) / 5)
-        .copied()
-        .unwrap_or(0.18);
-    let gain = (0.22 / reference.max(0.000_001)).clamp(0.25, 64.0);
-
-    linear
-        .iter()
-        .map(|pixel| {
-            let source_luminance = scene_luminance(*pixel).max(0.0);
-            let mapped_luminance = 1.0 - (-source_luminance * gain).exp();
-            let scale = if source_luminance > 0.000_001 {
-                mapped_luminance / source_luminance
-            } else {
-                gain
-            };
-            [
-                encode_srgb(pixel[0] * scale),
-                encode_srgb(pixel[1] * scale),
-                encode_srgb(pixel[2] * scale),
-                255,
-            ]
-        })
-        .collect()
-}
-
-fn scene_luminance(pixel: [f32; 3]) -> f32 {
-    pixel[0].max(0.0) * 0.212_6 + pixel[1].max(0.0) * 0.715_2 + pixel[2].max(0.0) * 0.072_2
 }
 
 #[allow(
@@ -158,14 +165,27 @@ fn scene_luminance(pixel: [f32; 3]) -> f32 {
     clippy::cast_sign_loss,
     reason = "the value is rounded and clamped to the complete u8 domain before quantization"
 )]
-fn encode_srgb(value: f32) -> u8 {
-    let value = value.clamp(0.0, 1.0);
-    let encoded = if value <= 0.003_130_8 {
-        value * 12.92
-    } else {
-        1.055 * value.powf(1.0 / 2.4) - 0.055
-    };
-    (encoded * 255.0).round().clamp(0.0, 255.0) as u8
+pub(super) fn linear_rgba8(pixels: &[[f32; 4]]) -> Vec<u8> {
+    pixels
+        .iter()
+        .flat_map(|pixel| {
+            [
+                quantize_linear(pixel[0]),
+                quantize_linear(pixel[1]),
+                quantize_linear(pixel[2]),
+                255,
+            ]
+        })
+        .collect()
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the value is rounded and clamped to the complete u8 domain before quantization"
+)]
+fn quantize_linear(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
 const fn image_orientation(orientation: RawOrientation) -> Orientation {

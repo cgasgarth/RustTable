@@ -14,8 +14,8 @@ mod source_color;
 mod view;
 
 pub use decode::{
-    DecodeError, DecodeReceipt, DecodeRequest, DecodeResult, DecodedFrame, DecodedFrameError,
-    DecoderCapabilities, DecoderDescriptor, DecoderIdentity,
+    DecodeError, DecodeReceipt, DecodeRequest, DecodeResult, DecodeStage, DecodedFrame,
+    DecodedFrameError, DecoderCapabilities, DecoderDescriptor, DecoderIdentity,
 };
 pub use format::{InputFormat, SUPPORTED_INPUT_EXTENSIONS, SUPPORTED_INPUT_FORMATS};
 pub use geometry::{Orientation, Roi, RoiError};
