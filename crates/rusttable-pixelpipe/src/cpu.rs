@@ -8,6 +8,7 @@ use rusttable_processing::{
     prepare_basicadj_plans, to_linear_srgb,
 };
 
+use crate::frame::{execute_frame_image, has_discrete_geometry};
 use crate::{
     CancellationError, CancellationScope, CancellationStage, CpuNodeReceipt, CpuPipelineReceipt,
     CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError, PixelIdentity, RgbaF32Channel,
@@ -94,6 +95,10 @@ impl CpuPixelpipeExecutor {
         &self,
         request: &CpuPixelpipeSnapshot,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
+        if has_discrete_geometry(request) {
+            let (image, plan_identity) = execute_frame_image(request, request.input(), None)?;
+            return Ok(Self::result_for(request, image, plan_identity));
+        }
         let plans = Self::prepare_plans(request)?;
         let image = Self::execute_image(request, request.input(), &plans)?;
         Ok(Self::result_for(request, image, plans.identity()))
@@ -111,6 +116,15 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Allocation)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
+        if has_discrete_geometry(request) {
+            let (image, plan_identity) =
+                execute_frame_image(request, request.input(), Some(scope))?;
+            scope
+                .child(CancellationStage::Publication)
+                .check()
+                .map_err(CpuPixelpipeError::Cancelled)?;
+            return Ok(Self::result_for(request, image, plan_identity));
+        }
         let plans = Self::prepare_plans(request)?;
         let image = Self::execute_image(request, request.input(), &plans)?;
         scope
@@ -137,7 +151,6 @@ impl CpuPixelpipeExecutor {
         tile_plan: CpuTilePlan,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
-        let plans = Self::prepare_plans(request)?;
         if request.graph().nodes().any(|node| {
             matches!(
                 node.operation().kind(),
@@ -163,9 +176,9 @@ impl CpuPixelpipeExecutor {
             // replacement. Running them independently per tile changes their
             // result, so the legal tiled contract is a full-frame analysis
             // followed by one publication.
-            let image = Self::execute_image(request, request.input(), &plans)?;
-            return Ok(Self::result_for(request, image, plans.identity()));
+            return self.execute(request);
         }
+        let plans = Self::prepare_plans(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -188,9 +201,10 @@ impl CpuPixelpipeExecutor {
             )?;
         }
 
-        let output_descriptor = RgbaF32Descriptor::new(
+        let output_descriptor = RgbaF32Descriptor::with_source_representation(
             request.input().descriptor().dimensions(),
             request.output_mode().color_encoding(),
+            request.input().descriptor().source_representation(),
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
@@ -210,7 +224,6 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Allocation)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        let plans = Self::prepare_plans(request)?;
         if request.graph().nodes().any(|node| {
             matches!(
                 node.operation().kind(),
@@ -236,13 +249,14 @@ impl CpuPixelpipeExecutor {
                 .child(CancellationStage::Tile)
                 .check()
                 .map_err(CpuPixelpipeError::Cancelled)?;
-            let result = self.execute(request)?;
+            let result = self.execute_with_cancellation(request, scope)?;
             scope
                 .child(CancellationStage::Publication)
                 .check()
                 .map_err(CpuPixelpipeError::Cancelled)?;
             return Ok(result);
         }
+        let plans = Self::prepare_plans(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -272,9 +286,10 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Publication)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        let output_descriptor = RgbaF32Descriptor::new(
+        let output_descriptor = RgbaF32Descriptor::with_source_representation(
             request.input().descriptor().dimensions(),
             request.output_mode().color_encoding(),
+            request.input().descriptor().source_representation(),
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
@@ -327,9 +342,10 @@ impl CpuPixelpipeExecutor {
         let evaluated =
             evaluate_graph_with_basicadj_plans(request.graph(), &linear_input, Some(plans))
                 .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
-        let output_descriptor = RgbaF32Descriptor::new(
+        let output_descriptor = RgbaF32Descriptor::with_source_representation(
             input.descriptor().dimensions(),
             request.output_mode().color_encoding(),
+            input.descriptor().source_representation(),
         );
         let output_pixels = output_pixels(request.output_mode(), &evaluated, input);
         RgbaF32Image::new(output_descriptor, output_pixels)
@@ -803,7 +819,9 @@ fn to_processing_source(input: &RgbaF32Image) -> Result<SourceRgbImage, CpuPixel
     })
 }
 
-fn to_linear_working(input: &RgbaF32Image) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+pub(crate) fn to_linear_working(
+    input: &RgbaF32Image,
+) -> Result<WorkingRgbImage, CpuPixelpipeError> {
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LinearSrgbD65 {
         let pixels = input
             .pixels()

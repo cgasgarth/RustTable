@@ -1,6 +1,10 @@
 use std::fmt;
 
-use crate::evaluate::{BasicAdjPlanSet, evaluate_steps, evaluate_steps_with_plans};
+use crate::evaluate::{
+    BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions,
+    evaluate_graph_at_frame_boundaries_with_plans, evaluate_steps, evaluate_steps_with_plans,
+    graph_has_discrete_geometry,
+};
 use crate::{
     CompiledOperationGraph, EvaluationError, LinearRgb, RasterDimensions, WorkingRgbImage,
 };
@@ -258,6 +262,18 @@ pub fn evaluate_graph_with_basicadj_plans(
     input: &WorkingRgbImage,
     plans: Option<&BasicAdjPlanSet>,
 ) -> Result<WorkingRgbImage, EvaluationError> {
+    if graph_has_discrete_geometry(graph) {
+        let alpha = vec![1.0; input.pixel_slice().len()];
+        return evaluate_graph_at_frame_boundaries_with_plans(
+            graph,
+            input,
+            &alpha,
+            FrameBoundaryOptions::new(FrameBoundaryMode::Preview),
+            plans,
+            || false,
+        )
+        .map(|evaluated| evaluated.image().clone());
+    }
     let pixels = evaluate_steps_with_plans(
         graph
             .nodes()

@@ -51,7 +51,9 @@ pub use descriptor::{
     soften_descriptor, temperature_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
-    BasicAdjPlanSet, BlendArithmeticStage, EvaluationError, evaluate, prepare_basicadj_plans,
+    BasicAdjPlanSet, BlendArithmeticStage, EvaluatedFrame, EvaluationError, FrameBoundaryMode,
+    FrameBoundaryOptions, FrameBoundaryPlan, evaluate, evaluate_graph_at_frame_boundaries,
+    graph_has_discrete_geometry, prepare_basicadj_plans,
 };
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,

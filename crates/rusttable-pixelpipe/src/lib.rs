@@ -5,6 +5,7 @@ mod cache;
 mod cancellation;
 mod cpu;
 mod failure;
+mod frame;
 mod gpu;
 mod histogram;
 mod host_pool;
