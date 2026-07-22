@@ -2,6 +2,7 @@ use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
+use rusttable_image::Orientation;
 use rusttable_pixelpipe::{
     CancellationReason, CancellationScope, CpuPixelpipeError, CpuPixelpipeExecutor,
     CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, CpuTilePlan, PipelineGeneration,
@@ -79,6 +80,10 @@ fn typed_operation(id: u128, key: &str, parameters: Vec<(&str, ParameterValue)>)
 }
 
 fn image(width: u32, height: u32) -> RgbaF32Image {
+    image_with_orientation(width, height, Orientation::Normal)
+}
+
+fn image_with_orientation(width: u32, height: u32, orientation: Orientation) -> RgbaF32Image {
     let dimensions = RasterDimensions::new(width, height).expect("dimensions");
     let pixel_count = u16::try_from(dimensions.pixel_count()).expect("small test image");
     let denominator = f32::from(pixel_count + 1);
@@ -99,10 +104,137 @@ fn image(width: u32, height: u32) -> RgbaF32Image {
             dimensions,
             RgbaF32ColorEncoding::LinearSrgbD65,
             RgbaF32SourceRepresentation::U16,
-        ),
+        )
+        .with_source_orientation(orientation),
         pixels,
     )
     .expect("valid image")
+}
+
+#[test]
+fn automatic_flip_executes_all_source_orientations_once_on_a_non_square_frame() {
+    let orientations = [
+        Orientation::Normal,
+        Orientation::FlipHorizontal,
+        Orientation::Rotate180,
+        Orientation::FlipVertical,
+        Orientation::Transpose,
+        Orientation::Rotate90,
+        Orientation::Transverse,
+        Orientation::Rotate270,
+    ];
+    let graph = graph(vec![operation(
+        875,
+        "rusttable.flip",
+        &[("mode", 0.0), ("orientation", 0.0)],
+    )]);
+    for orientation in orientations {
+        let input = image_with_orientation(3, 2, orientation);
+        let source = input.pixels().to_vec();
+        let result = CpuPixelpipeExecutor
+            .execute(&CpuPixelpipeSnapshot::new(
+                input,
+                graph.clone(),
+                CpuPixelpipeOutputMode::FullExport,
+            ))
+            .expect("automatic source orientation");
+        let output_dimensions = orientation.output_dimensions(
+            rusttable_image::ImageDimensions::new(3, 2).expect("image dimensions"),
+        );
+        assert_eq!(
+            result.image().descriptor().dimensions(),
+            RasterDimensions::new(output_dimensions.width(), output_dimensions.height()).unwrap()
+        );
+        assert_eq!(
+            result.image().descriptor().source_orientation(),
+            Orientation::Normal
+        );
+        for y in 0..2 {
+            for x in 0..3 {
+                let (output_x, output_y) = orientation.map_source_to_output(
+                    rusttable_image::ImageDimensions::new(3, 2).unwrap(),
+                    x,
+                    y,
+                );
+                let source_index = usize::try_from(y * 3 + x).unwrap();
+                let output_index =
+                    usize::try_from(output_y * output_dimensions.width() + output_x).unwrap();
+                assert_eq!(
+                    result.image().pixels()[output_index],
+                    source[source_index],
+                    "{orientation:?} source ({x}, {y})"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn repeated_automatic_flip_nodes_consume_source_orientation_only_once() {
+    let graph = graph(vec![
+        operation(
+            876,
+            "rusttable.flip",
+            &[("mode", 0.0), ("orientation", 0.0)],
+        ),
+        operation(
+            877,
+            "rusttable.flip",
+            &[("mode", 0.0), ("orientation", 0.0)],
+        ),
+    ]);
+    let input = image_with_orientation(3, 2, Orientation::Rotate90);
+    let result = CpuPixelpipeExecutor
+        .execute(&CpuPixelpipeSnapshot::new(
+            input,
+            graph,
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("source orientation is consumed once");
+
+    assert_eq!(
+        result.image().descriptor().dimensions(),
+        RasterDimensions::new(2, 3).unwrap()
+    );
+    let red = result
+        .image()
+        .pixels()
+        .iter()
+        .map(|pixel| pixel.red())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        red,
+        vec![
+            4.0 / 7.0,
+            1.0 / 7.0,
+            5.0 / 7.0,
+            2.0 / 7.0,
+            6.0 / 7.0,
+            3.0 / 7.0
+        ]
+    );
+}
+
+#[test]
+fn source_orientation_participates_in_snapshot_cache_identity() {
+    let graph = graph(vec![operation(
+        878,
+        "rusttable.flip",
+        &[("mode", 0.0), ("orientation", 0.0)],
+    )]);
+    let normal = CpuPixelpipeSnapshot::new(
+        image_with_orientation(3, 2, Orientation::Normal),
+        graph.clone(),
+        CpuPixelpipeOutputMode::Preview,
+    );
+    let rotated = CpuPixelpipeSnapshot::new(
+        image_with_orientation(3, 2, Orientation::Rotate90),
+        graph,
+        CpuPixelpipeOutputMode::Preview,
+    );
+
+    assert_eq!(normal.source_identity(), rotated.source_identity());
+    assert_ne!(normal.identity(), rotated.identity());
 }
 
 #[test]

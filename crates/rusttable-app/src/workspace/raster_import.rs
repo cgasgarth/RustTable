@@ -242,19 +242,27 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use rusttable_catalog::ImportRegistrationStatus;
+    use rusttable_catalog::{EditRepository, ImportRegistrationStatus};
     use rusttable_catalog_store::RedbCatalogRepository;
-    use rusttable_image::InputFormat;
+    use rusttable_image::{
+        DecodedImage, ImageDimensions, ImageOutput, InputFormat, JpegQuality, OutputLimits,
+        OutputOptions,
+    };
+    use rusttable_image_io::FileImageOutput;
     use rusttable_import::{
         AtomicRasterCatalog, RASTER_DECODER_IDENTITY_VERSION, RasterDuplicateIdentity,
         RasterImportCancellation, RasterImportStatus,
     };
+    use rusttable_metadata::MetadataInput;
     use sha2::{Digest, Sha256};
 
-    use super::{AppCatalog, preview_error_cause, run_raster_import};
+    use super::{
+        AppCatalog, ExifMetadataInput, metadata_limits, preview_error_cause, run_raster_import,
+    };
     use crate::PreviewError;
+    use crate::gtk_thumbnail_controller::{GtkThumbnailController, GtkThumbnailSource};
     use crate::library::{LibraryLoadResult, load_catalog};
-    use crate::workspace::load_selected_preview;
+    use crate::workspace::{load_selected_export_render, load_selected_preview};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -277,6 +285,111 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn jpeg_with_orientation(directory: &Path, code: u16) -> Vec<u8> {
+        let base = directory.join("base.jpg");
+        let image = DecodedImage::new(
+            ImageDimensions::new(2, 1).expect("dimensions"),
+            vec![255, 0, 0, 255, 0, 255, 0, 255],
+        )
+        .expect("source image");
+        FileImageOutput::new(OutputLimits::new(1_000_000).expect("output limits"))
+            .write_new(
+                &image,
+                &base,
+                OutputOptions::Jpeg {
+                    quality: JpegQuality::new(95).expect("quality"),
+                },
+            )
+            .expect("base JPEG");
+        let source = fs::read(&base).expect("base JPEG bytes");
+        fs::remove_file(base).expect("remove base JPEG");
+        let mut payload = b"Exif\0\0II*\0\x08\0\0\0\x01\0".to_vec();
+        payload.extend_from_slice(&0x0112_u16.to_le_bytes());
+        payload.extend_from_slice(&3_u16.to_le_bytes());
+        payload.extend_from_slice(&1_u32.to_le_bytes());
+        payload.extend_from_slice(&code.to_le_bytes());
+        payload.extend_from_slice(&[0, 0]);
+        payload.extend_from_slice(&0_u32.to_le_bytes());
+        let length = u16::try_from(payload.len() + 2).expect("EXIF segment length");
+        let mut bytes = vec![0xff, 0xd8, 0xff, 0xe1];
+        bytes.extend_from_slice(&length.to_be_bytes());
+        bytes.extend_from_slice(&payload);
+        bytes.extend_from_slice(&source[2..]);
+        bytes
+    }
+
+    #[test]
+    fn oriented_jpeg_preview_export_thumbnail_restart_and_cache_share_one_geometry() {
+        let directory = TempDirectory::new();
+        let source = directory.0.join("portrait.jpg");
+        let catalog = directory.0.join("catalog.redb");
+        let cache = directory.0.join("thumbnail-cache");
+        let bytes = jpeg_with_orientation(&directory.0, 6);
+        ExifMetadataInput::new(metadata_limits())
+            .read_bytes(InputFormat::Jpeg, &bytes)
+            .expect("orientation metadata");
+        fs::write(&source, bytes).expect("oriented JPEG fixture");
+
+        let batch = run_raster_import(
+            &catalog,
+            vec![source],
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let receipt = batch.receipts().next().expect("import receipt");
+        assert_eq!(receipt.status, RasterImportStatus::Imported, "{receipt:?}");
+        let photo_id = receipt.photo_id.expect("imported photo");
+        let import_preview = receipt.preview.as_ref().expect("import preview");
+        assert_eq!((import_preview.width, import_preview.height), (1, 2));
+
+        let repository = RedbCatalogRepository::open(&catalog).expect("restart catalog");
+        let edit = repository
+            .list()
+            .expect("persisted edits")
+            .into_iter()
+            .find(|edit| edit.photo_id() == photo_id)
+            .expect("orientation edit");
+        let operations = edit.operations().collect::<Vec<_>>();
+        assert_eq!(operations.len(), 3);
+        assert_eq!(operations[0].key().as_str(), "rusttable.flip");
+        drop(repository);
+
+        let preview = load_selected_preview(&catalog, Path::new("unused"), photo_id)
+            .expect("restart preview");
+        let (_, preview_dimensions, preview_pixels) = preview.into_parts();
+        assert_eq!(
+            (preview_dimensions.width(), preview_dimensions.height()),
+            (1, 2)
+        );
+        let export = load_selected_export_render(
+            &catalog,
+            Path::new("unused"),
+            photo_id,
+            rusttable_render::RenderTarget::FullResolution,
+        )
+        .expect("oriented export render");
+        assert_eq!(export.image().dimensions(), preview_dimensions);
+        assert_eq!(export.image().pixels(), preview_pixels);
+
+        let mut first = GtkThumbnailController::open(&catalog, &directory.0, &cache)
+            .expect("thumbnail controller");
+        let rendered = first.render(photo_id).expect("rendered thumbnail");
+        assert_eq!(rendered.source(), GtkThumbnailSource::Render);
+        assert_eq!(
+            (
+                rendered.metadata().dimensions().width(),
+                rendered.metadata().dimensions().height(),
+            ),
+            (1, 2)
+        );
+        drop(first);
+        let mut reopened = GtkThumbnailController::open(&catalog, &directory.0, &cache)
+            .expect("reopened thumbnail cache");
+        let cached = reopened.render(photo_id).expect("cached thumbnail");
+        assert_eq!(cached.source(), GtkThumbnailSource::Cache);
+        assert_eq!(cached.metadata(), rendered.metadata());
     }
 
     #[test]

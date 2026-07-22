@@ -1,8 +1,9 @@
 use std::io::Cursor;
 
+use rusttable_image::{DecodeLimits, Orientation};
 use rusttable_image_io::{
-    RawCapabilityKind, RawContainerKind, RawDecodeLimits, RawDecodeRequest, RawPlaneLayout,
-    RawlerRawDecoder,
+    ImageDecoderRegistry, RawCapabilityKind, RawContainerKind, RawDecodeLimits, RawDecodeRequest,
+    RawPlaneLayout, RawlerRawDecoder,
 };
 use tiff::encoder::colortype::{Gray8, Gray16};
 use tiff::encoder::{Rational, TiffEncoder, TiffKind};
@@ -10,6 +11,10 @@ use tiff::tags::Tag;
 
 fn limits() -> RawDecodeLimits {
     RawDecodeLimits::new(1_000_000, 64, 64, 4_096, 8 * 1024).expect("RAW limits")
+}
+
+fn image_limits() -> DecodeLimits {
+    DecodeLimits::new(1_000_000, 64, 64, 4_096, 16 * 1024).expect("image limits")
 }
 
 fn dng_fixture(big: bool, compression: Option<u16>) -> Vec<u8> {
@@ -32,6 +37,81 @@ fn linear_tiff_fixture(big: bool) -> Vec<u8> {
     } else {
         let mut encoder = TiffEncoder::new(&mut cursor).expect("TIFF encoder");
         write_linear_page(&mut encoder);
+    }
+    cursor.into_inner()
+}
+
+fn developable_dng_fixture() -> Vec<u8> {
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut encoder = TiffEncoder::new(&mut cursor).expect("TIFF encoder");
+        let mut raw = encoder.new_image::<Gray16>(8, 6).expect("raw image");
+        let writer = raw.encoder();
+        writer
+            .write_tag(Tag::Unknown(50_706), &[1_u8, 4, 0, 0][..])
+            .expect("DNG version");
+        writer.write_tag(Tag::Make, "RustTable").expect("make");
+        writer
+            .write_tag(Tag::Model, "DNG Orientation")
+            .expect("model");
+        writer
+            .write_tag(Tag::PhotometricInterpretation, 32_803_u16)
+            .expect("CFA photometric");
+        writer
+            .write_tag(Tag::Orientation, 6_u16)
+            .expect("orientation");
+        writer
+            .write_tag(Tag::Unknown(33_421), &[2_u16, 2][..])
+            .expect("CFA repeat");
+        writer
+            .write_tag(Tag::Unknown(33_422), &[0_u8, 1, 1, 2][..])
+            .expect("CFA pattern");
+        writer
+            .write_tag(Tag::Unknown(50_829), &[0_u32, 0, 6, 8][..])
+            .expect("active area");
+        writer
+            .write_tag(Tag::Unknown(50_719), &[0_u32, 0][..])
+            .expect("crop origin");
+        writer
+            .write_tag(Tag::Unknown(50_720), &[8_u32, 6][..])
+            .expect("crop size");
+        writer
+            .write_tag(Tag::Unknown(50_714), &[64_u32][..])
+            .expect("black level");
+        writer
+            .write_tag(Tag::Unknown(50_717), &[4_095_u32][..])
+            .expect("white level");
+        writer
+            .write_tag(
+                Tag::Unknown(50_728),
+                &[
+                    Rational { n: 1, d: 1 },
+                    Rational { n: 1, d: 1 },
+                    Rational { n: 1, d: 1 },
+                ][..],
+            )
+            .expect("white balance");
+        writer
+            .write_tag(Tag::Unknown(50_778), 21_u16)
+            .expect("illuminant");
+        let matrix = [
+            Rational { n: 1, d: 1 },
+            Rational { n: 0, d: 1 },
+            Rational { n: 0, d: 1 },
+            Rational { n: 0, d: 1 },
+            Rational { n: 1, d: 1 },
+            Rational { n: 0, d: 1 },
+            Rational { n: 0, d: 1 },
+            Rational { n: 0, d: 1 },
+            Rational { n: 1, d: 1 },
+        ];
+        writer
+            .write_tag(Tag::Unknown(50_721), &matrix[..])
+            .expect("color matrix");
+        let samples = (0_u16..48)
+            .map(|value| 512 + value * 32)
+            .collect::<Vec<_>>();
+        raw.write_data(&samples).expect("raw samples");
     }
     cursor.into_inner()
 }
@@ -189,6 +269,27 @@ fn classic_and_bigtiff_dng_preserve_samples_metadata_and_preview_inventory() {
             [Some(2.0), Some(1.0), Some(4.0)]
         );
     }
+}
+
+#[test]
+fn developed_raw_preview_defers_orientation_to_the_shared_geometry_boundary() {
+    let image = ImageDecoderRegistry::standard()
+        .decode_bytes(&developable_dng_fixture(), image_limits())
+        .expect("developed DNG preview");
+
+    assert_eq!(
+        (image.dimensions().width(), image.dimensions().height()),
+        (8, 6)
+    );
+    assert_eq!(image.source_orientation(), Orientation::Rotate90);
+    assert_eq!(
+        (
+            image.oriented_dimensions().width(),
+            image.oriented_dimensions().height()
+        ),
+        (6, 8)
+    );
+    assert_eq!(image.pixels().len(), 8 * 6 * 4);
 }
 
 #[test]

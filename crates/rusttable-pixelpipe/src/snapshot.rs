@@ -134,6 +134,7 @@ fn snapshot_identity(
     hasher.update(input.descriptor().dimensions().width().to_le_bytes());
     hasher.update(input.descriptor().dimensions().height().to_le_bytes());
     hasher.update([encoding_tag(input.descriptor().color_encoding())]);
+    hasher.update([input.descriptor().source_orientation() as u8]);
     hasher.update([mode_tag(output_mode)]);
     write_u128(&mut hasher, graph.source_edit_id().get());
     write_u128(&mut hasher, graph.source_photo_id().get());

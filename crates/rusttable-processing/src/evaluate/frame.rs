@@ -91,9 +91,11 @@ impl FrameBoundaryPlan {
         let mut steps = Vec::new();
         let mut segment_start = 0;
         let mut boundary_count = 0;
+        let mut source_orientation = options.source_orientation;
 
         for (index, node) in nodes.iter().copied().enumerate() {
-            let Some(boundary) = plan_boundary(node, dimensions, options)? else {
+            let node_options = options.with_source_orientation(source_orientation);
+            let Some(boundary) = plan_boundary(node, dimensions, node_options)? else {
                 continue;
             };
             if segment_start < index {
@@ -108,6 +110,15 @@ impl FrameBoundaryPlan {
                 node_index: index,
                 plan: boundary,
             });
+            if matches!(
+                steps.last(),
+                Some(FramePlanStep::Boundary {
+                    plan: DiscreteGeometryPlan::Flip(_),
+                    ..
+                })
+            ) {
+                source_orientation = Orientation::Normal;
+            }
             boundary_count += 1;
             segment_start = index + 1;
         }

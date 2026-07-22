@@ -91,18 +91,27 @@ impl RasterPreviewPort for CheckedPreview {
         entry: &RasterCatalogEntry,
     ) -> Result<RasterPreviewReceipt, RasterPreviewError> {
         let operations = entry.edit.operations().collect::<Vec<_>>();
-        assert_eq!(operations.len(), 2);
-        assert_eq!(operations[0].key().as_str(), "rusttable.exposure");
+        assert_eq!(operations.len(), 3);
+        assert_eq!(operations[0].key().as_str(), "rusttable.flip");
         assert_eq!(
-            operations[0].parameter(&ParameterName::new("stops").unwrap()),
+            operations[0].parameter(&ParameterName::new("mode").unwrap()),
+            Some(&ParameterValue::Integer(0))
+        );
+        assert_eq!(
+            operations[0].parameter(&ParameterName::new("orientation").unwrap()),
+            Some(&ParameterValue::Integer(0))
+        );
+        assert_eq!(operations[1].key().as_str(), "rusttable.exposure");
+        assert_eq!(
+            operations[1].parameter(&ParameterName::new("stops").unwrap()),
             Some(&ParameterValue::Scalar(
                 rusttable_core::FiniteF64::new(0.0).unwrap()
             ))
         );
-        assert_eq!(operations[1].key().as_str(), "rusttable.rgb_gain");
+        assert_eq!(operations[2].key().as_str(), "rusttable.rgb_gain");
         for name in ["red", "green", "blue"] {
             assert_eq!(
-                operations[1].parameter(&ParameterName::new(name).unwrap()),
+                operations[2].parameter(&ParameterName::new(name).unwrap()),
                 Some(&ParameterValue::Scalar(
                     rusttable_core::FiniteF64::new(1.0).unwrap()
                 ))

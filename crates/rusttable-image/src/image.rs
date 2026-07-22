@@ -122,11 +122,29 @@ impl DecodedImage {
         pixels: Vec<u8>,
         color_encoding: ColorEncoding,
     ) -> Result<Self, DecodedImageError> {
+        Self::new_with_source_orientation(dimensions, pixels, color_encoding, Orientation::Normal)
+    }
+
+    /// Creates an immutable packed RGBA8 image while retaining source orientation evidence.
+    ///
+    /// The pixels remain in encoded source order. Geometry consumers apply the
+    /// orientation at their frame boundary and publish a canonical normal-orientation image.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the expected byte count overflows or the buffer
+    /// length differs from the checked encoded dimensions.
+    pub fn new_with_source_orientation(
+        dimensions: ImageDimensions,
+        pixels: Vec<u8>,
+        color_encoding: ColorEncoding,
+        orientation: Orientation,
+    ) -> Result<Self, DecodedImageError> {
         let descriptor = ImageDescriptor::new(
             dimensions,
             PixelFormat::rgba8(),
             color_encoding,
-            Orientation::Normal,
+            orientation,
         )
         .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
         let expected = u64::try_from(descriptor.byte_length())
@@ -157,6 +175,19 @@ impl DecodedImage {
     #[must_use]
     pub const fn color_encoding(&self) -> ColorEncoding {
         self.owned.descriptor().color_encoding()
+    }
+
+    /// Returns the typed transform from encoded source pixels to display geometry.
+    #[must_use]
+    pub const fn source_orientation(&self) -> Orientation {
+        self.owned.descriptor().orientation()
+    }
+
+    /// Returns source dimensions after applying the typed orientation property.
+    #[must_use]
+    pub fn oriented_dimensions(&self) -> ImageDimensions {
+        self.source_orientation()
+            .output_dimensions(self.dimensions())
     }
 
     #[must_use]

@@ -4251,6 +4251,7 @@ dependencies = [
  "rusttable-image",
  "rusttable-image-io",
  "rusttable-metadata",
+ "rusttable-processing",
  "sha2",
  "tracing",
 ]

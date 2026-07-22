@@ -157,7 +157,8 @@ fn render_frame_with_target(
         SampleType::F32 => RgbaF32SourceRepresentation::F32,
     };
     let pixelpipe_input = RgbaF32Image::new(
-        RgbaF32Descriptor::with_source_representation(dimensions, encoding, representation),
+        RgbaF32Descriptor::with_source_representation(dimensions, encoding, representation)
+            .with_source_orientation(input.image().descriptor().orientation()),
         source_pixels
             .iter()
             .copied()
@@ -229,7 +230,8 @@ fn render_decoded_with_target(
     let (source_pixels, remainder) = input.pixels().as_chunks::<4>();
     debug_assert!(remainder.is_empty(), "decoded images are packed RGBA8");
     let pixelpipe_input = RgbaF32Image::new(
-        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::SrgbD65),
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::SrgbD65)
+            .with_source_orientation(input.source_orientation()),
         source_pixels
             .iter()
             .map(|pixel| {

@@ -37,7 +37,8 @@ pub(crate) fn execute_frame_image(
         request.graph(),
         &linear,
         &alpha,
-        FrameBoundaryOptions::new(mode),
+        FrameBoundaryOptions::new(mode)
+            .with_source_orientation(input.descriptor().source_orientation()),
         || {
             node_scope
                 .as_ref()

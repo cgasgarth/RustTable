@@ -1,5 +1,6 @@
 use std::fmt;
 
+use rusttable_image::Orientation;
 use rusttable_processing::RasterDimensions;
 use sha2::{Digest, Sha256};
 
@@ -90,6 +91,7 @@ pub struct RgbaF32Descriptor {
     color_encoding: RgbaF32ColorEncoding,
     alpha_mode: RgbaF32AlphaMode,
     source_representation: RgbaF32SourceRepresentation,
+    source_orientation: Orientation,
 }
 
 impl RgbaF32Descriptor {
@@ -100,6 +102,7 @@ impl RgbaF32Descriptor {
             color_encoding,
             alpha_mode: RgbaF32AlphaMode::Straight,
             source_representation: RgbaF32SourceRepresentation::F32,
+            source_orientation: Orientation::Normal,
         }
     }
 
@@ -114,7 +117,15 @@ impl RgbaF32Descriptor {
             color_encoding,
             alpha_mode: RgbaF32AlphaMode::Straight,
             source_representation,
+            source_orientation: Orientation::Normal,
         }
+    }
+
+    /// Retains the decoder's source orientation without changing packed pixel order.
+    #[must_use]
+    pub const fn with_source_orientation(mut self, source_orientation: Orientation) -> Self {
+        self.source_orientation = source_orientation;
+        self
     }
 
     #[must_use]
@@ -135,6 +146,11 @@ impl RgbaF32Descriptor {
     #[must_use]
     pub const fn source_representation(self) -> RgbaF32SourceRepresentation {
         self.source_representation
+    }
+
+    #[must_use]
+    pub const fn source_orientation(self) -> Orientation {
+        self.source_orientation
     }
 }
 

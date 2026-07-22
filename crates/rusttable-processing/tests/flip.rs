@@ -3,7 +3,7 @@ use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions};
 
 use flip::{
     FlipConfig, FlipParametersV1, FlipParametersV2, FlipPlan, ORIENTATION_NULL, OrientationBits,
-    migrate, migrate_v1, migrate_v1_with_source, migrate_v2,
+    merge_two_orientations, migrate, migrate_v1, migrate_v1_with_source, migrate_v2,
 };
 use rusttable_image::{CfaDescriptor, CfaPattern, CfaPhase, ImageDimensions, Orientation, Roi};
 
@@ -74,6 +74,70 @@ fn every_dihedral_mapping_is_bijective_and_has_the_expected_shape() {
             }
         }
         assert_eq!(seen.len(), 6);
+    }
+}
+
+#[test]
+fn every_source_and_user_composition_matches_darktable_for_pixels_masks_and_points() {
+    let orientations = [
+        Orientation::Normal,
+        Orientation::FlipHorizontal,
+        Orientation::Rotate180,
+        Orientation::FlipVertical,
+        Orientation::Transpose,
+        Orientation::Rotate90,
+        Orientation::Transverse,
+        Orientation::Rotate270,
+    ];
+    let mask = [1_u8, 2, 3, 4, 5, 6];
+    for source in orientations {
+        let source_plan = plan(3, 2, source);
+        for user in orientations {
+            let user_plan = FlipPlan::new(
+                source_plan.output_dimensions(),
+                FlipConfig::explicit(OrientationBits::from_orientation(user)),
+                Orientation::Normal,
+            )
+            .expect("user plan");
+            let merged = merge_two_orientations(
+                OrientationBits::from_orientation(source),
+                OrientationBits::from_orientation(user),
+            );
+            let merged_plan = FlipPlan::new(
+                dimensions(3, 2),
+                FlipConfig::explicit(merged),
+                Orientation::Normal,
+            )
+            .expect("merged plan");
+
+            assert_eq!(
+                merged_plan.output_dimensions(),
+                user_plan.output_dimensions(),
+                "{source:?} then {user:?}"
+            );
+            for y in 0..2 {
+                for x in 0..3 {
+                    let after_source = source_plan.forward(x, y).unwrap();
+                    assert_eq!(
+                        merged_plan.forward(x, y).unwrap(),
+                        user_plan.forward(after_source.0, after_source.1).unwrap(),
+                        "point/overlay coordinate for {source:?} then {user:?}"
+                    );
+                }
+            }
+            let after_source = source_plan.execute_plane(&mask, 3).unwrap();
+            let sequential = user_plan
+                .execute_plane(
+                    &after_source,
+                    usize::try_from(source_plan.output_dimensions().width()).unwrap(),
+                )
+                .unwrap();
+            assert_eq!(
+                merged_plan.execute_plane(&mask, 3).unwrap(),
+                sequential,
+                "mask pixels for {source:?} then {user:?}"
+            );
+        }
     }
 }
 
