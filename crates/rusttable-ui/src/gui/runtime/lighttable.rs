@@ -14,10 +14,10 @@ use crate::external_editor::ExternalEditorPanel;
 use crate::gui::{
     DARKTABLE_UI_TOKENS, DarkroomView, ExportPanel, LighttableContentState,
     LighttableInteractionState, LighttableSelectionAction, PhotoPreview, SelectionModifiers,
-    THUMBNAIL_METRICS, ThemeRole, WorkspaceRole, apply_theme_role,
+    ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
-use crate::views::lighttable::{LighttableCollectionState, LighttableGridSpec};
+use crate::views::lighttable::{FilmstripSpec, LighttableCollectionState, LighttableGridSpec};
 use crate::widgets::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 
 #[derive(Clone)]
@@ -87,12 +87,6 @@ impl WorkspaceRenderHandle {
         let zoom = self.interaction.borrow().zoom();
         let layout = self.interaction.borrow().layout();
         let grid = lighttable_grid_for_allocation(&self.lighttable, zoom);
-        // GridView keeps its children start-aligned. Apply the same centered
-        // offset used by the display-free card receipt so a small collection
-        // occupies the darktable thumbtable surface instead of pinning to the
-        // upper-left corner.
-        self.lighttable
-            .set_margin_start(i32::from(grid.horizontal_offset_px()));
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
         self.lighttable.set_min_columns(if layout.shows_culling() {
             1
@@ -153,6 +147,15 @@ impl WorkspaceRenderHandle {
                 interaction.ordered().collect::<Vec<_>>()
             }
         };
+        // GridView keeps its children start-aligned. Center the realized row
+        // in the available Darktable thumbtable surface; using the configured
+        // density here would pin a short final row to the upper-left corner.
+        let viewport_width = u16::try_from(self.lighttable.allocated_width())
+            .unwrap_or(0)
+            .saturating_sub(12);
+        let centered_grid = grid.centered_for_visible_count(viewport_width, display_ids.len());
+        self.lighttable
+            .set_margin_start(i32::from(centered_grid.horizontal_offset_px()));
         let selection = PhotoSelectionContext {
             darkroom_preview: self.darkroom_preview.clone(),
             darkroom: self.darkroom.clone(),
@@ -210,6 +213,9 @@ impl WorkspaceRenderHandle {
                 },
             );
         }
+        center_filmstrip(&self.filmstrip);
+        let filmstrip = self.filmstrip.clone();
+        gtk4::glib::idle_add_local_once(move || center_filmstrip(&filmstrip));
         // The shell owns and rebuilds these buttons; darkroom owns the
         // generation-tagged selection state. Rebind the latter after every
         // projection without duplicating the shell's click controllers.
@@ -242,7 +248,7 @@ impl WorkspaceRenderHandle {
                 photo.title(),
                 photo.secondary(),
                 photo.indicators(),
-                grid,
+                centered_grid,
             );
             let thumbnail_state = retained_thumbnail_state(
                 photo_id,
@@ -437,6 +443,45 @@ impl WorkspaceRenderHandle {
         self.workspace
             .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
     }
+}
+
+pub(super) fn connect_filmstrip_resize(filmstrip: &gtk4::FlowBox) {
+    let filmstrip_for_schedule = filmstrip.clone();
+    let pending = Rc::new(std::cell::Cell::new(false));
+    let schedule: Rc<dyn Fn()> = Rc::new(move || {
+        if pending.replace(true) {
+            return;
+        }
+        let pending = Rc::clone(&pending);
+        let filmstrip = filmstrip_for_schedule.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            pending.set(false);
+            center_filmstrip(&filmstrip);
+        });
+    });
+    filmstrip.connect_notify_local(Some("width"), {
+        let schedule = Rc::clone(&schedule);
+        move |_, _| schedule()
+    });
+    filmstrip.connect_notify_local(Some("height"), move |_, _| schedule());
+}
+
+fn center_filmstrip(filmstrip: &gtk4::FlowBox) {
+    let mut item_count = 0_usize;
+    let mut child = filmstrip.first_child();
+    while let Some(widget) = child {
+        item_count = item_count.saturating_add(1);
+        child = widget.next_sibling();
+    }
+    let mut surface_width = filmstrip.allocated_width();
+    let mut ancestor = filmstrip.parent();
+    while let Some(widget) = ancestor {
+        surface_width = surface_width.max(widget.allocated_width());
+        ancestor = widget.parent();
+    }
+    let viewport_width = u16::try_from(surface_width).unwrap_or(0);
+    let offset = FilmstripSpec::darktable().leading_offset_px(viewport_width, item_count);
+    filmstrip.set_margin_start(i32::from(offset));
 }
 
 pub(super) fn connect_lighttable_resize(
@@ -707,19 +752,20 @@ fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk
 }
 
 fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSurface) {
+    let geometry = FilmstripSpec::darktable();
     let thumbnail = ThumbnailSurface::new(
         &format!("filmstrip-thumbnail-{photo_id}"),
         &format!("Filmstrip thumbnail for {title}"),
-        i32::from(THUMBNAIL_METRICS.filmstrip_width_px),
-        i32::from(THUMBNAIL_METRICS.filmstrip_height_px),
+        i32::from(geometry.width_px()),
+        i32::from(geometry.height_px()),
     );
     let button = gtk4::Button::new();
     button.set_widget_name(&format!("filmstrip-photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
     button.add_css_class("dt_filmstrip_item");
     button.set_size_request(
-        i32::from(THUMBNAIL_METRICS.filmstrip_width_px),
-        i32::from(THUMBNAIL_METRICS.filmstrip_height_px),
+        i32::from(geometry.width_px()),
+        i32::from(geometry.height_px()),
     );
     button.set_tooltip_text(Some(title));
     button.update_property(&[Property::Label(&format!("Select {title} in filmstrip"))]);

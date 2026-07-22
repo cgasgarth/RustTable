@@ -16,8 +16,8 @@ use super::{
 use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
 use crate::gui::DARKTABLE_UI_TOKENS;
 use crate::gui::darktable_components::{
-    RAIL_SCROLLBAR_RESERVE, module_expander as shared_module_expander, rail as shared_rail,
-    rail_scroll as shared_rail_scroll,
+    RAIL_SCROLLBAR_RESERVE, module_action_button, module_expander as shared_module_expander,
+    rail as shared_rail, rail_scroll as shared_rail_scroll,
 };
 use crate::iop::modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
@@ -428,6 +428,17 @@ fn rail_module(
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     content.append(&state);
     let expander = shared_module_expander(id, title, initially_expanded, Some(&content));
+    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    title_row.set_hexpand(true);
+    let title_label = gtk4::Label::new(Some(title));
+    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_hexpand(true);
+    title_row.append(&title_label);
+    title_row.append(&module_action_button(
+        &format!("{id}-actions"),
+        "Module actions unavailable",
+    ));
+    expander.set_label_widget(Some(&title_row));
     expander.update_property(&[Property::Label(title)]);
     apply_theme_role(&expander, ThemeRole::ModuleGroup);
     (expander, state)

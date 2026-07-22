@@ -256,6 +256,7 @@ impl GtkShell {
             &shell.lighttable,
             shell.workspace_render_handle(),
         );
+        self::lighttable::connect_filmstrip_resize(&shell.filmstrip);
         let filmstrip_root = shell.filmstrip_root.clone();
         let interaction = Rc::clone(&shell.lighttable_interaction);
         let left_panel = shell.left_panel_stack.clone();

@@ -94,6 +94,29 @@ impl LighttableGridSpec {
         }
     }
 
+    /// Re-centers the realized first row without changing its Darktable density.
+    #[must_use]
+    pub(crate) fn centered_for_visible_count(
+        self,
+        viewport_width_px: u16,
+        visible_count: usize,
+    ) -> Self {
+        let items = visible_count.min(self.columns).max(1);
+        let items_u32 = u32::try_from(items).unwrap_or(u32::MAX);
+        let used_width = u32::from(self.card_width_px)
+            .saturating_mul(items_u32)
+            .saturating_add(
+                u32::from(DARKTABLE_UI_TOKENS.cards.item_gap_px)
+                    .saturating_mul(items_u32.saturating_sub(1)),
+            );
+        let offset = u32::from(viewport_width_px).saturating_sub(used_width) / 2;
+        Self {
+            horizontal_offset_px: u16::try_from(offset.min(u32::from(u16::MAX)))
+                .unwrap_or(u16::MAX),
+            ..self
+        }
+    }
+
     #[must_use]
     pub(crate) const fn columns(self) -> usize {
         self.columns
@@ -228,6 +251,25 @@ impl FilmstripSpec {
                     .saturating_sub(1)
                     .saturating_mul(u32::from(self.gap_px)),
             )
+    }
+
+    #[must_use]
+    pub(crate) fn leading_offset_px(self, viewport_width_px: u16, item_count: usize) -> u16 {
+        let items = u32::try_from(item_count).unwrap_or(u32::MAX);
+        let content_width = u32::from(self.width_px)
+            .saturating_mul(items)
+            .saturating_add(
+                items
+                    .saturating_sub(1)
+                    .saturating_mul(u32::from(self.gap_px)),
+            );
+        u16::try_from(
+            u32::from(viewport_width_px)
+                .saturating_sub(content_width)
+                .saturating_div(2)
+                .min(u32::from(u16::MAX)),
+        )
+        .unwrap_or(u16::MAX)
     }
 }
 
@@ -478,6 +520,20 @@ mod tests {
     }
 
     #[test]
+    fn grid_geometry_centers_the_realized_last_row() {
+        let spec = LighttableGridSpec::for_viewport(LighttableZoom::Normal, 1_000, 600);
+        let centered = spec.centered_for_visible_count(1_000, 2);
+
+        assert_eq!(centered.card_width_px(), spec.card_width_px());
+        assert_eq!(centered.columns(), spec.columns());
+        assert!(centered.horizontal_offset_px() > 0);
+        assert_eq!(
+            centered.cell_origin_x_px(0),
+            u32::from(centered.horizontal_offset_px())
+        );
+    }
+
+    #[test]
     fn filmstrip_geometry_is_one_unwrapped_row() {
         let spec = super::FilmstripSpec::darktable();
         assert_eq!(spec.width_px(), THUMBNAIL_METRICS.filmstrip_height_px);
@@ -485,6 +541,7 @@ mod tests {
         assert_eq!(spec.gap_px(), 4);
         assert_eq!(spec.max_children_per_line(), u32::MAX);
         assert_eq!(spec.content_width_px(3), 242);
+        assert_eq!(spec.leading_offset_px(400, 1), 161);
         assert_eq!(super::FilmstripSpec::for_viewport(80).width_px(), 80);
     }
 
