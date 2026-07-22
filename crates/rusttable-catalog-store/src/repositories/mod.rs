@@ -11,6 +11,7 @@ pub(crate) mod edit;
 pub(crate) mod history;
 pub(crate) mod metadata;
 pub(crate) mod recipe;
+pub(crate) mod tags;
 
 use crate::codecs as codec;
 use crate::schema::{self, ASSET_INDEX_TABLE, PHOTO_INDEX_TABLE, RECORDS_TABLE};

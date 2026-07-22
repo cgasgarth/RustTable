@@ -23,6 +23,7 @@ mod restore;
 mod snapshot;
 mod source_path;
 mod state;
+mod tags;
 
 pub use collections::{
     ACTIVE_LIGHTTABLE_STATE_VERSION, ActiveLibraryView, ActiveLighttableProperty,
@@ -76,3 +77,9 @@ pub use restore::CatalogRestoreError;
 pub use snapshot::{CatalogEntry, CatalogSnapshot, CatalogSnapshotError};
 pub use source_path::{SourcePath, SourcePathError};
 pub use state::CatalogState;
+pub use tags::{
+    MAX_ASSIGNMENT_PHOTOS, MAX_ASSIGNMENT_TAGS, MAX_TAG_ALIASES, MAX_TAG_NAME_BYTES,
+    MAX_TAGS_PER_PHOTO, TAG_HIERARCHY_SEPARATOR, TAG_SCHEMA_VERSION, TagAlias, TagCommand,
+    TagDefinition, TagError, TagId, TagIndexStats, TagMutationReceipt, TagName, TagProjection,
+    TagRepository, TagSnapshot, TagState,
+};
