@@ -12,6 +12,8 @@ use rusttable_image::{
 use rusttable_image_io::{FileImageInput, FileImageOutput};
 use sha2::{Digest, Sha256};
 
+use crate::{CanonicalArtifact, ExportMetadata, MetadataPacket, MetadataPolicy};
+
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Controls whether a PNG export may replace an existing destination.
@@ -173,6 +175,54 @@ pub struct PngVerificationReceipt {
     pixel_sha256: String,
 }
 
+/// Explicit evidence of the immutable metadata policy applied to a PNG.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PngMetadataReceipt {
+    policy_identity: String,
+    packet_sha256: String,
+    included_groups: Vec<String>,
+    excluded_groups: Vec<String>,
+    included_fields: Vec<String>,
+}
+
+impl PngMetadataReceipt {
+    #[must_use]
+    pub fn from_packet(packet: &MetadataPacket, policy: MetadataPolicy) -> Self {
+        Self {
+            policy_identity: policy.identity(),
+            packet_sha256: hash_hex(&packet.canonical_hash()),
+            included_groups: policy.included_groups(),
+            excluded_groups: policy.excluded_groups(),
+            included_fields: packet.property_names().into_iter().collect(),
+        }
+    }
+
+    #[must_use]
+    pub fn policy_identity(&self) -> &str {
+        &self.policy_identity
+    }
+
+    #[must_use]
+    pub fn packet_sha256(&self) -> &str {
+        &self.packet_sha256
+    }
+
+    #[must_use]
+    pub fn included_groups(&self) -> &[String] {
+        &self.included_groups
+    }
+
+    #[must_use]
+    pub fn excluded_groups(&self) -> &[String] {
+        &self.excluded_groups
+    }
+
+    #[must_use]
+    pub fn included_fields(&self) -> &[String] {
+        &self.included_fields
+    }
+}
+
 impl PngVerificationReceipt {
     #[must_use]
     pub const fn dimensions(&self) -> ImageDimensions {
@@ -195,6 +245,7 @@ impl PngVerificationReceipt {
 pub struct PngExportReceipt {
     output: OutputReceipt,
     verification: PngVerificationReceipt,
+    metadata: Option<PngMetadataReceipt>,
     collision: PngCollisionResult,
     completion: PngPublishCompletion,
 }
@@ -231,6 +282,11 @@ impl PngExportReceipt {
     }
 
     #[must_use]
+    pub fn metadata(&self) -> Option<&PngMetadataReceipt> {
+        self.metadata.as_ref()
+    }
+
+    #[must_use]
     pub const fn collision(&self) -> PngCollisionResult {
         self.collision
     }
@@ -259,6 +315,7 @@ pub enum PngPublishError {
         max_height: u32,
     },
     Output(ImageOutputError),
+    Metadata(String),
     VerificationDecode(rusttable_image::ImageInputError),
     VerificationMismatch {
         expected: ImageDimensions,
@@ -315,6 +372,7 @@ impl fmt::Display for PngPublishError {
                 max_height
             ),
             Self::Output(source) => write!(formatter, "PNG output failed: {source}"),
+            Self::Metadata(source) => write!(formatter, "PNG metadata output failed: {source}"),
             Self::VerificationDecode(source) => {
                 write!(formatter, "written PNG could not be decoded: {source}")
             }
@@ -352,6 +410,7 @@ impl std::error::Error for PngPublishError {
             | Self::Cancelled { .. }
             | Self::DimensionLimit { .. }
             | Self::Output(_)
+            | Self::Metadata(_)
             | Self::VerificationMismatch { .. }
             | Self::VerificationPixelsMismatch => None,
         }
@@ -412,6 +471,55 @@ impl PngPublisher {
         image: &DecodedImage,
         destination: &Path,
         collision: CollisionPolicy,
+        observer: Observer,
+    ) -> Result<PngExportReceipt, PngPublishError>
+    where
+        Observer: PngPublishObserver,
+    {
+        self.publish_with_metadata_and_observer(image, destination, collision, None, None, observer)
+    }
+
+    /// Encodes and publishes one PNG with a pre-resolved immutable metadata packet.
+    ///
+    /// Metadata is encoded while the owned staging file is still private. Any
+    /// policy or serialization failure therefore leaves the destination unchanged
+    /// and is returned explicitly to the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for invalid destinations, bounds, metadata or pixel
+    /// encoding, verification, collisions, cancellation, or filesystem failures.
+    pub fn publish_with_metadata(
+        &self,
+        image: &DecodedImage,
+        destination: &Path,
+        collision: CollisionPolicy,
+        metadata: ExportMetadata,
+        metadata_receipt: PngMetadataReceipt,
+    ) -> Result<PngExportReceipt, PngPublishError> {
+        self.publish_with_metadata_and_observer(
+            image,
+            destination,
+            collision,
+            Some(metadata),
+            Some(metadata_receipt),
+            |_: PngPublishProgress| PngPublishControl::Continue,
+        )
+    }
+
+    /// Metadata-aware PNG publication with explicit progress and cancellation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for invalid destinations, bounds, metadata or pixel
+    /// encoding, verification, collisions, cancellation, or filesystem failures.
+    pub fn publish_with_metadata_and_observer<Observer>(
+        &self,
+        image: &DecodedImage,
+        destination: &Path,
+        collision: CollisionPolicy,
+        metadata: Option<ExportMetadata>,
+        metadata_receipt: Option<PngMetadataReceipt>,
         mut observer: Observer,
     ) -> Result<PngExportReceipt, PngPublishError>
     where
@@ -431,13 +539,13 @@ impl PngPublisher {
         }
 
         let staging = staging_path(destination);
-        let output = FileImageOutput::new(self.limits.output);
         observe(&mut observer, PngPublishStage::Encoding)?;
-        let staged_receipt = match output.write_new(image, &staging, OutputOptions::Png) {
+        let staged_receipt_result = self.encode_staging(image, &staging, metadata);
+        let staged_receipt = match staged_receipt_result {
             Ok(receipt) => receipt,
             Err(error) => {
                 remove_staging(&staging);
-                return Err(PngPublishError::Output(error));
+                return Err(error);
             }
         };
         let verification = observe(&mut observer, PngPublishStage::Verifying)
@@ -479,6 +587,7 @@ impl PngPublisher {
         Ok(PngExportReceipt {
             output,
             verification,
+            metadata: metadata_receipt,
             collision: match collision {
                 CollisionPolicy::CreateNew | CollisionPolicy::Fail => {
                     PngCollisionResult::CreatedNew
@@ -495,6 +604,45 @@ impl PngPublisher {
                 PngPublishControl::Cancel => PngPublishCompletion::CompletedAfterCancellation,
             },
         })
+    }
+
+    fn encode_staging(
+        &self,
+        image: &DecodedImage,
+        staging: &Path,
+        metadata: Option<ExportMetadata>,
+    ) -> Result<OutputReceipt, PngPublishError> {
+        if let Some(metadata) = metadata {
+            let artifact = CanonicalArtifact::new(image.as_owned(), metadata);
+            let settings = crate::encoders::png::Settings {
+                bit_depth: crate::encoders::png::BitDepth::Eight,
+                channels: rusttable_image::ChannelLayout::Rgba,
+                compression: crate::encoders::png::Compression::Balanced,
+                filter: crate::encoders::png::Filter::Adaptive,
+                interlace: false,
+                metadata: crate::encoders::png::MetadataPolicy::All,
+                max_metadata_bytes: 16 * 1024 * 1024,
+            };
+            let receipt = crate::encoders::png::Encoder::new(settings)
+                .encode_to_path(&artifact, staging)
+                .map_err(|error| PngPublishError::Metadata(error.to_string()))?;
+            OutputReceipt::new(
+                staging.to_owned(),
+                rusttable_image::OutputFormat::Png,
+                receipt.dimensions,
+                receipt.encoded_bytes,
+            )
+            .map_err(|_| {
+                PngPublishError::Output(ImageOutputError::EncodeFailure {
+                    format: rusttable_image::OutputFormat::Png,
+                })
+            })
+        } else {
+            let output = FileImageOutput::new(self.limits.output);
+            output
+                .write_new(image, staging, OutputOptions::Png)
+                .map_err(PngPublishError::Output)
+        }
     }
 
     fn validate_dimensions(&self, dimensions: ImageDimensions) -> Result<(), PngPublishError> {

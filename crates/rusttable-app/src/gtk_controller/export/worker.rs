@@ -1,11 +1,13 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use rusttable_export::{
     PngExportLimits, PngPublishControl, PngPublishError, PngPublishProgress, PngPublishStage,
     PngPublisher,
 };
 
+use super::metadata::resolve;
 use super::{ExportCancellation, ExportRequest};
 use crate::workspace::{WorkspacePreviewError, load_selected_export_render_for_edit};
 
@@ -14,6 +16,7 @@ use crate::workspace::{WorkspacePreviewError, load_selected_export_render_for_ed
 pub enum ExportStage {
     Preparing,
     Rendering,
+    ResolvingMetadata,
     Encoding,
     Verifying,
     Publishing,
@@ -28,6 +31,7 @@ impl ExportStage {
         match self {
             Self::Preparing => "Preparing export…",
             Self::Rendering => "Rendering selected edit…",
+            Self::ResolvingMetadata => "Resolving export metadata…",
             Self::Encoding => "Encoding PNG…",
             Self::Verifying => "Verifying PNG…",
             Self::Publishing => "Publishing PNG…",
@@ -73,6 +77,14 @@ pub struct ExportCompletion {
     height: u32,
     encoded_bytes: u64,
     completed_after_cancellation: bool,
+    metadata: Arc<ExportMetadataEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExportMetadataEvidence {
+    policy_identity: String,
+    included_fields: Vec<String>,
+    excluded_groups: Vec<String>,
 }
 
 impl ExportCompletion {
@@ -84,8 +96,12 @@ impl ExportCompletion {
             "Saved"
         };
         format!(
-            "{prefix} {} ({}×{}, {} bytes)",
-            self.destination_alias, self.width, self.height, self.encoded_bytes
+            "{prefix} {} ({}×{}, {} bytes; metadata {})",
+            self.destination_alias,
+            self.width,
+            self.height,
+            self.encoded_bytes,
+            self.metadata.policy_identity
         )
     }
 
@@ -103,6 +119,21 @@ impl ExportCompletion {
     pub const fn encoded_bytes(&self) -> u64 {
         self.encoded_bytes
     }
+
+    #[must_use]
+    pub fn metadata_policy_identity(&self) -> &str {
+        &self.metadata.policy_identity
+    }
+
+    #[must_use]
+    pub fn metadata_included_fields(&self) -> &[String] {
+        &self.metadata.included_fields
+    }
+
+    #[must_use]
+    pub fn metadata_excluded_groups(&self) -> &[String] {
+        &self.metadata.excluded_groups
+    }
 }
 
 /// Failures surfaced by the GTK workflow, including a collision retry point.
@@ -112,6 +143,7 @@ pub enum ExportRunError {
     InvalidExtension(PathBuf),
     DestinationExists(PathBuf),
     Render(WorkspacePreviewError),
+    Metadata(String),
     Publish(PngPublishError),
     InvalidDestination(PathBuf),
 }
@@ -129,6 +161,9 @@ impl fmt::Display for ExportRunError {
                 write!(formatter, "a PNG already exists at {}", path.display())
             }
             Self::Render(error) => write!(formatter, "could not render the selected edit: {error}"),
+            Self::Metadata(error) => {
+                write!(formatter, "could not resolve export metadata: {error}")
+            }
             Self::Publish(error) => write!(formatter, "could not save the rendered PNG: {error}"),
             Self::InvalidDestination(path) => {
                 write!(formatter, "invalid PNG destination: {}", path.display())
@@ -145,6 +180,7 @@ impl std::error::Error for ExportRunError {
             Self::Cancelled
             | Self::InvalidExtension(_)
             | Self::DestinationExists(_)
+            | Self::Metadata(_)
             | Self::InvalidDestination(_) => None,
         }
     }
@@ -192,6 +228,17 @@ pub fn run_with_progress(
     .map_err(ExportRunError::Render)?;
     check_cancelled(cancellation)?;
 
+    report(ExportStatus::at(ExportStage::ResolvingMetadata));
+    let resolved_metadata = resolve(
+        request.catalog_path(),
+        request.photo_id(),
+        request.edit_id(),
+        &render,
+        request.settings().metadata_policy(),
+    )
+    .map_err(|error| ExportRunError::Metadata(error.to_string()))?;
+    check_cancelled(cancellation)?;
+
     let limits = PngExportLimits::new(
         request.settings().size().max_edge(),
         request.settings().size().max_edge(),
@@ -200,10 +247,12 @@ pub fn run_with_progress(
     .expect("constant PNG export limits are valid");
     let publisher = PngPublisher::new(limits);
     let receipt = publisher
-        .publish_with_observer(
+        .publish_with_metadata_and_observer(
             render.image(),
             &destination,
             request.settings().collision().policy(),
+            Some(resolved_metadata.metadata),
+            Some(resolved_metadata.receipt),
             |progress: PngPublishProgress| {
                 if let Some(status) = publish_status(progress.stage()) {
                     report(status);
@@ -220,6 +269,9 @@ pub fn run_with_progress(
     report(ExportStatus::at(ExportStage::Completed));
     let alias = destination_alias(&destination);
     let (width, height) = (receipt.dimensions().width(), receipt.dimensions().height());
+    let receipt_metadata = receipt
+        .metadata()
+        .expect("metadata-aware GTK export returns policy evidence");
     Ok(ExportCompletion {
         destination_alias: alias,
         width,
@@ -229,6 +281,11 @@ pub fn run_with_progress(
             receipt.completion(),
             rusttable_export::PngPublishCompletion::CompletedAfterCancellation
         ),
+        metadata: Arc::new(ExportMetadataEvidence {
+            policy_identity: receipt_metadata.policy_identity().to_owned(),
+            included_fields: receipt_metadata.included_fields().to_vec(),
+            excluded_groups: receipt_metadata.excluded_groups().to_vec(),
+        }),
     })
 }
 
@@ -376,6 +433,7 @@ mod tests {
             vec![
                 ExportStage::Preparing,
                 ExportStage::Rendering,
+                ExportStage::ResolvingMetadata,
                 ExportStage::Preparing,
                 ExportStage::Encoding,
                 ExportStage::Verifying,

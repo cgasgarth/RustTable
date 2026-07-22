@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rusttable_core::{EditId, PhotoId};
-use rusttable_export::CollisionPolicy;
+use rusttable_export::{CollisionPolicy, MetadataPolicy};
 use rusttable_render::{PreviewBounds, RenderTarget};
 
 pub const MAX_OUTPUT_EDGE: u32 = 16_384;
@@ -123,6 +123,7 @@ impl ExportCollisionSelection {
 pub struct ExportSettings {
     size: ExportSize,
     collision: ExportCollisionSelection,
+    metadata: MetadataPolicy,
 }
 
 impl ExportSettings {
@@ -134,6 +135,7 @@ impl ExportSettings {
         Self {
             size: size.into_size(),
             collision,
+            metadata: MetadataPolicy::standard(),
         }
     }
 
@@ -153,6 +155,16 @@ impl ExportSettings {
     #[must_use]
     pub const fn collision(self) -> ExportCollisionSelection {
         self.collision
+    }
+
+    #[must_use]
+    pub const fn metadata_policy(self) -> MetadataPolicy {
+        self.metadata
+    }
+
+    #[must_use]
+    pub const fn with_metadata_policy(self, metadata: MetadataPolicy) -> Self {
+        Self { metadata, ..self }
     }
 
     #[must_use]
