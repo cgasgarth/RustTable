@@ -1,6 +1,7 @@
 //! GTK4 Exposure IOP panel matching Darktable's manual controls.
 
 use std::cell::{Cell, RefCell};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 
 use gtk4::accessible::Property;
@@ -12,10 +13,10 @@ use rusttable_processing::{
     ExposureAction, ExposureActionError, ExposureMode, ExposureModuleState,
 };
 
-use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler};
+use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
 
-type ExposureActionHandler = Box<dyn Fn(ExposureAction)>;
+type ExposureActionHandler = Rc<dyn Fn(ExposureAction)>;
 
 /// Native GTK4 realization of one Darktable Exposure module panel.
 #[derive(Clone)]
@@ -29,6 +30,7 @@ pub struct ExposurePanel {
     exposure_value: gtk4::Label,
     black: gtk4::Scale,
     black_value: gtk4::Label,
+    status: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
     actions: Rc<RefCell<Option<ExposureActionHandler>>>,
@@ -88,6 +90,13 @@ impl ExposurePanel {
         let compensate_highlight_preservation = gtk4::Switch::new();
         let exposure_value = value_label("exposure-value", "Exposure value");
         let black_value = value_label("black-value", "Black-level value");
+        let status = gtk4::Label::new(Some("Ready"));
+        status.set_widget_name("exposure-status");
+        status.set_halign(gtk4::Align::Start);
+        status.set_hexpand(true);
+        status.set_accessible_role(gtk4::AccessibleRole::Status);
+        status.update_property(&[Property::Label("Exposure module status")]);
+        status.add_css_class("dim-label");
         let manual = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
         append_switch_row(
             &manual,
@@ -118,6 +127,7 @@ impl ExposurePanel {
         append_dropdown_row(&content, "mode", &mode);
         content.append(&mode_stack);
         append_scale_row(&content, "black", &black, &black_value, "");
+        content.append(&status);
 
         let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
         let title = gtk4::Label::new(Some("exposure"));
@@ -170,6 +180,7 @@ impl ExposurePanel {
             exposure_value,
             black,
             black_value,
+            status,
             compensate_exposure_bias,
             compensate_highlight_preservation,
             actions,
@@ -199,7 +210,7 @@ impl ExposurePanel {
     where
         F: Fn(ExposureAction) + 'static,
     {
-        self.actions.replace(Some(Box::new(handler)));
+        self.actions.replace(Some(Rc::new(handler)));
     }
 
     /// Connects the legacy Exposure widget to the controller-owned generic
@@ -235,6 +246,8 @@ impl ExposurePanel {
         self.state.replace(state);
         self.module_revision.replace(revision);
         self.sync_widgets();
+        self.status
+            .set_text(&format!("Ready · revision {revision}"));
         Ok(())
     }
 
@@ -247,6 +260,7 @@ impl ExposurePanel {
     pub fn apply(&self, action: ExposureAction) -> Result<(), ExposureActionError> {
         self.state.borrow_mut().apply(action)?;
         self.sync_widgets();
+        self.status.set_text("Ready");
         Ok(())
     }
 
@@ -318,7 +332,7 @@ impl ExposurePanel {
         let module_actions = Rc::clone(&self.module_actions);
         let module_revision = Rc::clone(&self.module_revision);
         reset.connect_clicked(move |_| {
-            dispatch(
+            dispatch_from_gtk(
                 &state,
                 &actions,
                 &controls,
@@ -343,6 +357,7 @@ impl ExposurePanel {
             exposure_value: self.exposure_value.clone(),
             black: self.black.clone(),
             black_value: self.black_value.clone(),
+            status: self.status.clone(),
             compensate_exposure_bias: self.compensate_exposure_bias.clone(),
             compensate_highlight_preservation: self.compensate_highlight_preservation.clone(),
             sync_guard: Rc::clone(&self.sync_guard),
@@ -366,6 +381,7 @@ struct ControlSet {
     exposure_value: gtk4::Label,
     black: gtk4::Scale,
     black_value: gtk4::Label,
+    status: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
     compensate_highlight_preservation: gtk4::Switch,
     sync_guard: Rc<Cell<bool>>,
@@ -487,7 +503,7 @@ fn connect_switch_action<F>(
     F: Fn(bool) -> ExposureAction + 'static,
 {
     control.connect_active_notify(move |control| {
-        dispatch(
+        dispatch_from_gtk(
             &state,
             &actions,
             &controls,
@@ -507,7 +523,7 @@ fn connect_expander_action(
     module_revision: Rc<RefCell<Revision>>,
 ) {
     control.connect_expanded_notify(move |control| {
-        dispatch(
+        dispatch_from_gtk(
             &state,
             &actions,
             &controls,
@@ -532,7 +548,7 @@ fn connect_mode_action(
         } else {
             ExposureMode::Automatic
         };
-        dispatch(
+        dispatch_from_gtk(
             &state,
             &actions,
             &controls,
@@ -555,7 +571,7 @@ fn connect_scale_action<F>(
     F: Fn(f64) -> ExposureAction + 'static,
 {
     control.connect_value_changed(move |control| {
-        dispatch(
+        dispatch_from_gtk(
             &state,
             &actions,
             &controls,
@@ -573,20 +589,107 @@ fn dispatch(
     module_actions: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
     module_revision: &Rc<RefCell<Revision>>,
     action: ExposureAction,
-) {
-    if controls.sync_guard.get() || state.borrow_mut().apply(action).is_err() {
-        return;
+) -> Result<(), ExposureDispatchError> {
+    if controls.sync_guard.get() {
+        return Ok(());
     }
+    state
+        .borrow_mut()
+        .apply(action)
+        .map_err(ExposureDispatchError::Action)?;
     sync_controls(state, controls);
-    if let Some(handler) = actions.borrow().as_ref() {
-        handler(action);
+    let requested_action = action;
+    if let Some(handler) = actions.borrow().as_ref().map(Rc::clone) {
+        catch_unwind(AssertUnwindSafe(|| handler(action))).map_err(|payload| {
+            ExposureDispatchError::CallbackPanicked {
+                action,
+                message: panic_message(payload.as_ref()),
+            }
+        })?;
     }
-    if let Some(action) = exposure_module_action(action, *module_revision.borrow())
-        && let Some(handler) = module_actions.borrow().as_ref()
-        && let Ok(revision) = handler(action)
+    let expected_revision = *module_revision.borrow();
+    let module_action = exposure_module_action(action, expected_revision);
+    let module_handler = module_actions.borrow().clone();
+    if let Some(action) = module_action
+        && let Some(handler) = module_handler
     {
+        let revision = catch_unwind(AssertUnwindSafe(|| handler(action))).map_err(|payload| {
+            ExposureDispatchError::CallbackPanicked {
+                action: requested_action,
+                message: panic_message(payload.as_ref()),
+            }
+        })?;
+        let revision = revision.map_err(ExposureDispatchError::Module)?;
         *module_revision.borrow_mut() = revision;
+        controls
+            .status
+            .set_text(&format!("Ready · revision {revision}"));
     }
+    Ok(())
+}
+
+fn dispatch_from_gtk(
+    state: &Rc<RefCell<ExposureModuleState>>,
+    actions: &Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: &ControlSet,
+    module_actions: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: &Rc<RefCell<Revision>>,
+    action: ExposureAction,
+) {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        dispatch(
+            state,
+            actions,
+            controls,
+            module_actions,
+            module_revision,
+            action,
+        )
+    }));
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => controls.status.set_text(&error.to_string()),
+        Err(payload) => controls.status.set_text(
+            &ExposureDispatchError::CallbackPanicked {
+                action,
+                message: panic_message(payload.as_ref()),
+            }
+            .to_string(),
+        ),
+    }
+}
+
+#[derive(Debug)]
+enum ExposureDispatchError {
+    Action(ExposureActionError),
+    Module(DarkroomModuleError),
+    CallbackPanicked {
+        action: ExposureAction,
+        message: String,
+    },
+}
+
+impl std::fmt::Display for ExposureDispatchError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Action(error) => write!(formatter, "Exposure action rejected · {error}"),
+            Self::Module(error) => write!(formatter, "Exposure module error · {error}"),
+            Self::CallbackPanicked { action, message } => write!(
+                formatter,
+                "Exposure callback failed for {action:?} · {message}"
+            ),
+        }
+    }
+}
+
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.clone();
+    }
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        return (*message).to_owned();
+    }
+    "non-string panic payload".to_owned()
 }
 
 fn exposure_module_action(
@@ -652,6 +755,109 @@ mod tests {
     fn mode_index_matches_dropdown_order() {
         assert_eq!(mode_index(ExposureMode::Manual), 0);
         assert_eq!(mode_index(ExposureMode::Automatic), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn gtk_callbacks_survive_repeated_projection_and_user_toggles() {
+        if gtk4::init().is_err() {
+            return;
+        }
+        let panel = ExposurePanel::new();
+        let root: gtk4::Widget = panel.widget().clone().upcast();
+        let enabled = find_widget(&root, "exposure-enabled")
+            .expect("exposure enabled switch")
+            .downcast::<gtk4::Switch>()
+            .expect("exposure enabled switch type");
+        let actions = Rc::new(RefCell::new(Vec::new()));
+        let handler_slot = Rc::new(RefCell::new(None::<DarkroomModuleActionHandler>));
+        let panel_for_handler = panel.clone();
+        let actions_for_handler = Rc::clone(&actions);
+        let slot_for_handler = Rc::clone(&handler_slot);
+        let handler: DarkroomModuleActionHandler = Rc::new(move |action| {
+            let DarkroomModuleAction::Enable {
+                expected_revision,
+                enabled,
+                ..
+            } = action
+            else {
+                return Err(DarkroomModuleError::WrongModule {
+                    expected: "exposure enable".to_owned(),
+                    actual: "unexpected action".to_owned(),
+                });
+            };
+            actions_for_handler.borrow_mut().push(action);
+            let revision = expected_revision
+                .checked_increment()
+                .map_err(|_| DarkroomModuleError::RevisionOverflow)?;
+            panel_for_handler
+                .set_module_projection(revision, enabled, true, 0.0, 0.0)
+                .map_err(|error| DarkroomModuleError::Persistence {
+                    message: error.to_string(),
+                })?;
+            let replacement = slot_for_handler.borrow().clone();
+            panel_for_handler.set_module_action_handler(replacement, revision);
+            Ok(revision)
+        });
+        handler_slot.replace(Some(handler.clone()));
+        panel.set_module_action_handler(Some(handler), Revision::ZERO);
+
+        for revision in 1..=8 {
+            let panel_for_projection = panel.clone();
+            run_main_loop(move || {
+                panel_for_projection
+                    .set_module_projection(
+                        Revision::from_u64(revision),
+                        revision % 2 == 0,
+                        true,
+                        0.0,
+                        0.0,
+                    )
+                    .expect("valid exposure projection");
+            });
+        }
+        for enabled_value in [false, true, false, true, false, true] {
+            let enabled_for_toggle = enabled.clone();
+            run_main_loop(move || enabled_for_toggle.set_active(enabled_value));
+        }
+
+        assert_eq!(actions.borrow().len(), 6);
+        assert_eq!(panel.state().enabled(), true);
+        assert_eq!(enabled.is_active(), true);
+        assert!(
+            find_widget(&root, "exposure-status")
+                .expect("exposure status")
+                .downcast::<gtk4::Label>()
+                .expect("exposure status type")
+                .text()
+                .starts_with("Ready · revision")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn run_main_loop(callback: impl FnOnce() + 'static) {
+        let main_loop = gtk4::glib::MainLoop::new(None, false);
+        let main_loop_for_callback = main_loop.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            callback();
+            main_loop_for_callback.quit();
+        });
+        main_loop.run();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
+        if root.widget_name() == name {
+            return Some(root.clone());
+        }
+        let mut child = root.first_child();
+        while let Some(current) = child {
+            if let Some(found) = find_widget(&current, name) {
+                return Some(found);
+            }
+            child = current.next_sibling();
+        }
+        None
     }
 
     fn assert_close(actual: f64, expected: f64) {
