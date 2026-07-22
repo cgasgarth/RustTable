@@ -26,7 +26,7 @@ pub use transform::{
     ColorTransformRequestError, CompositeStep, Intent, Lut1D, Lut1DError, Lut3D, Lut3DError,
     LutInterpolation, LutPacking, MatrixErrorAdapter, Precision, RenderingIntent,
     TransformExecutionError, TransformPlan, TransformPlanError, TransformReceipt, TransformStep,
-    TransformStepError,
+    TransformStepError, lab_to_xyz, xyz_to_lab,
 };
 
 /// Schema version for the stable color DTOs.

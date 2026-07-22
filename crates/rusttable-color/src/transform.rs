@@ -426,6 +426,12 @@ pub enum TransformStep {
     },
     Matrix(Matrix3),
     Adaptation(Adaptation),
+    XyzToLab {
+        white_point: WhitePoint,
+    },
+    LabToXyz {
+        white_point: WhitePoint,
+    },
     Lut1D(Lut1D),
     Lut3D(Lut3D),
     Composite(CompositeStep),
@@ -464,7 +470,7 @@ pub enum TransformStepError {
 impl TransformStep {
     fn validate(&self) -> Result<(), TransformStepError> {
         match self {
-            Self::Identity => Ok(()),
+            Self::Identity | Self::XyzToLab { .. } | Self::LabToXyz { .. } => Ok(()),
             Self::Transfer { function, .. } => match function {
                 TransferFunction::Gamma(gamma) if gamma.get() <= 0.0 => {
                     Err(TransformStepError::InvalidLut)
@@ -710,6 +716,12 @@ fn apply_step(step: &TransformStep, value: &mut [f32; 3]) -> Result<(), Transfor
         TransformStep::Matrix(matrix) | TransformStep::Adaptation(Adaptation { matrix, .. }) => {
             *value = matrix.apply(*value);
         }
+        TransformStep::XyzToLab { white_point } => {
+            *value = xyz_to_lab(*value, *white_point);
+        }
+        TransformStep::LabToXyz { white_point } => {
+            *value = lab_to_xyz(*value, *white_point);
+        }
         TransformStep::Lut1D(lut) => {
             for (channel_index, channel) in value.iter_mut().enumerate() {
                 *channel = interpolate_lut_channel(lut.samples(), channel_index, *channel)?;
@@ -807,13 +819,62 @@ fn step_resource_estimate(step: &TransformStep) -> u64 {
         TransformStep::Identity
         | TransformStep::Transfer { .. }
         | TransformStep::Matrix(_)
-        | TransformStep::Adaptation(_) => 1,
+        | TransformStep::Adaptation(_)
+        | TransformStep::XyzToLab { .. }
+        | TransformStep::LabToXyz { .. } => 1,
         TransformStep::Lut1D(lut) => u64::try_from(lut.samples.len()).unwrap_or(u64::MAX),
         TransformStep::Lut3D(lut) => u64::try_from(lut.values.len()).unwrap_or(u64::MAX),
         TransformStep::Composite(composite) => {
             composite.steps.iter().map(step_resource_estimate).sum()
         }
     }
+}
+
+const LAB_EPSILON: f32 = 0.008_856_452;
+const LAB_KAPPA: f32 = 903.296_3;
+
+#[must_use]
+pub fn xyz_to_lab(xyz: [f32; 3], white_point: WhitePoint) -> [f32; 3] {
+    let white = white_point.xyz();
+    let lab_f = |value: f32, white: f32| {
+        let ratio = value / white;
+        if ratio > LAB_EPSILON {
+            ratio.cbrt()
+        } else {
+            (LAB_KAPPA * ratio + 16.0) / 116.0
+        }
+    };
+    let f = [
+        lab_f(xyz[0], white[0]),
+        lab_f(xyz[1], white[1]),
+        lab_f(xyz[2], white[2]),
+    ];
+    [
+        116.0 * f[1] - 16.0,
+        500.0 * (f[0] - f[1]),
+        200.0 * (f[1] - f[2]),
+    ]
+}
+
+#[must_use]
+pub fn lab_to_xyz(lab: [f32; 3], white_point: WhitePoint) -> [f32; 3] {
+    let fy = (lab[0] + 16.0) / 116.0;
+    let fx = fy + lab[1] / 500.0;
+    let fz = fy - lab[2] / 200.0;
+    let inverse = |value: f32| {
+        let cube = value * value * value;
+        if cube > LAB_EPSILON {
+            cube
+        } else {
+            (116.0 * value - 16.0) / LAB_KAPPA
+        }
+    };
+    let white = white_point.xyz();
+    [
+        inverse(fx) * white[0],
+        inverse(fy) * white[1],
+        inverse(fz) * white[2],
+    ]
 }
 
 fn sha256(bytes: &[u8]) -> [u8; 32] {
