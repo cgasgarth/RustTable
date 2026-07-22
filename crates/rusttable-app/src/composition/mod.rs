@@ -48,7 +48,7 @@ use std::time::Duration;
 use ai_ui::{install_ai_batch_ui_bridge, install_ai_ui_bridges};
 use collection_bridge::{
     apply_collection_action, apply_lighttable_toolbar_action, apply_photo_selection,
-    collection_filter_state, empty_collection_filter_state,
+    collection_filter_state, empty_collection_filter_state, failed_collection_filter_state,
 };
 use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
 use selected_preview::{PreviewLifecycle, start_selected_preview};
@@ -241,13 +241,24 @@ fn activate_application(
         collection_filter_state(&controller.snapshot())
     });
     let toolbar_for_actions = Rc::clone(active_collection);
+    let toolbar_catalog = Rc::clone(active_catalog);
     shell.connect_lighttable_toolbar_action(move |action| {
         let mut controller = toolbar_for_actions.borrow_mut();
         let Some(controller) = controller.as_mut() else {
             return empty_collection_filter_state();
         };
-        apply_lighttable_toolbar_action(controller, action);
-        collection_filter_state(&controller.snapshot())
+        let catalog = toolbar_catalog.borrow().as_ref().cloned();
+        let Some(catalog) = catalog else {
+            return failed_collection_filter_state(&controller.snapshot());
+        };
+        let mut catalog = catalog.borrow_mut();
+        match apply_lighttable_toolbar_action(&mut catalog, controller, action) {
+            Ok(()) => collection_filter_state(&controller.snapshot()),
+            Err(error) => {
+                tracing::error!(target: "rusttable.catalog", error = %error, "lighttable organization change failed");
+                failed_collection_filter_state(&controller.snapshot())
+            }
+        }
     });
     let import_shell = shell.clone();
     let import_bridge = Rc::clone(native_bridge);

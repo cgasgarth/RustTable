@@ -29,7 +29,7 @@ pub use collections::{
     CollectionSort, CollectionState, CollectionValidationError, CollectionViewDefinition,
     GroupCollapsePolicy, MAX_RECENT_QUERIES, RecentQuery, SavedCollection,
 };
-pub use command::CatalogCommand;
+pub use command::{CatalogChangeEvent, CatalogCommand};
 pub use develop::{DevelopInput, DevelopInputError, DevelopSelection};
 pub use durable_edit::{DurableEditError, DurableEditOutcome, DurableEditService};
 pub use edit_repository::{EditRepository, EditRepositoryError};

@@ -311,10 +311,17 @@ impl CatalogState {
                 .get_mut(&old_rating)
                 .expect("old rating index exists")
                 .remove(&photo_id);
-            self.organization
+            let state = self
+                .organization
                 .get_mut(&photo_id)
-                .expect("photo organization exists")
-                .rating = rating;
+                .expect("photo organization exists");
+            state.rating = rating;
+            // Darktable's numeric rating path clears the rejection bit while a direct
+            // rejection leaves the stored star rating available for later un-rejection.
+            if state.rejected {
+                state.rejected = false;
+                self.rejected_index.remove(&photo_id);
+            }
             self.rating_index
                 .entry(rating)
                 .or_default()

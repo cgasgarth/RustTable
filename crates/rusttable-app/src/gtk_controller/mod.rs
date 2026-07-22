@@ -11,11 +11,15 @@ pub mod export;
 pub mod preview;
 pub mod thumbnail;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use rusttable_catalog::ImportRepository;
-use rusttable_catalog_store::RedbImportRepository;
+use rusttable_catalog::{
+    CatalogChangeEvent, CatalogCommand, ImportRepository, PhotoOrganizationState, RepositoryError,
+};
+use rusttable_catalog_store::{
+    AtomicCatalogStoreError, RedbCatalogRepository, RedbImportRepository,
+};
 use rusttable_core::PhotoId;
 use rusttable_i18n::LocaleTag;
 use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
@@ -27,6 +31,29 @@ pub use darkroom_edit::{DarkroomEditOutcome, GtkDarkroomEditController};
 pub use darkroom_panels::{
     DarkroomPanelControllerError, DarkroomPanelProjections, GtkDarkroomPanelController,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GtkCatalogMutationError {
+    NotReady,
+    Open(RepositoryError),
+    Repository(AtomicCatalogStoreError),
+}
+
+impl std::fmt::Display for GtkCatalogMutationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotReady => formatter.write_str("catalog is not ready for organization changes"),
+            Self::Open(error) => {
+                write!(formatter, "catalog organization store unavailable: {error}")
+            }
+            Self::Repository(error) => {
+                write!(formatter, "catalog organization change failed: {error:?}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for GtkCatalogMutationError {}
 
 /// Persisted catalog state consumed by the GTK application shell.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,12 +183,46 @@ impl GtkCatalogController {
         let GtkCatalogState::Ready(catalog) = &self.state else {
             return None;
         };
-        let repository = RedbImportRepository::open(catalog.location().catalog_path()).ok()?;
-        let records = repository.list().ok()?;
-        Some(CollectionController::from_import_records_with_locale(
-            records.iter(),
-            locale,
-        ))
+        let repository = RedbCatalogRepository::open(catalog.location().catalog_path()).ok()?;
+        let records = ImportRepository::list(&repository).ok()?;
+        let organization = repository.organization_states().ok()?;
+        Some(
+            CollectionController::from_import_records_with_locale_and_organization(
+                records.iter(),
+                locale,
+                &organization,
+            ),
+        )
+    }
+
+    /// Atomically applies a lighttable organization command and returns its committed event.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog readiness or persistence error. Failed commands do not update
+    /// the GTK projection.
+    pub fn apply_organization_command(
+        &mut self,
+        command: &CatalogCommand,
+    ) -> Result<
+        (
+            CatalogChangeEvent,
+            BTreeMap<PhotoId, PhotoOrganizationState>,
+        ),
+        GtkCatalogMutationError,
+    > {
+        let GtkCatalogState::Ready(catalog) = &self.state else {
+            return Err(GtkCatalogMutationError::NotReady);
+        };
+        let mut repository = RedbCatalogRepository::open(catalog.location().catalog_path())
+            .map_err(GtkCatalogMutationError::Open)?;
+        let event = repository
+            .apply_organization_command(command)
+            .map_err(GtkCatalogMutationError::Repository)?;
+        let organization = repository
+            .organization_states()
+            .map_err(GtkCatalogMutationError::Repository)?;
+        Ok((event, organization))
     }
 
     /// Opens the saved/recent/active library-view service for this catalog.

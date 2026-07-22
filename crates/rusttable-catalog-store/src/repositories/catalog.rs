@@ -1,10 +1,12 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
 use redb::{Database, ReadableDatabase, ReadableTable, WriteTransaction};
 use rusttable_catalog::{
-    EditRepository, EditRepositoryError, ImportDetails, ImportRecord, ImportRegistration,
-    ImportRepository, RepositoryError, SourcePath,
+    CatalogChangeEvent, CatalogCommand, ColorLabel, EditRepository, EditRepositoryError,
+    ImportDetails, ImportRecord, ImportRegistration, ImportRepository, PhotoOrganizationState,
+    Rating, RepositoryError, SourcePath,
 };
 use rusttable_core::{AssetId, ContentHash, Edit, EditId, PhotoId, Revision};
 
@@ -21,9 +23,11 @@ pub struct RedbCatalogRepository {
     edits: RedbEditRepository,
     recipes: RedbRecipeRepository,
     before_commit: Option<BeforeCommitHook>,
+    change_listener: Option<ChangeListener>,
 }
 
 type BeforeCommitHook = Arc<dyn Fn() -> Result<(), AtomicCatalogStoreError> + Send + Sync>;
+type ChangeListener = Arc<dyn Fn(&CatalogChangeEvent) + Send + Sync>;
 
 struct PreparedImport {
     encoded_record: Vec<u8>,
@@ -32,6 +36,37 @@ struct PreparedImport {
     photo_id: [u8; 16],
     asset_id: [u8; 16],
     edit_id: [u8; 16],
+}
+
+enum OrganizationUpdate {
+    Rating(Rating),
+    Rejection(bool),
+    Label(ColorLabel, bool),
+    ToggleLabel(ColorLabel),
+}
+
+impl OrganizationUpdate {
+    fn apply(&self, state: &mut PhotoOrganizationState) {
+        match self {
+            Self::Rating(rating) => {
+                state.rating = *rating;
+                state.rejected = false;
+            }
+            Self::Rejection(rejected) => state.rejected = *rejected,
+            Self::Label(label, enabled) => {
+                if *enabled {
+                    state.color_labels.insert(*label);
+                } else {
+                    state.color_labels.remove(label);
+                }
+            }
+            Self::ToggleLabel(label) => {
+                if !state.color_labels.insert(*label) {
+                    state.color_labels.remove(label);
+                }
+            }
+        }
+    }
 }
 
 impl PreparedImport {
@@ -94,7 +129,16 @@ impl RedbCatalogRepository {
             edits: RedbEditRepository::from_database(Arc::clone(&database)),
             recipes: RedbRecipeRepository::from_database(Arc::clone(&database)),
             before_commit,
+            change_listener: None,
         })
+    }
+
+    /// Installs a callback invoked after a durable organization transaction commits.
+    pub fn set_change_listener<F>(&mut self, listener: F)
+    where
+        F: Fn(&CatalogChangeEvent) + Send + Sync + 'static,
+    {
+        self.change_listener = Some(Arc::new(listener));
     }
 
     /// Returns versioned export recipes backed by this same catalog database.
@@ -179,6 +223,177 @@ impl RedbCatalogRepository {
             return Err(AtomicCatalogStoreError::Corrupt);
         }
         Ok(details)
+    }
+
+    /// Returns all persisted organization state, defaulting legacy photos to neutral values.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed storage or corruption error when the catalog cannot be read.
+    pub fn organization_states(
+        &self,
+    ) -> Result<BTreeMap<PhotoId, PhotoOrganizationState>, AtomicCatalogStoreError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let records = transaction
+            .open_table(schema::RECORDS_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let organization = transaction
+            .open_table(schema::PHOTO_ORGANIZATION_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let mut states = BTreeMap::new();
+        for entry in records
+            .iter()
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+        {
+            let (_, value) = entry.map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+            let record = crate::codec::decode(value.value())
+                .map_err(|()| AtomicCatalogStoreError::Corrupt)?;
+            let photo_id = record.photo().id();
+            let state = organization
+                .get(photo_id.get().to_be_bytes().as_slice())
+                .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+                .map(|value| {
+                    crate::organization_codec::decode(photo_id, value.value())
+                        .map_err(|()| AtomicCatalogStoreError::Corrupt)
+                })
+                .transpose()?
+                .unwrap_or_else(|| PhotoOrganizationState::new(photo_id));
+            states.insert(photo_id, state);
+        }
+        Ok(states)
+    }
+
+    /// Returns the current durable organization revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed storage or corruption error when the revision cannot be read.
+    pub fn organization_revision(&self) -> Result<Revision, AtomicCatalogStoreError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let revisions = transaction
+            .open_table(schema::ORGANIZATION_REVISION_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let value = revisions
+            .get(schema::ORGANIZATION_REVISION_KEY)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .map(|value| {
+                value
+                    .value()
+                    .try_into()
+                    .map(u64::from_be_bytes)
+                    .map(Revision::from_u64)
+                    .map_err(|_| AtomicCatalogStoreError::Corrupt)
+            })
+            .transpose()?
+            .unwrap_or(Revision::ZERO);
+        Ok(value)
+    }
+
+    /// Applies one rating/rejection/label command as a single durable transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, storage, or commit error. No event is emitted when the
+    /// transaction fails.
+    pub fn apply_organization_command(
+        &mut self,
+        command: &CatalogCommand,
+    ) -> Result<CatalogChangeEvent, AtomicCatalogStoreError> {
+        let (photo_ids, states) = self.prepare_organization_command(command)?;
+        let current_revision = self.organization_revision()?;
+        let next_revision = current_revision
+            .checked_increment()
+            .map_err(|_| AtomicCatalogStoreError::Conflict)?;
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let mut organization = transaction
+            .open_table(schema::PHOTO_ORGANIZATION_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        for state in &states {
+            let encoded = crate::organization_codec::encode(state)
+                .map_err(|()| AtomicCatalogStoreError::Corrupt)?;
+            organization
+                .insert(
+                    state.photo_id.get().to_be_bytes().as_slice(),
+                    encoded.as_slice(),
+                )
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        }
+        drop(organization);
+        let mut revisions = transaction
+            .open_table(schema::ORGANIZATION_REVISION_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        revisions
+            .insert(
+                schema::ORGANIZATION_REVISION_KEY,
+                next_revision.get().to_be_bytes().as_slice(),
+            )
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        drop(revisions);
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| AtomicCatalogStoreError::CommitFailed)?;
+        let event = CatalogChangeEvent::new(next_revision, photo_ids);
+        if let Some(listener) = &self.change_listener {
+            listener(&event);
+        }
+        Ok(event)
+    }
+
+    fn prepare_organization_command(
+        &self,
+        command: &CatalogCommand,
+    ) -> Result<(Vec<PhotoId>, Vec<PhotoOrganizationState>), AtomicCatalogStoreError> {
+        let states = self.organization_states()?;
+        let (photo_ids, update) = match command {
+            CatalogCommand::SetRating { photo_ids, rating } => {
+                (photo_ids, OrganizationUpdate::Rating(*rating))
+            }
+            CatalogCommand::SetRejection {
+                photo_ids,
+                rejected,
+            } => (photo_ids, OrganizationUpdate::Rejection(*rejected)),
+            CatalogCommand::SetColorLabel {
+                photo_ids,
+                label,
+                enabled,
+            } => (photo_ids, OrganizationUpdate::Label(*label, *enabled)),
+            CatalogCommand::ToggleColorLabel { photo_ids, label } => {
+                (photo_ids, OrganizationUpdate::ToggleLabel(*label))
+            }
+            CatalogCommand::RegisterPhoto(_)
+            | CatalogCommand::CreateEdit(_)
+            | CatalogCommand::ReplaceEdit { .. } => return Err(AtomicCatalogStoreError::Corrupt),
+        };
+        if photo_ids.is_empty() {
+            return Err(AtomicCatalogStoreError::Conflict);
+        }
+        let mut unique = photo_ids.clone();
+        unique.sort_unstable();
+        if unique.windows(2).any(|window| window[0] == window[1]) {
+            return Err(AtomicCatalogStoreError::Conflict);
+        }
+        let mut updated = Vec::with_capacity(unique.len());
+        for photo_id in &unique {
+            let mut state = states
+                .get(photo_id)
+                .cloned()
+                .ok_or(AtomicCatalogStoreError::Conflict)?;
+            update.apply(&mut state);
+            updated.push(state);
+        }
+        Ok((unique, updated))
     }
 
     /// Atomically persists one import record, neutral default edit, and durable details.

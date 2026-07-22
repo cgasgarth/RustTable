@@ -48,6 +48,16 @@ pub enum ColorLabel {
     Purple,
 }
 
+impl ColorLabel {
+    pub const ALL: [Self; 5] = [
+        Self::Red,
+        Self::Yellow,
+        Self::Green,
+        Self::Blue,
+        Self::Purple,
+    ];
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhotoOrganizationState {
     pub photo_id: PhotoId,

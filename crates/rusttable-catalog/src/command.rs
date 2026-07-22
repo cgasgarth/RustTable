@@ -29,3 +29,30 @@ pub enum CatalogCommand {
         label: ColorLabel,
     },
 }
+
+/// A committed catalog change that consumers can use to refresh projections.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogChangeEvent {
+    revision: Revision,
+    photo_ids: Vec<PhotoId>,
+}
+
+impl CatalogChangeEvent {
+    #[must_use]
+    pub fn new(revision: Revision, photo_ids: impl IntoIterator<Item = PhotoId>) -> Self {
+        Self {
+            revision,
+            photo_ids: photo_ids.into_iter().collect(),
+        }
+    }
+
+    #[must_use]
+    pub const fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    #[must_use]
+    pub fn photo_ids(&self) -> impl ExactSizeIterator<Item = PhotoId> + '_ {
+        self.photo_ids.iter().copied()
+    }
+}
