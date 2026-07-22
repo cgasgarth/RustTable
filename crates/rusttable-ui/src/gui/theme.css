@@ -1054,6 +1054,11 @@ scale:focus-visible {
   border: 0;
 }
 
+.dt_filmstrip_selection_pointer {
+  min-width: 18px;
+  min-height: 8px;
+}
+
 .dt_filmstrip_format {
   margin: 2px;
   padding: 0 2px;

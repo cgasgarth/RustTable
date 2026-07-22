@@ -82,14 +82,29 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         );
     }
     for id in [
+        "darkroom-navigation-info",
         "darkroom-navigation-actions",
+        "darkroom-snapshots-info",
         "darkroom-snapshots-actions",
+        "darkroom-history-info",
         "darkroom-history-actions",
+        "darkroom-image-information-info",
         "darkroom-image-information-actions",
     ] {
+        let affordance = find_widget(&rail, id)
+            .unwrap_or_else(|| panic!("left rail lost affordance {id}"))
+            .downcast::<gtk4::Button>()
+            .expect("accordion affordance is a button");
+        assert!(affordance.is_visible(), "accordion affordance hidden {id}");
         assert!(
-            find_widget(&rail, id).is_some(),
-            "left rail lost affordance {id}"
+            !affordance.is_sensitive(),
+            "unavailable accordion affordance must remain neutral {id}"
+        );
+        assert!(
+            affordance
+                .child()
+                .is_some_and(|child| child.is::<gtk4::Image>()),
+            "accordion affordance must use a Darktable-shaped symbolic icon {id}"
         );
     }
     for id in [

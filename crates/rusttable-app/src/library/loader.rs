@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use directories::ProjectDirs;
 use rusttable_catalog::{ImportRecord, ImportRepository, RepositoryError, SourcePath};
 use rusttable_catalog_store::RedbImportRepository;
-use rusttable_core::PhotoId;
+use rusttable_core::{MetadataEntry, MetadataField, PhotoId, PositiveRational};
 use rusttable_image::InputFormat;
 use rusttable_import::decode_reference_source;
 
@@ -189,11 +189,12 @@ fn present_records(
         let file_size = format_file_size(record.photo().primary_asset().byte_length().get());
         let secondary =
             presentation_text(&format!("{format} · {dimension_text}"), photo_id, &source)?;
-        let facts = vec![
+        let mut facts = vec![
             fact("Format", format, photo_id, &source)?,
             fact("Dimensions", &dimension_text, photo_id, &source)?,
-            fact("File size", &file_size, photo_id, &source)?,
         ];
+        facts.extend(canonical_exposure_facts(&record, photo_id, &source)?);
+        facts.push(fact("File size", &file_size, photo_id, &source)?);
         cards.push(PhotoCardViewModel::new(
             photo_id,
             title.clone(),
@@ -206,6 +207,60 @@ fn present_records(
     }
 
     PhotoWorkspaceViewModel::new(cards, details).map_err(CatalogPresentationError::Workspace)
+}
+
+fn canonical_exposure_facts(
+    record: &ImportRecord,
+    photo_id: PhotoId,
+    source: &SourcePath,
+) -> Result<Vec<PhotoFactViewModel>, CatalogPresentationError> {
+    let metadata = record.metadata();
+    let mut facts = Vec::with_capacity(4);
+    if let Some(MetadataEntry::ExposureTime(value)) = metadata.get(MetadataField::ExposureTime) {
+        facts.push(fact(
+            "Exposure",
+            &format_exposure_time(*value),
+            photo_id,
+            source,
+        )?);
+    }
+    if let Some(MetadataEntry::FNumber(value)) = metadata.get(MetadataField::FNumber) {
+        facts.push(fact(
+            "Aperture",
+            &format!("f/{}", format_decimal_one(*value)),
+            photo_id,
+            source,
+        )?);
+    }
+    if let Some(MetadataEntry::FocalLength(value)) = metadata.get(MetadataField::FocalLength) {
+        facts.push(fact(
+            "Focal length",
+            &format!("{} mm", format_decimal_one(*value)),
+            photo_id,
+            source,
+        )?);
+    }
+    if let Some(MetadataEntry::IsoSpeed(value)) = metadata.get(MetadataField::IsoSpeed) {
+        facts.push(fact("ISO", &value.get().to_string(), photo_id, source)?);
+    }
+    Ok(facts)
+}
+
+fn format_exposure_time(value: PositiveRational) -> String {
+    if value.numerator() < value.denominator() {
+        return format!("{}/{}", value.numerator(), value.denominator());
+    }
+    if value.denominator() == 1 {
+        return format!("{} s", value.numerator());
+    }
+    format!("{} s", format_decimal_one(value))
+}
+
+fn format_decimal_one(value: PositiveRational) -> String {
+    let numerator = u128::from(value.numerator());
+    let denominator = u128::from(value.denominator());
+    let tenths = numerator.saturating_mul(10).saturating_add(denominator / 2) / denominator;
+    format!("{}.{:01}", tenths / 10, tenths % 10)
 }
 
 fn photo_title(source: &SourcePath) -> PresentationText {
@@ -280,6 +335,7 @@ fn format_file_size(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::num::NonZeroU32;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -288,7 +344,8 @@ mod tests {
     };
     use rusttable_catalog_store::RedbImportRepository;
     use rusttable_core::{
-        Asset, AssetId, AssetRole, ByteLength, ContentHash, ImageMetadata, Photo, PhotoId,
+        Asset, AssetId, AssetRole, ByteLength, ContentHash, ImageMetadata, MetadataEntry, Photo,
+        PhotoId, PositiveRational,
     };
     use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
     use rusttable_import::encode_reference_source;
@@ -439,6 +496,45 @@ mod tests {
                 ("Format", "JPEG"),
                 ("Dimensions", "6000 × 4000"),
                 ("File size", "1025 bytes"),
+            ]
+        );
+    }
+
+    #[test]
+    fn canonical_exposure_metadata_projects_darktable_status_facts() {
+        let metadata = ImageMetadata::from_entries([
+            MetadataEntry::ExposureTime(PositiveRational::new(1, 90).expect("exposure rational")),
+            MetadataEntry::FNumber(PositiveRational::new(8, 1).expect("aperture rational")),
+            MetadataEntry::FocalLength(
+                PositiveRational::new(103, 10).expect("focal-length rational"),
+            ),
+            MetadataEntry::IsoSpeed(NonZeroU32::new(200).expect("ISO")),
+        ])
+        .expect("canonical metadata");
+        let record = record("photo.raw", 3, 13, InputFormat::Raw).with_metadata(metadata);
+
+        let workspace = present_records(vec![record]).expect("metadata presentation");
+        let detail = workspace
+            .detail(PhotoId::new(3).expect("photo ID"))
+            .expect("photo detail");
+        let exposure_facts = detail
+            .facts()
+            .filter(|fact| {
+                matches!(
+                    fact.label().as_str(),
+                    "Exposure" | "Aperture" | "Focal length" | "ISO"
+                )
+            })
+            .map(|fact| (fact.label().as_str(), fact.value().as_str()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            exposure_facts,
+            [
+                ("Exposure", "1/90"),
+                ("Aperture", "f/8.0"),
+                ("Focal length", "10.3 mm"),
+                ("ISO", "200"),
             ]
         );
     }

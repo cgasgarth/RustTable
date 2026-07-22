@@ -121,23 +121,31 @@ impl DarkroomStatusSurface {
 }
 
 fn status_metadata(detail: &PhotoDetailViewModel) -> (String, Option<String>) {
-    const PRIORITY: [&str; 9] = [
+    const EXPOSURE_FIELDS: [&str; 5] = [
         "exposure",
         "shutter speed",
         "aperture",
         "focal length",
         "iso",
-        "camera",
-        "lens",
-        "format",
-        "dimensions",
     ];
+    const FALLBACK_FIELDS: [&str; 2] = ["format", "dimensions"];
     let format = detail
         .facts()
         .find(|fact| fact.label().as_str().eq_ignore_ascii_case("format"))
         .map(|fact| fact.value().as_str().to_owned());
-    let mut values = Vec::new();
-    for label in PRIORITY {
+    let mut values = status_values(detail, &EXPOSURE_FIELDS);
+    if values.is_empty() {
+        values = status_values(detail, &FALLBACK_FIELDS);
+    }
+    if values.is_empty() {
+        values.push(detail.title().as_str().to_owned());
+    }
+    (values.join(" · "), format)
+}
+
+fn status_values(detail: &PhotoDetailViewModel, labels: &[&str]) -> Vec<String> {
+    let mut values = Vec::with_capacity(labels.len());
+    for &label in labels {
         let Some(fact) = detail
             .facts()
             .find(|fact| fact.label().as_str().eq_ignore_ascii_case(label))
@@ -150,14 +158,8 @@ fn status_metadata(detail: &PhotoDetailViewModel) -> (String, Option<String>) {
         } else {
             values.push(value.to_owned());
         }
-        if values.len() == 5 {
-            break;
-        }
     }
-    if values.is_empty() {
-        values.push(detail.title().as_str().to_owned());
-    }
-    (values.join(" · "), format)
+    values
 }
 
 fn is_idle_job_status(text: &str) -> bool {
@@ -208,9 +210,27 @@ mod tests {
         assert_eq!(
             status_metadata(&detail),
             (
-                "1/90 · f/8.0 · 10.3 mm · ISO 200 · RAW".to_owned(),
+                "1/90 · f/8.0 · 10.3 mm · ISO 200".to_owned(),
                 Some("RAW".to_owned())
             )
+        );
+    }
+
+    #[test]
+    fn bottom_status_retains_format_and_dimensions_without_exposure_metadata() {
+        let detail = PhotoDetailViewModel::new(
+            PhotoId::new(2).expect("photo"),
+            text("photo.raw"),
+            vec![
+                PhotoFactViewModel::new(text("Camera"), text("Example Camera")),
+                PhotoFactViewModel::new(text("Format"), text("RAW")),
+                PhotoFactViewModel::new(text("Dimensions"), text("6048 × 4038")),
+            ],
+        );
+
+        assert_eq!(
+            status_metadata(&detail),
+            ("RAW · 6048 × 4038".to_owned(), Some("RAW".to_owned()))
         );
     }
 }
