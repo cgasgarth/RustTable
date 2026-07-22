@@ -272,6 +272,20 @@ source = "darktable-reference-evidence"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-testkit::qualification"
 [[fixtures]]
+id = "corpus.compat.darktable-history-185"
+path = "fixtures/corpus/assets/darktable-history-185.toml"
+size = 625
+sha256 = "8c30294baa06ce2ec4563f349b1401fdeae512f019805dd303e3c692f3b890a1"
+media_type = "application/toml"
+privacy = "synthetic"
+consumers = ["rusttable-compat"]
+consuming_issue_ranges = ["#185"]
+artifact_class = "descriptor"
+format = "toml"
+source = "darktable-reference-evidence"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-compat::HistoryDecoder"
+[[fixtures]]
 id = "corpus.compat.data-schema"
 path = "fixtures/corpus/assets/compat-data-schema.db"
 size = 28672

@@ -1,0 +1,35 @@
+schema = "darktable-history-compat.v1"
+issue = 185
+image_id = 7
+history_end = 2
+module_order_version = 0
+module_order = "temperature,0,exposure,0,temperature,1"
+
+[[history]]
+source_row = 21
+num = 0
+operation = "temperature"
+enabled = 1
+multi_priority = 0
+multi_name = "base"
+op_params_hex = "01020304"
+blend_params_hex = "05"
+
+[[history]]
+source_row = 22
+num = 1
+operation = "exposure"
+enabled = 1
+multi_priority = 0
+multi_name = "base"
+op_params_hex = "090807"
+blend_params_hex = "0403"
+
+[[history]]
+source_row = 23
+num = 2
+operation = "temperature"
+enabled = 0
+multi_priority = 1
+multi_name = "second"
+op_params_hex = "06"

@@ -4114,7 +4114,11 @@ dependencies = [
 name = "rusttable-compat"
 version = "0.1.0"
 dependencies = [
+ "md5",
  "rusttable-sqlite-native",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
