@@ -43,16 +43,20 @@ use crate::libs::profiles::diagnostics::{
 };
 
 /// Stable widget identifiers for the initial darkroom surface.
-pub const DARKROOM_WIDGET_IDS: [&str; 22] = [
+pub const DARKROOM_WIDGET_IDS: [&str; 26] = [
     "darkroom-page",
     "darkroom-toolbar-top",
     "darkroom-photo-preview",
     "darkroom-toolbar-bottom",
     "darkroom-left-panel",
     "darkroom-navigation",
+    "darkroom-navigation-actions",
     "darkroom-snapshots",
+    "darkroom-snapshots-actions",
     "darkroom-history",
+    "darkroom-history-actions",
     "darkroom-image-information",
+    "darkroom-image-information-actions",
     "darkroom-right-panel",
     "darkroom-histogram",
     "darkroom-module-groups",

@@ -6,6 +6,7 @@ use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
 
+use crate::gui::darktable_components::module_action_button;
 use crate::libs::history::HistoryDirection;
 use crate::viewport_presentation::ViewportGeneration;
 
@@ -393,8 +394,26 @@ pub(crate) fn panel_expander(
     expander.set_widget_name(id);
     expander.set_focusable(true);
     expander.set_accessible_role(gtk4::AccessibleRole::Group);
+    expander.add_css_class("dt_module_expander");
+    expander.set_label_widget(Some(&panel_title(id, title)));
     expander.update_property(&[Property::Label(title)]);
     expander
+}
+
+fn panel_title(id: &str, title: &str) -> gtk4::Box {
+    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    title_row.set_hexpand(true);
+    let title_label = gtk4::Label::new(Some(title));
+    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_hexpand(true);
+    title_label.set_width_chars(1);
+    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    title_row.append(&title_label);
+    title_row.append(&module_action_button(
+        &format!("{id}-actions"),
+        "Module actions unavailable",
+    ));
+    title_row
 }
 
 pub(crate) fn panel_button(id: &str, label: &str) -> gtk4::Button {
