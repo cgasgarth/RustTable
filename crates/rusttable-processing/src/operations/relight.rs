@@ -1,9 +1,9 @@
-//! Deprecated Darktable fill-light compatibility in the typed RGB boundary.
+//! Deprecated Darktable fill-light compatibility at the typed D50 Lab boundary.
 //!
-//! Darktable's `src/iop/relight.c` operates on Lab lightness.  `RustTable`'s
-//! current processing image is linear RGB, so this CPU implementation uses
-//! luminance as the explicitly documented lightness boundary and reconstructs
-//! RGB while preserving chroma.  It does not claim Lab, CFA, or WGPU parity.
+//! Darktable's `src/iop/relight.c` consumes four-channel Lab pixels and changes
+//! only channel 0. RGB working frames cross this boundary in the evaluator;
+//! this module owns the native Lab equation and preserves the remaining
+//! channels exactly.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
@@ -18,8 +18,8 @@ use crate::descriptor::{
     ParameterDefault, ParameterDescriptor, ParameterKind, ParameterRole, RoiKind, TilingContract,
     UiHint,
 };
-use crate::operations::common::{OperationExecutionError, from_luma_chroma, luma, validate_shape};
-use crate::{FiniteF32, LinearRgb, RasterDimensions};
+use crate::operations::common::OperationExecutionError;
+use crate::{FiniteF32, RasterDimensions, RgbChannel};
 
 pub const RELIGHT_COMPATIBILITY_ID: &str = "relight";
 pub const RELIGHT_SCHEMA_VERSION: u16 = 1;
@@ -170,6 +170,52 @@ pub struct RelightConfig {
     width: FiniteF32,
 }
 
+/// Four-channel D50 Lab sample in Darktable's native scale: L in 0..100,
+/// a/b in -128..128, and an alpha/spare channel in 0..1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RelightPixel {
+    channels: [f32; 4],
+}
+
+impl RelightPixel {
+    #[must_use]
+    pub const fn new(lightness: f32, a: f32, b: f32, alpha: f32) -> Self {
+        Self {
+            channels: [lightness, a, b, alpha],
+        }
+    }
+
+    #[must_use]
+    pub const fn from_channels(channels: [f32; 4]) -> Self {
+        Self { channels }
+    }
+
+    #[must_use]
+    pub const fn channels(self) -> [f32; 4] {
+        self.channels
+    }
+
+    #[must_use]
+    pub const fn lightness(self) -> f32 {
+        self.channels[0]
+    }
+
+    #[must_use]
+    pub const fn a(self) -> f32 {
+        self.channels[1]
+    }
+
+    #[must_use]
+    pub const fn b(self) -> f32 {
+        self.channels[2]
+    }
+
+    #[must_use]
+    pub const fn alpha(self) -> f32 {
+        self.channels[3]
+    }
+}
+
 impl RelightConfig {
     pub fn new(ev: f32, center: f32, width: f32) -> Result<Self, RelightParameterError> {
         Self::try_from(RelightParametersV1::new(ev, center, width))
@@ -252,10 +298,35 @@ impl RelightPlan {
         Self { config, dimensions }
     }
 
-    /// Executes the deterministic RGB-boundary fill-light transform.
-    pub fn execute(&self, input: &[LinearRgb]) -> Result<Vec<LinearRgb>, OperationExecutionError> {
-        validate_shape(self.dimensions, input)?;
-        if self.config.ev().to_bits() == 0.0f32.to_bits() {
+    /// Executes Darktable's deterministic fill-light transform on D50 Lab.
+    pub fn execute_lab<F: FnMut() -> bool>(
+        &self,
+        input: &[RelightPixel],
+        opacity: f32,
+        mut cancelled: F,
+    ) -> Result<Vec<RelightPixel>, OperationExecutionError> {
+        let expected = usize::try_from(self.dimensions.pixel_count()).map_err(|_| {
+            OperationExecutionError::DimensionsMismatch {
+                expected: usize::MAX,
+                actual: input.len(),
+            }
+        })?;
+        if expected != input.len() {
+            return Err(OperationExecutionError::DimensionsMismatch {
+                expected,
+                actual: input.len(),
+            });
+        }
+        if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
+            return Err(OperationExecutionError::NonFiniteResult {
+                pixel: 0,
+                channel: RgbChannel::Red,
+            });
+        }
+        if cancelled() {
+            return Err(OperationExecutionError::Cancelled);
+        }
+        if self.config.ev().to_bits() == 0.0f32.to_bits() || opacity.to_bits() == 0.0f32.to_bits() {
             return Ok(input.to_vec());
         }
         let b = -1.0 + self.config.center() * 2.0;
@@ -264,26 +335,51 @@ impl RelightPlan {
             .iter()
             .enumerate()
             .map(|(index, pixel)| {
-                let source_luma = luma(*pixel);
-                let lightness = source_luma.clamp(0.0, 1.0);
-                let x = -1.0 + lightness * 2.0;
-                let gaussian = (-(x - b) * (x - b) / (c * c)).exp();
-                let target_luma =
-                    (lightness * 2.0f32.powf(self.config.ev() * gaussian)).clamp(0.0, 1.0);
-                from_luma_chroma(
-                    target_luma,
-                    (
-                        pixel.red().get() - source_luma,
-                        pixel.blue().get() - source_luma,
-                    ),
-                )
-                .ok_or(OperationExecutionError::NonFiniteResult {
-                    pixel: index,
-                    channel: crate::RgbChannel::Red,
-                })
+                if index % usize::try_from(self.dimensions.width()).expect("width fits usize") == 0
+                    && cancelled()
+                {
+                    return Err(OperationExecutionError::Cancelled);
+                }
+                let source = *pixel;
+                if source.channels().iter().any(|value| !value.is_finite()) {
+                    return Err(OperationExecutionError::NonFiniteResult {
+                        pixel: index,
+                        channel: RgbChannel::Red,
+                    });
+                }
+                let candidate = relit_lightness(source.lightness(), self.config, b, c);
+                let lightness = source.lightness() + (candidate - source.lightness()) * opacity;
+                if !lightness.is_finite() {
+                    return Err(OperationExecutionError::NonFiniteResult {
+                        pixel: index,
+                        channel: RgbChannel::Red,
+                    });
+                }
+                Ok(RelightPixel::new(
+                    lightness,
+                    source.a(),
+                    source.b(),
+                    source.alpha(),
+                ))
             })
             .collect()
     }
+
+    /// Executes the native Lab operation at full opacity without cancellation.
+    pub fn execute(
+        &self,
+        input: &[RelightPixel],
+    ) -> Result<Vec<RelightPixel>, OperationExecutionError> {
+        self.execute_lab(input, 1.0, || false)
+    }
+}
+
+fn relit_lightness(lightness: f32, config: RelightConfig, center: f32, width: f32) -> f32 {
+    let normalized = lightness / 100.0;
+    let x = -1.0 + normalized * 2.0;
+    let gaussian = (-(x - center) * (x - center) / (width * width)).exp();
+    let relight = 2.0f32.powf(config.ev() * gaussian.clamp(0.0, 1.0));
+    100.0 * (normalized * relight).clamp(0.0, 1.0)
 }
 
 #[must_use]
@@ -315,7 +411,7 @@ pub fn relight_descriptor() -> OperationDescriptor {
             .insert(OperationFlags::DETERMINISTIC_CPU)
             .insert(OperationFlags::COLOR)
             .insert(OperationFlags::BLENDING),
-        stage: "scene-linear-rgb-compat".to_owned(),
+        stage: "display-referred-lab".to_owned(),
         roi: RoiKind::Identity,
         tiling: TilingContract {
             overlap_pixels: 0,
@@ -329,15 +425,15 @@ pub fn relight_descriptor() -> OperationDescriptor {
         capability: CapabilityContract {
             cpu_supported: true,
             gpu_tier: None,
-            required_features: vec!["linear-rgb".to_owned()],
-            required_formats: vec!["rgb-f32".to_owned()],
+            required_features: vec!["lab-boundary".to_owned()],
+            required_formats: vec!["lab-f32x4".to_owned()],
             deterministic_cpu: true,
             deterministic_gpu: false,
-            fallback_to_cpu: false,
-            precision: "f32".to_owned(),
+            fallback_to_cpu: true,
+            precision: "f32 scalar Lab lightness".to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
         },
-        io: rgb_io(),
+        io: lab_io(),
         mask_blend: MaskBlendContract {
             consumes_mask: false,
             publishes_mask: false,
@@ -377,11 +473,11 @@ fn scalar(id: &str, minimum: f64, maximum: f64, default: f64, unit: &str) -> Par
     }
 }
 
-fn rgb_io() -> InputOutputContract {
+fn lab_io() -> InputOutputContract {
     let image = ImagePredicate {
-        channels: 3,
+        channels: 4,
         alpha: AlphaPolicy::Preserve,
-        encodings: vec![ColorEncoding::LinearSrgbD65],
+        encodings: vec![ColorEncoding::LabD50],
         nonfinite: NonFinitePolicy::Reject,
     };
     InputOutputContract {
