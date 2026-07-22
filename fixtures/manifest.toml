@@ -90,6 +90,20 @@ source = "rusttable-image-io-fixture"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-image-io"
 [[fixtures]]
+id = "image-io.progressive-jpeg"
+path = "crates/rusttable-image-io/tests/fixtures/progressive-2x1.jpg.b64"
+size = 730
+sha256 = "6d11455c24865b54f6479e7f34a151c9a9f21f89d11d3c9c7d3c0fbaff48ae09"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+consuming_issue_ranges = ["#225"]
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-image-io"
+[[fixtures]]
 id = "image-io.rgb-tiff"
 path = "crates/rusttable-image-io/tests/fixtures/rgb-2x1.tiff.b64"
 size = 197
