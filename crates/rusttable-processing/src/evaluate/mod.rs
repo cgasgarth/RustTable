@@ -13,6 +13,7 @@ use std::fmt;
 mod basicadj;
 mod basicadj_runtime;
 mod frame;
+mod lab_boundary;
 mod liquify;
 mod output;
 mod spots;
@@ -22,6 +23,7 @@ pub use frame::{
     EvaluatedFrame, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
     evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
 };
+use lab_boundary::apply_defringe;
 pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
@@ -406,13 +408,12 @@ pub(crate) fn apply_operation_with_profile(
                 pixel_index_offset,
             )
         }
-        ProcessingOperationKind::Defringe { .. } => Err(operation_error(
-            step_index,
-            operation_id,
-            OperationExecutionError::UnsupportedCapability(
-                "defringe requires the four-channel Lab execution seam",
-            ),
-        )),
+        ProcessingOperationKind::Defringe { config } => {
+            let candidate = apply_defringe(*config, pixels, dimensions, frame.encoding(), opacity)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
         ProcessingOperationKind::Clahe { config } => {
             let plan = crate::operations::clahe::ClahePlan::new(*config, dimensions, 1.0, 1.0)
                 .map_err(|error| operation_plan_error(step_index, operation_id, error))?;

@@ -42,12 +42,16 @@ impl ColorTransformPlanner for BuiltinColorTransformPlanner {
                 ColorEncoding::External(_) => PlannerError::UnknownProfile,
                 _ => PlannerError::UnsupportedColorSpace,
             })?;
-        if !source_space.is_matrix_space() || !target_space.is_matrix_space() {
+        let source_is_lab = source_space == BuiltinSpace::LabD50;
+        let target_is_lab = target_space == BuiltinSpace::LabD50;
+        if (!source_is_lab && !source_space.is_matrix_space())
+            || (!target_is_lab && !target_space.is_matrix_space())
+        {
             return Err(PlannerError::UnsupportedColorSpace);
         }
 
         let mut steps = Vec::with_capacity(5);
-        if !request.source().is_linear() {
+        if !source_is_lab && !request.source().is_linear() {
             steps.push(TransformStep::Transfer {
                 function: request
                     .source()
@@ -56,7 +60,11 @@ impl ColorTransformPlanner for BuiltinColorTransformPlanner {
                 decode: true,
             });
         }
-        if source_space != BuiltinSpace::XyzD50 && source_space != BuiltinSpace::XyzD65 {
+        if source_is_lab {
+            steps.push(TransformStep::LabToXyz {
+                white_point: source_space.white_point(),
+            });
+        } else if source_space != BuiltinSpace::XyzD50 && source_space != BuiltinSpace::XyzD65 {
             steps.push(TransformStep::Matrix(
                 source_space
                     .to_xyz_matrix()
@@ -71,7 +79,11 @@ impl ColorTransformPlanner for BuiltinColorTransformPlanner {
                     .map_err(PlannerError::Adaptation)?,
             ));
         }
-        if target_space != BuiltinSpace::XyzD50 && target_space != BuiltinSpace::XyzD65 {
+        if target_is_lab {
+            steps.push(TransformStep::XyzToLab {
+                white_point: target_space.white_point(),
+            });
+        } else if target_space != BuiltinSpace::XyzD50 && target_space != BuiltinSpace::XyzD65 {
             steps.push(TransformStep::Matrix(
                 target_space
                     .to_xyz_matrix()

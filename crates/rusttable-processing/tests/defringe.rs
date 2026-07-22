@@ -1,10 +1,12 @@
 use rusttable_core::{
-    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+    Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
+    ParameterValue, PhotoId, Revision,
 };
 use rusttable_processing::{
-    DEFRINGE_PARAMETER_BYTES, DEFRINGE_SCHEMA_VERSION, DefringeConfig, DefringeHistory,
-    DefringeMode, DefringeOutcome, DefringeParametersV1, DefringePixel, DefringePlan,
-    RasterDimensions,
+    CompiledPipeline, DEFRINGE_PARAMETER_BYTES, DEFRINGE_SCHEMA_VERSION, DefringeConfig,
+    DefringeHistory, DefringeMode, DefringeOutcome, DefringeParametersV1, DefringePixel,
+    DefringePlan, FiniteF32, LinearRgb, RasterDimensions, WorkingFrameDescriptor, WorkingRgbImage,
+    evaluate,
 };
 
 fn dimensions(width: u32, height: u32) -> RasterDimensions {
@@ -145,6 +147,80 @@ fn too_small_images_copy_through_and_record_degraded_outcome() {
         .expect("copy-through");
     assert_eq!(output, input);
     assert_eq!(receipt.outcome(), DefringeOutcome::ImageTooSmallForKernel);
+}
+
+#[test]
+fn mixed_rgb_lab_graph_executes_with_an_explicit_roundtrip_boundary() {
+    let dimensions = dimensions(32, 32);
+    let width = u16::try_from(dimensions.width()).expect("test width fits u16");
+    let height = u16::try_from(dimensions.height()).expect("test height fits u16");
+    let pixels = (0..dimensions.pixel_count())
+        .map(|index| {
+            let index = usize::try_from(index).expect("test index fits usize");
+            let x = f32::from(u16::try_from(index % usize::from(width)).expect("test x fits u16"))
+                / f32::from(width);
+            let y = f32::from(u16::try_from(index / usize::from(width)).expect("test y fits u16"))
+                / f32::from(height);
+            LinearRgb::new(
+                FiniteF32::new(0.15 + x * 0.6).expect("finite red"),
+                FiniteF32::new(0.2 + y * 0.5).expect("finite green"),
+                FiniteF32::new(0.25 + (x + y) * 0.25).expect("finite blue"),
+            )
+        })
+        .collect();
+    let input =
+        WorkingRgbImage::new_with_frame(dimensions, pixels, WorkingFrameDescriptor::rec2020())
+            .expect("matching pixels");
+    let defringe = Operation::new_with_opacity(
+        OperationId::new(2).expect("operation ID"),
+        OperationKey::new("rusttable.defringe").expect("operation key"),
+        true,
+        OperationOpacity::ONE,
+        [
+            (
+                ParameterName::new("radius").expect("radius name"),
+                ParameterValue::Scalar(FiniteF64::new(4.0).expect("finite radius")),
+            ),
+            (
+                ParameterName::new("threshold").expect("threshold name"),
+                ParameterValue::Scalar(FiniteF64::new(20.0).expect("finite threshold")),
+            ),
+            (
+                ParameterName::new("mode").expect("mode name"),
+                ParameterValue::Integer(2),
+            ),
+        ],
+    )
+    .expect("defringe operation");
+    let offset = Operation::new_with_opacity(
+        OperationId::new(1).expect("operation ID"),
+        OperationKey::new("rusttable.linear_offset").expect("operation key"),
+        true,
+        OperationOpacity::ONE,
+        [(
+            ParameterName::new("value").expect("value name"),
+            ParameterValue::Scalar(FiniteF64::new(0.01).expect("finite value")),
+        )],
+    )
+    .expect("offset operation");
+    let edit = Edit::from_parts(
+        EditId::new(1).expect("edit ID"),
+        PhotoId::new(2).expect("photo ID"),
+        Revision::ZERO,
+        Revision::ZERO,
+        [offset, defringe],
+    )
+    .expect("edit");
+    let pipeline = CompiledPipeline::compile(&edit).expect("mixed graph compiles");
+
+    let output = evaluate(&pipeline, &input).expect("mixed graph evaluates");
+
+    assert_eq!(output.frame(), input.frame());
+    assert!(output.pixel_slice().iter().all(|pixel| {
+        [pixel.red().get(), pixel.green().get(), pixel.blue().get()]
+            .into_iter()
+            .all(f32::is_finite)
+    }));
 }
 
 #[test]

@@ -153,6 +153,34 @@ fn planner_is_deterministic_and_canonical() {
 }
 
 #[test]
+fn lab_d50_boundary_adapts_and_roundtrips_extended_rgb() {
+    let planner = BuiltinColorTransformPlanner;
+    let to_lab = planner
+        .plan(&request(
+            ColorEncoding::LinearSrgbD65,
+            ColorEncoding::LabD50,
+        ))
+        .expect("RGB to Lab plan");
+    let to_rgb = planner
+        .plan(&request(
+            ColorEncoding::LabD50,
+            ColorEncoding::LinearSrgbD65,
+        ))
+        .expect("Lab to RGB plan");
+
+    for rgb in [[0.18, 0.42, 1.7], [-0.25, 0.5, 2.0]] {
+        let lab = to_lab.apply_rgb(rgb, || false).expect("RGB to Lab");
+        let restored = to_rgb.apply_rgb(lab, || false).expect("Lab to RGB");
+        assert!(
+            restored
+                .into_iter()
+                .zip(rgb)
+                .all(|(actual, expected)| (actual - expected).abs() < 0.000_1)
+        );
+    }
+}
+
+#[test]
 fn request_and_plan_codecs_reject_unknown_schema() {
     let request = request(ColorEncoding::SrgbD65, ColorEncoding::SrgbD65);
     let bytes = request.canonical_bytes().expect("request bytes");
