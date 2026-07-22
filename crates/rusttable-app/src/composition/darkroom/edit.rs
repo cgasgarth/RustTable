@@ -55,6 +55,12 @@ pub(crate) fn install(
                     "Edit persisted · revision {}",
                     outcome.revision()
                 ));
+                if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
+                    // Invalidate the shared filmstrip before the new preview request starts. This
+                    // prevents an old thumbnail worker from briefly publishing after persistence
+                    // has advanced the edit identity but before the new preview is ready.
+                    after_commit();
+                }
                 crate::composition::selected_preview::start_selected_preview(
                     &action_shell,
                     action_catalog.borrow().clone(),
@@ -62,12 +68,18 @@ pub(crate) fn install(
                     diagnostics.clone(),
                     action_display_profile.borrow().as_ref(),
                 );
-                if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
-                    after_commit();
-                }
                 Ok(outcome.revision())
             }
             Err(error) => {
+                let selected_photo = action_controller.borrow().selected_photo();
+                tracing::error!(
+                    target: "rusttable.gtk.darkroom.edit",
+                    photo_id = ?selected_photo,
+                    module_id = action.module_id(),
+                    expected_revision = %action.expected_revision(),
+                    cause = ?error,
+                    "darkroom edit action was not persisted; retaining the last published state"
+                );
                 if let Some(modules) = action_controller.borrow().modules().cloned() {
                     action_shell
                         .set_darkroom_module_stack(&modules, slot_for_handler.borrow().clone());

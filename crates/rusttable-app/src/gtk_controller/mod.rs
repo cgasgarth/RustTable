@@ -15,12 +15,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use rusttable_catalog::{
-    CatalogChangeEvent, CatalogCommand, ImportRepository, PhotoOrganizationState, RepositoryError,
+    CatalogChangeEvent, CatalogCommand, EditRepository, ImportRepository, PhotoOrganizationState,
+    RepositoryError,
 };
 use rusttable_catalog_store::{
     AtomicCatalogStoreError, RedbCatalogRepository, RedbImportRepository,
 };
-use rusttable_core::PhotoId;
+use rusttable_core::{Edit, PhotoId};
 use rusttable_i18n::LocaleTag;
 use rusttable_import::{decode_reference_source, normalize_reference_path};
 use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
@@ -164,6 +165,28 @@ impl GtkCatalogController {
     #[must_use]
     pub const fn selected_photo(&self) -> Option<PhotoId> {
         self.selected_photo
+    }
+
+    /// Captures the current persisted edit for one photo before an asynchronous render starts.
+    ///
+    /// The returned snapshot is the publication identity shared by the darkroom preview and the
+    /// selected lighttable/filmstrip thumbnail. It is intentionally read-only here; edit writes
+    /// remain owned by [`GtkDarkroomEditController`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a repository error when the ready catalog or persisted edit list cannot be read.
+    pub fn current_edit(&self, photo_id: PhotoId) -> Result<Option<Edit>, RepositoryError> {
+        let GtkCatalogState::Ready(catalog) = &self.state else {
+            return Ok(None);
+        };
+        let repository = RedbCatalogRepository::open(catalog.location().catalog_path())
+            .map_err(|_| RepositoryError::Unavailable)?;
+        Ok(EditRepository::list(&repository)
+            .map_err(|_| RepositoryError::Unavailable)?
+            .into_iter()
+            .filter(|edit| edit.photo_id() == photo_id)
+            .max_by_key(|edit| (edit.revision().get(), edit.id().get())))
     }
 
     /// Reopens the ready catalog's import records for collection filtering.

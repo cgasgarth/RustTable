@@ -4,6 +4,7 @@
 //! state onto a texture while the application keeps catalog access, CPU rendering, and failure
 //! redaction at this boundary.
 
+use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::PhotoId;
 use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_image::ImageDimensions;
@@ -17,7 +18,13 @@ use crate::composition::selected_preview::presentation::{
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{GtkCatalogController, GtkCatalogState};
 use crate::workspace::preview_loader::WorkspacePreviewError;
-use crate::workspace::{SelectedPreview, preview_loader::load_selected_preview_with_generation};
+use crate::workspace::{
+    SelectedPreview,
+    preview_loader::{
+        load_selected_preview_from_repository_for_edit_with_generation,
+        load_selected_preview_with_generation,
+    },
+};
 
 /// Stateless adapter for rendering the photo selected by the GTK catalog controller.
 #[derive(Debug, Default)]
@@ -86,6 +93,65 @@ impl GtkPreviewController {
                     Some(photo_id),
                     None,
                     None,
+                    None,
+                    None,
+                );
+                GtkPreviewState::failed(Some(photo_id), kind)
+            }
+        }
+    }
+
+    /// Renders the exact edit identity captured by the application publication coordinator.
+    pub(crate) fn render_selected_with_generation_for_edit(
+        catalog: &GtkCatalogController,
+        diagnostics: &AppDiagnostics,
+        edit_id: rusttable_core::EditId,
+        edit_revision: rusttable_core::Revision,
+        generation: u64,
+        display_profile: Option<&DisplayProfileSnapshot>,
+    ) -> GtkPreviewState {
+        let Some(photo_id) = catalog.selected_photo() else {
+            return GtkPreviewState::failed(None, GtkPreviewFailureKind::NoSelection);
+        };
+        let GtkCatalogState::Ready(ready) = catalog.state() else {
+            diagnostics.preview_failure(
+                "render_selected",
+                "catalog_lookup",
+                "catalog_unavailable",
+                Some(photo_id),
+                Some(edit_id),
+                Some(generation),
+                None,
+                None,
+            );
+            return GtkPreviewState::failed(
+                Some(photo_id),
+                GtkPreviewFailureKind::CatalogUnavailable,
+            );
+        };
+        let result = RedbCatalogRepository::open(ready.location().catalog_path())
+            .map_err(WorkspacePreviewError::Catalog)
+            .and_then(|repository| {
+                load_selected_preview_from_repository_for_edit_with_generation(
+                    &repository,
+                    ready.location().source_root(),
+                    photo_id,
+                    edit_id,
+                    edit_revision,
+                    generation,
+                )
+            });
+        match result {
+            Ok(preview) => Self::from_loaded_preview(preview, display_profile, diagnostics),
+            Err(error) => {
+                let kind = GtkPreviewFailureKind::from_workspace_error(&error);
+                diagnostics.preview_failure(
+                    "render_selected",
+                    kind.stage(),
+                    kind.cause(),
+                    Some(photo_id),
+                    Some(edit_id),
+                    Some(generation),
                     None,
                     None,
                 );

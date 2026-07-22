@@ -10,7 +10,6 @@ use std::thread;
 use std::time::Duration;
 
 use gtk4::glib::{self, ControlFlow};
-use rusttable_core::Revision;
 use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_ui::{
     DisplayPresentationFrame, DisplayPresentationRequest, GtkShell, HistogramData, HistogramError,
@@ -55,7 +54,46 @@ pub(crate) fn start_selected_preview(
         shell.clear_darkroom_selection(GtkPreviewFailureKind::NoSelection.message());
         return;
     };
-    let token = lifecycle.borrow_mut().begin(photo_id);
+    let edit = match catalog.current_edit(photo_id) {
+        Ok(Some(edit)) => edit,
+        Ok(None) => {
+            diagnostics.preview_failure(
+                "start_selected_preview",
+                "edit_resolution",
+                "missing_persisted_edit",
+                Some(photo_id),
+                None,
+                None,
+                None,
+                None,
+            );
+            shell.clear_darkroom_selection(GtkPreviewFailureKind::MissingPersistedEdit.message());
+            return;
+        }
+        Err(error) => {
+            diagnostics.preview_failure(
+                "start_selected_preview",
+                "edit_resolution",
+                "catalog_unavailable",
+                Some(photo_id),
+                None,
+                None,
+                None,
+                None,
+            );
+            tracing::error!(
+                target: "rusttable.gtk.preview",
+                photo_id = %photo_id,
+                cause = %error,
+                "could not capture selected edit identity"
+            );
+            shell.clear_darkroom_selection(GtkPreviewFailureKind::CatalogUnavailable.message());
+            return;
+        }
+    };
+    let token = lifecycle
+        .borrow_mut()
+        .begin(photo_id, edit.id(), edit.revision());
     let generation = ViewportGeneration::new(token.generation());
     shell.begin_darkroom_selection(photo_id, generation);
     shell.set_darkroom_preview_loading(generation);
@@ -65,9 +103,11 @@ pub(crate) fn start_selected_preview(
     let worker = thread::Builder::new()
         .name("rusttable-preview".to_owned())
         .spawn(move || {
-            let state = GtkPreviewController::render_selected_with_generation(
+            let state = GtkPreviewController::render_selected_with_generation_for_edit(
                 &catalog,
                 &worker_diagnostics,
+                edit.id(),
+                edit.revision(),
                 token.generation(),
                 display_profile_for_worker.as_ref(),
             );
@@ -116,7 +156,7 @@ pub(crate) fn start_selected_preview(
                         "stale_generation",
                         "viewport_generation_mismatch",
                         Some(token.photo_id()),
-                        None,
+                        Some(token.edit_id()),
                         Some(token.generation()),
                         None,
                         None,
@@ -160,6 +200,8 @@ fn install_if_current(
         tracing::warn!(
             target: "rusttable.gtk.preview",
             generation = token.generation(),
+            edit_id = %token.edit_id(),
+            edit_revision = %token.edit_revision(),
             "discarding stale preview result"
         );
     }
@@ -234,9 +276,12 @@ fn install_preview_state(
     let receipt = rendered
         .presentation_receipt()
         .expect("presented selected previews carry a presentation receipt");
+    let render_receipt = rendered
+        .receipt()
+        .expect("presented selected previews carry a render receipt");
     let request = DisplayPresentationRequest::new(
         rendered.photo_id(),
-        Revision::ZERO,
+        render_receipt.edit_revision(),
         receipt.monitor(),
         PresentationGeneration::new(receipt.generation()),
         PresentationMode::Sdr,
@@ -277,7 +322,13 @@ fn install_preview_state(
         );
     }
     if shell
-        .set_darkroom_presentation_result(generation, &frame, histogram)
+        .set_darkroom_presentation_result_for_edit(
+            generation,
+            &frame,
+            histogram,
+            render_receipt.edit_id(),
+            render_receipt.edit_revision(),
+        )
         .is_err()
     {
         diagnostics.preview_failure(
@@ -312,7 +363,7 @@ fn histogram_cause(error: &HistogramError) -> &'static str {
 mod tests {
     use std::cell::RefCell;
 
-    use rusttable_core::PhotoId;
+    use rusttable_core::{EditId, PhotoId, Revision};
     use rusttable_ui::HistogramError;
 
     use super::{PreviewLifecycle, histogram_cause, install_if_current};
@@ -324,10 +375,18 @@ mod tests {
     #[test]
     fn completion_callback_releases_lifecycle_borrow_before_reentry() {
         let lifecycle = RefCell::new(PreviewLifecycle::default());
-        let completed = lifecycle.borrow_mut().begin(photo_id(1));
+        let completed = lifecycle.borrow_mut().begin(
+            photo_id(1),
+            EditId::new(2).unwrap(),
+            Revision::from_u64(1),
+        );
 
         install_if_current(&lifecycle, completed, || {
-            lifecycle.borrow_mut().begin(photo_id(2));
+            lifecycle.borrow_mut().begin(
+                photo_id(2),
+                EditId::new(3).unwrap(),
+                Revision::from_u64(1),
+            );
         });
 
         assert!(!lifecycle.borrow().is_current(completed));

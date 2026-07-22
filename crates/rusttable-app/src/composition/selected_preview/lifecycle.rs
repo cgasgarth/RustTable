@@ -1,10 +1,12 @@
-use rusttable_core::PhotoId;
+use rusttable_core::{EditId, PhotoId, Revision};
 
 /// Monotonic identity for one selected-photo preview request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PreviewSelectionToken {
     generation: u64,
     photo_id: PhotoId,
+    edit_id: EditId,
+    edit_revision: Revision,
 }
 
 /// Tracks which asynchronous preview result is still allowed to update the UI.
@@ -15,11 +17,18 @@ pub(crate) struct PreviewLifecycle {
 }
 
 impl PreviewLifecycle {
-    pub(crate) fn begin(&mut self, photo_id: PhotoId) -> PreviewSelectionToken {
+    pub(crate) fn begin(
+        &mut self,
+        photo_id: PhotoId,
+        edit_id: EditId,
+        edit_revision: Revision,
+    ) -> PreviewSelectionToken {
         self.next_generation = self.next_generation.saturating_add(1);
         let token = PreviewSelectionToken {
             generation: self.next_generation,
             photo_id,
+            edit_id,
+            edit_revision,
         };
         self.active = Some(token);
         token
@@ -29,7 +38,10 @@ impl PreviewLifecycle {
     pub(crate) fn is_current(&self, token: PreviewSelectionToken) -> bool {
         match self.active {
             Some(active) => {
-                active.generation == token.generation && active.photo_id == token.photo_id
+                active.generation == token.generation
+                    && active.photo_id == token.photo_id
+                    && active.edit_id == token.edit_id
+                    && active.edit_revision == token.edit_revision
             }
             None => false,
         }
@@ -45,11 +57,19 @@ impl PreviewSelectionToken {
     pub(crate) const fn photo_id(self) -> PhotoId {
         self.photo_id
     }
+
+    pub(crate) const fn edit_id(self) -> EditId {
+        self.edit_id
+    }
+
+    pub(crate) const fn edit_revision(self) -> Revision {
+        self.edit_revision
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use rusttable_core::PhotoId;
+    use rusttable_core::{EditId, PhotoId, Revision};
 
     use super::PreviewLifecycle;
 
@@ -60,8 +80,8 @@ mod tests {
     #[test]
     fn only_the_latest_selection_token_remains_current() {
         let mut lifecycle = PreviewLifecycle::default();
-        let first = lifecycle.begin(photo_id(1));
-        let second = lifecycle.begin(photo_id(2));
+        let first = lifecycle.begin(photo_id(1), EditId::new(2).unwrap(), Revision::from_u64(1));
+        let second = lifecycle.begin(photo_id(2), EditId::new(3).unwrap(), Revision::from_u64(1));
 
         assert!(!lifecycle.is_current(first));
         assert!(lifecycle.is_current(second));
@@ -70,8 +90,8 @@ mod tests {
     #[test]
     fn reselection_gets_a_new_generation_for_stale_result_protection() {
         let mut lifecycle = PreviewLifecycle::default();
-        let first = lifecycle.begin(photo_id(1));
-        let second = lifecycle.begin(photo_id(1));
+        let first = lifecycle.begin(photo_id(1), EditId::new(2).unwrap(), Revision::from_u64(1));
+        let second = lifecycle.begin(photo_id(1), EditId::new(2).unwrap(), Revision::from_u64(2));
 
         assert_ne!(first, second);
         assert!(!lifecycle.is_current(first));

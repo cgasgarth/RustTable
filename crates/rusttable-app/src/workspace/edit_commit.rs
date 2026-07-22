@@ -167,6 +167,7 @@ mod tests {
     struct Repository {
         edit: Edit,
         commits: usize,
+        fail_commit: bool,
     }
 
     impl EditRepository for Repository {
@@ -187,6 +188,9 @@ mod tests {
             expected_edit_revision: Revision,
             edit: &Edit,
         ) -> Result<(), EditRepositoryError> {
+            if self.fail_commit {
+                return Err(EditRepositoryError::CommitFailure);
+            }
             if self.edit.revision() != expected_edit_revision {
                 return Err(EditRepositoryError::EditRevisionConflict {
                     edit_id: self.edit.id(),
@@ -251,6 +255,7 @@ mod tests {
         let mut repository = Repository {
             edit: original,
             commits: 0,
+            fail_commit: false,
         };
 
         let committed = commit_basic_edit(&mut repository, &draft).unwrap();
@@ -271,6 +276,7 @@ mod tests {
         let mut repository = Repository {
             edit: edit(5),
             commits: 0,
+            fail_commit: false,
         };
 
         assert!(matches!(
@@ -283,5 +289,25 @@ mod tests {
         ));
         assert_eq!(repository.commits, 0);
         assert_eq!(repository.edit.revision(), Revision::from_u64(5));
+    }
+
+    #[test]
+    fn persistence_failure_keeps_the_last_edit_and_returns_actionable_error() {
+        let original = edit(4);
+        let draft = BasicEditDraft::from_edit(&original).unwrap();
+        let mut repository = Repository {
+            edit: original.clone(),
+            commits: 0,
+            fail_commit: true,
+        };
+
+        assert!(matches!(
+            commit_basic_edit(&mut repository, &draft),
+            Err(BasicEditCommitError::Repository(
+                EditRepositoryError::CommitFailure
+            ))
+        ));
+        assert_eq!(repository.commits, 0);
+        assert_eq!(repository.edit, original);
     }
 }

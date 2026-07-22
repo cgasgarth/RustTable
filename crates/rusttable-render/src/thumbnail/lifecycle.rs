@@ -11,6 +11,7 @@ pub enum CacheChangeEvent {
     },
     EditChanged {
         photo_id: rusttable_core::PhotoId,
+        edit_id: rusttable_core::EditId,
         edit_revision: rusttable_core::Revision,
     },
     ProfileChanged {
@@ -106,8 +107,13 @@ fn affected(key: ThumbnailKey, event: CacheChangeEvent) -> bool {
         CacheChangeEvent::SourceChanged { content } => key.source_content() == content,
         CacheChangeEvent::EditChanged {
             photo_id,
+            edit_id,
             edit_revision,
-        } => key.photo_id() == photo_id && key.edit_revision() == edit_revision,
+        } => {
+            key.photo_id() == photo_id
+                && key.edit_id() == edit_id
+                && key.edit_revision() == edit_revision
+        }
         CacheChangeEvent::ProfileChanged { identity, version } => {
             key.profile_identity() == identity && key.profile_version() == version
         }

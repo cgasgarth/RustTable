@@ -12,7 +12,7 @@ use crate::presentation::{
 };
 use crate::{HistogramData, ViewportGeneration};
 use gtk4::prelude::ListModelExt;
-use rusttable_core::PhotoId;
+use rusttable_core::{EditId, PhotoId, Revision};
 
 fn id(value: u128) -> PhotoId {
     PhotoId::new(value).expect("non-zero test photo ID")
@@ -226,9 +226,19 @@ fn thumbnail_publication_keeps_grid_and_filmstrip_ready_through_rerenders() {
     )
     .expect("test thumbnail");
     shell
-        .set_photo_thumbnail(photo_id, &metadata)
+        .set_photo_thumbnail_for_edit(
+            photo_id,
+            &metadata,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(1),
+        )
         .expect("publish thumbnail");
     assert_thumbnail_pair_is_ready(&shell, photo_id);
+    assert!(shell.photo_thumbnail_has_edit_identity(
+        photo_id,
+        EditId::new(9).expect("edit id"),
+        Revision::from_u64(1),
+    ));
 
     shell.set_lighttable_workspace_filtered(&source, [photo_id]);
     assert_thumbnail_pair_is_ready(&shell, photo_id);
@@ -237,6 +247,22 @@ fn thumbnail_publication_keeps_grid_and_filmstrip_ready_through_rerenders() {
     shell.show_workspace(WorkspaceRole::Lighttable);
     shell.set_lighttable_workspace_filtered(&source, [photo_id]);
     assert_thumbnail_pair_is_ready(&shell, photo_id);
+
+    shell.set_photo_thumbnail_loading(photo_id);
+    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
+    shell
+        .set_photo_thumbnail_for_edit(
+            photo_id,
+            &metadata,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(2),
+        )
+        .expect("publish updated thumbnail");
+    assert!(shell.photo_thumbnail_has_edit_identity(
+        photo_id,
+        EditId::new(9).expect("edit id"),
+        Revision::from_u64(2),
+    ));
 }
 
 #[gtk4::test]
@@ -294,7 +320,12 @@ fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
     )
     .expect("test thumbnail");
     shell
-        .set_photo_thumbnail(photo_id, &thumbnail)
+        .set_photo_thumbnail_for_edit(
+            photo_id,
+            &thumbnail,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(1),
+        )
         .expect("publish thumbnail");
 
     let edited = Rgba8PreviewMetadata::new(
@@ -305,7 +336,13 @@ fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
     .expect("test edited preview");
     let histogram = HistogramData::from_rgba8(dimensions, edited.pixels()).expect("test histogram");
     shell
-        .set_darkroom_preview_result(generation, &edited, Ok(histogram))
+        .set_darkroom_preview_result_for_edit(
+            generation,
+            &edited,
+            Ok(histogram),
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(2),
+        )
         .expect("publish edited preview");
 
     assert_eq!(
@@ -322,6 +359,32 @@ fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
             .and_then(|workspace| workspace.detail(photo_id))
             .map(PhotoDetailViewModel::selected_preview),
         Some(SelectedPreviewState::Ready(_))
+    ));
+    assert_eq!(
+        shell.darkroom.viewport_state().edit_revision(),
+        Some(Revision::from_u64(2))
+    );
+    assert!(!shell.photo_thumbnail_has_edit_identity(
+        photo_id,
+        EditId::new(9).expect("edit id"),
+        Revision::from_u64(2),
+    ));
+
+    // The application invalidates the old pair before requesting the new exact-edit thumbnail.
+    shell.set_photo_thumbnail_loading(photo_id);
+    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
+    shell
+        .set_photo_thumbnail_for_edit(
+            photo_id,
+            &edited,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(2),
+        )
+        .expect("publish synchronized thumbnail");
+    assert!(shell.photo_thumbnail_has_edit_identity(
+        photo_id,
+        EditId::new(9).expect("edit id"),
+        Revision::from_u64(2),
     ));
 }
 
