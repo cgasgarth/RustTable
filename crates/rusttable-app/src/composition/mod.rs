@@ -2,7 +2,7 @@ mod ai_ui;
 mod collection_bridge;
 mod darkroom;
 mod import_bridge;
-mod selected_preview;
+pub(crate) mod selected_preview;
 pub(crate) mod services;
 mod thumbnails;
 
@@ -230,6 +230,8 @@ fn activate_application(
         .ok();
     let profile_snapshot = display_profiles.snapshots().next().cloned();
     shell.set_display_profile_state(profile_snapshot.as_ref(), profile_receipt);
+    let display_profiles = Rc::new(RefCell::new(display_profiles));
+    let display_profile_state = Rc::new(RefCell::new(profile_snapshot));
     install_action_input(&shell);
     let ai_bridges = install_ai_ui_bridges(&shell);
     darkroom::install(&shell);
@@ -308,10 +310,20 @@ fn activate_application(
     let selection_controller = Rc::clone(&catalog_controller);
     let selection_collection = Rc::clone(active_collection);
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
-    let darkroom_bridge =
-        darkroom::install_edit(&shell, &catalog_controller, &preview_lifecycle, diagnostics);
-    let darkroom_panel_bridge =
-        darkroom::install_panels(&shell, &catalog_controller, &preview_lifecycle, diagnostics);
+    let darkroom_bridge = darkroom::install_edit(
+        &shell,
+        &catalog_controller,
+        &preview_lifecycle,
+        &display_profile_state,
+        diagnostics,
+    );
+    let darkroom_panel_bridge = darkroom::install_panels(
+        &shell,
+        &catalog_controller,
+        &preview_lifecycle,
+        &display_profile_state,
+        diagnostics,
+    );
     let history_refresh_bridge = darkroom_panel_bridge.clone();
     let history_refresh_shell = shell.clone();
     let history_refresh_catalog = Rc::clone(&catalog_controller);
@@ -333,6 +345,8 @@ fn activate_application(
     let darkroom_selection_handler = darkroom_bridge.handler.clone();
     let darkroom_selection_panel_bridge = darkroom_panel_bridge;
     let selection_diagnostics = diagnostics.clone();
+    let selection_profile_state = Rc::clone(&display_profile_state);
+    let selection_preview_lifecycle = Rc::clone(&preview_lifecycle);
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
         let (catalog_changed, collection_changed) = apply_selection_projection(
             &selection_controller,
@@ -390,12 +404,21 @@ fn activate_application(
         start_selected_preview(
             &darkroom_selection_shell,
             catalog,
-            Rc::clone(&preview_lifecycle),
+            Rc::clone(&selection_preview_lifecycle),
             selection_diagnostics.clone(),
+            selection_profile_state.borrow().as_ref(),
         );
         darkroom_selection_panel_bridge
             .select(&darkroom_selection_shell, &selection_controller.borrow());
     });
+    install_display_profile_refresh(
+        &shell,
+        active_catalog,
+        display_profiles,
+        display_profile_state,
+        preview_lifecycle,
+        diagnostics.clone(),
+    );
     shell.present();
     active_shell.replace(Some(shell));
     if let Some(request) = native_bridge.borrow_mut().mark_ready() {
@@ -408,6 +431,46 @@ fn activate_application(
             diagnostics,
         );
     }
+}
+
+fn install_display_profile_refresh(
+    shell: &rusttable_ui::GtkShell,
+    active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
+    display_profiles: Rc<RefCell<rusttable_display_profile::DisplayProfileService>>,
+    display_profile_state: Rc<RefCell<Option<rusttable_display_profile::DisplayProfileSnapshot>>>,
+    preview_lifecycle: Rc<RefCell<PreviewLifecycle>>,
+    diagnostics: AppDiagnostics,
+) {
+    let shell = shell.clone();
+    let active_catalog = Rc::clone(active_catalog);
+    glib::timeout_add_local(Duration::from_secs(1), move || {
+        let receipt = display_profiles
+            .borrow_mut()
+            .reconcile(rusttable_ui::GtkMonitorInventory.discover())
+            .ok();
+        let snapshot = display_profiles.borrow().snapshots().next().cloned();
+        let changed = snapshot
+            .as_ref()
+            .map(rusttable_display_profile::DisplayProfileSnapshot::generation)
+            != display_profile_state
+                .borrow()
+                .as_ref()
+                .map(rusttable_display_profile::DisplayProfileSnapshot::generation);
+        if changed {
+            display_profile_state.replace(snapshot.clone());
+            shell.set_display_profile_state(snapshot.as_ref(), receipt);
+            if let Some(catalog) = active_catalog.borrow().as_ref().cloned() {
+                start_selected_preview(
+                    &shell,
+                    catalog.borrow().clone(),
+                    Rc::clone(&preview_lifecycle),
+                    diagnostics.clone(),
+                    snapshot.as_ref(),
+                );
+            }
+        }
+        ControlFlow::Continue
+    });
 }
 
 fn install_action_input(shell: &rusttable_ui::GtkShell) {

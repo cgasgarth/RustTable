@@ -1,8 +1,8 @@
 use rusttable_display_profile::{
     DisplayProfileEvent, DisplayProfileService, DisplayProvider, EventQueue, HdrDescriptor,
     IccProfileError, MAX_QUEUED_EVENTS, ManagedProfileStore, MonitorDescriptor, MonitorGeometry,
-    MonitorId, ProfileProbe, ProfileProbeFailure, ProfileSelection, ProviderMonitor,
-    SelectionStatus, StaleReason, WindowPresentation,
+    MonitorId, ProfileProbe, ProfileProbeFailure, ProfileSelection, ProfileTransformError,
+    ProviderMonitor, SelectionStatus, StaleReason, WindowPresentation,
 };
 
 fn profile(seed: u8, device_class: [u8; 4]) -> Vec<u8> {
@@ -12,6 +12,42 @@ fn profile(seed: u8, device_class: [u8; 4]) -> Vec<u8> {
     bytes[16..20].copy_from_slice(b"RGB ");
     bytes[36..40].copy_from_slice(b"acsp");
     bytes[64] = seed;
+    bytes
+}
+
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+fn matrix_profile() -> Vec<u8> {
+    let tag_count = 4_usize;
+    let table_size = 4 + tag_count * 12;
+    let profile_size = 128 + table_size + 4 * 20;
+    let mut bytes = vec![0_u8; profile_size];
+    bytes[0..4].copy_from_slice(&(profile_size as u32).to_be_bytes());
+    bytes[8..12].copy_from_slice(b"mntr");
+    bytes[12..16].copy_from_slice(b"RGB ");
+    bytes[16..20].copy_from_slice(b"RGB ");
+    bytes[20..24].copy_from_slice(b"XYZ ");
+    bytes[36..40].copy_from_slice(b"acsp");
+    bytes[128..132].copy_from_slice(&(tag_count as u32).to_be_bytes());
+    for (index, (name, values)) in [
+        (b"rXYZ", [0.48657, 0.22897, 0.0]),
+        (b"gXYZ", [0.26567, 0.69174, 0.04511]),
+        (b"bXYZ", [0.19822, 0.07929, 1.04394]),
+        (b"wtpt", [0.95047, 1.0, 1.08883]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let table = 132 + index * 12;
+        let offset = 128 + table_size + index * 20;
+        bytes[table..table + 4].copy_from_slice(name);
+        bytes[table + 4..table + 8].copy_from_slice(&(offset as u32).to_be_bytes());
+        bytes[table + 8..table + 12].copy_from_slice(&20_u32.to_be_bytes());
+        bytes[offset..offset + 4].copy_from_slice(b"XYZ ");
+        for (channel, value) in values.into_iter().enumerate() {
+            bytes[offset + 8 + channel * 4..offset + 12 + channel * 4]
+                .copy_from_slice(&((value * 65_536.0) as i32).to_be_bytes());
+        }
+    }
     bytes
 }
 
@@ -78,6 +114,39 @@ fn managed_store_validates_and_immutably_hashes_profiles() {
         store.insert(&vec![0_u8; 65 * 1024 * 1024]),
         Err(IccProfileError::Oversized)
     ));
+}
+
+#[test]
+fn matrix_profile_builds_a_wide_gamut_presentation_plan() {
+    let mut store = ManagedProfileStore::default();
+    let stored = store
+        .insert(&matrix_profile())
+        .expect("valid matrix profile");
+    let plan = stored
+        .presentation_plan(rusttable_color::RenderingIntent::Relative)
+        .expect("matrix presentation plan");
+    let transformed = plan
+        .apply_rgb([0.8, 0.2, 0.1], || false)
+        .expect("finite transformed RGB");
+    assert!(
+        transformed
+            .into_iter()
+            .zip([0.8, 0.2, 0.1])
+            .any(|(actual, source)| (actual - source).abs() > 0.0001)
+    );
+    assert!(transformed.into_iter().all(f32::is_finite));
+}
+
+#[test]
+fn structurally_valid_profile_without_matrix_evidence_is_unusable_for_presentation() {
+    let mut store = ManagedProfileStore::default();
+    let stored = store
+        .insert(&profile(3, *b"mntr"))
+        .expect("valid ICC header");
+    assert_eq!(
+        stored.presentation_plan(rusttable_color::RenderingIntent::Relative),
+        Err(ProfileTransformError::InvalidTagTable)
+    );
 }
 
 #[test]

@@ -1,6 +1,7 @@
 use crate::presentation::{
     PresentationText, Rgba8PreviewMetadata, SelectedPreviewFailure, SelectedPreviewState,
 };
+use crate::viewport_presentation::DisplayPresentationFrame;
 use crate::{HistogramData, HistogramError, ViewportGeneration};
 use rusttable_display_profile::{
     DisplayProfileReceipt, DisplayProfileSnapshot, ProfileSelection, SelectionStatus,
@@ -110,6 +111,74 @@ impl GtkShell {
         let _ = self.darkroom.set_histogram_result(generation, histogram);
         self.darkroom.sync_viewport_projection();
         self.darkroom.set_status(metadata.status().as_str());
+        Ok(())
+    }
+
+    /// Installs a generation-checked, typed color-presentation frame and its histogram.
+    ///
+    /// The frame carries the selected photo and active monitor-profile generation. GTK receives
+    /// only the validated presentation boundary; scene/edit cache identities remain in the
+    /// application preview receipt.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture error when the validated frame dimensions cannot be represented by GTK.
+    pub fn set_darkroom_presentation_result(
+        &self,
+        generation: ViewportGeneration,
+        frame: &DisplayPresentationFrame,
+        histogram: Result<HistogramData, HistogramError>,
+    ) -> Result<(), crate::gtk_shell::PhotoPreviewTextureError> {
+        if !self.accepts_darkroom_preview_generation(generation) {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "stale_generation",
+                cause = "viewport_generation_mismatch",
+                "ignored stale presentation result"
+            );
+            return Ok(());
+        }
+        let expected_photo = self.darkroom.viewport_state().photo_id();
+        if expected_photo != Some(frame.ticket().request().photo_id()) {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "stale_photo",
+                cause = "presentation_photo_mismatch",
+                "ignored presentation result for another photo"
+            );
+            return Ok(());
+        }
+        self.set_darkroom_presentation(frame).inspect_err(|error| {
+            tracing::error!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "texture",
+                cause = ?error,
+                width = frame.metadata().dimensions().width(),
+                height = frame.metadata().dimensions().height(),
+                "presentation texture adaptation failed"
+            );
+        })?;
+        self.replace_selected_preview_projection(
+            generation,
+            SelectedPreviewState::Ready(frame.metadata().clone()),
+        );
+        if let Err(error) = &histogram {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "histogram",
+                cause = ?error,
+                width = frame.metadata().dimensions().width(),
+                height = frame.metadata().dimensions().height(),
+                "preview histogram unavailable"
+            );
+        }
+        let _ = self.darkroom.set_histogram_result(generation, histogram);
+        self.darkroom.sync_viewport_projection();
+        self.darkroom.set_status(&frame.status().label());
         Ok(())
     }
 

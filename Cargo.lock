@@ -4040,6 +4040,7 @@ dependencies = [
  "gtk4",
  "rusttable-catalog",
  "rusttable-catalog-store",
+ "rusttable-color",
  "rusttable-core",
  "rusttable-diagnostics",
  "rusttable-display-profile",

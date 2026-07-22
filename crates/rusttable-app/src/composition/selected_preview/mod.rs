@@ -1,6 +1,7 @@
 //! Worker-to-GTK bridge for selected darkroom previews and histogram analysis.
 
 mod lifecycle;
+pub(crate) mod presentation;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,9 +10,12 @@ use std::thread;
 use std::time::Duration;
 
 use gtk4::glib::{self, ControlFlow};
+use rusttable_core::Revision;
+use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_ui::{
-    GtkShell, HistogramData, HistogramError, PresentationText, PreviewDimensions,
-    Rgba8PreviewMetadata, ViewportGeneration,
+    DisplayPresentationFrame, DisplayPresentationRequest, GtkShell, HistogramData, HistogramError,
+    PresentationGeneration, PresentationMode, PresentationTicket, PreviewDimensions,
+    ViewportGeneration,
 };
 
 use crate::diagnostics::AppDiagnostics;
@@ -35,6 +39,7 @@ pub(crate) fn start_selected_preview(
     catalog: crate::gtk_controller::GtkCatalogController,
     lifecycle: Rc<RefCell<PreviewLifecycle>>,
     diagnostics: AppDiagnostics,
+    display_profile: Option<&DisplayProfileSnapshot>,
 ) {
     let Some(photo_id) = catalog.selected_photo() else {
         diagnostics.preview_failure(
@@ -56,6 +61,7 @@ pub(crate) fn start_selected_preview(
     shell.set_darkroom_preview_loading(generation);
     let (sender, receiver) = mpsc::channel();
     let worker_diagnostics = diagnostics.clone();
+    let display_profile_for_worker = display_profile.cloned();
     let worker = thread::Builder::new()
         .name("rusttable-preview".to_owned())
         .spawn(move || {
@@ -63,6 +69,7 @@ pub(crate) fn start_selected_preview(
                 &catalog,
                 &worker_diagnostics,
                 token.generation(),
+                display_profile_for_worker.as_ref(),
             );
             let histogram = histogram_for_preview(&state);
             let _ = sender.send(PreviewResult {
@@ -171,6 +178,10 @@ fn histogram_for_preview(state: &GtkPreviewState) -> Option<Result<HistogramData
     Some(dimensions.and_then(|dimensions| HistogramData::from_rgba8(dimensions, rendered.pixels())))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "selected preview publication keeps validation, diagnostics, and GTK projection together"
+)]
 fn install_preview_state(
     shell: &GtkShell,
     token: PreviewSelectionToken,
@@ -185,6 +196,20 @@ fn install_preview_state(
         }
         return;
     };
+    if let Some(receipt) = rendered.presentation_receipt() {
+        tracing::debug!(
+            target: "rusttable.gtk.preview",
+            scene_identity = ?receipt.scene_identity(),
+            edit_identity = ?receipt.edit_identity(),
+            presentation_identity = ?receipt.presentation_identity(),
+            monitor = ?receipt.monitor(),
+            profile_id = ?receipt.profile_id(),
+            profile_generation = receipt.generation(),
+            intent = ?receipt.intent(),
+            fallback = ?receipt.fallback(),
+            "selected preview presentation receipt"
+        );
+    }
 
     let Ok(dimensions) = PreviewDimensions::new(
         rendered.dimensions().width(),
@@ -206,29 +231,26 @@ fn install_preview_state(
         );
         return;
     };
-    let Ok(status) = PresentationText::new(shell.darkroom_preview_status()) else {
+    let receipt = rendered
+        .presentation_receipt()
+        .expect("presented selected previews carry a presentation receipt");
+    let request = DisplayPresentationRequest::new(
+        rendered.photo_id(),
+        Revision::ZERO,
+        receipt.monitor(),
+        PresentationGeneration::new(receipt.generation()),
+        PresentationMode::Sdr,
+    );
+    let Ok(frame) = DisplayPresentationFrame::new(
+        PresentationTicket::new(request),
+        dimensions,
+        rendered.pixels().to_vec(),
+        rendered.presentation_status(),
+    ) else {
         diagnostics.preview_failure(
             "install_preview_state",
-            "texture",
-            "status_text",
-            Some(rendered.photo_id()),
-            None,
-            Some(generation.get()),
-            None,
-            Some(rendered.dimensions()),
-        );
-        shell.set_darkroom_preview_failure(
-            generation,
-            GtkPreviewFailureKind::RenderUnavailable.message(),
-        );
-        return;
-    };
-    let Ok(metadata) = Rgba8PreviewMetadata::new(dimensions, status, rendered.pixels().to_vec())
-    else {
-        diagnostics.preview_failure(
-            "install_preview_state",
-            "texture",
-            "metadata_validation",
+            "display_presentation",
+            "invalid_frame",
             Some(rendered.photo_id()),
             None,
             Some(generation.get()),
@@ -255,7 +277,7 @@ fn install_preview_state(
         );
     }
     if shell
-        .set_darkroom_preview_result(generation, &metadata, histogram)
+        .set_darkroom_presentation_result(generation, &frame, histogram)
         .is_err()
     {
         diagnostics.preview_failure(

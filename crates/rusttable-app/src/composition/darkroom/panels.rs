@@ -9,6 +9,7 @@ use crate::gtk_controller::{
     DarkroomPanelProjections, GtkCatalogController, GtkDarkroomPanelController,
 };
 use rusttable_core::Revision;
+use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_ui::{DarkroomPanelAction, DarkroomPanelActionHandler, GtkShell};
 
 #[derive(Clone)]
@@ -21,6 +22,7 @@ pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
+    display_profile: &Rc<RefCell<Option<DisplayProfileSnapshot>>>,
     diagnostics: &AppDiagnostics,
 ) -> DarkroomPanelBridge {
     let controller = Rc::new(RefCell::new(GtkDarkroomPanelController::new(
@@ -34,6 +36,7 @@ pub(crate) fn install(
     let action_shell = shell.clone();
     let action_catalog = Rc::clone(catalog);
     let action_lifecycle = Rc::clone(lifecycle);
+    let action_display_profile = Rc::clone(display_profile);
     let diagnostics = diagnostics.clone();
     let handler_slot_for_action = Rc::clone(&handler_slot);
     let handler: DarkroomPanelActionHandler = Rc::new(move |action| {
@@ -47,6 +50,7 @@ pub(crate) fn install(
                         action_catalog.borrow().clone(),
                         Rc::clone(&action_lifecycle),
                         diagnostics.clone(),
+                        action_display_profile.borrow().as_ref(),
                     );
                     if let Some(target) = action_shell.darkroom_panel_target() {
                         let rebound = action_controller.borrow_mut().rebind_target(target);
