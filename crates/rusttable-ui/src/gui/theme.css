@@ -221,6 +221,22 @@ button:disabled:hover,
   border-color: transparent;
 }
 
+.dt_darkroom_section_title {
+  min-width: 0;
+  min-height: {{module_title_height}}px;
+  padding: 0 4px;
+  color: {{foreground}};
+  background-color: transparent;
+}
+
+.dt_darkroom_section_label {
+  min-width: 0;
+  padding: 0;
+  color: {{foreground}};
+  font-size: {{base_font_pt}}pt;
+  font-weight: 500;
+}
+
 .dt_module_expander > box,
 .dt_module_group > box {
   min-width: 0;
@@ -705,6 +721,13 @@ scale:focus-visible {
   font-weight: bold;
 }
 
+#darkroom-left-panel expander > title > arrow,
+#darkroom-right-panel expander > title > arrow {
+  min-width: 14px;
+  margin-right: 3px;
+  color: {{foreground}};
+}
+
 #darkroom-left-panel expander > box,
 #darkroom-right-panel expander > box {
   padding: 3px 2px 4px 10px;
@@ -851,10 +874,17 @@ scale:focus-visible {
 }
 
 #darkroom-histogram {
-  min-height: {{histogram_height}}px;
+  min-height: {{histogram_min_height}}px;
+  max-height: {{histogram_height}}px;
   min-width: 0;
   background: linear-gradient(to top, #1d1d1dff, #383838ff);
   border-bottom: 1px solid {{border}};
+}
+
+#darkroom-filmstrip-boundary {
+  min-height: 1px;
+  background-color: {{border}};
+  border: 0;
 }
 
 #darkroom-module-groups {

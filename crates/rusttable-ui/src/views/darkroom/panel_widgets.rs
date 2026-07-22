@@ -16,7 +16,7 @@ use super::{
 use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
 use crate::gui::DARKTABLE_UI_TOKENS;
 use crate::gui::darktable_components::{
-    RAIL_SCROLLBAR_RESERVE, module_action_button, module_expander as shared_module_expander,
+    RAIL_SCROLLBAR_RESERVE, module_expander as shared_module_expander, module_title,
     rail as shared_rail, rail_scroll as shared_rail_scroll,
 };
 use crate::iop::modules::{
@@ -243,13 +243,23 @@ fn rail_scroll(child: &impl IsA<gtk4::Widget>, width: i32, id: &str) -> gtk4::Sc
 fn histogram() -> gtk4::Stack {
     let histogram = gtk4::Stack::new();
     histogram.set_widget_name("darkroom-histogram");
-    histogram.set_height_request(i32::from(DARKROOM_GEOMETRY.histogram_height_px));
+    histogram.set_height_request(i32::from(DARKROOM_GEOMETRY.histogram_min_height_px));
     histogram.set_hexpand(true);
     histogram.set_halign(gtk4::Align::Fill);
     histogram.set_vexpand(false);
     histogram.set_valign(gtk4::Align::Start);
     histogram.set_accessible_role(gtk4::AccessibleRole::Img);
     histogram.update_property(&[Property::Label("Image histogram")]);
+    histogram.connect_notify_local(Some("width"), |histogram, _| {
+        let width = histogram.width();
+        if width > 0 {
+            let height = width.saturating_mul(2).saturating_div(3).clamp(
+                i32::from(DARKROOM_GEOMETRY.histogram_min_height_px),
+                i32::from(DARKROOM_GEOMETRY.histogram_height_px),
+            );
+            histogram.set_height_request(height);
+        }
+    });
     histogram
 }
 
@@ -428,18 +438,7 @@ fn rail_module(
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     content.append(&state);
     let expander = shared_module_expander(id, title, initially_expanded, Some(&content));
-    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    title_row.set_hexpand(true);
-    let title_label = gtk4::Label::new(Some(title));
-    title_label.set_halign(gtk4::Align::Start);
-    title_label.set_hexpand(true);
-    title_label.set_width_chars(1);
-    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    title_row.append(&title_label);
-    title_row.append(&module_action_button(
-        &format!("{id}-actions"),
-        "Module actions unavailable",
-    ));
+    let title_row = module_title(id, title);
     expander.set_label_widget(Some(&title_row));
     expander.update_property(&[Property::Label(title)]);
     apply_theme_role(&expander, ThemeRole::ModuleGroup);

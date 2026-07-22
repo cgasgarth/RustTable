@@ -163,7 +163,7 @@ fn rail_resize_reallocates_the_center_from_the_same_display_free_contract() {
     assert_eq!(expanded_left.center_width_px(), 950);
     assert_eq!(expanded_right.center_width_px(), 800);
     assert!(expanded_right.center_width_px() > 650);
-    assert_eq!(expanded_right.filmstrip_height_px, 120);
+    assert_eq!(expanded_right.filmstrip_height_px, 84);
 }
 
 #[test]
@@ -194,6 +194,8 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
     assert!(runtime_lighttable.contains(".parent()"));
     assert!(components.contains("module_action_button"));
     assert!(css.contains(".dt_module_action"));
+    assert!(css.contains(".dt_darkroom_section_label"));
+    assert!(css.contains("#darkroom-filmstrip-boundary"));
     assert!(css.contains(".dt_view_switcher button.active"));
 }
 
@@ -268,7 +270,7 @@ fn lighttable_contract_has_one_filter_row_and_plain_bottom_filmstrip() {
     );
     assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 104);
     assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 78);
-    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
+    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 84);
 }
 
 #[test]

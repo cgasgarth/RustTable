@@ -307,6 +307,8 @@ pub struct DarkroomGeometry {
     pub viewport_minimum_height_px: u16,
     /// Initial scopes graph height in the right rail.
     pub histogram_height_px: u16,
+    /// Minimum scopes graph height at the preferred narrow rail width.
+    pub histogram_min_height_px: u16,
     /// Separator between the center column and the filmstrip.
     pub filmstrip_separator_px: u8,
     /// Height of the status and background-job row below the viewport toolbar.
@@ -364,6 +366,7 @@ pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
     bottom_toolbar_height_px: 28,
     viewport_minimum_height_px: 200,
     histogram_height_px: 180,
+    histogram_min_height_px: 120,
     filmstrip_separator_px: 1,
     status_bar_height_px: 20,
 };
@@ -665,7 +668,7 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     },
     filmstrip_heights: FilmstripHeights {
         minimum_px: 64,
-        preferred_px: 120,
+        preferred_px: 84,
         maximum_px: 400,
     },
 };
@@ -784,7 +787,7 @@ mod tests {
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
         assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
-        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
+        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 84);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
     }
@@ -824,7 +827,7 @@ mod tests {
         assert_eq!(full.left_panel_width_px, 150);
         assert_eq!(full.center_width_px(), 904);
         assert_eq!(full.right_panel_width_px, 150);
-        assert_eq!(full.filmstrip_height_px, 120);
+        assert_eq!(full.filmstrip_height_px, 84);
         assert_eq!(full.status_bar_height_px, 20);
 
         let compact = DarkroomGeometryReceipt::for_window(900, 500, false, true, false);
