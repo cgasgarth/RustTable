@@ -559,7 +559,7 @@ pub fn relight_definition() -> OperationDefinition {
         prepare_relight,
         &[
             "iop.relight.params.v1",
-            "iop.relight.cpu.rgb-boundary",
+            "iop.relight.cpu.lab-d50-lightness",
             "iop.relight.presets",
             "iop.relight.deprecated-visibility",
         ],

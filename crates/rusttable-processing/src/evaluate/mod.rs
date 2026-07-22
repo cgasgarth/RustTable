@@ -31,7 +31,7 @@ pub(crate) use frame::{
     evaluate_graph_at_frame_boundaries_with_plans,
     evaluate_graph_at_frame_boundaries_with_plans_and_masks,
 };
-use lab_boundary::{apply_defringe, apply_shadhi};
+use lab_boundary::{apply_defringe, apply_relight, apply_shadhi};
 use mask::{apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -565,18 +565,11 @@ pub(crate) fn apply_operation_with_profile(
             )
         }
         ProcessingOperationKind::Relight { config } => {
-            let plan = crate::operations::relight::RelightPlan::new(*config, dimensions);
-            let candidate = plan
-                .execute(pixels)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
-            apply_reconstruction(
-                pixels,
-                &candidate,
-                opacity,
-                step_index,
-                operation_id,
-                pixel_index_offset,
-            )
+            let candidate =
+                apply_relight(*config, pixels, dimensions, frame.encoding(), opacity)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
         }
         ProcessingOperationKind::Shadhi { config } => {
             let candidate = apply_shadhi(*config, pixels, dimensions, frame.encoding(), opacity)
