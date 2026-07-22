@@ -78,7 +78,7 @@ fn uses_both_standard_transfer_branches() {
 }
 
 #[test]
-fn no_monitor_srgb_fallback_preserves_neutral_luminance_and_transfer() {
+fn colorimetric_srgb_conversion_preserves_neutral_luminance_and_transfer() {
     let linear_mid_grey = 0.18;
     let expected_srgb = 0.461_356_12_f32;
     let input = working(vec![pixel(

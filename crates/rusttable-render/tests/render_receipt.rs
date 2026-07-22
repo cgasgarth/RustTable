@@ -2,7 +2,7 @@ use rusttable_core::{AssetId, ByteLength, ContentHash, Edit, EditId, PhotoId, Re
 use rusttable_image::{ColorEncoding, ImageDimensions, ImageProbe, InputFormat};
 use rusttable_render::{
     PreviewBounds, RenderPlan, RenderSourceProvenance, RenderTarget, SourceColorDecision,
-    SourceColorPolicy, render_edit_with_provenance,
+    SourceColorPolicy, SrgbFallbackContract, render_edit_with_provenance,
 };
 
 fn edit() -> Edit {
@@ -71,6 +71,10 @@ fn successful_render_owns_source_bound_receipt_and_plan() {
         output.receipt().working_profile().encoding(),
         ColorEncoding::LinearSrgbD65
     );
+    assert_eq!(
+        output.receipt().presentation(),
+        SrgbFallbackContract::Colorimetric
+    );
 }
 
 #[test]
@@ -116,4 +120,5 @@ fn preview_resampling_policy_is_visible_in_receipt_cache_identity() {
     assert!(encoding.contains("Bicubic"));
     assert!(encoding.contains("Reflect"));
     assert!(encoding.contains("Premultiplied"));
+    assert!(encoding.contains("presentation=Colorimetric"));
 }

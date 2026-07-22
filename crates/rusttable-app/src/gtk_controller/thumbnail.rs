@@ -316,7 +316,7 @@ fn configuration_identity(request: ThumbnailRequest) -> [u8; 32] {
 }
 
 fn output_transform_identity() -> [u8; 32] {
-    Sha256::digest(b"rusttable.srgb-display-fallback.v1").into()
+    Sha256::digest(b"rusttable.srgb-display-fallback.v2.scene-referred-raw").into()
 }
 
 fn present(

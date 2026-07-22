@@ -18,6 +18,7 @@ use rusttable_processing::{
 pub mod diagnostics;
 mod plan;
 mod prepared_pixelpipe;
+mod presentation;
 mod provenance;
 mod resampling;
 mod thumbnail;
@@ -35,6 +36,9 @@ pub use plan::{
 };
 pub use prepared_pixelpipe::{
     PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, render_prepared_cpu_pixelpipe,
+};
+pub use presentation::{
+    SCENE_REFERRED_RAW_EXPOSURE_STOPS, SCENE_REFERRED_RAW_LINEAR_GAIN, SrgbFallbackContract,
 };
 pub use provenance::{
     ProvenancedRenderError, ProvenancedRenderErrorKind, ProvenancedRenderOutput,
@@ -128,6 +132,7 @@ pub struct RenderOutput {
     clipping: GamutClipReport,
     provenance: RenderProvenance,
     working_profile: rusttable_processing::WorkingFrameDescriptor,
+    presentation: SrgbFallbackContract,
 }
 
 impl RenderOutput {
@@ -164,6 +169,11 @@ impl RenderOutput {
     #[must_use]
     pub const fn working_profile(&self) -> rusttable_processing::WorkingFrameDescriptor {
         self.working_profile
+    }
+
+    #[must_use]
+    pub const fn presentation(&self) -> SrgbFallbackContract {
+        self.presentation
     }
 }
 
@@ -252,7 +262,9 @@ pub fn render_edit_with_plan(
     // leaves the shared resampler as the sole final-downsampling path.
     let (evaluated, alpha) = resampling::resample_working(&evaluated, &alpha, plan)
         .map_err(|source| RenderError::Resampling { source })?;
-    let encoded = rusttable_processing::encode_working_to_srgb(&evaluated);
+    let presentation = SrgbFallbackContract::Colorimetric;
+    let presented = presentation.apply(&evaluated);
+    let encoded = rusttable_processing::encode_working_to_srgb(&presented);
     let pixels = quantized_pixels(&encoded, &alpha);
     let image = DecodedImage::new_with_color_encoding(
         plan.output_dimensions(),
@@ -274,6 +286,7 @@ pub fn render_edit_with_plan(
             pipeline.revision(),
         ),
         working_profile: evaluated.frame(),
+        presentation,
     })
 }
 

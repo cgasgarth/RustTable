@@ -3,7 +3,9 @@ use rusttable_image::ImageDimensions;
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions, WorkingRgbImage};
 use rusttable_render::{
     PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, PreviewBounds, RenderProvenance,
-    RenderSampling, RenderTarget, SourceColorDecision, render_prepared_cpu_pixelpipe,
+    RenderSampling, RenderTarget, SCENE_REFERRED_RAW_EXPOSURE_STOPS,
+    SCENE_REFERRED_RAW_LINEAR_GAIN, SourceColorDecision, SrgbFallbackContract,
+    render_prepared_cpu_pixelpipe,
 };
 
 fn pixels(values: &[(f32, f32, f32)], width: u32, height: u32) -> WorkingRgbImage {
@@ -57,6 +59,47 @@ fn full_render_encodes_the_completed_pixelpipe_result_without_re_evaluation() {
     );
     assert_eq!(output.provenance(), provenance());
     assert_eq!(output.clipping().above_one().blue(), 1);
+}
+
+#[test]
+fn scene_referred_raw_fallback_applies_the_darktable_baseline_before_srgb_transfer() {
+    let prepared = PreparedCpuPixelpipeResult::new(
+        pixels(
+            &[(0.05, 0.05, 0.05), (0.18, 0.18, 0.18), (0.5, 0.5, 0.5)],
+            3,
+            1,
+        ),
+        vec![1.0; 3],
+        SourceColorDecision::EmbeddedChromaticities,
+        provenance(),
+    )
+    .expect("matching alpha");
+    let colorimetric = render_prepared_cpu_pixelpipe(&prepared, RenderTarget::FullResolution)
+        .expect("colorimetric render");
+    let raw = render_prepared_cpu_pixelpipe(
+        &prepared.with_presentation(SrgbFallbackContract::SceneReferredRawV1),
+        RenderTarget::FullResolution,
+    )
+    .expect("scene-referred RAW render");
+
+    assert_eq!(
+        SCENE_REFERRED_RAW_EXPOSURE_STOPS.to_bits(),
+        0.7_f32.to_bits()
+    );
+    assert!((SCENE_REFERRED_RAW_LINEAR_GAIN - 0.7_f32.exp2()).abs() < 0.000_001);
+    assert_eq!(
+        colorimetric.image().pixels(),
+        &[63, 63, 63, 255, 118, 118, 118, 255, 188, 188, 188, 255]
+    );
+    assert_eq!(
+        raw.image().pixels(),
+        &[80, 80, 80, 255, 147, 147, 147, 255, 233, 233, 233, 255]
+    );
+    assert_eq!(
+        colorimetric.presentation(),
+        SrgbFallbackContract::Colorimetric
+    );
+    assert_eq!(raw.presentation(), SrgbFallbackContract::SceneReferredRawV1);
 }
 
 #[test]
