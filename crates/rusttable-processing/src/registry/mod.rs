@@ -571,7 +571,13 @@ impl PreparedCpuOperation {
     pub const fn operation(&self) -> &ProcessingOperation {
         &self.operation
     }
-
+    #[must_use]
+    pub fn disabled(self) -> Self {
+        Self {
+            operation: self.operation.with_enabled(false),
+            ..self
+        }
+    }
     #[must_use]
     pub const fn descriptor(&self) -> &DescriptorId {
         &self.descriptor

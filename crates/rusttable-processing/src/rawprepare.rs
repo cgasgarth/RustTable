@@ -79,6 +79,19 @@ impl NormalizedRaw {
             .checked_add(usize::try_from(x).ok()?)?;
         self.samples.get(index).copied()
     }
+
+    pub(crate) fn with_samples(&self, samples: Vec<FiniteF32>) -> Result<Self, RawPrepareError> {
+        if samples.len() != self.samples.len() {
+            return Err(RawPrepareError::SourceMetadataChanged);
+        }
+        Ok(Self {
+            dimensions: self.dimensions,
+            samples,
+            cfa: self.cfa,
+            levels: self.levels,
+            orientation: self.orientation,
+        })
+    }
 }
 
 /// A checked sensor-normalization plan with stable cache identity.

@@ -212,6 +212,50 @@ pub struct RawMosaic {
     orientation: Orientation,
 }
 
+/// A decoded sensor mosaic plus the source-area geometry needed by the raw
+/// processing boundary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawMosaicSource {
+    mosaic: RawMosaic,
+    active_area: Option<Roi>,
+    default_crop: Option<Roi>,
+}
+
+impl RawMosaicSource {
+    /// Creates a source mosaic with an optional active-area crop.
+    #[must_use]
+    pub const fn new(mosaic: RawMosaic, active_area: Option<Roi>) -> Self {
+        Self {
+            mosaic,
+            active_area,
+            default_crop: None,
+        }
+    }
+
+    /// Adds the decoder-declared default crop while retaining active-area
+    /// evidence separately.
+    #[must_use]
+    pub const fn with_default_crop(mut self, default_crop: Option<Roi>) -> Self {
+        self.default_crop = default_crop;
+        self
+    }
+
+    #[must_use]
+    pub const fn mosaic(&self) -> &RawMosaic {
+        &self.mosaic
+    }
+
+    #[must_use]
+    pub const fn active_area(&self) -> Option<Roi> {
+        self.active_area
+    }
+
+    #[must_use]
+    pub const fn default_crop(&self) -> Option<Roi> {
+        self.default_crop
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RawMosaicError {
     ArithmeticOverflow,

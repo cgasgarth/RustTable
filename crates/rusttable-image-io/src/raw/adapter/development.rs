@@ -69,7 +69,13 @@ pub(crate) fn decode_linear_frame(
     )
     .map_err(|reason| ImageInputError::DecodeContract { reason })?
     .with_processing_stages(developed.stages);
-    DecodedFrame::new(owned, receipt).map_err(|reason| ImageInputError::DecodeContract { reason })
+    let frame = DecodedFrame::new(owned, receipt)
+        .map_err(|reason| ImageInputError::DecodeContract { reason })?;
+    Ok(if let Some(source) = developed.raw_source {
+        frame.with_raw_source(source)
+    } else {
+        frame
+    })
 }
 
 pub(crate) fn decode_legacy_frame(
@@ -110,5 +116,11 @@ pub(crate) fn decode_legacy_frame(
     )
     .map_err(|reason| ImageInputError::DecodeContract { reason })?
     .with_processing_stages(developed.stages);
-    DecodedFrame::new(owned, receipt).map_err(|reason| ImageInputError::DecodeContract { reason })
+    let frame = DecodedFrame::new(owned, receipt)
+        .map_err(|reason| ImageInputError::DecodeContract { reason })?;
+    Ok(if let Some(source) = developed.raw_source {
+        frame.with_raw_source(source)
+    } else {
+        frame
+    })
 }

@@ -44,7 +44,7 @@ pub use pixel::{
 };
 pub use raw::{
     BlackWhiteLevels, BlackWhiteLevelsError, CfaColor, CfaDescriptor, CfaPattern, CfaPhase,
-    RawMosaic, RawMosaicError,
+    RawMosaic, RawMosaicError, RawMosaicSource,
 };
 pub use source_color::{SourceColor, SourceColorError, SourceColorEvidence, SourceColorFallback};
 pub use view::{
