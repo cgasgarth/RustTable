@@ -11,6 +11,7 @@ use crate::presentation::{
     PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState,
 };
 use crate::{HistogramData, ViewportGeneration};
+use gtk4::prelude::ListModelExt;
 use rusttable_core::PhotoId;
 
 fn id(value: u128) -> PhotoId {
@@ -58,6 +59,52 @@ fn collection_state(photo_id: PhotoId, generation: u64) -> CollectionFilterState
         )],
         LighttableToolbarState::new(1),
     )
+}
+
+#[cfg(not(target_os = "macos"))]
+#[gtk4::test]
+fn grid_model_keeps_complete_collections_while_gtk_virtualizes_cards() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.complete-lighttable-model"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let ids = (1..=201).collect::<Vec<_>>();
+
+    shell.set_photo_workspace(&workspace_with_photos(&ids));
+
+    let selection = shell.lighttable.model().expect("grid selection model");
+    let no_selection = selection
+        .downcast::<gtk4::NoSelection>()
+        .expect("grid uses non-selecting model");
+    let model = no_selection.model().expect("grid string model");
+    assert_eq!(model.n_items(), 201);
+    assert!(shell.photo_tiles.borrow().len() <= 201);
+}
+
+#[cfg(not(target_os = "macos"))]
+#[gtk4::test]
+fn grid_model_preserves_controller_order_across_filtered_refreshes() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.stable-lighttable-order"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let source = workspace_with_photos(&[1, 2, 3]);
+
+    shell.set_lighttable_workspace_filtered(&source, [3, 1]);
+
+    let selection = shell.lighttable.model().expect("grid selection model");
+    let no_selection = selection
+        .downcast::<gtk4::NoSelection>()
+        .expect("grid uses non-selecting model");
+    let model = no_selection
+        .model()
+        .expect("grid string model")
+        .downcast::<gtk4::StringList>()
+        .expect("grid IDs are ordered strings");
+    assert_eq!(model.string(0).as_deref(), Some("3"));
+    assert_eq!(model.string(1).as_deref(), Some("1"));
 }
 
 // GTK4's test helper uses a GLib worker thread, which is not the Darwin

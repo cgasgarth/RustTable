@@ -199,6 +199,10 @@ impl ThumbnailPair {
         self.lighttable.state()
     }
 
+    pub(crate) fn filmstrip(&self) -> ThumbnailSurface {
+        self.filmstrip.clone()
+    }
+
     pub fn set_failed(&self) {
         self.lighttable.set_failed();
         self.filmstrip.set_failed();

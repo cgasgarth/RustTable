@@ -9,7 +9,7 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
-use super::PhotoSelectedHandler;
+use super::{PhotoSelectedHandler, lighttable_window::ThumbnailWindowChanged};
 use crate::external_editor::ExternalEditorPanel;
 use crate::gui::{
     DARKTABLE_UI_TOKENS, DarkroomView, ExportPanel, LighttableContentState,
@@ -22,7 +22,7 @@ use crate::widgets::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface}
 
 #[derive(Clone)]
 pub(crate) struct WorkspaceRenderHandle {
-    pub(super) lighttable: gtk4::FlowBox,
+    pub(super) lighttable: gtk4::GridView,
     pub(super) lighttable_empty_state: gtk4::Stack,
     pub(super) filmstrip: gtk4::FlowBox,
     pub(super) filmstrip_root: gtk4::Box,
@@ -30,19 +30,20 @@ pub(crate) struct WorkspaceRenderHandle {
     pub(super) darkroom: DarkroomView,
     pub(super) workspace: gtk4::Stack,
     pub(super) photo_selected: Rc<RefCell<Option<PhotoSelectedHandler>>>,
+    pub(super) thumbnail_window_changed: ThumbnailWindowChanged,
     pub(super) export_panel: ExportPanel,
     pub(super) external_editor_panel: ExternalEditorPanel,
     pub(super) photo_tiles: Rc<RefCell<BTreeMap<PhotoId, PhotoTilePair>>>,
     pub(super) interaction: Rc<RefCell<LighttableInteractionState>>,
     pub(super) photo_details: Rc<RefCell<BTreeMap<PhotoId, PhotoDetailViewModel>>>,
     pub(super) lighttable_workspace: Rc<RefCell<Option<PhotoWorkspaceViewModel>>>,
-    pub(super) lighttable_filter: Rc<RefCell<Option<BTreeSet<PhotoId>>>>,
+    pub(super) lighttable_filter: Rc<RefCell<Option<Vec<PhotoId>>>>,
 }
 
 #[derive(Clone)]
 pub(super) struct PhotoTilePair {
     pub(super) thumbnails: ThumbnailPair,
-    lighttable_button: gtk4::Button,
+    pub(super) lighttable_button: Option<gtk4::Button>,
     filmstrip_button: gtk4::Button,
 }
 
@@ -70,7 +71,7 @@ impl WorkspaceRenderHandle {
     pub(super) fn render(
         &self,
         view_model: &PhotoWorkspaceViewModel,
-        matching_photo_ids: Option<&BTreeSet<PhotoId>>,
+        matching_photo_ids: Option<&[PhotoId]>,
     ) {
         let mut previous_thumbnail_states = self
             .photo_tiles
@@ -79,7 +80,7 @@ impl WorkspaceRenderHandle {
             .map(|(photo_id, tile)| (*photo_id, tile.thumbnails.state()))
             .collect::<BTreeMap<_, _>>();
         let previous_details = self.photo_details.borrow().clone();
-        clear_flow_box(&self.lighttable);
+        self.lighttable.set_model(None::<&gtk4::NoSelection>);
         clear_flow_box(&self.filmstrip);
         self.photo_tiles.borrow_mut().clear();
         self.photo_details.borrow_mut().clear();
@@ -87,12 +88,16 @@ impl WorkspaceRenderHandle {
         let layout = self.interaction.borrow().layout();
         let grid = lighttable_grid_for_allocation(&self.lighttable, zoom);
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
-        self.lighttable
-            .set_max_children_per_line(if layout.shows_culling() {
-                u32::MAX
-            } else {
-                columns
-            });
+        self.lighttable.set_min_columns(if layout.shows_culling() {
+            1
+        } else {
+            columns.max(1)
+        });
+        self.lighttable.set_max_columns(if layout.shows_culling() {
+            1
+        } else {
+            columns.max(1)
+        });
         let darkroom_visible = self.workspace.visible_child_name().as_deref()
             == Some(WorkspaceRole::Darkroom.stack_name());
         self.filmstrip_root
@@ -103,11 +108,27 @@ impl WorkspaceRenderHandle {
             self.lighttable.remove_css_class("dt_culling_surface");
         }
         let browser = crate::gui::LibraryBrowserModel::from_workspace(view_model);
-        let visible_ids = browser
+        let photos_by_id = browser
             .photos()
-            .filter(|photo| matching_photo_ids.is_none_or(|ids| ids.contains(&photo.id())))
-            .filter(|photo| view_model.detail(photo.id()).is_some())
-            .map(crate::gui::model::LibraryPhoto::id)
+            .map(|photo| (photo.id(), photo.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let visible_ids = matching_photo_ids.map_or_else(
+            || {
+                browser
+                    .photos()
+                    .map(crate::gui::model::LibraryPhoto::id)
+                    .collect()
+            },
+            <[PhotoId]>::to_vec,
+        );
+        let mut seen_ids = BTreeSet::new();
+        let visible_ids = visible_ids
+            .into_iter()
+            .filter(|photo_id| {
+                seen_ids.insert(*photo_id)
+                    && photos_by_id.contains_key(photo_id)
+                    && view_model.detail(*photo_id).is_some()
+            })
             .collect::<Vec<_>>();
         {
             let mut interaction = self.interaction.borrow_mut();
@@ -116,17 +137,16 @@ impl WorkspaceRenderHandle {
             } else {
                 columns as usize
             });
-            interaction.set_order(visible_ids);
+            interaction.set_order(visible_ids.clone());
         }
         let display_ids = {
             let interaction = self.interaction.borrow();
             if layout.shows_culling() {
-                interaction.culling_ids().collect::<BTreeSet<_>>()
+                interaction.culling_ids().collect::<Vec<_>>()
             } else {
-                interaction.ordered().collect::<BTreeSet<_>>()
+                interaction.ordered().collect::<Vec<_>>()
             }
         };
-        let mut rendered_photos = 0;
         let selection = PhotoSelectionContext {
             darkroom_preview: self.darkroom_preview.clone(),
             darkroom: self.darkroom.clone(),
@@ -139,63 +159,143 @@ impl WorkspaceRenderHandle {
             photo_details: Rc::clone(&self.photo_details),
         };
 
-        for photo in browser.photos() {
-            if matching_photo_ids.is_some_and(|ids| !ids.contains(&photo.id())) {
+        for photo_id in visible_ids.iter().copied() {
+            let Some(photo) = photos_by_id.get(&photo_id) else {
                 continue;
-            }
-            let Some(detail) = view_model.detail(photo.id()) else {
+            };
+            let Some(detail) = view_model.detail(photo_id) else {
                 continue;
             };
             let detail = detail.clone();
             self.photo_details
                 .borrow_mut()
-                .insert(photo.id(), detail.clone());
+                .insert(photo_id, detail.clone());
+            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo_id, photo.title());
+            let grid_thumbnail = ThumbnailSurface::new(
+                &format!("photo-thumbnail-{photo_id}"),
+                &format!("Thumbnail for {}", photo.title()),
+                i32::from(grid.thumbnail_width_px()),
+                i32::from(grid.thumbnail_height_px()),
+            );
+            let thumbnail_state = retained_thumbnail_state(
+                photo_id,
+                &detail,
+                &previous_details,
+                &mut previous_thumbnail_states,
+            );
+            let thumbnails = ThumbnailPair::new(grid_thumbnail, filmstrip_thumbnail);
+            if thumbnails.set_state(&thumbnail_state).is_err() {
+                thumbnails.set_failed();
+            }
+            connect_photo_selection(
+                &filmstrip_item,
+                photo_id,
+                detail,
+                PhotoSurface::Filmstrip,
+                &selection,
+            );
+            self.filmstrip.insert(&filmstrip_item, -1);
+            self.photo_tiles.borrow_mut().insert(
+                photo_id,
+                PhotoTilePair {
+                    thumbnails,
+                    lighttable_button: None,
+                    filmstrip_button: filmstrip_item,
+                },
+            );
+        }
+        let previous_thumbnail_states = Rc::new(RefCell::new(previous_thumbnail_states));
+        let previous_details = Rc::new(previous_details);
+        let photo_tiles = Rc::clone(&self.photo_tiles);
+        let photo_details = Rc::clone(&self.photo_details);
+        let selection_for_bind = selection.clone();
+        let thumbnail_window_changed = Rc::clone(&self.thumbnail_window_changed);
+        let photos_by_id_for_bind = photos_by_id;
+        let view_model_for_bind = view_model.clone();
+        let factory = gtk4::SignalListItemFactory::new();
+        factory.connect_bind(move |_, object| {
+            let Some(list_item) = object.downcast_ref::<gtk4::ListItem>() else {
+                return;
+            };
+            let Some(photo_id) = list_item_photo_id(list_item) else {
+                return;
+            };
+            let Some(photo) = photos_by_id_for_bind.get(&photo_id) else {
+                return;
+            };
+            let Some(detail) = view_model_for_bind.detail(photo_id).cloned() else {
+                return;
+            };
+            photo_details.borrow_mut().insert(photo_id, detail.clone());
             let (card, card_thumbnail) = lighttable_card(
-                photo.id(),
+                photo_id,
                 photo.title(),
                 photo.secondary(),
                 photo.indicators(),
                 grid,
             );
-            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(photo.id(), photo.title());
             let thumbnail_state = retained_thumbnail_state(
-                photo.id(),
+                photo_id,
                 &detail,
                 &previous_details,
-                &mut previous_thumbnail_states,
+                &mut previous_thumbnail_states.borrow_mut(),
             );
+            let Some(filmstrip_thumbnail) = photo_tiles
+                .borrow()
+                .get(&photo_id)
+                .map(|pair| pair.thumbnails.filmstrip())
+            else {
+                return;
+            };
             let thumbnails = ThumbnailPair::new(card_thumbnail, filmstrip_thumbnail);
             if thumbnails.set_state(&thumbnail_state).is_err() {
                 thumbnails.set_failed();
             }
             connect_photo_selection(
                 &card,
-                photo.id(),
-                detail.clone(),
-                PhotoSurface::Grid,
-                &selection,
-            );
-            connect_photo_selection(
-                &filmstrip_item,
-                photo.id(),
+                photo_id,
                 detail,
-                PhotoSurface::Filmstrip,
-                &selection,
+                PhotoSurface::Grid,
+                &selection_for_bind,
             );
-            if display_ids.contains(&photo.id()) {
-                self.lighttable.insert(&card, -1);
-                rendered_photos += 1;
+            if let Some(pair) = photo_tiles.borrow_mut().get_mut(&photo_id) {
+                pair.thumbnails = thumbnails;
+                pair.lighttable_button = Some(card.clone());
             }
-            self.filmstrip.insert(&filmstrip_item, -1);
-            self.photo_tiles.borrow_mut().insert(
-                photo.id(),
-                PhotoTilePair {
-                    thumbnails,
-                    lighttable_button: card,
-                    filmstrip_button: filmstrip_item,
-                },
-            );
-        }
+            list_item.set_child(Some(&card));
+            if let Some(handler) = thumbnail_window_changed.borrow().as_ref() {
+                handler();
+            }
+        });
+        let photo_tiles = Rc::clone(&self.photo_tiles);
+        factory.connect_unbind(move |_, object| {
+            let Some(list_item) = object.downcast_ref::<gtk4::ListItem>() else {
+                return;
+            };
+            if let Some(photo_id) = list_item_photo_id(list_item)
+                && let Some(pair) = photo_tiles.borrow_mut().get_mut(&photo_id)
+            {
+                pair.lighttable_button = None;
+            }
+            list_item.set_child(None::<&gtk4::Widget>);
+        });
+        let display_ids = display_ids
+            .into_iter()
+            .filter(|photo_id| visible_ids.contains(photo_id))
+            .collect::<Vec<_>>();
+        let display_strings = display_ids
+            .iter()
+            .map(|photo_id| photo_id.get().to_string())
+            .collect::<Vec<_>>();
+        let display_string_refs = display_strings
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let model = gtk4::StringList::new(&display_string_refs);
+        let selection_model = gtk4::NoSelection::new(Some(model));
+        self.lighttable.set_factory(Some(&factory));
+        self.lighttable.set_model(Some(&selection_model));
+        let rendered_photos = display_ids.len();
         let collection_state = if rendered_photos == 0 {
             LighttableCollectionState::Empty
         } else {
@@ -205,16 +305,15 @@ impl WorkspaceRenderHandle {
             LighttableContentState::from_rendered_count(collection_state.rendered_count())
                 .stack_name(),
         );
-        // Keep the native FlowBox visible whenever the projection contains
-        // cards.  This is intentionally separate from the Stack state: a
-        // stale visibility flag can otherwise leave the selection toolbar
-        // accurate while the lighttable surface remains visually empty after
-        // a native-file open/reset.
+        // Keep the native GridView visible whenever the projection contains cards.
         self.lighttable.set_visible(rendered_photos > 0);
         self.lighttable_empty_state.set_tooltip_text(
             (!collection_state.status_text().is_empty()).then_some(collection_state.status_text()),
         );
         self.sync_selection_styles();
+        if let Some(handler) = self.thumbnail_window_changed.borrow().as_ref() {
+            handler();
+        }
     }
 
     pub(super) fn rerender_current(&self) {
@@ -223,7 +322,7 @@ impl WorkspaceRenderHandle {
             return;
         };
         let filter = self.lighttable_filter.borrow();
-        self.render(view_model, filter.as_ref());
+        self.render(view_model, filter.as_deref());
     }
 
     pub(super) fn sync_selection_styles(&self) {
@@ -238,8 +337,8 @@ impl WorkspaceRenderHandle {
         if let Some(pair) = self.photo_tiles.borrow().get(&focus) {
             if pair.filmstrip_button.has_focus() {
                 pair.filmstrip_button.grab_focus();
-            } else {
-                pair.lighttable_button.grab_focus();
+            } else if let Some(button) = pair.lighttable_button.as_ref() {
+                button.grab_focus();
             }
         }
     }
@@ -330,7 +429,10 @@ impl WorkspaceRenderHandle {
     }
 }
 
-pub(super) fn connect_lighttable_resize(lighttable: &gtk4::FlowBox, render: WorkspaceRenderHandle) {
+pub(super) fn connect_lighttable_resize(
+    lighttable: &gtk4::GridView,
+    render: WorkspaceRenderHandle,
+) {
     let last_geometry = Rc::new(std::cell::Cell::new((0_u16, 0_u16)));
     let pending = Rc::new(std::cell::Cell::new(false));
     let lighttable = lighttable.clone();
@@ -366,7 +468,11 @@ fn sync_photo_buttons(
     let selected = interaction.selected().collect::<BTreeSet<_>>();
     let focus = interaction.focus();
     for (id, pair) in photo_tiles {
-        for button in [&pair.lighttable_button, &pair.filmstrip_button] {
+        for button in pair
+            .lighttable_button
+            .iter()
+            .chain(std::iter::once(&pair.filmstrip_button))
+        {
             button.add_css_class(ThemeRole::PhotoCard.class_name());
             if selected.contains(id) {
                 button.add_css_class(ThemeRole::SelectedPhoto.class_name());
@@ -559,7 +665,7 @@ fn lighttable_card(
 }
 
 fn lighttable_grid_for_allocation(
-    lighttable: &gtk4::FlowBox,
+    lighttable: &gtk4::GridView,
     zoom: crate::gui::LighttableZoom,
 ) -> LighttableGridSpec {
     let width = u16::try_from(lighttable.allocated_width()).unwrap_or(0);
@@ -637,6 +743,11 @@ fn clear_flow_box(flow_box: &gtk4::FlowBox) {
     while let Some(child) = flow_box.first_child() {
         flow_box.remove(&child);
     }
+}
+
+fn list_item_photo_id(list_item: &gtk4::ListItem) -> Option<PhotoId> {
+    let object = list_item.item()?.downcast::<gtk4::StringObject>().ok()?;
+    object.string().parse::<u128>().ok().and_then(PhotoId::new)
 }
 
 #[cfg(test)]

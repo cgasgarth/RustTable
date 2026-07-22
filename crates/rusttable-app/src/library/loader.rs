@@ -17,7 +17,6 @@ use rusttable_ui::{
 };
 
 const CATALOG_FILENAME: &str = "catalog.redb";
-const MAX_BROWSER_PHOTOS: usize = 200;
 const MAX_PHOTO_TITLE_BYTES: usize = 128;
 const GENERIC_PHOTO_TITLE: &str = "Image";
 
@@ -142,7 +141,7 @@ fn select_catalog_path(
         .ok_or(LibraryFailureKind::CatalogLocationUnavailable)
 }
 
-/// Loads the persisted catalog into the bounded library presentation model.
+/// Loads the persisted catalog into the complete library presentation model.
 #[must_use]
 pub fn load_catalog(path: &Path) -> LibraryLoadResult {
     match load_catalog_detailed(path) {
@@ -177,7 +176,6 @@ fn present_records(
     mut records: Vec<ImportRecord>,
 ) -> Result<PhotoWorkspaceViewModel, CatalogPresentationError> {
     records.sort_by(|left, right| left.source().cmp(right.source()));
-    records.truncate(MAX_BROWSER_PHOTOS);
     let mut cards = Vec::with_capacity(records.len());
     let mut details = Vec::with_capacity(records.len());
 
@@ -297,8 +295,7 @@ mod tests {
 
     use super::{
         CatalogPresentationError, LibraryLoadError, LibraryLoadRequestId, LibraryLoadResult,
-        MAX_BROWSER_PHOTOS, format_file_size, load_catalog, present_records, select_catalog_path,
-        source_root,
+        format_file_size, load_catalog, present_records, select_catalog_path, source_root,
     };
     use crate::library::LibraryFailureKind;
     use rusttable_ui::{PhotoWorkspaceViewModelError, SelectedPreviewState};
@@ -510,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn presentation_is_bounded_to_the_first_two_hundred_sorted_sources() {
+    fn presentation_keeps_every_sorted_source_beyond_the_old_two_hundred_limit() {
         let records = (1..=201)
             .map(|number| {
                 record(
@@ -523,20 +520,20 @@ mod tests {
             .rev()
             .collect();
 
-        let workspace = present_records(records).expect("bounded presentation");
+        let workspace = present_records(records).expect("complete presentation");
 
-        assert_eq!(workspace.cards().len(), MAX_BROWSER_PHOTOS);
+        assert_eq!(workspace.cards().len(), 201);
         assert_eq!(
             workspace
                 .cards()
                 .map(|card| card.id().get())
                 .collect::<Vec<_>>(),
-            (1..=u128::try_from(MAX_BROWSER_PHOTOS).expect("fits test IDs")).collect::<Vec<_>>()
+            (1..=201).collect::<Vec<_>>()
         );
         assert!(
             workspace
                 .detail(PhotoId::new(201).expect("test photo ID"))
-                .is_none()
+                .is_some()
         );
     }
 

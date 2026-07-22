@@ -1,6 +1,7 @@
 //! Generation-checked publication of the shared lighttable and filmstrip thumbnails.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
@@ -17,6 +18,7 @@ use rusttable_ui::GtkShell;
 #[derive(Debug, Default)]
 pub(super) struct ThumbnailLifecycle {
     generation: u64,
+    requested: BTreeSet<PhotoId>,
 }
 
 impl ThumbnailLifecycle {
@@ -44,14 +46,21 @@ pub(super) fn start_workspace_thumbnails(
     let GtkCatalogState::Ready(ready) = catalog.state() else {
         return;
     };
-    let generation = lifecycle.borrow_mut().begin();
     let catalog_path = ready.location().catalog_path().to_path_buf();
     let source_root = ready.location().source_root().to_path_buf();
-    let photo_ids = ready
-        .workspace()
-        .cards()
-        .map(rusttable_ui::PhotoCardViewModel::id)
+    let photo_ids = shell
+        .lighttable_thumbnail_photo_ids()
+        .into_iter()
+        .filter(|photo_id| !lifecycle.borrow().requested.contains(photo_id))
         .collect::<Vec<_>>();
+    if photo_ids.is_empty() {
+        return;
+    }
+    let generation = lifecycle.borrow_mut().begin();
+    lifecycle
+        .borrow_mut()
+        .requested
+        .extend(photo_ids.iter().copied());
     for photo_id in &photo_ids {
         shell.set_photo_thumbnail_loading(*photo_id);
     }
