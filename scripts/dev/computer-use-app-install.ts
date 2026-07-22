@@ -177,6 +177,23 @@ export const parseLaunchServicesRegistrations = (dump: string): LaunchServicesRe
   return registrations;
 };
 
+export const assertCanonicalLaunchServicesRegistration = ({
+  canonicalPath,
+  registrations,
+}: {
+  canonicalPath: string;
+  registrations: readonly LaunchServicesRegistration[];
+}): void => {
+  const canonical = resolve(canonicalPath);
+  const productionRegistrations = registrations.filter(
+    ({ bundleIdentifier }) => bundleIdentifier === RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+  );
+  if (productionRegistrations.length !== 1 || productionRegistrations[0]?.path !== canonical) {
+    const paths = productionRegistrations.map(({ path }) => path).sort().join(', ') || '<none>';
+    throw new Error(`Expected exactly one canonical Computer Use registration at ${canonical}; found ${paths}.`);
+  }
+};
+
 const isWorktreeTargetBundle = (path: string, worktreePaths: readonly string[]): boolean => {
   const normalizedPath = resolve(path);
   const targetSuffix = /\/target\/(?:debug|release)\/bundle\/macos\/[^/]+\.app$/;
@@ -339,6 +356,7 @@ export const cleanupRepositoryAppBundles = async ({
   for (const bundlePath of bundlePaths) {
     const resolvedPath = resolve(bundlePath);
     if (keep.has(resolvedPath)) continue;
+    if (isWorktreeTargetBundle(resolvedPath, worktreePaths) || isWorktreeTargetBundle(resolvedPath, managedRepositoryRoots)) continue;
     if (!isRepositoryOwnedBundlePath(resolvedPath, worktreePaths, repositoryPaths, managedDirectories, managedRepositoryRoots)) continue;
     if ((await lstat(resolvedPath).catch(() => undefined))?.isSymbolicLink()) continue;
     const identifier = await readIdentifier(resolvedPath).catch(() => 'unreadable');
