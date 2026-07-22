@@ -6,6 +6,7 @@
 
 mod layout;
 mod lighttable;
+mod mode_transition;
 mod preview;
 mod selection;
 
@@ -254,11 +255,19 @@ impl GtkShell {
         let left_panel = shell.left_panel_stack.clone();
         let right_panel = shell.right_panel_stack.clone();
         let darkroom = shell.darkroom.clone();
+        let photo_details = Rc::clone(&shell.photo_details);
         shell
             .workspace
             .connect_visible_child_name_notify(move |workspace| {
                 let darkroom_visible = workspace.visible_child_name().as_deref()
                     == Some(WorkspaceRole::Darkroom.stack_name());
+                if darkroom_visible {
+                    mode_transition::sync_darkroom_selection(
+                        &darkroom,
+                        &interaction,
+                        &photo_details,
+                    );
+                }
                 filmstrip_root.set_visible(if darkroom_visible {
                     darkroom.filmstrip_visible()
                 } else {
@@ -352,6 +361,9 @@ impl GtkShell {
 
     /// Starts a generation-tagged darkroom selection before its worker-rendered preview arrives.
     pub fn begin_darkroom_selection(&self, photo_id: PhotoId, generation: ViewportGeneration) {
+        if let Some(detail) = self.photo_details.borrow().get(&photo_id).cloned() {
+            self.darkroom.set_detail(&detail);
+        }
         self.darkroom
             .set_viewport_selection(photo_id, Revision::ZERO, generation);
     }

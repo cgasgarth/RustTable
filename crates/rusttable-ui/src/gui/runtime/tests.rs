@@ -104,6 +104,13 @@ fn native_open_projection_survives_workspace_reset_and_mode_switch() {
         Some(WorkspaceRole::Darkroom.stack_name())
     );
     shell.show_workspace(WorkspaceRole::Lighttable);
+    shell.show_workspace(WorkspaceRole::Darkroom);
+    assert_eq!(
+        shell.darkroom.preview().selection_state(),
+        super::super::DarkroomSelectionState::Selected(second)
+    );
+    assert_eq!(shell.darkroom.preview().title_label().text(), "photo-2");
+    shell.show_workspace(WorkspaceRole::Lighttable);
     assert_eq!(
         shell.workspace.visible_child_name().as_deref(),
         Some(WorkspaceRole::Lighttable.stack_name())
