@@ -2,6 +2,10 @@ use std::fmt;
 
 use crate::context::CorrelationContext;
 use crate::privacy::DiagnosticField;
+use crate::selected_preview::{
+    SELECTED_PREVIEW_FAILURE_IDENTITY, SELECTED_PREVIEW_SUBSYSTEM, SelectedPreviewFailureCode,
+    SelectedPreviewFailureStage, SelectedPreviewMetadata, SelectedPreviewOperation,
+};
 
 pub const SCHEMA_VERSION: u16 = 1;
 pub const MAX_EVENT_FIELDS: usize = 64;
@@ -136,6 +140,57 @@ impl DiagnosticEvent {
             Severity::Error,
             "application_failure",
         )
+    }
+
+    /// Creates the bounded, typed event used for selected-preview failures.
+    ///
+    /// The stage and cause are fixed taxonomy values and the operation is a fixed identity;
+    /// callers can add only [`SelectedPreviewMetadata`] and an already-redacted context. No
+    /// arbitrary error text or image payload can enter this event through this API.
+    ///
+    /// # Panics
+    ///
+    /// This function cannot panic for the supplied taxonomy values; the internal `expect` calls
+    /// guard static field names and values that are validated at compile time by inspection.
+    #[must_use]
+    pub fn selected_preview_failure(
+        stage: SelectedPreviewFailureStage,
+        code: SelectedPreviewFailureCode,
+        operation: SelectedPreviewOperation,
+    ) -> Self {
+        let mut event = Self::well_known(
+            SELECTED_PREVIEW_SUBSYSTEM,
+            SELECTED_PREVIEW_FAILURE_IDENTITY,
+            Severity::Error,
+            operation.as_str(),
+        );
+        event.fields.push(
+            DiagnosticField::public_text("failure_stage", stage.as_str())
+                .expect("selected-preview taxonomy field is static"),
+        );
+        event.fields.push(
+            DiagnosticField::public_text("failure_code", code.as_str())
+                .expect("selected-preview taxonomy field is static"),
+        );
+        event
+    }
+
+    /// Attaches the bounded metadata permitted for a selected-preview failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the event field bound would be exceeded.
+    pub fn with_selected_preview_metadata<M>(
+        mut self,
+        metadata: M,
+    ) -> Result<Self, DiagnosticsError>
+    where
+        M: std::borrow::Borrow<SelectedPreviewMetadata>,
+    {
+        for field in metadata.borrow().fields() {
+            self = self.with_field(field.clone())?;
+        }
+        Ok(self)
     }
 
     #[must_use]

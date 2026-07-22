@@ -233,10 +233,11 @@ pub(crate) fn refuse_symlink(path: &Path, name: &'static str) -> Result<(), Diag
 }
 
 fn fallback(event: &DiagnosticEvent) {
-    eprintln!(
-        "[rusttable diagnostics degraded] severity={} code={}",
-        event.severity().as_str(),
-        event.code().as_str()
+    tracing::error!(
+        target: "rusttable.diagnostics",
+        severity = event.severity().as_str(),
+        code = %event.code().as_str(),
+        "diagnostics sinks degraded"
     );
 }
 

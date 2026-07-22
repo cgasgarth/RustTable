@@ -41,6 +41,10 @@ fn diagnostics_process() {
     assert!(!structured_json.contains("credential-sentinel"));
     assert!(!structured_json.contains("pixel-sentinel"));
 
+    let selected_preview = unique_directory("selected-preview");
+    run_child("selected-preview", &selected_preview).assert_success();
+    assert_selected_preview_logs(&selected_preview);
+
     let concurrent = unique_directory("concurrent");
     run_child("concurrent", &concurrent).assert_success();
     assert_eq!(
@@ -153,6 +157,35 @@ fn child_mode(mode: &str) {
             guard.record(&event).unwrap();
             assert_eq!(guard.recent_snapshot().unwrap().len(), 1);
         }
+        "selected-preview" => {
+            let guard = install().expect("install");
+            let context = CorrelationContext::default()
+                .photo(guard.redactor(), "/private/photo.raw")
+                .request(guard.redactor(), "request-secret-preview");
+            let metadata = rusttable_diagnostics::SelectedPreviewMetadata::default()
+                .with_generation(12)
+                .with_expected_generation(13)
+                .with_dimensions(1920, 1080)
+                .expect("valid dimensions")
+                .with_byte_length(8_294_400)
+                .with_format("raw")
+                .expect("valid format")
+                .with_source_kind("raw")
+                .expect("valid source kind");
+            let event = rusttable_diagnostics::DiagnosticEvent::selected_preview_failure(
+                rusttable_diagnostics::SelectedPreviewFailureStage::SourceDecode,
+                rusttable_diagnostics::SelectedPreviewFailureCode::UnsupportedFormat,
+                rusttable_diagnostics::SelectedPreviewOperation::DecodeSource,
+            )
+            .with_context(context)
+            .with_selected_preview_metadata(metadata)
+            .expect("metadata fits");
+            guard
+                .record(&event)
+                .expect("record selected preview failure");
+            assert_eq!(guard.recent_snapshot().unwrap().len(), 1);
+            assert!(!event.code().as_str().contains("secret-preview-sentinel"));
+        }
         "invalid" => assert!(install().is_err()),
         "static-crash" => {
             let _guard = install().expect("install");
@@ -173,6 +206,60 @@ fn child_mode(mode: &str) {
         }
         _ => panic!("unknown diagnostics mode"),
     }
+}
+
+fn assert_selected_preview_logs(directory: &Path) {
+    let selected_json =
+        fs::read_to_string(directory.join("rusttable.jsonl")).expect("selected preview JSON log");
+    let selected_line = selected_json
+        .lines()
+        .next()
+        .expect("selected preview event");
+    let selected_value: serde_json::Value =
+        serde_json::from_str(selected_line).expect("valid selected preview JSONL");
+    let selected_object = selected_value.as_object().expect("JSON object schema");
+    assert_eq!(selected_object["schema_version"], 1);
+    assert_eq!(selected_object["code"], "preview.selected_failure");
+    assert_eq!(selected_object["severity"], "error");
+    assert_eq!(selected_object["operation"], "decode_source");
+    assert_eq!(
+        selected_object["context"]["photo"].as_str().unwrap().len(),
+        30
+    );
+    let fields = selected_object["fields"].as_array().expect("field array");
+    assert_field(fields, "failure_stage", "source_decode");
+    assert_field(fields, "failure_code", "unsupported_format");
+    assert_field(fields, "generation", 12);
+    assert_field(fields, "expected_generation", 13);
+    assert_field(fields, "width", 1920);
+    assert_field(fields, "height", 1080);
+    assert_field(fields, "format", "raw");
+    assert_field(fields, "source_kind", "raw");
+    assert_field(fields, "byte_length", 8_294_400);
+    assert!(!selected_json.contains("/private/photo.raw"));
+    assert!(!selected_json.contains("request-secret-preview"));
+    assert!(!selected_json.contains("secret-preview-sentinel"));
+    assert!(!selected_json.contains("image-bytes-sentinel"));
+
+    let selected_human =
+        fs::read_to_string(directory.join("rusttable.log")).expect("selected preview human log");
+    assert!(selected_human.contains("error preview.selected_failure"));
+    assert!(selected_human.contains("failure_stage=source_decode"));
+    assert!(selected_human.contains("failure_code=unsupported_format"));
+    assert!(selected_human.contains("generation=12"));
+    assert!(!selected_human.contains("/private/photo.raw"));
+    assert!(!selected_human.contains("request-secret-preview"));
+    assert!(!selected_human.contains("secret-preview-sentinel"));
+    assert!(!selected_human.contains("image-bytes-sentinel"));
+}
+
+fn assert_field(fields: &[serde_json::Value], key: &str, value: impl Into<serde_json::Value>) {
+    let value = value.into();
+    assert!(
+        fields
+            .iter()
+            .any(|field| { field["key"] == key && value == field["value"] })
+    );
 }
 
 fn run_child(mode: &str, directory: &Path) -> Output {
