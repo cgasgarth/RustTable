@@ -18,5 +18,10 @@ rusttable-processing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+[[test]]
+name = "exposure_gtk_boundary"
+path = "tests/exposure_gtk_boundary.rs"
+harness = false
+
 [lints]
 workspace = true

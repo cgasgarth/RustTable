@@ -332,14 +332,16 @@ impl ExposurePanel {
         let module_actions = Rc::clone(&self.module_actions);
         let module_revision = Rc::clone(&self.module_revision);
         reset.connect_clicked(move |_| {
-            dispatch_from_gtk(
-                &state,
-                &actions,
-                &controls,
-                &module_actions,
-                &module_revision,
-                ExposureAction::Reset,
-            );
+            run_gtk_callback(|| {
+                dispatch_from_gtk(
+                    &state,
+                    &actions,
+                    &controls,
+                    &module_actions,
+                    &module_revision,
+                    ExposureAction::Reset,
+                );
+            });
         });
     }
 
@@ -503,14 +505,16 @@ fn connect_switch_action<F>(
     F: Fn(bool) -> ExposureAction + 'static,
 {
     control.connect_active_notify(move |control| {
-        dispatch_from_gtk(
-            &state,
-            &actions,
-            &controls,
-            &module_actions,
-            &module_revision,
-            action(control.is_active()),
-        );
+        run_gtk_callback(|| {
+            dispatch_from_gtk(
+                &state,
+                &actions,
+                &controls,
+                &module_actions,
+                &module_revision,
+                action(control.is_active()),
+            );
+        });
     });
 }
 
@@ -523,14 +527,16 @@ fn connect_expander_action(
     module_revision: Rc<RefCell<Revision>>,
 ) {
     control.connect_expanded_notify(move |control| {
-        dispatch_from_gtk(
-            &state,
-            &actions,
-            &controls,
-            &module_actions,
-            &module_revision,
-            ExposureAction::SetExpanded(control.is_expanded()),
-        );
+        run_gtk_callback(|| {
+            dispatch_from_gtk(
+                &state,
+                &actions,
+                &controls,
+                &module_actions,
+                &module_revision,
+                ExposureAction::SetExpanded(control.is_expanded()),
+            );
+        });
     });
 }
 
@@ -543,19 +549,21 @@ fn connect_mode_action(
     module_revision: Rc<RefCell<Revision>>,
 ) {
     control.connect_selected_notify(move |control| {
-        let mode = if control.selected() == mode_index(ExposureMode::Manual) {
-            ExposureMode::Manual
-        } else {
-            ExposureMode::Automatic
-        };
-        dispatch_from_gtk(
-            &state,
-            &actions,
-            &controls,
-            &module_actions,
-            &module_revision,
-            ExposureAction::SetMode(mode),
-        );
+        run_gtk_callback(|| {
+            let mode = if control.selected() == mode_index(ExposureMode::Manual) {
+                ExposureMode::Manual
+            } else {
+                ExposureMode::Automatic
+            };
+            dispatch_from_gtk(
+                &state,
+                &actions,
+                &controls,
+                &module_actions,
+                &module_revision,
+                ExposureAction::SetMode(mode),
+            );
+        });
     });
 }
 
@@ -571,15 +579,25 @@ fn connect_scale_action<F>(
     F: Fn(f64) -> ExposureAction + 'static,
 {
     control.connect_value_changed(move |control| {
-        dispatch_from_gtk(
-            &state,
-            &actions,
-            &controls,
-            &module_actions,
-            &module_revision,
-            action(control.value()),
-        );
+        run_gtk_callback(|| {
+            dispatch_from_gtk(
+                &state,
+                &actions,
+                &controls,
+                &module_actions,
+                &module_revision,
+                action(control.value()),
+            );
+        });
     });
+}
+
+/// Seals the complete Rust body of every Exposure signal callback before it
+/// is entered from GTK's `extern "C"` trampoline. This includes widget reads,
+/// action construction, `RefCell` access, controller callbacks, and status
+/// reporting; no panic may cross back into native GTK.
+fn run_gtk_callback(callback: impl FnOnce()) {
+    let _ = catch_unwind(AssertUnwindSafe(callback));
 }
 
 fn dispatch(
@@ -755,109 +773,6 @@ mod tests {
     fn mode_index_matches_dropdown_order() {
         assert_eq!(mode_index(ExposureMode::Manual), 0);
         assert_eq!(mode_index(ExposureMode::Automatic), 1);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn gtk_callbacks_survive_repeated_projection_and_user_toggles() {
-        if gtk4::init().is_err() {
-            return;
-        }
-        let panel = ExposurePanel::new();
-        let root: gtk4::Widget = panel.widget().clone().upcast();
-        let enabled = find_widget(&root, "exposure-enabled")
-            .expect("exposure enabled switch")
-            .downcast::<gtk4::Switch>()
-            .expect("exposure enabled switch type");
-        let actions = Rc::new(RefCell::new(Vec::new()));
-        let handler_slot = Rc::new(RefCell::new(None::<DarkroomModuleActionHandler>));
-        let panel_for_handler = panel.clone();
-        let actions_for_handler = Rc::clone(&actions);
-        let slot_for_handler = Rc::clone(&handler_slot);
-        let handler: DarkroomModuleActionHandler = Rc::new(move |action| {
-            let DarkroomModuleAction::Enable {
-                expected_revision,
-                enabled,
-                ..
-            } = action
-            else {
-                return Err(DarkroomModuleError::WrongModule {
-                    expected: "exposure enable".to_owned(),
-                    actual: "unexpected action".to_owned(),
-                });
-            };
-            actions_for_handler.borrow_mut().push(action);
-            let revision = expected_revision
-                .checked_increment()
-                .map_err(|_| DarkroomModuleError::RevisionOverflow)?;
-            panel_for_handler
-                .set_module_projection(revision, enabled, true, 0.0, 0.0)
-                .map_err(|error| DarkroomModuleError::Persistence {
-                    message: error.to_string(),
-                })?;
-            let replacement = slot_for_handler.borrow().clone();
-            panel_for_handler.set_module_action_handler(replacement, revision);
-            Ok(revision)
-        });
-        handler_slot.replace(Some(handler.clone()));
-        panel.set_module_action_handler(Some(handler), Revision::ZERO);
-
-        for revision in 1..=8 {
-            let panel_for_projection = panel.clone();
-            run_main_loop(move || {
-                panel_for_projection
-                    .set_module_projection(
-                        Revision::from_u64(revision),
-                        revision % 2 == 0,
-                        true,
-                        0.0,
-                        0.0,
-                    )
-                    .expect("valid exposure projection");
-            });
-        }
-        for enabled_value in [false, true, false, true, false, true] {
-            let enabled_for_toggle = enabled.clone();
-            run_main_loop(move || enabled_for_toggle.set_active(enabled_value));
-        }
-
-        assert_eq!(actions.borrow().len(), 6);
-        assert_eq!(panel.state().enabled(), true);
-        assert_eq!(enabled.is_active(), true);
-        assert!(
-            find_widget(&root, "exposure-status")
-                .expect("exposure status")
-                .downcast::<gtk4::Label>()
-                .expect("exposure status type")
-                .text()
-                .starts_with("Ready · revision")
-        );
-    }
-
-    #[cfg(target_os = "linux")]
-    fn run_main_loop(callback: impl FnOnce() + 'static) {
-        let main_loop = gtk4::glib::MainLoop::new(None, false);
-        let main_loop_for_callback = main_loop.clone();
-        gtk4::glib::idle_add_local_once(move || {
-            callback();
-            main_loop_for_callback.quit();
-        });
-        main_loop.run();
-    }
-
-    #[cfg(target_os = "linux")]
-    fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
-        if root.widget_name() == name {
-            return Some(root.clone());
-        }
-        let mut child = root.first_child();
-        while let Some(current) = child {
-            if let Some(found) = find_widget(&current, name) {
-                return Some(found);
-            }
-            child = current.next_sibling();
-        }
-        None
     }
 
     fn assert_close(actual: f64, expected: f64) {
