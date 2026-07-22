@@ -101,6 +101,13 @@ pub enum LighttableSort {
     Rating,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LighttableSortDirection {
+    #[default]
+    Ascending,
+    Descending,
+}
+
 impl LighttableSort {
     pub const ALL: [Self; 3] = [Self::Filename, Self::CaptureTime, Self::Rating];
 
@@ -124,6 +131,7 @@ pub enum LighttableToolbarAction {
     SetProperty(CollectionProperty),
     SetSearchText(String),
     SetSort(LighttableSort),
+    SetSortDirection(LighttableSortDirection),
     SetRating(LighttableRating),
     ToggleColorLabel(LighttableColorLabel),
     ClearReset,
@@ -134,6 +142,7 @@ pub struct LighttableToolbarState {
     property: CollectionProperty,
     search_text: String,
     sort: LighttableSort,
+    sort_direction: LighttableSortDirection,
     selected_count: usize,
     visible_count: usize,
     total_count: usize,
@@ -148,6 +157,7 @@ impl LighttableToolbarState {
             property: CollectionProperty::Filename,
             search_text: String::new(),
             sort: LighttableSort::Filename,
+            sort_direction: LighttableSortDirection::Ascending,
             selected_count: 0,
             visible_count: total_count,
             total_count,
@@ -176,6 +186,12 @@ impl LighttableToolbarState {
     }
 
     #[must_use]
+    pub const fn with_sort_direction(mut self, direction: LighttableSortDirection) -> Self {
+        self.sort_direction = direction;
+        self
+    }
+
+    #[must_use]
     pub fn with_selection(
         mut self,
         selected_count: usize,
@@ -199,6 +215,10 @@ impl LighttableToolbarState {
     #[must_use]
     pub const fn sort(&self) -> LighttableSort {
         self.sort
+    }
+    #[must_use]
+    pub const fn sort_direction(&self) -> LighttableSortDirection {
+        self.sort_direction
     }
     #[must_use]
     pub const fn selected_count(&self) -> usize {
@@ -243,6 +263,7 @@ pub struct LighttableToolbar {
     property: gtk4::DropDown,
     search: gtk4::SearchEntry,
     sort: gtk4::DropDown,
+    sort_direction: gtk4::Button,
     count: gtk4::Label,
     rating_buttons: Vec<(LighttableRating, gtk4::Button)>,
     label_buttons: Vec<(LighttableColorLabel, gtk4::Button)>,
@@ -252,6 +273,7 @@ pub struct LighttableToolbar {
 }
 
 impl LighttableToolbar {
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn new() -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
@@ -333,6 +355,10 @@ impl LighttableToolbar {
         sort.set_accessible_role(gtk4::AccessibleRole::ComboBox);
         sort.set_tooltip_text(Some("sort visible images"));
         root.append(&sort);
+        let sort_direction = shared_button("lighttable-sort-direction", "↑");
+        sort_direction.set_accessible_role(gtk4::AccessibleRole::Button);
+        sort_direction.set_tooltip_text(Some("sort ascending; click to reverse"));
+        root.append(&sort_direction);
         let count = gtk4::Label::new(Some("0 selected · 0 of 0"));
         count.set_widget_name("lighttable-selection-count");
         count.add_css_class("dim-label");
@@ -353,6 +379,7 @@ impl LighttableToolbar {
             property,
             search,
             sort,
+            sort_direction,
             count,
             rating_buttons,
             label_buttons,
@@ -378,6 +405,12 @@ impl LighttableToolbar {
         self.property.set_selected(property_index(state.property));
         self.search.set_text(&state.search_text);
         self.sort.set_selected(state.sort.index());
+        let (symbol, tooltip) = match state.sort_direction {
+            LighttableSortDirection::Ascending => ("↑", "sort ascending; click to reverse"),
+            LighttableSortDirection::Descending => ("↓", "sort descending; click to reverse"),
+        };
+        self.sort_direction.set_label(symbol);
+        self.sort_direction.set_tooltip_text(Some(tooltip));
         self.count.set_text(&format!(
             "{} selected · {} of {}",
             state.selected_count, state.visible_count, state.total_count
@@ -385,7 +418,8 @@ impl LighttableToolbar {
         self.reset.set_sensitive(
             state.has_active_filter()
                 || state.selected_count() > 0
-                || state.sort() != LighttableSort::Filename,
+                || state.sort() != LighttableSort::Filename
+                || state.sort_direction() != LighttableSortDirection::Ascending,
         );
         for (rating, button) in &self.rating_buttons {
             button.set_css_classes(&button_classes(
@@ -436,6 +470,18 @@ impl LighttableToolbar {
                 && let Some(sort) = LighttableSort::from_index(dropdown.selected())
             {
                 action(LighttableToolbarAction::SetSort(sort));
+            }
+        });
+        let projecting = Rc::clone(&self.projecting);
+        let action = Rc::clone(&callback);
+        let state = Rc::clone(&self.state);
+        self.sort_direction.connect_clicked(move |_| {
+            if !projecting.get() {
+                let direction = match state.borrow().sort_direction() {
+                    LighttableSortDirection::Ascending => LighttableSortDirection::Descending,
+                    LighttableSortDirection::Descending => LighttableSortDirection::Ascending,
+                };
+                action(LighttableToolbarAction::SetSortDirection(direction));
             }
         });
         for (rating, button) in &self.rating_buttons {
@@ -494,6 +540,7 @@ mod tests {
         let state = LighttableToolbarState::new(12)
             .with_filter(CollectionProperty::Folders, "trip", 4)
             .with_sort(LighttableSort::Rating)
+            .with_sort_direction(LighttableSortDirection::Descending)
             .with_selection(
                 2,
                 Some(LighttableRating::Four),
@@ -502,6 +549,7 @@ mod tests {
         assert_eq!(state.property(), CollectionProperty::Folders);
         assert_eq!(state.search_text(), "trip");
         assert_eq!(state.sort(), LighttableSort::Rating);
+        assert_eq!(state.sort_direction(), LighttableSortDirection::Descending);
         assert_eq!(state.selected_count(), 2);
         assert_eq!(state.visible_count(), 4);
         assert_eq!(state.total_count(), 12);
@@ -521,6 +569,7 @@ mod tests {
             "lighttable-filter-property",
             "lighttable-filter-entry",
             "lighttable-sort",
+            "lighttable-sort-direction",
             "lighttable-selection-count",
             "lighttable-reset",
         ] {

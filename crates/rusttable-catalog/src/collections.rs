@@ -121,6 +121,132 @@ pub struct CollectionViewDefinition {
     grouping: GroupCollapsePolicy,
 }
 
+/// The collection property supported by the lighttable toolbar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ActiveLighttableProperty {
+    Filmroll,
+    Folders,
+    Rating,
+    ColorLabel,
+    Filename,
+}
+
+/// The collection sort mode supported by the lighttable toolbar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ActiveLighttableSort {
+    Filename,
+    CaptureTime,
+    Rating,
+}
+
+/// The direction applied to the active lighttable sort mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ActiveLighttableSortDirection {
+    Ascending,
+    Descending,
+}
+
+/// Current version of the durable active-lighttable payload.
+pub const ACTIVE_LIGHTTABLE_STATE_VERSION: u8 = 1;
+
+/// Versioned durable state for the implemented lighttable collection surface.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveLighttableState {
+    version: u8,
+    property: ActiveLighttableProperty,
+    search_text: String,
+    sort: ActiveLighttableSort,
+    direction: ActiveLighttableSortDirection,
+    selected_photo_ids: Vec<u128>,
+}
+
+impl ActiveLighttableState {
+    #[must_use]
+    pub fn new(
+        property: ActiveLighttableProperty,
+        search_text: impl Into<String>,
+        sort: ActiveLighttableSort,
+        direction: ActiveLighttableSortDirection,
+        selected_photo_ids: impl IntoIterator<Item = u128>,
+    ) -> Self {
+        let mut selected_photo_ids = selected_photo_ids.into_iter().collect::<Vec<_>>();
+        selected_photo_ids.sort_unstable();
+        selected_photo_ids.dedup();
+        Self {
+            version: ACTIVE_LIGHTTABLE_STATE_VERSION,
+            property,
+            search_text: search_text.into(),
+            sort,
+            direction,
+            selected_photo_ids,
+        }
+    }
+
+    #[must_use]
+    pub const fn default_state() -> Self {
+        Self {
+            version: ACTIVE_LIGHTTABLE_STATE_VERSION,
+            property: ActiveLighttableProperty::Filename,
+            search_text: String::new(),
+            sort: ActiveLighttableSort::Filename,
+            direction: ActiveLighttableSortDirection::Ascending,
+            selected_photo_ids: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub const fn version(&self) -> u8 {
+        self.version
+    }
+    #[must_use]
+    pub const fn property(&self) -> ActiveLighttableProperty {
+        self.property
+    }
+    #[must_use]
+    pub fn search_text(&self) -> &str {
+        &self.search_text
+    }
+    #[must_use]
+    pub const fn sort(&self) -> ActiveLighttableSort {
+        self.sort
+    }
+    #[must_use]
+    pub const fn direction(&self) -> ActiveLighttableSortDirection {
+        self.direction
+    }
+    #[must_use]
+    pub fn selected_photo_ids(&self) -> &[u128] {
+        &self.selected_photo_ids
+    }
+
+    /// Validates the serialized shape before it reaches an application controller.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.version != ACTIVE_LIGHTTABLE_STATE_VERSION {
+            return Err("unsupported active lighttable state version");
+        }
+        if self.search_text.len() > 4_096 {
+            return Err("active lighttable search text is too long");
+        }
+        if self
+            .selected_photo_ids
+            .windows(2)
+            .any(|ids| ids[0] >= ids[1])
+        {
+            return Err("active lighttable selection is not canonical");
+        }
+        if self.selected_photo_ids.contains(&0) {
+            return Err("active lighttable selection contains a zero photo ID");
+        }
+        Ok(())
+    }
+}
+
+impl Default for ActiveLighttableState {
+    fn default() -> Self {
+        Self::default_state()
+    }
+}
+
 impl CollectionViewDefinition {
     #[must_use]
     pub const fn new(

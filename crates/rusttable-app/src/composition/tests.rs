@@ -20,7 +20,8 @@ use crate::macos::MacOpenTarget;
 #[cfg(not(target_os = "macos"))]
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
 
-use super::{CollectionController, apply_collection_action, collection_filter_state};
+use super::collection_bridge::apply_collection_action;
+use super::{CollectionController, collection_filter_state};
 #[cfg(not(target_os = "macos"))]
 use super::{
     GtkCatalogController, MacApplicationBridge, apply_selection_projection, dispatch_open_request,

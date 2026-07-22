@@ -1,21 +1,26 @@
 //! GTK-facing collection state backed by the imported catalog records.
 
 mod service;
+mod state;
 
 pub use service::LibraryCollectionService;
-
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+pub use state::ActiveLighttableRestoreReport;
 
 use rusttable_catalog::{
-    CatalogCommand, CatalogState, ColorLabel, ImportRecord, PhotoOrganizationState, Rating,
+    ActiveLighttableState, CatalogCommand, CatalogState, ColorLabel, ImportRecord,
+    PhotoOrganizationState, Rating,
 };
 use rusttable_core::PhotoId;
 use rusttable_i18n::{CollationProfile, LocaleCollator, LocaleTag};
-use rusttable_import::decode_reference_source;
 use rusttable_ui::{
     CollectionItem, CollectionProperty, CollectionRule, LighttableColorLabel, LighttablePhotoState,
-    LighttableRating, LighttableSort, LighttableToolbarState,
+    LighttableRating, LighttableSort, LighttableSortDirection, LighttableToolbarState,
+};
+use std::collections::{BTreeMap, BTreeSet};
+
+use state::{
+    active_property, active_sort, active_sort_direction, collection_item, ui_property, ui_sort,
+    ui_sort_direction,
 };
 
 /// A display-safe snapshot for refreshing the lighttable and filmstrip.
@@ -88,6 +93,7 @@ pub struct CollectionController {
     selected: BTreeSet<PhotoId>,
     selection_anchor: Option<PhotoId>,
     sort: LighttableSort,
+    sort_direction: LighttableSortDirection,
     generation: u64,
 }
 
@@ -114,6 +120,7 @@ impl CollectionController {
             selected: BTreeSet::new(),
             selection_anchor: None,
             sort: LighttableSort::Filename,
+            sort_direction: LighttableSortDirection::Ascending,
             generation: 0,
         }
     }
@@ -184,6 +191,19 @@ impl CollectionController {
         controller
     }
 
+    #[must_use]
+    pub fn from_import_records_with_locale_and_organization_and_active_state<'a>(
+        records: impl IntoIterator<Item = &'a ImportRecord>,
+        locale: LocaleTag,
+        persisted: &BTreeMap<PhotoId, PhotoOrganizationState>,
+        active: &ActiveLighttableState,
+    ) -> (Self, ActiveLighttableRestoreReport) {
+        let mut controller =
+            Self::from_import_records_with_locale_and_organization(records, locale, persisted);
+        let report = controller.restore_active_state(active);
+        (controller, report)
+    }
+
     /// Returns the current rule.
     #[must_use]
     pub const fn rule(&self) -> &CollectionRule {
@@ -199,16 +219,19 @@ impl CollectionController {
     /// Changes the active collection property.
     pub fn set_property(&mut self, property: CollectionProperty) {
         self.rule.set_property(property);
+        self.reconcile_selection();
     }
 
     /// Changes the active search text.
     pub fn set_search_text(&mut self, search_text: impl Into<String>) {
         self.rule.set_search_text(search_text);
+        self.reconcile_selection();
     }
 
     /// Clears the search text while preserving the selected property.
     pub fn clear(&mut self) {
         self.rule.set_search_text(String::new());
+        self.reconcile_selection();
     }
 
     pub fn accept_generation(&mut self, generation: u64) -> bool {
@@ -221,6 +244,72 @@ impl CollectionController {
 
     pub fn set_sort(&mut self, sort: LighttableSort) {
         self.sort = sort;
+    }
+
+    pub fn set_sort_direction(&mut self, direction: LighttableSortDirection) {
+        self.sort_direction = direction;
+    }
+
+    fn reconcile_selection(&mut self) {
+        let visible = self
+            .matching_photo_ids()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        self.selected.retain(|photo_id| visible.contains(photo_id));
+        self.selection_anchor = self
+            .selection_anchor
+            .filter(|photo_id| self.selected.contains(photo_id))
+            .or_else(|| self.selected.first().copied());
+    }
+
+    #[must_use]
+    pub fn active_state(&self) -> ActiveLighttableState {
+        ActiveLighttableState::new(
+            active_property(self.rule.property()),
+            self.rule.search_text(),
+            active_sort(self.sort),
+            active_sort_direction(self.sort_direction),
+            self.selected.iter().map(|photo_id| photo_id.get()),
+        )
+    }
+
+    pub fn restore_active_state(
+        &mut self,
+        active: &ActiveLighttableState,
+    ) -> ActiveLighttableRestoreReport {
+        self.rule.set_property(ui_property(active.property()));
+        self.rule.set_search_text(active.search_text());
+        self.sort = ui_sort(active.sort());
+        self.sort_direction = ui_sort_direction(active.direction());
+
+        let matching = self.matching_photo_ids();
+        let matching = matching.iter().copied().collect::<BTreeSet<_>>();
+        let available = self.organization.keys().copied().collect::<BTreeSet<_>>();
+        let mut selected = BTreeSet::new();
+        let mut discarded_missing = 0;
+        let mut discarded_hidden = 0;
+        for raw_id in active.selected_photo_ids() {
+            let Some(photo_id) = PhotoId::new(*raw_id) else {
+                discarded_missing += 1;
+                continue;
+            };
+            if !available.contains(&photo_id) {
+                discarded_missing += 1;
+            } else if !matching.contains(&photo_id) {
+                discarded_hidden += 1;
+            } else {
+                selected.insert(photo_id);
+            }
+        }
+        self.selected = selected;
+        self.selection_anchor = self
+            .matching_photo_ids()
+            .into_iter()
+            .find(|photo_id| self.selected.contains(photo_id));
+        ActiveLighttableRestoreReport {
+            discarded_missing,
+            discarded_hidden,
+        }
     }
 
     pub fn select_only(&mut self, photo_id: PhotoId) -> bool {
@@ -353,6 +442,7 @@ impl CollectionController {
     pub fn clear_reset(&mut self) {
         self.rule = CollectionRule::new(CollectionProperty::Filename);
         self.sort = LighttableSort::Filename;
+        self.sort_direction = LighttableSortDirection::Ascending;
         self.selected.clear();
         self.selection_anchor = None;
     }
@@ -376,6 +466,10 @@ impl CollectionController {
         apply_fallback_organization(&mut self.organization, command);
     }
 
+    fn matching_photo_ids(&self) -> Vec<PhotoId> {
+        self.snapshot().matching_photo_ids().collect()
+    }
+
     /// Produces the typed result projection consumed by GTK refresh code.
     #[must_use]
     pub fn snapshot(&self) -> CollectionSnapshot {
@@ -389,7 +483,7 @@ impl CollectionController {
             .collect::<Vec<_>>();
         if let Ok(collator) = LocaleCollator::new(self.collation_profile.clone()) {
             matching_items.sort_by(|left, right| {
-                match self.sort {
+                let ordering = match self.sort {
                     LighttableSort::Filename => collator.compare(
                         left.value(self.rule.property()),
                         right.value(self.rule.property()),
@@ -399,8 +493,12 @@ impl CollectionController {
                         organization_rating(&self.organization, right.photo_id())
                             .cmp(&organization_rating(&self.organization, left.photo_id()))
                     }
-                }
-                .then_with(|| left.photo_id().cmp(&right.photo_id()))
+                };
+                let ordering = match self.sort_direction {
+                    LighttableSortDirection::Ascending => ordering,
+                    LighttableSortDirection::Descending => ordering.reverse(),
+                };
+                ordering.then_with(|| left.photo_id().cmp(&right.photo_id()))
             });
         }
         let matching_photo_ids: Vec<PhotoId> = matching_items
@@ -426,6 +524,7 @@ impl CollectionController {
                 matching_photo_ids.len(),
             )
             .with_sort(self.sort)
+            .with_sort_direction(self.sort_direction)
             .with_selection(self.selected.len(), selected_rating, selected_labels);
         CollectionSnapshot {
             property: self.rule.property(),
@@ -626,27 +725,22 @@ fn apply_fallback_organization(
     }
 }
 
-pub(super) fn collection_item(record: &ImportRecord) -> CollectionItem {
-    let path = decode_reference_source(record.source())
-        .map_or_else(|_| record.source().as_str().to_owned(), path_string);
-    CollectionItem::new(record.photo().id(), path)
-}
-
-fn path_string(path: PathBuf) -> String {
-    path.into_os_string().to_string_lossy().into_owned()
-}
-
 #[cfg(test)]
 mod tests {
+    use rusttable_catalog::{
+        ActiveLighttableProperty, ActiveLighttableSort, ActiveLighttableSortDirection,
+        ActiveLighttableState,
+    };
     use std::path::Path;
 
     use rusttable_core::PhotoId;
     use rusttable_i18n::LocaleTag;
     use rusttable_ui::{
         CollectionItem, CollectionProperty, LighttableColorLabel, LighttableRating, LighttableSort,
+        LighttableSortDirection,
     };
 
-    use super::CollectionController;
+    use super::{ActiveLighttableRestoreReport, CollectionController};
 
     fn id(value: u128) -> PhotoId {
         PhotoId::new(value).expect("non-zero photo ID")
@@ -791,6 +885,68 @@ mod tests {
             snapshot.matching_photo_ids().collect::<Vec<_>>(),
             vec![id(1), id(3), id(2)]
         );
+    }
+
+    #[test]
+    fn active_state_rebuild_restores_rule_sort_direction_and_visible_selection() {
+        let mut controller = controller();
+        controller.set_property(CollectionProperty::Folders);
+        controller.set_search_text("/photos/2026");
+        controller.set_sort(LighttableSort::Rating);
+        controller.set_sort_direction(LighttableSortDirection::Descending);
+        controller.select_only(id(1));
+        controller.toggle_selection(id(2));
+        let state = controller.active_state();
+
+        let mut rebuilt = CollectionController::new(controller.items().cloned());
+        let report = rebuilt.restore_active_state(&state);
+
+        assert_eq!(report, ActiveLighttableRestoreReport::default());
+        assert_eq!(rebuilt.active_state(), state);
+        assert_eq!(rebuilt.rule().property(), CollectionProperty::Folders);
+        assert_eq!(rebuilt.rule().search_text(), "/photos/2026");
+        assert_eq!(rebuilt.snapshot().toolbar().sort(), LighttableSort::Rating);
+        assert_eq!(
+            rebuilt.snapshot().toolbar().sort_direction(),
+            LighttableSortDirection::Descending
+        );
+        assert_eq!(
+            rebuilt.selected_photo_ids().collect::<Vec<_>>(),
+            vec![id(1), id(2)]
+        );
+    }
+
+    #[test]
+    fn restore_discards_missing_and_hidden_selection_deterministically() {
+        let mut controller = controller();
+        let state = ActiveLighttableState::new(
+            ActiveLighttableProperty::Folders,
+            "/photos/2026",
+            ActiveLighttableSort::Filename,
+            ActiveLighttableSortDirection::Ascending,
+            [3, 2, 99],
+        );
+
+        let report = controller.restore_active_state(&state);
+
+        assert_eq!(report.discarded_missing, 1);
+        assert_eq!(report.discarded_hidden, 1);
+        assert_eq!(
+            controller.selected_photo_ids().collect::<Vec<_>>(),
+            vec![id(2)]
+        );
+        assert_eq!(controller.active_state().selected_photo_ids(), &[2]);
+    }
+
+    #[test]
+    fn filtering_reconciles_selection_and_does_not_restore_it_on_reentry() {
+        let mut controller = controller();
+        controller.select_only(id(1));
+        controller.set_search_text("portrait");
+        assert_eq!(controller.selected_photo_ids().count(), 0);
+
+        controller.clear();
+        assert_eq!(controller.selected_photo_ids().count(), 0);
     }
 
     #[test]
