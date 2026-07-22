@@ -107,6 +107,22 @@ fn test_workspace(photo_id: PhotoId) -> PhotoWorkspaceViewModel {
                     PresentationText::new("Fujifilm X-T5").expect("test fact value"),
                 ),
                 PhotoFactViewModel::new(
+                    PresentationText::new("Exposure").expect("test fact label"),
+                    PresentationText::new("1/90").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
+                    PresentationText::new("Aperture").expect("test fact label"),
+                    PresentationText::new("f/8.0").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
+                    PresentationText::new("Focal length").expect("test fact label"),
+                    PresentationText::new("10.3 mm").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
+                    PresentationText::new("ISO").expect("test fact label"),
+                    PresentationText::new("200").expect("test fact value"),
+                ),
+                PhotoFactViewModel::new(
                     PresentationText::new("Format").expect("test fact label"),
                     PresentationText::new("RAW").expect("test fact value"),
                 ),
@@ -204,6 +220,33 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
             title.allocated_height()
         );
         assert_eq!(title.text().as_str(), expected, "title text for {id}");
+        for suffix in ["info", "actions"] {
+            let affordance = find_widget(&title_row, &format!("{id}-{suffix}"))
+                .expect("accordion affordance")
+                .downcast::<gtk4::Button>()
+                .expect("accordion affordance button");
+            assert!(
+                affordance.is_visible()
+                    && !affordance.is_sensitive()
+                    && affordance.allocated_width() > 0
+                    && affordance.allocated_height() > 0,
+                "{id}-{suffix} must keep visible neutral geometry"
+            );
+            assert!(
+                affordance
+                    .child()
+                    .is_some_and(|child| child.is::<gtk4::Image>()),
+                "{id}-{suffix} must render a symbolic icon"
+            );
+            let icon = affordance.child().expect("accordion symbolic icon");
+            let icon_bounds = icon
+                .compute_bounds(&visible_split)
+                .expect("accordion symbolic icon bounds");
+            assert!(
+                rendered.pixels_with_channel_at_least(icon_bounds, 80) >= 2,
+                "{id}-{suffix} must paint its neutral symbolic icon"
+            );
+        }
         let bounds = title
             .compute_bounds(&visible_split)
             .expect("title bounds within visible desktop split");
@@ -286,7 +329,7 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
         .expect("centered image status")
         .downcast::<gtk4::Label>()
         .expect("image status label");
-    assert_eq!(status_text.text(), "Fujifilm X-T5 · RAW · 6048 × 4038");
+    assert_eq!(status_text.text(), "1/90 · f/8.0 · 10.3 mm · ISO 200");
     assert!(!status_text.text().contains("MB"));
     for (id, expected) in [
         ("darkroom-module-order", "module order"),
@@ -363,6 +406,15 @@ fn assert_filmstrip_rendering(root: &gtk4::Widget) {
     assert_eq!(filmstrip_format.text(), "RAW");
     assert!(find_widget_with_prefix(root, "filmstrip-red-tag-").is_some());
     assert!(find_widget_with_prefix(root, "filmstrip-blue-tag-").is_some());
+    let selection_pointer = find_widget_with_prefix(root, "filmstrip-selection-pointer-")
+        .expect("selected filmstrip pointer");
+    assert!(selection_pointer.is_visible());
+    assert!(
+        selection_pointer.allocated_width() >= 18 && selection_pointer.allocated_height() >= 8,
+        "selected filmstrip pointer must keep chevron geometry: {}x{}",
+        selection_pointer.allocated_width(),
+        selection_pointer.allocated_height()
+    );
     let visible_split = find_widget(root, "desktop-left-split").expect("visible center split");
     let rendered = render_widget(&visible_split);
     let metadata_bounds = filmstrip_metadata
@@ -380,6 +432,13 @@ fn assert_filmstrip_rendering(root: &gtk4::Widget) {
     assert!(
         rendered.bright_pixels(selection_marker) >= 20,
         "selected filmstrip item must paint one light frame"
+    );
+    let pointer_bounds = selection_pointer
+        .compute_bounds(&visible_split)
+        .expect("selected filmstrip pointer bounds");
+    assert!(
+        rendered.bright_pixels(pointer_bounds) >= 20,
+        "selected filmstrip item must paint a top-center pointer chevron"
     );
     let boundary = find_widget(root, "darkroom-filmstrip-boundary").expect("filmstrip boundary");
     let boundary_bounds = boundary
@@ -459,6 +518,10 @@ struct RenderedWidget {
 
 impl RenderedWidget {
     fn bright_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
+        self.pixels_with_channel_at_least(bounds, 128)
+    }
+
+    fn pixels_with_channel_at_least(&self, bounds: gtk4::graphene::Rect, threshold: u8) -> usize {
         let left = bounds.x();
         let top = bounds.y();
         let right = left + bounds.width();
@@ -484,7 +547,7 @@ impl RenderedWidget {
                         .iter()
                         .copied()
                         .max()
-                        .is_some_and(|channel| channel >= 128)
+                        .is_some_and(|channel| channel >= threshold)
             })
             .count()
     }

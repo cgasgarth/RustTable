@@ -46,6 +46,7 @@ pub(super) struct PhotoTilePair {
     pub(super) thumbnails: ThumbnailPair,
     pub(super) lighttable_button: Option<gtk4::Button>,
     filmstrip_button: gtk4::Button,
+    filmstrip_pointer: gtk4::DrawingArea,
 }
 
 #[derive(Clone)]
@@ -181,7 +182,7 @@ impl WorkspaceRenderHandle {
                 .borrow_mut()
                 .insert(photo_id, detail.clone());
             let organization = self.photo_states.borrow().get(&photo_id).cloned();
-            let (filmstrip_item, filmstrip_thumbnail) = filmstrip_item(
+            let (filmstrip_item, filmstrip_thumbnail, filmstrip_pointer) = filmstrip_item(
                 photo_id,
                 photo.title(),
                 photo.secondary(),
@@ -217,6 +218,7 @@ impl WorkspaceRenderHandle {
                     thumbnails,
                     lighttable_button: None,
                     filmstrip_button: filmstrip_item,
+                    filmstrip_pointer,
                 },
             );
         }
@@ -530,6 +532,7 @@ fn sync_photo_buttons(
     let selected = interaction.selected().collect::<BTreeSet<_>>();
     let focus = interaction.focus();
     for (id, pair) in photo_tiles {
+        pair.filmstrip_pointer.set_visible(selected.contains(id));
         for button in pair
             .lighttable_button
             .iter()
@@ -763,7 +766,7 @@ fn filmstrip_item(
     title: &str,
     secondary: Option<&str>,
     organization: Option<&LighttablePhotoState>,
-) -> (gtk4::Button, ThumbnailSurface) {
+) -> (gtk4::Button, ThumbnailSurface, gtk4::DrawingArea) {
     let geometry = FilmstripSpec::darktable();
     let thumbnail = ThumbnailSurface::new(
         &format!("filmstrip-thumbnail-{photo_id}"),
@@ -802,8 +805,31 @@ fn filmstrip_item(
         metadata.set_valign(gtk4::Align::End);
         surface.add_overlay(&metadata);
     }
+    let pointer = filmstrip_selection_pointer(photo_id);
+    surface.add_overlay(&pointer);
     button.set_child(Some(&surface));
-    (button, thumbnail)
+    (button, thumbnail, pointer)
+}
+
+fn filmstrip_selection_pointer(photo_id: PhotoId) -> gtk4::DrawingArea {
+    let pointer = gtk4::DrawingArea::new();
+    pointer.set_widget_name(&format!("filmstrip-selection-pointer-{photo_id}"));
+    pointer.add_css_class("dt_filmstrip_selection_pointer");
+    pointer.set_content_width(18);
+    pointer.set_content_height(8);
+    pointer.set_halign(gtk4::Align::Center);
+    pointer.set_valign(gtk4::Align::Start);
+    pointer.set_can_target(false);
+    pointer.set_visible(false);
+    pointer.set_draw_func(|_, context, width, height| {
+        context.move_to(0.0, 0.0);
+        context.line_to(f64::from(width), 0.0);
+        context.line_to(f64::from(width) / 2.0, f64::from(height));
+        context.close_path();
+        context.set_source_rgb(0.93, 0.93, 0.93);
+        let _ = context.fill();
+    });
+    pointer
 }
 
 fn filmstrip_organization(photo_id: PhotoId, state: &LighttablePhotoState) -> gtk4::Box {
