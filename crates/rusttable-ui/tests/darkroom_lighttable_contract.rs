@@ -2,10 +2,10 @@
 
 use rusttable_core::PhotoId;
 use rusttable_ui::gtk_shell::{
-    DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS, DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS,
-    DarkroomGeometryReceipt, LAYOUT_METRICS, LIGHTTABLE_COMPOSITION, LIGHTTABLE_RIGHT_MODULES,
-    LIGHTTABLE_TOOLBAR, PANEL_SLOTS, PanelRole, ShellLayout, ShellRegion, THUMBNAIL_METRICS,
-    ViewMode, WorkspaceRole,
+    DARKROOM_PANEL_WIDTHS, DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS,
+    DARKTABLE_DESKTOP_SPEC, DESKTOP_REGIONS, DarkroomGeometryReceipt, LAYOUT_METRICS,
+    LIGHTTABLE_COMPOSITION, LIGHTTABLE_PANEL_WIDTHS, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
+    PANEL_SLOTS, PanelRole, ShellLayout, ShellRegion, THUMBNAIL_METRICS, ViewMode, WorkspaceRole,
 };
 use rusttable_ui::{
     DarkroomWorkspaceViewModel, LighttableContentState, LighttableInteractionState,
@@ -147,8 +147,11 @@ fn darkroom_geometry_keeps_both_rails_and_a_visible_center_at_supported_sizes() 
         let geometry =
             DarkroomGeometryReceipt::for_window(window_width, window_height, true, true, true);
 
-        assert_eq!(geometry.left_panel_width_px, 150);
-        assert_eq!(geometry.right_panel_width_px, 150);
+        assert_eq!(geometry.left_panel_width_px, DARKROOM_PANEL_WIDTHS.left_px);
+        assert_eq!(
+            geometry.right_panel_width_px,
+            DARKROOM_PANEL_WIDTHS.right_px
+        );
         assert!(geometry.center_width_px() >= 650);
         assert!(geometry.center_width_px() > geometry.right_panel_width_px);
     }
@@ -163,11 +166,11 @@ fn rail_resize_reallocates_the_center_from_the_same_display_free_contract() {
     let expanded_right =
         DarkroomGeometryReceipt::for_window_with_panel_widths(1_440, 900, 320, 300, true);
 
-    assert_eq!(narrow_left.center_width_px(), 1_120);
-    assert_eq!(expanded_left.center_width_px(), 950);
-    assert_eq!(expanded_right.center_width_px(), 800);
+    assert_eq!(narrow_left.center_width_px(), 1_126);
+    assert_eq!(expanded_left.center_width_px(), 956);
+    assert_eq!(expanded_right.center_width_px(), 806);
     assert!(expanded_right.center_width_px() > 650);
-    assert_eq!(expanded_right.filmstrip_height_px, 84);
+    assert_eq!(expanded_right.filmstrip_height_px, 82);
 }
 
 #[test]
@@ -210,7 +213,8 @@ fn gtk_workspace_ownership_keeps_lighttable_rail_and_darkroom_refresh_separate()
     let components = include_str!("../src/gui/darktable_components.rs");
     let css = include_str!("../src/gui/theme.css");
 
-    assert!(runtime_layout.contains("lighttable_page.append(lighttable_toolbar.widget())"));
+    assert!(runtime_layout.contains("center.append(toolbar.widget())"));
+    assert!(!runtime_layout.contains("lighttable_page.append(lighttable_toolbar.widget())"));
     assert!(!runtime_layout.contains("center.append(external_editor_panel.widget())"));
     assert!(!runtime_layout.contains("center.append(ai_batch_panel.widget())"));
     assert!(!runtime_layout.contains("center.append(camera_panel.widget())"));
@@ -274,7 +278,11 @@ fn lighttable_contract_has_one_filter_row_and_plain_bottom_filmstrip() {
     );
     assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 104);
     assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 78);
-    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 84);
+    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 82);
+    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.left_px, 140);
+    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.right_px, 164);
+    assert_eq!(DARKROOM_PANEL_WIDTHS.left_px, 180);
+    assert_eq!(DARKROOM_PANEL_WIDTHS.right_px, 180);
 }
 
 #[test]

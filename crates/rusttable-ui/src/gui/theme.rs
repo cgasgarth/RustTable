@@ -202,12 +202,12 @@ mod tests {
         let css = darktable_theme_css();
 
         assert!(!css.contains("{{"));
-        assert!(css.contains("#262626ff"));
+        assert!(css.contains("#6a6a6aff"));
         assert!(css.contains("#777777ff"));
-        assert!(css.contains("#ffbb00ff"));
+        assert!(css.contains("#f1f1f1ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
-        assert!(css.contains("font-size: 12pt"));
+        assert!(css.contains("font-size: 9pt"));
         assert!(!css.contains("font-size: 0.85em"));
         assert!(css.contains(".dt_view_switcher"));
         assert!(css.contains("button:disabled"));

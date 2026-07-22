@@ -88,7 +88,7 @@ impl WorkspaceRenderHandle {
         self.photo_details.borrow_mut().clear();
         let zoom = self.interaction.borrow().zoom();
         let layout = self.interaction.borrow().layout();
-        let grid = lighttable_grid_for_allocation(&self.lighttable, zoom);
+        let grid = lighttable_grid_for_allocation(&self.lighttable, zoom, layout);
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
         self.lighttable.set_min_columns(if layout.shows_culling() {
             1
@@ -258,6 +258,7 @@ impl WorkspaceRenderHandle {
                 photo.secondary(),
                 photo.indicators(),
                 centered_grid,
+                layout,
             );
             let thumbnail_state = retained_thumbnail_state(
                 photo_id,
@@ -505,6 +506,7 @@ pub(super) fn connect_lighttable_resize(
         let grid = lighttable_grid_for_allocation(
             &measured_lighttable,
             render.interaction.borrow().zoom(),
+            render.interaction.borrow().layout(),
         );
         let geometry = (grid.card_width_px(), grid.thumbnail_height_px());
         if geometry == last_geometry.get() || pending.replace(true) {
@@ -678,13 +680,19 @@ fn lighttable_card(
     secondary: Option<&str>,
     indicators: crate::presentation::ThumbnailIndicators,
     grid: LighttableGridSpec,
+    layout: crate::gui::LighttableLayout,
 ) -> (gtk4::Button, ThumbnailSurface) {
-    let card = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    let preview = layout == crate::gui::LighttableLayout::Preview;
+    let card = gtk4::Box::new(gtk4::Orientation::Vertical, if preview { 0 } else { 4 });
     card.add_css_class("dt_photo_card");
-    card.set_margin_top(4);
-    card.set_margin_bottom(4);
-    card.set_margin_start(4);
-    card.set_margin_end(4);
+    if preview {
+        card.add_css_class("dt_preview_card");
+    }
+    let card_margin = if preview { 0 } else { 4 };
+    card.set_margin_top(card_margin);
+    card.set_margin_bottom(card_margin);
+    card.set_margin_start(card_margin);
+    card.set_margin_end(card_margin);
     let thumbnail = ThumbnailSurface::new(
         &format!("photo-thumbnail-{photo_id}"),
         &format!("Thumbnail for {title}"),
@@ -694,34 +702,42 @@ fn lighttable_card(
     apply_theme_role(thumbnail.widget(), ThemeRole::ThumbnailImage);
     let thumbnail_overlay = gtk4::Overlay::new();
     thumbnail_overlay.set_child(Some(thumbnail.widget()));
-    let badges = thumbnail_badges(indicators);
-    badges.set_halign(gtk4::Align::End);
-    badges.set_valign(gtk4::Align::Start);
-    thumbnail_overlay.add_overlay(&badges);
+    if !preview {
+        let badges = thumbnail_badges(indicators);
+        badges.set_halign(gtk4::Align::End);
+        badges.set_valign(gtk4::Align::Start);
+        thumbnail_overlay.add_overlay(&badges);
+    }
     card.append(&thumbnail_overlay);
-    let title_label = gtk4::Label::new(Some(title));
-    title_label.set_halign(gtk4::Align::Start);
-    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    title_label.set_max_width_chars(22);
-    title_label.set_single_line_mode(true);
-    card.append(&title_label);
-    if let Some(secondary) = secondary {
-        let secondary_label = gtk4::Label::new(Some(secondary));
-        secondary_label.set_halign(gtk4::Align::Start);
-        secondary_label.add_css_class("dim-label");
-        secondary_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-        secondary_label.set_max_width_chars(22);
-        secondary_label.set_single_line_mode(true);
-        card.append(&secondary_label);
+    if !preview {
+        let title_label = gtk4::Label::new(Some(title));
+        title_label.set_halign(gtk4::Align::Start);
+        title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+        title_label.set_max_width_chars(22);
+        title_label.set_single_line_mode(true);
+        card.append(&title_label);
+        if let Some(secondary) = secondary {
+            let secondary_label = gtk4::Label::new(Some(secondary));
+            secondary_label.set_halign(gtk4::Align::Start);
+            secondary_label.add_css_class("dim-label");
+            secondary_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+            secondary_label.set_max_width_chars(22);
+            secondary_label.set_single_line_mode(true);
+            card.append(&secondary_label);
+        }
     }
     let button = gtk4::Button::new();
     button.set_widget_name(&format!("photo-{photo_id}"));
     apply_theme_role(&button, ThemeRole::PhotoCard);
+    if preview {
+        button.add_css_class("dt_preview_card");
+    }
     button.set_child(Some(&card));
+    let metadata_height =
+        i32::from(DARKTABLE_UI_TOKENS.cards.metadata_height_px) * i32::from(u8::from(!preview));
     button.set_size_request(
         i32::from(grid.card_width_px()),
-        i32::from(grid.thumbnail_height_px())
-            .saturating_add(i32::from(DARKTABLE_UI_TOKENS.cards.metadata_height_px)),
+        i32::from(grid.thumbnail_height_px()).saturating_add(metadata_height),
     );
     button.set_tooltip_text(Some(title));
     button.set_accessible_role(gtk4::AccessibleRole::Button);
@@ -733,14 +749,14 @@ fn lighttable_card(
 fn lighttable_grid_for_allocation(
     lighttable: &gtk4::GridView,
     zoom: crate::gui::LighttableZoom,
+    layout: crate::gui::LighttableLayout,
 ) -> LighttableGridSpec {
-    let width = u16::try_from(lighttable.allocated_width()).unwrap_or(0);
-    let height = u16::try_from(lighttable.allocated_height()).unwrap_or(0);
-    if width > 0 && height > 0 {
-        LighttableGridSpec::for_viewport(zoom, width.saturating_sub(12), height)
-    } else {
-        LighttableGridSpec::for_zoom(zoom)
-    }
+    LighttableGridSpec::for_layout_viewport(
+        layout,
+        zoom,
+        u16::try_from(lighttable.allocated_width()).unwrap_or(0),
+        u16::try_from(lighttable.allocated_height()).unwrap_or(0),
+    )
 }
 
 fn thumbnail_badges(indicators: crate::presentation::ThumbnailIndicators) -> gtk4::Box {
@@ -889,9 +905,7 @@ fn retained_thumbnail_state(
 }
 
 fn clear_flow_box(flow_box: &gtk4::FlowBox) {
-    // FlowBox owns an internal GtkFlowBoxChild wrapper for every inserted widget.
-    // Removing that wrapper through FlowBox keeps its internal sibling list in sync;
-    // generic Widget::unparent leaves GTK4 unable to accept the next insertion.
+    // Remove FlowBox wrappers through FlowBox so GTK keeps its sibling list synchronized.
     while let Some(child) = flow_box.first_child() {
         flow_box.remove(&child);
     }

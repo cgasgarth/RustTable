@@ -197,6 +197,32 @@ pub struct SidePanelWidths {
     pub maximum_px: u16,
 }
 
+/// Initial left/right rail allocations for one workspace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkspacePanelWidths {
+    pub left_px: u16,
+    pub right_px: u16,
+}
+
+/// The captured Darktable layouts retain narrower collection rails and wider
+/// editing rails while sharing the same resize bounds and panel components.
+pub const LIGHTTABLE_PANEL_WIDTHS: WorkspacePanelWidths = WorkspacePanelWidths {
+    left_px: 140,
+    right_px: 164,
+};
+pub const DARKROOM_PANEL_WIDTHS: WorkspacePanelWidths = WorkspacePanelWidths {
+    left_px: 180,
+    right_px: 180,
+};
+
+#[must_use]
+pub const fn workspace_panel_widths(mode: ViewMode) -> WorkspacePanelWidths {
+    match mode {
+        ViewMode::Lighttable => LIGHTTABLE_PANEL_WIDTHS,
+        ViewMode::Darkroom => DARKROOM_PANEL_WIDTHS,
+    }
+}
+
 impl SidePanelWidths {
     /// Returns whether a width is within the Darktable side-panel range.
     #[must_use]
@@ -318,7 +344,7 @@ pub struct DarkroomGeometry {
 /// The two deterministic side-rail modes used by the GTK shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DarkroomWindowLayout {
-    /// The preferred 150px rails with the full center minimum.
+    /// The preferred editing rails with the full center minimum.
     Normal,
     /// The same two rails retained while the center viewport accepts a compact minimum.
     Narrow,
@@ -362,13 +388,13 @@ pub const DARKROOM_OPERATION_FOCUS_ORDER: [&str; 5] = [
 ];
 
 pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
-    top_toolbar_height_px: 28,
-    bottom_toolbar_height_px: 28,
+    top_toolbar_height_px: 26,
+    bottom_toolbar_height_px: 26,
     viewport_minimum_height_px: 200,
     histogram_height_px: 180,
     histogram_min_height_px: 120,
     filmstrip_separator_px: 1,
-    status_bar_height_px: 20,
+    status_bar_height_px: 18,
 };
 
 /// A display-free allocation receipt for the darkroom's named regions.
@@ -404,12 +430,12 @@ impl DarkroomGeometryReceipt {
         filmstrip_visible: bool,
     ) -> Self {
         let left_panel_width = if left_panel_visible {
-            LAYOUT_METRICS.side_panel_widths.preferred_px
+            DARKROOM_PANEL_WIDTHS.left_px
         } else {
             0
         };
         let right_panel_width = if right_panel_visible {
-            LAYOUT_METRICS.side_panel_widths.preferred_px
+            DARKROOM_PANEL_WIDTHS.right_px
         } else {
             0
         };
@@ -654,40 +680,40 @@ pub const PANEL_SLOTS: [PanelSlot; 6] = [
 pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     window_width_px: 1_280,
     window_height_px: 768,
-    outer_border_px: 10,
-    header_height_px: 32,
+    outer_border_px: 7,
+    header_height_px: 36,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
     toolbar_padding_horizontal: EmHundredths::new(28),
     toolbar_button_minimum: EmHundredths::new(170),
     center_minimum_width_px: 650,
     side_panel_widths: SidePanelWidths {
-        minimum_px: 150,
-        preferred_px: 150,
+        minimum_px: 136,
+        preferred_px: 180,
         maximum_px: 1_500,
     },
     filmstrip_heights: FilmstripHeights {
         minimum_px: 64,
-        preferred_px: 84,
+        preferred_px: 82,
         maximum_px: 400,
     },
 };
 
-/// Default Darktable palette values used by the GTK shell.
+/// Darktable elegant-grey palette used by the matched reference captures.
 pub const DARKTABLE_COLORS: DarktableColors = DarktableColors {
-    background: ColorToken::new("bg_color", [0x26, 0x26, 0x26, 0xff]),
-    foreground: ColorToken::new("fg_color", [0xb9, 0xb9, 0xb9, 0xff]),
-    border: ColorToken::new("border_color", [0x1b, 0x1b, 0x1b, 0xff]),
-    module_background: ColorToken::new("plugin_bg_color", [0x30, 0x30, 0x30, 0xff]),
-    button_background: ColorToken::new("button_bg", [0x3b, 0x3b, 0x3b, 0xff]),
-    active_field_background: ColorToken::new("field_active_bg", [0x3b, 0x3b, 0x3b, 0xff]),
-    lighttable_canvas: ColorToken::new("lighttable_bg_color", [0x5e, 0x5e, 0x5e, 0xff]),
+    background: ColorToken::new("bg_color", [0x6a, 0x6a, 0x6a, 0xff]),
+    foreground: ColorToken::new("fg_color", [0xf1, 0xf1, 0xf1, 0xff]),
+    border: ColorToken::new("border_color", [0x5e, 0x5e, 0x5e, 0xff]),
+    module_background: ColorToken::new("plugin_bg_color", [0x71, 0x71, 0x71, 0xff]),
+    button_background: ColorToken::new("button_bg", [0x7d, 0x7d, 0x7d, 0xff]),
+    active_field_background: ColorToken::new("field_active_bg", [0x77, 0x77, 0x77, 0xff]),
+    lighttable_canvas: ColorToken::new("lighttable_bg_color", [0x91, 0x91, 0x91, 0xff]),
     darkroom_canvas: ColorToken::new("darkroom_bg_color", [0x77, 0x77, 0x77, 0xff]),
-    thumbnail_background: ColorToken::new("thumbnail_bg_color", [0x77, 0x77, 0x77, 0xff]),
-    filmstrip_background: ColorToken::new("filmstrip_bg_color", [0x5e, 0x5e, 0x5e, 0xff]),
-    selected_thumbnail: ColorToken::new("thumbnail_selected_bg_color", [0xab, 0xab, 0xab, 0xff]),
-    hovered_thumbnail: ColorToken::new("thumbnail_hover_bg_color", [0xd4, 0xd4, 0xd4, 0xff]),
-    active_image_marker: ColorToken::new("active_image_marker", [0xff, 0xbb, 0x00, 0xff]),
+    thumbnail_background: ColorToken::new("thumbnail_bg_color", [0xab, 0xab, 0xab, 0xff]),
+    filmstrip_background: ColorToken::new("filmstrip_bg_color", [0x91, 0x91, 0x91, 0xff]),
+    selected_thumbnail: ColorToken::new("thumbnail_selected_bg_color", [0xc6, 0xc6, 0xc6, 0xff]),
+    hovered_thumbnail: ColorToken::new("thumbnail_hover_bg_color", [0xf1, 0xf1, 0xf1, 0xff]),
+    active_image_marker: ColorToken::new("active_image_marker", [0xf1, 0xf1, 0xf1, 0xff]),
 };
 
 /// The complete display-free contract consumed by the GTK4 runtime.
@@ -779,15 +805,16 @@ mod tests {
 
     #[test]
     fn panel_metrics_preserve_darktable_resize_bounds() {
-        assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
-        assert_eq!(LAYOUT_METRICS.header_height_px, 32);
+        assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
+        assert_eq!(LAYOUT_METRICS.header_height_px, 36);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 150);
-        assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.minimum_px, 136);
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 180);
+        assert!(LAYOUT_METRICS.side_panel_widths.accepts(136));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
-        assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
-        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 84);
+        assert!(!LAYOUT_METRICS.side_panel_widths.accepts(135));
+        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 82);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
     }
@@ -796,15 +823,15 @@ mod tests {
     fn baseline_rail_geometry_leaves_a_stable_center_column() {
         assert_eq!(LAYOUT_METRICS.window_width_px, 1_280);
         assert_eq!(LAYOUT_METRICS.window_height_px, 768);
-        assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_204);
-        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 904);
+        assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_210);
+        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 850);
         assert_eq!(
             LAYOUT_METRICS.preferred_right_panel_position_px(1_224),
-            1_054
+            1_030
         );
         assert_eq!(
-            LAYOUT_METRICS.preferred_right_panel_position_for_content_width(1_204),
-            1_054
+            LAYOUT_METRICS.preferred_right_panel_position_for_content_width(1_210),
+            1_030
         );
         assert!(
             LAYOUT_METRICS.preferred_center_width_px(1_224)
@@ -824,16 +851,16 @@ mod tests {
     #[test]
     fn darkroom_geometry_receipt_is_deterministic_and_visibility_aware() {
         let full = DarkroomGeometryReceipt::for_window(1_224, 768, true, true, true);
-        assert_eq!(full.left_panel_width_px, 150);
-        assert_eq!(full.center_width_px(), 904);
-        assert_eq!(full.right_panel_width_px, 150);
-        assert_eq!(full.filmstrip_height_px, 84);
-        assert_eq!(full.status_bar_height_px, 20);
+        assert_eq!(full.left_panel_width_px, 180);
+        assert_eq!(full.center_width_px(), 850);
+        assert_eq!(full.right_panel_width_px, 180);
+        assert_eq!(full.filmstrip_height_px, 82);
+        assert_eq!(full.status_bar_height_px, 18);
 
         let compact = DarkroomGeometryReceipt::for_window(900, 500, false, true, false);
         assert_eq!(compact.left_panel_width_px, 0);
-        assert_eq!(compact.center_width_px(), 730);
-        assert_eq!(compact.right_panel_width_px, 150);
+        assert_eq!(compact.center_width_px(), 706);
+        assert_eq!(compact.right_panel_width_px, 180);
         assert_eq!(compact.filmstrip_height_px, 0);
         assert!(!compact.left_panel_visible);
         assert!(!compact.filmstrip_visible);
@@ -914,12 +941,12 @@ mod tests {
     }
 
     #[test]
-    fn darktable_colors_preserve_the_default_css_tokens() {
+    fn darktable_colors_preserve_the_elegant_grey_css_tokens() {
         assert_eq!(DARKTABLE_COLORS.background.css_name(), "bg_color");
-        assert_eq!(DARKTABLE_COLORS.background.rgba(), [0x26, 0x26, 0x26, 0xff]);
+        assert_eq!(DARKTABLE_COLORS.background.rgba(), [0x6a, 0x6a, 0x6a, 0xff]);
         assert_eq!(
             DARKTABLE_COLORS.lighttable_canvas.rgba(),
-            [0x5e, 0x5e, 0x5e, 0xff]
+            [0x91, 0x91, 0x91, 0xff]
         );
         assert_eq!(
             DARKTABLE_COLORS.darkroom_canvas.rgba(),
@@ -927,11 +954,11 @@ mod tests {
         );
         assert_eq!(
             DARKTABLE_COLORS.thumbnail_background.rgba(),
-            [0x77, 0x77, 0x77, 0xff]
+            [0xab, 0xab, 0xab, 0xff]
         );
         assert_eq!(
             DARKTABLE_COLORS.active_image_marker.rgba(),
-            [0xff, 0xbb, 0x00, 0xff]
+            [0xf1, 0xf1, 0xf1, 0xff]
         );
     }
 

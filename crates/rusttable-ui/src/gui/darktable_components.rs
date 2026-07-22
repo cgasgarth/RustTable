@@ -70,7 +70,7 @@ pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     let escaped_title = gtk4::glib::markup_escape_text(title);
     title_label.set_markup(&format!(
-        "<span foreground=\"#b9b9b9\">{escaped_title}</span>"
+        "<span foreground=\"#f1f1f1\">{escaped_title}</span>"
     ));
     title_label.add_css_class("dt_darkroom_section_label");
     title_row.append(&title_label);

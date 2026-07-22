@@ -15,9 +15,10 @@ use crate::gui::darktable_components::{
 };
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use crate::gui::{
-    DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls,
-    LighttableToolbar, ModuleControlKind, ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole,
-    WorkspaceRole, apply_theme_role, darkroom_window_layout,
+    DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_PANEL_WIDTHS,
+    LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls, LighttableToolbar, ModuleControlKind,
+    ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole, WorkspacePanelWidths, WorkspaceRole,
+    apply_theme_role, darkroom_window_layout,
 };
 use crate::views::lighttable::empty_collection_state;
 
@@ -31,7 +32,7 @@ pub(super) fn right_panel() -> (
 ) {
     let panel = panel_column(
         ShellRegion::RightPanel,
-        i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
+        i32::from(LIGHTTABLE_PANEL_WIDTHS.right_px),
     );
     apply_theme_role(&panel, ThemeRole::Panel);
     let export_panel = ExportPanel::new();
@@ -75,7 +76,7 @@ pub(super) fn mode_panel_stack(
     // child otherwise shifts the darkroom child left inside a narrow Paned,
     // clipping its disclosure arrows and labels while leaving trailing actions.
     stack.set_hhomogeneous(false);
-    let preferred_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
+    let preferred_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
     // Paned allocates a child from its minimum/natural width.  The module
     // contents are intentionally wider than Darktable's rail in places, so
     // make the stack's initial request explicit and let its inner scroller
@@ -111,13 +112,14 @@ pub(super) fn synchronize_panel_stacks(
 
 pub(super) fn desktop_body(
     workspace: &gtk4::Stack,
+    lighttable_toolbar: &LighttableToolbar,
     left_panel: &gtk4::Stack,
     right_panel: &gtk4::Stack,
     i18n: &I18n,
     geometry_changed: &std::rc::Rc<dyn Fn()>,
 ) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
-    let center = central_workspace(workspace);
+    let center = central_workspace(workspace, lighttable_toolbar);
     let (filmstrip_root, filmstrip) = filmstrip(i18n);
     let center_column = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     center_column.set_hexpand(true);
@@ -133,12 +135,12 @@ pub(super) fn desktop_body(
         .resize_start_child(false)
         .shrink_start_child(true)
         .shrink_end_child(false)
-        .position(i32::from(layout.side_panel_widths.preferred_px))
+        .position(i32::from(active_panel_widths(workspace).left_px))
         .build();
     split.set_widget_name("desktop-left-split");
     split.connect_map({
-        let preferred_width = i32::from(layout.side_panel_widths.preferred_px);
-        move |paned| paned.set_position(preferred_width)
+        let workspace = workspace.clone();
+        move |paned| paned.set_position(i32::from(active_panel_widths(&workspace).left_px))
     });
     connect_left_rail_constraints(&split);
     connect_geometry_refresh(&split, std::rc::Rc::clone(geometry_changed));
@@ -151,7 +153,9 @@ pub(super) fn desktop_body(
         .resize_end_child(false)
         .shrink_end_child(false)
         .position(i32::from(
-            layout.preferred_right_panel_position_px(layout.window_width_px),
+            layout
+                .content_width_px(layout.window_width_px)
+                .saturating_sub(active_panel_widths(workspace).right_px),
         ))
         .build();
     workspace_with_right_panel.set_widget_name("desktop-right-split");
@@ -159,17 +163,33 @@ pub(super) fn desktop_body(
     // allocate the explicit rail token, then clamp every drag to the readable
     // minimum instead of letting natural width consume the center workspace.
     workspace_with_right_panel.set_shrink_end_child(true);
-    workspace_with_right_panel.connect_map(move |paned| {
-        let paned = paned.clone();
-        gtk4::glib::idle_add_local_once(move || {
-            let content_width = u16::try_from(paned.allocated_width()).unwrap_or(u16::MAX);
-            if content_width == 0 {
-                return;
+    workspace_with_right_panel.connect_map({
+        let workspace = workspace.clone();
+        move |paned| {
+            let paned = paned.clone();
+            let workspace = workspace.clone();
+            gtk4::glib::idle_add_local_once(move || {
+                let content_width = u16::try_from(paned.allocated_width()).unwrap_or(u16::MAX);
+                if content_width == 0 {
+                    return;
+                }
+                paned.set_position(i32::from(
+                    content_width.saturating_sub(active_panel_widths(&workspace).right_px),
+                ));
+            });
+        }
+    });
+    workspace.connect_visible_child_name_notify({
+        let left_split = split.clone();
+        let right_split = workspace_with_right_panel.clone();
+        move |workspace| {
+            let widths = active_panel_widths(workspace);
+            left_split.set_position(i32::from(widths.left_px));
+            let content_width = u16::try_from(right_split.allocated_width()).unwrap_or(u16::MAX);
+            if content_width > 0 {
+                right_split.set_position(i32::from(content_width.saturating_sub(widths.right_px)));
             }
-            paned.set_position(i32::from(
-                layout.preferred_right_panel_position_for_content_width(content_width),
-            ));
-        });
+        }
     });
     connect_geometry_refresh(
         &workspace_with_right_panel,
@@ -262,7 +282,15 @@ fn connect_allocation_refresh(widget: &impl IsA<gtk4::Widget>, refresh: std::rc:
     widget.connect_notify_local(Some("height"), move |_, _| schedule());
 }
 
-fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
+fn active_panel_widths(workspace: &gtk4::Stack) -> WorkspacePanelWidths {
+    if workspace.visible_child_name().as_deref() == Some(WorkspaceRole::Darkroom.stack_name()) {
+        DARKROOM_PANEL_WIDTHS
+    } else {
+        LIGHTTABLE_PANEL_WIDTHS
+    }
+}
+
+fn central_workspace(workspace: &gtk4::Stack, toolbar: &LighttableToolbar) -> gtk4::Box {
     let center = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     center.set_hexpand(true);
     center.set_vexpand(true);
@@ -272,6 +300,7 @@ fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
     ));
     center.set_widget_name("workspace");
     apply_theme_role(&center, ThemeRole::Workspace);
+    center.append(toolbar.widget());
     center.append(workspace);
     center
 }
@@ -303,7 +332,6 @@ pub(super) fn workspace_stack(
     lighttable_page.set_hexpand(true);
     lighttable_page.set_vexpand(true);
     let lighttable_toolbar = LighttableToolbar::new();
-    lighttable_page.append(lighttable_toolbar.widget());
     let lighttable_scroll = gtk4::ScrolledWindow::builder()
         .child(&lighttable)
         .hexpand(true)
@@ -351,18 +379,30 @@ fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) ->
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
     bottom_tools.add_css_class("dt_lighttable_footer");
-    for (index, message_id) in [
-        MessageId::WorkspaceFit,
-        MessageId::WorkspaceBeforeAfter,
-        MessageId::WorkspaceSoftProof,
+    for (index, (message_id, icon_name)) in [
+        (MessageId::WorkspaceFit, "zoom-fit-best-symbolic"),
+        (MessageId::WorkspaceBeforeAfter, "view-dual-symbolic"),
+        (
+            MessageId::WorkspaceSoftProof,
+            "applications-graphics-symbolic",
+        ),
     ]
     .into_iter()
     .enumerate()
     {
         let label = i18n.text(message_id, &MessageArgs::new());
-        bottom_tools.append(&button(&format!("lighttable-footer-{index}"), &label));
+        let control = button(&format!("lighttable-footer-{index}"), "");
+        control.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
+        control.set_tooltip_text(Some(&label));
+        bottom_tools.append(&control);
     }
+    let leading_space = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    leading_space.set_hexpand(true);
+    bottom_tools.append(&leading_space);
     bottom_tools.append(layout_controls.widget());
+    let trailing_space = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    trailing_space.set_hexpand(true);
+    bottom_tools.append(&trailing_space);
     bottom_tools.append(&button("lighttable-zoom-reset", "100%"));
     bottom_tools
 }
@@ -390,7 +430,7 @@ mod tests {
             count += 1;
             child = widget.next_sibling();
         }
-        assert_eq!(count, 5);
+        assert_eq!(count, 7);
     }
 }
 

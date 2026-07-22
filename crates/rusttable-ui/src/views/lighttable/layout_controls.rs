@@ -44,21 +44,43 @@ impl LighttableLayoutControls {
         apply_theme_role(&root, ThemeRole::Toolbar);
 
         let layouts = [
-            (LighttableLayout::FileManager, "grid", "File manager grid"),
-            (LighttableLayout::Zoomable, "zoom", "Zoomable grid"),
-            (LighttableLayout::Culling, "cull", "Culling view"),
+            (
+                LighttableLayout::FileManager,
+                "grid",
+                "File manager grid",
+                "view-grid-symbolic",
+            ),
+            (
+                LighttableLayout::Zoomable,
+                "zoom",
+                "Zoomable grid",
+                "zoom-in-symbolic",
+            ),
+            (
+                LighttableLayout::Culling,
+                "cull",
+                "Culling view",
+                "view-dual-symbolic",
+            ),
             (
                 LighttableLayout::CullingDynamic,
                 "dynamic",
                 "Dynamic culling view",
+                "view-refresh-symbolic",
             ),
-            (LighttableLayout::Preview, "preview", "Full preview"),
+            (
+                LighttableLayout::Preview,
+                "preview",
+                "Full preview",
+                "view-fullscreen-symbolic",
+            ),
         ];
         let buttons = layouts
             .into_iter()
-            .map(|(layout, suffix, accessible_name)| {
-                let button = gtk4::ToggleButton::with_label(layout.label());
+            .map(|(layout, suffix, accessible_name, icon_name)| {
+                let button = gtk4::ToggleButton::new();
                 button.set_widget_name(&format!("lighttable-layout-{suffix}"));
+                button.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
                 button.set_focus_on_click(false);
                 button.set_accessible_role(gtk4::AccessibleRole::Radio);
                 button.update_property(&[Property::Label(accessible_name)]);
@@ -77,10 +99,11 @@ impl LighttableLayoutControls {
         ]
         .into_iter()
         .map(|(panel, suffix, accessible_name)| {
-            let button = gtk4::ToggleButton::with_label(match panel {
-                LighttablePanel::Left => "left",
-                LighttablePanel::Right => "right",
-            });
+            let button = gtk4::ToggleButton::new();
+            button.set_child(Some(&gtk4::Image::from_icon_name(match panel {
+                LighttablePanel::Left => "view-sidebar-start-symbolic",
+                LighttablePanel::Right => "view-sidebar-end-symbolic",
+            })));
             button.set_widget_name(&format!("lighttable-panel-{suffix}"));
             button.set_focus_on_click(false);
             button.set_active(true);

@@ -4,7 +4,8 @@ use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
 use crate::gui::{
-    CollectionControls, DARKTABLE_DESKTOP_SPEC, PanelSlot, ShellRegion, ThemeRole, apply_theme_role,
+    CollectionControls, LIGHTTABLE_PANEL_WIDTHS, PanelSlot, ShellRegion, ThemeRole,
+    apply_theme_role,
 };
 
 #[cfg(test)]
@@ -24,7 +25,7 @@ pub(crate) struct LeftPanel {
 
 impl LeftPanel {
     pub(crate) fn new(collection_controls: &CollectionControls, i18n: &I18n) -> Self {
-        let width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px);
+        let width = i32::from(LIGHTTABLE_PANEL_WIDTHS.left_px);
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         root.set_widget_name(ShellRegion::LeftPanel.identifier());
         root.set_size_request(width, -1);

@@ -145,6 +145,8 @@ impl GtkShell {
             .default_height(i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_height_px))
             .title(initial_i18n.text(MessageId::AppTitle, &MessageArgs::new()))
             .build();
+        #[cfg(target_os = "macos")]
+        window.set_decorated(false);
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
         let import_dialog = ImportDialog::new(&window);
@@ -198,6 +200,7 @@ impl GtkShell {
         });
         let (content, filmstrip, filmstrip_root) = desktop_body(
             &workspace,
+            &lighttable_toolbar,
             &left_panel,
             &right_panel,
             &initial_i18n,

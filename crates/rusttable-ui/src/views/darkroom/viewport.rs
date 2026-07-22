@@ -135,9 +135,9 @@ pub(super) fn darkroom_page(
     );
     before_after.set_child(Some(&gtk4::Image::from_icon_name("view-dual-symbolic")));
     let soft_proof = chrome_toggle(DARKROOM_VIEWPORT_WIDGET_IDS[1], "", "Toggle soft proof");
-    soft_proof.set_child(Some(&gtk4::Image::from_icon_name(
-        "applications-graphics-symbolic",
-    )));
+    let soft_proof_glyph = gtk4::Label::new(Some("◐"));
+    soft_proof_glyph.add_css_class("dt_symbolic_glyph");
+    soft_proof.set_child(Some(&soft_proof_glyph));
     let gamut_check = chrome_toggle(DARKROOM_VIEWPORT_WIDGET_IDS[2], "", "Toggle gamut warning");
     gamut_check.set_child(Some(&gtk4::Image::from_icon_name("color-select-symbolic")));
     let controls = ViewportControls {

@@ -4,7 +4,7 @@ use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
-use crate::gui::{ThemeRole, apply_theme_role};
+use crate::gui::{DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role};
 use crate::presentation::PhotoDetailViewModel;
 
 #[derive(Clone)]
@@ -21,7 +21,7 @@ impl DarkroomStatusSurface {
     pub(super) fn new() -> Self {
         let root = gtk4::CenterBox::new();
         root.set_widget_name("darkroom-status-bar");
-        root.set_height_request(28);
+        root.set_height_request(DARKTABLE_UI_TOKENS.controls.toolbar_height);
         root.set_hexpand(true);
         root.set_valign(gtk4::Align::Center);
         apply_theme_role(&root, ThemeRole::Toolbar);
