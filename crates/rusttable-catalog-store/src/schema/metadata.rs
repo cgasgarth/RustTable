@@ -1,7 +1,7 @@
 use redb::{Database, TableDefinition};
 use rusttable_catalog::RepositoryError;
 
-use super::{CURRENT_SCHEMA_VERSION, SCHEMA_TABLE, VERSION_KEY};
+use super::{CURRENT_SCHEMA_VERSION, SCHEMA_TABLE, VERSION_KEY, open_tag_tables};
 
 pub(crate) const METADATA_DOCUMENTS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_metadata_documents");
@@ -10,11 +10,12 @@ pub(crate) const METADATA_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
 pub(crate) const METADATA_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_metadata_revision");
 
-pub(crate) fn migrate_metadata_to_v11(database: &Database) -> Result<(), RepositoryError> {
+pub(crate) fn migrate_metadata_and_tags_to_v12(database: &Database) -> Result<(), RepositoryError> {
     let transaction = database
         .begin_write()
         .map_err(|_| RepositoryError::Unavailable)?;
     open_metadata_tables(&transaction)?;
+    open_tag_tables(&transaction)?;
     let mut schema = transaction
         .open_table(SCHEMA_TABLE)
         .map_err(|_| RepositoryError::CorruptPersistedData)?;

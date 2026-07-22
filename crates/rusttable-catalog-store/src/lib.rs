@@ -20,6 +20,7 @@ pub use repositories::edit::RedbEditRepository;
 pub use repositories::history::RedbHistoryRepository;
 pub use repositories::metadata::RedbCatalogMetadataRepository;
 pub use repositories::recipe::{RecipeStoreError, RedbRecipeRepository};
+pub use repositories::tags::RedbTagRepository;
 pub use rusttable_export::{
     ExportJobId, ExportJobPriority, ExportJobRecord, ExportJobStage, ExportJobState,
     ExportQueueError, RedbExportQueueStore, queue_now_millis,
