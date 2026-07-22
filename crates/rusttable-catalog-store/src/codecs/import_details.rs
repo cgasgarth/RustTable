@@ -2,8 +2,8 @@ use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 
 use rusttable_catalog::{
-    IMPORT_DETAILS_VERSION, ImportDetails, ImportMetadataSummary, ImportRegistrationReceipt,
-    ImportRegistrationStatus,
+    IMPORT_DETAILS_VERSION, ImportDetails, ImportMetadataStatus, ImportMetadataSummary,
+    ImportRegistrationReceipt, ImportRegistrationStatus,
 };
 use rusttable_core::{AssetId, ByteLength, EditId, Orientation, PhotoId};
 use rusttable_image::{ImageDimensions, InputFormat};
@@ -27,6 +27,8 @@ struct StoredSummary {
     camera_make_available: bool,
     camera_model_available: bool,
     capture_datetime_available: bool,
+    #[serde(default = "default_metadata_status")]
+    metadata_status: u8,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,6 +62,7 @@ pub(crate) fn encode(details: &ImportDetails) -> Result<Vec<u8>, ()> {
             camera_make_available: summary.camera_make_available(),
             camera_model_available: summary.camera_model_available(),
             capture_datetime_available: summary.capture_datetime_available(),
+            metadata_status: encode_metadata_status(summary.metadata_status()),
         },
         receipt: StoredReceipt {
             version: receipt.version(),
@@ -84,10 +87,11 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<ImportDetails, ()> {
         || stored.summary.version != IMPORT_DETAILS_VERSION
         || stored.receipt.version != IMPORT_DETAILS_VERSION
         || decode_status(stored.receipt.status).is_err()
+        || decode_metadata_status(stored.summary.metadata_status).is_err()
     {
         return Err(());
     }
-    let summary = ImportMetadataSummary::new(
+    let summary = ImportMetadataSummary::new_with_status(
         decode_format(stored.summary.format)?,
         ImageDimensions::new(
             u32::from_be_bytes(stored.summary.width),
@@ -103,6 +107,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<ImportDetails, ()> {
         stored.summary.camera_make_available,
         stored.summary.camera_model_available,
         stored.summary.capture_datetime_available,
+        decode_metadata_status(stored.summary.metadata_status)?,
     );
     let receipt = ImportRegistrationReceipt::new(
         stored.receipt.source_alias,
@@ -156,4 +161,23 @@ fn decode_status(value: u8) -> Result<ImportRegistrationStatus, ()> {
         1 => Ok(ImportRegistrationStatus::Registered),
         _ => Err(()),
     }
+}
+
+const fn encode_metadata_status(status: ImportMetadataStatus) -> u8 {
+    match status {
+        ImportMetadataStatus::Available => 1,
+        ImportMetadataStatus::Unavailable => 2,
+    }
+}
+
+fn decode_metadata_status(value: u8) -> Result<ImportMetadataStatus, ()> {
+    match value {
+        1 => Ok(ImportMetadataStatus::Available),
+        2 => Ok(ImportMetadataStatus::Unavailable),
+        _ => Err(()),
+    }
+}
+
+const fn default_metadata_status() -> u8 {
+    1
 }

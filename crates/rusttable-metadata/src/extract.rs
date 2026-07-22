@@ -20,6 +20,59 @@ pub trait MetadataInput: Send + Sync {
         format: InputFormat,
         source: &[u8],
     ) -> Result<ImageMetadata, MetadataInputError>;
+
+    /// Reads metadata without making ancillary metadata a prerequisite for image use.
+    fn read_bytes_tolerant(&self, format: InputFormat, source: &[u8]) -> MetadataReadResult {
+        match self.read_bytes(format, source) {
+            Ok(metadata) => MetadataReadResult::available(metadata),
+            Err(error) => MetadataReadResult::unavailable(ImageMetadata::empty(), error),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MetadataReadResult {
+    metadata: ImageMetadata,
+    status: MetadataReadStatus,
+}
+
+impl MetadataReadResult {
+    #[must_use]
+    pub fn available(metadata: ImageMetadata) -> Self {
+        Self {
+            metadata,
+            status: MetadataReadStatus::Available,
+        }
+    }
+
+    #[must_use]
+    pub fn unavailable(metadata: ImageMetadata, error: MetadataInputError) -> Self {
+        Self {
+            metadata,
+            status: MetadataReadStatus::Unavailable(error),
+        }
+    }
+
+    #[must_use]
+    pub const fn metadata(&self) -> &ImageMetadata {
+        &self.metadata
+    }
+
+    #[must_use]
+    pub const fn status(&self) -> &MetadataReadStatus {
+        &self.status
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (ImageMetadata, MetadataReadStatus) {
+        (self.metadata, self.status)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MetadataReadStatus {
+    Available,
+    Unavailable(MetadataInputError),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -53,6 +106,30 @@ impl MetadataInput for ExifMetadataInput {
         };
         parse_payload(&payload, self.limits)
     }
+
+    fn read_bytes_tolerant(&self, format: InputFormat, source: &[u8]) -> MetadataReadResult {
+        let Ok(actual) = u64::try_from(source.len()) else {
+            return MetadataReadResult::unavailable(
+                ImageMetadata::empty(),
+                MetadataInputError::ArithmeticOverflow,
+            );
+        };
+        if actual > self.limits.source_bytes {
+            return MetadataReadResult::unavailable(
+                ImageMetadata::empty(),
+                MetadataInputError::SourceTooLarge {
+                    limit: self.limits.source_bytes,
+                    actual,
+                },
+            );
+        }
+        let payload = match exif_payload(format, source, self.limits) {
+            Ok(Some(payload)) => payload,
+            Ok(None) => return MetadataReadResult::available(ImageMetadata::empty()),
+            Err(error) => return MetadataReadResult::unavailable(ImageMetadata::empty(), error),
+        };
+        parse_payload_tolerant(&payload, self.limits)
+    }
 }
 
 fn parse_payload(
@@ -65,6 +142,27 @@ fn parse_payload(
         .map_err(|_| MetadataInputError::MalformedExif)?;
     validate_exif(&exif, limits)?;
     canonical_entries(&exif)
+}
+
+fn parse_payload_tolerant(payload: &[u8], limits: MetadataLimits) -> MetadataReadResult {
+    if let Err(error) = preflight_tiff(payload, limits) {
+        return MetadataReadResult::unavailable(ImageMetadata::empty(), error);
+    }
+    let Ok(exif) = Reader::new().read_raw(payload.to_vec()) else {
+        return MetadataReadResult::unavailable(
+            ImageMetadata::empty(),
+            MetadataInputError::MalformedExif,
+        );
+    };
+    if let Err(error) = validate_exif(&exif, limits) {
+        return MetadataReadResult::unavailable(ImageMetadata::empty(), error);
+    }
+    let (entries, error) = canonical_entries_tolerant(&exif);
+    let metadata = ImageMetadata::from_entries(entries).unwrap_or_else(|_| ImageMetadata::empty());
+    match error {
+        Some(error) => MetadataReadResult::unavailable(metadata, error),
+        None => MetadataReadResult::available(metadata),
+    }
 }
 
 fn validate_exif(exif: &exif::Exif, limits: MetadataLimits) -> Result<(), MetadataInputError> {
@@ -173,6 +271,143 @@ fn canonical_entries(exif: &exif::Exif) -> Result<ImageMetadata, MetadataInputEr
     ImageMetadata::from_entries(entries).map_err(|_| MetadataInputError::DuplicateField {
         field: "canonical metadata",
     })
+}
+
+#[allow(clippy::too_many_lines)]
+fn canonical_entries_tolerant(
+    exif: &exif::Exif,
+) -> (Vec<MetadataEntry>, Option<MetadataInputError>) {
+    let mut entries = Vec::new();
+    let mut first_error = None;
+    remember_error(
+        &mut first_error,
+        text_entry(
+            exif,
+            Tag::Make,
+            "camera make",
+            MetadataEntry::CameraMake,
+            &mut entries,
+        ),
+    );
+    remember_error(
+        &mut first_error,
+        text_entry(
+            exif,
+            Tag::Model,
+            "camera model",
+            MetadataEntry::CameraModel,
+            &mut entries,
+        ),
+    );
+    remember_error(
+        &mut first_error,
+        text_entry(
+            exif,
+            Tag::LensModel,
+            "lens model",
+            MetadataEntry::LensModel,
+            &mut entries,
+        ),
+    );
+    remember_error(
+        &mut first_error,
+        text_entry(
+            exif,
+            Tag::DateTimeOriginal,
+            "capture date time",
+            MetadataEntry::CaptureDateTimeOriginal,
+            &mut entries,
+        ),
+    );
+    match unique_field(exif, Tag::Orientation, "orientation") {
+        Ok(Some(field)) => {
+            let orientation = field
+                .value
+                .get_uint(0)
+                .and_then(|value| u8::try_from(value).ok())
+                .ok_or(MetadataInputError::InvalidField {
+                    field: "orientation",
+                })
+                .and_then(|code| {
+                    Orientation::from_u8(code).map_err(|_| MetadataInputError::InvalidField {
+                        field: "orientation",
+                    })
+                });
+            match orientation {
+                Ok(orientation) => entries.push(MetadataEntry::Orientation(orientation)),
+                Err(error) => remember_error(&mut first_error, Err(error)),
+            }
+        }
+        Ok(None) => {}
+        Err(error) => remember_error(&mut first_error, Err(error)),
+    }
+    remember_error(
+        &mut first_error,
+        rational_entry(
+            exif,
+            Tag::ExposureTime,
+            "exposure time",
+            MetadataEntry::ExposureTime,
+            &mut entries,
+        ),
+    );
+    remember_error(
+        &mut first_error,
+        rational_entry(
+            exif,
+            Tag::FNumber,
+            "f-number",
+            MetadataEntry::FNumber,
+            &mut entries,
+        ),
+    );
+    let iso = match unique_field(exif, Tag::ISOSpeed, "ISO speed") {
+        Ok(Some(field)) => Some(field),
+        Ok(None) => match unique_field(exif, Tag::PhotographicSensitivity, "ISO speed") {
+            Ok(field) => field,
+            Err(error) => {
+                remember_error(&mut first_error, Err(error));
+                None
+            }
+        },
+        Err(error) => {
+            remember_error(&mut first_error, Err(error));
+            None
+        }
+    };
+    if let Some(field) = iso {
+        match field
+            .value
+            .get_uint(0)
+            .and_then(NonZeroU32::new)
+            .ok_or(MetadataInputError::InvalidField { field: "ISO speed" })
+        {
+            Ok(value) => entries.push(MetadataEntry::IsoSpeed(value)),
+            Err(error) => remember_error(&mut first_error, Err(error)),
+        }
+    }
+    remember_error(
+        &mut first_error,
+        rational_entry(
+            exif,
+            Tag::FocalLength,
+            "focal length",
+            MetadataEntry::FocalLength,
+            &mut entries,
+        ),
+    );
+    (entries, first_error)
+}
+
+fn remember_error(
+    first_error: &mut Option<MetadataInputError>,
+    result: Result<(), MetadataInputError>,
+) {
+    if let Err(error) = result
+        && first_error.is_none()
+    {
+        *first_error = Some(error);
+    }
 }
 
 fn preflight_tiff(payload: &[u8], limits: MetadataLimits) -> Result<(), MetadataInputError> {

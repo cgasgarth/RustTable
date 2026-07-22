@@ -164,6 +164,17 @@ impl ImportRecord {
     pub fn metadata(&self) -> &ImageMetadata {
         &self.metadata
     }
+
+    /// Returns the same immutable record with a newly validated metadata snapshot.
+    #[must_use]
+    pub fn with_metadata(&self, metadata: ImageMetadata) -> Self {
+        Self {
+            photo: self.photo.clone(),
+            source: self.source.clone(),
+            probe: self.probe,
+            metadata,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
