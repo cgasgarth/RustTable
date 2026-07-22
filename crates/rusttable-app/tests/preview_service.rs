@@ -102,6 +102,17 @@ fn raw_preview_and_export_share_one_linear_frame_boundary() {
             .processing_stages()
             .contains(&DecodeStage::RawWhiteBalance)
     );
+    for stage in [
+        DecodeStage::RawCfa,
+        DecodeStage::RawDemosaic,
+        DecodeStage::RawColorCalibration,
+        DecodeStage::RawDefaultCrop,
+    ] {
+        assert!(
+            frame.receipt().processing_stages().contains(&stage),
+            "linear X-Trans RAW contract is missing {stage:?}"
+        );
+    }
     let linear = frame.rgba_f32_pixels().expect("linear RAW pixels");
     let channel_means = linear.iter().fold([0.0_f64; 3], |mut sum, pixel| {
         for channel in 0..3 {

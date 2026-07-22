@@ -8,12 +8,15 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
+use rawler::cfa::{CFA_COLOR_B, CFA_COLOR_G, CFA_COLOR_R};
 use rawler::decoders::RawDecodeParams;
 use rawler::imgop::{
     Rect,
     develop::{Intermediate, ProcessingStep, RawDevelop},
 };
+use rawler::rawimage::{RawImage, RawPhotometricInterpretation};
 use rawler::rawsource::RawSource;
+use rusttable_color::{BuiltinSpace, Matrix3};
 use rusttable_image::{
     BlackWhiteLevels, CfaColor, CfaPattern, CfaPhase, ColorEncoding, DecodeLimits, DecodeStage,
     DecodedImage, DecodedImageError, ImageDimensions, ImageInputError, InputFormat, Orientation,
@@ -77,16 +80,26 @@ pub(super) fn developed_raw_linear(
     };
     let orientation = super::orientation(raw.orientation);
 
-    let developed = catch_unwind(AssertUnwindSafe(|| {
-        RawDevelop {
-            steps: development_steps(raw.active_area, raw.crop_area),
-        }
-        .develop_intermediate(&raw)
-    }))
-    .map_err(|_| malformed("RAW development backend panicked"))?
-    .map_err(|error| malformed(&format!("RAW development failed: {error}")))?;
-
-    let (width, height, pixels) = linear_rgb(developed)?;
+    let (width, height, pixels) = if is_xtrans(&raw_result.frame) {
+        developed_xtrans_linear(&raw, raw_result.frame.parts())?
+    } else {
+        let developed = catch_unwind(AssertUnwindSafe(|| {
+            RawDevelop {
+                steps: development_steps(raw.active_area, raw.crop_area),
+            }
+            .develop_intermediate(&raw)
+        }))
+        .map_err(|_| malformed("RAW development backend panicked"))?
+        .map_err(|error| malformed(&format!("RAW development failed: {error}")))?;
+        linear_rgb(developed)?
+    };
+    if pixels
+        .iter()
+        .flat_map(|pixel| pixel.iter())
+        .any(|value| !value.is_finite())
+    {
+        return Err(malformed("RAW development produced a non-finite sample"));
+    }
     Ok(DevelopedRawLinear {
         width,
         height,
@@ -98,6 +111,191 @@ pub(super) fn developed_raw_linear(
         stages: development_stages(raw.active_area, raw.crop_area),
         raw_source,
     })
+}
+
+fn is_xtrans(frame: &super::RawFrame) -> bool {
+    matches!(
+        frame.parts().planes.first().map(|plane| &plane.layout),
+        Some(super::RawPlaneLayout::Mosaic(cfa)) if cfa.width == 6 && cfa.height == 6
+    )
+}
+
+fn developed_xtrans_linear(
+    raw: &RawImage,
+    parts: &super::RawFrameParts,
+) -> Result<(u32, u32, Vec<[f32; 3]>), ImageInputError> {
+    let mut raw = raw.clone();
+    raw.apply_scaling()
+        .map_err(|error| malformed(&format!("X-Trans raw preparation failed: {error}")))?;
+    let RawPhotometricInterpretation::Cfa(config) = &raw.photometric else {
+        return Err(malformed("X-Trans RAW photometric metadata is not CFA"));
+    };
+    let wb = raw.wb_coeffs;
+    let samples = raw
+        .data
+        .as_f32()
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let x = index % raw.width;
+            let y = index / raw.width;
+            let gain = match config.cfa.cfa_color_at(y, x) as usize {
+                CFA_COLOR_R => wb[0],
+                CFA_COLOR_G => wb[1],
+                CFA_COLOR_B => wb[2],
+                _ => 1.0,
+            };
+            *value * gain
+        })
+        .collect::<Vec<_>>();
+    // X-Trans cameras commonly report an active area narrower than the default
+    // crop (the X-Pro2 reports 5920x4038 vs. 6000x4000). Demosaic the complete
+    // sensor so the default crop remains valid and phase stays at the sensor origin.
+    let pixels = xtrans_demosaic(&samples, raw.width, raw.height, &config.cfa);
+    let matrix = camera_to_srgb_matrix(parts)
+        .ok_or_else(|| malformed("X-Trans camera color matrix is missing"))?;
+    let crop_active_area = raw
+        .active_area
+        .is_none_or(|active| raw.crop_area.is_none_or(|crop| contains_rect(active, crop)));
+    let output_area = if crop_active_area {
+        raw.crop_area
+            .map(|crop| raw.active_area.map_or(crop, |active| crop.adapt(&active)))
+            .or(raw.active_area)
+    } else {
+        raw.crop_area
+    };
+    let (pixels, width, height) = if let Some(crop) = output_area {
+        let cropped = crop_rgb(&pixels, raw.width, raw.height, crop);
+        (cropped, crop.d.w, crop.d.h)
+    } else {
+        (pixels, raw.width, raw.height)
+    };
+    let pixels = pixels
+        .into_iter()
+        .map(|pixel| matrix.apply(pixel))
+        .collect::<Vec<_>>();
+    Ok((
+        u32::try_from(width).map_err(|_| ImageInputError::ArithmeticOverflow)?,
+        u32::try_from(height).map_err(|_| ImageInputError::ArithmeticOverflow)?,
+        pixels,
+    ))
+}
+
+fn xtrans_demosaic(
+    samples: &[f32],
+    width: usize,
+    height: usize,
+    cfa: &rawler::cfa::CFA,
+) -> Vec<[f32; 3]> {
+    // Unlike rawler's PPG implementation, this interpolation follows the
+    // 6x6 CFA phase and never treats X-Trans as a 2x2 Bayer pattern. The
+    // closest samples of each color are distance-weighted; calibration remains
+    // a separate matrix step below so the linear boundary is explicit.
+    let offsets = xtrans_offsets(cfa);
+    let mut output = Vec::with_capacity(width.saturating_mul(height));
+    for y in 0..height {
+        for x in 0..width {
+            let phase = (y % 6) * 6 + (x % 6);
+            let mut pixel = [0.0; 3];
+            for channel in 0..3 {
+                let mut sum = 0.0;
+                let mut weight_sum = 0.0;
+                for &(dx, dy) in &offsets[phase][channel] {
+                    let Some(nx) = x.checked_add_signed(dx) else {
+                        continue;
+                    };
+                    let Some(ny) = y.checked_add_signed(dy) else {
+                        continue;
+                    };
+                    if nx < width && ny < height {
+                        let distance =
+                            f32::from(u8::try_from(dx * dx + dy * dy).expect("bounded CFA offset"));
+                        let weight = 1.0 / distance.max(1.0);
+                        sum += samples[ny * width + nx] * weight;
+                        weight_sum += weight;
+                        if weight_sum >= 4.0 {
+                            break;
+                        }
+                    }
+                }
+                pixel[channel] = if weight_sum == 0.0 {
+                    0.0
+                } else {
+                    sum / weight_sum
+                };
+            }
+            output.push(pixel);
+        }
+    }
+    output
+}
+
+fn xtrans_offsets(cfa: &rawler::cfa::CFA) -> Vec<[Vec<(isize, isize)>; 3]> {
+    let mut offsets = Vec::with_capacity(36);
+    for phase_y in 0..6 {
+        for phase_x in 0..6 {
+            let mut channels = [const { Vec::new() }; 3];
+            for dy in -3..=3 {
+                for dx in -3..=3 {
+                    let color = cfa.color_at(
+                        (phase_y as isize + dy).rem_euclid(6) as usize,
+                        (phase_x as isize + dx).rem_euclid(6) as usize,
+                    );
+                    if color < 3 {
+                        channels[color].push((dx, dy));
+                    }
+                }
+            }
+            for channel in &mut channels {
+                channel.sort_by_key(|(dx, dy)| dx * dx + dy * dy);
+            }
+            offsets.push(channels);
+        }
+    }
+    offsets
+}
+
+fn crop_rgb(pixels: &[[f32; 3]], width: usize, height: usize, crop: Rect) -> Vec<[f32; 3]> {
+    let x = crop.p.x;
+    let y = crop.p.y;
+    let crop_width = crop.d.w;
+    let crop_height = crop.d.h;
+    let mut output = Vec::with_capacity(crop_width.saturating_mul(crop_height));
+    for row in y..y.saturating_add(crop_height).min(height) {
+        let start = row * width + x.min(width);
+        let end = start.saturating_add(crop_width).min(row * width + width);
+        output.extend_from_slice(&pixels[start..end]);
+    }
+    output
+}
+
+fn camera_to_srgb_matrix(parts: &super::RawFrameParts) -> Option<Matrix3> {
+    let matrix = parts
+        .color_matrices
+        .iter()
+        .find(|matrix| matrix.illuminant == super::RawIlluminant::D65)
+        .or_else(|| parts.color_matrices.first())?;
+    if matrix.rows != 3 || matrix.columns != 3 {
+        return None;
+    }
+    let camera_to_xyz: &[f32; 9] = matrix.coefficients.as_slice().try_into().ok()?;
+    let srgb_to_xyz = BuiltinSpace::SrgbD65.to_xyz_matrix()?.rows();
+    let mut rgb_to_camera = [0.0_f32; 9];
+    for row in 0..3 {
+        for column in 0..3 {
+            rgb_to_camera[row * 3 + column] = (0..3)
+                .map(|index| camera_to_xyz[row * 3 + index] * srgb_to_xyz[index * 3 + column])
+                .sum();
+        }
+        let sum: f32 = rgb_to_camera[row * 3..row * 3 + 3].iter().sum();
+        if sum == 0.0 || !sum.is_finite() {
+            return None;
+        }
+        for value in &mut rgb_to_camera[row * 3..row * 3 + 3] {
+            *value /= sum;
+        }
+    }
+    Matrix3::new(rgb_to_camera).ok()?.inverse().ok()
 }
 
 fn development_steps(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<ProcessingStep> {
@@ -353,7 +551,7 @@ fn decoded_image_error(error: DecodedImageError) -> ImageInputError {
 mod tests {
     use rawler::imgop::{Dim2, Point, develop::ProcessingStep};
 
-    use super::{Rect, contains_rect, development_steps};
+    use super::{Rect, contains_rect, development_steps, xtrans_demosaic};
 
     #[test]
     fn preserves_full_sensor_for_a_default_crop_wider_than_active_area() {
@@ -390,6 +588,22 @@ mod tests {
                 ProcessingStep::Calibrate,
                 ProcessingStep::CropDefault
             ]
+        );
+    }
+
+    #[test]
+    fn xtrans_demosaic_preserves_all_three_channels_at_full_resolution() {
+        let cfa = rawler::cfa::CFA::new("GGRGGBGGBGGRBRGRBGGGBGGRGGRGGBRBGBRG");
+        let samples = (0..36)
+            .map(|index| 0.1 + f32::from(u8::try_from(index).expect("small test sample")) / 100.0)
+            .collect::<Vec<_>>();
+        let pixels = xtrans_demosaic(&samples, 6, 6, &cfa);
+
+        assert_eq!(pixels.len(), 36);
+        assert!(
+            pixels
+                .iter()
+                .all(|pixel| { pixel.iter().all(|value| value.is_finite() && *value > 0.0) })
         );
     }
 }
