@@ -177,6 +177,9 @@ pub fn encode_linear_srgb(input: &WorkingRgbImage) -> EncodedSrgbOutput {
 /// finite sRGB output plan.
 #[must_use]
 pub fn encode_working_to_srgb(input: &WorkingRgbImage) -> EncodedSrgbOutput {
+    if input.frame() == WorkingFrameDescriptor::srgb() {
+        return encode_linear_srgb(input);
+    }
     let plan = ColorOutPlan::new_with_working_frame(
         ColorOutConfig::builtin(BuiltinSpace::SrgbD65),
         input.frame(),
