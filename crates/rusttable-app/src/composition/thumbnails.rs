@@ -1,7 +1,7 @@
 //! Generation-checked publication of the shared lighttable and filmstrip thumbnails.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
@@ -18,17 +18,52 @@ use rusttable_ui::GtkShell;
 #[derive(Debug, Default)]
 pub(super) struct ThumbnailLifecycle {
     generation: u64,
-    requested: BTreeSet<PhotoId>,
+    requested: BTreeMap<PhotoId, u64>,
+    published: BTreeSet<PhotoId>,
 }
 
 impl ThumbnailLifecycle {
     fn begin(&mut self) -> u64 {
         self.generation = self.generation.wrapping_add(1);
+        self.requested.clear();
         self.generation
     }
 
     fn is_current(&self, generation: u64) -> bool {
         self.generation == generation
+    }
+
+    fn reconcile(&mut self, photo_ids: &[PhotoId], is_terminal: impl Fn(PhotoId) -> bool) {
+        for photo_id in photo_ids {
+            if is_terminal(*photo_id) {
+                self.requested.remove(photo_id);
+                self.published.insert(*photo_id);
+            } else {
+                self.published.remove(photo_id);
+            }
+        }
+    }
+
+    fn needs_request(&self, photo_id: PhotoId) -> bool {
+        !self.requested.contains_key(&photo_id) && !self.published.contains(&photo_id)
+    }
+
+    fn request(&mut self, photo_ids: &[PhotoId], generation: u64) {
+        self.published
+            .retain(|photo_id| !photo_ids.contains(photo_id));
+        self.requested.extend(
+            photo_ids
+                .iter()
+                .copied()
+                .map(|photo_id| (photo_id, generation)),
+        );
+    }
+
+    fn publish(&mut self, photo_id: PhotoId, generation: u64) {
+        if self.requested.get(&photo_id) == Some(&generation) {
+            self.requested.remove(&photo_id);
+            self.published.insert(photo_id);
+        }
     }
 }
 
@@ -48,24 +83,33 @@ pub(super) fn start_workspace_thumbnails(
     };
     let catalog_path = ready.location().catalog_path().to_path_buf();
     let source_root = ready.location().source_root().to_path_buf();
-    let photo_ids = shell
-        .lighttable_thumbnail_photo_ids()
+    let candidate_photo_ids = shell.lighttable_thumbnail_photo_ids();
+    lifecycle
+        .borrow_mut()
+        .reconcile(&candidate_photo_ids, |photo_id| {
+            shell.photo_thumbnail_has_terminal_state(photo_id)
+        });
+    let has_new_request = candidate_photo_ids
+        .iter()
+        .any(|photo_id| lifecycle.borrow().needs_request(*photo_id));
+    if !has_new_request {
+        return;
+    }
+    let photo_ids = candidate_photo_ids
         .into_iter()
-        .filter(|photo_id| !lifecycle.borrow().requested.contains(photo_id))
+        .filter(|photo_id| !lifecycle.borrow().published.contains(photo_id))
         .collect::<Vec<_>>();
     if photo_ids.is_empty() {
         return;
     }
     let generation = lifecycle.borrow_mut().begin();
-    lifecycle
-        .borrow_mut()
-        .requested
-        .extend(photo_ids.iter().copied());
+    lifecycle.borrow_mut().request(&photo_ids, generation);
     for photo_id in &photo_ids {
         shell.set_photo_thumbnail_loading(*photo_id);
     }
 
     let (sender, receiver) = mpsc::channel();
+    let worker_photo_ids = photo_ids.clone();
     let worker = thread::Builder::new()
         .name("rusttable-thumbnails".to_owned())
         .spawn(move || {
@@ -74,13 +118,13 @@ pub(super) fn start_workspace_thumbnails(
                 source_root,
                 default_thumbnail_cache_root(),
             ) else {
-                for photo_id in photo_ids {
+                for photo_id in worker_photo_ids {
                     let _ = sender.send(ThumbnailWorkerMessage::Failed(photo_id));
                 }
                 let _ = sender.send(ThumbnailWorkerMessage::Finished);
                 return;
             };
-            for photo_id in photo_ids {
+            for photo_id in worker_photo_ids {
                 let message = controller
                     .render_with_generation(photo_id, generation)
                     .map_or_else(
@@ -94,6 +138,10 @@ pub(super) fn start_workspace_thumbnails(
             let _ = sender.send(ThumbnailWorkerMessage::Finished);
         });
     if worker.is_err() {
+        for photo_id in &photo_ids {
+            shell.set_photo_thumbnail_failed(*photo_id);
+            lifecycle.borrow_mut().publish(*photo_id, generation);
+        }
         return;
     }
 
@@ -112,10 +160,14 @@ pub(super) fn start_workspace_thumbnails(
                     {
                         shell.set_photo_thumbnail_failed(thumbnail.photo_id());
                     }
+                    lifecycle
+                        .borrow_mut()
+                        .publish(thumbnail.photo_id(), generation);
                 }
                 Ok(ThumbnailWorkerMessage::Failed(photo_id)) => {
                     if lifecycle.borrow().is_current(generation) {
                         shell.set_photo_thumbnail_failed(photo_id);
+                        lifecycle.borrow_mut().publish(photo_id, generation);
                     }
                 }
                 Ok(ThumbnailWorkerMessage::Finished) | Err(TryRecvError::Disconnected) => {
@@ -130,6 +182,11 @@ pub(super) fn start_workspace_thumbnails(
 #[cfg(test)]
 mod tests {
     use super::ThumbnailLifecycle;
+    use rusttable_core::PhotoId;
+
+    fn id(value: u128) -> PhotoId {
+        PhotoId::new(value).expect("non-zero test photo ID")
+    }
 
     #[test]
     fn a_new_refresh_rejects_late_thumbnail_results() {
@@ -139,5 +196,26 @@ mod tests {
 
         assert!(!lifecycle.is_current(first));
         assert!(lifecycle.is_current(second));
+    }
+
+    #[test]
+    fn recreated_loading_tiles_reconcile_published_thumbnails_and_request_again() {
+        let photo_id = id(1);
+        let mut lifecycle = ThumbnailLifecycle::default();
+        let generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], generation);
+
+        lifecycle.publish(photo_id, generation);
+        assert!(!lifecycle.needs_request(photo_id));
+
+        lifecycle.reconcile(&[photo_id], |_| false);
+        assert!(lifecycle.needs_request(photo_id));
+
+        let next_generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], next_generation);
+        lifecycle.publish(photo_id, generation);
+        assert!(!lifecycle.needs_request(photo_id));
+        lifecycle.publish(photo_id, next_generation);
+        assert!(!lifecycle.needs_request(photo_id));
     }
 }

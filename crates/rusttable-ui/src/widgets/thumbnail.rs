@@ -39,6 +39,11 @@ impl ThumbnailState {
     }
 
     #[must_use]
+    pub(crate) const fn is_terminal(&self) -> bool {
+        !matches!(self, Self::Loading)
+    }
+
+    #[must_use]
     pub(crate) const fn status_text(&self) -> &'static str {
         match self {
             Self::Loading => "loading…",

@@ -61,6 +61,17 @@ fn collection_state(photo_id: PhotoId, generation: u64) -> CollectionFilterState
     )
 }
 
+fn assert_thumbnail_pair_is_ready(shell: &GtkShell, photo_id: PhotoId) {
+    let pair = shell
+        .photo_tiles
+        .borrow()
+        .get(&photo_id)
+        .cloned()
+        .expect("photo tile");
+    assert!(pair.thumbnails.state().is_ready());
+    assert!(pair.thumbnails.filmstrip().state().is_ready());
+}
+
 #[cfg(not(target_os = "macos"))]
 #[gtk4::test]
 fn grid_model_keeps_complete_collections_while_gtk_virtualizes_cards() {
@@ -194,6 +205,38 @@ fn native_open_projection_survives_workspace_reset_and_mode_switch() {
             .state()
             .is_ready()
     );
+}
+
+#[gtk4::test]
+fn thumbnail_publication_keeps_grid_and_filmstrip_ready_through_rerenders() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.thumbnail-publication-reconciliation"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let photo_id = id(4);
+    let source = workspace(photo_id);
+    shell.set_photo_workspace(&source);
+
+    let dimensions = PreviewDimensions::new(1, 1).expect("test dimensions");
+    let metadata = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("thumbnail ready").expect("test status"),
+        vec![255, 0, 0, 255],
+    )
+    .expect("test thumbnail");
+    shell
+        .set_photo_thumbnail(photo_id, &metadata)
+        .expect("publish thumbnail");
+    assert_thumbnail_pair_is_ready(&shell, photo_id);
+
+    shell.set_lighttable_workspace_filtered(&source, [photo_id]);
+    assert_thumbnail_pair_is_ready(&shell, photo_id);
+
+    shell.show_workspace(WorkspaceRole::Darkroom);
+    shell.show_workspace(WorkspaceRole::Lighttable);
+    shell.set_lighttable_workspace_filtered(&source, [photo_id]);
+    assert_thumbnail_pair_is_ready(&shell, photo_id);
 }
 
 // Darktable's `src/views/darkroom.c` and `src/libs/histogram.c` treat the completed preview pipe
