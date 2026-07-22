@@ -397,7 +397,6 @@ impl DarkroomGeometryReceipt {
         right_panel_visible: bool,
         filmstrip_visible: bool,
     ) -> Self {
-        let content_width = LAYOUT_METRICS.content_width_px(window_width_px);
         let left_panel_width = if left_panel_visible {
             LAYOUT_METRICS.side_panel_widths.preferred_px
         } else {
@@ -408,9 +407,28 @@ impl DarkroomGeometryReceipt {
         } else {
             0
         };
-        let center_width = content_width
-            .saturating_sub(left_panel_width)
-            .saturating_sub(right_panel_width);
+        Self::for_window_with_panel_widths(
+            window_width_px,
+            window_height_px,
+            left_panel_width,
+            right_panel_width,
+            filmstrip_visible,
+        )
+    }
+
+    /// Returns the same receipt for a live Paned allocation. Keeping the
+    /// calculation display-free makes rail-drag behavior deterministic and
+    /// gives the GTK refresh callback one contract for viewport and histogram
+    /// recomputation.
+    #[must_use]
+    pub const fn for_window_with_panel_widths(
+        window_width_px: u16,
+        window_height_px: u16,
+        left_panel_width_px: u16,
+        right_panel_width_px: u16,
+        filmstrip_visible: bool,
+    ) -> Self {
+        let content_width = LAYOUT_METRICS.content_width_px(window_width_px);
         let filmstrip_height = if filmstrip_visible {
             LAYOUT_METRICS.filmstrip_heights.preferred_px
         } else {
@@ -419,16 +437,18 @@ impl DarkroomGeometryReceipt {
         Self {
             window_width_px,
             window_height_px,
-            left_panel_width_px: left_panel_width,
-            center_width_px: center_width,
-            right_panel_width_px: right_panel_width,
+            left_panel_width_px,
+            center_width_px: content_width
+                .saturating_sub(left_panel_width_px)
+                .saturating_sub(right_panel_width_px),
+            right_panel_width_px,
             top_toolbar_height_px: DARKROOM_GEOMETRY.top_toolbar_height_px,
             viewport_minimum_height_px: DARKROOM_GEOMETRY.viewport_minimum_height_px,
             bottom_toolbar_height_px: DARKROOM_GEOMETRY.bottom_toolbar_height_px,
             status_bar_height_px: DARKROOM_GEOMETRY.status_bar_height_px,
             filmstrip_height_px: filmstrip_height,
-            left_panel_visible,
-            right_panel_visible,
+            left_panel_visible: left_panel_width_px > 0,
+            right_panel_visible: right_panel_width_px > 0,
             filmstrip_visible,
         }
     }

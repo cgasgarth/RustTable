@@ -14,6 +14,10 @@ use super::{
     chrome_toggle,
 };
 use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
+use crate::gui::darktable_components::{
+    module_expander as shared_module_expander, rail as shared_rail,
+    rail_scroll as shared_rail_scroll,
+};
 use crate::iop::modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
     build_module_column_with_filter, build_module_column_without_empty,
@@ -230,18 +234,7 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 }
 
 fn rail_scroll(child: &impl IsA<gtk4::Widget>, width: i32, id: &str) -> gtk4::ScrolledWindow {
-    let scroll = gtk4::ScrolledWindow::builder()
-        .child(child)
-        .hexpand(true)
-        .vexpand(true)
-        .build();
-    scroll.set_widget_name(id);
-    scroll.set_can_focus(true);
-    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
-    scroll.set_min_content_width(width);
-    scroll.set_propagate_natural_width(false);
-    scroll.set_propagate_natural_height(false);
-    scroll
+    shared_rail_scroll(child, width, id)
 }
 
 fn histogram() -> gtk4::Stack {
@@ -415,17 +408,7 @@ fn replace_projection(slot: &gtk4::Box, expander: &gtk4::Expander) {
 }
 
 fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
-    let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    panel.set_widget_name(id);
-    panel.set_width_request(width);
-    panel.set_hexpand(false);
-    panel.set_vexpand(true);
-    panel.set_halign(gtk4::Align::Fill);
-    panel.set_valign(gtk4::Align::Fill);
-    panel.set_accessible_role(gtk4::AccessibleRole::Group);
-    panel.update_property(&[Property::Label(accessible_name)]);
-    apply_theme_role(&panel, ThemeRole::Panel);
-    panel
+    shared_rail(id, width, accessible_name)
 }
 
 fn rail_module(
@@ -441,13 +424,7 @@ fn rail_module(
     state.set_accessible_role(gtk4::AccessibleRole::Status);
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     content.append(&state);
-    let expander = gtk4::Expander::builder()
-        .label(title)
-        .expanded(initially_expanded)
-        .child(&content)
-        .build();
-    expander.set_widget_name(id);
-    expander.set_focusable(true);
+    let expander = shared_module_expander(id, title, initially_expanded, Some(&content));
     expander.update_property(&[Property::Label(title)]);
     apply_theme_role(&expander, ThemeRole::ModuleGroup);
     (expander, state)

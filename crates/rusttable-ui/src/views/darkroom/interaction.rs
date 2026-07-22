@@ -102,6 +102,10 @@ impl HistogramView {
         self.chart.queue_draw();
     }
 
+    pub(super) fn widget(&self) -> &gtk4::Stack {
+        &self.stack
+    }
+
     pub(super) fn loading(&self, generation: ViewportGeneration) {
         self.data.replace(None);
         self.selected_sample.replace(None);

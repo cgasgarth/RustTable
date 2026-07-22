@@ -6,6 +6,9 @@ use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
+use crate::gui::darktable_components::{
+    button as shared_button, dropdown as shared_dropdown, module_expander as shared_module_expander,
+};
 use crate::presentation::PresentationTextError;
 use crate::presentation::darkroom_controls::{
     ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlValue,
@@ -675,8 +678,7 @@ pub fn build_module_panel_with_actions(
     status.set_hexpand(true);
     status.set_accessible_role(gtk4::AccessibleRole::Status);
     status.update_property(&[Property::Label("Module status")]);
-    let recover = gtk4::Button::with_label("Refresh");
-    recover.set_widget_name(&format!("{}-recover", module.id()));
+    let recover = shared_button(&format!("{}-recover", module.id()), "Refresh");
     recover.set_sensitive(false);
     recover.set_focus_on_click(false);
     recover.update_property(&[Property::Label("Refresh module snapshot")]);
@@ -694,8 +696,7 @@ pub fn build_module_panel_with_actions(
     enabled.update_property(&[Property::Label("Enable module")]);
     header.append(&enabled);
     let presets = if module.presets().len() == 0 {
-        let button = gtk4::Button::with_label("Presets");
-        button.set_widget_name(&format!("{}-presets", module.id()));
+        let button = shared_button(&format!("{}-presets", module.id()), "Presets");
         button.set_tooltip_text(Some("Presets are unavailable for this module"));
         button.set_sensitive(false);
         button.set_focusable(false);
@@ -707,8 +708,7 @@ pub fn build_module_panel_with_actions(
             .presets()
             .map(DarkroomModulePreset::label)
             .collect::<Vec<_>>();
-        let dropdown = gtk4::DropDown::from_strings(&labels);
-        dropdown.set_widget_name(&format!("{}-presets", module.id()));
+        let dropdown = shared_dropdown(&format!("{}-presets", module.id()), &labels);
         dropdown.set_sensitive(module_available && module.enabled());
         dropdown.set_focusable(true);
         dropdown.update_property(&[Property::Label("Choose module preset")]);
@@ -716,8 +716,7 @@ pub fn build_module_panel_with_actions(
         Some(dropdown)
     };
     let reset = module.resettable().then(|| {
-        let reset = gtk4::Button::with_label("Reset");
-        reset.set_widget_name(&format!("{}-reset", module.id()));
+        let reset = shared_button(&format!("{}-reset", module.id()), "Reset");
         reset.set_sensitive(module_available && module.enabled());
         reset.set_focus_on_click(false);
         reset.set_halign(gtk4::Align::End);
@@ -744,13 +743,12 @@ pub fn build_module_panel_with_actions(
         control_rows.push(row);
     }
 
-    let expander = gtk4::Expander::builder()
-        .label(module.title())
-        .expanded(module.expanded())
-        .child(&content)
-        .build();
-    expander.set_widget_name(module.id());
-    expander.set_focusable(true);
+    let expander = shared_module_expander(
+        module.id(),
+        module.title(),
+        module.expanded(),
+        Some(&content),
+    );
     expander.set_accessible_role(gtk4::AccessibleRole::Group);
     expander.update_property(&[Property::Label(module.title())]);
     apply_theme_role(&expander, ThemeRole::Module);

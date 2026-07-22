@@ -144,14 +144,18 @@ impl GtkShell {
         let (darkroom, darkroom_preview, darkroom_workspace) = build_darkroom(panel_width);
         let darkroom_left_modules = darkroom.left_modules().clone();
         let darkroom_right_modules = darkroom.right_modules().clone();
-        let (workspace, lighttable, lighttable_empty_state, lighttable_layout_controls) =
-            workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
+        let (
+            workspace,
+            lighttable,
+            lighttable_empty_state,
+            lighttable_layout_controls,
+            lighttable_toolbar,
+        ) = workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
         let input_mapping_editor = InputMappingEditor::new(application);
         let ai_models_panel = AiModelsPanel::new();
         let display_profile_banner = DisplayProfileBanner::new();
         let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
         initialize_profile_diagnostics(&darkroom);
-        let lighttable_toolbar = header.lighttable_toolbar().clone();
         header.preferences_button().connect_clicked({
             let editor = input_mapping_editor.clone();
             let ai_models = ai_models_panel.clone();
@@ -180,8 +184,17 @@ impl GtkShell {
             &darkroom,
             layout.initial_workspace(),
         );
-        let (content, filmstrip, filmstrip_root) =
-            desktop_body(&workspace, &left_panel, &right_panel, &initial_i18n);
+        let geometry_changed: Rc<dyn Fn()> = Rc::new({
+            let darkroom = darkroom.clone();
+            move || darkroom.refresh_geometry()
+        });
+        let (content, filmstrip, filmstrip_root) = desktop_body(
+            &workspace,
+            &left_panel,
+            &right_panel,
+            &initial_i18n,
+            &geometry_changed,
+        );
 
         let shell = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         apply_theme_role(&shell, ThemeRole::Shell);

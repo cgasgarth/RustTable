@@ -9,6 +9,7 @@ use gtk4::prelude::*;
 
 use crate::CollectionProperty;
 
+use crate::gui::darktable_components::{button as shared_button, dropdown as shared_dropdown};
 use crate::gui::{LIGHTTABLE_TOOLBAR, ThemeRole, apply_theme_role};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -260,8 +261,10 @@ impl LighttableToolbar {
         root.set_accessible_role(gtk4::AccessibleRole::Toolbar);
         apply_theme_role(&root, ThemeRole::Toolbar);
 
-        let property = gtk4::DropDown::from_strings(&["film roll", "folders", "filename"]);
-        property.set_widget_name("lighttable-filter-property");
+        let property = shared_dropdown(
+            "lighttable-filter-property",
+            &["film roll", "folders", "filename"],
+        );
         property.set_accessible_role(gtk4::AccessibleRole::ComboBox);
         property.set_tooltip_text(Some("collection filter property"));
         root.append(&property);
@@ -277,8 +280,7 @@ impl LighttableToolbar {
 
         let mut label_buttons = Vec::new();
         for label in LighttableColorLabel::ALL {
-            let button = gtk4::Button::with_label("●");
-            button.set_widget_name(&format!("lighttable-color-{}", label.index()));
+            let button = shared_button(&format!("lighttable-color-{}", label.index()), "●");
             button.set_accessible_role(gtk4::AccessibleRole::Button);
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_color_filter");
@@ -292,8 +294,7 @@ impl LighttableToolbar {
         root.append(&toolbar_separator("labels-rating"));
 
         let mut rating_buttons = Vec::new();
-        let rejected = gtk4::Button::with_label("×");
-        rejected.set_widget_name("lighttable-rating-rejected");
+        let rejected = shared_button("lighttable-rating-rejected", "×");
         rejected.add_css_class("dt_filter_button");
         rejected.add_css_class("dt_rating_filter");
         rejected.set_accessible_role(gtk4::AccessibleRole::Button);
@@ -302,8 +303,7 @@ impl LighttableToolbar {
         root.append(&rejected);
         rating_buttons.push((LighttableRating::Rejected, rejected));
 
-        let unrated = gtk4::Button::with_label("0");
-        unrated.set_widget_name("lighttable-rating-zero");
+        let unrated = shared_button("lighttable-rating-zero", "0");
         unrated.add_css_class("dt_filter_button");
         unrated.add_css_class("dt_rating_filter");
         unrated.set_accessible_role(gtk4::AccessibleRole::Button);
@@ -313,11 +313,10 @@ impl LighttableToolbar {
         rating_buttons.push((LighttableRating::Zero, unrated));
 
         for rating in LighttableRating::STARS {
-            let button = gtk4::Button::with_label("★");
-            button.set_widget_name(&format!(
-                "lighttable-rating-{}",
-                rating.stars().unwrap_or(0)
-            ));
+            let button = shared_button(
+                &format!("lighttable-rating-{}", rating.stars().unwrap_or(0)),
+                "★",
+            );
             button.add_css_class("dt_filter_button");
             button.add_css_class("dt_rating_filter");
             button.set_accessible_role(gtk4::AccessibleRole::Button);
@@ -330,8 +329,7 @@ impl LighttableToolbar {
 
         root.append(&toolbar_separator("rating-sort"));
 
-        let sort = gtk4::DropDown::from_strings(&["filename", "capture time", "rating"]);
-        sort.set_widget_name("lighttable-sort");
+        let sort = shared_dropdown("lighttable-sort", &["filename", "capture time", "rating"]);
         sort.set_accessible_role(gtk4::AccessibleRole::ComboBox);
         sort.set_tooltip_text(Some("sort visible images"));
         root.append(&sort);
@@ -341,8 +339,7 @@ impl LighttableToolbar {
         count.set_accessible_role(gtk4::AccessibleRole::Status);
         root.append(&count);
         root.append(&toolbar_separator("count-reset"));
-        let reset = gtk4::Button::with_label("reset");
-        reset.set_widget_name("lighttable-reset");
+        let reset = shared_button("lighttable-reset", "reset");
         reset.add_css_class("dt_filter_button");
         reset.update_property(&[Property::Label(
             "clear collection filter, sort, and selection",

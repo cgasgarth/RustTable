@@ -9,11 +9,14 @@ use crate::external_editor::ExternalEditorPanel;
 use crate::import::ImportSessionPanel;
 
 use crate::gui::darkroom_modules::DarkroomModuleGroup;
+use crate::gui::darktable_components::{
+    button, module_expander as shared_module_expander, module_row,
+};
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use crate::gui::{
     DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls,
-    ModuleControlKind, ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
-    apply_theme_role, darkroom_window_layout,
+    LighttableToolbar, ModuleControlKind, ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole,
+    WorkspaceRole, apply_theme_role, darkroom_window_layout,
 };
 use crate::views::lighttable::empty_collection_state;
 
@@ -40,10 +43,9 @@ pub(super) fn right_panel() -> (
         center.append(&module_group(module.widget_name, module.title, false));
     }
     center.append(export_panel.widget());
-    center.append(external_editor_panel.widget());
-    center.append(ai_batch_panel.widget());
-    center.append(camera_panel.widget());
-    center.append(import_session_panel.widget());
+    // External editors, AI batch, tethering, and import-session controls are
+    // services, not lighttable modules. Keep their controllers alive without
+    // placing their unrelated surfaces in the collection rail.
     let bottom = panel_slot(PanelSlot::RightBottom);
     let search = gtk4::SearchEntry::new();
     search.set_widget_name("right-module-search");
@@ -106,6 +108,7 @@ pub(super) fn desktop_body(
     left_panel: &gtk4::Stack,
     right_panel: &gtk4::Stack,
     i18n: &I18n,
+    geometry_changed: &std::rc::Rc<dyn Fn()>,
 ) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let center = central_workspace(workspace);
@@ -130,6 +133,7 @@ pub(super) fn desktop_body(
         let preferred_width = i32::from(layout.side_panel_widths.preferred_px);
         move |paned| paned.set_position(preferred_width)
     });
+    connect_geometry_refresh(&split, std::rc::Rc::clone(geometry_changed));
     let workspace_with_right_panel = gtk4::Paned::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .start_child(&split)
@@ -159,6 +163,10 @@ pub(super) fn desktop_body(
             ));
         });
     });
+    connect_geometry_refresh(
+        &workspace_with_right_panel,
+        std::rc::Rc::clone(geometry_changed),
+    );
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
     content.set_margin_top(outer_border);
@@ -167,6 +175,13 @@ pub(super) fn desktop_body(
     content.set_margin_end(outer_border);
     content.append(&workspace_with_right_panel);
     (content, filmstrip, filmstrip_root)
+}
+
+fn connect_geometry_refresh(paned: &gtk4::Paned, refresh: std::rc::Rc<dyn Fn()>) {
+    paned.connect_position_notify(move |paned| {
+        paned.queue_resize();
+        (refresh)();
+    });
 }
 
 fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
@@ -192,6 +207,7 @@ pub(super) fn workspace_stack(
     gtk4::FlowBox,
     gtk4::Stack,
     LighttableLayoutControls,
+    LighttableToolbar,
 ) {
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
@@ -210,6 +226,10 @@ pub(super) fn workspace_stack(
     apply_theme_role(&lighttable, ThemeRole::Lighttable);
     let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     lighttable_page.set_widget_name("lighttable-page");
+    lighttable_page.set_hexpand(true);
+    lighttable_page.set_vexpand(true);
+    let lighttable_toolbar = LighttableToolbar::new();
+    lighttable_page.append(lighttable_toolbar.widget());
     let lighttable_scroll = gtk4::ScrolledWindow::builder()
         .child(&lighttable)
         .hexpand(true)
@@ -243,7 +263,13 @@ pub(super) fn workspace_stack(
         &i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()),
     );
     workspace.set_visible_child_name(initial_workspace.stack_name());
-    (workspace, lighttable, lighttable_canvas, layout_controls)
+    (
+        workspace,
+        lighttable,
+        lighttable_canvas,
+        layout_controls,
+        lighttable_toolbar,
+    )
 }
 
 fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) -> gtk4::Box {
@@ -251,17 +277,19 @@ fn lighttable_footer(i18n: &I18n, layout_controls: &LighttableLayoutControls) ->
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
     bottom_tools.add_css_class("dt_lighttable_footer");
-    for message_id in [
+    for (index, message_id) in [
         MessageId::WorkspaceFit,
         MessageId::WorkspaceBeforeAfter,
         MessageId::WorkspaceSoftProof,
-    ] {
-        bottom_tools.append(&gtk4::Button::with_label(
-            &i18n.text(message_id, &MessageArgs::new()),
-        ));
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let label = i18n.text(message_id, &MessageArgs::new());
+        bottom_tools.append(&button(&format!("lighttable-footer-{index}"), &label));
     }
     bottom_tools.append(layout_controls.widget());
-    bottom_tools.append(&gtk4::Button::with_label("100%"));
+    bottom_tools.append(&button("lighttable-zoom-reset", "100%"));
     bottom_tools
 }
 
@@ -395,11 +423,7 @@ pub(super) fn render_modules<'a>(
 }
 
 fn module_group(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
-    let group_widget = gtk4::Expander::builder()
-        .label(label)
-        .expanded(expanded)
-        .build();
-    group_widget.set_widget_name(id);
+    let group_widget = shared_module_expander(id, label, expanded, None::<&gtk4::Widget>);
     apply_theme_role(&group_widget, ThemeRole::ModuleGroup);
     group_widget
 }
@@ -408,12 +432,6 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     content.set_widget_name(&format!("module-{index}-controls"));
     for control in module.controls() {
-        let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        row.add_css_class("dt_module_row");
-        let label = gtk4::Label::new(Some(control.label().as_str()));
-        label.set_halign(gtk4::Align::Start);
-        label.set_hexpand(true);
-        row.append(&label);
         let widget: gtk4::Widget = match control.kind() {
             ModuleControlKind::Slider => {
                 gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01).upcast()
@@ -421,16 +439,15 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
             ModuleControlKind::Toggle => gtk4::Switch::new().upcast(),
             ModuleControlKind::Choice => gtk4::DropDown::from_strings(&["default"]).upcast(),
         };
-        row.append(&widget);
+        let row = module_row(control.label().as_str(), &widget);
         content.append(&row);
     }
-    let expander = gtk4::Expander::builder()
-        .label(module.title().as_str())
-        .expanded(true)
-        .child(&content)
-        .build();
-    expander.set_widget_name(&format!("module-{index}"));
-    expander.set_focusable(true);
+    let expander = shared_module_expander(
+        &format!("module-{index}"),
+        module.title().as_str(),
+        true,
+        Some(&content),
+    );
     expander.update_property(&[gtk4::accessible::Property::Label(module.title().as_str())]);
     apply_theme_role(&expander, ThemeRole::Module);
     expander

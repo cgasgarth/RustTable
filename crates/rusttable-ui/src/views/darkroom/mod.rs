@@ -303,6 +303,19 @@ impl DarkroomView {
         &self.page
     }
 
+    /// Invalidates the center projection and scopes after either side rail is
+    /// resized. Darktable redraws the center from the newly allocated panel
+    /// bounds; keeping this explicit prevents a stale histogram/viewport
+    /// surface while a Paned handle is dragged.
+    pub(crate) fn refresh_geometry(&self) {
+        self.page.queue_resize();
+        self.page.queue_draw();
+        self.preview.widget().queue_resize();
+        self.preview.widget().queue_draw();
+        self.histogram.widget().queue_resize();
+        self.histogram.widget().queue_draw();
+    }
+
     #[must_use]
     pub fn left_panel_visible(&self) -> bool {
         self.left_panel_visible.get()

@@ -146,6 +146,22 @@ fn darkroom_geometry_keeps_both_rails_and_a_visible_center_at_supported_sizes() 
 }
 
 #[test]
+fn rail_resize_reallocates_the_center_from_the_same_display_free_contract() {
+    let narrow_left =
+        DarkroomGeometryReceipt::for_window_with_panel_widths(1_440, 900, 150, 150, true);
+    let expanded_left =
+        DarkroomGeometryReceipt::for_window_with_panel_widths(1_440, 900, 320, 150, true);
+    let expanded_right =
+        DarkroomGeometryReceipt::for_window_with_panel_widths(1_440, 900, 320, 300, true);
+
+    assert_eq!(narrow_left.center_width_px(), 1_120);
+    assert_eq!(expanded_left.center_width_px(), 950);
+    assert_eq!(expanded_right.center_width_px(), 800);
+    assert!(expanded_right.center_width_px() > 650);
+    assert_eq!(expanded_right.filmstrip_height_px, 120);
+}
+
+#[test]
 fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
     let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
     let darkroom_panels = include_str!("../src/views/darkroom/panel_widgets.rs");
@@ -155,6 +171,44 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
     assert!(runtime_layout.contains("gtk4::glib::idle_add_local_once"));
     assert!(darkroom_panels.contains("darkroom-module-groups-scroll"));
     assert!(darkroom_panels.contains(".propagate_natural_width(false)"));
+}
+
+#[test]
+fn gtk_workspace_ownership_keeps_lighttable_rail_and_darkroom_refresh_separate() {
+    let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
+    let runtime_shell = include_str!("../src/gui/runtime/mod.rs");
+    let components = include_str!("../src/gui/darktable_components.rs");
+    let css = include_str!("../src/gui/theme.css");
+
+    assert!(runtime_layout.contains("lighttable_page.append(lighttable_toolbar.widget())"));
+    assert!(!runtime_layout.contains("center.append(external_editor_panel.widget())"));
+    assert!(!runtime_layout.contains("center.append(ai_batch_panel.widget())"));
+    assert!(!runtime_layout.contains("center.append(camera_panel.widget())"));
+    assert!(runtime_layout.contains("connect_position_notify"));
+    assert!(runtime_shell.contains("darkroom.refresh_geometry()"));
+    for class in [
+        "module_expander",
+        "module_row",
+        "scale_row",
+        "dropdown",
+        "rail_scroll",
+    ] {
+        assert!(
+            components.contains(class),
+            "shared component helper missing {class}"
+        );
+    }
+    for selector in [
+        ".dt_rail",
+        ".dt_module_expander",
+        ".dt_module_row",
+        ".dt_field",
+    ] {
+        assert!(
+            css.contains(selector),
+            "shared Darktable CSS selector missing {selector}"
+        );
+    }
 }
 
 #[test]
