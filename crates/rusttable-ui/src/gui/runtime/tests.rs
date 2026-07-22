@@ -26,6 +26,26 @@ fn workspace(photo_id: PhotoId) -> PhotoWorkspaceViewModel {
     .expect("matching test workspace")
 }
 
+fn workspace_with_photos(photo_ids: &[u128]) -> PhotoWorkspaceViewModel {
+    let cards = photo_ids
+        .iter()
+        .map(|value| {
+            let photo_id = id(*value);
+            let title = PresentationText::new(format!("photo-{photo_id}")).expect("test title");
+            PhotoCardViewModel::new(photo_id, title, None)
+        })
+        .collect::<Vec<_>>();
+    let details = photo_ids
+        .iter()
+        .map(|value| {
+            let photo_id = id(*value);
+            let title = PresentationText::new(format!("photo-{photo_id}")).expect("test title");
+            PhotoDetailViewModel::new(photo_id, title, Vec::new())
+        })
+        .collect::<Vec<_>>();
+    PhotoWorkspaceViewModel::new(cards, details).expect("matching test workspace")
+}
+
 fn collection_state(photo_id: PhotoId, generation: u64) -> CollectionFilterState {
     let controls =
         CollectionControlState::new(CollectionProperty::Filename, 1).with_generation(generation);
@@ -179,4 +199,93 @@ fn completed_preview_survives_native_open_projection_replay() {
     assert!(shell.darkroom_preview().texture().is_some());
     assert_eq!(shell.darkroom_preview().status_label().text(), "rendered");
     assert!(shell.darkroom.histogram_available());
+}
+
+#[gtk4::test]
+fn immediate_darkroom_activation_binds_before_presentation_and_rejects_stale_reselection() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.darkroom-transition-race"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let first = id(10);
+    let second = id(11);
+    let generation = std::rc::Rc::new(std::cell::Cell::new(0_u64));
+
+    shell.set_photo_workspace(&workspace_with_photos(&[10, 11]));
+    shell.set_photo_selected_handler({
+        let shell = shell.clone();
+        let generation = std::rc::Rc::clone(&generation);
+        move |photo_id, _| {
+            let next = generation.get().saturating_add(1);
+            generation.set(next);
+            let generation = ViewportGeneration::new(next);
+            shell.begin_darkroom_selection(photo_id, generation);
+            shell.set_darkroom_preview_loading(generation);
+        }
+    });
+
+    assert!(shell.open_photo(first));
+    assert_eq!(
+        shell.workspace.visible_child_name().as_deref(),
+        Some(WorkspaceRole::Darkroom.stack_name())
+    );
+    assert_eq!(shell.darkroom.viewport_state().photo_id(), Some(first));
+    assert_eq!(shell.darkroom.viewport_state().generation().get(), 1);
+    assert_eq!(shell.darkroom.filmstrip_selection(), Some(first));
+    assert_eq!(
+        shell.darkroom_preview().selection_state(),
+        super::super::DarkroomSelectionState::Selected(first)
+    );
+    assert_eq!(
+        shell.darkroom_preview().status_label().text(),
+        "loading preview"
+    );
+    assert!(!shell.darkroom.histogram_available());
+    assert_eq!(
+        shell.left_panel_stack.visible_child_name().as_deref(),
+        Some(WorkspaceRole::Darkroom.stack_name())
+    );
+    assert_eq!(
+        shell.right_panel_stack.visible_child_name().as_deref(),
+        Some(WorkspaceRole::Darkroom.stack_name())
+    );
+    assert!(shell.filmstrip_root.is_visible());
+
+    assert!(shell.open_photo(second));
+    assert_eq!(shell.darkroom.viewport_state().photo_id(), Some(second));
+    assert_eq!(shell.darkroom.viewport_state().generation().get(), 2);
+    assert_eq!(shell.darkroom.filmstrip_selection(), Some(second));
+
+    let dimensions = PreviewDimensions::new(1, 1).expect("test dimensions");
+    let stale_pixels = vec![255, 0, 0, 255];
+    let stale = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("stale").expect("test status"),
+        stale_pixels.clone(),
+    )
+    .expect("stale preview");
+    let stale_histogram =
+        HistogramData::from_rgba8(dimensions, &stale_pixels).expect("stale histogram");
+    shell
+        .set_darkroom_preview_result(ViewportGeneration::new(1), &stale, Ok(stale_histogram))
+        .expect("stale result is ignored");
+    assert_eq!(shell.darkroom.viewport_state().photo_id(), Some(second));
+    assert!(shell.darkroom_preview().texture().is_none());
+
+    let current_pixels = vec![0, 255, 0, 255];
+    let current = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("rendered").expect("test status"),
+        current_pixels.clone(),
+    )
+    .expect("current preview");
+    let current_histogram =
+        HistogramData::from_rgba8(dimensions, &current_pixels).expect("current histogram");
+    shell
+        .set_darkroom_preview_result(ViewportGeneration::new(2), &current, Ok(current_histogram))
+        .expect("current result");
+    assert!(shell.darkroom_preview().texture().is_some());
+    assert!(shell.darkroom.histogram_available());
+    assert_eq!(shell.darkroom.viewport_state().photo_id(), Some(second));
 }
