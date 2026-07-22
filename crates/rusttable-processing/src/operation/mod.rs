@@ -444,6 +444,23 @@ impl ProcessingOperation {
     pub const fn kind(&self) -> &ProcessingOperationKind {
         &self.kind
     }
+
+    /// Returns whether the registry contract requires full-image analysis.
+    ///
+    /// The executor uses this contract for tile scheduling so analysis
+    /// operations observe the same full raster regardless of tile boundaries.
+    #[must_use]
+    pub fn requires_full_image_analysis(&self) -> bool {
+        let descriptor_id = crate::registry::operation_descriptor_for(self);
+        crate::registry::builtin_registry()
+            .definition(descriptor_id.rust_id.as_str())
+            .is_some_and(|definition| {
+                definition
+                    .descriptor()
+                    .flags
+                    .contains(crate::descriptor::OperationFlags::ANALYSIS)
+            })
+    }
 }
 
 fn compile_rgb_gain(operation: &Operation) -> Result<ProcessingOperation, OperationCompileError> {

@@ -966,6 +966,7 @@ pub(crate) mod closure;
 mod color;
 mod masks;
 mod operations;
+pub(crate) use operations::operation_descriptor_for;
 mod reconstruction;
 mod spots;
 mod watermark;
@@ -983,7 +984,7 @@ pub use operations::{
     rotatepixels_definition, scalepixels_definition, shadhi_definition, soften_definition,
     temperature_definition, vignette_definition,
 };
-use operations::{hex, operation_descriptor_for, snapshot_hash, unavailable, validate_definition};
+use operations::{hex, snapshot_hash, unavailable, validate_definition};
 pub use spots::spots_definition;
 
 /// Returns the process-wide immutable first-party registry snapshot.

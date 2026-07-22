@@ -160,7 +160,7 @@ pub(super) fn hex(bytes: &[u8; 32]) -> String {
     }
     output
 }
-pub(super) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
+pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     super::reconstruction::operation_descriptor_for(operation)
 }
 fn prepare_exposure(
