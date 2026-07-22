@@ -261,6 +261,22 @@ fn cold_launch_main_preview_and_filmstrip_converge_on_neutral_raw_presentation()
         "cold-launch neutral blue-sky/gray-building presentation is green/cyan: means {channel_means:?}"
     );
 
+    let reselected = GtkPreviewController::new().render_selected(&catalog);
+    let GtkPreviewState::Ready(reselected) = reselected else {
+        panic!("reselecting the same RAW photo must reuse a ready preview");
+    };
+    assert_eq!(reselected.photo_id(), photo_id);
+    assert_eq!(reselected.dimensions(), preview.dimensions());
+    assert_eq!(reselected.pixels(), preview.pixels());
+    assert_eq!(
+        reselected
+            .receipt()
+            .map(rusttable_app::CatalogPreviewReceipt::identity_hash),
+        preview
+            .receipt()
+            .map(rusttable_app::CatalogPreviewReceipt::identity_hash)
+    );
+
     let source = DecodedImage::new_with_color_encoding(
         preview.dimensions(),
         preview.pixels().to_vec(),
