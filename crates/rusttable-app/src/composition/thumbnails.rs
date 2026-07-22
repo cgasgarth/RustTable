@@ -218,4 +218,21 @@ mod tests {
         lifecycle.publish(photo_id, next_generation);
         assert!(!lifecycle.needs_request(photo_id));
     }
+
+    #[test]
+    fn late_publication_cannot_complete_a_new_request_for_the_same_photo() {
+        let photo_id = id(2);
+        let mut lifecycle = ThumbnailLifecycle::default();
+        let first_generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], first_generation);
+
+        let second_generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], second_generation);
+        lifecycle.publish(photo_id, first_generation);
+        assert_eq!(lifecycle.requested.get(&photo_id), Some(&second_generation));
+        assert!(!lifecycle.published.contains(&photo_id));
+
+        lifecycle.publish(photo_id, second_generation);
+        assert!(!lifecycle.needs_request(photo_id));
+    }
 }
