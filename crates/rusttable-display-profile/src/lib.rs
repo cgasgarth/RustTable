@@ -11,7 +11,7 @@ pub use events::{DisplayProfileEvent, EventQueue, MAX_QUEUED_EVENTS};
 pub use identity::{HdrDescriptor, MonitorDescriptor, MonitorGeometry, MonitorId, MonitorIdError};
 pub use profile::{
     DisplayProfileId, IccProfileError, MAX_PROFILE_BYTES, MIN_PROFILE_BYTES, ManagedProfileStore,
-    ProfileMetadata, StoredProfile,
+    ProfileMetadata, ProfileTransformError, StoredProfile,
 };
 pub use provider::{
     DisplayProvider, PlatformProfileAdapter, ProfileProbe, ProfileProbeFailure,

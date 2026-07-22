@@ -6,6 +6,7 @@ use std::rc::Rc;
 use crate::composition::selected_preview::PreviewLifecycle;
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
+use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_ui::{DarkroomModuleActionHandler, GtkShell};
 
 pub(crate) type DarkroomEditCommitHandler = Rc<dyn Fn()>;
@@ -20,10 +21,12 @@ pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
+    display_profile: &Rc<RefCell<Option<DisplayProfileSnapshot>>>,
     diagnostics: &AppDiagnostics,
 ) -> DarkroomEditBridge {
     let catalog = Rc::clone(catalog);
     let lifecycle = Rc::clone(lifecycle);
+    let display_profile = Rc::clone(display_profile);
     let diagnostics = diagnostics.clone();
     let controller = Rc::new(RefCell::new(GtkDarkroomEditController::new(
         catalog
@@ -36,6 +39,7 @@ pub(crate) fn install(
     let action_shell = shell.clone();
     let action_catalog = Rc::clone(&catalog);
     let action_lifecycle = Rc::clone(&lifecycle);
+    let action_display_profile = Rc::clone(&display_profile);
     let slot_for_handler = Rc::clone(&slot);
     let after_commit = Rc::new(RefCell::new(None::<DarkroomEditCommitHandler>));
     let after_commit_for_handler = Rc::clone(&after_commit);
@@ -56,6 +60,7 @@ pub(crate) fn install(
                     action_catalog.borrow().clone(),
                     Rc::clone(&action_lifecycle),
                     diagnostics.clone(),
+                    action_display_profile.borrow().as_ref(),
                 );
                 if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
                     after_commit();

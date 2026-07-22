@@ -66,6 +66,27 @@ impl AppDiagnostics {
         );
     }
 
+    pub(crate) fn preview_fallback(
+        &self,
+        operation: &'static str,
+        cause: &'static str,
+        generation: Option<u64>,
+    ) {
+        self.record(
+            "app",
+            "preview.display_presentation",
+            Severity::Warning,
+            operation,
+            "display_presentation",
+            Some(cause),
+            None,
+            None,
+            generation,
+            None,
+            None,
+        );
+    }
+
     pub(crate) fn import_preview_failure(
         &self,
         format: Option<InputFormat>,
@@ -173,6 +194,7 @@ fn preview_code(stage: &str) -> &str {
         "histogram" => "preview.histogram",
         "texture" => "preview.texture",
         "stale_generation" => "preview.stale_generation",
+        "display_presentation" => "preview.display_presentation",
         _ => "preview.failure",
     }
 }

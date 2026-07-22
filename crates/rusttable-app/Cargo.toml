@@ -16,6 +16,7 @@ rusttable-diagnostics.workspace = true
 rusttable-display-profile.workspace = true
 rusttable-export.workspace = true
 rusttable-core.workspace = true
+rusttable-color.workspace = true
 rusttable-image.workspace = true
 rusttable-image-io.workspace = true
 rusttable-input.workspace = true
