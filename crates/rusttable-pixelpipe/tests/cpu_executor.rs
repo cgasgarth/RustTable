@@ -177,6 +177,95 @@ fn executes_deprecated_defringe_only_at_the_typed_lab_boundary() {
 }
 
 #[test]
+fn defringe_composes_in_a_mixed_lab_graph_for_every_mode() {
+    let input = lab_image();
+    for mode in 0..=2 {
+        let graph = graph(vec![
+            operation(471, "rusttable.linear_offset", &[("value", 0.01)]),
+            operation(
+                475,
+                "rusttable.defringe",
+                &[
+                    ("radius", 4.0),
+                    ("threshold", 20.0),
+                    ("mode", f64::from(mode)),
+                ],
+            ),
+            operation(476, "rusttable.exposure", &[("stops", 0.1)]),
+        ]);
+        let request =
+            CpuPixelpipeSnapshot::try_new(input.clone(), graph, CpuPixelpipeOutputMode::FullExport)
+                .expect("mixed Lab graph is accepted by the input contract");
+        let result = CpuPixelpipeExecutor
+            .execute(&request)
+            .expect("mixed Lab graph executes");
+        let tiled = CpuPixelpipeExecutor
+            .execute_tiled(&request, CpuTilePlan::new(8, 8).expect("tile plan"))
+            .expect("mixed Lab graph tiled execution");
+
+        assert_eq!(
+            result.image().descriptor().color_encoding(),
+            RgbaF32ColorEncoding::LabD50
+        );
+        assert_eq!(result.image(), tiled.image());
+        assert_eq!(result.receipt(), tiled.receipt());
+        assert!(result.image().pixels().iter().all(|pixel| {
+            [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+                .into_iter()
+                .all(f32::is_finite)
+        }));
+        assert!(
+            result
+                .image()
+                .pixels()
+                .iter()
+                .all(|pixel| pixel.alpha().to_bits() == 0.5_f32.to_bits())
+        );
+        assert_eq!(
+            result
+                .receipt()
+                .nodes()
+                .iter()
+                .map(|node| node.operation_id().get())
+                .collect::<Vec<_>>(),
+            [471, 475, 476]
+        );
+    }
+}
+
+#[test]
+fn mixed_lab_defringe_preview_and_export_share_the_same_edited_state() {
+    let graph = graph(vec![
+        operation(471, "rusttable.linear_offset", &[("value", 0.01)]),
+        operation(
+            475,
+            "rusttable.defringe",
+            &[("radius", 4.0), ("threshold", 20.0), ("mode", 2.0)],
+        ),
+        operation(
+            476,
+            "rusttable.rgb_gain",
+            &[("red", 1.1), ("green", 0.9), ("blue", 1.0)],
+        ),
+    ]);
+    let preview =
+        CpuPixelpipeSnapshot::try_new(lab_image(), graph.clone(), CpuPixelpipeOutputMode::Preview)
+            .expect("preview snapshot");
+    let export =
+        CpuPixelpipeSnapshot::try_new(lab_image(), graph, CpuPixelpipeOutputMode::FullExport)
+            .expect("export snapshot");
+    let preview = CpuPixelpipeExecutor
+        .execute(&preview)
+        .expect("preview executes");
+    let export = CpuPixelpipeExecutor
+        .execute(&export)
+        .expect("export executes");
+
+    assert_eq!(preview.image(), export.image());
+    assert_eq!(preview.receipt().nodes(), export.receipt().nodes());
+}
+
+#[test]
 fn exposure_applies_darktable_black_level_scale_without_clipping() {
     let graph = graph(vec![operation(
         10,
