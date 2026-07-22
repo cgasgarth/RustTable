@@ -47,6 +47,27 @@ pub(crate) fn module_expander(
     module_widget
 }
 
+pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
+    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
+    title_row.set_widget_name(&format!("{id}-title"));
+    title_row.set_hexpand(true);
+    title_row.set_valign(gtk4::Align::Center);
+    title_row.add_css_class("dt_darkroom_section_title");
+
+    let title_label = gtk4::Label::new(Some(title));
+    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_hexpand(true);
+    title_label.set_width_chars(1);
+    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    title_label.add_css_class("dt_darkroom_section_label");
+    title_row.append(&title_label);
+    title_row.append(&module_action_button(
+        &format!("{id}-actions"),
+        "Module actions unavailable",
+    ));
+    title_row
+}
+
 pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     row.set_height_request(MODULE_ROW_HEIGHT);

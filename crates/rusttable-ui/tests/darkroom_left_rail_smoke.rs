@@ -87,13 +87,25 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         "darkroom-history",
         "darkroom-image-information",
     ] {
+        let expected_title = id
+            .strip_prefix("darkroom-")
+            .expect("darkroom section id")
+            .replace('-', " ");
         let expander = find_widget(&rail, id)
             .expect("left-rail section")
             .downcast::<gtk4::Expander>()
             .expect("left-rail section expander");
+        let title_row = expander.label_widget().expect("section title row");
+        let title_label = find_label(&title_row).expect("section title label");
+        assert_eq!(title_label.text().as_str(), expected_title, "section {id}");
         assert!(
-            expander.label_widget().is_some(),
-            "section lost title row {id}"
+            title_label.has_css_class("dt_darkroom_section_label"),
+            "section label lost Darktable typography class {id}"
+        );
+        let action_id = format!("{id}-actions");
+        assert!(
+            find_widget(&title_row, &action_id).is_some(),
+            "section lost action affordance {id}"
         );
     }
     assert!(matches!(
@@ -101,6 +113,20 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         DarkroomSelectionState::Selected(photo_id) if photo_id == expected.photo_id()
     ));
     assert!(direct_children.len() >= 5, "left rail must not be blank");
+}
+
+fn find_label(root: &gtk4::Widget) -> Option<gtk4::Label> {
+    if let Ok(label) = root.clone().downcast::<gtk4::Label>() {
+        return Some(label);
+    }
+    let mut child = root.first_child();
+    while let Some(current) = child {
+        if let Some(found) = find_label(&current) {
+            return Some(found);
+        }
+        child = current.next_sibling();
+    }
+    None
 }
 
 fn child_names(widget: &gtk4::Widget) -> Vec<String> {

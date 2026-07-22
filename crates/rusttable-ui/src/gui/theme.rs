@@ -155,6 +155,10 @@ pub fn darktable_theme_css() -> String {
             i32::from(DARKROOM_GEOMETRY.histogram_height_px),
         ),
         (
+            "{{histogram_min_height}}",
+            i32::from(DARKROOM_GEOMETRY.histogram_min_height_px),
+        ),
+        (
             "{{card_min_width}}",
             i32::from(tokens.cards.minimum_width_px),
         ),

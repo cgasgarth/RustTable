@@ -443,9 +443,9 @@ pub(super) fn sync_filmstrip_buttons(filmstrip: &gtk4::FlowBox, selected: Option
         {
             let is_selected = parse_filmstrip_id(&button) == selected;
             if is_selected {
-                button.add_css_class("selected");
+                button.add_css_class("dt_selected");
             } else {
-                button.remove_css_class("selected");
+                button.remove_css_class("dt_selected");
             }
             button.update_state(&[State::Selected(Some(is_selected))]);
         }

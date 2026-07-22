@@ -20,6 +20,7 @@ fn installed_darktable_scale_is_explicit_and_readable() {
     assert_eq!(panels.preferred_px, 150);
     assert!(panels.accepts(panels.minimum_px));
     assert_eq!(DARKROOM_GEOMETRY.histogram_height_px, 180);
+    assert_eq!(DARKROOM_GEOMETRY.histogram_min_height_px, 120);
 }
 
 #[test]
@@ -85,7 +86,8 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
         "min-width: 150px",
         "min-height: 24px",
         "min-height: 26px",
-        "min-height: 180px",
+        "max-height: 180px",
+        "min-height: 120px",
     ] {
         assert!(
             css.contains(declaration),
