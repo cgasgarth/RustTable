@@ -29,4 +29,13 @@ impl GtkShell {
             .filter_map(|(photo_id, tile)| tile.lighttable_button.is_some().then_some(*photo_id))
             .collect()
     }
+
+    /// Reports whether the current tile has a published result that can survive a rebuild.
+    #[must_use]
+    pub fn photo_thumbnail_has_terminal_state(&self, photo_id: PhotoId) -> bool {
+        self.photo_tiles
+            .borrow()
+            .get(&photo_id)
+            .is_some_and(|tile| tile.thumbnails.state().is_terminal())
+    }
 }
