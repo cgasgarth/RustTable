@@ -76,11 +76,12 @@ pub(super) fn mode_panel_stack(
     // make the stack's initial request explicit and let its inner scroller
     // handle overflow instead of allowing natural width to consume the
     // center workspace.
-    stack.set_width_request(preferred_width);
+    stack.set_size_request(preferred_width, -1);
     stack.set_hexpand(false);
     stack.set_vexpand(true);
     stack.set_halign(gtk4::Align::Fill);
     stack.set_valign(gtk4::Align::Fill);
+    stack.add_css_class("dt_rail_stack");
     stack.add_named(lighttable, Some(WorkspaceRole::Lighttable.stack_name()));
     stack.add_named(darkroom, Some(WorkspaceRole::Darkroom.stack_name()));
     stack.set_visible_child_name(initial.stack_name());
@@ -129,6 +130,7 @@ pub(super) fn desktop_body(
         .shrink_end_child(false)
         .position(i32::from(layout.side_panel_widths.preferred_px))
         .build();
+    split.set_widget_name("desktop-left-split");
     split.connect_map({
         let preferred_width = i32::from(layout.side_panel_widths.preferred_px);
         move |paned| paned.set_position(preferred_width)
@@ -146,10 +148,10 @@ pub(super) fn desktop_body(
             layout.preferred_right_panel_position_px(layout.window_width_px),
         ))
         .build();
-    // The right rail is vertically scrolled and must be allowed to shrink to
-    // its preferred Darktable width.  Without this, the natural width of an
-    // expanded module wins the first allocation and the rail covers the
-    // center of the window.
+    workspace_with_right_panel.set_widget_name("desktop-right-split");
+    // The scroller may have a wider natural size at 12pt. Permit the Paned to
+    // allocate the explicit rail token, then clamp every drag to the readable
+    // minimum instead of letting natural width consume the center workspace.
     workspace_with_right_panel.set_shrink_end_child(true);
     workspace_with_right_panel.connect_map(move |paned| {
         let paned = paned.clone();
@@ -164,6 +166,11 @@ pub(super) fn desktop_body(
         });
     });
     connect_geometry_refresh(
+        &workspace_with_right_panel,
+        std::rc::Rc::clone(geometry_changed),
+    );
+    connect_right_rail_constraints(&workspace_with_right_panel);
+    connect_allocation_refresh(
         &workspace_with_right_panel,
         std::rc::Rc::clone(geometry_changed),
     );
@@ -182,6 +189,51 @@ fn connect_geometry_refresh(paned: &gtk4::Paned, refresh: std::rc::Rc<dyn Fn()>)
         paned.queue_resize();
         (refresh)();
     });
+}
+
+fn connect_right_rail_constraints(paned: &gtk4::Paned) {
+    let clamp = |paned: &gtk4::Paned| {
+        let width = paned.allocated_width();
+        if width <= 0 {
+            return;
+        }
+        let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+        let maximum = width
+            .saturating_sub(i32::from(
+                DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px,
+            ))
+            .saturating_sub(minimum)
+            .max(minimum);
+        let rail_width = width
+            .saturating_sub(paned.position())
+            .clamp(minimum, maximum);
+        let position = width.saturating_sub(rail_width);
+        if paned.position() != position {
+            paned.set_position(position);
+        }
+    };
+    paned.connect_position_notify(move |paned| clamp(paned));
+    paned.connect_notify_local(Some("width"), move |paned, _| clamp(paned));
+}
+
+fn connect_allocation_refresh(widget: &impl IsA<gtk4::Widget>, refresh: std::rc::Rc<dyn Fn()>) {
+    let pending = std::rc::Rc::new(std::cell::Cell::new(false));
+    let schedule: std::rc::Rc<dyn Fn()> = std::rc::Rc::new(move || {
+        if pending.replace(true) {
+            return;
+        }
+        let pending = std::rc::Rc::clone(&pending);
+        let refresh = std::rc::Rc::clone(&refresh);
+        gtk4::glib::idle_add_local_once(move || {
+            pending.set(false);
+            refresh();
+        });
+    });
+    widget.connect_notify_local(Some("width"), {
+        let schedule = std::rc::Rc::clone(&schedule);
+        move |_, _| schedule()
+    });
+    widget.connect_notify_local(Some("height"), move |_, _| schedule());
 }
 
 fn central_workspace(workspace: &gtk4::Stack) -> gtk4::Box {
@@ -359,7 +411,7 @@ fn panel_column(region: ShellRegion, width: i32) -> gtk4::Box {
     );
     panel.set_widget_name(region.identifier());
     apply_theme_role(&panel, ThemeRole::Panel);
-    panel.set_width_request(width);
+    panel.set_size_request(width, -1);
     panel.set_hexpand(false);
     panel.set_vexpand(true);
     panel.set_halign(gtk4::Align::Fill);

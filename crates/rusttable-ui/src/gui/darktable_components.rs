@@ -7,12 +7,12 @@
 
 use gtk4::prelude::*;
 
-use super::{DARKTABLE_DESKTOP_SPEC, ThemeRole, apply_theme_role};
+use super::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role};
 
-pub(crate) const CONTROL_GAP: i32 = 4;
-pub(crate) const MODULE_GAP: i32 = 2;
-pub(crate) const MODULE_ROW_HEIGHT: i32 = 20;
-pub(crate) const TOOLBAR_HEIGHT: i32 = 28;
+pub(crate) const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
+pub(crate) const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
+pub(crate) const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_row_height;
+pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
 
 pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
@@ -86,6 +86,7 @@ pub(crate) fn scale_row(
 pub(crate) fn button(id: &str, label: &str) -> gtk4::Button {
     let button = gtk4::Button::with_label(label);
     button.set_widget_name(id);
+    button.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
     button.add_css_class("dt_button");
     button.set_focus_on_click(false);
     button
@@ -94,6 +95,7 @@ pub(crate) fn button(id: &str, label: &str) -> gtk4::Button {
 pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
     let button = gtk4::ToggleButton::with_label(label);
     button.set_widget_name(id);
+    button.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
     button.add_css_class("dt_button");
     button.set_focus_on_click(false);
     button
@@ -102,6 +104,7 @@ pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
 pub(crate) fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
     let dropdown = gtk4::DropDown::from_strings(values);
     dropdown.set_widget_name(id);
+    dropdown.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
     dropdown.add_css_class("dt_field");
     dropdown
 }
@@ -110,8 +113,8 @@ pub(crate) fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
     let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     panel.set_widget_name(id);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    panel.set_width_request(width.max(minimum));
-    panel.set_hexpand(true);
+    panel.set_size_request(width.max(minimum), -1);
+    panel.set_hexpand(false);
     panel.set_vexpand(true);
     panel.set_halign(gtk4::Align::Fill);
     panel.set_valign(gtk4::Align::Fill);
@@ -134,7 +137,8 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
         .build();
     scroll.set_widget_name(id);
     scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
-    scroll.set_min_content_width(width);
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    scroll.set_min_content_width(width.max(minimum));
     scroll.set_propagate_natural_width(false);
     scroll.set_propagate_natural_height(false);
     scroll
