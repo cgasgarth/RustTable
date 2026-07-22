@@ -318,11 +318,15 @@ impl WorkspaceRenderHandle {
             .set_status(&format!("selected · {}", detail.title().as_str()));
         self.export_panel.set_selected(true);
         self.external_editor_panel.set_selection(1);
-        self.workspace
-            .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
         if let Some(handler) = self.photo_selected.borrow().as_ref() {
             handler(photo_id, SelectionModifiers::default());
         }
+        // The selection callback owns the application token, viewport generation, preview
+        // loading state, histogram generation, and controller-owned rails. Present the new
+        // child only after that binding is complete so GTK cannot paint the old lighttable
+        // surface as the first darkroom frame.
+        self.workspace
+            .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
     }
 }
 
@@ -440,14 +444,17 @@ fn open_photo(context: &PhotoSelectionContext, photo_id: PhotoId, detail: &Photo
     context
         .darkroom
         .set_status(&format!("selected · {}", detail.title().as_str()));
-    context
-        .workspace
-        .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
     context.export_panel.set_selected(true);
     context.external_editor_panel.set_selection(1);
     if let Some(handler) = context.photo_selected.borrow().as_ref() {
         handler(photo_id, SelectionModifiers::default());
     }
+    // Keep the first darkroom frame coherent with the application selection token and
+    // generation. The callback must finish binding those surfaces before GTK presents the
+    // darkroom child, just as the native-open path does above.
+    context
+        .workspace
+        .set_visible_child_name(WorkspaceRole::Darkroom.stack_name());
 }
 
 fn select_photo(

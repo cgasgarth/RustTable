@@ -364,6 +364,13 @@ impl GtkShell {
         if let Some(detail) = self.photo_details.borrow().get(&photo_id).cloned() {
             self.darkroom.set_detail(&detail);
         }
+        let filmstrip_ids = self
+            .lighttable_interaction
+            .borrow()
+            .ordered()
+            .collect::<Vec<_>>();
+        self.darkroom
+            .set_filmstrip_items(filmstrip_ids, Some(photo_id), generation);
         self.darkroom
             .set_viewport_selection(photo_id, Revision::ZERO, generation);
     }

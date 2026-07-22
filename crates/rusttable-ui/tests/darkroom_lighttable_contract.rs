@@ -343,6 +343,38 @@ fn gtk_selection_route_projects_preview_and_darkroom_filmstrip_activation() {
 }
 
 #[test]
+fn darkroom_activation_binds_selection_before_presenting_the_stack_child() {
+    let runtime = include_str!("../src/gui/runtime/lighttable.rs");
+    let shell_runtime = include_str!("../src/gui/runtime/mod.rs");
+
+    let callback_positions =
+        runtime.match_indices("handler(photo_id, SelectionModifiers::default())");
+    let stack_positions =
+        runtime.match_indices("set_visible_child_name(WorkspaceRole::Darkroom.stack_name())");
+    let callbacks = callback_positions.collect::<Vec<_>>();
+    let stacks = stack_positions.collect::<Vec<_>>();
+    assert_eq!(
+        callbacks.len(),
+        2,
+        "native-open and GTK activation paths must notify once"
+    );
+    assert_eq!(
+        stacks.len(),
+        2,
+        "native-open and GTK activation paths must present once"
+    );
+    for ((callback, _), (stack, _)) in callbacks.iter().zip(stacks.iter()) {
+        assert!(
+            callback < stack,
+            "selection callback must precede GTK stack presentation"
+        );
+    }
+    assert!(
+        shell_runtime.contains("set_filmstrip_items(filmstrip_ids, Some(photo_id), generation)")
+    );
+}
+
+#[test]
 fn lighttable_filter_projection_keeps_matching_ids_and_selection_count() {
     let filter = rusttable_ui::gtk_shell::CollectionFilterState::new(
         rusttable_ui::CollectionControlState::new(rusttable_ui::CollectionProperty::Filename, 5)
