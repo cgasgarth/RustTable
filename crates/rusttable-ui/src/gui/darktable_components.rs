@@ -50,21 +50,26 @@ pub(crate) fn module_expander(
 pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
     let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     title_row.set_widget_name(&format!("{id}-title"));
+    title_row.set_width_request(0);
     title_row.set_hexpand(true);
     title_row.set_valign(gtk4::Align::Center);
+    title_row.set_visible(true);
     title_row.add_css_class("dt_darkroom_section_title");
 
     let title_label = gtk4::Label::new(Some(title));
+    title_label.set_widget_name(&format!("{id}-label"));
+    title_label.set_width_request(0);
     title_label.set_halign(gtk4::Align::Start);
     title_label.set_hexpand(true);
+    title_label.set_visible(true);
     title_label.set_width_chars(1);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("dt_darkroom_section_label");
     title_row.append(&title_label);
-    title_row.append(&module_action_button(
-        &format!("{id}-actions"),
-        "Module actions unavailable",
-    ));
+    let action_button =
+        module_action_button(&format!("{id}-actions"), "Module actions unavailable");
+    action_button.set_visible(true);
+    title_row.append(&action_button);
     title_row
 }
 
