@@ -4,6 +4,7 @@
 //! `src/imageio/imageio.c` render handoff to the existing Rust PNG publisher,
 //! which owns the bounded encoding, verification, and disk publication stages.
 
+mod metadata;
 mod request;
 mod worker;
 

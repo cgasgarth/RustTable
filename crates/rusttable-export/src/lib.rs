@@ -41,8 +41,8 @@ pub use manifest::{
 pub use metadata_policy::{MetadataAction, MetadataPolicy};
 pub use png::{
     CollisionPolicy, PngCollisionResult, PngExportLimits, PngExportLimitsError, PngExportReceipt,
-    PngPublishCompletion, PngPublishControl, PngPublishError, PngPublishObserver,
-    PngPublishProgress, PngPublishStage, PngPublisher, PngVerificationReceipt,
+    PngMetadataReceipt, PngPublishCompletion, PngPublishControl, PngPublishError,
+    PngPublishObserver, PngPublishProgress, PngPublishStage, PngPublisher, PngVerificationReceipt,
 };
 pub use queue_store::{
     ExportJobId, ExportJobPriority, ExportJobRecord, ExportJobStage, ExportJobState,

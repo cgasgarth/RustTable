@@ -1,5 +1,9 @@
 use rusttable_image::{ImageView, OwnedImage};
-use rusttable_metadata::{FormatViewKind, MetadataPacket};
+use rusttable_metadata::{
+    CanonicalExifOutput, ImageMetadata, MetadataEntry, MetadataOutput, MetadataOutputLimits,
+    MetadataPacket, MetadataText as CoreMetadataText, MetadataValue, Orientation, PositiveRational,
+};
+use std::num::NonZeroU32;
 
 /// The canonical image and metadata pair handed to export encoders.
 #[derive(Debug)]
@@ -87,22 +91,33 @@ impl ExportMetadata {
         self
     }
 
+    /// # Panics
+    ///
+    /// Panics only if the compile-time metadata output limits are invalid.
     #[must_use]
     pub fn from_packet(packet: MetadataPacket) -> Self {
-        let exif = packet
-            .view_bytes(FormatViewKind::Exif)
-            .map(ToOwned::to_owned);
-        let xmp = packet
-            .view_bytes(FormatViewKind::Xmp)
-            .map(ToOwned::to_owned);
-        let iptc = packet
-            .view_bytes(FormatViewKind::IptcIim)
-            .map(ToOwned::to_owned);
+        // Format views are canonical evidence, not necessarily format-native
+        // payloads. Build the supported EXIF subset through the existing
+        // bounded metadata output abstraction and keep the complete packet as
+        // deterministic UTF-8 XMP evidence for PNG/iTXt round trips.
+        let exif = image_metadata_from_packet(&packet).and_then(|metadata| {
+            CanonicalExifOutput::new(
+                MetadataOutputLimits::new(16 * 1024 * 1024, 32, 1 << 20, 16 * 1024 * 1024)
+                    .expect("constant metadata output limits are valid"),
+            )
+            .encode_exif(&metadata)
+            .ok()
+            .flatten()
+            .map(|encoded| encoded.as_bytes().to_vec())
+        });
+        let xmp = Some(packet_xmp(&packet).into_bytes());
         Self {
             icc_profile: None,
             exif,
             xmp,
-            iptc,
+            // PNG has no standard IPTC chunk. IPTC properties remain in the
+            // packet/XMP evidence only when the immutable policy includes them.
+            iptc: None,
             density: None,
             text: Vec::new(),
             packet: Some(packet),
@@ -149,6 +164,98 @@ impl ExportMetadata {
     pub fn text(&self) -> &[MetadataText] {
         &self.text
     }
+}
+
+fn image_metadata_from_packet(packet: &MetadataPacket) -> Option<ImageMetadata> {
+    let mut entries = Vec::new();
+    for property in packet.properties() {
+        if property.namespace != "exif" {
+            continue;
+        }
+        let entry = match (property.name.as_str(), &property.value) {
+            ("CameraMake", MetadataValue::Text(value)) => CoreMetadataText::new(value)
+                .ok()
+                .map(MetadataEntry::CameraMake),
+            ("CameraModel", MetadataValue::Text(value)) => CoreMetadataText::new(value)
+                .ok()
+                .map(MetadataEntry::CameraModel),
+            ("LensModel", MetadataValue::Text(value)) => CoreMetadataText::new(value)
+                .ok()
+                .map(MetadataEntry::LensModel),
+            ("CaptureDateTimeOriginal", MetadataValue::DateTime(value)) => {
+                CoreMetadataText::new(value)
+                    .ok()
+                    .map(MetadataEntry::CaptureDateTimeOriginal)
+            }
+            ("Orientation", MetadataValue::Integer(value)) => u8::try_from(*value)
+                .ok()
+                .and_then(|value| Orientation::from_u8(value).ok())
+                .map(MetadataEntry::Orientation),
+            (
+                "ExposureTime",
+                MetadataValue::Rational {
+                    numerator,
+                    denominator,
+                },
+            ) => positive_rational(*numerator, *denominator).map(MetadataEntry::ExposureTime),
+            (
+                "FNumber",
+                MetadataValue::Rational {
+                    numerator,
+                    denominator,
+                },
+            ) => positive_rational(*numerator, *denominator).map(MetadataEntry::FNumber),
+            ("IsoSpeed", MetadataValue::Integer(value)) => u32::try_from(*value)
+                .ok()
+                .and_then(NonZeroU32::new)
+                .map(MetadataEntry::IsoSpeed),
+            (
+                "FocalLength",
+                MetadataValue::Rational {
+                    numerator,
+                    denominator,
+                },
+            ) => positive_rational(*numerator, *denominator).map(MetadataEntry::FocalLength),
+            _ => None,
+        };
+        if let Some(entry) = entry {
+            entries.push(entry);
+        }
+    }
+    ImageMetadata::from_entries(entries).ok()
+}
+
+fn positive_rational(numerator: i64, denominator: u64) -> Option<PositiveRational> {
+    u64::try_from(numerator)
+        .ok()
+        .and_then(|numerator| PositiveRational::new(numerator, denominator).ok())
+}
+
+fn packet_xmp(packet: &MetadataPacket) -> String {
+    let mut xmp = String::from(
+        "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:rusttable=\"https://rusttable.app/ns/1.0/\">",
+    );
+    for property in packet.properties() {
+        xmp.push_str("<rusttable:Property rusttable:name=\"");
+        xmp.push_str(&escape_xml(&format!(
+            "{}:{}",
+            property.namespace, property.name
+        )));
+        xmp.push_str("\">");
+        xmp.push_str(&escape_xml(&format!("{:?}", property.value)));
+        xmp.push_str("</rusttable:Property>");
+    }
+    xmp.push_str("</rdf:Description></rdf:RDF></x:xmpmeta>");
+    xmp
+}
+
+fn escape_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 /// A bounded text metadata field.

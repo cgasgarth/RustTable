@@ -24,23 +24,31 @@ pub struct MetadataPolicy {
 
 impl Default for MetadataPolicy {
     fn default() -> Self {
+        Self::standard()
+    }
+}
+
+impl MetadataPolicy {
+    /// The product default, available in constant export request builders.
+    /// It mirrors Darktable's EXIF, metadata, geotag, tag, and history flags
+    /// for the field groups `RustTable` currently represents.
+    #[must_use]
+    pub const fn standard() -> Self {
         Self {
             exif: MetadataAction::Include,
             iptc: MetadataAction::Include,
             xmp: MetadataAction::Include,
-            gps: MetadataAction::Redact,
+            gps: MetadataAction::Include,
             faces_and_regions: MetadataAction::Redact,
             ratings_labels_tags: MetadataAction::Include,
-            history: MetadataAction::Exclude,
+            history: MetadataAction::Include,
             thumbnail: MetadataAction::Include,
             icc_and_cicp: MetadataAction::Include,
             software_and_version: MetadataAction::Include,
             user_fields: MetadataAction::Redact,
         }
     }
-}
 
-impl MetadataPolicy {
     #[must_use]
     pub fn canonical(self) -> CanonicalMetadataPolicy {
         CanonicalMetadataPolicy {
@@ -58,6 +66,74 @@ impl MetadataPolicy {
             ..Default::default()
         }
     }
+
+    /// Returns the stable identity of the immutable policy carried by an export.
+    #[must_use]
+    pub fn identity(self) -> String {
+        format!(
+            "rusttable.export-metadata-policy.v1:{:x}",
+            policy_bits(self)
+        )
+    }
+
+    /// Returns the concrete field groups selected for serialization.
+    #[must_use]
+    pub fn included_groups(self) -> Vec<String> {
+        groups(self, false)
+    }
+
+    /// Returns the concrete field groups excluded from serialization.
+    #[must_use]
+    pub fn excluded_groups(self) -> Vec<String> {
+        groups(self, true)
+    }
+}
+
+fn policy_bits(policy: MetadataPolicy) -> u32 {
+    [
+        policy.exif,
+        policy.iptc,
+        policy.xmp,
+        policy.gps,
+        policy.faces_and_regions,
+        policy.ratings_labels_tags,
+        policy.history,
+        policy.thumbnail,
+        policy.icc_and_cicp,
+        policy.software_and_version,
+        policy.user_fields,
+    ]
+    .into_iter()
+    .enumerate()
+    .fold(0, |bits, (index, action)| {
+        bits | (action as u32) << (index * 2)
+    })
+}
+
+fn groups(policy: MetadataPolicy, excluded: bool) -> Vec<String> {
+    [
+        ("exif", policy.exif),
+        ("iptc", policy.iptc),
+        ("xmp", policy.xmp),
+        ("gps", policy.gps),
+        ("faces-and-regions", policy.faces_and_regions),
+        ("ratings-labels-tags", policy.ratings_labels_tags),
+        ("history", policy.history),
+        ("thumbnail", policy.thumbnail),
+        ("icc-and-cicp", policy.icc_and_cicp),
+        ("software-and-version", policy.software_and_version),
+        ("user-fields", policy.user_fields),
+    ]
+    .into_iter()
+    .filter_map(|(name, action)| {
+        (if excluded {
+            action != MetadataAction::Include
+        } else {
+            action == MetadataAction::Include
+        })
+        .then_some(name.to_owned())
+    })
+    .collect()
 }
 
 fn action(value: MetadataAction, include: CanonicalAction) -> CanonicalAction {
