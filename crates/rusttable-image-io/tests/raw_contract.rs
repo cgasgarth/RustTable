@@ -30,6 +30,7 @@ fn corpus_raf_maps_to_an_owned_validated_sensor_frame() {
     assert_eq!(result.receipt.container, RawContainerKind::Raf);
     assert_eq!(result.receipt.camera.maker, "FUJIFILM");
     assert_eq!(result.receipt.camera.model, "X-Pro2");
+    assert_eq!(result.receipt.bit_depth, 14);
     assert_eq!(result.receipt.source.source_bytes, 70_000);
     assert!(result.receipt.source.stable_copy_used);
     assert_eq!(result.receipt.plane_count, 1);

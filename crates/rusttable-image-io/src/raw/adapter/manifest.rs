@@ -4,7 +4,7 @@ use rawler::decoders::FormatHint;
 use rawler::rawimage::{RawImage, RawPhotometricInterpretation};
 use rawler::rawsource::RawSource;
 
-use super::{map_backend_error, safe_text};
+use super::{declared_sensor_bit_depth, map_backend_error, safe_text};
 use crate::raw::{
     RawCapabilityError, RawCapabilityEvidence, RawCapabilityKind, RawCapabilityLayout,
     RawCapabilityResolveError, RawContainerProbe, RawDecodeError,
@@ -45,10 +45,7 @@ pub(super) fn validate_manifest_profile(
             RawCapabilityResolveError::Unsupported,
         ));
     }
-    let actual_bits = probe
-        .evidence
-        .bit_depth
-        .or_else(|| u8::try_from(image.bps).ok());
+    let actual_bits = declared_sensor_bit_depth(image, probe);
     if profile
         .bit_depth
         .is_some_and(|expected| actual_bits != Some(expected))

@@ -55,11 +55,14 @@ pub fn deterministic_compressed_raf() -> RawImportFixture {
     put_u32(&mut bytes, 100, 400);
 
     bytes[212..220].copy_from_slice(&[b'M', b'M', 0, 42, 0, 0, 0, 8]);
-    put_u16(&mut bytes, 220, 3);
+    put_u16(&mut bytes, 220, 4);
     put_entry(&mut bytes, 222, 0x010f, 2, 9, 338);
     put_entry(&mut bytes, 234, 0x0110, 2, 7, 348);
     put_entry(&mut bytes, 246, 0x8769, 4, 1, 388);
-    put_u32(&mut bytes, 258, 0);
+    // Real X-Pro2 RAFs can expose the unpacked 16-bit TIFF storage width here
+    // while the camera profile and RAF sensor tag retain 14-bit precision.
+    put_entry(&mut bytes, 258, 0x0102, 3, 1, 16 << 16);
+    put_u32(&mut bytes, 270, 0);
     bytes[550..559].copy_from_slice(b"FUJIFILM\0");
     bytes[560..567].copy_from_slice(b"X-Pro2\0");
 
@@ -179,6 +182,16 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.bytes().len(), 70_000);
         assert_eq!(first.source_name(), "deterministic-xpro2.raf");
+        assert_eq!(
+            u16::from_be_bytes([first.bytes()[266], first.bytes()[267]]),
+            16,
+            "embedded TIFF storage width"
+        );
+        assert_eq!(
+            u16::from_be_bytes([first.bytes()[476], first.bytes()[477]]),
+            14,
+            "RAF sensor precision"
+        );
         assert!(!first.source_name().contains('/'));
         assert!(!first.source_name().contains('\\'));
     }
