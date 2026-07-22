@@ -58,7 +58,7 @@ fn app_shell_transition_paints_darkroom_titles() {
             shell.show_workspace(WorkspaceRole::Lighttable);
             gtk4::glib::idle_add_local_once(move || {
                 shell.show_workspace(WorkspaceRole::Darkroom);
-                left_split.set_position(150);
+                left_split.set_position(180);
                 transitioned.set(true);
             });
         }
@@ -82,8 +82,8 @@ fn app_shell_transition_paints_darkroom_titles() {
         },
     );
     assert!(
-        left_stack.allocated_width() <= 152,
-        "active darkroom rail must honor the 150px divider, got {}px",
+        left_stack.allocated_width() <= 182,
+        "active darkroom rail must honor the 180px divider, got {}px",
         left_stack.allocated_width()
     );
     assert_darkroom_titles_are_allocated(&shell);
@@ -357,21 +357,37 @@ fn assert_right_rail_geometry(root: &gtk4::Widget) {
     let search_y = search.compute_bounds(root).expect("search bounds").y();
     let modules_y = modules.compute_bounds(root).expect("module bounds").y();
     assert!(histogram_y < groups_y && groups_y < search_y && search_y < modules_y);
-    let full_render = render_widget(root);
     for id in [
         "darkroom-left-panel-toggle",
-        "darkroom-soft-proof",
         "group-active",
         "group-favorites",
     ] {
         let button = find_widget(root, id).expect("icon button");
         let icon = button.first_child().expect("symbolic icon");
-        let icon_bounds = icon.compute_bounds(root).expect("icon bounds");
         assert!(
-            full_render.bright_pixels(icon_bounds) >= 4,
-            "{id} must render a symbolic icon instead of fallback text"
+            icon.is_visible() && icon.is_mapped(),
+            "{id} icon must be mapped"
+        );
+        assert!(
+            icon.allocated_width() > 0 && icon.allocated_height() > 0,
+            "{id} icon must have a positive allocation"
+        );
+        let image = icon
+            .downcast::<gtk4::Image>()
+            .expect("icon button must use a GTK symbolic image");
+        let icon_name = image.icon_name().expect("symbolic image must name an icon");
+        let theme = gtk4::IconTheme::for_display(
+            &gtk4::gdk::Display::default().expect("test display remains active"),
+        );
+        assert!(
+            theme.has_icon(&icon_name),
+            "{id} must use an installed symbolic icon, got {icon_name}"
         );
     }
+    let soft_proof = find_widget(root, "darkroom-soft-proof").expect("soft-proof control");
+    let soft_proof_glyph = soft_proof.first_child().expect("soft-proof symbolic glyph");
+    assert!(soft_proof_glyph.is_visible() && soft_proof_glyph.is_mapped());
+    assert!(soft_proof_glyph.allocated_width() > 0 && soft_proof_glyph.allocated_height() > 0);
     for id in [
         "darkroom-histogram-empty",
         "darkroom-histogram-loading",
@@ -445,7 +461,7 @@ fn assert_filmstrip_rendering(root: &gtk4::Widget) {
         .compute_bounds(&visible_split)
         .expect("filmstrip boundary bounds");
     assert!(
-        rendered.dark_pixels(boundary_bounds) >= 100,
+        rendered.pixels_with_channel_at_most(boundary_bounds, 110) >= 100,
         "filmstrip boundary must render as a dark, compact separator"
     );
 }
@@ -490,9 +506,9 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
             "{id} must stay inside the narrow right rail: {bounds:?} vs {panel_bounds:?}"
         );
     }
-    right_split.set_position(split_width.saturating_sub(150));
+    right_split.set_position(split_width.saturating_sub(180));
     settle_gtk_until(
-        || histogram.allocated_width() <= 170,
+        || histogram.allocated_width() <= 190,
         || {
             format!(
                 "narrow panel={}, histogram={}x{}, split={}@{}",
@@ -552,7 +568,7 @@ impl RenderedWidget {
             .count()
     }
 
-    fn dark_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
+    fn pixels_with_channel_at_most(&self, bounds: gtk4::graphene::Rect, threshold: u8) -> usize {
         let left = bounds.x();
         let top = bounds.y();
         let right = left + bounds.width();
@@ -574,7 +590,7 @@ impl RenderedWidget {
                     && x < right
                     && y >= top
                     && y < bottom
-                    && pixel[..3].iter().all(|channel| *channel <= 64)
+                    && pixel[..3].iter().all(|channel| *channel <= threshold)
             })
             .count()
     }

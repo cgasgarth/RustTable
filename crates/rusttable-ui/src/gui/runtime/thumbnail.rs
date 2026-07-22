@@ -5,6 +5,22 @@ use rusttable_core::{EditId, PhotoId, Revision};
 use super::GtkShell;
 
 impl GtkShell {
+    pub(super) fn photo_thumbnail_metadata(
+        &self,
+        photo_id: PhotoId,
+    ) -> Option<crate::presentation::Rgba8PreviewMetadata> {
+        self.photo_tiles
+            .borrow()
+            .get(&photo_id)
+            .and_then(|tile| tile.thumbnails.ready_metadata())
+    }
+
+    pub(super) fn invalidate_photo_thumbnail_edit_identity(&self, photo_id: PhotoId) {
+        self.thumbnail_edit_identities
+            .borrow_mut()
+            .remove(&photo_id);
+    }
+
     /// Installs a background-rendered thumbnail into the synchronized grid and filmstrip tiles.
     ///
     /// # Errors
@@ -67,9 +83,7 @@ impl GtkShell {
     }
 
     pub fn set_photo_thumbnail_loading(&self, photo_id: PhotoId) {
-        self.thumbnail_edit_identities
-            .borrow_mut()
-            .remove(&photo_id);
+        self.invalidate_photo_thumbnail_edit_identity(photo_id);
         if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
             tile.thumbnails.set_loading();
         }

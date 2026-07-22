@@ -86,25 +86,25 @@ pub struct DarktableUiTokens {
     pub cards: LighttableCardTokens,
 }
 
-/// Darktable's 12pt base font and proportional GTK chrome at desktop scale.
+/// Compact typography and chrome from the matched Darktable desktop capture.
 pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
     typography: TypographyTokens {
-        base_pt: 12,
-        compact_pt: 10,
-        micro_pt: 9,
+        base_pt: 9,
+        compact_pt: 8,
+        micro_pt: 7,
         heading_pt: 13,
     },
     controls: ControlScaleTokens {
-        control_height: 24,
-        module_row_height: 26,
-        module_title_height: 26,
-        toolbar_height: 28,
-        status_height: 20,
-        control_gap: 4,
-        module_gap: 2,
-        module_padding: 4,
-        module_control_min_width: 48,
-        rail_scrollbar_reserve: 14,
+        control_height: 18,
+        module_row_height: 20,
+        module_title_height: 19,
+        toolbar_height: 26,
+        status_height: 18,
+        control_gap: 3,
+        module_gap: 1,
+        module_padding: 3,
+        module_control_min_width: 42,
+        rail_scrollbar_reserve: 10,
     },
     cards: LighttableCardTokens {
         minimum_width_px: 148,

@@ -35,6 +35,12 @@ On macOS, install or replace the canonical Computer Use app:
 bun run install:computer-use
 ```
 
+## Current interface
+
+| Lighttable | Darkroom |
+| --- | --- |
+| ![RustTable Lighttable](docs/screenshots/rusttable-lighttable.png) | ![RustTable Darkroom](docs/screenshots/rusttable-darkroom.png) |
+
 ## Product engineering tasks
 
 ```sh

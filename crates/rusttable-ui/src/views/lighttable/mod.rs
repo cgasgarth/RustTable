@@ -10,7 +10,7 @@ use crate::gui::darktable_spec::{
     DARKTABLE_UI_TOKENS, FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE, THUMBNAIL_METRICS,
 };
 use crate::gui::{ThemeRole, apply_theme_role};
-use interaction::LighttableZoom;
+use interaction::{LighttableLayout, LighttableZoom};
 
 /// Geometry shared by the collection grid and its focused layout tests.
 ///
@@ -91,6 +91,44 @@ impl LighttableGridSpec {
             thumbnail_width_px,
             thumbnail_height_px,
             horizontal_offset_px: u16::try_from(horizontal_offset).unwrap_or(u16::MAX),
+        }
+    }
+
+    /// One 3:2 image fitted into Darktable's full-preview lighttable surface.
+    #[must_use]
+    pub(crate) fn for_preview_viewport(viewport_width_px: u16, viewport_height_px: u16) -> Self {
+        let available_width = viewport_width_px.saturating_sub(16).max(1);
+        let available_height = viewport_height_px.saturating_sub(12).max(1);
+        let width_from_height = available_height.saturating_mul(3) / 2;
+        let thumbnail_width_px = available_width.min(width_from_height).max(1);
+        let thumbnail_height_px = thumbnail_width_px.saturating_mul(2) / 3;
+        Self {
+            zoom: LighttableZoom::Normal,
+            columns: 1,
+            card_width_px: thumbnail_width_px.saturating_add(2),
+            thumbnail_width_px,
+            thumbnail_height_px,
+            horizontal_offset_px: viewport_width_px
+                .saturating_sub(thumbnail_width_px.saturating_add(2))
+                / 2,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn for_layout_viewport(
+        layout: LighttableLayout,
+        zoom: LighttableZoom,
+        width: u16,
+        height: u16,
+    ) -> Self {
+        if layout == LighttableLayout::Preview && width > 0 && height > 0 {
+            Self::for_preview_viewport(width, height)
+        } else if width > 0 && height > 0 {
+            Self::for_viewport(zoom, width.saturating_sub(12), height)
+        } else if layout == LighttableLayout::Preview {
+            Self::for_preview_viewport(900, 590)
+        } else {
+            Self::for_zoom(zoom)
         }
     }
 
@@ -505,6 +543,17 @@ mod tests {
         assert_eq!(DARKTABLE_UI_TOKENS.cards.preferred_width_px, 196);
         assert_eq!(THUMBNAIL_METRICS.grid_width_px, 196);
         assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_rows, 1);
+    }
+
+    #[test]
+    fn preview_geometry_fits_one_three_by_two_surface_inside_the_canvas() {
+        let preview = LighttableGridSpec::for_preview_viewport(900, 600);
+
+        assert_eq!(preview.columns(), 1);
+        assert_eq!(preview.thumbnail_width_px(), 882);
+        assert_eq!(preview.thumbnail_height_px(), 588);
+        assert_eq!(preview.card_width_px(), 884);
+        assert_eq!(preview.horizontal_offset_px(), 8);
     }
 
     #[test]

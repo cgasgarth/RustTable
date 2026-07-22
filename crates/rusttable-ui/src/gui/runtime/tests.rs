@@ -266,6 +266,45 @@ fn thumbnail_publication_keeps_grid_and_filmstrip_ready_through_rerenders() {
 }
 
 #[gtk4::test]
+fn selected_ready_thumbnail_supplies_histogram_while_full_preview_loads() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.provisional-histogram"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let photo_id = id(5);
+    shell.set_photo_workspace(&workspace(photo_id));
+
+    let dimensions = PreviewDimensions::new(2, 1).expect("test dimensions");
+    let metadata = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("catalog thumbnail").expect("test status"),
+        vec![255, 0, 0, 255, 0, 0, 255, 255],
+    )
+    .expect("test thumbnail");
+    shell
+        .set_photo_thumbnail_for_edit(
+            photo_id,
+            &metadata,
+            EditId::new(12).expect("edit id"),
+            Revision::from_u64(3),
+        )
+        .expect("publish thumbnail");
+
+    let generation = ViewportGeneration::new(7);
+    shell.begin_darkroom_selection(photo_id, generation);
+    shell.set_darkroom_preview_loading(generation);
+
+    assert!(shell.darkroom.histogram_available());
+    assert_thumbnail_pair_is_ready(&shell, photo_id);
+    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
+    assert_eq!(
+        shell.darkroom_preview().status_label().text(),
+        "loading preview"
+    );
+}
+
+#[gtk4::test]
 fn thumbnail_candidates_include_unrealized_active_filmstrip_selection() {
     let application = gtk4::Application::new(
         Some("com.cgasgarth.rusttable.test.bounded-thumbnail-candidates"),

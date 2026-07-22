@@ -145,6 +145,8 @@ impl GtkShell {
             .default_height(i32::from(DARKTABLE_DESKTOP_SPEC.layout.window_height_px))
             .title(initial_i18n.text(MessageId::AppTitle, &MessageArgs::new()))
             .build();
+        #[cfg(target_os = "macos")]
+        window.set_decorated(false);
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
         let import_dialog = ImportDialog::new(&window);
@@ -198,6 +200,7 @@ impl GtkShell {
         });
         let (content, filmstrip, filmstrip_root) = desktop_body(
             &workspace,
+            &lighttable_toolbar,
             &left_panel,
             &right_panel,
             &initial_i18n,
@@ -321,6 +324,9 @@ impl GtkShell {
             .connect_action(move |action| match action {
                 LighttableLayoutAction::SetLayout(layout) => {
                     shell_for_layout.set_lighttable_layout(layout);
+                }
+                LighttableLayoutAction::SetZoom(zoom) => {
+                    shell_for_layout.set_lighttable_zoom(zoom);
                 }
                 LighttableLayoutAction::SetPanelVisibility { panel, visible } => {
                     shell_for_layout.set_lighttable_panel_visibility(panel, visible);
@@ -533,6 +539,7 @@ impl GtkShell {
             .lighttable_interaction
             .borrow_mut()
             .apply(LighttableSelectionAction::SetZoom(zoom));
+        self.lighttable_layout_controls.set_zoom(zoom);
         let workspace = self.lighttable_workspace.borrow();
         let Some(view_model) = workspace.as_ref() else {
             return;

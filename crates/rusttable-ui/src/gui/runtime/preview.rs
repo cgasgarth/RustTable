@@ -42,14 +42,32 @@ impl GtkShell {
         }
     }
 
-    /// Clears the old texture while the selected preview and its histogram are computed off-loop.
+    /// Clears the old full-size texture while the selected preview is computed off-loop.
+    ///
+    /// A ready catalog thumbnail is real image data from the same photo, so it remains visible in
+    /// the navigation/filmstrip surfaces and provides a provisional RGB histogram. The completed
+    /// preview still replaces that lower-resolution histogram through the generation-checked path.
     pub fn set_darkroom_preview_loading(&self, generation: ViewportGeneration) {
         let selected_photo = self.darkroom.viewport_state().photo_id();
         self.replace_selected_preview_projection(generation, SelectedPreviewState::Loading);
         self.darkroom_preview.set_loading();
         self.darkroom.set_status("loading preview");
         if let Some(photo_id) = selected_photo {
-            self.set_photo_thumbnail_loading(photo_id);
+            self.invalidate_photo_thumbnail_edit_identity(photo_id);
+            if let Some(metadata) = self.photo_thumbnail_metadata(photo_id) {
+                if let Err(error) = self.darkroom.set_navigation_preview(&metadata) {
+                    tracing::warn!(
+                        target: "rusttable.gtk.preview",
+                        generation = generation.get(),
+                        cause = ?error,
+                        "could not retain selected thumbnail in darkroom navigation"
+                    );
+                }
+                let histogram = HistogramData::from_rgba8(metadata.dimensions(), metadata.pixels());
+                let _ = self.darkroom.set_histogram_result(generation, histogram);
+            } else {
+                self.set_photo_thumbnail_loading(photo_id);
+            }
         }
     }
 

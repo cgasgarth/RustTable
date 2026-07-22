@@ -20,6 +20,8 @@ pub struct ThumbnailSurface {
     placeholder: gtk4::Label,
     texture: Rc<RefCell<Option<gtk4::gdk::Texture>>>,
     state: Rc<RefCell<ThumbnailState>>,
+    target_width: u32,
+    target_height: u32,
 }
 
 /// Display state retained when the lighttable rebuilds its GTK children.
@@ -76,6 +78,8 @@ impl ThumbnailSurface {
         let root = gtk4::Overlay::new();
         root.set_widget_name(id);
         root.add_css_class("dt_thumbnail_surface");
+        root.set_size_request(width, height);
+        root.set_overflow(gtk4::Overflow::Hidden);
         root.set_child(Some(&picture));
         root.add_overlay(&placeholder);
         Self {
@@ -84,6 +88,8 @@ impl ThumbnailSurface {
             placeholder,
             texture: Rc::new(RefCell::new(None)),
             state: Rc::new(RefCell::new(ThumbnailState::Loading)),
+            target_width: u32::try_from(width).unwrap_or(1),
+            target_height: u32::try_from(height).unwrap_or(1),
         }
     }
 
@@ -97,11 +103,12 @@ impl ThumbnailSurface {
         &self,
         metadata: &Rgba8PreviewMetadata,
     ) -> Result<(), PhotoPreviewTextureError> {
-        if metadata.pixels().len() > MAX_THUMBNAIL_RGBA8_BYTES {
+        let bounded = fit_metadata(metadata, self.target_width, self.target_height);
+        if bounded.pixels().len() > MAX_THUMBNAIL_RGBA8_BYTES {
             return Err(PhotoPreviewTextureError::PixelPayloadTooLarge);
         }
-        let (width, height, stride) = texture_parameters(metadata.dimensions())?;
-        let bytes = gtk4::glib::Bytes::from_owned(metadata.pixels().to_owned());
+        let (width, height, stride) = texture_parameters(bounded.dimensions())?;
+        let bytes = gtk4::glib::Bytes::from_owned(bounded.pixels().to_owned());
         let texture: gtk4::gdk::Texture = gtk4::gdk::MemoryTexture::new(
             width,
             height,
@@ -113,7 +120,7 @@ impl ThumbnailSurface {
         self.picture.set_paintable(Some(&texture));
         self.placeholder.set_visible(false);
         self.texture.replace(Some(texture));
-        self.state.replace(ThumbnailState::Ready(metadata.clone()));
+        self.state.replace(ThumbnailState::Ready(bounded));
         Ok(())
     }
 
@@ -165,6 +172,63 @@ impl ThumbnailSurface {
     }
 }
 
+fn fit_metadata(
+    metadata: &Rgba8PreviewMetadata,
+    target_width: u32,
+    target_height: u32,
+) -> Rgba8PreviewMetadata {
+    let source = metadata.dimensions();
+    if source.width() <= target_width && source.height() <= target_height {
+        return metadata.clone();
+    }
+    let (width, height) = if u64::from(source.width()) * u64::from(target_height)
+        > u64::from(source.height()) * u64::from(target_width)
+    {
+        (
+            target_width,
+            u32::try_from(
+                (u64::from(source.height()) * u64::from(target_width) / u64::from(source.width()))
+                    .max(1),
+            )
+            .expect("fitted thumbnail height is bounded by the target"),
+        )
+    } else {
+        (
+            u32::try_from(
+                (u64::from(source.width()) * u64::from(target_height) / u64::from(source.height()))
+                    .max(1),
+            )
+            .expect("fitted thumbnail width is bounded by the target"),
+            target_height,
+        )
+    };
+    let pixel_bytes = usize::try_from(u64::from(width) * u64::from(height) * 4)
+        .expect("fitted thumbnail payload fits usize");
+    let mut pixels = vec![0_u8; pixel_bytes];
+    for y in 0..height {
+        let source_y = y * source.height() / height;
+        for x in 0..width {
+            let source_x = x * source.width() / width;
+            let source_offset = usize::try_from(
+                (u64::from(source_y) * u64::from(source.width()) + u64::from(source_x)) * 4,
+            )
+            .expect("validated preview offset fits usize");
+            let target_offset =
+                usize::try_from((u64::from(y) * u64::from(width) + u64::from(x)) * 4)
+                    .expect("fitted thumbnail offset fits usize");
+            pixels[target_offset..target_offset + 4]
+                .copy_from_slice(&metadata.pixels()[source_offset..source_offset + 4]);
+        }
+    }
+    Rgba8PreviewMetadata::new(
+        crate::presentation::PreviewDimensions::new(width, height)
+            .expect("fitted thumbnail dimensions stay non-zero"),
+        metadata.status().clone(),
+        pixels,
+    )
+    .expect("fitted thumbnail remains a valid bounded RGBA8 surface")
+}
+
 /// The two synchronized native thumbnail surfaces for one photo.
 #[derive(Clone)]
 pub struct ThumbnailPair {
@@ -209,6 +273,15 @@ impl ThumbnailPair {
         self.lighttable.state()
     }
 
+    /// Returns the last real thumbnail pixels while a higher-resolution preview is pending.
+    #[must_use]
+    pub(crate) fn ready_metadata(&self) -> Option<Rgba8PreviewMetadata> {
+        match self.state() {
+            ThumbnailState::Ready(metadata) => Some(metadata),
+            ThumbnailState::Loading | ThumbnailState::Unavailable | ThumbnailState::Failed => None,
+        }
+    }
+
     pub(crate) fn filmstrip(&self) -> ThumbnailSurface {
         self.filmstrip.clone()
     }
@@ -221,7 +294,8 @@ impl ThumbnailPair {
 
 #[cfg(test)]
 mod tests {
-    use super::ThumbnailState;
+    use super::{ThumbnailState, fit_metadata};
+    use crate::presentation::{PresentationText, PreviewDimensions, Rgba8PreviewMetadata};
 
     #[test]
     fn thumbnail_states_have_truthful_status_contracts() {
@@ -232,5 +306,20 @@ mod tests {
         );
         assert_eq!(ThumbnailState::Failed.status_text(), "preview failed");
         assert!(!ThumbnailState::Loading.is_ready());
+    }
+
+    #[test]
+    fn thumbnail_pixels_are_downscaled_to_the_requested_surface() {
+        let dimensions = PreviewDimensions::new(180, 120).expect("valid source dimensions");
+        let status = PresentationText::new("rendered").expect("valid status");
+        let metadata = Rgba8PreviewMetadata::new(dimensions, status, vec![127; 180 * 120 * 4])
+            .expect("valid source payload");
+
+        let fitted = fit_metadata(&metadata, 78, 78);
+
+        assert_eq!(fitted.dimensions().width(), 78);
+        assert_eq!(fitted.dimensions().height(), 52);
+        assert_eq!(fitted.pixels().len(), 78 * 52 * 4);
+        assert!(fitted.pixels().iter().all(|channel| *channel == 127));
     }
 }

@@ -1,4 +1,4 @@
-/* RustTable's compact GTK4 transcription of Darktable's default grey theme. */
+/* RustTable's compact GTK4 transcription of Darktable's elegant-grey theme. */
 
 * {
   color: {{foreground}};
@@ -17,7 +17,7 @@ window,
 }
 
 #header {
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 3px;
   border-bottom: 1px solid {{border}};
 }
@@ -30,14 +30,14 @@ window,
 }
 
 #header-left {
-  min-width: 150px;
+  min-width: 140px;
   padding: 2px 7px 2px 2px;
   margin: 0;
 }
 
 #rusttable-aperture-mark {
-  min-width: 24px;
-  min-height: 24px;
+  min-width: 20px;
+  min-height: 20px;
 }
 
 .dt_brand_title {
@@ -69,7 +69,7 @@ window,
 }
 
 .dt_view_switcher button {
-  min-height: 26px;
+  min-height: 24px;
   min-width: 68px;
   padding: 1px 7px;
   border: 1px solid transparent;
@@ -114,8 +114,8 @@ textview {
 .dt_toolbar button:hover,
 button:hover,
 .dt_button:hover {
-  background-color: #777777ff;
-  border-color: #777777ff;
+  background-color: #abababff;
+  border-color: #abababff;
   color: {{background}};
 }
 
@@ -127,14 +127,14 @@ spinbutton:disabled,
 textview:disabled {
   background-color: transparent;
   border-color: {{border}};
-  color: #6a6a6aff;
+  color: #9e9e9eff;
 }
 
 button:disabled:hover,
 .dt_button:disabled:hover {
   background-color: transparent;
   border-color: {{border}};
-  color: #6a6a6aff;
+  color: #9e9e9eff;
 }
 
 .dt_view_switcher button:checked,
@@ -216,7 +216,7 @@ button:disabled:hover,
 }
 
 .dt_module_action:disabled {
-  color: #858585ff;
+  color: #d4d4d4ff;
   background-color: transparent;
   border-color: transparent;
 }
@@ -429,24 +429,62 @@ button:disabled:hover,
   margin-left: 6px;
 }
 
-#lighttable-layout-controls button {
+#lighttable-layout-mode-group button,
+#lighttable-zoom-controls button {
+  min-width: 28px;
   min-height: {{control_height}}px;
-  padding: 0 4px;
+  padding: 0 5px;
   background-color: transparent;
   color: {{foreground}};
 }
 
-#lighttable-layout-controls button:checked {
+#lighttable-layout-mode-group button:checked {
   background-color: {{selected_thumbnail}};
   color: {{background}};
 }
 
+#lighttable-zoom-columns {
+  min-width: 34px;
+  padding: 0 5px;
+  border: 1px solid {{border}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_segmented_group button {
+  margin: 0;
+  border-radius: 0;
+  border-right-width: 0;
+}
+
+.dt_segmented_group button:last-child {
+  border-right-width: 1px;
+}
+
 #lighttable-grid.dt_culling_surface {
-  padding: 12px;
+  padding: 6px 8px;
 }
 
 #lighttable-grid.dt_culling_surface > flowboxchild {
-  margin: 6px;
+  margin: 0;
+}
+
+button.dt_preview_card,
+button.dt_preview_card:hover,
+button.dt_preview_card.dt_selected,
+.dt_preview_card {
+  margin: 0;
+  padding: 0;
+  border: 1px solid #d4d4d4ff;
+  border-radius: 0;
+  background-color: #989898ff;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+.dt_preview_card .dt_thumbnail_surface {
+  border: 0;
+  background-color: #989898ff;
 }
 
 #lighttable-grid > flowboxchild {
@@ -793,7 +831,7 @@ scale:focus-visible {
 
 .dt_export_label {
   font-size: {{compact_font_pt}}pt;
-  color: #919191ff;
+  color: #e2e2e2ff;
 }
 
 #export-destination,
@@ -888,14 +926,14 @@ scale:focus-visible {
 #darkroom-histogram {
   min-height: {{histogram_min_height}}px;
   min-width: 0;
-  background: linear-gradient(to top, #1d1d1dff, #383838ff);
+  background: linear-gradient(to top, #5e5e5eff, #777777ff);
   border-bottom: 1px solid {{border}};
 }
 
 #darkroom-filmstrip-boundary {
   min-height: 1px;
-  background-color: #1c1c1cff;
-  color: #1c1c1cff;
+  background-color: #5e5e5eff;
+  color: #5e5e5eff;
   border: 0;
 }
 
@@ -922,6 +960,11 @@ scale:focus-visible {
 #darkroom-toolbar-bottom button:checked {
   background-color: {{active_field_background}};
   color: {{foreground}};
+}
+
+.dt_symbolic_glyph {
+  color: {{foreground}};
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_darkroom_toolbar {
@@ -1088,7 +1131,7 @@ scale:focus-visible {
 
 .dt_placeholder,
 .dim-label {
-  color: #919191ff;
+  color: #dededeff;
 }
 
 scrollbar slider {

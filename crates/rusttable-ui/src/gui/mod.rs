@@ -51,15 +51,16 @@ pub use darkroom_modules::{
     build_module_panel, reference_modules,
 };
 pub use darktable_spec::{
-    ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_RAIL_SCROLL_WIDGET_IDS,
-    DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, DESKTOP_REGIONS,
-    DarkroomGeometry, DarkroomGeometryReceipt, DarkroomWindowLayout, DarktableColors,
-    DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LIGHTTABLE_COMPOSITION,
-    LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, LayoutMetrics, LighttableCompositionSpec,
-    LighttableModuleSpec, LighttableToolbarSpec, ModuleControlAllocationReceipt, PANEL_SLOTS,
-    PanelRole, PanelSlot as VisualPanelSlot, ResponsiveGeometryReceipt, SidePanelWidths,
-    THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ThumbnailMetrics, TopBarSection, TypographyTokens,
-    ViewMode, darkroom_window_layout,
+    ColorToken, DARKROOM_GEOMETRY, DARKROOM_OPERATION_FOCUS_ORDER, DARKROOM_PANEL_WIDTHS,
+    DARKROOM_RAIL_SCROLL_WIDGET_IDS, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS,
+    DESKTOP_REGIONS, DarkroomGeometry, DarkroomGeometryReceipt, DarkroomWindowLayout,
+    DarktableColors, DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS,
+    LIGHTTABLE_COMPOSITION, LIGHTTABLE_PANEL_WIDTHS, LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR,
+    LayoutMetrics, LighttableCompositionSpec, LighttableModuleSpec, LighttableToolbarSpec,
+    ModuleControlAllocationReceipt, PANEL_SLOTS, PanelRole, PanelSlot as VisualPanelSlot,
+    ResponsiveGeometryReceipt, SidePanelWidths, THUMBNAIL_METRICS, TOP_BAR_SECTIONS,
+    ThumbnailMetrics, TopBarSection, TypographyTokens, ViewMode, WorkspacePanelWidths,
+    darkroom_window_layout, workspace_panel_widths,
 };
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};
