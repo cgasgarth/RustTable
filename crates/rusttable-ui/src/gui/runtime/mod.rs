@@ -6,6 +6,7 @@
 
 mod layout;
 mod lighttable;
+mod preview;
 mod selection;
 
 use std::cell::{Cell, RefCell};
@@ -49,7 +50,6 @@ use crate::presentation::{
 use crate::viewport_presentation::{
     DisplayPresentationFrame, PresentationStatus, ViewportGeneration,
 };
-use crate::{HistogramData, HistogramError};
 
 use self::lighttable::{PhotoTilePair, WorkspaceRenderHandle};
 
@@ -347,49 +347,6 @@ impl GtkShell {
                 viewport.edit_revision().unwrap_or(Revision::ZERO),
             )
         })
-    }
-
-    /// Clears the old texture while the selected preview and its histogram are computed off-loop.
-    pub fn set_darkroom_preview_loading(&self) {
-        self.darkroom_preview.set_loading();
-        self.darkroom.set_status("loading preview");
-    }
-
-    /// Restores the truthful empty darkroom surface when no catalog photo is selected.
-    pub fn clear_darkroom_selection(&self, message: &str) {
-        self.darkroom.clear_viewport_selection();
-        self.darkroom_preview.set_failure(message);
-        self.darkroom.set_status(message);
-    }
-
-    /// Installs a validated worker result and its already-computed histogram on the GTK surface.
-    ///
-    /// The darkroom checks the generation again before publishing histogram data, so a late
-    /// worker cannot restore data from an older selection.
-    ///
-    /// # Errors
-    ///
-    /// Returns a texture error when the validated preview dimensions cannot be represented by
-    /// GTK's memory texture API.
-    pub fn set_darkroom_preview_result(
-        &self,
-        generation: ViewportGeneration,
-        metadata: &crate::presentation::Rgba8PreviewMetadata,
-        histogram: Result<HistogramData, HistogramError>,
-    ) -> Result<(), super::PhotoPreviewTextureError> {
-        self.darkroom_preview.set_rgba8(metadata)?;
-        let _ = self.darkroom.set_histogram_result(generation, histogram);
-        self.darkroom.sync_viewport_projection();
-        Ok(())
-    }
-
-    /// Projects a preview failure and removes any histogram that belonged to its frame.
-    pub fn set_darkroom_preview_failure(&self, generation: ViewportGeneration, message: &str) {
-        self.darkroom_preview.set_failure(message);
-        let _ = self
-            .darkroom
-            .set_histogram_result(generation, Err(HistogramError::PreviewUnavailable));
-        self.darkroom.set_status(message);
     }
 
     /// Projects a controller-owned selected-photo operation stack into GTK.

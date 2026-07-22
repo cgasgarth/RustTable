@@ -183,7 +183,7 @@ impl Density {
     ///
     /// # Errors
     ///
-    /// Returns [`DensityError::Zero`] when either axis is zero.
+    /// Returns `DensityError::Zero` when either axis is zero.
     pub const fn new(x: u32, y: u32, unit: DensityUnit) -> Result<Self, DensityError> {
         if x == 0 || y == 0 {
             return Err(DensityError::Zero);

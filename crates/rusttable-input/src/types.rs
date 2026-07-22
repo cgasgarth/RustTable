@@ -9,7 +9,7 @@ impl ActionId {
     ///
     /// # Errors
     ///
-    /// Returns [`ActionIdError`] when the path is empty or contains shortcut
+    /// Returns `ActionIdError` when the path is empty or contains shortcut
     /// file delimiters.
     pub fn new(value: impl Into<String>) -> Result<Self, ActionIdError> {
         let value = value.into();

@@ -1,8 +1,9 @@
 use std::ffi::OsStr;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
+use std::{collections::BTreeSet, env};
 
 use crate::{Result, codegen, export_contract, fixtures, operations, run_process_quiet};
 use sha2::{Digest, Sha256};
@@ -11,11 +12,15 @@ const FORBIDDEN_NATIVE_EXTENSIONS: &[&str] = &[
     "c", "cc", "cl", "cmake", "cpp", "cxx", "h", "hh", "hpp", "m", "mm", "s",
 ];
 const FORBIDDEN_NATIVE_FILENAMES: &[&str] = &["CMakeLists.txt", "ConfigureChecks.cmake"];
+const MAX_CHANGED_RUST_LINES: usize = 1_000;
 type CheckFn = fn(&Path) -> Result;
 
 const CHECKS: &[(&str, CheckFn)] = &[
     ("source policy", verify_sources),
-    ("cargo format, clippy, and tests", run_cargo_pipeline),
+    (
+        "cargo format, clippy, tests, and rustdoc",
+        run_cargo_pipeline,
+    ),
     ("operation codegen", verify_codegen),
     ("operation manifest", verify_operations),
     ("export contract", verify_export_contract),
@@ -107,6 +112,19 @@ fn run_cargo_pipeline(root: &Path) -> Result {
             "--locked",
         ]),
     )?;
+    run_process_quiet(
+        "rustdoc",
+        Command::new("cargo")
+            .current_dir(root)
+            .env("RUSTDOCFLAGS", "-Dwarnings")
+            .args([
+                "doc",
+                "--workspace",
+                "--all-features",
+                "--no-deps",
+                "--locked",
+            ]),
+    )?;
     Ok(())
 }
 
@@ -147,6 +165,7 @@ fn verify_sources(root: &Path) -> Result {
         Command::new("bash").arg(root.join("scripts/check-source-policy.sh")),
     )?;
     verify_asset_provenance(root)?;
+    verify_changed_rust_source_sizes(root)?;
     let output = Command::new("git")
         .current_dir(root)
         .args([
@@ -179,6 +198,113 @@ fn verify_sources(root: &Path) -> Result {
         }
     }
     Ok(())
+}
+
+fn verify_changed_rust_source_sizes(root: &Path) -> Result {
+    let base = source_size_diff_base(root)?;
+    let mut paths = git_paths(
+        root,
+        &[
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            "-z",
+            &base,
+            "--",
+            "*.rs",
+        ],
+    )?;
+    paths.extend(git_paths(
+        root,
+        &[
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "*.rs",
+        ],
+    )?);
+
+    let mut violations = Vec::new();
+    for relative in paths {
+        if source_size_exempt(&relative) {
+            continue;
+        }
+        let source = fs::read_to_string(root.join(&relative))
+            .map_err(|error| format!("source size policy: read {}: {error}", relative.display()))?;
+        let lines = source.lines().count();
+        if source_exceeds_line_limit(&source) {
+            violations.push(format!("{} ({lines} lines)", relative.display()));
+        }
+    }
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "source size policy: changed handwritten Rust exceeds {MAX_CHANGED_RUST_LINES} lines: {}",
+            violations.join(", ")
+        ))
+    }
+}
+
+fn source_size_diff_base(root: &Path) -> Result<String> {
+    let mut candidates = Vec::new();
+    if let Ok(base) = env::var("RUSTTABLE_SOURCE_SIZE_BASE") {
+        candidates.push(base);
+    }
+    if let Ok(base) = env::var("GITHUB_BASE_REF") {
+        candidates.push(format!("origin/{base}"));
+    }
+    candidates.push("origin/main".to_owned());
+    candidates.push("HEAD".to_owned());
+
+    for candidate in candidates {
+        let output = Command::new("git")
+            .current_dir(root)
+            .args(["merge-base", "HEAD", &candidate])
+            .output()
+            .map_err(|error| format!("source size policy: could not find diff base: {error}"))?;
+        if output.status.success() {
+            return String::from_utf8(output.stdout)
+                .map(|base| base.trim().to_owned())
+                .map_err(|_| "source size policy: diff base is not UTF-8".to_owned());
+        }
+    }
+    Err("source size policy: no usable Git diff base".to_owned())
+}
+
+fn git_paths(root: &Path, arguments: &[&str]) -> Result<BTreeSet<PathBuf>> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(arguments)
+        .output()
+        .map_err(|error| format!("source size policy: could not list changed files: {error}"))?;
+    if !output.status.success() {
+        return Err("source size policy: Git file listing failed".to_owned());
+    }
+    output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        .map(|path| {
+            std::str::from_utf8(path)
+                .map(PathBuf::from)
+                .map_err(|_| "source size policy: changed path is not UTF-8".to_owned())
+        })
+        .collect()
+}
+
+fn source_size_exempt(path: &Path) -> bool {
+    path.starts_with("architecture")
+        || path
+            .components()
+            .any(|component| component.as_os_str() == "generated")
+        || path.file_name() == Some(OsStr::new("generated.rs"))
+}
+
+fn source_exceeds_line_limit(source: &str) -> bool {
+    source.lines().count() > MAX_CHANGED_RUST_LINES
 }
 
 fn verify_asset_provenance(root: &Path) -> Result {
@@ -312,5 +438,20 @@ mod tests {
         assert!(forbidden_native_path(Path::new("src/legacy.c")));
         assert!(forbidden_native_path(Path::new("CMakeLists.txt")));
         assert!(!forbidden_native_path(Path::new("src/lib.rs")));
+    }
+
+    #[test]
+    fn changed_source_size_policy_targets_handwritten_rust() {
+        assert!(!source_size_exempt(Path::new("crates/app/src/runtime.rs")));
+        assert!(source_size_exempt(Path::new(
+            "crates/app/src/generated/registry.rs"
+        )));
+        assert!(source_size_exempt(Path::new("crates/app/src/generated.rs")));
+        assert!(!source_exceeds_line_limit(
+            &"line\n".repeat(MAX_CHANGED_RUST_LINES)
+        ));
+        assert!(source_exceeds_line_limit(
+            &"line\n".repeat(MAX_CHANGED_RUST_LINES + 1)
+        ));
     }
 }

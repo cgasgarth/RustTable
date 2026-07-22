@@ -14,7 +14,7 @@ use crate::gui::{ThemeRole, apply_theme_role};
 
 /// The central darkroom image surface and its typed metadata presentation.
 ///
-/// The widget deliberately accepts a [`gdk4::Texture`] rather than image bytes.
+/// The widget deliberately accepts a [`gtk4::gdk::Texture`] rather than image bytes.
 /// Preview services own decoding and color conversion; this surface owns only
 /// displaying the resulting paintable and the typed state that describes it.
 #[derive(Clone)]
