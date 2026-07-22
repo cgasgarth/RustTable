@@ -186,12 +186,9 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
         panic!("selected RAW preview must render");
     };
     assert_eq!(preview.photo_id(), photo_id);
-    assert_eq!(
-        preview.dimensions(),
-        decoder_probe(fixture.bytes()).dimensions()
-    );
-    assert_eq!(preview.dimensions().width(), fixture.expected_width());
-    assert_eq!(preview.dimensions().height(), fixture.expected_height());
+    let sensor_dimensions = decoder_probe(fixture.bytes()).dimensions();
+    assert!(preview.dimensions().width() <= sensor_dimensions.width());
+    assert!(preview.dimensions().height() <= sensor_dimensions.height());
     assert_eq!(
         preview.pixels().len(),
         usize::try_from(
@@ -201,6 +198,19 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
                 .expect("preview byte count"),
         )
         .expect("preview bytes fit usize")
+    );
+    let mean_rgb = preview
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|pixel| &pixel[..3])
+        .map(|channel| f64::from(*channel))
+        .sum::<f64>()
+        / f64::from(preview.dimensions().width() * preview.dimensions().height() * 3);
+    assert!(
+        mean_rgb >= 32.0,
+        "selected RAW preview must not be near-black; mean RGB was {mean_rgb:.2}"
     );
 
     let mut darkroom_panels = GtkDarkroomPanelController::new(Some(catalog_path.clone()));

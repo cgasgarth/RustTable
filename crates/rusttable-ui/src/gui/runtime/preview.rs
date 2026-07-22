@@ -2,10 +2,44 @@ use crate::presentation::{
     PresentationText, Rgba8PreviewMetadata, SelectedPreviewFailure, SelectedPreviewState,
 };
 use crate::{HistogramData, HistogramError, ViewportGeneration};
+use rusttable_display_profile::{
+    DisplayProfileReceipt, DisplayProfileSnapshot, ProfileSelection, SelectionStatus,
+};
+
+use crate::libs::profiles::diagnostics::ProfileDiagnosticRequest;
 
 use super::GtkShell;
 
 impl GtkShell {
+    /// Applies one display-profile decision to both the header and darkroom render status.
+    pub fn set_display_profile_state(
+        &self,
+        snapshot: Option<&DisplayProfileSnapshot>,
+        receipt: Option<DisplayProfileReceipt>,
+    ) {
+        self.display_profile_banner.set_snapshot(snapshot);
+        self.darkroom.set_profile_diagnostic_state(
+            snapshot,
+            receipt,
+            ProfileDiagnosticRequest::new(),
+        );
+        self.preview_profile_fallback
+            .set(snapshot.is_none_or(|snapshot| {
+                snapshot.status() != SelectionStatus::Active
+                    || snapshot.selection() == ProfileSelection::Unprofiled
+            }));
+    }
+
+    /// Returns the explicit display contract attached to the next selected preview.
+    #[must_use]
+    pub fn darkroom_preview_status(&self) -> &'static str {
+        if self.preview_profile_fallback.get() {
+            "rendered · sRGB display fallback · profile evidence unavailable"
+        } else {
+            "rendered"
+        }
+    }
+
     /// Clears the old texture while the selected preview and its histogram are computed off-loop.
     pub fn set_darkroom_preview_loading(&self, generation: ViewportGeneration) {
         self.replace_selected_preview_projection(generation, SelectedPreviewState::Loading);

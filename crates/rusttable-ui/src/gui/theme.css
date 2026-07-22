@@ -757,6 +757,12 @@ scale:focus-visible {
   font-weight: bold;
 }
 
+.dt_darkroom_module_header button {
+  min-width: {{control_height}}px;
+  min-height: {{control_height}}px;
+  padding: 0 3px;
+}
+
 .dt_module_row {
   min-height: {{module_row_height}}px;
   padding: 1px 0;
@@ -770,6 +776,13 @@ scale:focus-visible {
 .dt_module_row dropdown,
 .dt_module_row scale {
   min-height: {{control_height}}px;
+  min-width: 0;
+}
+
+.dt_rail_scroll,
+.dt_rail_scroll viewport,
+.dt_rail_scroll .dt_module_expander {
+  min-width: 0;
 }
 
 #darkroom-histogram {

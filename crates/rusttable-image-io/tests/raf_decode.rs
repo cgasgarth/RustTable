@@ -1,4 +1,4 @@
-use rusttable_image::{DecodeLimits, ImageInput, ImageInputError, InputFormat};
+use rusttable_image::{ColorEncoding, DecodeLimits, ImageInput, ImageInputError, InputFormat};
 use rusttable_image_io::FileImageInput;
 
 fn limits() -> DecodeLimits {
@@ -102,11 +102,26 @@ fn compressed_raf_probe_and_decode_are_deterministic() {
         .expect("repeat compressed RAF decode");
 
     assert_eq!(probe.format(), InputFormat::Raw);
-    assert_eq!(probe.dimensions(), decoded.dimensions());
-    assert_eq!(decoded.dimensions().width(), 768);
+    assert_eq!(probe.dimensions().width(), 768);
+    assert_eq!(probe.dimensions().height(), 6);
+    assert_eq!(decoded.dimensions().width(), 640);
     assert_eq!(decoded.dimensions().height(), 6);
-    assert_eq!(decoded.pixels().len(), 768 * 6 * 4);
+    assert_eq!(decoded.color_encoding(), ColorEncoding::Srgb);
+    assert_eq!(decoded.pixels().len(), 640 * 6 * 4);
     assert_eq!(decoded.pixels(), decoded_again.pixels());
+    let mean_rgb = decoded
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|pixel| &pixel[..3])
+        .map(|channel| f64::from(*channel))
+        .sum::<f64>()
+        / f64::from(decoded.dimensions().width() * decoded.dimensions().height() * 3);
+    assert!(
+        mean_rgb >= 32.0,
+        "developed RAW must not be near-black; mean RGB was {mean_rgb:.2}"
+    );
 }
 
 #[test]

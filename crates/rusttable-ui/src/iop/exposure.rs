@@ -16,7 +16,8 @@ use rusttable_processing::{
 use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
 use crate::gui::darktable_components::{
-    button, dropdown, module_expander as shared_module_expander, module_row, scale_row,
+    MODULE_GAP, button, dropdown, module_expander as shared_module_expander, module_row, scale_row,
+    slider, switch,
 };
 
 type ExposureActionHandler = Rc<dyn Fn(ExposureAction)>;
@@ -58,39 +59,37 @@ impl ExposurePanel {
         let module_actions = Rc::new(RefCell::new(None));
         let module_revision = Rc::new(RefCell::new(Revision::ZERO));
         let sync_guard = Rc::new(Cell::new(false));
-        let enabled = gtk4::Switch::new();
+        let enabled = switch("exposure-enabled");
         let mode = dropdown("exposure-mode", &["manual", "automatic"]);
         let mode_stack = gtk4::Stack::new();
         mode_stack.set_widget_name("exposure-mode-stack");
         mode_stack.set_hhomogeneous(false);
-        let exposure = gtk4::Scale::with_range(
-            gtk4::Orientation::Horizontal,
+        let exposure = slider(
+            "exposure-ev",
             EXPOSURE_EV_MINIMUM,
             EXPOSURE_EV_MAXIMUM,
             0.001,
+            false,
         );
-        let black = gtk4::Scale::with_range(
-            gtk4::Orientation::Horizontal,
+        let black = slider(
+            "exposure-black",
             BLACK_LEVEL_MINIMUM,
             BLACK_LEVEL_MAXIMUM,
             0.0001,
+            false,
         );
         exposure.set_digits(3);
-        exposure.set_hexpand(true);
-        exposure.set_draw_value(false);
         exposure.set_tooltip_text(Some(&format!(
             "adjust exposure correction; soft range {EXPOSURE_EV_SOFT_MINIMUM:.0} to \
              {EXPOSURE_EV_SOFT_MAXIMUM:.0} EV"
         )));
         black.set_digits(4);
-        black.set_hexpand(true);
-        black.set_draw_value(false);
         black.set_tooltip_text(Some(&format!(
             "adjust black level; soft range {BLACK_LEVEL_SOFT_MINIMUM:.1} to \
              {BLACK_LEVEL_SOFT_MAXIMUM:.1}"
         )));
-        let compensate_exposure_bias = gtk4::Switch::new();
-        let compensate_highlight_preservation = gtk4::Switch::new();
+        let compensate_exposure_bias = switch("exposure-bias-compensation");
+        let compensate_highlight_preservation = switch("exposure-highlight-compensation");
         let exposure_value = value_label("exposure-value", "Exposure value");
         let black_value = value_label("black-value", "Black-level value");
         let status = gtk4::Label::new(Some("Ready"));
@@ -100,7 +99,7 @@ impl ExposurePanel {
         status.set_accessible_role(gtk4::AccessibleRole::Status);
         status.update_property(&[Property::Label("Exposure module status")]);
         status.add_css_class("dim-label");
-        let manual = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+        let manual = gtk4::Box::new(gtk4::Orientation::Vertical, MODULE_GAP);
         append_switch_row(
             &manual,
             "compensate camera exposure bias",
@@ -119,19 +118,25 @@ impl ExposurePanel {
         automatic.add_css_class("dim-label");
         automatic.set_accessible_role(gtk4::AccessibleRole::Status);
         mode_stack.add_named(&automatic, Some("automatic"));
-        let presets = button("exposure-presets", "presets");
+        let presets = button("exposure-presets", "⋯");
         presets.set_sensitive(false);
         presets.set_focusable(false);
         presets.set_tooltip_text(Some("Exposure presets are unavailable"));
         presets.update_property(&[Property::Label("Exposure presets unavailable")]);
-        let reset = button("exposure-reset", "reset");
-        let content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+        let reset = button("exposure-reset", "↺");
+        reset.set_tooltip_text(Some("Reset exposure module"));
+        let content = gtk4::Box::new(gtk4::Orientation::Vertical, MODULE_GAP);
+        content.set_width_request(0);
+        content.set_hexpand(true);
         append_dropdown_row(&content, "mode", &mode);
         content.append(&mode_stack);
         append_scale_row(&content, "black", &black, &black_value, "");
         content.append(&status);
 
-        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        let header = gtk4::Box::new(gtk4::Orientation::Horizontal, MODULE_GAP);
+        header.set_width_request(0);
+        header.set_hexpand(true);
+        header.add_css_class("dt_darkroom_module_header");
         let title = gtk4::Label::new(Some("exposure"));
         title.set_halign(gtk4::Align::Start);
         title.set_hexpand(true);

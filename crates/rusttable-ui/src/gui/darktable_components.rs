@@ -13,6 +13,8 @@ pub(crate) const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
 pub(crate) const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
 pub(crate) const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_row_height;
 pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
+pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
+const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
 
 pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
@@ -48,11 +50,13 @@ pub(crate) fn module_expander(
 pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     row.set_height_request(MODULE_ROW_HEIGHT);
+    row.set_width_request(0);
     row.set_hexpand(true);
     row.add_css_class("dt_module_row");
     let label_widget = gtk4::Label::new(Some(label));
     label_widget.set_halign(gtk4::Align::Start);
     label_widget.set_hexpand(true);
+    label_widget.set_width_chars(1);
     label_widget.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     row.append(&label_widget);
     row.append(widget);
@@ -66,6 +70,8 @@ pub(crate) fn scale_row(
     unit: &str,
 ) -> gtk4::Box {
     let row = gtk4::Box::new(gtk4::Orientation::Vertical, MODULE_GAP);
+    row.set_width_request(0);
+    row.set_hexpand(true);
     row.add_css_class("dt_module_row");
     let heading = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     let label_text = if unit.is_empty() {
@@ -105,8 +111,36 @@ pub(crate) fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
     let dropdown = gtk4::DropDown::from_strings(values);
     dropdown.set_widget_name(id);
     dropdown.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    dropdown.set_width_request(MODULE_CONTROL_MIN_WIDTH);
+    dropdown.set_hexpand(true);
     dropdown.add_css_class("dt_field");
     dropdown
+}
+
+pub(crate) fn slider(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    step: f64,
+    draw_value: bool,
+) -> gtk4::Scale {
+    let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, minimum, maximum, step);
+    slider.set_widget_name(id);
+    slider.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    slider.set_width_request(MODULE_CONTROL_MIN_WIDTH);
+    slider.set_hexpand(true);
+    slider.set_draw_value(draw_value);
+    slider.add_css_class("dt_slider");
+    slider
+}
+
+pub(crate) fn switch(id: &str) -> gtk4::Switch {
+    let control = gtk4::Switch::new();
+    control.set_widget_name(id);
+    control.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    control.set_valign(gtk4::Align::Center);
+    control.add_css_class("dt_switch");
+    control
 }
 
 pub(crate) fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
@@ -138,8 +172,12 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     scroll.set_widget_name(id);
     scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    scroll.set_min_content_width(width.max(minimum));
+    let allocated_content = width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE);
+    scroll.set_min_content_width(allocated_content);
     scroll.set_propagate_natural_width(false);
     scroll.set_propagate_natural_height(false);
+    scroll.add_css_class("dt_rail_scroll");
+    child.set_width_request(0);
+    child.set_hexpand(true);
     scroll
 }

@@ -56,10 +56,10 @@ pub use darktable_spec::{
     DarkroomGeometry, DarkroomGeometryReceipt, DarkroomWindowLayout, DarktableColors,
     DarktableDesktopSpec, DesktopRegion, FilmstripHeights, LAYOUT_METRICS, LIGHTTABLE_COMPOSITION,
     LIGHTTABLE_RIGHT_MODULES, LIGHTTABLE_TOOLBAR, LayoutMetrics, LighttableCompositionSpec,
-    LighttableModuleSpec, LighttableToolbarSpec, PANEL_SLOTS, PanelRole,
-    PanelSlot as VisualPanelSlot, ResponsiveGeometryReceipt, SidePanelWidths, THUMBNAIL_METRICS,
-    TOP_BAR_SECTIONS, ThumbnailMetrics, TopBarSection, TypographyTokens, ViewMode,
-    darkroom_window_layout,
+    LighttableModuleSpec, LighttableToolbarSpec, ModuleControlAllocationReceipt, PANEL_SLOTS,
+    PanelRole, PanelSlot as VisualPanelSlot, ResponsiveGeometryReceipt, SidePanelWidths,
+    THUMBNAIL_METRICS, TOP_BAR_SECTIONS, ThumbnailMetrics, TopBarSection, TypographyTokens,
+    ViewMode, darkroom_window_layout,
 };
 pub use display_profile::{DisplayProfileBanner, GtkMonitorInventory};
 pub use export_panel::{ExportAction, ExportPanel, ExportSize};

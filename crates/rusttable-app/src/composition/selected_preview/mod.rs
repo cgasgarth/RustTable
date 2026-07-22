@@ -128,7 +128,7 @@ fn install_preview_state(
         );
         return;
     };
-    let Ok(status) = PresentationText::new("rendered") else {
+    let Ok(status) = PresentationText::new(shell.darkroom_preview_status()) else {
         shell.set_darkroom_preview_failure(
             generation,
             GtkPreviewFailureKind::RenderUnavailable.message(),

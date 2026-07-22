@@ -9,10 +9,7 @@ use rawler::imgop::xyz::Illuminant;
 use rawler::rawimage::RawPhotometricInterpretation;
 use rawler::rawsource::RawSource;
 use rawler::{RawImage, RawImageData, RawlerError};
-use rusttable_image::{
-    ColorEncoding, DecodeLimits, DecodedImage, DecodedImageError, ImageDimensions, ImageInputError,
-    ImageProbe, InputFormat,
-};
+use rusttable_image::{DecodeLimits, ImageDimensions, ImageInputError, ImageProbe, InputFormat};
 use sha2::{Digest, Sha256};
 
 use super::{
@@ -24,6 +21,8 @@ use super::{
     RawPlaneLayout, RawPreviewDescriptor, RawPreviewFormat, RawPreviewKind, RawProbeOutcome,
     RawRect, RawSourceError, RawSourceReceipt,
 };
+
+mod preview;
 
 const COPY_CHUNK_BYTES: usize = 64 * 1024;
 
@@ -917,15 +916,11 @@ fn oriented_header_dimensions(header: &RawHeader) -> Result<ImageDimensions, Ima
 pub(super) fn decode_legacy_preview(
     bytes: &[u8],
     limits: DecodeLimits,
-) -> Result<DecodedImage, ImageInputError> {
-    let request = RawDecodeRequest::new(raw_limits(limits)?);
-    let result = RawlerRawDecoder::new()
-        .decode_bytes(bytes, &request)
-        .map_err(raw_input_error)?;
-    sensor_compatibility_preview(&result.frame, limits)
+) -> Result<rusttable_image::DecodedImage, ImageInputError> {
+    preview::developed_raw_preview(bytes, limits)
 }
 
-fn raw_limits(limits: DecodeLimits) -> Result<RawDecodeLimits, ImageInputError> {
+pub(super) fn raw_limits(limits: DecodeLimits) -> Result<RawDecodeLimits, ImageInputError> {
     RawDecodeLimits::new(
         limits.max_source_bytes(),
         limits.max_width(),
@@ -936,76 +931,7 @@ fn raw_limits(limits: DecodeLimits) -> Result<RawDecodeLimits, ImageInputError> 
     .map_err(|_| ImageInputError::ArithmeticOverflow)
 }
 
-fn oriented_dimensions(parts: &RawFrameParts) -> Result<ImageDimensions, ImageInputError> {
-    let dimensions = parts.planes[0].dimensions;
-    let transpose = matches!(
-        parts.orientation,
-        RawOrientation::Transpose
-            | RawOrientation::Rotate90
-            | RawOrientation::Transverse
-            | RawOrientation::Rotate270
-    );
-    ImageDimensions::new(
-        if transpose {
-            dimensions.height
-        } else {
-            dimensions.width
-        },
-        if transpose {
-            dimensions.width
-        } else {
-            dimensions.height
-        },
-    )
-    .map_err(|_| ImageInputError::ArithmeticOverflow)
-}
-
-fn sensor_compatibility_preview(
-    frame: &RawFrame,
-    limits: DecodeLimits,
-) -> Result<DecodedImage, ImageInputError> {
-    let parts = frame.parts();
-    let plane = &parts.planes[0];
-    let dimensions = oriented_dimensions(parts)?;
-    let output_bytes = dimensions
-        .decoded_byte_count()
-        .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    if output_bytes > limits.max_decoded_bytes() {
-        return Err(ImageInputError::DecodedByteLimit {
-            actual: output_bytes,
-            limit: limits.max_decoded_bytes(),
-        });
-    }
-    let capacity =
-        usize::try_from(output_bytes).map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    let mut output = Vec::new();
-    output
-        .try_reserve_exact(capacity)
-        .map_err(|_| ImageInputError::AllocationFailure)?;
-    let shift = u32::from(parts.bit_depth.saturating_sub(8));
-    let cpp = usize::from(plane.channels_per_pixel);
-    for pixel in plane.samples.chunks_exact(cpp) {
-        let channels = if cpp >= 3 {
-            [pixel[0], pixel[1], pixel[2]]
-        } else {
-            [pixel[0]; 3]
-        };
-        for value in channels {
-            output.push(u8::try_from((u32::from(value) >> shift).min(255)).unwrap_or(255));
-        }
-        output.push(255);
-    }
-    DecodedImage::new_with_color_encoding(dimensions, output, ColorEncoding::Unspecified).map_err(
-        |error| match error {
-            DecodedImageError::ArithmeticOverflow => ImageInputError::ArithmeticOverflow,
-            DecodedImageError::ByteLengthMismatch { expected, actual } => {
-                ImageInputError::DecodedBufferInvariant { expected, actual }
-            }
-        },
-    )
-}
-
-fn raw_input_error(error: RawDecodeError) -> ImageInputError {
+pub(super) fn raw_input_error(error: RawDecodeError) -> ImageInputError {
     match error {
         RawDecodeError::Source(RawSourceError::TooLarge { actual, limit }) => {
             ImageInputError::SourceTooLarge { limit, actual }

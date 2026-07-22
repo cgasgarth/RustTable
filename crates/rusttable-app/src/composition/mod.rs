@@ -196,15 +196,11 @@ fn activate_application(
     );
     shell.set_import_existing_paths(catalog_controller.borrow().existing_source_paths());
     let mut display_profiles = rusttable_display_profile::DisplayProfileService::new();
-    if display_profiles
+    let profile_receipt = display_profiles
         .reconcile(rusttable_ui::GtkMonitorInventory.discover())
-        .is_ok()
-    {
-        let snapshot = display_profiles.snapshots().next().cloned();
-        shell
-            .display_profile_banner()
-            .set_snapshot(snapshot.as_ref());
-    }
+        .ok();
+    let profile_snapshot = display_profiles.snapshots().next().cloned();
+    shell.set_display_profile_state(profile_snapshot.as_ref(), profile_receipt);
     install_action_input(&shell);
     let ai_bridges = install_ai_ui_bridges(&shell);
     darkroom::install(&shell);
