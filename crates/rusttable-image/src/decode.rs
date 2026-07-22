@@ -1,6 +1,6 @@
 use crate::{
-    ChannelLayout, DecodeLimits, ImageDescriptor, InputFormat, Orientation, OwnedImage,
-    PixelFormat, Roi, SampleType,
+    AlphaMode, ByteOrder, ChannelLayout, DecodeLimits, ImageDescriptor, InputFormat, Orientation,
+    OwnedImage, PixelFormat, Roi, SampleType, StorageLayout,
 };
 
 /// A request independent of any particular decoder implementation.
@@ -122,12 +122,12 @@ impl DecodeReceipt {
 
 /// A decoded owned image and the descriptor facts needed to audit it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecodeResult {
+pub struct DecodedFrame {
     image: OwnedImage,
     receipt: DecodeReceipt,
 }
 
-impl DecodeResult {
+impl DecodedFrame {
     /// Pairs an owned image with matching decode evidence.
     ///
     /// # Errors
@@ -154,6 +154,152 @@ impl DecodeResult {
     pub fn into_image(self) -> OwnedImage {
         self.image
     }
+
+    /// Converts the declared native samples to finite RGBA f32 values.
+    ///
+    /// Integer samples are normalized by their declared code depth. Floating
+    /// samples are copied as-is; this is the explicit bridge immediately
+    /// before the first processing input, not a presentation conversion.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the declared storage is not a supported
+    /// interleaved native frame or contains non-finite floating samples.
+    pub fn rgba_f32_pixels(&self) -> Result<Vec<[f32; 4]>, DecodedFrameError> {
+        let descriptor = self.image.descriptor();
+        let format = descriptor.format();
+        if format.storage() != StorageLayout::Interleaved {
+            return Err(DecodedFrameError::UnsupportedStorage);
+        }
+        if format.byte_order() != ByteOrder::Native {
+            return Err(DecodedFrameError::UnsupportedByteOrder);
+        }
+        if format.channels().is_mosaic() {
+            return Err(DecodedFrameError::UnsupportedChannels);
+        }
+        if !matches!(format.alpha(), AlphaMode::None | AlphaMode::Straight) {
+            return Err(DecodedFrameError::UnsupportedAlpha);
+        }
+        let channels = format.channels().channels();
+        let bytes = self.image.bytes();
+        let sample_bytes = format.bytes_per_sample();
+        let pixel_count = usize::try_from(
+            descriptor
+                .dimensions()
+                .pixel_count()
+                .map_err(|_| DecodedFrameError::ArithmeticOverflow)?,
+        )
+        .map_err(|_| DecodedFrameError::ArithmeticOverflow)?;
+        let mut output = Vec::new();
+        output
+            .try_reserve_exact(pixel_count)
+            .map_err(|_| DecodedFrameError::AllocationFailure)?;
+        for pixel_index in 0..pixel_count {
+            let mut values = [0.0; 4];
+            for channel in 0..channels {
+                let offset = pixel_index
+                    .checked_mul(channels)
+                    .and_then(|value| value.checked_add(channel))
+                    .and_then(|value| value.checked_mul(sample_bytes))
+                    .ok_or(DecodedFrameError::ArithmeticOverflow)?;
+                let target = if channels == 4 && channel == 3 {
+                    3
+                } else {
+                    channel.min(2)
+                };
+                values[target] = read_sample(
+                    format.sample_type(),
+                    bytes
+                        .get(offset..offset + sample_bytes)
+                        .ok_or(DecodedFrameError::BufferInvariant)?,
+                )?;
+                if channels == 2 && channel == 1 {
+                    values[3] = values[1];
+                }
+            }
+            if channels == 1 {
+                values[1] = values[0];
+                values[2] = values[0];
+                values[3] = 1.0;
+            } else if channels == 2 {
+                values[1] = values[0];
+                values[2] = values[0];
+            } else if channels == 3 {
+                values[3] = 1.0;
+            }
+            if !values.iter().all(|value| value.is_finite()) {
+                return Err(DecodedFrameError::NonFinite { pixel_index });
+            }
+            output.push(values);
+        }
+        Ok(output)
+    }
+
+    /// Returns the native scalar representation published by the decoder.
+    #[must_use]
+    pub const fn sample_type(&self) -> SampleType {
+        self.image.descriptor().format().sample_type()
+    }
+}
+
+/// Compatibility name retained for callers of the original decode contract.
+pub type DecodeResult = DecodedFrame;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecodedFrameError {
+    ArithmeticOverflow,
+    AllocationFailure,
+    BufferInvariant,
+    UnsupportedStorage,
+    UnsupportedByteOrder,
+    UnsupportedChannels,
+    UnsupportedAlpha,
+    NonFinite { pixel_index: usize },
+}
+
+fn read_sample(sample_type: SampleType, bytes: &[u8]) -> Result<f32, DecodedFrameError> {
+    match sample_type {
+        SampleType::U8 => Ok(f32::from(bytes[0]) / 255.0),
+        SampleType::U16 => Ok(f32::from(u16::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| DecodedFrameError::BufferInvariant)?,
+        )) / 65_535.0),
+        SampleType::F16 => Ok(half_to_f32(u16::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| DecodedFrameError::BufferInvariant)?,
+        ))),
+        SampleType::F32 => Ok(f32::from_ne_bytes(
+            bytes
+                .try_into()
+                .map_err(|_| DecodedFrameError::BufferInvariant)?,
+        )),
+    }
+}
+
+fn half_to_f32(bits: u16) -> f32 {
+    let sign = u32::from(bits & 0x8000) << 16;
+    let exponent = u32::from((bits >> 10) & 0x1f);
+    let fraction = u32::from(bits & 0x03ff);
+    let value = match exponent {
+        0 => {
+            if fraction == 0 {
+                sign
+            } else {
+                let mut fraction = fraction;
+                let mut exponent = 127 - 14;
+                while fraction & 0x0400 == 0 {
+                    fraction <<= 1;
+                    exponent -= 1;
+                }
+                sign | (exponent << 23) | ((fraction & 0x03ff) << 13)
+            }
+        }
+        0x1f => sign | 0x7f80_0000 | (fraction << 13),
+        _ => sign | ((exponent + 112) << 23) | (fraction << 13),
+    };
+    f32::from_bits(value)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

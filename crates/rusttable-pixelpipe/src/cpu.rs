@@ -3,8 +3,9 @@
 use std::fmt;
 
 use rusttable_processing::{
-    BasicAdjPlanSet, EvaluationError, SourceRgb, SourceRgbImage, SrgbChannel, encode_linear_srgb,
-    evaluate_graph_with_basicadj_plans, prepare_basicadj_plans, to_linear_srgb,
+    BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, SourceRgb, SourceRgbImage, SrgbChannel,
+    WorkingRgbImage, encode_linear_srgb, evaluate_graph_with_basicadj_plans,
+    prepare_basicadj_plans, to_linear_srgb,
 };
 
 use crate::{
@@ -322,8 +323,7 @@ impl CpuPixelpipeExecutor {
             return execute_clahe_image(request, input, node);
         }
 
-        let source = to_processing_source(input)?;
-        let linear_input = to_linear_srgb(&source);
+        let linear_input = to_linear_working(input)?;
         let evaluated =
             evaluate_graph_with_basicadj_plans(request.graph(), &linear_input, Some(plans))
                 .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
@@ -341,8 +341,7 @@ impl CpuPixelpipeExecutor {
         if request.input().descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
             return Ok(BasicAdjPlanSet::default());
         }
-        let source = to_processing_source(request.input())?;
-        let linear = to_linear_srgb(&source);
+        let linear = to_linear_working(request.input())?;
         prepare_basicadj_plans(request.graph(), &linear)
             .map_err(|source| CpuPixelpipeError::Evaluation { source })
     }
@@ -377,8 +376,7 @@ fn execute_censorize_image(
     input: &RgbaF32Image,
     node: &rusttable_processing::OperationGraphNode,
 ) -> Result<RgbaF32Image, CpuPixelpipeError> {
-    let source = to_processing_source(input)?;
-    let linear = to_linear_srgb(&source);
+    let linear = to_linear_working(input)?;
     let config = match node.operation().kind() {
         rusttable_processing::ProcessingOperationKind::Censorize { config } => *config,
         _ => unreachable!("censorize image bridge is only called for censorize"),
@@ -521,8 +519,7 @@ fn execute_clahe_image(
     input: &RgbaF32Image,
     node: &rusttable_processing::OperationGraphNode,
 ) -> Result<RgbaF32Image, CpuPixelpipeError> {
-    let source = to_processing_source(input)?;
-    let linear = to_linear_srgb(&source);
+    let linear = to_linear_working(input)?;
     let config = match node.operation().kind() {
         rusttable_processing::ProcessingOperationKind::Clahe { config } => *config,
         _ => unreachable!("clahe image bridge is only called for clahe"),
@@ -634,7 +631,9 @@ fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError
     let actual = input.descriptor().color_encoding();
     if matches!(
         actual,
-        RgbaF32ColorEncoding::SrgbD65 | RgbaF32ColorEncoding::LabD50
+        RgbaF32ColorEncoding::SrgbD65
+            | RgbaF32ColorEncoding::LinearSrgbD65
+            | RgbaF32ColorEncoding::LabD50
     ) {
         Ok(())
     } else {
@@ -664,7 +663,11 @@ fn tile_input(
         pixels.extend_from_slice(source_row);
     }
     RgbaF32Image::new(
-        RgbaF32Descriptor::new(tile.dimensions(), input.descriptor().color_encoding()),
+        RgbaF32Descriptor::with_source_representation(
+            tile.dimensions(),
+            input.descriptor().color_encoding(),
+            input.descriptor().source_representation(),
+        ),
         pixels,
     )
     .map_err(|source| CpuPixelpipeError::InputBridge { source })
@@ -798,6 +801,33 @@ fn to_processing_source(input: &RgbaF32Image) -> Result<SourceRgbImage, CpuPixel
             },
         }
     })
+}
+
+fn to_linear_working(input: &RgbaF32Image) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+    if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LinearSrgbD65 {
+        let pixels = input
+            .pixels()
+            .iter()
+            .copied()
+            .map(|pixel| {
+                LinearRgb::new(
+                    FiniteF32::new(pixel.red()).expect("validated finite red"),
+                    FiniteF32::new(pixel.green()).expect("validated finite green"),
+                    FiniteF32::new(pixel.blue()).expect("validated finite blue"),
+                )
+            })
+            .collect();
+        return WorkingRgbImage::new(input.descriptor().dimensions(), pixels).map_err(|_| {
+            CpuPixelpipeError::InputBridge {
+                source: RgbaF32ImageError::PixelCountMismatch {
+                    expected: input.descriptor().dimensions().pixel_count(),
+                    actual: input.pixels().len(),
+                },
+            }
+        });
+    }
+    let source = to_processing_source(input)?;
+    Ok(to_linear_srgb(&source))
 }
 
 const fn input_component_error(pixel_index: usize, channel: RgbaF32Channel) -> CpuPixelpipeError {

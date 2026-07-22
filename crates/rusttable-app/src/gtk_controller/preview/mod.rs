@@ -266,7 +266,8 @@ impl GtkPreviewFailureKind {
             WorkspacePreviewError::Preview(error) => match error {
                 CatalogPreviewError::Preview(preview) => match preview {
                     crate::PreviewError::Decode(_) => Self::DecodeUnavailable,
-                    crate::PreviewError::Render(_)
+                    crate::PreviewError::DecodedFrame
+                    | crate::PreviewError::Render(_)
                     | crate::PreviewError::UnsupportedPixelpipeColor { .. }
                     | crate::PreviewError::PixelpipeInput(_)
                     | crate::PreviewError::PixelpipeSnapshot(_)

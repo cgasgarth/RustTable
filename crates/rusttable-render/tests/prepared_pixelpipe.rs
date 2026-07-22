@@ -36,7 +36,7 @@ fn provenance() -> RenderProvenance {
 fn full_render_encodes_the_completed_pixelpipe_result_without_re_evaluation() {
     let prepared = PreparedCpuPixelpipeResult::new(
         pixels(&[(0.25, 0.5, 2.0)], 1, 1),
-        vec![71],
+        vec![71.0 / 255.0],
         SourceColorDecision::DeclaredSrgb,
         provenance(),
     )
@@ -72,7 +72,7 @@ fn preview_sampling_routes_the_completed_pixelpipe_result() {
             4,
             1,
         ),
-        vec![1, 2, 3, 4],
+        vec![1.0 / 255.0, 2.0 / 255.0, 3.0 / 255.0, 4.0 / 255.0],
         SourceColorDecision::AssumedSrgb,
         provenance(),
     )
@@ -100,7 +100,7 @@ fn preview_sampling_routes_the_completed_pixelpipe_result() {
 fn prepared_result_rejects_incomplete_alpha() {
     let error = PreparedCpuPixelpipeResult::new(
         pixels(&[(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)], 2, 1),
-        vec![1],
+        vec![1.0 / 255.0],
         SourceColorDecision::DeclaredSrgb,
         provenance(),
     )

@@ -1,13 +1,19 @@
 use rusttable_image::{
-    DecodeLimits, DecodedImage, DecoderDescriptor, DecoderIdentity, ImageInputError, ImageProbe,
-    InputFormat,
+    DecodeLimits, DecodeReceipt, DecodedFrame, DecodedImage, DecoderDescriptor, DecoderIdentity,
+    ImageInputError, ImageProbe, InputFormat,
 };
 
 use crate::jpeg::JpegDecoder;
-use crate::openexr::{decode_exr_probe, decode_legacy_rgba8 as decode_exr_rgba8, is_exr_signature};
+use crate::openexr::{
+    ExrDecodeRequest, ExrSampleData, decode_exr_probe, decode_legacy_rgba8 as decode_exr_rgba8,
+    is_exr_signature,
+};
 use crate::png::{decode_legacy_rgba8, decode_png_probe, is_png_signature};
 use crate::raw::{decode_raw, is_raw, probe_raw};
-use crate::tiff::{decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature};
+use crate::tiff::{
+    TiffDecodeRequest, TiffPhotometric, TiffSampleData, TiffStorageLayout,
+    decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature,
+};
 
 /// Maximum amount of a source that any format probe may inspect.
 pub const PROBE_BUDGET_BYTES: usize = 64 * 1024;
@@ -32,6 +38,7 @@ struct DecoderEntry {
     full_source_probe: bool,
     probe: fn(&[u8], DecodeLimits) -> Result<ImageProbe, ImageInputError>,
     decode: fn(&[u8], DecodeLimits) -> Result<DecodedImage, ImageInputError>,
+    decode_frame: fn(&[u8], DecodeLimits) -> Result<DecodedFrame, ImageInputError>,
 }
 
 macro_rules! builtin_decoders {
@@ -44,6 +51,7 @@ macro_rules! builtin_decoders {
                 matches: $matches:path,
                 probe: $probe:path,
                 decode: $decode:path,
+                decode_frame: $decode_frame:path,
                 full_source_probe: $full_source_probe:expr
             }
         ),+ $(,)?
@@ -65,6 +73,7 @@ macro_rules! builtin_decoders {
                 full_source_probe: $full_source_probe,
                 probe: $probe,
                 decode: $decode,
+                decode_frame: $decode_frame,
             }),+
         ];
     };
@@ -76,8 +85,9 @@ builtin_decoders! {
         id: "rusttable.decoder.jpeg.v1",
         implementation: "image-jpeg-0.25",
         matches: is_jpeg,
-        probe: probe_jpeg,
-        decode: decode_jpeg,
+                probe: probe_jpeg,
+                decode: decode_jpeg,
+        decode_frame: decode_jpeg_frame,
         full_source_probe: false
     },
     Png {
@@ -86,6 +96,7 @@ builtin_decoders! {
         matches: is_png_signature,
         probe: decode_png_probe,
         decode: decode_png,
+        decode_frame: decode_png_frame,
         full_source_probe: false
     },
     OpenExr {
@@ -94,6 +105,7 @@ builtin_decoders! {
         matches: is_exr_signature,
         probe: decode_exr_probe,
         decode: decode_exr,
+        decode_frame: decode_exr_frame,
         full_source_probe: true
     },
     Raw {
@@ -102,6 +114,7 @@ builtin_decoders! {
         matches: is_raw,
         probe: probe_raw,
         decode: decode_raw,
+        decode_frame: decode_raw_frame,
         full_source_probe: true
     },
     Tiff {
@@ -110,6 +123,7 @@ builtin_decoders! {
         matches: is_tiff_signature,
         probe: decode_tiff_probe,
         decode: decode_tiff,
+        decode_frame: decode_tiff_frame,
         full_source_probe: true
     }
 }
@@ -230,6 +244,33 @@ impl ImageDecoderRegistry {
             })?;
         (entry.decode)(bytes, limits)
     }
+
+    /// Decodes one source without projecting its native sample representation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the selected decoder's typed probe, decode, limit, or contract
+    /// failure.
+    pub fn decode_frame_bytes(
+        &self,
+        bytes: &[u8],
+        limits: DecodeLimits,
+    ) -> Result<DecodedFrame, ImageInputError> {
+        let decoder = match self.probe(bytes, limits) {
+            ProbeOutcome::NoMatch => return Err(unsupported_signature(bytes)),
+            ProbeOutcome::MalformedRecognized { error, .. } => return Err(error),
+            ProbeOutcome::Match { decoder, .. } => decoder,
+        };
+        let entry = self
+            .entries
+            .iter()
+            .find(|entry| entry.descriptor == decoder)
+            .ok_or_else(|| ImageInputError::MalformedInput {
+                format: decoder.format(),
+                message: "selected decoder disappeared from the registry".to_owned(),
+            })?;
+        (entry.decode_frame)(bytes, limits)
+    }
 }
 
 impl Default for ImageDecoderRegistry {
@@ -271,6 +312,11 @@ fn decode_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, Image
     })
 }
 
+fn decode_jpeg_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
+    let image = decode_jpeg(bytes, limits)?.into_owned();
+    frame(bytes, InputFormat::Jpeg, image)
+}
+
 fn decode_png(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
     let (dimensions, pixels) = decode_legacy_rgba8(bytes, limits)?;
     rusttable_image::DecodedImage::new_with_color_encoding(
@@ -286,6 +332,25 @@ fn decode_png(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageI
             ImageInputError::DecodedBufferInvariant { expected, actual }
         }
     })
+}
+
+fn decode_png_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
+    let result = crate::png::PngDecoder::new()
+        .decode_bytes(
+            bytes,
+            &crate::png::PngDecodeRequest::new(crate::png::PngDecodeLimits::from_common(limits)),
+        )
+        .map_err(|error| ImageInputError::MalformedInput {
+            format: InputFormat::Png,
+            message: error.to_string(),
+        })?;
+    let image = result
+        .image
+        .ok_or_else(|| ImageInputError::MalformedInput {
+            format: InputFormat::Png,
+            message: "PNG full decode returned no typed image".to_owned(),
+        })?;
+    frame(bytes, InputFormat::Png, image)
 }
 
 fn decode_exr(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
@@ -305,6 +370,62 @@ fn decode_exr(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageI
     })
 }
 
+fn decode_exr_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
+    let source = bytes;
+    let result = crate::openexr::ExrDecoder::new()
+        .decode_bytes(
+            bytes,
+            &ExrDecodeRequest::new(crate::openexr::ExrDecodeLimits::from_common(limits)),
+        )
+        .map_err(|error| ImageInputError::MalformedInput {
+            format: InputFormat::OpenExr,
+            message: error.to_string(),
+        })?;
+    let pixels = result
+        .pixels
+        .ok_or_else(|| ImageInputError::MalformedInput {
+            format: InputFormat::OpenExr,
+            message: "OpenEXR full decode returned no typed pixels".to_owned(),
+        })?;
+    let format = rusttable_image::PixelFormat::new(
+        match pixels.sample_type {
+            crate::openexr::ExrSampleType::F16 => rusttable_image::SampleType::F16,
+            crate::openexr::ExrSampleType::F32 => rusttable_image::SampleType::F32,
+            crate::openexr::ExrSampleType::U32 => {
+                return Err(ImageInputError::UnsupportedFeature {
+                    format: InputFormat::OpenExr,
+                    reason: rusttable_image::UnsupportedImageFeature::SampleFormat,
+                });
+            }
+        },
+        pixels.layout,
+        if result.receipt.alpha == crate::openexr::ExrAlphaAssociation::Associated {
+            rusttable_image::AlphaMode::Premultiplied
+        } else if pixels.layout.channels() == 4 {
+            rusttable_image::AlphaMode::Straight
+        } else {
+            rusttable_image::AlphaMode::None
+        },
+        rusttable_image::ByteOrder::Native,
+        rusttable_image::StorageLayout::Interleaved,
+    )
+    .map_err(|_| ImageInputError::MalformedInput {
+        format: InputFormat::OpenExr,
+        message: "invalid OpenEXR channel format".to_owned(),
+    })?;
+    let bytes = match pixels.samples {
+        ExrSampleData::F16(values) => values.into_iter().flat_map(u16::to_ne_bytes).collect(),
+        ExrSampleData::F32(values) => values.into_iter().flat_map(f32::to_ne_bytes).collect(),
+    };
+    let image = owned_image(
+        pixels.dimensions,
+        format,
+        rusttable_image::ColorEncoding::LinearSrgb,
+        bytes,
+    )?;
+    frame(source, InputFormat::OpenExr, image)
+}
+
 fn decode_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
     let (dimensions, pixels) = decode_tiff_rgba8(bytes, limits)?;
     DecodedImage::new_with_color_encoding(
@@ -320,4 +441,136 @@ fn decode_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, Image
             ImageInputError::DecodedBufferInvariant { expected, actual }
         }
     })
+}
+
+fn decode_tiff_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
+    let result = crate::tiff::TiffDecoder::new()
+        .decode_bytes(
+            bytes,
+            &TiffDecodeRequest::new(crate::tiff::TiffDecodeLimits::from_common(limits)),
+        )
+        .map_err(|error| ImageInputError::MalformedInput {
+            format: InputFormat::Tiff,
+            message: error.to_string(),
+        })?;
+    let pixels = result
+        .pixels
+        .ok_or_else(|| ImageInputError::MalformedInput {
+            format: InputFormat::Tiff,
+            message: "TIFF full decode returned no typed pixels".to_owned(),
+        })?;
+    let sample_type = match &pixels.samples {
+        TiffSampleData::U8(_) => rusttable_image::SampleType::U8,
+        TiffSampleData::U16(_) => rusttable_image::SampleType::U16,
+        TiffSampleData::F16(_) => rusttable_image::SampleType::F16,
+        TiffSampleData::F32(_) => rusttable_image::SampleType::F32,
+        _ => {
+            return Err(ImageInputError::UnsupportedFeature {
+                format: InputFormat::Tiff,
+                reason: rusttable_image::UnsupportedImageFeature::SampleFormat,
+            });
+        }
+    };
+    let channels = match result.page.photometric {
+        TiffPhotometric::WhiteIsZero | TiffPhotometric::BlackIsZero => {
+            rusttable_image::ChannelLayout::Gray
+        }
+        TiffPhotometric::Rgb => {
+            if result.page.alpha.is_empty() {
+                rusttable_image::ChannelLayout::Rgb
+            } else {
+                rusttable_image::ChannelLayout::Rgba
+            }
+        }
+        _ => {
+            return Err(ImageInputError::UnsupportedFeature {
+                format: InputFormat::Tiff,
+                reason: rusttable_image::UnsupportedImageFeature::ColorModel,
+            });
+        }
+    };
+    let alpha = if channels.channels() == 4 {
+        rusttable_image::AlphaMode::Straight
+    } else {
+        rusttable_image::AlphaMode::None
+    };
+    let format = rusttable_image::PixelFormat::new(
+        sample_type,
+        channels,
+        alpha,
+        rusttable_image::ByteOrder::Native,
+        match pixels.storage {
+            TiffStorageLayout::Chunky => rusttable_image::StorageLayout::Interleaved,
+            TiffStorageLayout::Planar => {
+                return Err(ImageInputError::UnsupportedFeature {
+                    format: InputFormat::Tiff,
+                    reason: rusttable_image::UnsupportedImageFeature::PlanarConfiguration,
+                });
+            }
+        },
+    )
+    .map_err(|_| ImageInputError::MalformedInput {
+        format: InputFormat::Tiff,
+        message: "invalid TIFF channel format".to_owned(),
+    })?;
+    let sample_bytes = tiff_sample_bytes(pixels.samples);
+    let image = owned_image(
+        pixels.dimensions,
+        format,
+        rusttable_image::ColorEncoding::Unspecified,
+        sample_bytes,
+    )?;
+    frame(bytes, InputFormat::Tiff, image)
+}
+
+fn decode_raw_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
+    let image = decode_raw(bytes, limits)?.into_owned();
+    frame(bytes, InputFormat::Raw, image)
+}
+
+fn tiff_sample_bytes(samples: TiffSampleData) -> Vec<u8> {
+    match samples {
+        TiffSampleData::U8(values) => values,
+        TiffSampleData::U16(values) | TiffSampleData::F16(values) => {
+            values.into_iter().flat_map(u16::to_ne_bytes).collect()
+        }
+        TiffSampleData::F32(values) => values.into_iter().flat_map(f32::to_ne_bytes).collect(),
+        TiffSampleData::U32(values) => values.into_iter().flat_map(u32::to_ne_bytes).collect(),
+        TiffSampleData::I8(values) => values.into_iter().map(i8::cast_unsigned).collect(),
+        TiffSampleData::I16(values) => values.into_iter().flat_map(i16::to_ne_bytes).collect(),
+        TiffSampleData::I32(values) => values.into_iter().flat_map(i32::to_ne_bytes).collect(),
+    }
+}
+
+fn owned_image(
+    dimensions: rusttable_image::ImageDimensions,
+    format: rusttable_image::PixelFormat,
+    encoding: rusttable_image::ColorEncoding,
+    bytes: Vec<u8>,
+) -> Result<rusttable_image::OwnedImage, ImageInputError> {
+    let descriptor = rusttable_image::ImageDescriptor::new(
+        dimensions,
+        format,
+        encoding,
+        rusttable_image::Orientation::Normal,
+    )
+    .map_err(|_| ImageInputError::ArithmeticOverflow)?;
+    rusttable_image::OwnedImage::new(descriptor, bytes).map_err(|_| {
+        ImageInputError::DecodedBufferInvariant {
+            expected: 0,
+            actual: 0,
+        }
+    })
+}
+
+fn frame(
+    source: &[u8],
+    format: rusttable_image::InputFormat,
+    image: rusttable_image::OwnedImage,
+) -> Result<DecodedFrame, ImageInputError> {
+    let source_bytes =
+        u64::try_from(source.len()).map_err(|_| ImageInputError::ArithmeticOverflow)?;
+    let receipt = DecodeReceipt::new(format, source_bytes, image.descriptor().clone())
+        .map_err(|reason| ImageInputError::DecodeContract { reason })?;
+    DecodedFrame::new(image, receipt).map_err(|reason| ImageInputError::DecodeContract { reason })
 }

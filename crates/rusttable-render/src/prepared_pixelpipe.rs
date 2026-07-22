@@ -13,10 +13,10 @@ use crate::{
 /// The executor owns operation evaluation. This boundary accepts only its
 /// completed linear-light pixels, alpha channel, and immutable provenance; it
 /// deliberately has no operation registry or operation-name dispatch.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PreparedCpuPixelpipeResult {
     pixels: WorkingRgbImage,
-    alpha: Vec<u8>,
+    alpha: Vec<f32>,
     source_color_decision: SourceColorDecision,
     provenance: RenderProvenance,
 }
@@ -30,7 +30,7 @@ impl PreparedCpuPixelpipeResult {
     /// already-validated working pixel.
     pub fn new(
         pixels: WorkingRgbImage,
-        alpha: Vec<u8>,
+        alpha: Vec<f32>,
         source_color_decision: SourceColorDecision,
         provenance: RenderProvenance,
     ) -> Result<Self, PreparedCpuPixelpipeResultError> {
@@ -55,7 +55,7 @@ impl PreparedCpuPixelpipeResult {
     }
 
     #[must_use]
-    pub fn alpha(&self) -> &[u8] {
+    pub fn alpha(&self) -> &[f32] {
         &self.alpha
     }
 
