@@ -4,6 +4,7 @@
 mod input;
 pub mod jpeg;
 mod output;
+pub mod png;
 mod raster_samples;
 pub mod raw;
 mod registry;
@@ -18,6 +19,12 @@ pub use jpeg::{
     JpegHeader, JpegMetadataSegment, JpegPixelData, JpegSampling, JpegSof,
 };
 pub use output::FileImageOutput;
+pub use png::{
+    PNG_BACKEND_ID, PngAnimation, PngBitDepth, PngChunk, PngChunkInventory, PngColorType,
+    PngDecodeError, PngDecodeLimits, PngDecodeMode, PngDecodeReceipt, PngDecodeRequest,
+    PngDecodeResult, PngDecoder, PngHeader, PngMetadataInventory, PngPhysicalResolution,
+    PngPixelData, PngProfileInventory, PngSampleLayout, PngTextInventory,
+};
 pub use raster_samples::{DecodedRgbSamples, decode_png_rgb_samples};
 pub use raw::{
     RAW_PROBE_BUDGET_BYTES, RAWLER_BACKEND_ID, RawByteSource, RawCameraEvidence, RawCameraIdentity,

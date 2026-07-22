@@ -3,11 +3,12 @@ use std::io::Cursor;
 use image::{ImageFormat, ImageReader};
 use rusttable_image::{
     DecodeLimits, DecodedImage, DecoderDescriptor, DecoderIdentity, ImageDimensions,
-    ImageInputError, ImageProbe, InputFormat, UnsupportedImageFeature,
+    ImageInputError, ImageProbe, InputFormat,
 };
 
-use crate::input::{enforce_limits, malformed, probe_tiff, validate_tiff};
+use crate::input::{enforce_limits, probe_tiff, validate_tiff};
 use crate::jpeg::JpegDecoder;
+use crate::png::{decode_legacy_rgba8, decode_png_probe, is_png_signature};
 use crate::raw::{decode_raw, is_raw, probe_raw};
 
 /// Maximum amount of a source that any format probe may inspect.
@@ -83,9 +84,9 @@ builtin_decoders! {
     },
     Png {
         id: "rusttable.decoder.png.v1",
-        implementation: "image-png-0.25",
-        matches: is_png,
-        probe: probe_png,
+        implementation: "png-0.18.1-pure-rust",
+        matches: is_png_signature,
+        probe: decode_png_probe,
         decode: decode_png,
         full_source_probe: false
     },
@@ -241,117 +242,11 @@ fn is_jpeg(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0xff, 0xd8])
 }
 
-fn is_png(bytes: &[u8]) -> bool {
-    bytes.starts_with(&[0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'])
-}
-
 fn is_tiff(bytes: &[u8]) -> bool {
     bytes.starts_with(&[b'I', b'I', 0x2a, 0x00])
         || bytes.starts_with(&[b'M', b'M', 0x00, 0x2a])
         || bytes.starts_with(&[b'I', b'I', 0x2b, 0x00])
         || bytes.starts_with(&[b'M', b'M', 0x00, 0x2b])
-}
-
-#[derive(Debug, Clone, Copy)]
-struct PngHeader {
-    dimensions: ImageDimensions,
-    color_encoding: rusttable_image::ColorEncoding,
-}
-
-fn probe_png(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
-    let header = inspect_png(bytes)?;
-    enforce_limits(limits, header.dimensions)?;
-    Ok(ImageProbe::new(InputFormat::Png, header.dimensions))
-}
-
-fn inspect_png(bytes: &[u8]) -> Result<PngHeader, ImageInputError> {
-    const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
-    if !bytes.starts_with(SIGNATURE) {
-        return Err(malformed_input(InputFormat::Png, "missing PNG signature"));
-    }
-    let ihdr = bytes
-        .get(8..33)
-        .ok_or_else(|| malformed_input(InputFormat::Png, "truncated PNG IHDR"))?;
-    if u32::from_be_bytes(ihdr[0..4].try_into().expect("fixed IHDR length")) != 13
-        || &ihdr[4..8] != b"IHDR"
-    {
-        return Err(malformed_input(InputFormat::Png, "invalid PNG IHDR"));
-    }
-    let width = u32::from_be_bytes(ihdr[8..12].try_into().expect("fixed IHDR length"));
-    let height = u32::from_be_bytes(ihdr[12..16].try_into().expect("fixed IHDR length"));
-    let dimensions = ImageDimensions::new(width, height)
-        .map_err(|_| malformed_input(InputFormat::Png, "PNG dimensions must be nonzero"))?;
-    let bit_depth = ihdr[16];
-    let color_type = ihdr[17];
-    if !valid_png_bit_depth(color_type, bit_depth) {
-        return Err(ImageInputError::UnsupportedFeature {
-            format: InputFormat::Png,
-            reason: UnsupportedImageFeature::BitDepth,
-        });
-    }
-    if bit_depth != 8 {
-        return Err(ImageInputError::UnsupportedFeature {
-            format: InputFormat::Png,
-            reason: UnsupportedImageFeature::BitDepth,
-        });
-    }
-    if ihdr[18] != 0 || ihdr[19] != 0 || ihdr[20] > 1 {
-        return Err(malformed_input(
-            InputFormat::Png,
-            "unsupported PNG compression, filter, or interlace method",
-        ));
-    }
-
-    let mut offset = 33_usize;
-    let mut color_encoding = rusttable_image::ColorEncoding::Unspecified;
-    while let Some(chunk_header) = bytes.get(offset..offset.saturating_add(8)) {
-        let length = usize::try_from(u32::from_be_bytes(
-            chunk_header[0..4]
-                .try_into()
-                .expect("fixed chunk header length"),
-        ))
-        .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-        let chunk_type = &chunk_header[4..8];
-        let end = offset
-            .checked_add(12)
-            .and_then(|end| end.checked_add(length))
-            .ok_or(ImageInputError::ArithmeticOverflow)?;
-        if end > bytes.len() {
-            break;
-        }
-        if chunk_type == b"acTL" {
-            return Err(ImageInputError::UnsupportedFeature {
-                format: InputFormat::Png,
-                reason: UnsupportedImageFeature::Animation,
-            });
-        }
-        if chunk_type == b"sRGB" {
-            if length != 1 {
-                return Err(malformed_input(InputFormat::Png, "invalid PNG sRGB chunk"));
-            }
-            color_encoding = rusttable_image::ColorEncoding::Srgb;
-        }
-        if chunk_type == b"IDAT" {
-            break;
-        }
-        if chunk_type == b"IEND" {
-            return Err(malformed_input(InputFormat::Png, "PNG ended before IDAT"));
-        }
-        offset = end;
-    }
-    Ok(PngHeader {
-        dimensions,
-        color_encoding,
-    })
-}
-
-fn valid_png_bit_depth(color_type: u8, bit_depth: u8) -> bool {
-    match color_type {
-        0 => matches!(bit_depth, 1 | 2 | 4 | 8 | 16),
-        2 | 4 | 6 => matches!(bit_depth, 8 | 16),
-        3 => matches!(bit_depth, 1 | 2 | 4 | 8),
-        _ => false,
-    }
 }
 
 fn probe_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInputError> {
@@ -382,16 +277,20 @@ fn decode_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, Image
 }
 
 fn decode_png(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
-    let header = inspect_png(bytes)?;
-    enforce_limits(limits, header.dimensions)?;
-    let probe = ImageProbe::new(InputFormat::Png, header.dimensions);
-    decode_image_with_encoding(
-        bytes,
-        probe,
-        limits,
-        ImageFormat::Png,
-        header.color_encoding,
+    let (dimensions, pixels) = decode_legacy_rgba8(bytes, limits)?;
+    rusttable_image::DecodedImage::new_with_color_encoding(
+        dimensions,
+        pixels,
+        rusttable_image::ColorEncoding::Unspecified,
     )
+    .map_err(|error| match error {
+        rusttable_image::DecodedImageError::ArithmeticOverflow => {
+            ImageInputError::ArithmeticOverflow
+        }
+        rusttable_image::DecodedImageError::ByteLengthMismatch { expected, actual } => {
+            ImageInputError::DecodedBufferInvariant { expected, actual }
+        }
+    })
 }
 
 fn decode_classic_tiff(
@@ -409,25 +308,12 @@ fn decode_image(
     limits: DecodeLimits,
     format: ImageFormat,
 ) -> Result<DecodedImage, ImageInputError> {
-    decode_image_with_encoding(
-        bytes,
-        probe,
-        limits,
-        format,
-        rusttable_image::ColorEncoding::Unspecified,
-    )
-}
-
-fn decode_image_with_encoding(
-    bytes: &[u8],
-    probe: ImageProbe,
-    limits: DecodeLimits,
-    format: ImageFormat,
-    color_encoding: rusttable_image::ColorEncoding,
-) -> Result<DecodedImage, ImageInputError> {
     let decoded = ImageReader::with_format(Cursor::new(bytes), format)
         .decode()
-        .map_err(|error| malformed(probe.format(), &error))?
+        .map_err(|error| ImageInputError::MalformedInput {
+            format: probe.format(),
+            message: error.to_string(),
+        })?
         .to_rgba8();
     let dimensions = ImageDimensions::new(decoded.width(), decoded.height())
         .map_err(|_| ImageInputError::ArithmeticOverflow)?;
@@ -438,21 +324,17 @@ fn decode_image_with_encoding(
             message: "decoded dimensions differ from the container probe".to_owned(),
         });
     }
-    DecodedImage::new_with_color_encoding(dimensions, decoded.into_raw(), color_encoding).map_err(
-        |error| match error {
-            rusttable_image::DecodedImageError::ArithmeticOverflow => {
-                ImageInputError::ArithmeticOverflow
-            }
-            rusttable_image::DecodedImageError::ByteLengthMismatch { expected, actual } => {
-                ImageInputError::DecodedBufferInvariant { expected, actual }
-            }
-        },
+    DecodedImage::new_with_color_encoding(
+        dimensions,
+        decoded.into_raw(),
+        rusttable_image::ColorEncoding::Unspecified,
     )
-}
-
-fn malformed_input(format: InputFormat, message: &str) -> ImageInputError {
-    ImageInputError::MalformedInput {
-        format,
-        message: message.to_owned(),
-    }
+    .map_err(|error| match error {
+        rusttable_image::DecodedImageError::ArithmeticOverflow => {
+            ImageInputError::ArithmeticOverflow
+        }
+        rusttable_image::DecodedImageError::ByteLengthMismatch { expected, actual } => {
+            ImageInputError::DecodedBufferInvariant { expected, actual }
+        }
+    })
 }

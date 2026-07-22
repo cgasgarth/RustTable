@@ -430,13 +430,6 @@ pub(crate) fn enforce_limits(
     Ok(())
 }
 
-pub(crate) fn malformed(format: InputFormat, error: &image::ImageError) -> ImageInputError {
-    ImageInputError::MalformedInput {
-        format,
-        message: error.to_string(),
-    }
-}
-
 fn io_error(error: &std::io::Error) -> ImageInputError {
     if error.kind() == std::io::ErrorKind::OutOfMemory {
         ImageInputError::AllocationFailure
