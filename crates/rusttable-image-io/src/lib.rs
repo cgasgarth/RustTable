@@ -4,7 +4,7 @@
 mod input;
 mod output;
 mod raster_samples;
-mod raw;
+pub mod raw;
 mod registry;
 mod svg;
 
@@ -13,6 +13,18 @@ pub mod dng_output;
 pub use input::FileImageInput;
 pub use output::FileImageOutput;
 pub use raster_samples::{DecodedRgbSamples, decode_png_rgb_samples};
+pub use raw::{
+    RAW_PROBE_BUDGET_BYTES, RAWLER_BACKEND_ID, RawByteSource, RawCameraEvidence, RawCameraIdentity,
+    RawCancellationToken, RawCapabilityDescriptor, RawCapabilityError, RawCapabilityKey,
+    RawCapabilityKind, RawCapabilityManifest, RawCapabilityResolveError, RawCfa, RawChannel,
+    RawColorMatrix, RawCompression, RawCompressionEvidence, RawContainerKind, RawContainerProbe,
+    RawContainerRegistry, RawDecodeError, RawDecodeLimits, RawDecodeLimitsError, RawDecodeReceipt,
+    RawDecodeRequest, RawDecodeResult, RawDimensions, RawFrame, RawFrameParts,
+    RawFrameValidationError, RawHeader, RawIlluminant, RawLevelPattern, RawOpcodeDescriptor,
+    RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout, RawPreviewDescriptor,
+    RawPreviewFormat, RawPreviewKind, RawProbeEvidence, RawProbeOutcome, RawRect, RawSourceError,
+    RawSourceReceipt, RawlerRawDecoder, SliceRawSource, rawler_capability_manifest,
+};
 pub use registry::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 pub use rusttable_image::{DecoderDescriptor, DecoderIdentity};
 pub use svg::{ManagedSvgAsset, SVG_SCHEMA_VERSION, SvgError, SvgLimits, SvgRaster};

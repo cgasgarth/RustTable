@@ -39,7 +39,7 @@ impl RawImportFixture {
 
     #[must_use]
     pub const fn expected_decoder_implementation(&self) -> &'static str {
-        "rawloader-0.37.1+rawler-0.7.2-raf"
+        "rawler-0.7.2"
     }
 }
 

@@ -90,7 +90,7 @@ builtin_decoders! {
     },
     Raw {
         id: "rusttable.decoder.raw.v1",
-        implementation: "rawloader-0.37.1+rawler-0.7.2-raf",
+        implementation: "rawler-0.7.2",
         matches: is_raw,
         probe: probe_raw,
         decode: decode_raw,
