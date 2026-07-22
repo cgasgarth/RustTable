@@ -7,6 +7,8 @@
 use rusttable_core::PhotoId;
 use rusttable_image::ImageDimensions;
 
+use crate::CatalogPreviewError;
+use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{GtkCatalogController, GtkCatalogState};
 use crate::workspace::preview_loader::WorkspacePreviewError;
 use crate::workspace::{SelectedPreview, load_selected_preview};
@@ -24,11 +26,28 @@ impl GtkPreviewController {
     /// Loads the selected photo through the persisted-edit CPU preview path.
     #[must_use]
     pub fn render_selected(&self, catalog: &GtkCatalogController) -> GtkPreviewState {
+        Self::render_selected_with_diagnostics(catalog, &AppDiagnostics::default())
+    }
+
+    pub(crate) fn render_selected_with_diagnostics(
+        catalog: &GtkCatalogController,
+        diagnostics: &AppDiagnostics,
+    ) -> GtkPreviewState {
         let Some(photo_id) = catalog.selected_photo() else {
             return GtkPreviewState::failed(None, GtkPreviewFailureKind::NoSelection);
         };
 
         let GtkCatalogState::Ready(ready) = catalog.state() else {
+            diagnostics.preview_failure(
+                "render_selected",
+                "catalog_lookup",
+                "catalog_unavailable",
+                Some(photo_id),
+                None,
+                None,
+                None,
+                None,
+            );
             return GtkPreviewState::failed(
                 Some(photo_id),
                 GtkPreviewFailureKind::CatalogUnavailable,
@@ -41,18 +60,43 @@ impl GtkPreviewController {
             photo_id,
         );
         match result {
-            Ok(preview) => Self::from_loaded_preview(preview),
-            Err(error) => GtkPreviewState::failed(
-                Some(photo_id),
-                GtkPreviewFailureKind::from_workspace_error(&error),
-            ),
+            Ok(preview) => Self::from_loaded_preview(preview, diagnostics),
+            Err(error) => {
+                let kind = GtkPreviewFailureKind::from_workspace_error(&error);
+                diagnostics.preview_failure(
+                    "render_selected",
+                    kind.stage(),
+                    kind.cause(),
+                    Some(photo_id),
+                    None,
+                    None,
+                    None,
+                    None,
+                );
+                GtkPreviewState::failed(Some(photo_id), kind)
+            }
         }
     }
 
-    fn from_loaded_preview(preview: SelectedPreview) -> GtkPreviewState {
+    fn from_loaded_preview(
+        preview: SelectedPreview,
+        diagnostics: &AppDiagnostics,
+    ) -> GtkPreviewState {
         let (photo_id, dimensions, pixels) = preview.into_parts();
         GtkPreview::new(photo_id, dimensions, pixels).map_or_else(
-            |kind| GtkPreviewState::failed(Some(photo_id), kind),
+            |kind| {
+                diagnostics.preview_failure(
+                    "render_selected",
+                    "texture",
+                    kind.cause(),
+                    Some(photo_id),
+                    None,
+                    None,
+                    None,
+                    Some(dimensions),
+                );
+                GtkPreviewState::failed(Some(photo_id), kind)
+            },
             GtkPreviewState::Ready,
         )
     }
@@ -176,6 +220,7 @@ pub enum GtkPreviewFailureKind {
     NoSelection,
     CatalogUnavailable,
     MissingPersistedEdit,
+    DecodeUnavailable,
     RenderUnavailable,
     InvalidRgba8,
 }
@@ -187,8 +232,30 @@ impl GtkPreviewFailureKind {
             Self::NoSelection => "Select a photo to preview it.",
             Self::CatalogUnavailable => "The library is unavailable.",
             Self::MissingPersistedEdit => "The selected photo has no persisted edit.",
+            Self::DecodeUnavailable => "The selected photo could not be decoded.",
             Self::RenderUnavailable => "The selected preview could not be rendered.",
             Self::InvalidRgba8 => "The selected preview returned invalid image data.",
+        }
+    }
+
+    pub(crate) const fn stage(self) -> &'static str {
+        match self {
+            Self::NoSelection | Self::CatalogUnavailable => "catalog_lookup",
+            Self::MissingPersistedEdit => "edit_resolution",
+            Self::DecodeUnavailable => "decode",
+            Self::RenderUnavailable => "processing",
+            Self::InvalidRgba8 => "texture",
+        }
+    }
+
+    pub(crate) const fn cause(self) -> &'static str {
+        match self {
+            Self::NoSelection => "no_selection",
+            Self::CatalogUnavailable => "catalog_unavailable",
+            Self::MissingPersistedEdit => "missing_persisted_edit",
+            Self::DecodeUnavailable => "decode_unavailable",
+            Self::RenderUnavailable => "render_unavailable",
+            Self::InvalidRgba8 => "invalid_rgba8",
         }
     }
 
@@ -196,7 +263,26 @@ impl GtkPreviewFailureKind {
         match error {
             WorkspacePreviewError::Catalog(_) => Self::CatalogUnavailable,
             WorkspacePreviewError::MissingEdit { .. } => Self::MissingPersistedEdit,
-            WorkspacePreviewError::Preview(_) => Self::RenderUnavailable,
+            WorkspacePreviewError::Preview(error) => match error {
+                CatalogPreviewError::Preview(preview) => match preview {
+                    crate::PreviewError::Decode(_) => Self::DecodeUnavailable,
+                    crate::PreviewError::Render(_)
+                    | crate::PreviewError::UnsupportedPixelpipeColor { .. }
+                    | crate::PreviewError::PixelpipeInput(_)
+                    | crate::PreviewError::PixelpipeSnapshot(_)
+                    | crate::PreviewError::Graph(_)
+                    | crate::PreviewError::Pixelpipe(_)
+                    | crate::PreviewError::Prepared(_) => Self::RenderUnavailable,
+                },
+                CatalogPreviewError::ImportRepository(_)
+                | CatalogPreviewError::EditRepository(_)
+                | CatalogPreviewError::UnknownPhoto { .. }
+                | CatalogPreviewError::UnknownEdit { .. }
+                | CatalogPreviewError::EditPhotoMismatch { .. }
+                | CatalogPreviewError::Snapshot(_)
+                | CatalogPreviewError::SnapshotRead(_)
+                | CatalogPreviewError::SourceLimits => Self::CatalogUnavailable,
+            },
         }
     }
 }
@@ -208,12 +294,15 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use rusttable_core::PhotoId;
+    use rusttable_image::ImageInputError;
     use rusttable_import::RasterImportCancellation;
 
     use super::{
         GtkPreview, GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState, GtkPreviewStatus,
     };
+    use crate::workspace::preview_loader::WorkspacePreviewError;
     use crate::workspace::{load_selected_preview, run_raster_import};
+    use crate::{CatalogPreviewError, PreviewError};
 
     static TEST_DIRECTORY_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -240,6 +329,27 @@ mod tests {
 
     fn photo_id(value: u128) -> PhotoId {
         PhotoId::new(value).expect("test photo ID is non-zero")
+    }
+
+    #[test]
+    fn workspace_preview_errors_keep_decode_and_processing_stages_distinct() {
+        let decode = WorkspacePreviewError::Preview(CatalogPreviewError::Preview(
+            PreviewError::Decode(ImageInputError::ArithmeticOverflow),
+        ));
+        assert_eq!(
+            GtkPreviewFailureKind::from_workspace_error(&decode),
+            GtkPreviewFailureKind::DecodeUnavailable
+        );
+
+        let processing = WorkspacePreviewError::Preview(CatalogPreviewError::Preview(
+            PreviewError::UnsupportedPixelpipeColor {
+                actual: rusttable_image::ColorEncoding::DisplayP3D65,
+            },
+        ));
+        assert_eq!(
+            GtkPreviewFailureKind::from_workspace_error(&processing),
+            GtkPreviewFailureKind::RenderUnavailable
+        );
     }
 
     fn decode_base64(value: &str) -> Vec<u8> {
@@ -294,7 +404,10 @@ mod tests {
         let selected = batch.first_selected_photo().expect("fixture import photo");
         let loaded = load_selected_preview(&catalog, &directory.0, selected)
             .expect("production CPU preview");
-        let state = GtkPreviewController::from_loaded_preview(loaded);
+        let state = GtkPreviewController::from_loaded_preview(
+            loaded,
+            &crate::diagnostics::AppDiagnostics::default(),
+        );
 
         let GtkPreviewState::Ready(preview) = state else {
             panic!("fixture preview should be ready");

@@ -14,6 +14,7 @@ pub use services::catalog_preview::{
     CatalogPreviewError, CatalogPreviewRequest, CatalogPreviewService,
 };
 
+use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{CollectionController, GtkCatalogController};
 use crate::gtk_export::{
     ExportCancellation, ExportCollisionSelection, ExportCompletion, ExportRequest, ExportRunError,
@@ -80,14 +81,11 @@ pub fn run() -> Result<(), DesktopRunError> {
     let preflight = crate::platform::startup_preflight();
     run_with_bootstrap(
         rusttable_diagnostics::install,
-        || {
-            if let Err(error) = crate::configuration::load() {
-                rusttable_diagnostics::emit(
-                    &rusttable_diagnostics::DiagnosticEvent::application_failure(
-                        rusttable_diagnostics::ApplicationFailureCode::ConfigurationRejected,
-                    ),
-                );
-                eprintln!("RustTable configuration rejected; using compiled defaults: {error}");
+        |guard| {
+            let diagnostics = AppDiagnostics::from_guard(guard);
+            if crate::configuration::load().is_err() {
+                diagnostics.lifecycle_failure("configuration_rejected", "configuration_load");
+                tracing::warn!(target: "rusttable.app", operation = "configuration_load", cause = "configuration_rejected", "configuration rejected; using compiled defaults");
             }
             if !preflight.is_supported() {
                 return Ok(());
@@ -104,6 +102,7 @@ pub fn run() -> Result<(), DesktopRunError> {
                 Rc::clone(&active_catalog),
                 Rc::clone(&active_collection),
                 Rc::clone(&native_bridge),
+                diagnostics,
             );
             let exit_code = application.run();
             if exit_code == gtk4::glib::ExitCode::SUCCESS {
@@ -114,7 +113,7 @@ pub fn run() -> Result<(), DesktopRunError> {
                 })
             }
         },
-        |warning| eprintln!("{warning}"),
+        |warning| tracing::warn!(target: "rusttable.lifecycle", message = warning),
     )
 }
 
@@ -131,6 +130,7 @@ fn connect_application_signals(
     active_catalog: Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: Rc<RefCell<Option<CollectionController>>>,
     native_bridge: Rc<RefCell<MacApplicationBridge>>,
+    diagnostics: AppDiagnostics,
 ) {
     application.connect_startup({
         let native_bridge = Rc::clone(&native_bridge);
@@ -142,12 +142,19 @@ fn connect_application_signals(
         let active_catalog = Rc::clone(&active_catalog);
         let active_collection = Rc::clone(&active_collection);
         let native_bridge = Rc::clone(&native_bridge);
+        let diagnostics = diagnostics.clone();
         move |_, files, _hint| {
             let delivery = native_bridge
                 .borrow_mut()
                 .receive_optional_paths(files.iter().map(FileExt::path));
             if let Some(request) = delivery.request().cloned() {
-                dispatch_open_request(&request, &active_shell, &active_catalog, &active_collection);
+                dispatch_open_request(
+                    &request,
+                    &active_shell,
+                    &active_catalog,
+                    &active_collection,
+                    &diagnostics,
+                );
             }
         }
     });
@@ -162,6 +169,7 @@ fn connect_application_signals(
             &active_catalog,
             &active_collection,
             &native_bridge,
+            &diagnostics,
         );
     });
 }
@@ -173,6 +181,7 @@ fn activate_application(
     active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
     native_bridge: &Rc<RefCell<MacApplicationBridge>>,
+    diagnostics: &AppDiagnostics,
 ) {
     if let Some(shell) = active_shell.borrow().as_ref() {
         shell.present();
@@ -245,6 +254,7 @@ fn activate_application(
     let import_active_shell = Rc::clone(active_shell);
     let import_active_catalog = Rc::clone(active_catalog);
     let import_active_collection = Rc::clone(active_collection);
+    let import_diagnostics = diagnostics.clone();
     shell.connect_import_action(move |action| {
         if let ImportAction::Import(request) = action {
             import_bridge::dispatch_import_request(
@@ -254,6 +264,7 @@ fn activate_application(
                 &import_active_catalog,
                 &import_active_collection,
                 &request,
+                &import_diagnostics,
             );
         }
     });
@@ -265,9 +276,10 @@ fn activate_application(
     let selection_controller = Rc::clone(&catalog_controller);
     let selection_collection = Rc::clone(active_collection);
     let preview_lifecycle = Rc::new(RefCell::new(PreviewLifecycle::default()));
-    let darkroom_bridge = darkroom::install_edit(&shell, &catalog_controller, &preview_lifecycle);
+    let darkroom_bridge =
+        darkroom::install_edit(&shell, &catalog_controller, &preview_lifecycle, diagnostics);
     let darkroom_panel_bridge =
-        darkroom::install_panels(&shell, &catalog_controller, &preview_lifecycle);
+        darkroom::install_panels(&shell, &catalog_controller, &preview_lifecycle, diagnostics);
     let history_refresh_bridge = darkroom_panel_bridge.clone();
     let history_refresh_shell = shell.clone();
     let history_refresh_catalog = Rc::clone(&catalog_controller);
@@ -280,6 +292,7 @@ fn activate_application(
     let darkroom_selection_shell = shell.clone();
     let darkroom_selection_handler = darkroom_bridge.handler.clone();
     let darkroom_selection_panel_bridge = darkroom_panel_bridge;
+    let selection_diagnostics = diagnostics.clone();
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
         let (catalog_changed, collection_changed) = apply_selection_projection(
             &selection_controller,
@@ -338,6 +351,7 @@ fn activate_application(
             &darkroom_selection_shell,
             catalog,
             Rc::clone(&preview_lifecycle),
+            selection_diagnostics.clone(),
         );
         darkroom_selection_panel_bridge
             .select(&darkroom_selection_shell, &selection_controller.borrow());
@@ -345,7 +359,13 @@ fn activate_application(
     shell.present();
     active_shell.replace(Some(shell));
     if let Some(request) = native_bridge.borrow_mut().mark_ready() {
-        dispatch_open_request(&request, active_shell, active_catalog, active_collection);
+        dispatch_open_request(
+            &request,
+            active_shell,
+            active_catalog,
+            active_collection,
+            diagnostics,
+        );
     }
 }
 
@@ -487,6 +507,7 @@ fn dispatch_open_request(
     active_shell: &Rc<RefCell<Option<rusttable_ui::GtkShell>>>,
     active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
+    diagnostics: &AppDiagnostics,
 ) {
     let Some(catalog) = active_catalog.borrow().as_ref().cloned() else {
         return;
@@ -517,12 +538,14 @@ fn dispatch_open_request(
     let recent_paths = image_paths.clone();
     let (sender, receiver) = mpsc::channel::<RasterImportBatch>();
     let worker_catalog_path = catalog_path.clone();
+    let worker_diagnostics = diagnostics.clone();
     thread::spawn(move || {
-        let batch = crate::workspace::run_raster_import(
+        let batch = crate::workspace::run_raster_import_with_diagnostics(
             &worker_catalog_path,
             image_paths,
             &rusttable_import::RasterImportCancellation::default(),
             &|_| {},
+            worker_diagnostics,
         );
         let _ = sender.send(batch);
     });

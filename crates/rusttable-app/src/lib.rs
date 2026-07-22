@@ -3,6 +3,7 @@
 
 mod composition;
 mod configuration;
+pub(crate) mod diagnostics;
 mod extensions;
 pub mod gtk_controller;
 pub mod library;

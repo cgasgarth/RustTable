@@ -17,6 +17,7 @@ rusttable-input.workspace = true
 rusttable-processing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
 
 [[test]]
 name = "exposure_gtk_boundary"

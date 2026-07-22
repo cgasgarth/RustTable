@@ -41,6 +41,10 @@ impl PreviewSelectionToken {
     pub(crate) const fn generation(self) -> u64 {
         self.generation
     }
+
+    pub(crate) const fn photo_id(self) -> PhotoId {
+        self.photo_id
+    }
 }
 
 #[cfg(test)]

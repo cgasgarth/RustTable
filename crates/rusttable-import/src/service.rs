@@ -69,7 +69,15 @@ impl SourceImportService {
         image_input: &dyn ImageInput,
         metadata_input: &dyn MetadataInput,
     ) -> Result<ImportOutcome, SourceImportError> {
+        let _span = tracing::info_span!(
+            target: "rusttable.import",
+            "inspect_and_register",
+            photo_id = request.photo_id().get(),
+            operation = "source_import"
+        )
+        .entered();
         if expected_revision != state.revision() {
+            tracing::warn!(target: "rusttable.import", stage = "revision", cause = "stale_revision");
             return Err(SourceImportError::StaleRevision {
                 expected: expected_revision,
                 actual: state.revision(),
@@ -77,16 +85,26 @@ impl SourceImportService {
         }
         let snapshot = snapshot_reader
             .read_snapshot(request.physical_path(), limits)
-            .map_err(SourceImportError::Snapshot)?;
+            .map_err(|error| {
+                tracing::warn!(target: "rusttable.import", stage = "snapshot", cause = "read_failed");
+                SourceImportError::Snapshot(error)
+            })?;
         let bytes = snapshot
             .materialize(limits)
-            .map_err(SourceImportError::SnapshotRead)?;
-        let probe = image_input
-            .probe_bytes(&bytes)
-            .map_err(SourceImportError::Image)?;
+            .map_err(|error| {
+                tracing::warn!(target: "rusttable.import", stage = "snapshot_read", cause = "materialize_failed");
+                SourceImportError::SnapshotRead(error)
+            })?;
+        let probe = image_input.probe_bytes(&bytes).map_err(|error| {
+            tracing::warn!(target: "rusttable.import", stage = "decode", cause = "probe_failed");
+            SourceImportError::Image(error)
+        })?;
         let metadata = metadata_input
             .read_bytes(probe.format(), &bytes)
-            .map_err(SourceImportError::Metadata)?;
+            .map_err(|error| {
+                tracing::warn!(target: "rusttable.import", stage = "metadata", cause = "read_failed");
+                SourceImportError::Metadata(error)
+            })?;
         let mut hasher = Sha256::new();
         hasher.update(&bytes);
         let hash: [u8; 32] = hasher.finalize().into();
@@ -99,8 +117,14 @@ impl SourceImportService {
             probe,
             metadata,
         )
-        .map_err(SourceImportError::Candidate)?;
+        .map_err(|error| {
+            tracing::warn!(target: "rusttable.import", stage = "candidate", cause = "validation_failed");
+            SourceImportError::Candidate(error)
+        })?;
         ImportService::register(state, expected_revision, &candidate, repository)
-            .map_err(SourceImportError::Import)
+            .map_err(|error| {
+                tracing::warn!(target: "rusttable.import", stage = "register", cause = "catalog_failed");
+                SourceImportError::Import(error)
+            })
     }
 }

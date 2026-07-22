@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::diagnostics::AppDiagnostics;
 use rusttable_ui::{ImportRequest, is_raw_path};
 
 use super::{
@@ -16,6 +17,7 @@ pub(super) fn dispatch_import_request(
     active_catalog: &Rc<RefCell<Option<Rc<RefCell<GtkCatalogController>>>>>,
     active_collection: &Rc<RefCell<Option<CollectionController>>>,
     request: &ImportRequest,
+    diagnostics: &AppDiagnostics,
 ) {
     let existing = active_catalog
         .borrow()
@@ -37,6 +39,7 @@ pub(super) fn dispatch_import_request(
             active_shell,
             active_catalog,
             active_collection,
+            diagnostics,
         );
     }
 }

@@ -49,7 +49,7 @@ fn run(
     let calls = RefCell::new(0);
     let result = run_with_bootstrap(
         installer,
-        || {
+        |_| {
             *calls.borrow_mut() += 1;
             app
         },
@@ -77,7 +77,7 @@ fn startup_and_shutdown_surround_successful_application() {
         failure: None,
     };
     let result: ApplicationRunResult<TestRunError> =
-        run_with_bootstrap(|| Ok(guard), || Ok(()), |_| {});
+        run_with_bootstrap(|| Ok(guard), |_| Ok(()), |_| {});
     assert!(result.is_ok());
     assert_eq!(
         events.borrow().as_slice(),
@@ -95,7 +95,7 @@ fn application_failure_is_returned_without_replacement() {
                 failure: None,
             })
         },
-        || Err(TestRunError::Backend),
+        |_| Err(TestRunError::Backend),
         |_| {},
     );
     assert_eq!(result, Err(TestRunError::Backend));
@@ -119,7 +119,7 @@ fn startup_record_failure_does_not_skip_application() {
                 failure: Some(DiagnosticEvent::startup()),
             })
         },
-        || {
+        |_| {
             *calls.borrow_mut() += 1;
             Ok(())
         },
@@ -140,7 +140,7 @@ fn final_record_failure_does_not_replace_application_result() {
                 failure: Some(DiagnosticEvent::shutdown()),
             })
         },
-        || Ok(()),
+        |_| Ok(()),
         |message| warnings.borrow_mut().push(message.to_owned()),
     );
     assert!(result.is_ok());

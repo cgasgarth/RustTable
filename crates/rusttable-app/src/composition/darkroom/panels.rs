@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::composition::selected_preview::PreviewLifecycle;
+use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{
     DarkroomPanelProjections, GtkCatalogController, GtkDarkroomPanelController,
 };
@@ -20,6 +21,7 @@ pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
+    diagnostics: &AppDiagnostics,
 ) -> DarkroomPanelBridge {
     let controller = Rc::new(RefCell::new(GtkDarkroomPanelController::new(
         catalog
@@ -32,6 +34,7 @@ pub(crate) fn install(
     let action_shell = shell.clone();
     let action_catalog = Rc::clone(catalog);
     let action_lifecycle = Rc::clone(lifecycle);
+    let diagnostics = diagnostics.clone();
     let handler_slot_for_action = Rc::clone(&handler_slot);
     let handler: DarkroomPanelActionHandler = Rc::new(move |action| {
         let refresh_preview = refreshes_preview(&action);
@@ -43,6 +46,7 @@ pub(crate) fn install(
                         &action_shell,
                         action_catalog.borrow().clone(),
                         Rc::clone(&action_lifecycle),
+                        diagnostics.clone(),
                     );
                     if let Some(target) = action_shell.darkroom_panel_target() {
                         let rebound = action_controller.borrow_mut().rebind_target(target);

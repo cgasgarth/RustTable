@@ -33,9 +33,21 @@ impl PreviewService {
     ///
     /// Returns a typed decode or CPU-render failure.
     pub fn render_bytes(&self, source: &[u8], edit: &Edit) -> Result<RenderOutput, PreviewError> {
+        let _span = tracing::info_span!(
+            target: "rusttable.preview",
+            "render_bytes",
+            operation = "preview_render",
+            source_bytes = source.len(),
+            width = tracing::field::Empty,
+            height = tracing::field::Empty
+        )
+        .entered();
         let input = FileImageInput::new(self.limits)
             .decode_bytes(source)
-            .map_err(PreviewError::Decode)?;
+            .map_err(|error| {
+                tracing::error!(target: "rusttable.preview", stage = "decode", cause = "decode_failed");
+                PreviewError::Decode(error)
+            })?;
         self.render_preview_decoded(&input, edit)
     }
 
@@ -72,7 +84,10 @@ impl PreviewService {
     ) -> Result<RenderOutput, PreviewError> {
         let input = FileImageInput::new(self.limits)
             .decode_bytes(source)
-            .map_err(PreviewError::Decode)?;
+            .map_err(|error| {
+                tracing::error!(target: "rusttable.preview", stage = "decode", cause = "decode_failed");
+                PreviewError::Decode(error)
+            })?;
         render_with_target(&input, edit, target)
     }
 
@@ -114,7 +129,9 @@ fn render_decoded_with_target(
     edit: &Edit,
     target: RenderTarget,
 ) -> Result<RenderOutput, PreviewError> {
-    let source_color_decision = source_color_decision(input.color_encoding())?;
+    let source_color_decision = source_color_decision(input.color_encoding()).inspect_err(|_| {
+        tracing::error!(target: "rusttable.preview", stage = "processing", cause = "unsupported_color");
+    })?;
     let dimensions = RasterDimensions::new(input.dimensions().width(), input.dimensions().height())
         .expect("decoded images have nonzero dimensions");
     let (source_pixels, remainder) = input.pixels().as_chunks::<4>();
@@ -133,18 +150,28 @@ fn render_decoded_with_target(
             })
             .collect(),
     )
-    .map_err(PreviewError::PixelpipeInput)?;
-    let graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
+    .map_err(|error| {
+        tracing::error!(target: "rusttable.preview", stage = "processing", cause = "input_adaptation");
+        PreviewError::PixelpipeInput(error)
+    })?;
+    let graph = CompiledOperationGraph::compile(edit).map_err(|error| {
+        tracing::error!(target: "rusttable.preview", stage = "processing", cause = "graph_compile");
+        PreviewError::Graph(error)
+    })?;
     let snapshot = CpuPixelpipeSnapshot::try_new(
         pixelpipe_input,
         graph,
         // The prepared-render boundary owns deterministic target encoding.
         CpuPixelpipeOutputMode::FullExport,
     )
-    .map_err(PreviewError::PixelpipeSnapshot)?;
-    let result = CpuPixelpipeExecutor
-        .execute(&snapshot)
-        .map_err(PreviewError::Pixelpipe)?;
+    .map_err(|error| {
+        tracing::error!(target: "rusttable.preview", stage = "processing", cause = "snapshot");
+        PreviewError::PixelpipeSnapshot(error)
+    })?;
+    let result = CpuPixelpipeExecutor.execute(&snapshot).map_err(|error| {
+        tracing::error!(target: "rusttable.preview", stage = "processing", cause = "pixelpipe");
+        PreviewError::Pixelpipe(error)
+    })?;
     let pixels = result
         .image()
         .pixels()
@@ -171,8 +198,14 @@ fn render_decoded_with_target(
             edit.revision(),
         ),
     )
-    .map_err(PreviewError::Prepared)?;
-    render_prepared_cpu_pixelpipe(&prepared, target).map_err(PreviewError::Render)
+    .map_err(|error| {
+        tracing::error!(target: "rusttable.preview", stage = "processing", cause = "prepare");
+        PreviewError::Prepared(error)
+    })?;
+    render_prepared_cpu_pixelpipe(&prepared, target).map_err(|error| {
+        tracing::error!(target: "rusttable.preview", stage = "render", cause = "target_adaptation");
+        PreviewError::Render(error)
+    })
 }
 
 fn source_color_decision(encoding: ColorEncoding) -> Result<SourceColorDecision, PreviewError> {
