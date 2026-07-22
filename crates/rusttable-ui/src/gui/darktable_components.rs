@@ -218,7 +218,10 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
         .vexpand(true)
         .build();
     scroll.set_widget_name(id);
-    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
+    // A processing module may have a wider natural control row than the live
+    // Paned allocation. Let the scroller absorb that width instead of forcing
+    // the entire rail child to remain wider and render clipped after a drag.
+    scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
     let allocated_content = width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE);
     scroll.set_min_content_width(allocated_content);

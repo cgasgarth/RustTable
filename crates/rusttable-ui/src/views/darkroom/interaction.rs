@@ -120,7 +120,8 @@ impl HistogramView {
     pub(super) fn failure(&self, generation: ViewportGeneration, error: HistogramError) {
         self.data.replace(None);
         self.selected_sample.replace(None);
-        self.failure.set_text(&format_histogram_error(error));
+        self.failure
+            .set_tooltip_text(Some(&format_histogram_error(error)));
         self.state
             .replace(HistogramSurfaceState::Failed { generation, error });
         self.stack.set_visible_child_name("failure");
@@ -130,10 +131,10 @@ impl HistogramView {
     pub(super) fn stale(&self, expected: ViewportGeneration, received: ViewportGeneration) {
         self.data.replace(None);
         self.selected_sample.replace(None);
-        self.stale.set_text(&format!(
+        self.stale.set_tooltip_text(Some(&format!(
             "preview changed; ignored histogram generation {}",
             received.get()
-        ));
+        )));
         self.state
             .replace(HistogramSurfaceState::Stale { expected, received });
         self.stack.set_visible_child_name("stale");
@@ -299,7 +300,7 @@ fn format_histogram_error(error: HistogramError) -> String {
 }
 
 fn histogram_status(id: &str, text: &str) -> gtk4::Label {
-    let label = gtk4::Label::new(Some(text));
+    let label = gtk4::Label::new(None);
     label.set_widget_name(id);
     label.set_halign(gtk4::Align::Center);
     label.set_valign(gtk4::Align::Center);
@@ -307,6 +308,8 @@ fn histogram_status(id: &str, text: &str) -> gtk4::Label {
     label.set_vexpand(true);
     label.add_css_class("dim-label");
     label.set_accessible_role(gtk4::AccessibleRole::Status);
+    label.set_tooltip_text(Some(text));
+    label.update_property(&[Property::Label(text)]);
     label
 }
 

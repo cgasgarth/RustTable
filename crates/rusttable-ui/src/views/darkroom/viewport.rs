@@ -130,19 +130,16 @@ pub(super) fn darkroom_page(
     );
     let before_after = chrome_toggle(
         DARKROOM_VIEWPORT_WIDGET_IDS[5],
-        "before/after",
+        "",
         "Compare before and after",
     );
-    let soft_proof = chrome_toggle(
-        DARKROOM_VIEWPORT_WIDGET_IDS[1],
-        "soft proof",
-        "Toggle soft proof",
-    );
-    let gamut_check = chrome_toggle(
-        DARKROOM_VIEWPORT_WIDGET_IDS[2],
-        "gamut check",
-        "Toggle gamut warning",
-    );
+    before_after.set_child(Some(&gtk4::Image::from_icon_name("view-dual-symbolic")));
+    let soft_proof = chrome_toggle(DARKROOM_VIEWPORT_WIDGET_IDS[1], "", "Toggle soft proof");
+    soft_proof.set_child(Some(&gtk4::Image::from_icon_name(
+        "applications-graphics-symbolic",
+    )));
+    let gamut_check = chrome_toggle(DARKROOM_VIEWPORT_WIDGET_IDS[2], "", "Toggle gamut warning");
+    gamut_check.set_child(Some(&gtk4::Image::from_icon_name("color-select-symbolic")));
     let controls = ViewportControls {
         zoom: zoom.clone(),
         fit: fit.clone(),
@@ -161,35 +158,36 @@ pub(super) fn darkroom_page(
     let top = toolbar("darkroom-toolbar-top", "Darkroom viewport controls");
     let left_panel = layout_toggle(
         "darkroom-left-panel-toggle",
-        "left panel",
+        "view-sidebar-start-symbolic",
         "Show or hide the left darkroom panel",
         left_panel_visible.get(),
     );
     let right_panel = layout_toggle(
         "darkroom-right-panel-toggle",
-        "right panel",
+        "view-sidebar-end-symbolic",
         "Show or hide the right darkroom panel",
         right_panel_visible.get(),
     );
     let filmstrip = layout_toggle(
         "darkroom-filmstrip-toggle",
-        "filmstrip",
+        "view-list-symbolic",
         "Show or hide the bottom filmstrip",
         filmstrip_visible.get(),
     );
-    top.append(&left_panel);
-    top.append(&right_panel);
-    top.append(&filmstrip);
-    top.append(&soft_proof);
-    top.append(&gamut_check);
     let bottom = toolbar("darkroom-toolbar-bottom", "Darkroom viewport controls");
-    // Darktable exposes one compact viewport chrome surface here. Keep the
-    // legacy bottom-toolbar widget ID for shell/test discovery, but do not
-    // reserve a second row that squeezes the image viewport.
-    top.append(&zoom);
-    top.append(&fit);
-    top.append(&before_after);
-    bottom.set_visible(false);
+    top.set_visible(false);
+    for control in [
+        &left_panel,
+        &right_panel,
+        &filmstrip,
+        &soft_proof,
+        &gamut_check,
+    ] {
+        bottom.append(control);
+    }
+    bottom.append(&zoom);
+    bottom.append(&fit);
+    bottom.append(&before_after);
 
     let viewport = gtk4::Overlay::new();
     viewport.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[0]);
@@ -202,13 +200,13 @@ pub(super) fn darkroom_page(
     viewport.add_overlay(&projection);
     viewport.add_overlay(&overlay);
     let boundary = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    boundary.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[7]);
+    boundary.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[12]);
     boundary.update_property(&[Property::Label("Filmstrip boundary")]);
 
     page.append(&top);
     page.append(&viewport);
-    page.append(&bottom);
     let status_surface = DarkroomStatusSurface::new();
+    status_surface.set_controls(&bottom);
     page.append(status_surface.widget());
     page.append(&boundary);
     connect_viewport_controls(&controls, state, handler, preview);
@@ -236,8 +234,14 @@ pub(super) fn darkroom_page(
     (page, controls, status_surface)
 }
 
-fn layout_toggle(id: &str, label: &str, accessible_name: &str, active: bool) -> gtk4::ToggleButton {
-    let button = shared_toggle_button(id, label);
+fn layout_toggle(
+    id: &str,
+    icon_name: &str,
+    accessible_name: &str,
+    active: bool,
+) -> gtk4::ToggleButton {
+    let button = shared_toggle_button(id, "");
+    button.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
     button.set_active(active);
     button.add_css_class("dt_button");
     button.set_focus_on_click(false);
