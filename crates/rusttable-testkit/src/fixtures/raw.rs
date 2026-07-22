@@ -104,12 +104,16 @@ pub fn deterministic_compressed_raf() -> RawImportFixture {
     put_entry(&mut bytes, 468, 0xf003, 3, 1, 14 << 16);
     put_entry(&mut bytes, 480, 0xf007, 4, 1, 600);
     put_entry(&mut bytes, 492, 0xf008, 4, 1, 65_568);
-    put_entry(&mut bytes, 504, 0xf00e, 3, 4, 320);
+    put_entry(&mut bytes, 504, 0xf00e, 3, 4, 372);
     put_u32(&mut bytes, 516, 0);
     put_u16(&mut bytes, 720, 1_024);
     put_u16(&mut bytes, 722, 1_024);
     put_u16(&mut bytes, 724, 1_024);
     put_u16(&mut bytes, 726, 1_024);
+    put_u16(&mut bytes, 772, 1_000);
+    put_u16(&mut bytes, 774, 2_116);
+    put_u16(&mut bytes, 776, 1_715);
+    put_u16(&mut bytes, 778, 1_000);
 
     bytes[1_000..1_002].copy_from_slice(b"IS");
     bytes[1_002..1_005].copy_from_slice(&[1, 16, 14]);
@@ -122,6 +126,25 @@ pub fn deterministic_compressed_raf() -> RawImportFixture {
     put_u32(&mut bytes, 1_016, 65_536);
     bytes[1_032..66_568].fill(0xff);
 
+    // Keep the decoded sensor channels in the inverse of the declared as-shot
+    // WB so the presentation reference is neutral after WB + calibration.
+    let cfa = [
+        *b"RBGBRG", *b"GGRGGB", *b"GGBGGR", *b"BRGRBG", *b"GGBGGR", *b"GGRGGB",
+    ];
+    let channel_level = |channel| match channel {
+        b'R' => 2_840,
+        b'G' => 7_100,
+        b'B' => 3_750,
+        _ => unreachable!("synthetic CFA uses RGB only"),
+    };
+    for (row, cfa_row) in cfa.iter().enumerate() {
+        for column in 0..768 {
+            let channel = cfa_row[column % 6];
+            let offset = 1_000 + (row * 768 + column) * 2;
+            put_u16_le(&mut bytes, offset, 1_024 + channel_level(channel));
+        }
+    }
+
     RawImportFixture { bytes }
 }
 
@@ -131,6 +154,10 @@ fn put_u16(bytes: &mut [u8], offset: usize, value: u16) {
 
 fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+}
+
+fn put_u16_le(bytes: &mut [u8], offset: usize, value: u16) {
+    bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
 }
 
 fn put_entry(bytes: &mut [u8], offset: usize, tag: u16, ty: u16, count: u32, value: u32) {
