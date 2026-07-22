@@ -35,6 +35,7 @@
 
 ### Visual comparison workflow
 - For GTK visual parity reviews, the orchestrator uses computer use only to capture screenshots of the installed RustTable and original Darktable apps; Gemini visual-analysis workers do not use computer use.
+- Gemini visual review workers receive paired local full-screen screenshots as image inputs, never computer-use access, and must return concrete implemented-behavior findings mapped to RustTable components.
 - Capture matched screenshots locally and pass them to Gemini as image inputs. Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state for each comparison pair.
 - Capture the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize. Ask Gemini to report concrete geometry/style/render differences and map them to RustTable components.
 - Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.

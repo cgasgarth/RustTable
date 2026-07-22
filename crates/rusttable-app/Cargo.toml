@@ -37,5 +37,10 @@ tracing.workspace = true
 [dev-dependencies]
 rusttable-testkit.workspace = true
 
+[[test]]
+name = "darkroom_shell_runtime_smoke"
+path = "tests/darkroom_shell_runtime_smoke.rs"
+harness = false
+
 [lints]
 workspace = true

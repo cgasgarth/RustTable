@@ -15,6 +15,9 @@ pub(crate) const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_ro
 pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
 pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
 const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
+// The title slot must retain enough width for the shortest readable label
+// after the arrow, action slot, and rail padding are allocated.
+const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 80;
 
 pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
@@ -50,20 +53,25 @@ pub(crate) fn module_expander(
 pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
     let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     title_row.set_widget_name(&format!("{id}-title"));
-    title_row.set_width_request(0);
     title_row.set_hexpand(true);
+    title_row.set_halign(gtk4::Align::Fill);
     title_row.set_valign(gtk4::Align::Center);
     title_row.set_visible(true);
     title_row.add_css_class("dt_darkroom_section_title");
 
     let title_label = gtk4::Label::new(Some(title));
     title_label.set_widget_name(&format!("{id}-label"));
-    title_label.set_width_request(0);
     title_label.set_halign(gtk4::Align::Start);
+    title_label.set_valign(gtk4::Align::Center);
+    title_label.set_width_request(MODULE_TITLE_LABEL_MIN_WIDTH);
     title_label.set_hexpand(true);
     title_label.set_visible(true);
     title_label.set_width_chars(1);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    let escaped_title = gtk4::glib::markup_escape_text(title);
+    title_label.set_markup(&format!(
+        "<span foreground=\"#b9b9b9\">{escaped_title}</span>"
+    ));
     title_label.add_css_class("dt_darkroom_section_label");
     title_row.append(&title_label);
     let action_button =

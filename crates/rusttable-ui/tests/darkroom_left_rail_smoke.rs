@@ -111,10 +111,17 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
             .expect("section title label")
             .downcast::<gtk4::Label>()
             .expect("section title widget is a label");
-        assert_eq!(title_label.text().as_str(), expected_title, "section {id}");
+        assert_eq!(
+            title_label.text().as_str(),
+            expected_title.as_str(),
+            "section {id}"
+        );
         assert!(title_label.is_visible(), "section label is hidden {id}");
         assert!(
-            title_label.allocated_width() > 0 && title_label.allocated_height() > 0,
+            title_row.allocated_width() > 0
+                && title_row.allocated_height() > 0
+                && title_label.allocated_width() > 0
+                && title_label.allocated_height() > 0,
             "section label has no rendered allocation {id}: {}x{}",
             title_label.allocated_width(),
             title_label.allocated_height()
