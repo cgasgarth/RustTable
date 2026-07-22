@@ -11,12 +11,15 @@ use std::time::Duration;
 
 use gtk4::glib::{self, ControlFlow};
 use rusttable_display_profile::DisplayProfileSnapshot;
+use rusttable_image::{CancellationToken, ColorEncoding, DecodedImage};
+use rusttable_render::{MipmapLevel, ThumbnailGenerator, ThumbnailRequest, ThumbnailSize};
 use rusttable_ui::{
     DisplayPresentationFrame, DisplayPresentationRequest, GtkShell, HistogramData, HistogramError,
-    PresentationGeneration, PresentationMode, PresentationTicket, PreviewDimensions,
-    ViewportGeneration,
+    PresentationGeneration, PresentationMode, PresentationText, PresentationTicket,
+    PreviewDimensions, Rgba8PreviewMetadata, ViewportGeneration,
 };
 
+use crate::composition::thumbnails::ThumbnailLifecycle;
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_preview_controller::{GtkPreviewController, GtkPreviewFailureKind, GtkPreviewState};
 
@@ -27,6 +30,7 @@ struct PreviewResult {
     token: PreviewSelectionToken,
     state: GtkPreviewState,
     histogram: Option<Result<HistogramData, HistogramError>>,
+    thumbnail: Option<Rgba8PreviewMetadata>,
 }
 
 #[expect(
@@ -37,6 +41,7 @@ pub(crate) fn start_selected_preview(
     shell: &GtkShell,
     catalog: crate::gtk_controller::GtkCatalogController,
     lifecycle: Rc<RefCell<PreviewLifecycle>>,
+    thumbnail_lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
     diagnostics: AppDiagnostics,
     display_profile: Option<&DisplayProfileSnapshot>,
 ) {
@@ -94,6 +99,7 @@ pub(crate) fn start_selected_preview(
     let token = lifecycle
         .borrow_mut()
         .begin(photo_id, edit.id(), edit.revision());
+    thumbnail_lifecycle.borrow_mut().invalidate(photo_id);
     let generation = ViewportGeneration::new(token.generation());
     shell.begin_darkroom_selection(photo_id, generation);
     shell.set_darkroom_preview_loading(generation);
@@ -112,10 +118,12 @@ pub(crate) fn start_selected_preview(
                 display_profile_for_worker.as_ref(),
             );
             let histogram = histogram_for_preview(&state);
+            let thumbnail = thumbnail_for_preview(&state);
             let _ = sender.send(PreviewResult {
                 token,
                 state,
                 histogram,
+                thumbnail,
             });
         });
     if worker.is_err() {
@@ -147,6 +155,7 @@ pub(crate) fn start_selected_preview(
                         result.token,
                         result.state,
                         result.histogram,
+                        result.thumbnail,
                         &diagnostics,
                     );
                 });
@@ -220,6 +229,28 @@ fn histogram_for_preview(state: &GtkPreviewState) -> Option<Result<HistogramData
     Some(dimensions.and_then(|dimensions| HistogramData::from_rgba8(dimensions, rendered.pixels())))
 }
 
+fn thumbnail_for_preview(state: &GtkPreviewState) -> Option<Rgba8PreviewMetadata> {
+    let rendered = state.ready()?;
+    let source = DecodedImage::new_with_color_encoding(
+        rendered.dimensions(),
+        rendered.pixels().to_vec(),
+        ColorEncoding::Srgb,
+    )
+    .ok()?;
+    let size = ThumbnailSize::fit(180, 120).ok()?;
+    let request = ThumbnailRequest::new(MipmapLevel::zero(), size);
+    let thumbnail =
+        ThumbnailGenerator::generate(&source, request, 2 * 1024 * 1024, &CancellationToken::new())
+            .ok()?;
+    let dimensions = PreviewDimensions::new(
+        thumbnail.dimensions().width(),
+        thumbnail.dimensions().height(),
+    )
+    .ok()?;
+    let status = PresentationText::new("edited preview ready").ok()?;
+    Rgba8PreviewMetadata::new(dimensions, status, thumbnail.pixels().to_vec()).ok()
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "selected preview publication keeps validation, diagnostics, and GTK projection together"
@@ -229,6 +260,7 @@ fn install_preview_state(
     token: PreviewSelectionToken,
     state: GtkPreviewState,
     histogram: Option<Result<HistogramData, HistogramError>>,
+    thumbnail: Option<Rgba8PreviewMetadata>,
     diagnostics: &AppDiagnostics,
 ) {
     let generation = ViewportGeneration::new(token.generation());
@@ -345,6 +377,42 @@ fn install_preview_state(
             generation,
             GtkPreviewFailureKind::InvalidRgba8.message(),
         );
+        return;
+    }
+    if let Some(thumbnail) = thumbnail {
+        if shell
+            .set_darkroom_preview_thumbnail_for_edit(
+                generation,
+                &thumbnail,
+                render_receipt.edit_id(),
+                render_receipt.edit_revision(),
+            )
+            .is_err()
+        {
+            diagnostics.preview_failure(
+                "install_preview_state",
+                "thumbnail",
+                "gtk_texture_adaptation",
+                Some(rendered.photo_id()),
+                Some(render_receipt.edit_id()),
+                Some(generation.get()),
+                None,
+                Some(rendered.dimensions()),
+            );
+            shell.set_photo_thumbnail_unavailable(rendered.photo_id());
+        }
+    } else {
+        diagnostics.preview_failure(
+            "install_preview_state",
+            "thumbnail",
+            "thumbnail_generation_unavailable",
+            Some(rendered.photo_id()),
+            Some(render_receipt.edit_id()),
+            Some(generation.get()),
+            None,
+            Some(rendered.dimensions()),
+        );
+        shell.set_photo_thumbnail_unavailable(rendered.photo_id());
     }
 }
 

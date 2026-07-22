@@ -44,16 +44,24 @@ impl GtkShell {
 
     /// Clears the old texture while the selected preview and its histogram are computed off-loop.
     pub fn set_darkroom_preview_loading(&self, generation: ViewportGeneration) {
+        let selected_photo = self.darkroom.viewport_state().photo_id();
         self.replace_selected_preview_projection(generation, SelectedPreviewState::Loading);
         self.darkroom_preview.set_loading();
         self.darkroom.set_status("loading preview");
+        if let Some(photo_id) = selected_photo {
+            self.set_photo_thumbnail_loading(photo_id);
+        }
     }
 
     /// Restores the truthful empty darkroom surface when no catalog photo is selected.
     pub fn clear_darkroom_selection(&self, message: &str) {
+        let selected_photo = self.darkroom.viewport_state().photo_id();
         self.darkroom.clear_viewport_selection();
         self.darkroom_preview.set_failure(message);
         self.darkroom.set_status(message);
+        if let Some(photo_id) = selected_photo {
+            self.set_photo_thumbnail_unavailable(photo_id);
+        }
     }
 
     /// Installs a validated worker result and its already-computed histogram on the GTK surface.
@@ -138,6 +146,49 @@ impl GtkShell {
             "publishing selected preview edit identity"
         );
         self.set_darkroom_preview_result(generation, metadata, histogram)
+    }
+
+    /// Publishes the thumbnail generated from the same completed presented preview as darkroom.
+    ///
+    /// The viewport generation and edit identity are checked before touching either shared
+    /// thumbnail surface, so a late result cannot restore pixels from an older edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture adaptation error when the bounded thumbnail cannot be installed.
+    pub fn set_darkroom_preview_thumbnail_for_edit(
+        &self,
+        generation: ViewportGeneration,
+        metadata: &Rgba8PreviewMetadata,
+        edit_id: EditId,
+        edit_revision: Revision,
+    ) -> Result<(), crate::gtk_shell::PhotoPreviewTextureError> {
+        if !self.accepts_darkroom_preview_generation(generation) {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                edit_id = %edit_id,
+                edit_revision = %edit_revision,
+                "ignored stale selected-preview thumbnail"
+            );
+            return Ok(());
+        }
+        let viewport = self.darkroom.viewport_state();
+        if viewport.edit_revision() != Some(edit_revision) {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                edit_id = %edit_id,
+                edit_revision = %edit_revision,
+                viewport_revision = ?viewport.edit_revision(),
+                "ignored selected-preview thumbnail for another edit"
+            );
+            return Ok(());
+        }
+        let Some(photo_id) = viewport.photo_id() else {
+            return Ok(());
+        };
+        self.set_photo_thumbnail_for_edit(photo_id, metadata, edit_id, edit_revision)
     }
 
     /// Installs a generation-checked, typed color-presentation frame and its histogram.
@@ -257,6 +308,9 @@ impl GtkShell {
             .darkroom
             .set_histogram_result(generation, Err(HistogramError::PreviewUnavailable));
         self.darkroom.set_status(message);
+        if let Some(photo_id) = self.darkroom.viewport_state().photo_id() {
+            self.set_photo_thumbnail_unavailable(photo_id);
+        }
     }
 
     fn accepts_darkroom_preview_generation(&self, generation: ViewportGeneration) -> bool {

@@ -16,7 +16,7 @@ use rusttable_core::{EditId, PhotoId, Revision};
 use rusttable_ui::GtkShell;
 
 #[derive(Debug, Default)]
-pub(super) struct ThumbnailLifecycle {
+pub(crate) struct ThumbnailLifecycle {
     generation: u64,
     requested: BTreeMap<PhotoId, (ThumbnailTarget, u64)>,
     published: BTreeMap<PhotoId, ThumbnailTarget>,
@@ -72,8 +72,12 @@ impl ThumbnailLifecycle {
             && self.published.get(&target.photo_id) != Some(&target)
     }
 
-    fn invalidate(&mut self, photo_id: PhotoId) {
-        self.requested.remove(&photo_id);
+    pub(crate) fn invalidate(&mut self, photo_id: PhotoId) {
+        // A preview generation may already have a worker in flight. Clear all pending
+        // requests so that its results cannot be accepted after the selected photo begins a
+        // new edit/selection generation; unchanged published tiles remain valid and are reused.
+        self.generation = self.generation.wrapping_add(1);
+        self.requested.clear();
         self.published.remove(&photo_id);
     }
 
@@ -116,7 +120,19 @@ pub(super) fn start_workspace_thumbnails(
     };
     let catalog_path = ready.location().catalog_path().to_path_buf();
     let source_root = ready.location().source_root().to_path_buf();
-    let candidate_photo_ids = shell.lighttable_thumbnail_photo_ids();
+    let selected_darkroom_photo = shell
+        .darkroom_panel_target()
+        .map(rusttable_ui::DarkroomPanelTarget::photo_id);
+    if let Some(photo_id) = selected_darkroom_photo {
+        // The selected darkroom thumbnail is authored by the completed presented preview. Do
+        // not let an independent source/cache worker race it or restore stale pixels on failure.
+        lifecycle.borrow_mut().invalidate(photo_id);
+    }
+    let candidate_photo_ids = shell
+        .lighttable_thumbnail_photo_ids()
+        .into_iter()
+        .filter(|photo_id| Some(*photo_id) != selected_darkroom_photo)
+        .collect::<Vec<_>>();
     let targets = candidate_photo_ids
         .iter()
         .filter_map(|photo_id| {
@@ -279,6 +295,22 @@ mod tests {
 
         assert!(!lifecycle.is_current(first));
         assert!(lifecycle.is_current(second));
+    }
+
+    #[test]
+    fn invalidating_a_selected_photo_rejects_inflight_results() {
+        let photo_id = id(4);
+        let target = target(photo_id, 1);
+        let mut lifecycle = ThumbnailLifecycle::default();
+        let generation = lifecycle.begin();
+        lifecycle.request(&[target], generation);
+
+        lifecycle.invalidate(photo_id);
+        lifecycle.publish(target, generation);
+
+        assert!(!lifecycle.is_current(generation));
+        assert!(lifecycle.needs_request(target));
+        assert!(!lifecycle.published.contains_key(&photo_id));
     }
 
     #[test]

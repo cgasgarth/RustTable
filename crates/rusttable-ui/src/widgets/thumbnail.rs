@@ -199,6 +199,11 @@ impl ThumbnailPair {
         self.filmstrip.set_loading();
     }
 
+    pub(crate) fn set_unavailable(&self) {
+        self.lighttable.set_unavailable();
+        self.filmstrip.set_unavailable();
+    }
+
     #[must_use]
     pub(crate) fn state(&self) -> ThumbnailState {
         self.lighttable.state()

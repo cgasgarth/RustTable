@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::composition::selected_preview::PreviewLifecycle;
+use crate::composition::thumbnails::ThumbnailLifecycle;
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
 use rusttable_display_profile::DisplayProfileSnapshot;
@@ -21,11 +22,13 @@ pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
+    thumbnail_lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
     display_profile: &Rc<RefCell<Option<DisplayProfileSnapshot>>>,
     diagnostics: &AppDiagnostics,
 ) -> DarkroomEditBridge {
     let catalog = Rc::clone(catalog);
     let lifecycle = Rc::clone(lifecycle);
+    let thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     let display_profile = Rc::clone(display_profile);
     let diagnostics = diagnostics.clone();
     let controller = Rc::new(RefCell::new(GtkDarkroomEditController::new(
@@ -65,6 +68,7 @@ pub(crate) fn install(
                     &action_shell,
                     action_catalog.borrow().clone(),
                     Rc::clone(&action_lifecycle),
+                    &thumbnail_lifecycle,
                     diagnostics.clone(),
                     action_display_profile.borrow().as_ref(),
                 );

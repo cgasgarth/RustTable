@@ -776,6 +776,16 @@ impl GtkShell {
         }
     }
 
+    /// Removes thumbnail pixels when the edited preview cannot be produced.
+    pub fn set_photo_thumbnail_unavailable(&self, photo_id: PhotoId) {
+        self.thumbnail_edit_identities
+            .borrow_mut()
+            .remove(&photo_id);
+        if let Some(tile) = self.photo_tiles.borrow().get(&photo_id) {
+            tile.thumbnails.set_unavailable();
+        }
+    }
+
     /// Updates the darkroom image detail and its controller-owned module panels.
     ///
     /// This surface deliberately accepts only `rusttable-ui` presentation

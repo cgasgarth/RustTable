@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::composition::selected_preview::PreviewLifecycle;
+use crate::composition::thumbnails::ThumbnailLifecycle;
 use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{
     DarkroomPanelProjections, GtkCatalogController, GtkDarkroomPanelController,
@@ -22,6 +23,7 @@ pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
+    thumbnail_lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
     display_profile: &Rc<RefCell<Option<DisplayProfileSnapshot>>>,
     diagnostics: &AppDiagnostics,
 ) -> DarkroomPanelBridge {
@@ -36,6 +38,7 @@ pub(crate) fn install(
     let action_shell = shell.clone();
     let action_catalog = Rc::clone(catalog);
     let action_lifecycle = Rc::clone(lifecycle);
+    let action_thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     let action_display_profile = Rc::clone(display_profile);
     let diagnostics = diagnostics.clone();
     let handler_slot_for_action = Rc::clone(&handler_slot);
@@ -49,6 +52,7 @@ pub(crate) fn install(
                         &action_shell,
                         action_catalog.borrow().clone(),
                         Rc::clone(&action_lifecycle),
+                        &action_thumbnail_lifecycle,
                         diagnostics.clone(),
                         action_display_profile.borrow().as_ref(),
                     );

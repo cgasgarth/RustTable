@@ -326,7 +326,7 @@ fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
             EditId::new(9).expect("edit id"),
             Revision::from_u64(1),
         )
-        .expect("publish thumbnail");
+        .expect("publish source thumbnail");
 
     let edited = Rgba8PreviewMetadata::new(
         dimensions,
@@ -364,18 +364,9 @@ fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
         shell.darkroom.viewport_state().edit_revision(),
         Some(Revision::from_u64(2))
     );
-    assert!(!shell.photo_thumbnail_has_edit_identity(
-        photo_id,
-        EditId::new(9).expect("edit id"),
-        Revision::from_u64(2),
-    ));
-
-    // The application invalidates the old pair before requesting the new exact-edit thumbnail.
-    shell.set_photo_thumbnail_loading(photo_id);
-    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
     shell
-        .set_photo_thumbnail_for_edit(
-            photo_id,
+        .set_darkroom_preview_thumbnail_for_edit(
+            generation,
             &edited,
             EditId::new(9).expect("edit id"),
             Revision::from_u64(2),
@@ -386,6 +377,113 @@ fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
         EditId::new(9).expect("edit id"),
         Revision::from_u64(2),
     ));
+}
+
+#[gtk4::test]
+fn preview_failure_removes_selected_thumbnail_pixels() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.preview-failure-filmstrip-fallback"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let photo_id = id(6);
+    let generation = ViewportGeneration::new(4);
+    shell.set_photo_workspace(&workspace(photo_id));
+    shell.begin_darkroom_selection(photo_id, generation);
+    shell.set_darkroom_preview_loading(generation);
+
+    let dimensions = PreviewDimensions::new(1, 1).expect("test dimensions");
+    let stale = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("stale thumbnail").expect("test status"),
+        vec![1, 2, 3, 255],
+    )
+    .expect("test thumbnail");
+    shell
+        .set_photo_thumbnail_for_edit(
+            photo_id,
+            &stale,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(4),
+        )
+        .expect("publish thumbnail race");
+    assert_thumbnail_pair_is_ready(&shell, photo_id);
+
+    shell.set_darkroom_preview_failure(generation, "preview unavailable");
+
+    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
+    let pair = shell
+        .photo_tiles
+        .borrow()
+        .get(&photo_id)
+        .cloned()
+        .expect("photo tile");
+    assert!(!pair.thumbnails.state().is_ready());
+    assert!(!pair.thumbnails.filmstrip().state().is_ready());
+}
+
+#[gtk4::test]
+fn stale_selected_preview_thumbnail_cannot_restore_a_new_generation() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.stale-preview-filmstrip-generation"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let photo_id = id(7);
+    let first_generation = ViewportGeneration::new(5);
+    let second_generation = ViewportGeneration::new(6);
+    shell.set_photo_workspace(&workspace(photo_id));
+    shell.begin_darkroom_selection(photo_id, first_generation);
+    shell.set_darkroom_preview_loading(first_generation);
+
+    let dimensions = PreviewDimensions::new(1, 1).expect("test dimensions");
+    let preview = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("first preview").expect("test status"),
+        vec![10, 20, 30, 255],
+    )
+    .expect("test preview");
+    let histogram = HistogramData::from_rgba8(dimensions, preview.pixels()).expect("histogram");
+    shell
+        .set_darkroom_preview_result_for_edit(
+            first_generation,
+            &preview,
+            Ok(histogram),
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(5),
+        )
+        .expect("publish first preview");
+    shell
+        .set_darkroom_preview_thumbnail_for_edit(
+            first_generation,
+            &preview,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(5),
+        )
+        .expect("publish first thumbnail");
+
+    shell.begin_darkroom_selection(photo_id, second_generation);
+    shell.set_darkroom_preview_loading(second_generation);
+    shell
+        .set_darkroom_preview_thumbnail_for_edit(
+            first_generation,
+            &preview,
+            EditId::new(9).expect("edit id"),
+            Revision::from_u64(5),
+        )
+        .expect("stale thumbnail is ignored");
+
+    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
+    assert!(
+        !shell
+            .photo_tiles
+            .borrow()
+            .get(&photo_id)
+            .expect("photo tile")
+            .thumbnails
+            .state()
+            .is_ready()
+    );
 }
 
 // Darktable's `src/views/darkroom.c` and `src/libs/histogram.c` treat the completed preview pipe
