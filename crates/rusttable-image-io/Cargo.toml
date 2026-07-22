@@ -21,6 +21,8 @@ rusttable-image.workspace = true
 rusttable-metadata.workspace = true
 sha2.workspace = true
 tiff.workspace = true
+serde.workspace = true
+toml.workspace = true
 usvg.workspace = true
 
 [dev-dependencies]

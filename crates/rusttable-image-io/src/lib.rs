@@ -38,15 +38,17 @@ pub use png::{
 pub use raster_samples::{DecodedRgbSamples, decode_png_rgb_samples};
 pub use raw::{
     RAW_PROBE_BUDGET_BYTES, RAWLER_BACKEND_ID, RawByteSource, RawCameraEvidence, RawCameraIdentity,
-    RawCancellationToken, RawCapabilityDescriptor, RawCapabilityError, RawCapabilityKey,
-    RawCapabilityKind, RawCapabilityManifest, RawCapabilityResolveError, RawCfa, RawChannel,
-    RawColorMatrix, RawCompression, RawCompressionEvidence, RawContainerKind, RawContainerProbe,
-    RawContainerRegistry, RawDecodeError, RawDecodeLimits, RawDecodeLimitsError, RawDecodeReceipt,
-    RawDecodeRequest, RawDecodeResult, RawDimensions, RawDngReceipt, RawFrame, RawFrameParts,
+    RawCancellationToken, RawCapabilityDescriptor, RawCapabilityError, RawCapabilityEvidence,
+    RawCapabilityKey, RawCapabilityKind, RawCapabilityLayout, RawCapabilityManifest,
+    RawCapabilityResolveError, RawCfa, RawChannel, RawColorMatrix, RawCompression,
+    RawCompressionEvidence, RawContainerKind, RawContainerProbe, RawContainerRegistry,
+    RawDecodeError, RawDecodeLimits, RawDecodeLimitsError, RawDecodeReceipt, RawDecodeRequest,
+    RawDecodeResult, RawDimensions, RawDngReceipt, RawFrame, RawFrameParts,
     RawFrameValidationError, RawHeader, RawIlluminant, RawLevelPattern, RawOpcodeDescriptor,
     RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout, RawPreviewDescriptor,
     RawPreviewFormat, RawPreviewKind, RawProbeEvidence, RawProbeOutcome, RawRect, RawSourceError,
-    RawSourceReceipt, RawlerRawDecoder, SliceRawSource, rawler_capability_manifest,
+    RawSourceReceipt, RawVendorFamily, RawlerRawDecoder, SliceRawSource,
+    rawler_capability_manifest,
 };
 pub use registry::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 pub use rusttable_image::{DecoderDescriptor, DecoderIdentity};

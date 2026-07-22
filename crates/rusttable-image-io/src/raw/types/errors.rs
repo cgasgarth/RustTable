@@ -10,6 +10,7 @@ pub enum RawCapabilityKind {
     Layout,
     SampleType,
     ImageIndex,
+    ManifestDrift,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +21,7 @@ pub struct RawCapabilityError {
     pub model: String,
     pub mode: String,
     pub detail: String,
+    pub evidence: Box<super::RawCapabilityEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod errors;
 mod receipt;
+#[cfg(test)]
+mod tests;
 
 pub use errors::{
     RawCapabilityError, RawCapabilityKind, RawDecodeError, RawFrameValidationError, RawSourceError,
@@ -21,13 +23,19 @@ pub enum RawContainerKind {
     Cr3,
     Crw,
     Nef,
+    Nrw,
     Arw,
+    Sr2,
+    Srf,
     Orf,
     Rw2,
+    Rwl,
     Pef,
     Srw,
     Erf,
     Iiq,
+    ThreeFr,
+    Fff,
     Mrw,
     X3f,
     TiffRaw,
@@ -66,6 +74,16 @@ pub struct RawProbeEvidence {
     pub signature: Vec<u8>,
     pub raw_tags: Vec<u16>,
     pub camera: RawCameraEvidence,
+    pub compression: RawCompressionEvidence,
+    pub bit_depth: Option<u8>,
+}
+
+/// Bounded evidence explaining why a backend result was not accepted by the manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawCapabilityEvidence {
+    pub signature: Vec<u8>,
+    pub raw_tags: Vec<u16>,
+    pub backend_format: String,
     pub compression: RawCompressionEvidence,
     pub bit_depth: Option<u8>,
 }
@@ -752,10 +770,41 @@ pub struct RawCapabilityKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawCapabilityDescriptor {
     pub key: RawCapabilityKey,
+    pub family: RawVendorFamily,
+    pub profile_id: String,
+    pub backend_format: String,
+    pub decoder_path: String,
+    pub layout: RawCapabilityLayout,
+    pub quirk_ids: Vec<String>,
+    pub reference_evidence: Vec<String>,
+    pub reviewed: bool,
     pub normalized_maker: String,
     pub normalized_model: String,
     pub bit_depth: Option<u8>,
     pub corpus_fixtures: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RawVendorFamily {
+    Canon,
+    Nikon,
+    Sony,
+    Fujifilm,
+    Olympus,
+    PanasonicLeica,
+    Pentax,
+    Samsung,
+    Hasselblad,
+    PhaseOne,
+    Epson,
+    Standardized,
+    UnreviewedBackend,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RawCapabilityLayout {
+    BayerOrLinear,
+    BayerOrXTrans,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -826,113 +875,61 @@ impl RawCapabilityManifest {
             }),
         }
     }
+
+    /// Selects a unique backend camera profile using exact identity first, then reviewed aliases.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RawCapabilityResolveError::Unsupported`] when no profile matches, or
+    /// [`RawCapabilityResolveError::Ambiguous`] when more than one profile matches.
+    pub fn resolve_backend(
+        &self,
+        maker: &str,
+        model: &str,
+        mode: &str,
+        container: RawContainerKind,
+    ) -> Result<(&RawCapabilityDescriptor, bool), RawCapabilityResolveError> {
+        let exact: Vec<_> = self
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.key.container == container
+                    && entry.key.maker == maker
+                    && entry.key.model == model
+                    && entry.key.mode == mode
+            })
+            .collect();
+        if let [entry] = exact.as_slice() {
+            return Ok((entry, false));
+        }
+        if exact.len() > 1 {
+            return Err(RawCapabilityResolveError::Ambiguous {
+                candidates: exact.len(),
+            });
+        }
+        let folded_maker = maker.trim().to_lowercase();
+        let folded_model = model.trim().to_lowercase();
+        let aliases: Vec<_> = self
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.key.container == container
+                    && entry.normalized_maker.to_lowercase() == folded_maker
+                    && entry.normalized_model.to_lowercase() == folded_model
+            })
+            .collect();
+        match aliases.as_slice() {
+            [entry] => Ok((entry, true)),
+            [] => Err(RawCapabilityResolveError::Unsupported),
+            values => Err(RawCapabilityResolveError::Ambiguous {
+                candidates: values.len(),
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RawCapabilityResolveError {
     Unsupported,
     Ambiguous { candidates: usize },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn descriptor(mode: &str) -> RawCapabilityDescriptor {
-        RawCapabilityDescriptor {
-            key: RawCapabilityKey {
-                maker: "ACME".to_owned(),
-                model: "Alias One".to_owned(),
-                mode: mode.to_owned(),
-                container: RawContainerKind::Dng,
-                compression: RawCompression::BackendDefined,
-                cfa: "RGGB".to_owned(),
-            },
-            normalized_maker: "Acme".to_owned(),
-            normalized_model: "Camera".to_owned(),
-            bit_depth: Some(14),
-            corpus_fixtures: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn ambiguous_camera_aliases_never_select_by_collection_order() {
-        let first = RawCapabilityManifest::generated(
-            vec![descriptor("compressed"), descriptor("uncompressed")],
-            [1; 32],
-        );
-        let second = RawCapabilityManifest::generated(
-            vec![descriptor("uncompressed"), descriptor("compressed")],
-            [2; 32],
-        );
-        assert_eq!(
-            first.resolve("ACME", "Alias One", RawContainerKind::Dng),
-            Err(RawCapabilityResolveError::Ambiguous { candidates: 2 })
-        );
-        assert_eq!(
-            second.resolve("ACME", "Alias One", RawContainerKind::Dng),
-            Err(RawCapabilityResolveError::Ambiguous { candidates: 2 })
-        );
-    }
-
-    #[test]
-    fn nonfinite_matrix_is_rejected_before_frame_publication() {
-        let dimensions = RawDimensions::new(1, 1).expect("dimensions");
-        let area = RawRect::new(0, 0, 1, 1).expect("area");
-        let parts = RawFrameParts {
-            planes: vec![RawPlane {
-                dimensions,
-                channels_per_pixel: 1,
-                layout: RawPlaneLayout::Mosaic(RawCfa {
-                    width: 2,
-                    height: 2,
-                    phase_x: 0,
-                    phase_y: 0,
-                    pattern: vec![
-                        RawChannel::Red,
-                        RawChannel::Green,
-                        RawChannel::Green,
-                        RawChannel::Blue,
-                    ],
-                }),
-                samples: vec![1],
-            }],
-            active_area: area,
-            crop_area: area,
-            masked_areas: Vec::new(),
-            black_levels: RawLevelPattern {
-                repeat_width: 1,
-                repeat_height: 1,
-                channels: 1,
-                values: vec![0.0],
-            },
-            white_levels: vec![4_095.0],
-            orientation: RawOrientation::Normal,
-            camera: RawCameraIdentity {
-                maker: "ACME".to_owned(),
-                model: "Camera".to_owned(),
-                normalized_maker: "Acme".to_owned(),
-                normalized_model: "Camera".to_owned(),
-                mode: String::new(),
-            },
-            color_matrices: vec![RawColorMatrix {
-                illuminant: RawIlluminant::D65,
-                rows: 3,
-                columns: 3,
-                coefficients: vec![f32::NAN; 9],
-            }],
-            white_balance: vec![Some(1.0), Some(1.0), Some(1.0), None],
-            compression: RawCompressionEvidence {
-                compression: RawCompression::Uncompressed,
-                container_code: Some(1),
-            },
-            bit_depth: 12,
-            opcodes: Vec::new(),
-            previews: Vec::new(),
-        };
-        assert_eq!(
-            RawFrame::try_new(parts, RawDecodeLimits::standard()),
-            Err(RawFrameValidationError::InvalidMatrix)
-        );
-    }
 }

@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusttable_image_io::{
-    RAWLER_BACKEND_ID, RawByteSource, RawCancellationToken, RawChannel, RawContainerKind,
-    RawDecodeError, RawDecodeLimits, RawDecodeRequest, RawFrameValidationError, RawPlaneLayout,
-    RawSourceError, RawlerRawDecoder, rawler_capability_manifest,
+    RAWLER_BACKEND_ID, RawByteSource, RawCancellationToken, RawChannel, RawCompression,
+    RawCompressionEvidence, RawContainerKind, RawDecodeError, RawDecodeLimits, RawDecodeRequest,
+    RawFrameValidationError, RawPlaneLayout, RawSourceError, RawVendorFamily, RawlerRawDecoder,
+    rawler_capability_manifest,
 };
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
 
@@ -19,6 +20,13 @@ fn corpus_raf_maps_to_an_owned_validated_sensor_frame() {
         .expect("RAW frame");
 
     assert_eq!(result.receipt.backend, RAWLER_BACKEND_ID);
+    assert_eq!(result.receipt.family, RawVendorFamily::Fujifilm);
+    assert_eq!(result.receipt.backend_format, "RAF");
+    assert!(!result.receipt.camera_profile_id.is_empty());
+    assert_eq!(
+        result.receipt.capability_manifest_sha256,
+        rawler_capability_manifest().sha256
+    );
     assert_eq!(result.receipt.container, RawContainerKind::Raf);
     assert_eq!(result.receipt.camera.maker, "FUJIFILM");
     assert_eq!(result.receipt.camera.model, "X-Pro2");
@@ -134,6 +142,14 @@ fn unsupported_camera_is_a_precise_capability_error() {
             assert_eq!(capability.model, "NO-CAM");
             assert!(!capability.detail.is_empty());
             assert!(capability.detail.len() <= 256);
+            assert_eq!(
+                capability.evidence.compression,
+                RawCompressionEvidence {
+                    compression: RawCompression::Uncompressed,
+                    container_code: None,
+                }
+            );
+            assert!(!capability.evidence.signature.is_empty());
         }
         other => panic!("expected capability error, got {other:?}"),
     }
@@ -180,6 +196,12 @@ fn manifest_is_deterministic_and_links_the_corpus() {
             .iter()
             .any(|fixture| fixture == "rusttable-testkit.raw.synthetic-compressed-raf")
     }));
+    assert!(
+        first
+            .entries()
+            .iter()
+            .any(|entry| entry.family == RawVendorFamily::UnreviewedBackend && !entry.reviewed)
+    );
 }
 
 #[test]
