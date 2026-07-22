@@ -8,12 +8,18 @@ use crate::{
     ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
-use sha2::Digest;
-use std::{collections::BTreeMap, fmt};
+use std::fmt;
 mod basicadj;
+mod basicadj_runtime;
+mod frame;
 mod liquify;
 mod spots;
 pub use basicadj::BasicAdjPlanSet;
+pub(crate) use frame::evaluate_graph_at_frame_boundaries_with_plans;
+pub use frame::{
+    EvaluatedFrame, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
+    evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry,
+};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
     InvalidExposureScale {
@@ -110,60 +116,7 @@ where
 /// # Errors
 ///
 /// Returns the first graph-operation or automatic-analysis failure.
-pub fn prepare_basicadj_plans(
-    graph: &crate::CompiledOperationGraph,
-    input: &WorkingRgbImage,
-) -> Result<BasicAdjPlanSet, EvaluationError> {
-    let mut current = input.pixel_slice().to_vec();
-    let mut plans = BTreeMap::new();
-    for node in graph.nodes() {
-        let operation = node.operation();
-        if let crate::ProcessingOperationKind::BasicAdj { config } = operation.kind()
-            && operation.is_enabled()
-            && operation.opacity().get().to_bits() != 0.0_f32.to_bits()
-            && config.auto_controls().is_active()
-        {
-            let raster = crate::BasicAdjAnalysisRaster::new(input.dimensions(), &current, None)
-                .map_err(|error| EvaluationError::OperationExecution {
-                    step_index: node.pipeline_step_index(),
-                    operation_id: operation.operation_id(),
-                    reason: error.to_string(),
-                })?;
-            let plan = crate::BasicAdjPlan::resolve(*config, raster).map_err(|error| {
-                EvaluationError::OperationExecution {
-                    step_index: node.pipeline_step_index(),
-                    operation_id: operation.operation_id(),
-                    reason: error.to_string(),
-                }
-            })?;
-            plans.insert(operation.operation_id(), plan);
-        }
-        let plan_set = BasicAdjPlanSet {
-            plans: plans.clone(),
-            identity: [0; 32],
-        };
-        apply_operation_with_plans(
-            node.pipeline_step_index(),
-            operation,
-            &mut current,
-            input.dimensions(),
-            0,
-            Some(&plan_set),
-        )?;
-    }
-    let identity = if plans.is_empty() {
-        [0; 32]
-    } else {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(b"rusttable.basicadj.plan-set.v1");
-        for (operation_id, plan) in &plans {
-            hasher.update(operation_id.get().to_le_bytes());
-            hasher.update(plan.identity());
-        }
-        hasher.finalize().into()
-    };
-    Ok(BasicAdjPlanSet { plans, identity })
-}
+pub use basicadj_runtime::prepare_basicadj_plans;
 pub(crate) fn execute_prepared_operation(
     operation: &PreparedCpuOperation,
     step_index: PipelineStepIndex,

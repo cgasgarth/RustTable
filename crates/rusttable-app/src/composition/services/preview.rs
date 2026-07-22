@@ -176,9 +176,15 @@ fn render_frame_with_target(
             )
         })
         .collect();
-    let working = WorkingRgbImage::new(dimensions, pixels)
-        .expect("CPU pixelpipe preserves its validated image dimensions");
-    let alpha = source_pixels.iter().map(|pixel| pixel[3]).collect();
+    let output_dimensions = result.image().descriptor().dimensions();
+    let working = WorkingRgbImage::new(output_dimensions, pixels)
+        .expect("CPU pixelpipe result dimensions match its validated pixels");
+    let alpha = result
+        .image()
+        .pixels()
+        .iter()
+        .map(|pixel| pixel.alpha())
+        .collect();
     let prepared = PreparedCpuPixelpipeResult::new(
         working,
         alpha,
@@ -262,11 +268,14 @@ fn render_decoded_with_target(
             )
         })
         .collect();
-    let working = WorkingRgbImage::new(dimensions, pixels)
-        .expect("CPU pixelpipe preserves its validated image dimensions");
-    let alpha = source_pixels
+    let output_dimensions = result.image().descriptor().dimensions();
+    let working = WorkingRgbImage::new(output_dimensions, pixels)
+        .expect("CPU pixelpipe result dimensions match its validated pixels");
+    let alpha = result
+        .image()
+        .pixels()
         .iter()
-        .map(|pixel| f32::from(pixel[3]) / 255.0)
+        .map(|pixel| pixel.alpha())
         .collect();
     let prepared = PreparedCpuPixelpipeResult::new(
         working,
