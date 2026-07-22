@@ -29,6 +29,8 @@ pub struct ControlScaleTokens {
     pub control_gap: i32,
     pub module_gap: i32,
     pub module_padding: i32,
+    pub module_control_min_width: i32,
+    pub rail_scrollbar_reserve: i32,
 }
 
 /// Bounded lighttable card geometry recomputed from the center viewport width.
@@ -101,6 +103,8 @@ pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
         control_gap: 6,
         module_gap: 4,
         module_padding: 6,
+        module_control_min_width: 96,
+        rail_scrollbar_reserve: 14,
     },
     cards: LighttableCardTokens {
         minimum_width_px: 148,
@@ -113,6 +117,46 @@ pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
         image_aspect_height: 3,
     },
 };
+
+/// Horizontal allocation used by every module row inside a scrolling rail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModuleControlAllocationReceipt {
+    pub rail_width_px: u16,
+    pub content_width_px: u16,
+    pub label_width_px: u16,
+    pub control_width_px: u16,
+    pub scrollbar_width_px: u16,
+}
+
+impl ModuleControlAllocationReceipt {
+    #[must_use]
+    pub fn for_rail(rail_width_px: u16) -> Self {
+        let controls = DARKTABLE_UI_TOKENS.controls;
+        let scrollbar = u16::try_from(controls.rail_scrollbar_reserve).unwrap_or_default();
+        let padding = u16::try_from(controls.module_padding.saturating_mul(2)).unwrap_or_default();
+        let gap = u16::try_from(controls.control_gap).unwrap_or_default();
+        let control = u16::try_from(controls.module_control_min_width).unwrap_or_default();
+        let content = rail_width_px
+            .saturating_sub(scrollbar)
+            .saturating_sub(padding);
+        let label = content.saturating_sub(gap).saturating_sub(control);
+        Self {
+            rail_width_px,
+            content_width_px: content,
+            label_width_px: label,
+            control_width_px: control,
+            scrollbar_width_px: scrollbar,
+        }
+    }
+
+    #[must_use]
+    pub const fn fits(self) -> bool {
+        self.content_width_px
+            .saturating_add(self.scrollbar_width_px)
+            <= self.rail_width_px
+            && self.label_width_px > 0
+    }
+}
 
 /// Allocation shared by viewport, histogram, and lighttable resize paths.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

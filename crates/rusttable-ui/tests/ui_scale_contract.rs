@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 
 use rusttable_ui::gtk_shell::{
-    DARKROOM_GEOMETRY, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ResponsiveGeometryReceipt,
+    DARKROOM_GEOMETRY, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ModuleControlAllocationReceipt,
+    ResponsiveGeometryReceipt,
 };
 
 #[test]
@@ -19,6 +20,22 @@ fn installed_darktable_scale_is_explicit_and_readable() {
     assert_eq!(panels.preferred_px, 220);
     assert!(panels.accepts(panels.minimum_px));
     assert_eq!(DARKROOM_GEOMETRY.histogram_height_px, 180);
+}
+
+#[test]
+fn module_controls_fit_inside_scrollbar_allocation_at_supported_sizes() {
+    for (width, height) in [(1_280, 768), (1_366, 768), (1_440, 900)] {
+        let geometry = ResponsiveGeometryReceipt::for_window(width, height);
+        let allocation = ModuleControlAllocationReceipt::for_rail(geometry.right_rail_width_px);
+
+        assert!(allocation.fits(), "control allocation at {width}x{height}");
+        assert_eq!(allocation.control_width_px, 96);
+        assert!(allocation.label_width_px >= 80);
+        assert_eq!(allocation.scrollbar_width_px, 14);
+        assert!(
+            allocation.content_width_px + allocation.scrollbar_width_px <= allocation.rail_width_px
+        );
+    }
 }
 
 #[test]

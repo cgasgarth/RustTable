@@ -6,6 +6,7 @@ use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
+use crate::gui::darktable_components::{CONTROL_GAP, dropdown, slider, switch};
 use crate::presentation::PresentationText;
 use crate::presentation::darkroom_controls::{DarkroomControlKind, DarkroomControlValue};
 
@@ -25,26 +26,29 @@ pub(super) fn build_control_row(
     current_revision: Rc<RefCell<Revision>>,
     module_id: String,
 ) -> gtk4::Box {
-    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
+    row.set_width_request(0);
+    row.set_hexpand(true);
     row.set_widget_name(control.id().as_str());
     row.add_css_class("dt_module_row");
     let label = gtk4::Label::new(Some(control.label().as_str()));
     label.set_halign(gtk4::Align::Start);
     label.set_hexpand(true);
+    label.set_width_chars(1);
     row.append(&label);
 
     match control.kind() {
         DarkroomControlKind::Slider => {
             let spec = control.slider_spec().expect("slider has slider metadata");
-            let slider = gtk4::Scale::with_range(
-                gtk4::Orientation::Horizontal,
+            let slider = slider(
+                &format!("{}-widget", control.id()),
                 spec.minimum(),
                 spec.maximum(),
                 spec.step(),
+                true,
             );
             slider.set_value(spec.value());
             slider.set_sensitive(module_enabled);
-            slider.set_hexpand(true);
             slider.set_digits(slider_digits(spec.step()));
             slider.set_draw_value(true);
             slider.set_value_pos(gtk4::PositionType::Right);
@@ -79,7 +83,7 @@ pub(super) fn build_control_row(
                 .choices()
                 .map(PresentationText::as_str)
                 .collect::<Vec<_>>();
-            let choice = gtk4::DropDown::from_strings(&choices);
+            let choice = dropdown(&format!("{}-widget", control.id()), &choices);
             if let DarkroomControlValue::Choice(selected) = control.value() {
                 choice.set_selected(u32::try_from(selected).unwrap_or(u32::MAX));
             }
@@ -109,7 +113,7 @@ pub(super) fn build_control_row(
             row.append(&choice);
         }
         DarkroomControlKind::Toggle => {
-            let toggle = gtk4::Switch::new();
+            let toggle = switch(&format!("{}-widget", control.id()));
             if let DarkroomControlValue::Toggle(active) = control.value() {
                 toggle.set_active(active);
             }

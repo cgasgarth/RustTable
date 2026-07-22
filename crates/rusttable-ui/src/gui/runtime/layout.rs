@@ -10,7 +10,7 @@ use crate::import::ImportSessionPanel;
 
 use crate::gui::darkroom_modules::DarkroomModuleGroup;
 use crate::gui::darktable_components::{
-    button, module_expander as shared_module_expander, module_row,
+    button, dropdown, module_expander as shared_module_expander, module_row, slider, switch,
 };
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use crate::gui::{
@@ -485,11 +485,9 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
     content.set_widget_name(&format!("module-{index}-controls"));
     for control in module.controls() {
         let widget: gtk4::Widget = match control.kind() {
-            ModuleControlKind::Slider => {
-                gtk4::Scale::with_range(gtk4::Orientation::Horizontal, 0.0, 1.0, 0.01).upcast()
-            }
-            ModuleControlKind::Toggle => gtk4::Switch::new().upcast(),
-            ModuleControlKind::Choice => gtk4::DropDown::from_strings(&["default"]).upcast(),
+            ModuleControlKind::Slider => slider("module-slider", 0.0, 1.0, 0.01, false).upcast(),
+            ModuleControlKind::Toggle => switch("module-switch").upcast(),
+            ModuleControlKind::Choice => dropdown("module-dropdown", &["default"]).upcast(),
         };
         let row = module_row(control.label().as_str(), &widget);
         content.append(&row);

@@ -16,7 +16,7 @@ use super::{
 use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
 use crate::gui::DARKTABLE_UI_TOKENS;
 use crate::gui::darktable_components::{
-    module_expander as shared_module_expander, rail as shared_rail,
+    RAIL_SCROLLBAR_RESERVE, module_expander as shared_module_expander, rail as shared_rail,
     rail_scroll as shared_rail_scroll,
 };
 use crate::iop::modules::{
@@ -99,7 +99,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         .build();
     groups_scroll.set_widget_name("darkroom-module-groups-scroll");
     groups_scroll.set_height_request(DARKTABLE_UI_TOKENS.controls.toolbar_height);
-    groups_scroll.set_min_content_width(width);
+    groups_scroll.set_min_content_width(width.saturating_sub(RAIL_SCROLLBAR_RESERVE));
     groups_scroll.set_propagate_natural_width(false);
     panel.append(&groups_scroll);
 
@@ -108,7 +108,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     search.set_placeholder_text(Some("search modules"));
     search.set_accessible_role(gtk4::AccessibleRole::SearchBox);
     search.update_property(&[Property::Label("Search darkroom modules")]);
-    search.set_width_request(width);
+    search.set_width_request(0);
     search.set_hexpand(true);
     panel.append(&search);
 
@@ -117,6 +117,8 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
 
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     modules.set_widget_name("darkroom-right-modules");
+    modules.set_width_request(0);
+    modules.set_hexpand(true);
     let exposure = ExposurePanel::new();
     let rgb_denoise = RgbDenoisePanel::new();
     let raw_denoise = RawDenoisePanel::new();
