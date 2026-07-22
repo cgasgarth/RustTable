@@ -1,8 +1,16 @@
-use rusttable_core::{Edit, EditId, PhotoId, Revision};
+use rusttable_core::{
+    Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+    PhotoId, Revision,
+};
 use rusttable_image::{ColorEncoding, DecodedImage, ImageDimensions};
+use rusttable_processing::{
+    CompiledPipeline, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel, evaluate,
+    to_linear_srgb,
+};
 use rusttable_render::{
-    PreviewBounds, RenderPlan, RenderSampling, RenderTarget, SourceColorDecision,
-    SourceColorPolicy, render_edit, render_edit_with_plan,
+    PreparedCpuPixelpipeResult, PreviewBounds, RenderPlan, RenderProvenance, RenderSampling,
+    RenderTarget, SourceColorDecision, SourceColorPolicy, render_edit, render_edit_with_plan,
+    render_prepared_cpu_pixelpipe,
 };
 
 fn edit() -> Edit {
@@ -20,6 +28,78 @@ fn image(width: u32, height: u32, pixels: Vec<u8>, encoding: ColorEncoding) -> D
         ImageDimensions::new(width, height).unwrap(),
         pixels,
         encoding,
+    )
+    .unwrap()
+}
+
+fn vignette_edit() -> Edit {
+    let scalar = |value: f64| ParameterValue::Scalar(FiniteF64::new(value).unwrap());
+    Edit::new(
+        EditId::new(3).unwrap(),
+        PhotoId::new(2).unwrap(),
+        Revision::ZERO,
+        [Operation::new(
+            OperationId::new(4).unwrap(),
+            OperationKey::new("rusttable.vignette").unwrap(),
+            true,
+            [
+                (ParameterName::new("scale").unwrap(), scalar(65.0)),
+                (ParameterName::new("falloff_scale").unwrap(), scalar(35.0)),
+                (ParameterName::new("brightness").unwrap(), scalar(-0.65)),
+                (ParameterName::new("saturation").unwrap(), scalar(-0.2)),
+                (ParameterName::new("shape").unwrap(), scalar(1.4)),
+            ],
+        )
+        .unwrap()],
+    )
+    .unwrap()
+}
+
+fn full_resolution_reference(input: &DecodedImage, edit: &Edit) -> rusttable_render::RenderOutput {
+    let dimensions =
+        RasterDimensions::new(input.dimensions().width(), input.dimensions().height()).unwrap();
+    let source = SourceRgbImage::new(
+        dimensions,
+        input
+            .pixels()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|pixel| {
+                SourceRgb::new(
+                    SrgbChannel::new(f32::from(pixel[0]) / 255.0).unwrap(),
+                    SrgbChannel::new(f32::from(pixel[1]) / 255.0).unwrap(),
+                    SrgbChannel::new(f32::from(pixel[2]) / 255.0).unwrap(),
+                )
+            })
+            .collect(),
+    )
+    .unwrap();
+    let working = to_linear_srgb(&source);
+    let pipeline = CompiledPipeline::compile(edit).unwrap();
+    let evaluated = evaluate(&pipeline, &working).unwrap();
+    let alpha = input
+        .pixels()
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|pixel| f32::from(pixel[3]) / 255.0)
+        .collect();
+    let prepared = PreparedCpuPixelpipeResult::new(
+        evaluated,
+        alpha,
+        SourceColorDecision::DeclaredSrgb,
+        RenderProvenance::new(
+            edit.id(),
+            edit.photo_id(),
+            edit.base_photo_revision(),
+            edit.revision(),
+        ),
+    )
+    .unwrap();
+    render_prepared_cpu_pixelpipe(
+        &prepared,
+        RenderTarget::PreviewFit(PreviewBounds::new(4, 4).unwrap()),
     )
     .unwrap()
 }
@@ -106,4 +186,35 @@ fn display_p3_preview_keeps_declared_source_policy_and_alpha() {
         output.source_color_decision(),
         SourceColorDecision::DeclaredDisplayP3
     );
+}
+
+#[test]
+fn scale_sensitive_graph_evaluates_at_source_before_preview_downsample() {
+    let input = image(
+        12,
+        8,
+        (0..96)
+            .flat_map(|index| {
+                [
+                    u8::try_from(index * 17 % 251).expect("bounded fixture channel"),
+                    u8::try_from(index * 31 % 251).expect("bounded fixture channel"),
+                    u8::try_from(index * 47 % 251).expect("bounded fixture channel"),
+                    255,
+                ]
+            })
+            .collect(),
+        ColorEncoding::Srgb,
+    );
+    let edit = vignette_edit();
+    let plan = RenderPlan::for_source(
+        input.dimensions(),
+        RenderTarget::PreviewFit(PreviewBounds::new(4, 4).unwrap()),
+    );
+
+    let actual =
+        render_edit_with_plan(&edit, &input, SourceColorPolicy::RequireDeclaredSrgb, plan).unwrap();
+    let expected = full_resolution_reference(&input, &edit);
+
+    assert_eq!(actual.image(), expected.image());
+    assert_eq!(actual.plan().evaluation_dimensions(), input.dimensions());
 }

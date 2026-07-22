@@ -8,7 +8,7 @@ use rusttable_core::{
 use rusttable_image::DecodeLimits;
 use rusttable_image_io::FileImageInput;
 use rusttable_import::{FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotReader};
-use rusttable_render::{PreviewBounds, RenderTarget};
+use rusttable_render::{PreviewBounds, RenderTarget, render_prepared_cpu_pixelpipe};
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
 
 #[test]
@@ -180,4 +180,91 @@ fn edit<const N: usize>(operations: [Operation; N]) -> Edit {
         operations,
     )
     .expect("valid edit")
+}
+
+fn scale_sensitive_edit() -> Edit {
+    edit([Operation::new(
+        OperationId::new(4).expect("operation ID"),
+        OperationKey::new("rusttable.flip").expect("operation key"),
+        true,
+        [
+            (
+                ParameterName::new("mode").expect("parameter"),
+                ParameterValue::Integer(1),
+            ),
+            (
+                ParameterName::new("orientation").expect("parameter"),
+                ParameterValue::Integer(6),
+            ),
+        ],
+    )
+    .expect("flip operation")])
+}
+
+fn assert_preview_matches_full_frame_reference(
+    service: &PreviewService,
+    frame: &rusttable_image::DecodedFrame,
+    edit: &Edit,
+) {
+    let prepared = service
+        .prepare_decoded_frame(frame, edit)
+        .expect("full-resolution graph preparation");
+    let reference = render_prepared_cpu_pixelpipe(
+        &prepared,
+        RenderTarget::PreviewFit(PreviewBounds::new(4, 4).expect("bounds")),
+    )
+    .expect("final-size reference preview");
+    let preview = service
+        .render_decoded_frame_for_target(
+            frame,
+            edit,
+            RenderTarget::PreviewFit(PreviewBounds::new(4, 4).expect("bounds")),
+        )
+        .expect("production preview");
+    let full = render_prepared_cpu_pixelpipe(&prepared, RenderTarget::FullResolution)
+        .expect("full-output reference");
+
+    assert_eq!(preview, reference);
+    assert_eq!(
+        preview.plan().evaluation_dimensions(),
+        full.plan().source_dimensions()
+    );
+    assert_eq!(full.provenance(), preview.provenance());
+}
+
+#[test]
+fn raster_preview_converges_with_full_output_final_size_reference() {
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("fixtures/corpus/assets/raster-png-16-alpha.png");
+    let limits = DecodeLimits::new(32 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024)
+        .expect("valid limits");
+    let snapshot = FileSourceSnapshotReader
+        .read_snapshot(
+            &source,
+            ImportSourceLimits::new(32 * 1024 * 1024).expect("source cap"),
+        )
+        .expect("raster snapshot");
+    let bytes = snapshot
+        .materialize(ImportSourceLimits::new(32 * 1024 * 1024).expect("cap"))
+        .expect("raster bytes");
+    let frame = FileImageInput::new(limits)
+        .decode_linear_frame_bytes(&bytes)
+        .expect("raster frame");
+    let service = PreviewService::new(limits, PreviewBounds::new(4, 4).expect("bounds"));
+
+    assert_preview_matches_full_frame_reference(&service, &frame, &scale_sensitive_edit());
+}
+
+#[test]
+fn raw_preview_converges_with_full_output_final_size_reference() {
+    let fixture = deterministic_compressed_raf();
+    let limits = DecodeLimits::new(32 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024)
+        .expect("valid limits");
+    let frame = FileImageInput::new(limits)
+        .decode_linear_frame_bytes(fixture.bytes())
+        .expect("RAW frame");
+    let service = PreviewService::new(limits, PreviewBounds::new(4, 4).expect("bounds"));
+
+    assert_preview_matches_full_frame_reference(&service, &frame, &scale_sensitive_edit());
 }

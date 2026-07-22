@@ -203,6 +203,16 @@ impl RenderPlan {
         self.source_dimensions
     }
 
+    /// Dimensions presented to the operation graph before the final target
+    /// presentation step.
+    ///
+    /// Scale-sensitive operations always evaluate against the decoded source
+    /// frame.  A preview target changes only the final resampling stage.
+    #[must_use]
+    pub const fn evaluation_dimensions(self) -> ImageDimensions {
+        self.source_dimensions
+    }
+
     #[must_use]
     pub const fn target(self) -> RenderTarget {
         self.target

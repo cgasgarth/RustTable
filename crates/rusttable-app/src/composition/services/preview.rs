@@ -123,15 +123,34 @@ impl PreviewService {
         edit: &Edit,
         target: RenderTarget,
     ) -> Result<RenderOutput, PreviewError> {
-        render_frame_with_target(input, edit, target)
+        let prepared = prepare_frame(input, edit)?;
+        render_prepared_cpu_pixelpipe(&prepared, target).map_err(PreviewError::Render)
+    }
+
+    /// Prepares the complete graph at the decoded source/intermediate
+    /// resolution without applying a display-sized target.
+    ///
+    /// The returned frame is the shared full-output reference used by both
+    /// preview and export presentation. Callers must pass it through
+    /// [`render_prepared_cpu_pixelpipe`] for the requested target.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed frame-adaptation, graph, pixelpipe, or preparation
+    /// error.
+    pub fn prepare_decoded_frame(
+        &self,
+        input: &DecodedFrame,
+        edit: &Edit,
+    ) -> Result<PreparedCpuPixelpipeResult, PreviewError> {
+        prepare_frame(input, edit)
     }
 }
 
-fn render_frame_with_target(
+fn prepare_frame(
     input: &DecodedFrame,
     edit: &Edit,
-    target: RenderTarget,
-) -> Result<RenderOutput, PreviewError> {
+) -> Result<PreparedCpuPixelpipeResult, PreviewError> {
     let mut graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
     let (source_pixels, dimensions, representation) = source_frame_pixels(input, &mut graph)?;
     let source_color = input.source_color();
@@ -198,7 +217,7 @@ fn render_frame_with_target(
         ),
     )
     .map_err(PreviewError::Prepared)?;
-    render_prepared_cpu_pixelpipe(&prepared, target).map_err(PreviewError::Render)
+    Ok(prepared)
 }
 
 fn source_frame_pixels(

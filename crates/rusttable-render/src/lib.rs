@@ -243,10 +243,15 @@ pub fn render_edit_with_plan(
         SourceImage::DisplayP3(source) => to_linear_srgb_from_display_p3(&source),
         SourceImage::LinearDisplayP3(source) => linear_display_p3_to_working(&source),
     };
-    let (working, alpha) = resampling::resample_working(&working, &alpha, plan)
-        .map_err(|source| RenderError::Resampling { source })?;
     let evaluated =
         evaluate(&pipeline, &working).map_err(|source| RenderError::Evaluation { source })?;
+    // Operations must observe the decoded source/intermediate frame.  The
+    // render target is a presentation boundary, so final preview scaling is
+    // applied only after the complete graph has run.  This keeps dimension-
+    // and scale-sensitive operations aligned with full-resolution export and
+    // leaves the shared resampler as the sole final-downsampling path.
+    let (evaluated, alpha) = resampling::resample_working(&evaluated, &alpha, plan)
+        .map_err(|source| RenderError::Resampling { source })?;
     let encoded = rusttable_processing::encode_working_to_srgb(&evaluated);
     let pixels = quantized_pixels(&encoded, &alpha);
     let image = DecodedImage::new_with_color_encoding(
