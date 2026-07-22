@@ -15,6 +15,9 @@ use rusttable_processing::{
 
 use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
+use crate::gui::darktable_components::{
+    button, dropdown, module_expander as shared_module_expander, module_row, scale_row,
+};
 
 type ExposureActionHandler = Rc<dyn Fn(ExposureAction)>;
 
@@ -56,7 +59,7 @@ impl ExposurePanel {
         let module_revision = Rc::new(RefCell::new(Revision::ZERO));
         let sync_guard = Rc::new(Cell::new(false));
         let enabled = gtk4::Switch::new();
-        let mode = gtk4::DropDown::from_strings(&["manual", "automatic"]);
+        let mode = dropdown("exposure-mode", &["manual", "automatic"]);
         let mode_stack = gtk4::Stack::new();
         mode_stack.set_widget_name("exposure-mode-stack");
         mode_stack.set_hhomogeneous(false);
@@ -116,13 +119,12 @@ impl ExposurePanel {
         automatic.add_css_class("dim-label");
         automatic.set_accessible_role(gtk4::AccessibleRole::Status);
         mode_stack.add_named(&automatic, Some("automatic"));
-        let presets = gtk4::Button::with_label("presets");
-        presets.set_widget_name("exposure-presets");
+        let presets = button("exposure-presets", "presets");
         presets.set_sensitive(false);
         presets.set_focusable(false);
         presets.set_tooltip_text(Some("Exposure presets are unavailable"));
         presets.update_property(&[Property::Label("Exposure presets unavailable")]);
-        let reset = gtk4::Button::with_label("reset");
+        let reset = button("exposure-reset", "reset");
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
         append_dropdown_row(&content, "mode", &mode);
         content.append(&mode_stack);
@@ -138,11 +140,12 @@ impl ExposurePanel {
         header.append(&presets);
         header.append(&reset);
 
-        let expander = gtk4::Expander::builder()
-            .label("exposure")
-            .expanded(initial_state.expanded())
-            .child(&content)
-            .build();
+        let expander = shared_module_expander(
+            "exposure",
+            "exposure",
+            initial_state.expanded(),
+            Some(&content),
+        );
         expander.set_label_widget(Some(&header));
         expander.set_widget_name("exposure");
         apply_theme_role(&expander, ThemeRole::Module);
@@ -429,25 +432,11 @@ fn sync_controls(state: &Rc<RefCell<ExposureModuleState>>, controls: &ControlSet
 }
 
 fn append_switch_row(container: &gtk4::Box, label: &str, control: &gtk4::Switch) {
-    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    row.add_css_class("dt_module_row");
-    let text = gtk4::Label::new(Some(label));
-    text.set_halign(gtk4::Align::Start);
-    text.set_hexpand(true);
-    row.append(&text);
-    row.append(control);
-    container.append(&row);
+    container.append(&module_row(label, control));
 }
 
 fn append_dropdown_row(container: &gtk4::Box, label: &str, control: &gtk4::DropDown) {
-    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    row.add_css_class("dt_module_row");
-    let text = gtk4::Label::new(Some(label));
-    text.set_halign(gtk4::Align::Start);
-    text.set_hexpand(true);
-    row.append(&text);
-    row.append(control);
-    container.append(&row);
+    container.append(&module_row(label, control));
 }
 
 fn append_scale_row(
@@ -457,22 +446,7 @@ fn append_scale_row(
     value: &gtk4::Label,
     unit: &str,
 ) {
-    let row = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
-    row.add_css_class("dt_module_row");
-    let heading_text = if unit.is_empty() {
-        label.to_owned()
-    } else {
-        format!("{label} ({unit})")
-    };
-    let heading_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    let heading = gtk4::Label::new(Some(&heading_text));
-    heading.set_halign(gtk4::Align::Start);
-    heading.set_hexpand(true);
-    heading_row.append(&heading);
-    heading_row.append(value);
-    row.append(&heading_row);
-    row.append(control);
-    container.append(&row);
+    container.append(&scale_row(label, control, value, unit));
 }
 
 fn value_label(id: &str, accessible_name: &str) -> gtk4::Label {

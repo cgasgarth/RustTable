@@ -14,6 +14,10 @@ use super::{
     DarkroomViewportActionHandler, PhotoPreview, ThemeRole, apply_theme_role,
 };
 use crate::HistogramSample;
+use crate::gui::darktable_components::{
+    button as shared_button, dropdown as shared_dropdown, toggle_button as shared_toggle_button,
+    toolbar as shared_toolbar,
+};
 use crate::viewport_presentation::{
     DarkroomViewportAction, DarkroomViewportCommand, DarkroomViewportState, DarkroomZoom,
     ViewportColorMode, ViewportComparison,
@@ -113,8 +117,10 @@ pub(super) fn darkroom_page(
     overlay.append(&overlay_gamut);
     overlay.append(&overlay_sample);
 
-    let zoom = gtk4::DropDown::from_strings(&DarkroomZoom::ALL.map(DarkroomZoom::label));
-    zoom.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[3]);
+    let zoom = shared_dropdown(
+        DARKROOM_VIEWPORT_WIDGET_IDS[3],
+        &DarkroomZoom::ALL.map(DarkroomZoom::label),
+    );
     zoom.set_tooltip_text(Some("Image zoom level"));
     zoom.update_property(&[Property::Label("Image zoom level")]);
     let fit = chrome_button(
@@ -227,8 +233,7 @@ pub(super) fn darkroom_page(
 }
 
 fn layout_toggle(id: &str, label: &str, accessible_name: &str, active: bool) -> gtk4::ToggleButton {
-    let button = gtk4::ToggleButton::with_label(label);
-    button.set_widget_name(id);
+    let button = shared_toggle_button(id, label);
     button.set_active(active);
     button.add_css_class("dt_button");
     button.set_focus_on_click(false);
@@ -255,8 +260,7 @@ fn connect_layout_toggle(
 }
 
 fn toolbar(id: &str, accessible_name: &str) -> gtk4::Box {
-    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 2);
-    toolbar.set_widget_name(id);
+    let toolbar = shared_toolbar(id, ThemeRole::Toolbar);
     toolbar.add_css_class("dt_darkroom_toolbar");
     toolbar.set_accessible_role(gtk4::AccessibleRole::Toolbar);
     toolbar.update_property(&[Property::Label(accessible_name)]);
@@ -268,10 +272,7 @@ fn toolbar(id: &str, accessible_name: &str) -> gtk4::Box {
 }
 
 pub(crate) fn chrome_toggle(id: &str, label: &str, accessible_name: &str) -> gtk4::ToggleButton {
-    let button = gtk4::ToggleButton::with_label(label);
-    button.set_widget_name(id);
-    button.add_css_class("dt_button");
-    button.set_focus_on_click(false);
+    let button = shared_toggle_button(id, label);
     button.set_tooltip_text(Some(accessible_name));
     button.update_property(&[Property::Label(accessible_name)]);
     button
@@ -584,10 +585,7 @@ fn find_image_canvas(widget: &gtk4::Widget) -> Option<gtk4::Picture> {
 }
 
 fn chrome_button(id: &str, label: &str, accessible_name: &str) -> gtk4::Button {
-    let button = gtk4::Button::with_label(label);
-    button.set_widget_name(id);
-    button.add_css_class("dt_button");
-    button.set_focus_on_click(false);
+    let button = shared_button(id, label);
     button.update_property(&[Property::Label(accessible_name)]);
     button
 }

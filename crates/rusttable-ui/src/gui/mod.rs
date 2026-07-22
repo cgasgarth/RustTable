@@ -5,6 +5,7 @@
 //! those stable roles to GTK widgets.
 
 mod ai_surfaces;
+pub(crate) mod darktable_components;
 pub(crate) mod darktable_spec;
 pub(crate) mod display_profile;
 mod header;

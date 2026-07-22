@@ -6,8 +6,7 @@ use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
 use super::{
-    DARKTABLE_DESKTOP_SPEC, LighttableToolbar, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole,
-    apply_theme_role,
+    DARKTABLE_DESKTOP_SPEC, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use crate::libs::profiles::diagnostics::ProfileDiagnosticSurface;
 
@@ -26,7 +25,6 @@ pub(super) struct HeaderChrome {
     root: gtk4::Box,
     preferences: gtk4::Button,
     import: gtk4::Button,
-    lighttable_toolbar: LighttableToolbar,
 }
 
 impl HeaderChrome {
@@ -42,8 +40,7 @@ impl HeaderChrome {
         apply_theme_role(&root, ThemeRole::Header);
 
         root.append(&brand(i18n));
-        let (toolbar, import, preferences, lighttable_toolbar) =
-            header_toolbar(i18n, display_profile);
+        let (toolbar, import, preferences) = header_toolbar(i18n, display_profile);
         let center = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         center.set_widget_name(PanelSlot::HeaderCenter.identifier());
         center.set_hexpand(true);
@@ -56,7 +53,6 @@ impl HeaderChrome {
             root,
             preferences,
             import,
-            lighttable_toolbar,
         }
     }
 
@@ -70,10 +66,6 @@ impl HeaderChrome {
 
     pub(super) const fn import_button(&self) -> &gtk4::Button {
         &self.import
-    }
-
-    pub(super) const fn lighttable_toolbar(&self) -> &LighttableToolbar {
-        &self.lighttable_toolbar
     }
 }
 
@@ -152,7 +144,7 @@ fn aperture_mark() -> gtk4::DrawingArea {
 fn header_toolbar(
     i18n: &I18n,
     display_profile: &DisplayProfileBanner,
-) -> (gtk4::Box, gtk4::Button, gtk4::Button, LighttableToolbar) {
+) -> (gtk4::Box, gtk4::Button, gtk4::Button) {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
     toolbar.set_widget_name("header-toolbar");
     toolbar.set_hexpand(true);
@@ -167,9 +159,6 @@ fn header_toolbar(
     import.update_property(&[Property::Label("Import images")]);
     import.add_css_class("dt_header_icon");
     toolbar.append(&import);
-
-    let lighttable_toolbar = LighttableToolbar::new();
-    toolbar.append(lighttable_toolbar.widget());
 
     let profile = display_profile.widget();
     profile.set_width_chars(2);
@@ -189,7 +178,7 @@ fn header_toolbar(
     preferences.update_property(&[Property::Label("Open preferences")]);
     preferences.add_css_class("dt_header_icon");
     toolbar.append(&preferences);
-    (toolbar, import, preferences, lighttable_toolbar)
+    (toolbar, import, preferences)
 }
 
 fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {

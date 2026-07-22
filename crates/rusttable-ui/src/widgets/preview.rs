@@ -125,9 +125,13 @@ impl PhotoPreview {
         facts.set_margin_start(12);
         facts.set_margin_end(12);
 
-        root.append(&header);
+        // Darktable keeps the selected image metadata in the left
+        // `image-information` module and leaves the center column for the
+        // actual darkroom viewport. The header/facts widgets remain owned by
+        // this presentation object for status updates and accessibility, but
+        // are not allowed to consume viewport height or create a second card
+        // surface above/below the image.
         root.append(&canvas_frame);
-        root.append(&facts);
 
         Self {
             root,
