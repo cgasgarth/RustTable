@@ -69,15 +69,23 @@ pub fn deterministic_compressed_raf() -> RawImportFixture {
     put_u32(&mut bytes, 708, 0);
     put_u16(&mut bytes, 712, 0);
 
-    put_u32(&mut bytes, 300, 1);
-    put_u16(&mut bytes, 304, 0x0131);
-    put_u16(&mut bytes, 306, 36);
+    put_u32(&mut bytes, 300, 3);
+    put_u16(&mut bytes, 304, 0x0110);
+    put_u16(&mut bytes, 306, 4);
+    put_u16(&mut bytes, 308, 0);
+    put_u16(&mut bytes, 310, 0);
+    put_u16(&mut bytes, 312, 0x0111);
+    put_u16(&mut bytes, 314, 4);
+    put_u16(&mut bytes, 316, 6);
+    put_u16(&mut bytes, 318, 768);
+    put_u16(&mut bytes, 320, 0x0131);
+    put_u16(&mut bytes, 322, 36);
     for (index, color) in b"RBGBRGGGRGGBGGBGGRBRGRBGGGBGGRGGRGGB"
         .iter()
         .rev()
         .enumerate()
     {
-        bytes[308 + index] = match color {
+        bytes[324 + index] = match color {
             b'R' => 0,
             b'G' => 1,
             b'B' => 2,

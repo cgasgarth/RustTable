@@ -9,7 +9,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
 use rawler::decoders::RawDecodeParams;
-use rawler::imgop::develop::{Intermediate, ProcessingStep, RawDevelop};
+use rawler::imgop::{
+    Rect,
+    develop::{Intermediate, ProcessingStep, RawDevelop},
+};
 use rawler::rawsource::RawSource;
 use rusttable_image::{
     ColorEncoding, DecodeLimits, DecodedImage, DecodedImageError, ImageDimensions, ImageInputError,
@@ -40,14 +43,7 @@ pub(super) fn developed_raw_preview(
 
     let developed = catch_unwind(AssertUnwindSafe(|| {
         RawDevelop {
-            steps: vec![
-                ProcessingStep::Rescale,
-                ProcessingStep::Demosaic,
-                ProcessingStep::CropActiveArea,
-                ProcessingStep::WhiteBalance,
-                ProcessingStep::Calibrate,
-                ProcessingStep::CropDefault,
-            ],
+            steps: development_steps(raw.active_area, raw.crop_area),
         }
         .develop_intermediate(&raw)
     }))
@@ -60,6 +56,28 @@ pub(super) fn developed_raw_preview(
     enforce_output_limit(dimensions, limits)?;
     DecodedImage::new_with_color_encoding(dimensions, pixels, ColorEncoding::Srgb)
         .map_err(decoded_image_error)
+}
+
+fn development_steps(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<ProcessingStep> {
+    let can_adapt_default_crop =
+        active_area.is_none_or(|active| crop_area.is_none_or(|crop| contains_rect(active, crop)));
+    let mut steps = vec![ProcessingStep::Rescale, ProcessingStep::Demosaic];
+    if can_adapt_default_crop {
+        steps.push(ProcessingStep::CropActiveArea);
+    }
+    steps.extend([
+        ProcessingStep::WhiteBalance,
+        ProcessingStep::Calibrate,
+        ProcessingStep::CropDefault,
+    ]);
+    steps
+}
+
+fn contains_rect(outer: Rect, inner: Rect) -> bool {
+    inner.p.x >= outer.p.x
+        && inner.p.y >= outer.p.y
+        && inner.p.x.saturating_add(inner.d.w) <= outer.p.x.saturating_add(outer.d.w)
+        && inner.p.y.saturating_add(inner.d.h) <= outer.p.y.saturating_add(outer.d.h)
 }
 
 fn linear_rgb(intermediate: Intermediate) -> Result<(u32, u32, Vec<[f32; 3]>), ImageInputError> {
@@ -228,5 +246,34 @@ fn decoded_image_error(error: DecodedImageError) -> ImageInputError {
         DecodedImageError::ByteLengthMismatch { expected, actual } => {
             ImageInputError::DecodedBufferInvariant { expected, actual }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rawler::imgop::{Dim2, Point, develop::ProcessingStep};
+
+    use super::{Rect, contains_rect, development_steps};
+
+    #[test]
+    fn preserves_full_sensor_for_a_default_crop_wider_than_active_area() {
+        let active = Rect::new(Point::new(0, 0), Dim2::new(5_920, 4_038));
+        let crop = Rect::new(Point::new(16, 21), Dim2::new(6_000, 4_000));
+
+        assert!(!contains_rect(active, crop));
+        assert!(
+            !development_steps(Some(active), Some(crop)).contains(&ProcessingStep::CropActiveArea)
+        );
+    }
+
+    #[test]
+    fn adapts_default_crop_when_it_is_inside_active_area() {
+        let active = Rect::new(Point::new(0, 0), Dim2::new(6_000, 4_000));
+        let crop = Rect::new(Point::new(16, 21), Dim2::new(5_900, 3_900));
+
+        assert!(contains_rect(active, crop));
+        assert!(
+            development_steps(Some(active), Some(crop)).contains(&ProcessingStep::CropActiveArea)
+        );
     }
 }

@@ -9,7 +9,7 @@ use rusttable_app::gtk_controller::{
 use rusttable_app::gtk_preview_controller::{GtkPreviewController, GtkPreviewState};
 use rusttable_app::gtk_thumbnail_controller::{GtkThumbnailController, GtkThumbnailSource};
 use rusttable_app::workspace::run_raster_import;
-use rusttable_image::{ImageInput, InputFormat};
+use rusttable_image::{ImageInput, InputFormat, SampleType};
 use rusttable_image_io::{FileImageInput, ImageDecoderRegistry};
 use rusttable_import::RasterImportCancellation;
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
@@ -122,6 +122,21 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
         decoder.identity().implementation(),
         fixture.expected_decoder_implementation()
     );
+    let frame = FileImageInput::new(
+        rusttable_image::DecodeLimits::new(64 * 1024 * 1024, 2_000, 2_000, 4_000_000, 8_000_000)
+            .expect("typed frame limits"),
+    )
+    .decode_frame_bytes(fixture.bytes())
+    .expect("typed RAF frame");
+    assert_eq!(frame.sample_type(), SampleType::U8);
+    assert_eq!(
+        frame.image().descriptor().dimensions().width(),
+        fixture.expected_width()
+    );
+    assert_eq!(
+        frame.image().descriptor().dimensions().height(),
+        fixture.expected_height()
+    );
 
     let repository = rusttable_catalog_store::RedbCatalogRepository::open(&catalog_path)
         .expect("catalog registration");
@@ -186,6 +201,8 @@ fn gtk_raw_import_reaches_catalog_thumbnail_preview_and_darkroom() {
         panic!("selected RAW preview must render");
     };
     assert_eq!(preview.photo_id(), photo_id);
+    assert_eq!(preview.dimensions().width(), fixture.expected_width());
+    assert_eq!(preview.dimensions().height(), fixture.expected_height());
     let sensor_dimensions = decoder_probe(fixture.bytes()).dimensions();
     assert!(preview.dimensions().width() <= sensor_dimensions.width());
     assert!(preview.dimensions().height() <= sensor_dimensions.height());
