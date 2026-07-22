@@ -156,7 +156,13 @@ fn native_open_import_dispatches_selection_through_active_projection() {
         request.targets(),
         [MacOpenTarget::Image(path)] if path == &source
     ));
-    dispatch_open_request(&request, &active_shell, &active_catalog, &active_collection);
+    dispatch_open_request(
+        &request,
+        &active_shell,
+        &active_catalog,
+        &active_collection,
+        &crate::diagnostics::AppDiagnostics::default(),
+    );
 
     let context = gtk4::glib::MainContext::default();
     let deadline = Instant::now() + Duration::from_secs(10);

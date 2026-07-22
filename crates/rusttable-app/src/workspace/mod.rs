@@ -16,3 +16,4 @@ pub use preview_loader::{
     load_selected_export_render_for_edit, load_selected_preview, selected_edit_id,
 };
 pub use raster_import::run_raster_import;
+pub(crate) use raster_import::run_raster_import_with_diagnostics;

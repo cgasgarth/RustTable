@@ -70,13 +70,43 @@ impl GtkShell {
         histogram: Result<HistogramData, HistogramError>,
     ) -> Result<(), crate::gtk_shell::PhotoPreviewTextureError> {
         if !self.accepts_darkroom_preview_generation(generation) {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "stale_generation",
+                cause = "viewport_generation_mismatch",
+                "ignored stale preview result"
+            );
             return Ok(());
         }
-        self.darkroom_preview.set_rgba8(metadata)?;
+        self.darkroom_preview
+            .set_rgba8(metadata)
+            .inspect_err(|error| {
+                tracing::error!(
+                    target: "rusttable.gtk.preview",
+                    generation = generation.get(),
+                    stage = "texture",
+                    cause = ?error,
+                    width = metadata.dimensions().width(),
+                    height = metadata.dimensions().height(),
+                    "preview texture adaptation failed"
+                );
+            })?;
         self.replace_selected_preview_projection(
             generation,
             SelectedPreviewState::Ready(metadata.clone()),
         );
+        if let Err(error) = &histogram {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "histogram",
+                cause = ?error,
+                width = metadata.dimensions().width(),
+                height = metadata.dimensions().height(),
+                "preview histogram unavailable"
+            );
+        }
         let _ = self.darkroom.set_histogram_result(generation, histogram);
         self.darkroom.sync_viewport_projection();
         self.darkroom.set_status(metadata.status().as_str());
@@ -86,6 +116,13 @@ impl GtkShell {
     /// Projects a preview failure and removes any histogram that belonged to its frame.
     pub fn set_darkroom_preview_failure(&self, generation: ViewportGeneration, message: &str) {
         if !self.accepts_darkroom_preview_generation(generation) {
+            tracing::warn!(
+                target: "rusttable.gtk.preview",
+                generation = generation.get(),
+                stage = "stale_generation",
+                cause = "failure_for_old_viewport",
+                "ignored stale preview failure"
+            );
             return;
         }
         if let Ok(detail) = PresentationText::new(message) {

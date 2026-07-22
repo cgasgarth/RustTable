@@ -763,11 +763,11 @@ pub(crate) fn run_with_bootstrap<I, G, A, W, Error>(
 where
     I: FnOnce() -> Result<G, DiagnosticsError>,
     G: Recorder,
-    A: FnOnce() -> ApplicationRunResult<Error>,
+    A: FnOnce(Option<Arc<G>>) -> ApplicationRunResult<Error>,
     W: FnMut(&str),
 {
     let guard = if let Ok(guard) = installer() {
-        Some(guard)
+        Some(Arc::new(guard))
     } else {
         warn("RustTable diagnostics installation failed; continuing");
         None
@@ -779,7 +779,7 @@ where
         warn("RustTable diagnostics startup record failed; continuing");
     }
 
-    let result = application();
+    let result = application(guard.clone());
     if let Some(ref guard) = guard {
         let event = result.as_ref().map_or(
             DiagnosticEvent::application_failure(

@@ -75,6 +75,13 @@ impl<'a> RasterImportService<'a> {
         cancellation: &RasterImportCancellation,
         observer: &dyn RasterImportObserver,
     ) -> RasterImportBatch {
+        let _span = tracing::info_span!(
+            target: "rusttable.import",
+            "raster_import",
+            item_count = request.items().len(),
+            operation = "raster_import"
+        )
+        .entered();
         let items = request
             .items()
             .map(|(item_id, path)| (item_id, path.to_owned()))
@@ -602,6 +609,13 @@ fn failed(
     failure: RasterImportFailure,
     observer: &dyn RasterImportObserver,
 ) -> RasterImportReceipt {
+    tracing::warn!(
+        target: "rusttable.import",
+        item_id = item_id.get(),
+        stage = "failure",
+        cause = ?failure,
+        "raster import failed"
+    );
     report(observer, item_id, RasterImportStage::Failed);
     receipt(item_id, alias, RasterImportStatus::Failed(failure))
 }
@@ -614,9 +628,27 @@ fn failed_with_evidence(
     failure: RasterImportFailure,
     observer: &dyn RasterImportObserver,
 ) -> RasterImportReceipt {
+    tracing::warn!(
+        target: "rusttable.import",
+        item_id = item_id.get(),
+        stage = "failure",
+        cause = ?failure,
+        format = format.map_or("unknown", |format| format_label(format)),
+        "raster import failed"
+    );
     report(observer, item_id, RasterImportStage::Failed);
     let mut receipt = receipt(item_id, alias, RasterImportStatus::Failed(failure));
     receipt.content_sha256 = Some(hash);
     receipt.format = format;
     receipt
+}
+
+fn format_label(format: InputFormat) -> &'static str {
+    match format {
+        InputFormat::Jpeg => "jpeg",
+        InputFormat::Png => "png",
+        InputFormat::Tiff => "tiff",
+        InputFormat::Raw => "raw",
+        InputFormat::OpenExr => "openexr",
+    }
 }

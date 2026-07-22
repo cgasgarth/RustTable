@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::composition::selected_preview::PreviewLifecycle;
+use crate::diagnostics::AppDiagnostics;
 use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
 use rusttable_ui::{DarkroomModuleActionHandler, GtkShell};
 
@@ -19,9 +20,11 @@ pub(crate) fn install(
     shell: &GtkShell,
     catalog: &Rc<RefCell<GtkCatalogController>>,
     lifecycle: &Rc<RefCell<PreviewLifecycle>>,
+    diagnostics: &AppDiagnostics,
 ) -> DarkroomEditBridge {
     let catalog = Rc::clone(catalog);
     let lifecycle = Rc::clone(lifecycle);
+    let diagnostics = diagnostics.clone();
     let controller = Rc::new(RefCell::new(GtkDarkroomEditController::new(
         catalog
             .borrow()
@@ -52,6 +55,7 @@ pub(crate) fn install(
                     &action_shell,
                     action_catalog.borrow().clone(),
                     Rc::clone(&action_lifecycle),
+                    diagnostics.clone(),
                 );
                 if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
                     after_commit();

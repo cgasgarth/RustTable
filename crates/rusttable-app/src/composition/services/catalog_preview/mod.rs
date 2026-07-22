@@ -43,15 +43,27 @@ impl CatalogPreviewService {
     ) -> Result<RenderOutput, CatalogPreviewError> {
         let record = imports
             .find_by_photo_id(request.photo_id)
-            .map_err(CatalogPreviewError::ImportRepository)?
-            .ok_or(CatalogPreviewError::UnknownPhoto {
+            .map_err(|error| {
+                tracing::error!(target: "rusttable.preview", stage = "catalog_lookup", cause = "import_repository");
+                CatalogPreviewError::ImportRepository(error)
+            })?
+            .ok_or_else(|| {
+                tracing::error!(target: "rusttable.preview", stage = "catalog_lookup", cause = "unknown_photo");
+                CatalogPreviewError::UnknownPhoto {
                 photo_id: request.photo_id,
+                }
             })?;
         let edit = edits
             .find_by_edit_id(request.edit_id)
-            .map_err(CatalogPreviewError::EditRepository)?
-            .ok_or(CatalogPreviewError::UnknownEdit {
+            .map_err(|error| {
+                tracing::error!(target: "rusttable.preview", stage = "edit_resolution", cause = "edit_repository");
+                CatalogPreviewError::EditRepository(error)
+            })?
+            .ok_or_else(|| {
+                tracing::error!(target: "rusttable.preview", stage = "edit_resolution", cause = "unknown_edit");
+                CatalogPreviewError::UnknownEdit {
                 edit_id: request.edit_id,
+                }
             })?;
         self.render_record(request.source_root, &record, &edit)
     }
@@ -75,9 +87,15 @@ impl CatalogPreviewService {
     ) -> Result<RenderOutput, CatalogPreviewError> {
         let record = imports
             .find_by_photo_id(edit.photo_id())
-            .map_err(CatalogPreviewError::ImportRepository)?
-            .ok_or(CatalogPreviewError::UnknownPhoto {
+            .map_err(|error| {
+                tracing::error!(target: "rusttable.preview", stage = "catalog_lookup", cause = "import_repository");
+                CatalogPreviewError::ImportRepository(error)
+            })?
+            .ok_or_else(|| {
+                tracing::error!(target: "rusttable.preview", stage = "catalog_lookup", cause = "unknown_photo");
+                CatalogPreviewError::UnknownPhoto {
                 photo_id: edit.photo_id(),
+                }
             })?;
         self.render_record(source_root, &record, edit)
     }
