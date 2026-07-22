@@ -877,6 +877,11 @@ impl RawCapabilityManifest {
     }
 
     /// Selects a unique backend camera profile using exact identity first, then reviewed aliases.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RawCapabilityResolveError::Unsupported`] when no profile matches, or
+    /// [`RawCapabilityResolveError::Ambiguous`] when more than one profile matches.
     pub fn resolve_backend(
         &self,
         maker: &str,
