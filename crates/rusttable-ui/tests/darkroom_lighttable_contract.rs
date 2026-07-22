@@ -139,8 +139,8 @@ fn darkroom_geometry_keeps_both_rails_and_a_visible_center_at_supported_sizes() 
         let geometry =
             DarkroomGeometryReceipt::for_window(window_width, window_height, true, true, true);
 
-        assert_eq!(geometry.left_panel_width_px, 220);
-        assert_eq!(geometry.right_panel_width_px, 220);
+        assert_eq!(geometry.left_panel_width_px, 150);
+        assert_eq!(geometry.right_panel_width_px, 150);
         assert!(geometry.center_width_px() >= 650);
         assert!(geometry.center_width_px() > geometry.right_panel_width_px);
     }
@@ -169,6 +169,7 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
 
     assert!(runtime_layout.contains(".propagate_natural_width(false)"));
     assert!(runtime_layout.contains("connect_right_rail_constraints"));
+    assert!(runtime_layout.contains("connect_left_rail_constraints"));
     assert!(runtime_layout.contains("gtk4::glib::idle_add_local_once"));
     assert!(darkroom_panels.contains("darkroom-module-groups-scroll"));
     assert!(darkroom_panels.contains(".propagate_natural_width(false)"));

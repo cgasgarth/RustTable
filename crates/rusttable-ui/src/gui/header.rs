@@ -189,15 +189,19 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     modes.set_valign(gtk4::Align::Center);
     apply_theme_role(&modes, ThemeRole::ViewSwitcher);
 
-    let lighttable =
-        gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceLighttable, &MessageArgs::new()));
+    let lighttable_label = i18n
+        .text(MessageId::WorkspaceLighttable, &MessageArgs::new())
+        .to_lowercase();
+    let lighttable = gtk4::Button::with_label(&lighttable_label);
     lighttable.set_widget_name("view-lighttable");
     lighttable.add_css_class("dt_mode_button");
     lighttable.set_can_focus(true);
     lighttable.set_accessible_role(gtk4::AccessibleRole::Radio);
     lighttable.update_property(&[Property::Label("Switch to lighttable")]);
-    let darkroom =
-        gtk4::Button::with_label(&i18n.text(MessageId::WorkspaceDarkroom, &MessageArgs::new()));
+    let darkroom_label = i18n
+        .text(MessageId::WorkspaceDarkroom, &MessageArgs::new())
+        .to_lowercase();
+    let darkroom = gtk4::Button::with_label(&darkroom_label);
     darkroom.set_widget_name("view-darkroom");
     darkroom.add_css_class("dt_mode_button");
     darkroom.set_can_focus(true);
