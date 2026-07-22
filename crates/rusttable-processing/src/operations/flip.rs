@@ -302,10 +302,10 @@ pub fn migrate_v1_with_source(
     if value.orientation == ORIENTATION_NULL {
         return Ok(migrate_v1(value));
     }
-    let user = OrientationBits::try_from(value.orientation)?.bits();
-    let source = OrientationBits::from_orientation(source_orientation).bits();
+    let user = OrientationBits::try_from(value.orientation)?;
+    let source = OrientationBits::from_orientation(source_orientation);
     Ok(FlipParametersV2 {
-        orientation: i32::from(merge_orientation_bits(source, user)),
+        orientation: i32::from(merge_two_orientations(source, user).bits()),
     })
 }
 
@@ -355,7 +355,17 @@ impl fmt::Display for FlipParameterError {
 
 impl std::error::Error for FlipParameterError {}
 
-fn merge_orientation_bits(raw: u8, user: u8) -> u8 {
+/// Composes stored source orientation with a subsequent user transform using
+/// Darktable `flip.c::merge_two_orientations` axis-bit semantics.
+#[must_use]
+pub const fn merge_two_orientations(
+    source: OrientationBits,
+    user: OrientationBits,
+) -> OrientationBits {
+    OrientationBits(merge_orientation_bits(source.bits(), user.bits()))
+}
+
+const fn merge_orientation_bits(raw: u8, user: u8) -> u8 {
     let mut corrected = raw;
     if user & ORIENTATION_SWAP_XY != 0 {
         if raw & ORIENTATION_FLIP_Y != 0 {

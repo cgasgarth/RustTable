@@ -223,7 +223,14 @@ impl JpegDecoder {
         &self,
         bytes: &[u8],
         limits: DecodeLimits,
-    ) -> Result<(rusttable_image::ImageDimensions, Vec<u8>), ImageInputError> {
+    ) -> Result<
+        (
+            rusttable_image::ImageDimensions,
+            rusttable_image::Orientation,
+            Vec<u8>,
+        ),
+        ImageInputError,
+    > {
         let raw_limits = raw_limits(limits)?;
         let request = JpegDecodeRequest::new(raw_limits);
         let result = self.decode_bytes(bytes, &request).map_err(map_error)?;
@@ -231,7 +238,7 @@ impl JpegDecoder {
             .pixels
             .ok_or_else(|| malformed("JPEG header-only decode returned no pixels"))?;
         let rgba = to_rgba8(&pixels, result.header.dimensions)?;
-        Ok((result.header.dimensions, rgba))
+        Ok((result.header.dimensions, result.header.orientation, rgba))
     }
 }
 

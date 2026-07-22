@@ -11,6 +11,7 @@ rusttable-catalog.workspace = true
 rusttable-core.workspace = true
 rusttable-image.workspace = true
 rusttable-metadata.workspace = true
+rusttable-processing.workspace = true
 sha2.workspace = true
 tracing.workspace = true
 

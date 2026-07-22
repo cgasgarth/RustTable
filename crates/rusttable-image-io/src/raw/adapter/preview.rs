@@ -16,7 +16,7 @@ use rawler::imgop::{
 use rawler::rawsource::RawSource;
 use rusttable_image::{
     ColorEncoding, DecodeLimits, DecodedImage, DecodedImageError, ImageDimensions, ImageInputError,
-    InputFormat,
+    InputFormat, Orientation,
 };
 
 use super::{
@@ -51,11 +51,20 @@ pub(super) fn developed_raw_preview(
     .map_err(|error| malformed(&format!("RAW development failed: {error}")))?;
 
     let (width, height, pixels) = linear_rgb(developed)?;
-    let pixels = display_map(&pixels);
-    let (dimensions, pixels) = orient_rgba8(width, height, &pixels, orientation)?;
+    let pixels = display_map(&pixels)
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    let dimensions =
+        ImageDimensions::new(width, height).map_err(|_| ImageInputError::ArithmeticOverflow)?;
     enforce_output_limit(dimensions, limits)?;
-    DecodedImage::new_with_color_encoding(dimensions, pixels, ColorEncoding::Srgb)
-        .map_err(decoded_image_error)
+    DecodedImage::new_with_source_orientation(
+        dimensions,
+        pixels,
+        ColorEncoding::Srgb,
+        image_orientation(orientation),
+    )
+    .map_err(decoded_image_error)
 }
 
 fn development_steps(active_area: Option<Rect>, crop_area: Option<Rect>) -> Vec<ProcessingStep> {
@@ -159,61 +168,16 @@ fn encode_srgb(value: f32) -> u8 {
     (encoded * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
-fn orient_rgba8(
-    width: u32,
-    height: u32,
-    pixels: &[[u8; 4]],
-    orientation: RawOrientation,
-) -> Result<(ImageDimensions, Vec<u8>), ImageInputError> {
-    let transposed = matches!(
-        orientation,
-        RawOrientation::Transpose
-            | RawOrientation::Rotate90
-            | RawOrientation::Transverse
-            | RawOrientation::Rotate270
-    );
-    let output_width = if transposed { height } else { width };
-    let output_height = if transposed { width } else { height };
-    let dimensions = ImageDimensions::new(output_width, output_height)
-        .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    let capacity = usize::try_from(
-        dimensions
-            .decoded_byte_count()
-            .map_err(|_| ImageInputError::ArithmeticOverflow)?,
-    )
-    .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    let mut output = vec![0_u8; capacity];
-    for y in 0..height {
-        for x in 0..width {
-            let (target_x, target_y) = oriented_coordinate(x, y, width, height, orientation);
-            let source = usize::try_from(u64::from(y) * u64::from(width) + u64::from(x))
-                .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-            let target = usize::try_from(
-                (u64::from(target_y) * u64::from(output_width) + u64::from(target_x)) * 4,
-            )
-            .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-            output[target..target + 4].copy_from_slice(&pixels[source]);
-        }
-    }
-    Ok((dimensions, output))
-}
-
-const fn oriented_coordinate(
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    orientation: RawOrientation,
-) -> (u32, u32) {
+const fn image_orientation(orientation: RawOrientation) -> Orientation {
     match orientation {
-        RawOrientation::HorizontalFlip => (width - 1 - x, y),
-        RawOrientation::Rotate180 => (width - 1 - x, height - 1 - y),
-        RawOrientation::VerticalFlip => (x, height - 1 - y),
-        RawOrientation::Transpose => (y, x),
-        RawOrientation::Rotate90 => (height - 1 - y, x),
-        RawOrientation::Transverse => (height - 1 - y, width - 1 - x),
-        RawOrientation::Rotate270 => (y, width - 1 - x),
-        RawOrientation::Normal | RawOrientation::Unknown => (x, y),
+        RawOrientation::HorizontalFlip => Orientation::FlipHorizontal,
+        RawOrientation::Rotate180 => Orientation::Rotate180,
+        RawOrientation::VerticalFlip => Orientation::FlipVertical,
+        RawOrientation::Transpose => Orientation::Transpose,
+        RawOrientation::Rotate90 => Orientation::Rotate90,
+        RawOrientation::Transverse => Orientation::Transverse,
+        RawOrientation::Rotate270 => Orientation::Rotate270,
+        RawOrientation::Normal | RawOrientation::Unknown => Orientation::Normal,
     }
 }
 

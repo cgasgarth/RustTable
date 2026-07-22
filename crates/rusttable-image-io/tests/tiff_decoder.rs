@@ -1,11 +1,11 @@
 use std::io::Cursor;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use rusttable_image::{Orientation, Roi};
+use rusttable_image::{DecodeLimits, Orientation, Roi};
 use rusttable_image_io::{
-    RawByteSource, RawCancellationToken, RawSourceError, TIFF_BACKEND_ID, TiffChunkKind,
-    TiffContainer, TiffDecodeError, TiffDecodeLimits, TiffDecodeRequest, TiffDecoder,
-    TiffSampleData,
+    ImageDecoderRegistry, RawByteSource, RawCancellationToken, RawSourceError, TIFF_BACKEND_ID,
+    TiffChunkKind, TiffContainer, TiffDecodeError, TiffDecodeLimits, TiffDecodeRequest,
+    TiffDecoder, TiffSampleData,
 };
 use tiff::encoder::colortype::{Gray8, Gray16, Gray32, Gray32Float, GrayI16, RGBA8};
 use tiff::encoder::{Compression, DeflateLevel, Predictor, TiffEncoder};
@@ -204,23 +204,43 @@ fn orientation_alpha_and_metadata_are_inventory_not_transforms() {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut encoder = TiffEncoder::new(&mut cursor).unwrap();
-        let mut image = encoder.new_image::<RGBA8>(1, 1).unwrap();
+        let mut image = encoder.new_image::<RGBA8>(2, 1).unwrap();
         image.encoder().write_tag(Tag::Orientation, 6_u16).unwrap();
         image
             .encoder()
             .write_tag(Tag::IccProfile, &[1_u8, 2, 3, 4][..])
             .unwrap();
-        image.write_data(&[10, 20, 30, 40]).unwrap();
+        image.write_data(&[10, 20, 30, 40, 50, 60, 70, 80]).unwrap();
     }
-    let result = decode(&cursor.into_inner());
+    let bytes = cursor.into_inner();
+    let result = decode(&bytes);
 
     assert_eq!(result.page.orientation, Orientation::Rotate90);
     assert_eq!(result.page.metadata.icc.unwrap().length, 4);
     assert_eq!(
         result.pixels.unwrap().samples,
-        TiffSampleData::U8(vec![10, 20, 30, 40])
+        TiffSampleData::U8(vec![10, 20, 30, 40, 50, 60, 70, 80])
     );
     assert_eq!(result.receipt.backend, TIFF_BACKEND_ID);
+
+    let limits = DecodeLimits::new(1_000_000, 2, 1, 2, 8).unwrap();
+    let registry = ImageDecoderRegistry::standard();
+    let frame = registry.decode_frame_bytes(&bytes, limits).unwrap();
+    assert_eq!(
+        frame.image().descriptor().orientation(),
+        Orientation::Rotate90
+    );
+    assert_eq!(
+        frame
+            .image()
+            .descriptor()
+            .orientation()
+            .output_dimensions(frame.image().descriptor().dimensions()),
+        rusttable_image::ImageDimensions::new(1, 2).unwrap()
+    );
+    let legacy = registry.decode_bytes(&bytes, limits).unwrap();
+    assert_eq!(legacy.source_orientation(), Orientation::Rotate90);
+    assert_eq!(legacy.pixels(), &[10, 20, 30, 40, 50, 60, 70, 80]);
 }
 
 #[test]

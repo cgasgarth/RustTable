@@ -139,7 +139,14 @@ pub(crate) fn decode_tiff_probe(
 pub(crate) fn decode_legacy_rgba8(
     bytes: &[u8],
     limits: DecodeLimits,
-) -> Result<(rusttable_image::ImageDimensions, Vec<u8>), ImageInputError> {
+) -> Result<
+    (
+        rusttable_image::ImageDimensions,
+        rusttable_image::Orientation,
+        Vec<u8>,
+    ),
+    ImageInputError,
+> {
     let request = TiffDecodeRequest::new(TiffDecodeLimits::from_common(limits));
     let result = TiffDecoder::new()
         .decode_bytes(bytes, &request)
@@ -149,7 +156,7 @@ pub(crate) fn decode_legacy_rgba8(
         .as_ref()
         .ok_or_else(|| malformed_input("TIFF full decode returned no samples"))?;
     let rgba = to_rgba8(pixels, &result.page)?;
-    Ok((pixels.dimensions, rgba))
+    Ok((pixels.dimensions, result.page.orientation, rgba))
 }
 
 fn decode_page(

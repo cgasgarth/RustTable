@@ -296,11 +296,12 @@ fn probe_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<ImageProbe, ImageInp
 
 fn decode_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
     let decoder = JpegDecoder::new();
-    let (dimensions, pixels) = decoder.decode_rgba8(bytes, limits)?;
-    rusttable_image::DecodedImage::new_with_color_encoding(
+    let (dimensions, orientation, pixels) = decoder.decode_rgba8(bytes, limits)?;
+    rusttable_image::DecodedImage::new_with_source_orientation(
         dimensions,
         pixels,
         rusttable_image::ColorEncoding::Unspecified,
+        orientation,
     )
     .map_err(|error| match error {
         rusttable_image::DecodedImageError::ArithmeticOverflow => {
@@ -421,17 +422,19 @@ fn decode_exr_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, 
         pixels.dimensions,
         format,
         rusttable_image::ColorEncoding::LinearSrgb,
+        rusttable_image::Orientation::Normal,
         bytes,
     )?;
     frame(source, InputFormat::OpenExr, image)
 }
 
 fn decode_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
-    let (dimensions, pixels) = decode_tiff_rgba8(bytes, limits)?;
-    DecodedImage::new_with_color_encoding(
+    let (dimensions, orientation, pixels) = decode_tiff_rgba8(bytes, limits)?;
+    DecodedImage::new_with_source_orientation(
         dimensions,
         pixels,
         rusttable_image::ColorEncoding::Unspecified,
+        orientation,
     )
     .map_err(|error| match error {
         rusttable_image::DecodedImageError::ArithmeticOverflow => {
@@ -518,6 +521,7 @@ fn decode_tiff_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame,
         pixels.dimensions,
         format,
         rusttable_image::ColorEncoding::Unspecified,
+        result.page.orientation,
         sample_bytes,
     )?;
     frame(bytes, InputFormat::Tiff, image)
@@ -546,15 +550,12 @@ fn owned_image(
     dimensions: rusttable_image::ImageDimensions,
     format: rusttable_image::PixelFormat,
     encoding: rusttable_image::ColorEncoding,
+    orientation: rusttable_image::Orientation,
     bytes: Vec<u8>,
 ) -> Result<rusttable_image::OwnedImage, ImageInputError> {
-    let descriptor = rusttable_image::ImageDescriptor::new(
-        dimensions,
-        format,
-        encoding,
-        rusttable_image::Orientation::Normal,
-    )
-    .map_err(|_| ImageInputError::ArithmeticOverflow)?;
+    let descriptor =
+        rusttable_image::ImageDescriptor::new(dimensions, format, encoding, orientation)
+            .map_err(|_| ImageInputError::ArithmeticOverflow)?;
     rusttable_image::OwnedImage::new(descriptor, bytes).map_err(|_| {
         ImageInputError::DecodedBufferInvariant {
             expected: 0,

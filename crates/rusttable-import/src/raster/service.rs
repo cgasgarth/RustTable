@@ -439,6 +439,9 @@ fn neutral_edit(
     photo_id: PhotoId,
     hash: [u8; 32],
 ) -> Result<Edit, RasterImportFailure> {
+    let flip = rusttable_processing::builtin_registry()
+        .materialize_operation("rusttable.flip", operation_id(b"source-orientation", hash)?)
+        .map_err(|_| RasterImportFailure::InternalInvariant)?;
     let exposure = Operation::new(
         operation_id(b"exposure", hash)?,
         OperationKey::new("rusttable.exposure")
@@ -459,8 +462,13 @@ fn neutral_edit(
         ],
     )
     .map_err(|_| RasterImportFailure::InternalInvariant)?;
-    Edit::new(edit_id, photo_id, Revision::ZERO, [exposure, rgb_gain])
-        .map_err(|_| RasterImportFailure::InternalInvariant)
+    Edit::new(
+        edit_id,
+        photo_id,
+        Revision::ZERO,
+        [flip, exposure, rgb_gain],
+    )
+    .map_err(|_| RasterImportFailure::InternalInvariant)
 }
 
 fn operation_id(domain: &[u8], hash: [u8; 32]) -> Result<OperationId, RasterImportFailure> {

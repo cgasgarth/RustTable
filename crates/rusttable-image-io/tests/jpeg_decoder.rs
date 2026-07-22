@@ -4,8 +4,8 @@ use rusttable_image::{
     DecodeLimits, ImageInputError, InputFormat, Orientation, UnsupportedImageFeature,
 };
 use rusttable_image_io::{
-    JpegComponentModel, JpegDecodeError, JpegDecodeRequest, JpegDecoder, JpegPixelData,
-    RawByteSource, RawDecodeLimits, RawSourceError,
+    ImageDecoderRegistry, JpegComponentModel, JpegDecodeError, JpegDecodeRequest, JpegDecoder,
+    JpegPixelData, RawByteSource, RawDecodeLimits, RawSourceError,
 };
 
 fn decode_base64(encoded: &str) -> Vec<u8> {
@@ -68,7 +68,8 @@ fn exif_orientation(value: u16) -> Vec<u8> {
     payload.extend_from_slice(&3_u16.to_le_bytes());
     payload.extend_from_slice(&1_u32.to_le_bytes());
     payload.extend_from_slice(&value.to_le_bytes());
-    payload.extend_from_slice(&[0, 0, 0, 0]);
+    payload.extend_from_slice(&[0, 0]);
+    payload.extend_from_slice(&0_u32.to_le_bytes());
     payload
 }
 
@@ -100,6 +101,45 @@ fn header_probe_reports_dimensions_precision_components_orientation_and_metadata
     assert_eq!(header.output_dimensions().height(), 2);
     assert_eq!(header.metadata.len(), 1);
     assert_eq!(header.metadata[0].data, exif[4..]);
+}
+
+#[test]
+fn all_exif_orientations_remain_typed_source_properties_on_non_square_jpegs() {
+    let orientations = [
+        Orientation::Normal,
+        Orientation::FlipHorizontal,
+        Orientation::Rotate180,
+        Orientation::FlipVertical,
+        Orientation::Transpose,
+        Orientation::Rotate90,
+        Orientation::Transverse,
+        Orientation::Rotate270,
+    ];
+    for (index, expected) in orientations.into_iter().enumerate() {
+        let code = u16::try_from(index + 1).expect("EXIF code");
+        let mut bytes = vec![0xff, 0xd8];
+        bytes.extend(segment(0xe1, &exif_orientation(code)));
+        bytes.extend_from_slice(&jpeg()[2..]);
+
+        let frame = ImageDecoderRegistry::standard()
+            .decode_frame_bytes(&bytes, image_limits())
+            .expect("oriented JPEG frame");
+        let descriptor = frame.image().descriptor();
+
+        assert_eq!(descriptor.dimensions().width(), 2, "orientation {code}");
+        assert_eq!(descriptor.dimensions().height(), 1, "orientation {code}");
+        assert_eq!(descriptor.orientation(), expected, "orientation {code}");
+        let expected_dimensions = if code >= 5 { (1, 2) } else { (2, 1) };
+        let output_dimensions = descriptor
+            .orientation()
+            .output_dimensions(descriptor.dimensions());
+        assert_eq!(
+            (output_dimensions.width(), output_dimensions.height()),
+            expected_dimensions,
+            "orientation {code}"
+        );
+        assert_eq!(frame.rgba_f32_pixels().unwrap().len(), 2);
+    }
 }
 
 #[test]
