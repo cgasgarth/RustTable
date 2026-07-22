@@ -1,6 +1,7 @@
 use rusttable_processing::{
     EncodedSrgbOutput, FiniteF32, GamutClipReport, LinearRgb, RasterDimensions, RgbChannel,
-    SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage, encode_linear_srgb, to_linear_srgb,
+    SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage, encode_linear_srgb,
+    encode_working_to_srgb, to_linear_srgb,
 };
 
 fn dimensions(width: u32, height: u32) -> RasterDimensions {
@@ -74,6 +75,29 @@ fn uses_both_standard_transfer_branches() {
 
     assert_eq!(channel_bits(&output, 0, RgbChannel::Red), low_expected);
     assert_eq!(channel_bits(&output, 1, RgbChannel::Red), high_expected);
+}
+
+#[test]
+fn no_monitor_srgb_fallback_preserves_neutral_luminance_and_transfer() {
+    let linear_mid_grey = 0.18;
+    let expected_srgb = 0.461_356_12_f32;
+    let input = working(vec![pixel(
+        linear_mid_grey,
+        linear_mid_grey,
+        linear_mid_grey,
+    )]);
+
+    let fallback = encode_working_to_srgb(&input);
+    let direct = encode_linear_srgb(&input);
+    let output = fallback.image().pixel(0).expect("fallback pixel exists");
+    let luminance = 0.2126_f32.mul_add(
+        output.red().get(),
+        0.7152_f32.mul_add(output.green().get(), 0.0722 * output.blue().get()),
+    );
+
+    assert_eq!(fallback, direct);
+    assert!((output.red().get() - expected_srgb).abs() < 0.000_001);
+    assert!((luminance - expected_srgb).abs() < 0.000_001);
 }
 
 #[test]
