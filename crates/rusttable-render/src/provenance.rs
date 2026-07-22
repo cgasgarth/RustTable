@@ -118,6 +118,7 @@ pub enum RenderFailureStage {
     SourceColor,
     Pipeline,
     Evaluation,
+    Resampling,
     Image,
 }
 

@@ -23,7 +23,7 @@ fn shared_render_size_request_drives_the_same_plan_used_by_export() {
         plan.output_dimensions(),
         ImageDimensions::new(100, 50).unwrap()
     );
-    assert_eq!(plan.sampling(), RenderSampling::CenterPoint);
+    assert_eq!(plan.sampling(), RenderSampling::Filtered);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn preview_plan_fits_without_upscaling_using_integer_arithmetic() {
         plan.output_dimensions(),
         ImageDimensions::new(2, 1).unwrap()
     );
-    assert_eq!(plan.sampling(), RenderSampling::CenterPoint);
+    assert_eq!(plan.sampling(), RenderSampling::Filtered);
 }
 
 #[test]

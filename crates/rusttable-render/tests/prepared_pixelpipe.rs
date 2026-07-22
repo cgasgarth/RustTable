@@ -88,8 +88,8 @@ fn preview_sampling_routes_the_completed_pixelpipe_result() {
         output.image().dimensions(),
         ImageDimensions::new(2, 1).unwrap()
     );
-    assert_eq!(output.image().pixels(), &[255, 0, 0, 2, 0, 0, 255, 4]);
-    assert_eq!(output.plan().sampling(), RenderSampling::CenterPoint);
+    assert_eq!(output.image().pixels(), &[219, 101, 0, 2, 55, 183, 188, 3]);
+    assert_eq!(output.plan().sampling(), RenderSampling::Filtered);
     assert_eq!(
         output.source_color_decision(),
         SourceColorDecision::AssumedSrgb

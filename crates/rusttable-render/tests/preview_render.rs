@@ -25,7 +25,7 @@ fn image(width: u32, height: u32, pixels: Vec<u8>, encoding: ColorEncoding) -> D
 }
 
 #[test]
-fn center_point_preview_copies_exact_rgba_source_pixels() {
+fn filtered_preview_reconstructs_source_pixels_in_linear_light() {
     let input = image(
         4,
         3,
@@ -50,9 +50,9 @@ fn center_point_preview_copies_exact_rgba_source_pixels() {
         output.image().dimensions(),
         ImageDimensions::new(2, 1).unwrap()
     );
-    assert_eq!(output.image().pixels(), &[5, 25, 45, 205, 7, 27, 47, 207]);
+    assert_eq!(output.image().pixels(), &[5, 25, 45, 205, 7, 27, 47, 206]);
     assert_eq!(output.plan(), plan);
-    assert_eq!(output.plan().sampling(), RenderSampling::CenterPoint);
+    assert_eq!(output.plan().sampling(), RenderSampling::Filtered);
     assert_eq!(
         output.source_color_decision(),
         SourceColorDecision::DeclaredSrgb
@@ -101,7 +101,7 @@ fn display_p3_preview_keeps_declared_source_policy_and_alpha() {
         output.image().dimensions(),
         ImageDimensions::new(1, 1).unwrap()
     );
-    assert_eq!(output.image().pixels()[3], 9);
+    assert_eq!(output.image().pixels()[3], 8);
     assert_eq!(
         output.source_color_decision(),
         SourceColorDecision::DeclaredDisplayP3

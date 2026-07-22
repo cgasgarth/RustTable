@@ -19,6 +19,7 @@ pub mod diagnostics;
 mod plan;
 mod prepared_pixelpipe;
 mod provenance;
+mod resampling;
 mod thumbnail;
 
 pub use diagnostics::{
@@ -28,7 +29,10 @@ pub use diagnostics::{
     RawOverexposedPlan, RawOverexposedReceipt, RawOverexposedResult, RawOverexposedState,
     RawOverlayMode, RawSolidColor, RgbaPixel,
 };
-pub use plan::{PreviewBounds, PreviewBoundsError, RenderPlan, RenderSampling, RenderTarget};
+pub use plan::{
+    PreviewBounds, PreviewBoundsError, RenderAlphaPolicy, RenderBorderPolicy, RenderPlan,
+    RenderResampling, RenderSampling, RenderTarget,
+};
 pub use prepared_pixelpipe::{
     PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, render_prepared_cpu_pixelpipe,
 };
@@ -36,6 +40,7 @@ pub use provenance::{
     ProvenancedRenderError, ProvenancedRenderErrorKind, ProvenancedRenderOutput,
     RenderFailureStage, RenderReceipt, RenderRequestContext, RenderSourceProvenance,
 };
+pub use resampling::{ResamplingChannel, ResamplingError};
 pub use thumbnail::cache::{
     CURRENT_CACHE_SCHEMA, CacheEntry, CacheError, CacheLease, CacheLimits, CachePin, CacheStore,
     CacheTime, ReconciliationReport,
@@ -177,6 +182,9 @@ pub enum RenderError {
     Evaluation {
         source: EvaluationError,
     },
+    Resampling {
+        source: ResamplingError,
+    },
     Image {
         source: DecodedImageError,
     },
@@ -228,21 +236,15 @@ pub fn render_edit_with_plan(
     let pipeline = CompiledPipeline::compile(edit).map_err(|source| RenderError::Pipeline {
         source: Box::new(source),
     })?;
-    let sampled = match plan.sampling() {
-        RenderSampling::Identity => None,
-        RenderSampling::CenterPoint => Some(
-            sample_center_point(input, plan.output_dimensions())
-                .map_err(|source| RenderError::Image { source })?,
-        ),
-    };
-    let render_input = sampled.as_ref().unwrap_or(input);
-    let (source, alpha) = source_image(render_input);
+    let (source, alpha) = source_image(input);
     let working = match source {
         SourceImage::Srgb(source) => to_linear_srgb(&source),
         SourceImage::LinearSrgb(source) => linear_srgb_to_working(&source),
         SourceImage::DisplayP3(source) => to_linear_srgb_from_display_p3(&source),
         SourceImage::LinearDisplayP3(source) => linear_display_p3_to_working(&source),
     };
+    let (working, alpha) = resampling::resample_working(&working, &alpha, plan)
+        .map_err(|source| RenderError::Resampling { source })?;
     let evaluated =
         evaluate(&pipeline, &working).map_err(|source| RenderError::Evaluation { source })?;
     let encoded = rusttable_processing::encode_working_to_srgb(&evaluated);
@@ -324,6 +326,7 @@ const fn failure_stage(error: &RenderError) -> RenderFailureStage {
         RenderError::SourceColor { .. } => RenderFailureStage::SourceColor,
         RenderError::Pipeline { .. } => RenderFailureStage::Pipeline,
         RenderError::Evaluation { .. } => RenderFailureStage::Evaluation,
+        RenderError::Resampling { .. } => RenderFailureStage::Resampling,
         RenderError::Image { .. } => RenderFailureStage::Image,
     }
 }
@@ -421,51 +424,6 @@ fn source_image(input: &DecodedImage) -> (SourceImage, Vec<f32>) {
     }
 }
 
-fn sample_center_point(
-    input: &DecodedImage,
-    output_dimensions: ImageDimensions,
-) -> Result<DecodedImage, DecodedImageError> {
-    let source_width = u64::from(input.dimensions().width());
-    let source_height = u64::from(input.dimensions().height());
-    let output_width = u64::from(output_dimensions.width());
-    let output_height = u64::from(output_dimensions.height());
-    let pixel_count = usize::try_from(
-        output_dimensions
-            .pixel_count()
-            .map_err(|_| DecodedImageError::ArithmeticOverflow)?,
-    )
-    .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
-    let mut pixels = Vec::with_capacity(
-        pixel_count
-            .checked_mul(4)
-            .ok_or(DecodedImageError::ArithmeticOverflow)?,
-    );
-    for output_row in 0..output_height {
-        let source_row = center_index(output_row, source_height, output_height);
-        for output_column in 0..output_width {
-            let source_column = center_index(output_column, source_width, output_width);
-            let source_index = usize::try_from(
-                (source_row * source_width + source_column)
-                    .checked_mul(4)
-                    .ok_or(DecodedImageError::ArithmeticOverflow)?,
-            )
-            .map_err(|_| DecodedImageError::ArithmeticOverflow)?;
-            pixels.extend_from_slice(
-                input
-                    .pixels()
-                    .get(source_index..source_index + 4)
-                    .ok_or(DecodedImageError::ArithmeticOverflow)?,
-            );
-        }
-    }
-    DecodedImage::new_with_color_encoding(output_dimensions, pixels, input.color_encoding())
-}
-
-fn center_index(output_index: u64, source_extent: u64, output_extent: u64) -> u64 {
-    ((2 * output_index + 1) * source_extent / (2 * output_extent))
-        .min(source_extent.saturating_sub(1))
-}
-
 fn quantized_pixels(encoded: &rusttable_processing::EncodedSrgbOutput, alpha: &[f32]) -> Vec<u8> {
     let mut pixels = Vec::with_capacity(alpha.len() * 4);
     for (encoded_pixel, &alpha) in encoded.image().pixels().zip(alpha) {
@@ -520,6 +478,9 @@ impl fmt::Display for RenderError {
                 write!(formatter, "render pipeline compilation failed: {source}")
             }
             Self::Evaluation { source } => write!(formatter, "render evaluation failed: {source}"),
+            Self::Resampling { source } => {
+                write!(formatter, "render resampling failed: {source:?}")
+            }
             Self::Image { source } => write!(
                 formatter,
                 "render output image construction failed: {source}"
@@ -534,6 +495,7 @@ impl std::error::Error for RenderError {
             Self::PlanSourceDimensions { .. } | Self::SourceColor { .. } => None,
             Self::Pipeline { source } => Some(source.as_ref()),
             Self::Evaluation { source } => Some(source),
+            Self::Resampling { source } => Some(source),
             Self::Image { source } => Some(source),
         }
     }

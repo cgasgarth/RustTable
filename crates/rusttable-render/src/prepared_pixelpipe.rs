@@ -6,8 +6,8 @@ use rusttable_image::{
 use rusttable_processing::{WorkingRgbImage, encode_working_to_srgb};
 
 use crate::{
-    RenderError, RenderOutput, RenderPlan, RenderProvenance, RenderSampling, RenderTarget,
-    SourceColorDecision, quantized_pixels, sample_center_point,
+    RenderError, RenderOutput, RenderPlan, RenderProvenance, RenderTarget, SourceColorDecision,
+    quantized_pixels, resampling,
 };
 
 /// Immutable canonical CPU pixelpipe output ready for final rendering.
@@ -145,18 +145,15 @@ pub fn render_prepared_cpu_pixelpipe(
     let source_dimensions = ImageDimensions::new(dimensions.width(), dimensions.height())
         .expect("processing dimensions are nonzero by type");
     let plan = RenderPlan::for_source(source_dimensions, target);
-    let encoded = encode_working_to_srgb(prepared.pixels());
-    let full = DecodedImage::new_with_color_encoding(
-        source_dimensions,
-        quantized_pixels(&encoded, prepared.alpha()),
+    let (pixels, alpha) = resampling::resample_working(prepared.pixels(), prepared.alpha(), plan)
+        .map_err(|source| RenderError::Resampling { source })?;
+    let encoded = encode_working_to_srgb(&pixels);
+    let image = DecodedImage::new_with_color_encoding(
+        plan.output_dimensions(),
+        quantized_pixels(&encoded, &alpha),
         ColorEncoding::Srgb,
     )
     .map_err(|source| RenderError::Image { source })?;
-    let image = match plan.sampling() {
-        RenderSampling::Identity => full,
-        RenderSampling::CenterPoint => sample_center_point(&full, plan.output_dimensions())
-            .map_err(|source| RenderError::Image { source })?,
-    };
 
     Ok(RenderOutput {
         image,
@@ -165,7 +162,7 @@ pub fn render_prepared_cpu_pixelpipe(
         source_color: prepared.source_color(),
         clipping: encoded.clipping(),
         provenance: prepared.provenance(),
-        working_profile: prepared.pixels().frame(),
+        working_profile: pixels.frame(),
     })
 }
 

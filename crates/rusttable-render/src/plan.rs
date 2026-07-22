@@ -2,6 +2,7 @@ use std::fmt;
 
 use rusttable_core::{RenderSizeError, RenderSizeRequest};
 use rusttable_image::ImageDimensions;
+use rusttable_processing::operations::finalscale::FinalScaleKernel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PreviewBounds {
@@ -65,7 +66,71 @@ pub enum RenderTarget {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderSampling {
     Identity,
-    CenterPoint,
+    Filtered,
+}
+
+/// Border policy used by the preview resampler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RenderBorderPolicy {
+    Reflect,
+}
+
+/// Alpha policy used by filtered preview resampling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RenderAlphaPolicy {
+    Premultiplied,
+}
+
+/// Explicit preview resampling policy carried by every non-identity plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RenderResampling {
+    filter: FinalScaleKernel,
+    border: RenderBorderPolicy,
+    alpha: RenderAlphaPolicy,
+}
+
+impl RenderResampling {
+    #[must_use]
+    pub const fn preview() -> Self {
+        Self {
+            filter: FinalScaleKernel::Bicubic,
+            border: RenderBorderPolicy::Reflect,
+            alpha: RenderAlphaPolicy::Premultiplied,
+        }
+    }
+
+    #[must_use]
+    pub const fn new(
+        filter: FinalScaleKernel,
+        border: RenderBorderPolicy,
+        alpha: RenderAlphaPolicy,
+    ) -> Self {
+        Self {
+            filter,
+            border,
+            alpha,
+        }
+    }
+
+    #[must_use]
+    pub const fn filter(self) -> FinalScaleKernel {
+        self.filter
+    }
+
+    #[must_use]
+    pub const fn support(self) -> u32 {
+        self.filter.support()
+    }
+
+    #[must_use]
+    pub const fn border(self) -> RenderBorderPolicy {
+        self.border
+    }
+
+    #[must_use]
+    pub const fn alpha(self) -> RenderAlphaPolicy {
+        self.alpha
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,6 +139,7 @@ pub struct RenderPlan {
     target: RenderTarget,
     output_dimensions: ImageDimensions,
     sampling: RenderSampling,
+    resampling: Option<RenderResampling>,
 }
 
 impl RenderPlan {
@@ -104,8 +170,10 @@ impl RenderPlan {
             sampling: if output_dimensions == source_dimensions {
                 RenderSampling::Identity
             } else {
-                RenderSampling::CenterPoint
+                RenderSampling::Filtered
             },
+            resampling: (output_dimensions != source_dimensions)
+                .then_some(RenderResampling::preview()),
         })
     }
 
@@ -118,13 +186,15 @@ impl RenderPlan {
         let sampling = if output_dimensions == source_dimensions {
             RenderSampling::Identity
         } else {
-            RenderSampling::CenterPoint
+            RenderSampling::Filtered
         };
         Self {
             source_dimensions,
             target,
             output_dimensions,
             sampling,
+            resampling: (output_dimensions != source_dimensions)
+                .then_some(RenderResampling::preview()),
         }
     }
 
@@ -146,6 +216,23 @@ impl RenderPlan {
     #[must_use]
     pub const fn sampling(self) -> RenderSampling {
         self.sampling
+    }
+
+    #[must_use]
+    pub const fn resampling(self) -> Option<RenderResampling> {
+        self.resampling
+    }
+
+    /// Horizontal output-to-source scale propagated to scale-sensitive work.
+    #[must_use]
+    pub fn scale_x(self) -> f64 {
+        f64::from(self.output_dimensions.width()) / f64::from(self.source_dimensions.width())
+    }
+
+    /// Vertical output-to-source scale propagated to scale-sensitive work.
+    #[must_use]
+    pub fn scale_y(self) -> f64 {
+        f64::from(self.output_dimensions.height()) / f64::from(self.source_dimensions.height())
     }
 }
 
