@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::{num::NonZeroU32, ops::Range};
 
 use exif::{Reader, Tag, Value};
 use rusttable_core::{ImageMetadata, MetadataEntry, MetadataText, Orientation, PositiveRational};
@@ -464,34 +464,18 @@ fn preflight_tiff(payload: &[u8], limits: MetadataLimits) -> Result<(), Metadata
             let tag = read_u16(payload, entry_offset, little)?;
             let kind = read_u16(payload, entry_offset + 2, little)?;
             let count = read_u32(payload, entry_offset + 4, little)?;
-            let unit = type_size(kind).ok_or(MetadataInputError::MalformedExif)?;
-            let value_bytes = u64::from(count)
-                .checked_mul(u64::from(unit))
-                .ok_or(MetadataInputError::ArithmeticOverflow)?;
+            let value_bytes = checked_tiff_value_bytes(kind, u64::from(count))?;
             if value_bytes > limits.value_bytes {
                 return Err(MetadataInputError::ValueTooLarge {
                     limit: limits.value_bytes,
                     actual: value_bytes,
                 });
             }
-            let value_offset = if value_bytes <= 4 {
-                entry_offset + 8
-            } else {
-                usize::try_from(read_u32(payload, entry_offset + 8, little)?)
-                    .map_err(|_| MetadataInputError::ArithmeticOverflow)?
-            };
-            let value_end = value_offset
-                .checked_add(
-                    usize::try_from(value_bytes)
-                        .map_err(|_| MetadataInputError::ArithmeticOverflow)?,
-                )
-                .ok_or(MetadataInputError::ArithmeticOverflow)?;
-            if value_end > payload.len() {
-                return Err(MetadataInputError::MalformedExif);
-            }
+            let _value = tiff_value_range(payload, entry_offset, kind, count, little)?;
             if matches!(tag, 0x8769 | 0x8825 | 0xa005) && kind == 4 && count == 1 {
-                let child = usize::try_from(read_u32(payload, value_offset, little)?)
-                    .map_err(|_| MetadataInputError::ArithmeticOverflow)?;
+                let child_offset = read_tiff_u32(payload, entry_offset, kind, count, little)?;
+                let child = usize::try_from(child_offset)
+                    .map_err(|_| tiff_offset_overflow(u64::from(child_offset), 1))?;
                 pending.push((
                     child,
                     depth
@@ -507,25 +491,166 @@ fn preflight_tiff(payload: &[u8], limits: MetadataLimits) -> Result<(), Metadata
     Ok(())
 }
 
-fn type_size(kind: u16) -> Option<u32> {
-    match kind {
-        1 | 2 | 7 | 8 => Some(1),
-        3 | 9 => Some(2),
-        4 | 11 => Some(4),
-        5 | 10 | 12 => Some(8),
-        _ => None,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TiffFieldType {
+    code: u16,
+    element_size: u8,
+}
+
+// TIFF 6.0 field widths. Keep this as the sole width authority for preflight
+// and the typed Value accounting below. BigTIFF's 64-bit types are not part of
+// the classic TIFF/EXIF contract implemented by RustTable.
+const TIFF_FIELD_TYPES: [TiffFieldType; 13] = [
+    TiffFieldType {
+        code: 1,
+        element_size: 1,
+    }, // BYTE
+    TiffFieldType {
+        code: 2,
+        element_size: 1,
+    }, // ASCII
+    TiffFieldType {
+        code: 3,
+        element_size: 2,
+    }, // SHORT
+    TiffFieldType {
+        code: 4,
+        element_size: 4,
+    }, // LONG
+    TiffFieldType {
+        code: 5,
+        element_size: 8,
+    }, // RATIONAL
+    TiffFieldType {
+        code: 6,
+        element_size: 1,
+    }, // SBYTE
+    TiffFieldType {
+        code: 7,
+        element_size: 1,
+    }, // UNDEFINED
+    TiffFieldType {
+        code: 8,
+        element_size: 2,
+    }, // SSHORT
+    TiffFieldType {
+        code: 9,
+        element_size: 4,
+    }, // SLONG
+    TiffFieldType {
+        code: 10,
+        element_size: 8,
+    }, // SRATIONAL
+    TiffFieldType {
+        code: 11,
+        element_size: 4,
+    }, // FLOAT
+    TiffFieldType {
+        code: 12,
+        element_size: 8,
+    }, // DOUBLE
+    TiffFieldType {
+        code: 13,
+        element_size: 4,
+    }, // IFD
+];
+
+fn tiff_field_type(kind: u16) -> Option<TiffFieldType> {
+    TIFF_FIELD_TYPES
+        .iter()
+        .copied()
+        .find(|field_type| field_type.code == kind)
+}
+
+fn checked_tiff_value_bytes(kind: u16, count: u64) -> Result<u64, MetadataInputError> {
+    let field_type = tiff_field_type(kind).ok_or(MetadataInputError::MalformedExif)?;
+    count.checked_mul(u64::from(field_type.element_size)).ok_or(
+        MetadataInputError::TiffValueSizeOverflow {
+            kind,
+            count,
+            element_size: field_type.element_size,
+        },
+    )
+}
+
+fn tiff_value_range(
+    payload: &[u8],
+    entry_offset: usize,
+    kind: u16,
+    count: u32,
+    little: bool,
+) -> Result<Range<usize>, MetadataInputError> {
+    let value_bytes = checked_tiff_value_bytes(kind, u64::from(count))?;
+    let inline_slot = entry_offset
+        .checked_add(8)
+        .ok_or_else(|| tiff_offset_overflow(u64::try_from(entry_offset).unwrap_or(u64::MAX), 8))?;
+    if value_bytes <= 4 {
+        let _slot = read_fixed(payload, inline_slot, 4)?;
+        return bounded_value_range(payload, inline_slot, value_bytes, kind, u64::from(count));
     }
+
+    let value_offset = read_u32(payload, inline_slot, little)?;
+    let value_offset = usize::try_from(value_offset)
+        .map_err(|_| tiff_offset_overflow(u64::from(value_offset), value_bytes))?;
+    bounded_value_range(payload, value_offset, value_bytes, kind, u64::from(count))
+}
+
+fn bounded_value_range(
+    payload: &[u8],
+    value_offset: usize,
+    value_bytes: u64,
+    kind: u16,
+    count: u64,
+) -> Result<Range<usize>, MetadataInputError> {
+    let value_length = usize::try_from(value_bytes).map_err(|_| {
+        tiff_offset_overflow(u64::try_from(value_offset).unwrap_or(u64::MAX), value_bytes)
+    })?;
+    let value_end = value_offset.checked_add(value_length).ok_or_else(|| {
+        tiff_offset_overflow(u64::try_from(value_offset).unwrap_or(u64::MAX), value_bytes)
+    })?;
+    if value_end > payload.len() {
+        return Err(MetadataInputError::TiffValueTruncated {
+            kind,
+            count,
+            offset: u64::try_from(value_offset).unwrap_or(u64::MAX),
+            required: value_bytes,
+            available: u64::try_from(payload.len().saturating_sub(value_offset))
+                .unwrap_or(u64::MAX),
+        });
+    }
+    Ok(value_offset..value_end)
+}
+
+fn tiff_offset_overflow(offset: u64, length: u64) -> MetadataInputError {
+    MetadataInputError::TiffOffsetOverflow { offset, length }
+}
+
+fn read_tiff_u32(
+    payload: &[u8],
+    entry_offset: usize,
+    kind: u16,
+    count: u32,
+    little: bool,
+) -> Result<u32, MetadataInputError> {
+    let range = tiff_value_range(payload, entry_offset, kind, count, little)?;
+    let bytes = payload
+        .get(range)
+        .ok_or(MetadataInputError::TiffValueTruncated {
+            kind,
+            count: u64::from(count),
+            offset: u64::try_from(entry_offset).unwrap_or(u64::MAX),
+            required: 4,
+            available: 0,
+        })?;
+    Ok(if little {
+        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+    } else {
+        u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+    })
 }
 
 fn read_u16(payload: &[u8], offset: usize, little: bool) -> Result<u16, MetadataInputError> {
-    let bytes = payload
-        .get(
-            offset
-                ..offset
-                    .checked_add(2)
-                    .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        )
-        .ok_or(MetadataInputError::MalformedExif)?;
+    let bytes = read_fixed(payload, offset, 2)?;
     Ok(if little {
         u16::from_le_bytes([bytes[0], bytes[1]])
     } else {
@@ -534,19 +659,28 @@ fn read_u16(payload: &[u8], offset: usize, little: bool) -> Result<u16, Metadata
 }
 
 fn read_u32(payload: &[u8], offset: usize, little: bool) -> Result<u32, MetadataInputError> {
-    let bytes = payload
-        .get(
-            offset
-                ..offset
-                    .checked_add(4)
-                    .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        )
-        .ok_or(MetadataInputError::MalformedExif)?;
+    let bytes = read_fixed(payload, offset, 4)?;
     Ok(if little {
         u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     } else {
         u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
     })
+}
+
+fn read_fixed(payload: &[u8], offset: usize, length: usize) -> Result<&[u8], MetadataInputError> {
+    let end = offset.checked_add(length).ok_or_else(|| {
+        tiff_offset_overflow(
+            u64::try_from(offset).unwrap_or(u64::MAX),
+            u64::try_from(length).unwrap_or(u64::MAX),
+        )
+    })?;
+    payload
+        .get(offset..end)
+        .ok_or_else(|| MetadataInputError::TiffStructureTruncated {
+            offset: u64::try_from(offset).unwrap_or(u64::MAX),
+            required: u64::try_from(length).unwrap_or(u64::MAX),
+            available: u64::try_from(payload.len().saturating_sub(offset)).unwrap_or(u64::MAX),
+        })
 }
 
 fn text_entry<F>(
@@ -610,47 +744,85 @@ fn unique_field<'a>(
 
 fn value_bytes(value: &Value) -> Result<u64, MetadataInputError> {
     let bytes = match value {
-        Value::Byte(values) | Value::Undefined(values, _) => values.len(),
-        Value::Ascii(values) => values
-            .iter()
-            .try_fold(0usize, |total, value| total.checked_add(value.len()))
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::Short(values) => values
-            .len()
-            .checked_mul(2)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::Long(values) => values
-            .len()
-            .checked_mul(4)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::SLong(values) => values
-            .len()
-            .checked_mul(4)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::Rational(values) => values
-            .len()
-            .checked_mul(8)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::SRational(values) => values
-            .len()
-            .checked_mul(8)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::SByte(values) => values.len(),
-        Value::SShort(values) => values
-            .len()
-            .checked_mul(2)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::Float(values) => values
-            .len()
-            .checked_mul(4)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::Double(values) => values
-            .len()
-            .checked_mul(8)
-            .ok_or(MetadataInputError::ArithmeticOverflow)?,
-        Value::Unknown(_, count, _) => {
-            usize::try_from(*count).map_err(|_| MetadataInputError::ArithmeticOverflow)?
+        Value::Byte(values) => typed_value_bytes(1, values.len())?,
+        Value::Ascii(values) => {
+            let count = values
+                .iter()
+                .try_fold(0usize, |total, value| total.checked_add(value.len()))
+                .ok_or(MetadataInputError::ArithmeticOverflow)?;
+            typed_value_bytes(2, count)?
         }
+        Value::Undefined(values, _) => typed_value_bytes(7, values.len())?,
+        Value::Short(values) => typed_value_bytes(3, values.len())?,
+        Value::Long(values) => typed_value_bytes(4, values.len())?,
+        Value::SLong(values) => typed_value_bytes(9, values.len())?,
+        Value::Rational(values) => typed_value_bytes(5, values.len())?,
+        Value::SRational(values) => typed_value_bytes(10, values.len())?,
+        Value::SByte(values) => typed_value_bytes(6, values.len())?,
+        Value::SShort(values) => typed_value_bytes(8, values.len())?,
+        Value::Float(values) => typed_value_bytes(11, values.len())?,
+        Value::Double(values) => typed_value_bytes(12, values.len())?,
+        Value::Unknown(_, count, _) => u64::from(*count),
     };
-    u64::try_from(bytes).map_err(|_| MetadataInputError::ArithmeticOverflow)
+    Ok(bytes)
+}
+
+fn typed_value_bytes(kind: u16, count: usize) -> Result<u64, MetadataInputError> {
+    let count = u64::try_from(count).map_err(|_| MetadataInputError::ArithmeticOverflow)?;
+    checked_tiff_value_bytes(kind, count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TIFF_FIELD_TYPES, checked_tiff_value_bytes, tiff_field_type};
+    use crate::error::MetadataInputError;
+
+    #[test]
+    fn authoritative_table_matches_classic_tiff_widths() {
+        let expected = [
+            (1, 1),
+            (2, 1),
+            (3, 2),
+            (4, 4),
+            (5, 8),
+            (6, 1),
+            (7, 1),
+            (8, 2),
+            (9, 4),
+            (10, 8),
+            (11, 4),
+            (12, 8),
+            (13, 4),
+        ];
+        assert_eq!(TIFF_FIELD_TYPES.len(), expected.len());
+        for (kind, width) in expected {
+            assert_eq!(
+                tiff_field_type(kind).map(|field| field.element_size),
+                Some(width)
+            );
+        }
+    }
+
+    #[test]
+    fn checked_width_arithmetic_preserves_count_for_representable_values() {
+        for field_type in TIFF_FIELD_TYPES {
+            for count in [0, 1, 2, 3, 7, 31, 255, u64::from(u32::MAX)] {
+                let bytes = checked_tiff_value_bytes(field_type.code, count).unwrap();
+                assert_eq!(bytes / u64::from(field_type.element_size), count);
+                assert_eq!(bytes % u64::from(field_type.element_size), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn checked_width_arithmetic_rejects_u64_multiplication_overflow() {
+        assert!(matches!(
+            checked_tiff_value_bytes(12, u64::MAX),
+            Err(MetadataInputError::TiffValueSizeOverflow {
+                kind: 12,
+                count: u64::MAX,
+                element_size: 8,
+            })
+        ));
+    }
 }
