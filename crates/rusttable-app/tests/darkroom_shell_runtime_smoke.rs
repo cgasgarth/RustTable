@@ -8,8 +8,8 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_ui::gtk_shell::{GtkShell, WorkspaceRole};
 use rusttable_ui::{
-    PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel, PresentationText,
-    ViewportGeneration,
+    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
+    PresentationText, ViewportGeneration,
 };
 
 fn main() {
@@ -41,7 +41,14 @@ fn app_shell_transition_paints_darkroom_titles() {
     let title = PresentationText::new("Alex_Benes.RAF").expect("test title");
     let workspace = PhotoWorkspaceViewModel::new(
         vec![PhotoCardViewModel::new(photo_id, title.clone(), None)],
-        vec![PhotoDetailViewModel::new(photo_id, title, Vec::new())],
+        vec![PhotoDetailViewModel::new(
+            photo_id,
+            title,
+            vec![PhotoFactViewModel::new(
+                PresentationText::new("camera").expect("test fact label"),
+                PresentationText::new("Fujifilm X-T5").expect("test fact value"),
+            )],
+        )],
     )
     .expect("test workspace");
 
@@ -86,6 +93,7 @@ fn app_shell_transition_paints_darkroom_titles() {
         left_stack.allocated_width()
     );
     assert_darkroom_titles_are_allocated(&shell);
+    assert_darkroom_chrome_matches_runtime_geometry(&shell);
 }
 
 fn settle_gtk_until(done: impl Fn() -> bool, state: impl Fn() -> String) {
@@ -147,6 +155,178 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
     }
 }
 
+fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
+    let root: gtk4::Widget = shell.window().clone().upcast();
+    assert_toolbar_and_status_geometry(&root);
+    assert_right_rail_geometry(&root);
+    assert_filmstrip_rendering(&root);
+    assert_right_rail_resize(&root);
+}
+
+fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
+    assert!(
+        find_widget(root, "header-profile-diagnostic").is_none(),
+        "display-profile prose must not leak into the global header"
+    );
+
+    let viewport = find_widget(root, "darkroom-viewport").expect("darkroom viewport");
+    let top = find_widget(root, "darkroom-toolbar-top").expect("legacy top toolbar");
+    let bottom = find_widget(root, "darkroom-toolbar-bottom").expect("bottom toolbar");
+    let status = find_widget(root, "darkroom-status-bar").expect("darkroom status bar");
+    let job = find_widget(root, "darkroom-job-status").expect("darkroom job status");
+    let profile =
+        find_widget(root, "darkroom-profile-diagnostic").expect("retained profile diagnostic");
+    assert!(
+        !top.is_visible(),
+        "the canvas must not reserve a top toolbar row"
+    );
+    assert!(bottom.is_visible() && bottom.is_ancestor(&status));
+    assert!(
+        !job.is_visible(),
+        "idle export prose must stay out of the status bar"
+    );
+    assert!(
+        !profile.is_visible(),
+        "profile diagnostics belong in the header icon tooltip"
+    );
+
+    let viewport_bounds = viewport.compute_bounds(root).expect("viewport bounds");
+    let status_bounds = status.compute_bounds(root).expect("status bounds");
+    assert!(
+        status_bounds.y() >= viewport_bounds.y() + viewport_bounds.height() - 1.0,
+        "viewport controls and status must sit below the canvas"
+    );
+
+    let status_text = find_widget(root, "darkroom-status")
+        .expect("centered image status")
+        .downcast::<gtk4::Label>()
+        .expect("image status label");
+    assert_eq!(status_text.text(), "Alex_Benes.RAF  ·  Fujifilm X-T5");
+}
+
+fn assert_right_rail_geometry(root: &gtk4::Widget) {
+    let histogram = find_widget(root, "darkroom-histogram").expect("histogram");
+    let groups = find_widget(root, "darkroom-module-groups-scroll").expect("module groups");
+    let search = find_widget(root, "darkroom-module-search").expect("module search");
+    let modules = find_widget(root, "darkroom-right-module-scroll").expect("module scroll");
+    let histogram_y = histogram
+        .compute_bounds(root)
+        .expect("histogram bounds")
+        .y();
+    let groups_y = groups.compute_bounds(root).expect("group bounds").y();
+    let search_y = search.compute_bounds(root).expect("search bounds").y();
+    let modules_y = modules.compute_bounds(root).expect("module bounds").y();
+    assert!(histogram_y < groups_y && groups_y < search_y && search_y < modules_y);
+    let full_render = render_widget(root);
+    for id in [
+        "darkroom-left-panel-toggle",
+        "darkroom-soft-proof",
+        "group-active",
+        "group-favorites",
+    ] {
+        let button = find_widget(root, id).expect("icon button");
+        let icon = button.first_child().expect("symbolic icon");
+        let icon_bounds = icon.compute_bounds(root).expect("icon bounds");
+        assert!(
+            full_render.bright_pixels(icon_bounds) >= 4,
+            "{id} must render a symbolic icon instead of fallback text"
+        );
+    }
+    for id in [
+        "darkroom-histogram-empty",
+        "darkroom-histogram-loading",
+        "darkroom-histogram-failure",
+        "darkroom-histogram-stale",
+    ] {
+        let label = find_widget(&histogram, id)
+            .expect("histogram state")
+            .downcast::<gtk4::Label>()
+            .expect("histogram state label");
+        assert!(
+            label.text().is_empty(),
+            "{id} must not expose diagnostic prose"
+        );
+    }
+}
+
+fn assert_filmstrip_rendering(root: &gtk4::Widget) {
+    let filmstrip_item = find_widget_with_prefix(root, "filmstrip-photo-").expect("filmstrip item");
+    assert!(filmstrip_item.has_css_class("dt_selected"));
+    let filmstrip_metadata = find_widget_with_prefix(root, "filmstrip-metadata-")
+        .expect("filmstrip metadata")
+        .downcast::<gtk4::Label>()
+        .expect("filmstrip metadata label");
+    assert_eq!(filmstrip_metadata.text(), "Alex_Benes.RAF");
+    let visible_split = find_widget(root, "desktop-left-split").expect("visible center split");
+    let rendered = render_widget(&visible_split);
+    let metadata_bounds = filmstrip_metadata
+        .compute_bounds(&visible_split)
+        .expect("filmstrip metadata bounds");
+    assert!(
+        rendered.bright_pixels(metadata_bounds) >= 8,
+        "filmstrip metadata must paint visible pixels"
+    );
+    let item_bounds = filmstrip_item
+        .compute_bounds(&visible_split)
+        .expect("selected filmstrip bounds");
+    let selection_marker =
+        gtk4::graphene::Rect::new(item_bounds.x(), item_bounds.y(), item_bounds.width(), 3.0);
+    assert!(
+        rendered.bright_pixels(selection_marker) >= 20,
+        "selected filmstrip item must paint a light top marker"
+    );
+    let boundary = find_widget(root, "darkroom-filmstrip-boundary").expect("filmstrip boundary");
+    let boundary_bounds = boundary
+        .compute_bounds(&visible_split)
+        .expect("filmstrip boundary bounds");
+    assert!(
+        rendered.dark_pixels(boundary_bounds) >= 100,
+        "filmstrip boundary must render as a dark, compact separator"
+    );
+}
+
+fn assert_right_rail_resize(root: &gtk4::Widget) {
+    let viewport = find_widget(root, "darkroom-viewport").expect("darkroom viewport");
+    let histogram = find_widget(root, "darkroom-histogram").expect("histogram");
+    let right_panel = find_widget(root, "darkroom-right-panel").expect("right panel");
+    let right_split = find_widget(root, "desktop-right-split")
+        .expect("right split")
+        .downcast::<gtk4::Paned>()
+        .expect("right split is a paned");
+    let split_width = right_split.allocated_width();
+    right_split.set_position(split_width.saturating_sub(300));
+    settle_gtk_until(
+        || histogram.allocated_width() >= 280,
+        || {
+            format!(
+                "expanded histogram={}x{}",
+                histogram.allocated_width(),
+                histogram.allocated_height()
+            )
+        },
+    );
+    assert!((120..=180).contains(&histogram.allocated_height()));
+    right_split.set_position(split_width.saturating_sub(150));
+    settle_gtk_until(
+        || histogram.allocated_width() <= 170,
+        || {
+            format!(
+                "narrow panel={}, histogram={}x{}, split={}@{}",
+                right_panel.allocated_width(),
+                histogram.allocated_width(),
+                histogram.allocated_height(),
+                right_split.allocated_width(),
+                right_split.position()
+            )
+        },
+    );
+    assert!((120..=180).contains(&histogram.allocated_height()));
+    assert!(
+        viewport.allocated_width() >= 600,
+        "resize must preserve the canvas"
+    );
+}
+
 struct RenderedWidget {
     bytes: Vec<u8>,
     width: usize,
@@ -180,6 +360,33 @@ impl RenderedWidget {
                         .copied()
                         .max()
                         .is_some_and(|channel| channel >= 128)
+            })
+            .count()
+    }
+
+    fn dark_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
+        let left = bounds.x();
+        let top = bounds.y();
+        let right = left + bounds.width();
+        let bottom = top + bounds.height();
+        let (pixels, remainder) = self.bytes.as_chunks::<4>();
+        assert!(
+            remainder.is_empty(),
+            "render texture must contain RGBA pixels"
+        );
+        pixels
+            .iter()
+            .enumerate()
+            .filter(|(index, pixel)| {
+                let x = u16::try_from(index % self.width).expect("render x fits u16");
+                let y = u16::try_from(index / self.width).expect("render y fits u16");
+                let x = f32::from(x);
+                let y = f32::from(y);
+                x >= left
+                    && x < right
+                    && y >= top
+                    && y < bottom
+                    && pixel[..3].iter().all(|channel| *channel <= 64)
             })
             .count()
     }
@@ -219,6 +426,20 @@ fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
     let mut child = root.first_child();
     while let Some(current) = child {
         if let Some(found) = find_widget(&current, name) {
+            return Some(found);
+        }
+        child = current.next_sibling();
+    }
+    None
+}
+
+fn find_widget_with_prefix(root: &gtk4::Widget, prefix: &str) -> Option<gtk4::Widget> {
+    if root.widget_name().starts_with(prefix) {
+        return Some(root.clone());
+    }
+    let mut child = root.first_child();
+    while let Some(current) = child {
+        if let Some(found) = find_widget_with_prefix(&current, prefix) {
             return Some(found);
         }
         child = current.next_sibling();

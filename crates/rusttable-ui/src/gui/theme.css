@@ -543,7 +543,6 @@ expander:hover {
   font-size: {{compact_font_pt}}pt;
 }
 
-#header-profile-diagnostic,
 #darkroom-profile-diagnostic {
   min-width: 0;
   min-height: {{status_height}}px;
@@ -553,7 +552,6 @@ expander:hover {
   font-size: {{compact_font_pt}}pt;
 }
 
-#header-profile-diagnostic label,
 #darkroom-profile-diagnostic label {
   font-size: {{compact_font_pt}}pt;
 }
@@ -626,7 +624,7 @@ spinbutton,
   min-height: 64px;
   background-color: {{filmstrip_background}};
   color: {{foreground}};
-  border-top: 1px solid {{border}};
+  border-top: 0;
 }
 
 .dt_photo_card,
@@ -889,7 +887,6 @@ scale:focus-visible {
 
 #darkroom-histogram {
   min-height: {{histogram_min_height}}px;
-  max-height: {{histogram_height}}px;
   min-width: 0;
   background: linear-gradient(to top, #1d1d1dff, #383838ff);
   border-bottom: 1px solid {{border}};
@@ -897,7 +894,8 @@ scale:focus-visible {
 
 #darkroom-filmstrip-boundary {
   min-height: 1px;
-  background-color: {{border}};
+  background-color: #1c1c1cff;
+  color: #1c1c1cff;
   border: 0;
 }
 
@@ -920,6 +918,12 @@ scale:focus-visible {
   color: {{foreground}};
 }
 
+#darkroom-module-groups button:checked,
+#darkroom-toolbar-bottom button:checked {
+  background-color: {{active_field_background}};
+  color: {{foreground}};
+}
+
 .dt_darkroom_toolbar {
   min-height: {{toolbar_height}}px;
   min-width: 0;
@@ -938,13 +942,14 @@ scale:focus-visible {
 }
 
 #darkroom-toolbar-bottom {
-  border-top: 1px solid {{border}};
-  border-bottom: 0;
+  padding: 0 3px;
+  background-color: transparent;
+  border: 0;
 }
 
 #darkroom-status-bar {
-  min-height: {{status_height}}px;
-  padding: 1px 5px;
+  min-height: {{toolbar_height}}px;
+  padding: 0 5px;
   background-color: {{background}};
   border-top: 1px solid {{border}};
   color: {{foreground}};
@@ -1031,13 +1036,28 @@ scale:focus-visible {
 
 .dt_filmstrip_item {
   margin: 2px 1px;
+  border: 1px solid {{border}};
   border-top: 2px solid transparent;
-  border-radius: 3px;
-  box-shadow: 0 1px 2px #00000066;
+  border-radius: 1px;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
+  box-shadow: none;
 }
 
 .dt_filmstrip_item.dt_selected {
-  border-top-color: {{active_image_marker}};
+  border-color: {{border}};
+  border-top-color: #eeeeeeff;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
+  box-shadow: inset 0 1px #eeeeeeff;
+}
+
+.dt_filmstrip_metadata {
+  min-height: 14px;
+  padding: 1px 3px;
+  background-color: #111111cc;
+  color: #dededeff;
+  font-size: {{compact_font_pt}}pt;
 }
 
 .dt_placeholder,

@@ -805,6 +805,13 @@ impl DarkroomView {
 
     /// Projects a selected image into the side-rail states without inventing unavailable data.
     pub fn set_detail(&self, detail: &PhotoDetailViewModel) {
+        let mut image_information = detail.title().as_str().to_owned();
+        for fact in detail.facts().take(3) {
+            image_information.push_str("  ·  ");
+            image_information.push_str(fact.value().as_str());
+        }
+        self.status_surface
+            .set_image_information(&image_information);
         let viewport = self.viewport_state.borrow();
         self.rail_status
             .navigation

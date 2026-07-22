@@ -89,6 +89,11 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     let module_group = Rc::new(Cell::new(DarkroomModuleGroup::Active));
     let module_group_handler = Rc::new(RefCell::new(None));
     add_group_buttons(&groups, &module_group, &module_group_handler);
+
+    // Darktable places its live scope at the top of the processing rail, with
+    // module grouping and search immediately below it.
+    let histogram = histogram();
+    panel.append(&histogram);
     let groups_scroll = gtk4::ScrolledWindow::builder()
         .child(&groups)
         .hscrollbar_policy(gtk4::PolicyType::Automatic)
@@ -111,9 +116,6 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     search.set_width_request(0);
     search.set_hexpand(true);
     panel.append(&search);
-
-    let histogram = histogram();
-    panel.append(&histogram);
 
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     modules.set_widget_name("darkroom-right-modules");
@@ -273,62 +275,68 @@ pub(super) fn add_group_buttons(
         (
             DarkroomModuleGroup::Active,
             "group-active",
-            "●",
+            "object-select-symbolic",
             "Active modules",
         ),
         (
             DarkroomModuleGroup::Favorites,
             "group-favorites",
-            "★",
+            "starred-symbolic",
             "Favorite modules",
         ),
         (
             DarkroomModuleGroup::Basic,
             "group-basic",
-            "B",
+            "view-grid-symbolic",
             "Basic modules",
         ),
-        (DarkroomModuleGroup::Tone, "group-tone", "T", "Tone modules"),
+        (
+            DarkroomModuleGroup::Tone,
+            "group-tone",
+            "weather-clear-night-symbolic",
+            "Tone modules",
+        ),
         (
             DarkroomModuleGroup::Color,
             "group-color",
-            "C",
+            "applications-graphics-symbolic",
             "Color modules",
         ),
         (
             DarkroomModuleGroup::Correct,
             "group-correct",
-            "⌕",
+            "tools-check-spelling-symbolic",
             "Corrective modules",
         ),
         (
             DarkroomModuleGroup::Effects,
             "group-effects",
-            "E",
+            "applications-multimedia-symbolic",
             "Effect modules",
         ),
         (
             DarkroomModuleGroup::Grading,
             "group-grading",
-            "◐",
+            "color-select-symbolic",
             "Grading modules",
         ),
         (
             DarkroomModuleGroup::Technical,
             "group-technical",
-            "⚙",
+            "applications-engineering-symbolic",
             "Technical modules",
         ),
         (
             DarkroomModuleGroup::Deprecated,
             "group-deprecated",
-            "!",
+            "dialog-warning-symbolic",
             "Deprecated compatibility modules",
         ),
     ]
     .into_iter()
-    .map(|(group, id, icon, label)| {
-        let button = chrome_toggle(id, icon, label);
+    .map(|(group, id, icon_name, label)| {
+        let button = chrome_toggle(id, "", label);
+        button.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
         button.set_active(group == DarkroomModuleGroup::Active);
         let state = Rc::clone(state);
         let handler = Rc::clone(handler);

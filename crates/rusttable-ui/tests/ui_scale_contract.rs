@@ -77,6 +77,7 @@ fn lighttable_cards_grow_between_target_viewports_without_dominating_center() {
 fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
     let css = rusttable_ui::gtk_shell::darktable_theme_css();
     let components = include_str!("../src/gui/darktable_components.rs");
+    let darkroom_panels = include_str!("../src/views/darkroom/panel_widgets.rs");
     let layout = include_str!("../src/gui/runtime/layout.rs");
     let lighttable = include_str!("../src/gui/runtime/lighttable.rs");
 
@@ -86,7 +87,6 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
         "min-width: 150px",
         "min-height: 24px",
         "min-height: 26px",
-        "max-height: 180px",
         "min-height: 120px",
     ] {
         assert!(
@@ -94,7 +94,14 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
             "missing generated CSS {declaration}"
         );
     }
+    assert!(
+        !css.contains("max-height: 180px"),
+        "GTK CSS has no max-height property; runtime owns the histogram cap"
+    );
     assert!(components.contains("DARKTABLE_UI_TOKENS"));
+    assert!(components.contains("PolicyType::Automatic, gtk4::PolicyType::Automatic"));
+    assert!(darkroom_panels.contains("DARKROOM_GEOMETRY.histogram_height_px"));
+    assert!(darkroom_panels.contains("connect_notify_local(Some(\"width\")"));
     assert!(layout.contains("connect_right_rail_constraints"));
     assert!(layout.contains("connect_left_rail_constraints"));
     assert!(layout.contains(".clamp(minimum, maximum)"));

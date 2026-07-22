@@ -770,7 +770,18 @@ fn filmstrip_item(photo_id: PhotoId, title: &str) -> (gtk4::Button, ThumbnailSur
     button.set_tooltip_text(Some(title));
     button.update_property(&[Property::Label(&format!("Select {title} in filmstrip"))]);
     button.set_focus_on_click(true);
-    button.set_child(Some(thumbnail.widget()));
+    let surface = gtk4::Overlay::new();
+    surface.set_child(Some(thumbnail.widget()));
+    let metadata = gtk4::Label::new(Some(title));
+    metadata.set_widget_name(&format!("filmstrip-metadata-{photo_id}"));
+    metadata.add_css_class("dt_filmstrip_metadata");
+    metadata.set_halign(gtk4::Align::Fill);
+    metadata.set_valign(gtk4::Align::End);
+    metadata.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    metadata.set_single_line_mode(true);
+    metadata.set_tooltip_text(Some(title));
+    surface.add_overlay(&metadata);
+    button.set_child(Some(&surface));
     (button, thumbnail)
 }
 
