@@ -24,13 +24,14 @@ fn dimensions_are_checked_and_report_rgba_size() {
 }
 
 #[test]
-fn supported_input_formats_have_stable_jpeg_png_tiff_order() {
+fn supported_input_formats_have_stable_raster_then_raw_order() {
     assert_eq!(
         rusttable_image::SUPPORTED_INPUT_FORMATS,
         [
             rusttable_image::InputFormat::Jpeg,
             rusttable_image::InputFormat::Png,
             rusttable_image::InputFormat::Tiff,
+            rusttable_image::InputFormat::OpenExr,
             rusttable_image::InputFormat::Raw,
         ]
     );
@@ -45,6 +46,10 @@ fn decoder_extensions_are_case_insensitive_and_canonical() {
     );
     assert_eq!(InputFormat::from_extension("png"), Some(InputFormat::Png));
     assert_eq!(InputFormat::from_extension("TIF"), Some(InputFormat::Tiff));
+    assert_eq!(
+        InputFormat::from_extension("EXR"),
+        Some(InputFormat::OpenExr)
+    );
     assert_eq!(InputFormat::from_extension("raw"), Some(InputFormat::Raw));
     assert_eq!(InputFormat::Jpeg.extensions(), &["jpg", "jpeg"]);
 }

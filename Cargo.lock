@@ -4222,6 +4222,7 @@ dependencies = [
 name = "rusttable-image-io"
 version = "0.1.0"
 dependencies = [
+ "exr",
  "flate2",
  "half",
  "image",

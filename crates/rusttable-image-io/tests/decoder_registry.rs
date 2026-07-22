@@ -8,7 +8,7 @@ fn limits() -> DecodeLimits {
 #[test]
 fn standard_registry_has_stable_unique_decoder_identities() {
     let descriptors = ImageDecoderRegistry::standard().descriptors();
-    assert_eq!(descriptors.len(), 4);
+    assert_eq!(descriptors.len(), 5);
     assert_eq!(
         descriptors
             .iter()
@@ -17,6 +17,7 @@ fn standard_registry_has_stable_unique_decoder_identities() {
         vec![
             "rusttable.decoder.jpeg.v1",
             "rusttable.decoder.png.v1",
+            "rusttable.decoder.openexr.v1",
             "rusttable.decoder.raw.v1",
             "rusttable.decoder.tiff.v1"
         ]
@@ -202,6 +203,27 @@ fn unsupported_signature_is_rejected() {
         result,
         Err(ImageInputError::UnsupportedSignature { signature }) if signature == bytes
     ));
+}
+
+#[test]
+fn openexr_magic_is_registered_without_shadowing_raw() {
+    use exr::prelude::{f16, write_rgb_file};
+
+    let path = std::env::temp_dir().join(format!("rusttable-registry-{}.exr", std::process::id()));
+    write_rgb_file(&path, 2, 1, |x, _| {
+        let value = f16::from_f32(f32::from(u16::try_from(x).unwrap()));
+        (value, value, value)
+    })
+    .unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::remove_file(path).unwrap();
+    let registry = ImageDecoderRegistry::standard();
+    let probe = registry.probe_bytes(&bytes, limits()).unwrap();
+    assert_eq!(probe.format(), InputFormat::OpenExr);
+    assert_eq!(
+        registry.select(b"FUJIFILMCCD-RAW").unwrap().format(),
+        InputFormat::Raw
+    );
 }
 
 #[test]
