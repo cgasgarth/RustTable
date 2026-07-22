@@ -3,6 +3,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  assertCanonicalLaunchServicesRegistration,
   findStaleRepositoryRegistrationPaths,
   cleanupRepositoryAppBundles,
   installCanonicalComputerUseApp,
@@ -11,10 +12,12 @@ import {
   parseGitWorktreePaths,
   parseLaunchServicesRegistrations,
   discoverApplicationBundles,
+  discoverRepositoryAppBundles,
   RUSTTABLE_BUNDLE_IDENTIFIER,
   RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
   DEFAULT_COMPUTER_USE_APP_PATH,
   unregisterMissingRepositoryBundles,
+  unregisterRepositoryBundles,
 } from './computer-use-app-install';
 import {
   createRustTableBundle,
@@ -85,6 +88,42 @@ describe('computer-use installer parsing', () => {
     ).toEqual([
       { bundleIdentifier: RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER, path: '/repo/target/debug/bundle/macos/rusttable - latest.app' },
     ]);
+  });
+
+  test('asserts exactly one canonical Computer Use registration', () => {
+    const canonicalPath = '/Users/test/Applications/rusttable - latest.app';
+    const registration = {
+      bundleIdentifier: RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+      path: canonicalPath,
+    };
+    expect(() => assertCanonicalLaunchServicesRegistration({ canonicalPath, registrations: [registration] })).not.toThrow();
+    expect(() => assertCanonicalLaunchServicesRegistration({
+      canonicalPath,
+      registrations: [registration, { ...registration, path: '/repo/target/release/bundle/macos/rusttable - latest.app' }],
+    })).toThrow('exactly one canonical');
+  });
+
+  test('discovers and unregisters repository bundles without removing source artifacts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
+    try {
+      const worktree = join(root, 'repo');
+      const debugBundle = await makeBundle(join(worktree, 'target/debug/bundle/macos'), 'RustTable.app', '0.1.0', RUSTTABLE_BUNDLE_IDENTITY);
+      const releaseBundle = await makeBundle(join(worktree, 'target/release/bundle/macos'), 'rusttable - latest.app');
+      expect(await discoverRepositoryAppBundles([worktree])).toEqual([debugBundle, releaseBundle].sort());
+      const calls: string[] = [];
+      expect(await unregisterRepositoryBundles({
+        paths: [debugBundle, releaseBundle],
+        run: async (request) => {
+          calls.push(request.label);
+          return { exitCode: 0, stderr: '', stdout: '' };
+        },
+      })).toEqual([debugBundle, releaseBundle]);
+      expect(calls).toEqual(['unregister ' + debugBundle, 'unregister ' + releaseBundle]);
+      expect(await pathExistsForTest(debugBundle)).toBe(true);
+      expect(await pathExistsForTest(releaseBundle)).toBe(true);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   test('filters stale registrations by identity and worktree location', () => {
@@ -330,7 +369,7 @@ describe('computer-use installer parsing', () => {
     }
   });
 
-  test('cleans repository-owned duplicates recoverably and refuses unrelated or symlink paths', async () => {
+  test('preserves repository build artifacts and refuses unrelated or symlink paths', async () => {
     const root = await mkdtemp(join(tmpdir(), 'rusttable-installer-'));
     try {
       const worktree = join(root, 'repo');
@@ -352,9 +391,9 @@ describe('computer-use installer parsing', () => {
         },
         worktreePaths: [worktree],
       });
-      expect(removed).toEqual([duplicate]);
-      expect(labels).toEqual(['unregister ' + duplicate]);
-      expect(await readdir(recoveryDirectory)).toHaveLength(1);
+      expect(removed).toEqual([]);
+      expect(labels).toEqual([]);
+      expect(await pathExistsForTest(duplicate)).toBe(true);
       expect(await readBundleManifest(unrelated)).toMatchObject({ CFBundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER });
       expect(await readBundleManifest(outsideBoundary)).toMatchObject({ CFBundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER });
       expect((await lstat(symlinkPath)).isSymbolicLink()).toBe(true);
