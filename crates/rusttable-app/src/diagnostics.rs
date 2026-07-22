@@ -6,8 +6,11 @@ use rusttable_diagnostics::{
     Severity, Subsystem,
 };
 use rusttable_image::{ImageDimensions, InputFormat};
+use rusttable_image_io::{RawCapabilityKind, RawContainerKind, RawDecodeError};
 
 use crate::lifecycle::Recorder;
+use crate::workspace::preview_loader::WorkspacePreviewError;
+use crate::{CatalogPreviewError, PreviewError};
 
 /// The application-owned handle keeps the diagnostics guard alive for GTK callbacks and workers.
 #[derive(Clone, Default)]
@@ -33,6 +36,7 @@ impl AppDiagnostics {
             None,
             None,
             None,
+            Vec::new(),
         );
     }
 
@@ -63,6 +67,37 @@ impl AppDiagnostics {
             generation,
             format,
             dimensions,
+            Vec::new(),
+        );
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "workspace preview diagnostics retain correlation plus typed decode detail"
+    )]
+    pub(crate) fn preview_workspace_failure(
+        &self,
+        operation: &'static str,
+        stage: &'static str,
+        cause: &'static str,
+        photo_id: Option<PhotoId>,
+        edit_id: Option<EditId>,
+        generation: Option<u64>,
+        error: &WorkspacePreviewError,
+    ) {
+        self.record(
+            "app",
+            preview_code(stage),
+            Severity::Error,
+            operation,
+            stage,
+            Some(cause),
+            photo_id,
+            edit_id,
+            generation,
+            None,
+            None,
+            workspace_preview_error_fields(error),
         );
     }
 
@@ -84,6 +119,7 @@ impl AppDiagnostics {
             generation,
             None,
             None,
+            Vec::new(),
         );
     }
 
@@ -105,6 +141,7 @@ impl AppDiagnostics {
             None,
             format,
             dimensions.and_then(|(width, height)| ImageDimensions::new(width, height).ok()),
+            Vec::new(),
         );
     }
 
@@ -125,6 +162,7 @@ impl AppDiagnostics {
         generation: Option<u64>,
         format: Option<InputFormat>,
         dimensions: Option<ImageDimensions>,
+        detail_fields: Vec<Result<DiagnosticField, rusttable_diagnostics::DiagnosticsError>>,
     ) {
         let Ok(subsystem) = Subsystem::new(subsystem) else {
             tracing::error!(target: "rusttable.app", operation, stage, "invalid diagnostic subsystem");
@@ -156,6 +194,7 @@ impl AppDiagnostics {
         }
         for field in fields(stage, cause, generation, format, dimensions)
             .into_iter()
+            .chain(detail_fields)
             .flatten()
         {
             event = match event.with_field(field) {
@@ -171,6 +210,112 @@ impl AppDiagnostics {
             rusttable_diagnostics::emit(&event);
         }
         tracing::error!(target: "rusttable.app", operation, stage, code = %code_text, "application boundary failure");
+    }
+}
+
+fn workspace_preview_error_fields(
+    error: &WorkspacePreviewError,
+) -> Vec<Result<DiagnosticField, rusttable_diagnostics::DiagnosticsError>> {
+    let WorkspacePreviewError::Preview(CatalogPreviewError::Preview(PreviewError::RawDecode(
+        error,
+    ))) = error
+    else {
+        return Vec::new();
+    };
+    raw_decode_error_fields(error)
+}
+
+fn raw_decode_error_fields(
+    error: &RawDecodeError,
+) -> Vec<Result<DiagnosticField, rusttable_diagnostics::DiagnosticsError>> {
+    let mut fields = vec![DiagnosticField::public_text(
+        "raw_decode_kind",
+        raw_decode_kind(error),
+    )];
+    let container = match error {
+        RawDecodeError::Malformed { container, .. } => *container,
+        RawDecodeError::Capability(error) => error.container,
+        RawDecodeError::Backend { container, .. } => Some(*container),
+        RawDecodeError::Cancelled
+        | RawDecodeError::Source(_)
+        | RawDecodeError::UnsupportedSignature { .. }
+        | RawDecodeError::InvalidFrame(_) => None,
+    };
+    if let Some(container) = container {
+        fields.push(DiagnosticField::public_text(
+            "raw_container",
+            raw_container_label(container),
+        ));
+    }
+    if let RawDecodeError::Capability(capability) = error {
+        fields.push(DiagnosticField::public_text(
+            "raw_capability",
+            raw_capability_label(capability.missing),
+        ));
+        if !capability.evidence.backend_format.is_empty() {
+            fields.push(DiagnosticField::public_text(
+                "raw_backend_format",
+                &capability.evidence.backend_format,
+            ));
+        }
+        if let Some(bit_depth) = capability.evidence.bit_depth {
+            fields.push(DiagnosticField::unsigned(
+                "raw_evidence_bit_depth",
+                u64::from(bit_depth),
+            ));
+        }
+    }
+    fields
+}
+
+const fn raw_decode_kind(error: &RawDecodeError) -> &'static str {
+    match error {
+        RawDecodeError::Cancelled => "cancelled",
+        RawDecodeError::Source(_) => "source",
+        RawDecodeError::UnsupportedSignature { .. } => "unsupported_signature",
+        RawDecodeError::Malformed { .. } => "malformed",
+        RawDecodeError::Capability(_) => "capability",
+        RawDecodeError::InvalidFrame(_) => "invalid_frame",
+        RawDecodeError::Backend { .. } => "backend",
+    }
+}
+
+const fn raw_capability_label(kind: RawCapabilityKind) -> &'static str {
+    match kind {
+        RawCapabilityKind::Container => "container",
+        RawCapabilityKind::Camera => "camera",
+        RawCapabilityKind::Compression => "compression",
+        RawCapabilityKind::Layout => "layout",
+        RawCapabilityKind::SampleType => "sample_type",
+        RawCapabilityKind::ImageIndex => "image_index",
+        RawCapabilityKind::ManifestDrift => "manifest_drift",
+    }
+}
+
+const fn raw_container_label(container: RawContainerKind) -> &'static str {
+    match container {
+        RawContainerKind::Dng => "dng",
+        RawContainerKind::Raf => "raf",
+        RawContainerKind::Cr2 => "cr2",
+        RawContainerKind::Cr3 => "cr3",
+        RawContainerKind::Crw => "crw",
+        RawContainerKind::Nef => "nef",
+        RawContainerKind::Nrw => "nrw",
+        RawContainerKind::Arw => "arw",
+        RawContainerKind::Sr2 => "sr2",
+        RawContainerKind::Srf => "srf",
+        RawContainerKind::Orf => "orf",
+        RawContainerKind::Rw2 => "rw2",
+        RawContainerKind::Rwl => "rwl",
+        RawContainerKind::Pef => "pef",
+        RawContainerKind::Srw => "srw",
+        RawContainerKind::Erf => "erf",
+        RawContainerKind::Iiq => "iiq",
+        RawContainerKind::ThreeFr => "3fr",
+        RawContainerKind::Fff => "fff",
+        RawContainerKind::Mrw => "mrw",
+        RawContainerKind::X3f => "x3f",
+        RawContainerKind::TiffRaw => "tiff_raw",
     }
 }
 
@@ -242,8 +387,15 @@ fn format_label(format: InputFormat) -> &'static str {
 #[cfg(test)]
 mod tests {
     use rusttable_image::{ImageDimensions, InputFormat};
+    use rusttable_image_io::{
+        RawCapabilityError, RawCapabilityEvidence, RawCapabilityKind, RawCompression,
+        RawCompressionEvidence, RawContainerKind, RawDecodeError,
+    };
 
-    use super::{fields, format_label, preview_code};
+    use super::{
+        fields, format_label, preview_code, raw_capability_label, raw_container_label,
+        raw_decode_error_fields,
+    };
 
     #[test]
     fn preview_contract_maps_implemented_stages_to_stable_codes() {
@@ -281,5 +433,50 @@ mod tests {
         );
         assert_eq!(format_label(InputFormat::Png), "png");
         assert!(!fields.iter().any(|key| key == "path"));
+    }
+
+    #[test]
+    fn raw_capability_diagnostics_keep_only_bounded_structured_evidence() {
+        let error = RawDecodeError::Capability(RawCapabilityError {
+            missing: RawCapabilityKind::ManifestDrift,
+            container: Some(RawContainerKind::Raf),
+            maker: "private maker".to_owned(),
+            model: "private model".to_owned(),
+            mode: String::new(),
+            detail: "free-form backend detail".to_owned(),
+            evidence: Box::new(RawCapabilityEvidence {
+                signature: vec![1, 2, 3],
+                raw_tags: vec![0xf003],
+                backend_format: "RAF".to_owned(),
+                compression: RawCompressionEvidence {
+                    compression: RawCompression::Unknown,
+                    container_code: None,
+                },
+                bit_depth: Some(16),
+            }),
+        });
+        let keys = raw_decode_error_fields(&error)
+            .into_iter()
+            .map(|field| field.expect("bounded diagnostic field").key().to_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            keys,
+            [
+                "raw_decode_kind",
+                "raw_container",
+                "raw_capability",
+                "raw_backend_format",
+                "raw_evidence_bit_depth",
+            ]
+        );
+        assert_eq!(
+            raw_capability_label(RawCapabilityKind::ManifestDrift),
+            "manifest_drift"
+        );
+        assert_eq!(raw_container_label(RawContainerKind::Raf), "raf");
+        for forbidden in ["path", "maker", "model", "mode", "detail", "signature"] {
+            assert!(!keys.iter().any(|key| key.contains(forbidden)));
+        }
     }
 }

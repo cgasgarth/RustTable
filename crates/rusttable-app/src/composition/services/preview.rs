@@ -1,9 +1,11 @@
 use rusttable_core::Edit;
 use rusttable_image::{
-    ColorEncoding, DecodeLimits, DecodedFrame, DecodedImage, SampleType, SourceColor,
-    SourceColorEvidence, SourceColorFallback,
+    ColorEncoding, DecodeLimits, DecodedFrame, DecodedImage, ImageInputError, InputFormat,
+    SampleType, SourceColor, SourceColorEvidence, SourceColorFallback,
 };
-use rusttable_image_io::FileImageInput;
+use rusttable_image_io::{
+    FileImageInput, RawDecodeError, RawDecodeLimits, RawDecodeRequest, RawlerRawDecoder,
+};
 use rusttable_pixelpipe::{
     CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot,
     CpuPixelpipeSnapshotError, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
@@ -46,12 +48,7 @@ impl PreviewService {
             height = tracing::field::Empty
         )
         .entered();
-        let input = FileImageInput::new(self.limits)
-            .decode_linear_frame_bytes(source)
-            .map_err(|error| {
-                tracing::error!(target: "rusttable.preview", stage = "decode", cause = "decode_failed");
-                PreviewError::Decode(error)
-            })?;
+        let input = decode_preview_frame(source, self.limits)?;
         self.render_decoded_frame_for_target(&input, edit, RenderTarget::PreviewFit(self.bounds))
     }
 
@@ -86,12 +83,7 @@ impl PreviewService {
         edit: &Edit,
         target: RenderTarget,
     ) -> Result<RenderOutput, PreviewError> {
-        let input = FileImageInput::new(self.limits)
-            .decode_linear_frame_bytes(source)
-            .map_err(|error| {
-                tracing::error!(target: "rusttable.preview", stage = "decode", cause = "decode_failed");
-                PreviewError::Decode(error)
-            })?;
+        let input = decode_preview_frame(source, self.limits)?;
         self.render_decoded_frame_for_target(&input, edit, target)
     }
 
@@ -145,6 +137,50 @@ impl PreviewService {
     ) -> Result<PreparedCpuPixelpipeResult, PreviewError> {
         prepare_frame(input, edit)
     }
+}
+
+fn decode_preview_frame(source: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, PreviewError> {
+    FileImageInput::new(limits)
+        .decode_linear_frame_bytes(source)
+        .map_err(|error| {
+            let failure = recover_raw_decode_error(source, limits, &error).map_or_else(
+                || PreviewError::Decode(error),
+                |raw| PreviewError::RawDecode(Box::new(raw)),
+            );
+            tracing::error!(
+                target: "rusttable.preview",
+                stage = "decode",
+                cause = failure.diagnostic_cause()
+            );
+            failure
+        })
+}
+
+fn recover_raw_decode_error(
+    source: &[u8],
+    limits: DecodeLimits,
+    error: &ImageInputError,
+) -> Option<RawDecodeError> {
+    if !matches!(
+        error,
+        ImageInputError::MalformedInput {
+            format: InputFormat::Raw,
+            ..
+        }
+    ) {
+        return None;
+    }
+    let raw_limits = RawDecodeLimits::new(
+        limits.max_source_bytes(),
+        limits.max_width(),
+        limits.max_height(),
+        limits.max_pixel_count(),
+        limits.max_decoded_bytes(),
+    )
+    .ok()?;
+    RawlerRawDecoder::new()
+        .decode_bytes(source, &RawDecodeRequest::new(raw_limits))
+        .err()
 }
 
 fn prepare_frame(
@@ -426,6 +462,7 @@ fn pixelpipe_encoding(source: SourceColor) -> RgbaF32ColorEncoding {
 #[derive(Debug)]
 pub enum PreviewError {
     Decode(rusttable_image::ImageInputError),
+    RawDecode(Box<RawDecodeError>),
     DecodedFrame,
     UnsupportedPixelpipeColor { actual: ColorEncoding },
     PixelpipeInput(RgbaF32ImageError),
@@ -441,6 +478,7 @@ impl std::fmt::Display for PreviewError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Decode(error) => write!(formatter, "preview decode failed: {error}"),
+            Self::RawDecode(error) => write!(formatter, "preview RAW decode failed: {error}"),
             Self::DecodedFrame => formatter.write_str("preview decoded frame adaptation failed"),
             Self::UnsupportedPixelpipeColor { actual } => write!(
                 formatter,
@@ -465,6 +503,7 @@ impl std::error::Error for PreviewError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Decode(error) => Some(error),
+            Self::RawDecode(error) => Some(error.as_ref()),
             Self::DecodedFrame | Self::UnsupportedPixelpipeColor { .. } => None,
             Self::PixelpipeInput(error) => Some(error),
             Self::PixelpipeSnapshot(error) => Some(error),
@@ -473,6 +512,27 @@ impl std::error::Error for PreviewError {
             Self::Pixelpipe(error) => Some(error),
             Self::Prepared(error) => Some(error),
             Self::Render(error) => Some(error),
+        }
+    }
+}
+
+impl PreviewError {
+    fn diagnostic_cause(&self) -> &'static str {
+        match self {
+            Self::RawDecode(error) if matches!(error.as_ref(), RawDecodeError::Capability(_)) => {
+                "raw_capability"
+            }
+            Self::RawDecode(_) => "raw_decode",
+            Self::Decode(_) => "decode_failed",
+            Self::DecodedFrame
+            | Self::UnsupportedPixelpipeColor { .. }
+            | Self::PixelpipeInput(_)
+            | Self::PixelpipeSnapshot(_)
+            | Self::Graph(_)
+            | Self::RawPipeline(_)
+            | Self::Pixelpipe(_)
+            | Self::Prepared(_)
+            | Self::Render(_) => "render_failed",
         }
     }
 }

@@ -1,6 +1,6 @@
 use rawler::rawimage::RawImage;
 
-use super::{convert_rect, dimensions, invalid, orientation, safe_text};
+use super::{convert_rect, declared_sensor_bit_depth, dimensions, invalid, orientation, safe_text};
 use crate::raw::{RawCameraIdentity, RawContainerProbe, RawDecodeError, RawHeader, RawRect};
 
 pub(super) fn header_from_backend(
@@ -19,11 +19,7 @@ pub(super) fn header_from_backend(
         .map(convert_rect)
         .transpose()?
         .unwrap_or(active_area);
-    let bit_depth = probe
-        .evidence
-        .bit_depth
-        .or_else(|| image.camera.bps.and_then(|value| u8::try_from(value).ok()))
-        .unwrap_or_else(|| u8::try_from(image.bps).unwrap_or_default());
+    let bit_depth = declared_sensor_bit_depth(image, probe).unwrap_or_default();
     Ok(RawHeader {
         container: probe.container,
         dimensions,

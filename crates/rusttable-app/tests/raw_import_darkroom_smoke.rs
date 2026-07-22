@@ -60,6 +60,48 @@ impl Drop for SmokeDirectory {
 }
 
 #[test]
+fn persisted_xpro2_catalog_selection_decodes_and_publishes_the_selected_edit() {
+    let fixture = deterministic_compressed_raf();
+    let directory = SmokeDirectory::new();
+    let source = directory.source(fixture.source_name());
+    fs::write(&source, fixture.bytes()).expect("X-Pro2 RAF regression fixture");
+    let catalog_path = directory.catalog();
+
+    let batch = run_raster_import(
+        &catalog_path,
+        vec![source],
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let photo_id = batch
+        .first_selected_photo()
+        .expect("catalog persisted the imported RAF selection");
+    drop(batch);
+
+    let mut catalog = GtkCatalogController::load_catalog_at(catalog_path);
+    assert!(matches!(catalog.state(), GtkCatalogState::Ready(_)));
+    assert!(catalog.select_photo(photo_id));
+    let selected_edit = catalog
+        .current_edit(photo_id)
+        .expect("persisted edit lookup")
+        .expect("selected RAF edit");
+
+    let state = GtkPreviewController::new().render_selected(&catalog);
+    let GtkPreviewState::Ready(preview) = state else {
+        panic!("persisted X-Pro2 RAF selection must publish a preview");
+    };
+    let receipt = preview
+        .receipt()
+        .expect("published catalog preview receipt");
+    assert_eq!(preview.photo_id(), photo_id);
+    assert_eq!(receipt.edit_id(), selected_edit.id());
+    assert_eq!(receipt.edit_revision(), selected_edit.revision());
+    assert_eq!(preview.dimensions().width(), fixture.expected_width());
+    assert_eq!(preview.dimensions().height(), fixture.expected_height());
+    assert!(!preview.pixels().is_empty());
+}
+
+#[test]
 #[expect(
     clippy::too_many_lines,
     reason = "the focused smoke test keeps the import-to-darkroom evidence in one ordered path"

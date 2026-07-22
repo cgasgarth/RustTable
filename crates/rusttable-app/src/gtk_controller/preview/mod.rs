@@ -86,15 +86,14 @@ impl GtkPreviewController {
             Ok(preview) => Self::from_loaded_preview(preview, display_profile, diagnostics),
             Err(error) => {
                 let kind = GtkPreviewFailureKind::from_workspace_error(&error);
-                diagnostics.preview_failure(
+                diagnostics.preview_workspace_failure(
                     "render_selected",
                     kind.stage(),
                     kind.cause(),
                     Some(photo_id),
                     None,
                     None,
-                    None,
-                    None,
+                    &error,
                 );
                 GtkPreviewState::failed(Some(photo_id), kind)
             }
@@ -145,15 +144,14 @@ impl GtkPreviewController {
             Ok(preview) => Self::from_loaded_preview(preview, display_profile, diagnostics),
             Err(error) => {
                 let kind = GtkPreviewFailureKind::from_workspace_error(&error);
-                diagnostics.preview_failure(
+                diagnostics.preview_workspace_failure(
                     "render_selected",
                     kind.stage(),
                     kind.cause(),
                     Some(photo_id),
                     Some(edit_id),
                     Some(generation),
-                    None,
-                    None,
+                    &error,
                 );
                 GtkPreviewState::failed(Some(photo_id), kind)
             }
@@ -416,7 +414,9 @@ impl GtkPreviewFailureKind {
             WorkspacePreviewError::MissingEdit { .. } => Self::MissingPersistedEdit,
             WorkspacePreviewError::Preview(error) => match error {
                 CatalogPreviewError::Preview(preview) => match preview {
-                    crate::PreviewError::Decode(_) => Self::DecodeUnavailable,
+                    crate::PreviewError::Decode(_) | crate::PreviewError::RawDecode(_) => {
+                        Self::DecodeUnavailable
+                    }
                     crate::PreviewError::DecodedFrame
                     | crate::PreviewError::Render(_)
                     | crate::PreviewError::UnsupportedPixelpipeColor { .. }

@@ -393,12 +393,7 @@ fn validate_backend_declaration(
             limit: limits.max_decoded_bytes,
         }));
     }
-    let bit_depth = probe
-        .evidence
-        .bit_depth
-        .map(usize::from)
-        .or(image.camera.bps)
-        .unwrap_or(image.bps);
+    let bit_depth = declared_sensor_bit_depth(image, probe).map_or(image.bps, usize::from);
     if bit_depth == 0 || bit_depth > 16 || image.bps == 0 || image.bps > 16 {
         return Err(invalid(RawFrameValidationError::BitDepth));
     }
@@ -473,6 +468,7 @@ fn convert_frame(
     validate_backend_declaration(&image, limits, probe)?;
     let dimensions = dimensions(image.width, image.height)?;
     let layout = convert_layout(&image.photometric, image.cpp, probe, &image)?;
+    let bit_depth = declared_sensor_bit_depth(&image, probe).unwrap_or_default();
     let samples = match image.data {
         RawImageData::Integer(samples) => samples,
         RawImageData::Float(_) => {
@@ -522,11 +518,6 @@ fn convert_frame(
         .map_err(|_| invalid(RawFrameValidationError::InvalidLevels))?;
     let level_channels = u8::try_from(image.blacklevel.cpp)
         .map_err(|_| invalid(RawFrameValidationError::InvalidLevels))?;
-    let bit_depth = probe
-        .evidence
-        .bit_depth
-        .or_else(|| image.camera.bps.and_then(|value| u8::try_from(value).ok()))
-        .unwrap_or_else(|| u8::try_from(image.bps).unwrap_or_default());
     RawFrame::try_new(
         RawFrameParts {
             planes: vec![RawPlane {
@@ -557,6 +548,37 @@ fn convert_frame(
         limits,
     )
     .map_err(invalid)
+}
+
+/// Resolves decoded sensor precision without conflating it with storage width.
+///
+/// RAF decoders unpack samples into 16-bit storage and some X-Pro2 files expose
+/// that width through embedded TIFF metadata. Prefer the RAF sensor tag, then
+/// derive precision from the bounded camera white level when the tag is absent.
+/// Other containers retain the established probe-first policy.
+fn declared_sensor_bit_depth(image: &RawImage, probe: &RawContainerProbe) -> Option<u8> {
+    if probe.container == RawContainerKind::Raf {
+        probe
+            .evidence
+            .bit_depth
+            .or_else(|| {
+                image
+                    .whitelevel
+                    .0
+                    .iter()
+                    .copied()
+                    .max()
+                    .filter(|level| *level > 0)
+                    .and_then(|level| u8::try_from(u32::BITS - level.leading_zeros()).ok())
+            })
+            .or_else(|| u8::try_from(image.bps).ok())
+    } else {
+        probe
+            .evidence
+            .bit_depth
+            .or_else(|| image.camera.bps.and_then(|value| u8::try_from(value).ok()))
+            .or_else(|| u8::try_from(image.bps).ok())
+    }
 }
 
 fn convert_layout(

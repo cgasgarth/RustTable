@@ -104,7 +104,10 @@ fn direct_probe(bytes: &[u8], container: RawContainerKind) -> RawProbeOutcome {
         {
             camera.model = summary.model;
             raw_tags = summary.raw_tags;
-            bit_depth = summary.bit_depth.or(bit_depth);
+            // RAF tag 0xf003 is the sensor precision. Embedded TIFF
+            // `BitsPerSample` can instead describe 16-bit unpacked storage,
+            // as seen in X-Pro2 files, so it is only a fallback here.
+            bit_depth = bit_depth.or(summary.bit_depth);
         }
     }
     RawProbeOutcome::Match(RawContainerProbe {

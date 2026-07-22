@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use rusttable_app::PreviewService;
+use rusttable_app::{PreviewError, PreviewService};
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
     PhotoId, Revision,
 };
 use rusttable_image::{DecodeLimits, DecodeStage};
-use rusttable_image_io::FileImageInput;
+use rusttable_image_io::{FileImageInput, RawCapabilityKind, RawDecodeError};
 use rusttable_import::{FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotReader};
 use rusttable_render::{PreviewBounds, RenderTarget, render_prepared_cpu_pixelpipe};
 use rusttable_testkit::fixtures::deterministic_compressed_raf;
@@ -148,6 +148,27 @@ fn raw_preview_and_export_share_one_linear_frame_boundary() {
         rusttable_image::ColorEncoding::LinearSrgb
     );
     assert_eq!(export.image(), direct_export.image());
+}
+
+#[test]
+fn raw_manifest_failure_remains_typed_at_the_preview_boundary() {
+    let mut bytes = deterministic_compressed_raf().bytes().to_vec();
+    bytes[560..567].copy_from_slice(b"NO-CAM\0");
+    let service = PreviewService::new(
+        DecodeLimits::new(32 * 1024 * 1024, 4096, 4096, 16_777_216, 64 * 1024 * 1024)
+            .expect("valid limits"),
+        PreviewBounds::new(64, 64).expect("bounds"),
+    );
+
+    let error = service
+        .render_bytes(&bytes, &edit([]))
+        .expect_err("unreviewed RAW camera must fail");
+    assert!(matches!(
+        error,
+        PreviewError::RawDecode(error)
+            if matches!(&*error, RawDecodeError::Capability(capability)
+                if capability.missing == RawCapabilityKind::Camera)
+    ));
 }
 
 #[test]
