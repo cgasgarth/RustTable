@@ -48,6 +48,11 @@ impl ThumbnailLifecycle {
         !self.requested.contains_key(&photo_id) && !self.published.contains(&photo_id)
     }
 
+    fn invalidate(&mut self, photo_id: PhotoId) {
+        self.requested.remove(&photo_id);
+        self.published.remove(&photo_id);
+    }
+
     fn request(&mut self, photo_ids: &[PhotoId], generation: u64) {
         self.published
             .retain(|photo_id| !photo_ids.contains(photo_id));
@@ -179,6 +184,22 @@ pub(super) fn start_workspace_thumbnails(
     });
 }
 
+/// Invalidates the active filmstrip image before scheduling the post-edit render.
+pub(super) fn refresh_active_thumbnail(
+    shell: &GtkShell,
+    catalog: &GtkCatalogController,
+    lifecycle: &Rc<RefCell<ThumbnailLifecycle>>,
+) {
+    if let Some(photo_id) = shell
+        .darkroom_panel_target()
+        .map(rusttable_ui::DarkroomPanelTarget::photo_id)
+    {
+        lifecycle.borrow_mut().invalidate(photo_id);
+        shell.set_photo_thumbnail_loading(photo_id);
+    }
+    start_workspace_thumbnails(shell, catalog, lifecycle);
+}
+
 #[cfg(test)]
 mod tests {
     use super::ThumbnailLifecycle;
@@ -217,5 +238,35 @@ mod tests {
         assert!(!lifecycle.needs_request(photo_id));
         lifecycle.publish(photo_id, next_generation);
         assert!(!lifecycle.needs_request(photo_id));
+    }
+
+    #[test]
+    fn late_publication_cannot_complete_a_new_request_for_the_same_photo() {
+        let photo_id = id(2);
+        let mut lifecycle = ThumbnailLifecycle::default();
+        let first_generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], first_generation);
+
+        let second_generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], second_generation);
+        lifecycle.publish(photo_id, first_generation);
+        assert_eq!(lifecycle.requested.get(&photo_id), Some(&second_generation));
+        assert!(!lifecycle.published.contains(&photo_id));
+
+        lifecycle.publish(photo_id, second_generation);
+        assert!(!lifecycle.needs_request(photo_id));
+    }
+
+    #[test]
+    fn invalidating_an_edited_photo_forces_a_new_thumbnail_request() {
+        let photo_id = id(1);
+        let mut lifecycle = ThumbnailLifecycle::default();
+        let generation = lifecycle.begin();
+        lifecycle.request(&[photo_id], generation);
+        lifecycle.publish(photo_id, generation);
+
+        lifecycle.invalidate(photo_id);
+
+        assert!(lifecycle.needs_request(photo_id));
     }
 }

@@ -239,6 +239,92 @@ fn thumbnail_publication_keeps_grid_and_filmstrip_ready_through_rerenders() {
     assert_thumbnail_pair_is_ready(&shell, photo_id);
 }
 
+#[gtk4::test]
+fn thumbnail_candidates_include_unrealized_active_filmstrip_selection() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.bounded-thumbnail-candidates"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let selected = id(2);
+    shell.set_photo_workspace(&workspace_with_photos(&[1, 2, 3]));
+    shell.begin_darkroom_selection(selected, ViewportGeneration::new(1));
+
+    {
+        let mut tiles = shell.photo_tiles.borrow_mut();
+        tiles.get_mut(&id(1)).expect("first tile").lighttable_button = Some(gtk4::Button::new());
+        tiles
+            .get_mut(&selected)
+            .expect("selected tile")
+            .lighttable_button = None;
+        tiles.get_mut(&id(3)).expect("third tile").lighttable_button = None;
+    }
+
+    assert_eq!(
+        shell.lighttable_thumbnail_photo_ids(),
+        vec![id(1), selected]
+    );
+
+    shell.show_workspace(WorkspaceRole::Darkroom);
+    assert_eq!(
+        shell.lighttable_thumbnail_photo_ids(),
+        vec![id(1), selected]
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+#[gtk4::test]
+fn edited_main_preview_and_filmstrip_publish_for_the_same_selection() {
+    let application = gtk4::Application::new(
+        Some("com.cgasgarth.rusttable.test.edited-preview-filmstrip-publication"),
+        Default::default(),
+    );
+    let shell = GtkShell::new(&application);
+    let photo_id = id(5);
+    shell.set_photo_workspace(&workspace(photo_id));
+    let generation = ViewportGeneration::new(3);
+    shell.begin_darkroom_selection(photo_id, generation);
+    shell.set_darkroom_preview_loading(generation);
+
+    let dimensions = PreviewDimensions::new(1, 1).expect("test dimensions");
+    let thumbnail = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("thumbnail").expect("test status"),
+        vec![16, 32, 48, 255],
+    )
+    .expect("test thumbnail");
+    shell
+        .set_photo_thumbnail(photo_id, &thumbnail)
+        .expect("publish thumbnail");
+
+    let edited = Rgba8PreviewMetadata::new(
+        dimensions,
+        PresentationText::new("edited preview").expect("test status"),
+        vec![192, 160, 128, 255],
+    )
+    .expect("test edited preview");
+    let histogram = HistogramData::from_rgba8(dimensions, edited.pixels()).expect("test histogram");
+    shell
+        .set_darkroom_preview_result(generation, &edited, Ok(histogram))
+        .expect("publish edited preview");
+
+    assert_eq!(
+        shell.darkroom_preview().status_label().text(),
+        "edited preview"
+    );
+    assert!(shell.darkroom_preview().texture().is_some());
+    assert_thumbnail_pair_is_ready(&shell, photo_id);
+    assert!(matches!(
+        shell
+            .lighttable_workspace
+            .borrow()
+            .as_ref()
+            .and_then(|workspace| workspace.detail(photo_id))
+            .map(PhotoDetailViewModel::selected_preview),
+        Some(SelectedPreviewState::Ready(_))
+    ));
+}
+
 // Darktable's `src/views/darkroom.c` and `src/libs/histogram.c` treat the completed preview pipe
 // as one terminal projection. Reopening the selected photo must not replay its earlier loading
 // detail after the texture and histogram have both completed.

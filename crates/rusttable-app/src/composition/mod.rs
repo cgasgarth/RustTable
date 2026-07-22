@@ -53,7 +53,7 @@ use collection_bridge::{
 };
 use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
 use selected_preview::{PreviewLifecycle, start_selected_preview};
-use thumbnails::{ThumbnailLifecycle, start_workspace_thumbnails};
+use thumbnails::{ThumbnailLifecycle, refresh_active_thumbnail, start_workspace_thumbnails};
 
 /// Error returned when GTK terminates `RustTable` unsuccessfully.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -320,7 +320,7 @@ fn activate_application(
     let thumbnail_refresh_lifecycle = Rc::clone(thumbnail_lifecycle);
     darkroom_bridge.set_after_commit(Rc::new(move || {
         history_refresh_bridge.refresh(&history_refresh_shell, &history_refresh_catalog.borrow());
-        start_workspace_thumbnails(
+        refresh_active_thumbnail(
             &thumbnail_refresh_shell,
             &thumbnail_refresh_catalog.borrow(),
             &thumbnail_refresh_lifecycle,
