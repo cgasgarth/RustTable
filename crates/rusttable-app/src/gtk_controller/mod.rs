@@ -15,8 +15,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use rusttable_catalog::{
-    CatalogChangeEvent, CatalogCommand, EditRepository, ImportRepository, PhotoOrganizationState,
-    RepositoryError,
+    CatalogChangeEvent, CatalogCommand, CollectionRepositoryError, EditRepository,
+    ImportRepository, PhotoOrganizationState, RepositoryError,
 };
 use rusttable_catalog_store::{
     AtomicCatalogStoreError, RedbCatalogRepository, RedbImportRepository,
@@ -28,7 +28,10 @@ use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 
 use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root};
 
-pub use collection::{CollectionController, CollectionSnapshot, LibraryCollectionService};
+pub use collection::{
+    ActiveLighttableRestoreReport, CollectionController, CollectionSnapshot,
+    LibraryCollectionService,
+};
 pub use darkroom_edit::{DarkroomEditOutcome, GtkDarkroomEditController};
 pub use darkroom_panels::{
     DarkroomPanelControllerError, DarkroomPanelProjections, GtkDarkroomPanelController,
@@ -39,6 +42,7 @@ pub enum GtkCatalogMutationError {
     NotReady,
     Open(RepositoryError),
     Repository(AtomicCatalogStoreError),
+    Collection(CollectionRepositoryError),
 }
 
 impl std::fmt::Display for GtkCatalogMutationError {
@@ -50,6 +54,9 @@ impl std::fmt::Display for GtkCatalogMutationError {
             }
             Self::Repository(error) => {
                 write!(formatter, "catalog organization change failed: {error:?}")
+            }
+            Self::Collection(error) => {
+                write!(formatter, "active collection persistence failed: {error:?}")
             }
         }
     }
@@ -204,6 +211,19 @@ impl GtkCatalogController {
         &self,
         locale: LocaleTag,
     ) -> Option<CollectionController> {
+        self.try_collection_controller_with_locale(locale.clone()).map_or_else(
+            |error| {
+                tracing::warn!(target: "rusttable.catalog", error = %error, "active lighttable state unavailable; falling back to default collection state");
+                self.default_collection_controller_with_locale(locale)
+            },
+            Some,
+        )
+    }
+
+    fn default_collection_controller_with_locale(
+        &self,
+        locale: LocaleTag,
+    ) -> Option<CollectionController> {
         let GtkCatalogState::Ready(catalog) = &self.state else {
             return None;
         };
@@ -217,6 +237,98 @@ impl GtkCatalogController {
                 &organization,
             ),
         )
+    }
+
+    /// Rebuilds the collection controller from catalog records and durable lighttable state.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog or active-state persistence error when the controller cannot be
+    /// rebuilt safely.
+    pub fn try_collection_controller_with_locale(
+        &self,
+        locale: LocaleTag,
+    ) -> Result<CollectionController, GtkCatalogMutationError> {
+        let GtkCatalogState::Ready(catalog) = &self.state else {
+            return Err(GtkCatalogMutationError::NotReady);
+        };
+        let repository = RedbCatalogRepository::open(catalog.location().catalog_path())
+            .map_err(GtkCatalogMutationError::Open)?;
+        let records = ImportRepository::list(&repository)
+            .map_err(|_| GtkCatalogMutationError::Collection(CollectionRepositoryError::Corrupt))?;
+        let organization = repository
+            .organization_states()
+            .map_err(|_| GtkCatalogMutationError::Collection(CollectionRepositoryError::Corrupt))?;
+        let collection_repository = rusttable_catalog_store::RedbCollectionRepository::open(
+            catalog.location().catalog_path(),
+        )
+        .map_err(GtkCatalogMutationError::Collection)?;
+        let active = collection_repository
+            .load_active_lighttable_state()
+            .map_err(GtkCatalogMutationError::Collection)?;
+        let (controller, report) =
+            CollectionController::from_import_records_with_locale_and_organization_and_active_state(
+                records.iter(),
+                locale,
+                &organization,
+                &active,
+            );
+        if report.discarded_missing > 0 || report.discarded_hidden > 0 {
+            tracing::warn!(
+                target: "rusttable.catalog",
+                discarded_missing = report.discarded_missing,
+                discarded_hidden = report.discarded_hidden,
+                "reconciled invalid active lighttable selections"
+            );
+        }
+        if controller.active_state() != active {
+            collection_repository
+                .persist_active_lighttable_state(&controller.active_state())
+                .map_err(GtkCatalogMutationError::Collection)?;
+        }
+        Ok(controller)
+    }
+
+    /// Persists the complete active lighttable state without changing the caller's controller.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed readiness or catalog-store error. The previous durable state remains
+    /// intact when the transaction fails.
+    pub fn persist_active_collection_state(
+        &self,
+        state: &rusttable_catalog::ActiveLighttableState,
+    ) -> Result<(), GtkCatalogMutationError> {
+        let GtkCatalogState::Ready(catalog) = &self.state else {
+            return Err(GtkCatalogMutationError::NotReady);
+        };
+        let repository = rusttable_catalog_store::RedbCollectionRepository::open(
+            catalog.location().catalog_path(),
+        )
+        .map_err(GtkCatalogMutationError::Collection)?;
+        repository
+            .persist_active_lighttable_state(state)
+            .map_err(GtkCatalogMutationError::Collection)
+    }
+
+    /// Applies and persists one collection-controller mutation transactionally.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog-store error; the supplied controller is unchanged on failure.
+    pub fn apply_collection_controller_change<F>(
+        &self,
+        controller: &mut CollectionController,
+        update: F,
+    ) -> Result<(), GtkCatalogMutationError>
+    where
+        F: FnOnce(&mut CollectionController),
+    {
+        let mut next = controller.clone();
+        update(&mut next);
+        self.persist_active_collection_state(&next.active_state())?;
+        *controller = next;
+        Ok(())
     }
 
     /// Atomically applies a lighttable organization command and returns its committed event.

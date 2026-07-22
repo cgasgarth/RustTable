@@ -2,8 +2,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusttable_catalog::{
-    ActiveLibraryView, CollectionCommand, CollectionQuery, CollectionRepository, CollectionSort,
-    CollectionViewDefinition, GroupCollapsePolicy, SavedCollection,
+    ActiveLibraryView, ActiveLighttableProperty, ActiveLighttableSort,
+    ActiveLighttableSortDirection, ActiveLighttableState, CollectionCommand, CollectionQuery,
+    CollectionRepository, CollectionRepositoryError, CollectionSort, CollectionViewDefinition,
+    GroupCollapsePolicy, SavedCollection,
 };
 use rusttable_catalog_store::RedbCollectionRepository;
 
@@ -80,6 +82,74 @@ fn deleting_active_collection_reopens_as_all_photos() {
             .active()
             .saved_id()
             .is_none()
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn active_lighttable_state_roundtrips_and_reconciles_as_versioned_payload() {
+    let path = path();
+    let state = ActiveLighttableState::new(
+        ActiveLighttableProperty::Folders,
+        "holiday",
+        ActiveLighttableSort::Rating,
+        ActiveLighttableSortDirection::Descending,
+        [9, 3, 9],
+    );
+    let repository = RedbCollectionRepository::open(&path).expect("open");
+    repository
+        .persist_active_lighttable_state(&state)
+        .expect("persist active lighttable state");
+    drop(repository);
+
+    let repository = RedbCollectionRepository::open(&path).expect("reopen");
+    let restored = repository
+        .load_active_lighttable_state()
+        .expect("load active lighttable state");
+    assert_eq!(restored, state);
+    assert_eq!(restored.version(), 1);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn active_lighttable_commit_failure_keeps_the_previous_payload() {
+    let path = path();
+    let first = ActiveLighttableState::new(
+        ActiveLighttableProperty::Filename,
+        "before",
+        ActiveLighttableSort::Filename,
+        ActiveLighttableSortDirection::Ascending,
+        [1],
+    );
+    let second = ActiveLighttableState::new(
+        ActiveLighttableProperty::Rating,
+        "after",
+        ActiveLighttableSort::CaptureTime,
+        ActiveLighttableSortDirection::Descending,
+        [2],
+    );
+    let repository = RedbCollectionRepository::open(&path).expect("open");
+    repository
+        .persist_active_lighttable_state(&first)
+        .expect("persist initial state");
+    drop(repository);
+
+    let failing = RedbCollectionRepository::open_with_before_commit_hook(&path, || {
+        Err(CollectionRepositoryError::CommitFailed)
+    })
+    .expect("open failing repository");
+    assert_eq!(
+        failing.persist_active_lighttable_state(&second),
+        Err(CollectionRepositoryError::CommitFailed)
+    );
+    drop(failing);
+
+    let repository = RedbCollectionRepository::open(&path).expect("reopen");
+    assert_eq!(
+        repository
+            .load_active_lighttable_state()
+            .expect("load previous state"),
+        first
     );
     let _ = std::fs::remove_file(path);
 }

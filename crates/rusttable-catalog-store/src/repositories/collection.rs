@@ -5,23 +5,49 @@ use std::sync::Arc;
 
 use redb::{Database, ReadableDatabase, ReadableTable};
 use rusttable_catalog::{
-    CollectionCommand, CollectionRepository, CollectionRepositoryError, CollectionState,
+    ActiveLibraryView, ActiveLighttableProperty, ActiveLighttableSort,
+    ActiveLighttableSortDirection, ActiveLighttableState, CollectionCommand, CollectionField,
+    CollectionQuery, CollectionRepository, CollectionRepositoryError, CollectionSort,
+    CollectionState, SavedCollection,
 };
 use sha2::{Digest, Sha256};
 
 use crate::schema;
 
 const STATE_KEY: &[u8] = b"state";
+const ACTIVE_LIGHTTABLE_STATE_KEY: &[u8] = b"active-lighttable-v1";
+
+type BeforeCommitHook = Arc<dyn Fn() -> Result<(), CollectionRepositoryError> + Send + Sync>;
 
 /// Transactional redb adapter for saved, recent, and active library views.
 pub struct RedbCollectionRepository {
     database: Arc<Database>,
+    before_commit: Option<BeforeCommitHook>,
 }
 
 impl RedbCollectionRepository {
     pub fn open(path: &Path) -> Result<Self, CollectionRepositoryError> {
         let database = schema::open(path).map_err(|error| map_schema_error(&error))?;
-        Ok(Self { database })
+        Ok(Self {
+            database,
+            before_commit: None,
+        })
+    }
+
+    /// Opens a repository with a test-only failure seam immediately before commit.
+    #[doc(hidden)]
+    pub fn open_with_before_commit_hook<F>(
+        path: &Path,
+        hook: F,
+    ) -> Result<Self, CollectionRepositoryError>
+    where
+        F: Fn() -> Result<(), CollectionRepositoryError> + Send + Sync + 'static,
+    {
+        let database = schema::open(path).map_err(|error| map_schema_error(&error))?;
+        Ok(Self {
+            database,
+            before_commit: Some(Arc::new(hook)),
+        })
     }
 
     /// Rechecks the state and all derived indexes without changing the catalog.
@@ -160,9 +186,120 @@ impl RedbCollectionRepository {
                 .insert(state.revision().to_be_bytes().as_slice(), digest.as_slice())
                 .map_err(|_| CollectionRepositoryError::Unavailable)?;
         }
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
         transaction
             .commit()
             .map_err(|_| CollectionRepositoryError::CommitFailed)
+    }
+
+    /// Loads the durable active lighttable state, migrating the older active-view payload when
+    /// this is the first access after the feature was introduced.
+    pub fn load_active_lighttable_state(
+        &self,
+    ) -> Result<ActiveLighttableState, CollectionRepositoryError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| CollectionRepositoryError::Unavailable)?;
+        let table = transaction
+            .open_table(schema::ACTIVE_VIEW_TABLE)
+            .map_err(|_| CollectionRepositoryError::Corrupt)?;
+        let value = table
+            .get(ACTIVE_LIGHTTABLE_STATE_KEY)
+            .map_err(|_| CollectionRepositoryError::Corrupt)?;
+        let Some(value) = value else {
+            drop(table);
+            drop(transaction);
+            let migrated = self.migrate_legacy_active_lighttable_state()?;
+            self.persist_active_lighttable_state(&migrated)?;
+            return Ok(migrated);
+        };
+        let state: ActiveLighttableState =
+            postcard::from_bytes(value.value()).map_err(|_| CollectionRepositoryError::Corrupt)?;
+        state
+            .validate()
+            .map_err(|_| CollectionRepositoryError::Corrupt)?;
+        Ok(state)
+    }
+
+    /// Persists one complete active lighttable state in a single catalog transaction.
+    pub fn persist_active_lighttable_state(
+        &self,
+        state: &ActiveLighttableState,
+    ) -> Result<(), CollectionRepositoryError> {
+        state
+            .validate()
+            .map_err(|_| CollectionRepositoryError::Corrupt)?;
+        let encoded =
+            postcard::to_allocvec(state).map_err(|_| CollectionRepositoryError::Corrupt)?;
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| CollectionRepositoryError::Unavailable)?;
+        {
+            let mut table = transaction
+                .open_table(schema::ACTIVE_VIEW_TABLE)
+                .map_err(|_| CollectionRepositoryError::Unavailable)?;
+            table
+                .insert(ACTIVE_LIGHTTABLE_STATE_KEY, encoded.as_slice())
+                .map_err(|_| CollectionRepositoryError::Unavailable)?;
+        }
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| CollectionRepositoryError::CommitFailed)
+    }
+
+    fn migrate_legacy_active_lighttable_state(
+        &self,
+    ) -> Result<ActiveLighttableState, CollectionRepositoryError> {
+        let legacy = self.load()?;
+        let definition = match legacy.active() {
+            ActiveLibraryView::Saved(id) => legacy.by_id(*id).map(SavedCollection::view),
+            ActiveLibraryView::Inline { definition, .. } => Some(definition),
+        };
+        let Some(definition) = definition else {
+            return Ok(ActiveLighttableState::default());
+        };
+        let (property, search_text) = match definition.query() {
+            CollectionQuery::Text { field, value } => match field {
+                CollectionField::Filename => (ActiveLighttableProperty::Filename, value.clone()),
+                CollectionField::Folder => (ActiveLighttableProperty::Folders, value.clone()),
+                CollectionField::Tag | CollectionField::Camera | CollectionField::Lens => {
+                    (ActiveLighttableProperty::Filename, String::new())
+                }
+            },
+            CollectionQuery::RatingAtLeast(value) => {
+                (ActiveLighttableProperty::Rating, value.to_string())
+            }
+            CollectionQuery::AllPhotos
+            | CollectionQuery::Rejected(_)
+            | CollectionQuery::ColorLabel(_)
+            | CollectionQuery::And(_)
+            | CollectionQuery::Opaque { .. } => (ActiveLighttableProperty::Filename, String::new()),
+        };
+        let sort = match definition.sort() {
+            CollectionSort::FilenameAscending => ActiveLighttableSort::Filename,
+            CollectionSort::CaptureTimeAscending => ActiveLighttableSort::CaptureTime,
+            CollectionSort::RatingDescending => ActiveLighttableSort::Rating,
+        };
+        let selection = match legacy.active() {
+            ActiveLibraryView::Inline {
+                selection_anchor, ..
+            } => selection_anchor.iter().copied().collect::<Vec<_>>(),
+            ActiveLibraryView::Saved(_) => Vec::new(),
+        };
+        Ok(ActiveLighttableState::new(
+            property,
+            search_text,
+            sort,
+            ActiveLighttableSortDirection::Ascending,
+            selection,
+        ))
     }
 }
 

@@ -61,10 +61,11 @@ pub use gtk_shell::{
     ExposurePanel, GtkShell, LighttableColorLabel, LighttableContentState,
     LighttableInteractionState, LighttableLayout, LighttableLayoutAction, LighttableLayoutControls,
     LighttablePanel, LighttablePhotoState, LighttableRating, LighttableSelectionAction,
-    LighttableSort, LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
-    LighttableZoom, ModuleControlKind, ModuleControlViewModel, ModulePanelViewModel,
-    NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion, ThemeRole, WorkspaceRole,
-    apply_theme_role, darktable_theme_css, install_darktable_theme, reference_modules,
+    LighttableSort, LighttableSortDirection, LighttableToolbar, LighttableToolbarAction,
+    LighttableToolbarState, LighttableZoom, ModuleControlKind, ModuleControlViewModel,
+    ModulePanelViewModel, NavigationDirection, SelectionModifiers, ShellLayout, ShellRegion,
+    ThemeRole, WorkspaceRole, apply_theme_role, darktable_theme_css, install_darktable_theme,
+    reference_modules,
 };
 pub use gui::{DisplayProfileBanner, GtkMonitorInventory};
 pub use import::{

@@ -71,8 +71,8 @@ pub use lighttable_layout_controls::{
     LighttableLayoutAction, LighttableLayoutControls, LighttablePanel,
 };
 pub use lighttable_toolbar::{
-    LighttableColorLabel, LighttableRating, LighttableSort, LighttableToolbar,
-    LighttableToolbarAction, LighttableToolbarState,
+    LighttableColorLabel, LighttableRating, LighttableSort, LighttableSortDirection,
+    LighttableToolbar, LighttableToolbarAction, LighttableToolbarState,
 };
 pub use model::{
     DarkroomWorkspaceViewModel, LibraryBrowserModel, LibraryPhoto, LighttableContentState,

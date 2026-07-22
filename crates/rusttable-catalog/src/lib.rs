@@ -24,10 +24,12 @@ mod source_path;
 mod state;
 
 pub use collections::{
-    ActiveLibraryView, CollectionCommand, CollectionError, CollectionField, CollectionId,
-    CollectionProvenance, CollectionQuery, CollectionRepository, CollectionRepositoryError,
-    CollectionSort, CollectionState, CollectionValidationError, CollectionViewDefinition,
-    GroupCollapsePolicy, MAX_RECENT_QUERIES, RecentQuery, SavedCollection,
+    ACTIVE_LIGHTTABLE_STATE_VERSION, ActiveLibraryView, ActiveLighttableProperty,
+    ActiveLighttableSort, ActiveLighttableSortDirection, ActiveLighttableState, CollectionCommand,
+    CollectionError, CollectionField, CollectionId, CollectionProvenance, CollectionQuery,
+    CollectionRepository, CollectionRepositoryError, CollectionSort, CollectionState,
+    CollectionValidationError, CollectionViewDefinition, GroupCollapsePolicy, MAX_RECENT_QUERIES,
+    RecentQuery, SavedCollection,
 };
 pub use command::{CatalogChangeEvent, CatalogCommand};
 pub use develop::{DevelopInput, DevelopInputError, DevelopSelection};

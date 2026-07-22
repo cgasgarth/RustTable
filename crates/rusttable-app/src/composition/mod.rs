@@ -48,7 +48,7 @@ use std::time::Duration;
 
 use ai_ui::{install_ai_batch_ui_bridge, install_ai_ui_bridges};
 use collection_bridge::{
-    apply_collection_action, apply_lighttable_toolbar_action, apply_photo_selection,
+    apply_collection_action_persisted, apply_lighttable_toolbar_action, apply_selection_projection,
     collection_filter_state, empty_collection_filter_state, failed_collection_filter_state,
 };
 use rusttable_ui::{PhotoSelection, PhotoSourceKind, RawDenoiseAction, RgbDenoiseAction};
@@ -253,13 +253,27 @@ fn activate_application(
         shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
     }
     let collection_for_actions = Rc::clone(active_collection);
+    let collection_catalog_for_actions = Rc::clone(active_catalog);
     shell.connect_collection_action(move |action| {
         let mut controller = collection_for_actions.borrow_mut();
         let Some(controller) = controller.as_mut() else {
             return empty_collection_filter_state();
         };
-        apply_collection_action(controller, action);
-        collection_filter_state(&controller.snapshot())
+        let catalog = collection_catalog_for_actions.borrow().as_ref().cloned();
+        let Some(catalog) = catalog else {
+            return failed_collection_filter_state(&controller.snapshot());
+        };
+        match apply_collection_action_persisted(
+            &catalog.borrow(),
+            controller,
+            action,
+        ) {
+            Ok(()) => collection_filter_state(&controller.snapshot()),
+            Err(error) => {
+                tracing::error!(target: "rusttable.catalog", error = %error, "lighttable collection change failed");
+                failed_collection_filter_state(&controller.snapshot())
+            }
+        }
     });
     let toolbar_for_actions = Rc::clone(active_collection);
     let toolbar_catalog = Rc::clone(active_catalog);
@@ -348,13 +362,25 @@ fn activate_application(
     let selection_profile_state = Rc::clone(&display_profile_state);
     let selection_preview_lifecycle = Rc::clone(&preview_lifecycle);
     shell.set_photo_selected_handler(move |photo_id, modifiers| {
-        let (catalog_changed, collection_changed) = apply_selection_projection(
+        let projection = apply_selection_projection(
             &selection_controller,
             &selection_collection,
             &darkroom_selection_shell,
             photo_id,
             modifiers,
         );
+        let (catalog_changed, collection_changed) = match projection {
+            Ok(changed) => changed,
+            Err(error) => {
+                tracing::error!(target: "rusttable.catalog", error = %error, "lighttable selection persistence failed");
+                if let Some(controller) = selection_collection.borrow().as_ref() {
+                    darkroom_selection_shell
+                        .set_collection_filter_state(&failed_collection_filter_state(&controller.snapshot()));
+                }
+                darkroom_selection_shell.set_darkroom_status(&error.to_string());
+                return;
+            }
+        };
         if !catalog_changed && !collection_changed {
             return;
         }
@@ -520,24 +546,6 @@ fn install_action_input(shell: &rusttable_ui::GtkShell) {
             _ => {}
         }
     });
-}
-
-fn apply_selection_projection(
-    catalog: &Rc<RefCell<GtkCatalogController>>,
-    collection: &Rc<RefCell<Option<CollectionController>>>,
-    shell: &rusttable_ui::GtkShell,
-    photo_id: rusttable_core::PhotoId,
-    modifiers: rusttable_ui::SelectionModifiers,
-) -> (bool, bool) {
-    let catalog_changed = catalog.borrow_mut().select_photo(photo_id);
-    let collection_changed = collection
-        .borrow_mut()
-        .as_mut()
-        .is_some_and(|controller| apply_photo_selection(controller, photo_id, modifiers));
-    if let Some(controller) = collection.borrow().as_ref() {
-        shell.set_collection_filter_state(&collection_filter_state(&controller.snapshot()));
-    }
-    (catalog_changed, collection_changed)
 }
 
 fn install_application_menus(
