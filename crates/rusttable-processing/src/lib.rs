@@ -28,6 +28,7 @@ pub mod operation_stack;
 pub mod operations;
 mod output;
 mod pipeline;
+pub mod raw_pipeline;
 pub mod rawprepare;
 pub mod registry;
 mod scalar;
@@ -158,6 +159,10 @@ pub use output::{
     convert_working_to_linear_srgb, encode_linear_srgb, encode_working_to_srgb,
 };
 pub use pipeline::{CompiledPipeline, PipelineCompileError, PipelineStep, PipelineStepIndex};
+pub use raw_pipeline::{
+    RawPipelineError, RawPipelineExecution, RawPipelinePlan, RawPipelineReceipt,
+    RawTemperatureSelection, pre_demosaic_temperature,
+};
 pub use rawprepare::{NormalizedRaw, RawPrepareConfig, RawPrepareError, RawPreparePlan};
 pub use registry::closure::{
     OperationClassification, REGISTRY_CLOSURE_SCHEMA, RegistryClosure, RegistryClosureEntry,

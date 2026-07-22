@@ -430,6 +430,12 @@ impl ProcessingOperation {
     }
 
     #[must_use]
+    pub const fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    #[must_use]
     pub const fn opacity(&self) -> FiniteF32 {
         self.opacity
     }

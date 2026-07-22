@@ -423,6 +423,7 @@ impl GtkPreviewFailureKind {
                     | crate::PreviewError::PixelpipeInput(_)
                     | crate::PreviewError::PixelpipeSnapshot(_)
                     | crate::PreviewError::Graph(_)
+                    | crate::PreviewError::RawPipeline(_)
                     | crate::PreviewError::Pixelpipe(_)
                     | crate::PreviewError::Prepared(_) => Self::RenderUnavailable,
                 },

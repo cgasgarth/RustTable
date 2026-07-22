@@ -148,6 +148,26 @@ impl CompiledOperationGraph {
         self.nodes.iter()
     }
 
+    /// Disables pre-demosaic temperature nodes after the source-side RAW
+    /// segment has consumed them. The graph identity and persisted operation
+    /// remain unchanged for receipts and history.
+    #[must_use]
+    pub fn without_pre_demosaic_temperature(&self) -> Self {
+        let mut graph = self.clone();
+        for node in &mut graph.nodes {
+            if node.operation().is_enabled()
+                && matches!(
+                    node.operation().kind(),
+                    crate::ProcessingOperationKind::Temperature { config }
+                        if config.stage() == crate::operations::temperature::WhiteBalanceStage::PreDemosaic
+                )
+            {
+                node.prepared = node.prepared.clone().disabled();
+            }
+        }
+        graph
+    }
+
     #[must_use]
     pub fn node(&self, index: OperationGraphNodeIndex) -> Option<&OperationGraphNode> {
         self.nodes.get(index.get())

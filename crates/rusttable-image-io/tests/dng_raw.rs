@@ -398,11 +398,11 @@ fn raw_frame_is_linear_and_receipt_exposes_every_development_stage() {
             DecodeStage::RawActiveAreaCrop,
             DecodeStage::RawCfa,
             DecodeStage::RawDemosaic,
-            DecodeStage::RawWhiteBalance,
             DecodeStage::RawColorCalibration,
             DecodeStage::RawDefaultCrop,
         ]
     );
+    assert!(frame.raw_source().is_some());
     assert!(
         frame
             .receipt()

@@ -1,6 +1,6 @@
 use crate::{
     AlphaMode, ByteOrder, ChannelLayout, DecodeLimits, ImageDescriptor, InputFormat, Orientation,
-    OwnedImage, PixelFormat, Roi, SampleType, SourceColor, StorageLayout,
+    OwnedImage, PixelFormat, RawMosaicSource, Roi, SampleType, SourceColor, StorageLayout,
 };
 use sha2::{Digest, Sha256};
 
@@ -204,6 +204,7 @@ pub struct DecodedFrame {
     image: OwnedImage,
     receipt: DecodeReceipt,
     embedded_icc: Option<Vec<u8>>,
+    raw_source: Option<RawMosaicSource>,
 }
 
 impl DecodedFrame {
@@ -220,6 +221,7 @@ impl DecodedFrame {
             image,
             receipt,
             embedded_icc: None,
+            raw_source: None,
         })
     }
 
@@ -242,6 +244,13 @@ impl DecodedFrame {
         Ok(self)
     }
 
+    /// Retains the validated CFA source used to produce a native RAW frame.
+    #[must_use]
+    pub fn with_raw_source(mut self, source: RawMosaicSource) -> Self {
+        self.raw_source = Some(source);
+        self
+    }
+
     #[must_use]
     pub const fn image(&self) -> &OwnedImage {
         &self.image
@@ -260,6 +269,11 @@ impl DecodedFrame {
     #[must_use]
     pub fn embedded_icc(&self) -> Option<&[u8]> {
         self.embedded_icc.as_deref()
+    }
+
+    #[must_use]
+    pub const fn raw_source(&self) -> Option<&RawMosaicSource> {
+        self.raw_source.as_ref()
     }
 
     #[must_use]

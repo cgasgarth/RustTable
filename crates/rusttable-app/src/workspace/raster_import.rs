@@ -280,6 +280,7 @@ fn preview_error_cause(error: &crate::PreviewError) -> &'static str {
         crate::PreviewError::PixelpipeInput(_) => "pixelpipe_input",
         crate::PreviewError::PixelpipeSnapshot(_) => "pixelpipe_snapshot",
         crate::PreviewError::Graph(_) => "processing_graph",
+        crate::PreviewError::RawPipeline(_) => "processing_raw_pipeline",
         crate::PreviewError::Pixelpipe(_) => "processing_pixelpipe",
         crate::PreviewError::Prepared(_) => "processing_prepare",
         crate::PreviewError::Render(_) => "render",

@@ -3,6 +3,7 @@ use rusttable_core::{
 };
 use rusttable_image::{
     BlackWhiteLevels, CfaPattern, CfaPhase, ImageDimensions, Orientation, RawMosaic,
+    RawMosaicSource,
 };
 use rusttable_processing::operations::temperature::{
     ChannelMultipliers, TemperatureConfig, TemperatureConfigError, TemperatureLegacyParametersV2,
@@ -10,7 +11,10 @@ use rusttable_processing::operations::temperature::{
     TemperaturePlanError, WhiteBalanceSource, WhiteBalanceStage, migrate_v2, migrate_v3,
     migrate_v4, multipliers_to_temperature_tint, temperature_tint_to_multipliers,
 };
-use rusttable_processing::{RawPrepareConfig, RawPreparePlan, temperature_descriptor};
+use rusttable_processing::{
+    DemosaicAlgorithm, RawPipelinePlan, RawPrepareConfig, RawPreparePlan, RawTemperatureSelection,
+    temperature_descriptor,
+};
 
 fn scalar(value: f64) -> ParameterValue {
     ParameterValue::Scalar(FiniteF64::new(value).expect("finite scalar"))
@@ -154,6 +158,107 @@ fn raw_execution_uses_cfa_color_and_phase_instead_of_array_position() {
     let values: Vec<_> = output.samples().iter().map(|value| value.get()).collect();
     assert_eq!(values, vec![0.5, 0.5, 0.75, 0.5]);
     assert_eq!(output.cfa(), normalized.cfa());
+}
+
+#[test]
+fn raw_pipeline_applies_temperature_once_before_bayer_demosaic() {
+    let raw = RawMosaic::new(
+        ImageDimensions::new(4, 4).expect("dimensions"),
+        4,
+        vec![
+            100, 200, 100, 200, 200, 300, 200, 300, 100, 200, 100, 200, 200, 300, 200, 300,
+        ],
+        CfaPattern::bayer_rggb(),
+        CfaPhase::new(0, 0, CfaPattern::bayer_rggb()),
+        BlackWhiteLevels::new(0, 1_000).expect("levels"),
+        Orientation::Normal,
+    )
+    .expect("Bayer source");
+    let source = RawMosaicSource::new(raw, None);
+    let config = TemperatureConfig::with_details(
+        ChannelMultipliers::new([2.0, 1.0, 0.5, 1.0]).expect("multipliers"),
+        WhiteBalanceSource::Custom,
+        WhiteBalanceStage::PreDemosaic,
+        None,
+        None,
+    )
+    .expect("config");
+    let plan = RawPipelinePlan::new(
+        &source,
+        Some(RawTemperatureSelection::new(
+            config,
+            rusttable_processing::FiniteF32::new(1.0).expect("opacity"),
+        )),
+        DemosaicAlgorithm::Bilinear,
+    )
+    .expect("RAW plan");
+    let output = plan.execute(&source).expect("RAW execution");
+
+    assert!(plan.receipt().temperature_applied_once());
+    assert_eq!(
+        output.image().dimensions(),
+        rusttable_processing::RasterDimensions::new(4, 4).expect("dimensions")
+    );
+    let pixel = output.image().pixels()[0];
+    assert!((pixel.red().get() - 0.2).abs() < 1e-6);
+    assert!((pixel.green().get() - 0.2).abs() < 1e-6);
+    assert!((pixel.blue().get() - 0.15).abs() < 1e-6);
+}
+
+#[test]
+fn raw_pipeline_preserves_xtrans_channel_mapping_before_demosaic() {
+    let pattern = CfaPattern::XTrans([
+        [rusttable_image::CfaColor::Green; 6],
+        [rusttable_image::CfaColor::Red; 6],
+        [rusttable_image::CfaColor::Blue; 6],
+        [rusttable_image::CfaColor::Green; 6],
+        [rusttable_image::CfaColor::Red; 6],
+        [rusttable_image::CfaColor::Blue; 6],
+    ]);
+    let samples = (0..6)
+        .flat_map(|row| {
+            let value = match row % 3 {
+                0 => 100,
+                1 => 200,
+                _ => 300,
+            };
+            std::iter::repeat_n(value, 6)
+        })
+        .collect();
+    let raw = RawMosaic::new(
+        ImageDimensions::new(6, 6).expect("dimensions"),
+        6,
+        samples,
+        pattern,
+        CfaPhase::new(0, 0, pattern),
+        BlackWhiteLevels::new(0, 1_000).expect("levels"),
+        Orientation::Normal,
+    )
+    .expect("X-Trans source");
+    let source = RawMosaicSource::new(raw, None);
+    let config = TemperatureConfig::with_details(
+        ChannelMultipliers::new([2.0, 1.0, 0.5, 1.0]).expect("multipliers"),
+        WhiteBalanceSource::Custom,
+        WhiteBalanceStage::PreDemosaic,
+        None,
+        None,
+    )
+    .expect("config");
+    let plan = RawPipelinePlan::new(
+        &source,
+        Some(RawTemperatureSelection::new(
+            config,
+            rusttable_processing::FiniteF32::new(1.0).expect("opacity"),
+        )),
+        DemosaicAlgorithm::Bilinear,
+    )
+    .expect("RAW plan");
+    let output = plan.execute(&source).expect("RAW execution");
+
+    let pixel = output.image().pixels()[0];
+    assert!((pixel.red().get() - 0.4).abs() < 1e-6);
+    assert!((pixel.green().get() - 0.1).abs() < 1e-6);
+    assert!((pixel.blue().get() - 0.15).abs() < 1e-6);
 }
 
 #[test]

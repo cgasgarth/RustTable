@@ -10,7 +10,8 @@ use rusttable_pixelpipe::{
     RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
 };
 use rusttable_processing::{
-    CompiledOperationGraph, FiniteF32, LinearRgb, RasterDimensions, WorkingRgbImage,
+    CompiledOperationGraph, DemosaicAlgorithm, FiniteF32, LinearRgb, RasterDimensions,
+    RawPipelinePlan, WorkingRgbImage, pre_demosaic_temperature,
 };
 use rusttable_render::{
     PreparedCpuPixelpipeResult, PreparedCpuPixelpipeResultError, PreviewBounds, RenderOutput,
@@ -131,14 +132,8 @@ fn render_frame_with_target(
     edit: &Edit,
     target: RenderTarget,
 ) -> Result<RenderOutput, PreviewError> {
-    let source_pixels = input
-        .rgba_f32_pixels()
-        .map_err(|_| PreviewError::DecodedFrame)?;
-    let dimensions = RasterDimensions::new(
-        input.image().descriptor().dimensions().width(),
-        input.image().descriptor().dimensions().height(),
-    )
-    .expect("decoded images have nonzero dimensions");
+    let mut graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
+    let (source_pixels, dimensions, representation) = source_frame_pixels(input, &mut graph)?;
     let source_color = input.source_color();
     let source_color_decision = source_color_decision(source_color).inspect_err(|_| {
         tracing::error!(
@@ -148,12 +143,6 @@ fn render_frame_with_target(
         );
     })?;
     let encoding = pixelpipe_encoding(source_color);
-    let representation = match input.sample_type() {
-        SampleType::U8 => RgbaF32SourceRepresentation::U8,
-        SampleType::U16 => RgbaF32SourceRepresentation::U16,
-        SampleType::F16 => RgbaF32SourceRepresentation::F16,
-        SampleType::F32 => RgbaF32SourceRepresentation::F32,
-    };
     let pixelpipe_input = RgbaF32Image::new(
         RgbaF32Descriptor::with_source_representation(dimensions, encoding, representation)
             .with_source_orientation(input.image().descriptor().orientation())
@@ -165,7 +154,6 @@ fn render_frame_with_target(
             .collect(),
     )
     .map_err(PreviewError::PixelpipeInput)?;
-    let graph = CompiledOperationGraph::compile(edit).map_err(PreviewError::Graph)?;
     let snapshot =
         CpuPixelpipeSnapshot::try_new(pixelpipe_input, graph, CpuPixelpipeOutputMode::FullExport)
             .map_err(PreviewError::PixelpipeSnapshot)?;
@@ -211,6 +199,54 @@ fn render_frame_with_target(
     )
     .map_err(PreviewError::Prepared)?;
     render_prepared_cpu_pixelpipe(&prepared, target).map_err(PreviewError::Render)
+}
+
+fn source_frame_pixels(
+    input: &DecodedFrame,
+    graph: &mut CompiledOperationGraph,
+) -> Result<(Vec<[f32; 4]>, RasterDimensions, RgbaF32SourceRepresentation), PreviewError> {
+    if let Some(raw_source) = input.raw_source() {
+        let temperature = pre_demosaic_temperature(graph).map_err(PreviewError::RawPipeline)?;
+        let plan = RawPipelinePlan::new(raw_source, temperature, DemosaicAlgorithm::Bilinear)
+            .map_err(PreviewError::RawPipeline)?;
+        let execution = plan
+            .execute(raw_source)
+            .map_err(PreviewError::RawPipeline)?;
+        if plan.receipt().temperature_applied_once() {
+            *graph = graph.without_pre_demosaic_temperature();
+        }
+        let dimensions = execution.image().dimensions();
+        let source_pixels = execution
+            .image()
+            .pixels()
+            .iter()
+            .map(|pixel| {
+                [
+                    pixel.red().get(),
+                    pixel.green().get(),
+                    pixel.blue().get(),
+                    1.0,
+                ]
+            })
+            .collect();
+        return Ok((source_pixels, dimensions, RgbaF32SourceRepresentation::F32));
+    }
+
+    let source_pixels = input
+        .rgba_f32_pixels()
+        .map_err(|_| PreviewError::DecodedFrame)?;
+    let dimensions = RasterDimensions::new(
+        input.image().descriptor().dimensions().width(),
+        input.image().descriptor().dimensions().height(),
+    )
+    .expect("decoded images have nonzero dimensions");
+    let representation = match input.sample_type() {
+        SampleType::U8 => RgbaF32SourceRepresentation::U8,
+        SampleType::U16 => RgbaF32SourceRepresentation::U16,
+        SampleType::F16 => RgbaF32SourceRepresentation::F16,
+        SampleType::F32 => RgbaF32SourceRepresentation::F32,
+    };
+    Ok((source_pixels, dimensions, representation))
 }
 
 fn render_with_target(
@@ -370,6 +406,7 @@ pub enum PreviewError {
     PixelpipeInput(RgbaF32ImageError),
     PixelpipeSnapshot(CpuPixelpipeSnapshotError),
     Graph(rusttable_processing::OperationGraphCompileError),
+    RawPipeline(rusttable_processing::RawPipelineError),
     Pixelpipe(CpuPixelpipeError),
     Prepared(PreparedCpuPixelpipeResultError),
     Render(rusttable_render::RenderError),
@@ -389,6 +426,7 @@ impl std::fmt::Display for PreviewError {
                 write!(formatter, "preview CPU snapshot failed: {error}")
             }
             Self::Graph(error) => write!(formatter, "preview graph compilation failed: {error}"),
+            Self::RawPipeline(error) => write!(formatter, "preview RAW pipeline failed: {error}"),
             Self::Pixelpipe(error) => write!(formatter, "preview CPU pixelpipe failed: {error}"),
             Self::Prepared(error) => {
                 write!(formatter, "preview CPU render preparation failed: {error}")
@@ -406,6 +444,7 @@ impl std::error::Error for PreviewError {
             Self::PixelpipeInput(error) => Some(error),
             Self::PixelpipeSnapshot(error) => Some(error),
             Self::Graph(error) => Some(error),
+            Self::RawPipeline(error) => Some(error),
             Self::Pixelpipe(error) => Some(error),
             Self::Prepared(error) => Some(error),
             Self::Render(error) => Some(error),
