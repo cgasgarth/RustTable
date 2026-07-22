@@ -37,7 +37,8 @@ pub use color::{
     DisplayP3Channel, DisplayP3ChannelError, DisplayP3Rgb, DisplayP3RgbImage, ImageBuildError,
     LinearRgb, RasterDimensions, RasterDimensionsError, RgbChannel, SourceColorSpace, SourceRgb,
     SourceRgbImage, SrgbChannel, SrgbChannelError, WorkingColorSpace, WorkingRgbImage,
-    to_linear_srgb, to_linear_srgb_from_display_p3,
+    linear_display_p3_to_working, linear_srgb_to_working, to_linear_srgb,
+    to_linear_srgb_from_display_p3,
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{

@@ -135,6 +135,7 @@ pub struct ExrBlobMetadata {
     pub type_name: String,
     pub bytes: u64,
     pub sha256: [u8; 32],
+    pub data: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

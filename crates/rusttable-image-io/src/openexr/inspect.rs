@@ -341,6 +341,7 @@ fn blob(name: &str, value: &AttributeValue) -> Option<ExrBlobMetadata> {
         type_name,
         bytes: bytes.len() as u64,
         sha256: Sha256::digest(bytes).into(),
+        data: bytes.to_vec(),
     })
 }
 

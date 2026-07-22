@@ -10,6 +10,7 @@ mod input;
 mod output;
 mod pixel;
 mod raw;
+mod source_color;
 mod view;
 
 pub use decode::{
@@ -45,6 +46,7 @@ pub use raw::{
     BlackWhiteLevels, BlackWhiteLevelsError, CfaColor, CfaDescriptor, CfaPattern, CfaPhase,
     RawMosaic, RawMosaicError,
 };
+pub use source_color::{SourceColor, SourceColorError, SourceColorEvidence, SourceColorFallback};
 pub use view::{
     AlignedRgbaF32, CanonicalRgbaF32, ImageDescriptor, ImageDescriptorError, ImageView,
     ImageViewError, ImageViewMut, OwnedImage, PlaneDescriptor,

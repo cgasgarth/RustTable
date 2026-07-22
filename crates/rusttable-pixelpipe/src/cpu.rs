@@ -2,6 +2,12 @@
 
 use std::fmt;
 
+use rusttable_color::{
+    BuiltinSpace, Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion, RenderingIntent,
+};
+use rusttable_processing::operations::colorin::{
+    ColorInConfig, ColorInNormalization, ColorInPlan, ColorInProfile,
+};
 use rusttable_processing::{
     BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, SourceRgb, SourceRgbImage, SrgbChannel,
     WorkingRgbImage, encode_linear_srgb, evaluate_graph_with_basicadj_plans,
@@ -57,6 +63,7 @@ impl CpuPixelpipeResult {
 pub enum CpuPixelpipeError {
     Cancelled(CancellationError),
     UnsupportedInputEncoding { actual: RgbaF32ColorEncoding },
+    SourceColorPlan(String),
     InputBridge { source: RgbaF32ImageError },
     Evaluation { source: EvaluationError },
     OutputBoundary { source: RgbaF32ImageError },
@@ -135,11 +142,6 @@ impl CpuPixelpipeExecutor {
     }
 
     /// Executes a point-operation graph in deterministic, row-major tiles.
-    ///
-    /// Each tile is evaluated through the same scalar operation path as a
-    /// full-frame request. Tile results are copied back into their original
-    /// row-major positions, so this path produces the exact full-frame image
-    /// and receipt identity for the currently supported point operations.
     ///
     /// # Errors
     ///
@@ -649,6 +651,9 @@ fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError
         actual,
         RgbaF32ColorEncoding::SrgbD65
             | RgbaF32ColorEncoding::LinearSrgbD65
+            | RgbaF32ColorEncoding::DisplayP3D65
+            | RgbaF32ColorEncoding::LinearDisplayP3D65
+            | RgbaF32ColorEncoding::External(_)
             | RgbaF32ColorEncoding::LabD50
     ) {
         Ok(())
@@ -822,6 +827,9 @@ fn to_processing_source(input: &RgbaF32Image) -> Result<SourceRgbImage, CpuPixel
 pub(crate) fn to_linear_working(
     input: &RgbaF32Image,
 ) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+    if let Some(source_color) = input.descriptor().source_color() {
+        return to_colorin_working(input, source_color);
+    }
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LinearSrgbD65 {
         let pixels = input
             .pixels()
@@ -846,6 +854,63 @@ pub(crate) fn to_linear_working(
     }
     let source = to_processing_source(input)?;
     Ok(to_linear_srgb(&source))
+}
+
+fn to_colorin_working(
+    input: &RgbaF32Image,
+    source_color: rusttable_image::SourceColor,
+) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+    let id = source_color
+        .profile()
+        .map_or_else(|| synthetic_profile(source_color), Ok)?;
+    let input_profile = ColorInProfile::Matrix {
+        id,
+        primaries: source_color.primaries(),
+        transfer: source_color.transfer(),
+    };
+    let config = ColorInConfig::new(
+        input_profile,
+        ColorInProfile::Builtin(BuiltinSpace::SrgbD65),
+        RenderingIntent::Relative,
+        ColorInNormalization::Off,
+        false,
+    )
+    .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    let plan = ColorInPlan::new(config)
+        .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    let pixels = input
+        .pixels()
+        .iter()
+        .copied()
+        .map(|pixel| {
+            LinearRgb::new(
+                FiniteF32::new(pixel.red()).expect("validated finite red"),
+                FiniteF32::new(pixel.green()).expect("validated finite green"),
+                FiniteF32::new(pixel.blue()).expect("validated finite blue"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let execution = plan
+        .execute(&pixels)
+        .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    WorkingRgbImage::new(input.descriptor().dimensions(), execution.pixels().to_vec())
+        .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))
+}
+
+fn synthetic_profile(
+    source_color: rusttable_image::SourceColor,
+) -> Result<ProfileId, CpuPixelpipeError> {
+    let bytes = postcard::to_allocvec(&(source_color.encoding(), source_color.transfer()))
+        .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    ProfileId::from_content(
+        &bytes,
+        ProfileClass::Input,
+        ProfileModel::Matrix,
+        Pcs::XyzD50,
+        ProfileParserVersion::new(1)
+            .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?,
+    )
+    .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))
 }
 
 const fn input_component_error(pixel_index: usize, channel: RgbaF32Channel) -> CpuPixelpipeError {
@@ -873,6 +938,9 @@ impl fmt::Display for CpuPixelpipeError {
             Self::UnsupportedInputEncoding { actual } => {
                 write!(formatter, "CPU pixelpipe does not accept {actual:?} input")
             }
+            Self::SourceColorPlan(message) => {
+                write!(formatter, "CPU source-color plan failed: {message}")
+            }
             Self::InputBridge { source } => write!(formatter, "invalid CPU input bridge: {source}"),
             Self::Evaluation { source } => {
                 write!(formatter, "CPU operation evaluation failed: {source}")
@@ -893,6 +961,7 @@ impl std::error::Error for CpuPixelpipeError {
         match self {
             Self::Cancelled(_) => None,
             Self::UnsupportedInputEncoding { .. } => None,
+            Self::SourceColorPlan(_) => None,
             Self::InputBridge { source } | Self::OutputBoundary { source } => Some(source),
             Self::Evaluation { source } => Some(source),
             Self::TilePlan { source } => Some(source),

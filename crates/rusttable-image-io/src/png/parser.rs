@@ -1,7 +1,6 @@
 #![allow(clippy::all, clippy::pedantic)]
 
 use flate2::read::ZlibDecoder;
-use rusttable_color::{Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion};
 use rusttable_image::{ColorEncoding, DecodeLimits, ImageDimensions, ImageInputError};
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -326,20 +325,17 @@ pub(crate) fn parse(
             if profile.is_empty() {
                 return Err(PngDecodeError::Malformed("empty iCCP profile".to_owned()));
             }
-            let id = ProfileId::from_content(
-                &profile,
-                ProfileClass::Input,
-                ProfileModel::Unknown,
-                Pcs::Unknown,
-                ProfileParserVersion::new(1).expect("constant profile parser version"),
-            )
-            .map_err(|error| {
-                PngDecodeError::Malformed(format!("invalid ICC profile identity: {error}"))
+            let source_color = crate::source_color::embedded_icc(&profile).map_err(|error| {
+                PngDecodeError::Malformed(format!("invalid embedded ICC profile: {error}"))
             })?;
+            let id = source_color
+                .profile()
+                .expect("embedded ICC has an identity");
             let inventory = PngProfileInventory {
                 bytes: u64::try_from(profile.len()).map_err(|_| arithmetic())?,
                 sha256: Sha256::digest(&profile).into(),
                 profile_id: id,
+                data: profile,
             };
             metadata.icc_profile = Some(inventory.clone());
             icc_profile = Some(inventory);

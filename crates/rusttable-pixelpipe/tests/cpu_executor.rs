@@ -2,11 +2,11 @@ use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
+use rusttable_image::{ColorEncoding, SourceColor, SourceColorFallback};
 use rusttable_pixelpipe::{
     CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
-    CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuTilePlan,
-    CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel,
+    CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError, RgbaF32Channel,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{
     CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
@@ -54,6 +54,24 @@ fn image() -> RgbaF32Image {
         ],
     )
     .expect("valid input")
+}
+
+fn source_colored_image(value: f32, source_color: SourceColor) -> RgbaF32Image {
+    let encoding = match source_color.encoding() {
+        ColorEncoding::SrgbD65 => RgbaF32ColorEncoding::SrgbD65,
+        ColorEncoding::LinearSrgbD65 => RgbaF32ColorEncoding::LinearSrgbD65,
+        actual => panic!("unexpected test encoding: {actual:?}"),
+    };
+    let descriptor = RgbaF32Descriptor::new(
+        RasterDimensions::new(1, 1).expect("nonzero dimensions"),
+        encoding,
+    )
+    .with_source_color(source_color);
+    RgbaF32Image::new(
+        descriptor,
+        vec![RgbaF32Pixel::new(value, value, value, 1.0)],
+    )
+    .expect("valid source-color input")
 }
 
 fn tiled_image() -> RgbaF32Image {
@@ -292,7 +310,7 @@ fn snapshot_identity_changes_for_pixel_affecting_preparation_changes() {
 }
 
 #[test]
-fn checked_snapshot_rejects_unsupported_input_before_execution() {
+fn checked_snapshot_accepts_extended_linear_input() {
     let descriptor = RgbaF32Descriptor::new(
         RasterDimensions::new(1, 1).expect("nonzero dimensions"),
         RgbaF32ColorEncoding::LinearSrgbD65,
@@ -300,11 +318,9 @@ fn checked_snapshot_rejects_unsupported_input_before_execution() {
     let input = RgbaF32Image::new(descriptor, vec![RgbaF32Pixel::new(1.5, 0.0, 0.0, 1.0)])
         .expect("linear extended range is valid");
 
-    assert_eq!(
-        CpuPixelpipeSnapshot::try_new(input, graph(Vec::new()), CpuPixelpipeOutputMode::FullExport),
-        Err(CpuPixelpipeSnapshotError::UnsupportedInputEncoding {
-            actual: RgbaF32ColorEncoding::LinearSrgbD65,
-        })
+    assert!(
+        CpuPixelpipeSnapshot::try_new(input, graph(Vec::new()), CpuPixelpipeOutputMode::FullExport)
+            .is_ok()
     );
 }
 
@@ -450,6 +466,67 @@ fn output_modes_have_known_linear_and_srgb_boundaries_with_identical_alpha() {
         full.receipt().output_identity(),
         preview.receipt().output_identity()
     );
+}
+
+#[test]
+fn encoded_and_linear_ramps_share_working_values_and_receipts_keep_evidence() {
+    let encoded_color = SourceColor::declared(ColorEncoding::SrgbD65).expect("sRGB source");
+    let linear_color =
+        SourceColor::declared(ColorEncoding::LinearSrgbD65).expect("linear sRGB source");
+    let graph = graph(Vec::new());
+    let encoded = CpuPixelpipeSnapshot::new(
+        source_colored_image(0.537_098_7, encoded_color),
+        graph.clone(),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let linear = CpuPixelpipeSnapshot::new(
+        source_colored_image(0.25, linear_color),
+        graph,
+        CpuPixelpipeOutputMode::FullExport,
+    );
+
+    let encoded_result = CpuPixelpipeExecutor
+        .execute(&encoded)
+        .expect("encoded ramp");
+    let linear_result = CpuPixelpipeExecutor.execute(&linear).expect("linear ramp");
+
+    let encoded_red = encoded_result.image().pixels()[0].red();
+    let linear_red = linear_result.image().pixels()[0].red();
+    assert!((encoded_red - 0.25).abs() < 0.001);
+    assert!((linear_red - 0.25).abs() < 0.001);
+    assert!((encoded_red - linear_red).abs() < 0.000_01);
+    assert_eq!(
+        encoded_result.receipt().input_descriptor().source_color(),
+        Some(encoded_color)
+    );
+    assert_eq!(
+        linear_result.receipt().input_descriptor().source_color(),
+        Some(linear_color)
+    );
+    assert_ne!(encoded.identity(), linear.identity());
+}
+
+#[test]
+fn cache_identity_distinguishes_declared_and_fallback_source_evidence() {
+    let dimensions = RasterDimensions::new(1, 1).expect("nonzero dimensions");
+    let pixels = vec![RgbaF32Pixel::new(0.5, 0.5, 0.5, 1.0)];
+    let snapshot = |source_color| {
+        CpuPixelpipeSnapshot::new(
+            RgbaF32Image::new(
+                RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::SrgbD65)
+                    .with_source_color(source_color),
+                pixels.clone(),
+            )
+            .expect("valid source"),
+            graph(Vec::new()),
+            CpuPixelpipeOutputMode::Preview,
+        )
+    };
+
+    let declared = snapshot(SourceColor::declared(ColorEncoding::SrgbD65).expect("sRGB"));
+    let fallback = snapshot(SourceColor::fallback(SourceColorFallback::EncodedSrgb));
+
+    assert_ne!(declared.identity(), fallback.identity());
 }
 
 #[test]

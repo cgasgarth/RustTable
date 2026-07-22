@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rusttable_image::Orientation;
+use rusttable_image::{Orientation, SourceColor};
 use rusttable_processing::RasterDimensions;
 use sha2::{Digest, Sha256};
 
@@ -55,6 +55,9 @@ impl fmt::Debug for SourceRasterIdentity {
 pub enum RgbaF32ColorEncoding {
     SrgbD65,
     LinearSrgbD65,
+    DisplayP3D65,
+    LinearDisplayP3D65,
+    External(rusttable_color::ProfileId),
     LabD50,
 }
 
@@ -92,6 +95,7 @@ pub struct RgbaF32Descriptor {
     alpha_mode: RgbaF32AlphaMode,
     source_representation: RgbaF32SourceRepresentation,
     source_orientation: Orientation,
+    source_color: Option<SourceColor>,
 }
 
 impl RgbaF32Descriptor {
@@ -103,6 +107,7 @@ impl RgbaF32Descriptor {
             alpha_mode: RgbaF32AlphaMode::Straight,
             source_representation: RgbaF32SourceRepresentation::F32,
             source_orientation: Orientation::Normal,
+            source_color: None,
         }
     }
 
@@ -118,6 +123,7 @@ impl RgbaF32Descriptor {
             alpha_mode: RgbaF32AlphaMode::Straight,
             source_representation,
             source_orientation: Orientation::Normal,
+            source_color: None,
         }
     }
 
@@ -125,6 +131,13 @@ impl RgbaF32Descriptor {
     #[must_use]
     pub const fn with_source_orientation(mut self, source_orientation: Orientation) -> Self {
         self.source_orientation = source_orientation;
+        self
+    }
+
+    /// Retains the decoder's complete source-color evidence at pixelpipe ingress.
+    #[must_use]
+    pub const fn with_source_color(mut self, source_color: SourceColor) -> Self {
+        self.source_color = Some(source_color);
         self
     }
 
@@ -151,6 +164,11 @@ impl RgbaF32Descriptor {
     #[must_use]
     pub const fn source_orientation(self) -> Orientation {
         self.source_orientation
+    }
+
+    #[must_use]
+    pub const fn source_color(self) -> Option<SourceColor> {
+        self.source_color
     }
 }
 
@@ -250,7 +268,12 @@ impl RgbaF32Image {
             validate_component(pixel_index, RgbaF32Channel::Green, pixel.green())?;
             validate_component(pixel_index, RgbaF32Channel::Blue, pixel.blue())?;
             validate_component(pixel_index, RgbaF32Channel::Alpha, pixel.alpha())?;
-            if descriptor.color_encoding() == RgbaF32ColorEncoding::SrgbD65 {
+            if descriptor
+                .source_color()
+                .is_some_and(|color| color.transfer() != rusttable_color::TransferFunction::Linear)
+                || descriptor.color_encoding() == RgbaF32ColorEncoding::SrgbD65
+                || descriptor.color_encoding() == RgbaF32ColorEncoding::DisplayP3D65
+            {
                 validate_normalized(pixel_index, RgbaF32Channel::Red, pixel.red())?;
                 validate_normalized(pixel_index, RgbaF32Channel::Green, pixel.green())?;
                 validate_normalized(pixel_index, RgbaF32Channel::Blue, pixel.blue())?;

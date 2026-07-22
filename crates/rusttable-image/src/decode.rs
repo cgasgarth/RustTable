@@ -1,7 +1,8 @@
 use crate::{
     AlphaMode, ByteOrder, ChannelLayout, DecodeLimits, ImageDescriptor, InputFormat, Orientation,
-    OwnedImage, PixelFormat, Roi, SampleType, StorageLayout,
+    OwnedImage, PixelFormat, Roi, SampleType, SourceColor, StorageLayout,
 };
+use sha2::{Digest, Sha256};
 
 /// A request independent of any particular decoder implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +82,7 @@ pub struct DecodeReceipt {
     format: InputFormat,
     source_bytes: u64,
     descriptor: ImageDescriptor,
+    source_color: SourceColor,
 }
 
 impl DecodeReceipt {
@@ -97,10 +99,38 @@ impl DecodeReceipt {
         if source_bytes == 0 {
             return Err(DecodeError::EmptySource);
         }
+        let source_color = SourceColor::from_encoding(descriptor.color_encoding())
+            .map_err(|_| DecodeError::InvalidSourceColor)?;
         Ok(Self {
             format,
             source_bytes,
             descriptor,
+            source_color,
+        })
+    }
+
+    /// Creates decode evidence with the decoder's complete source-color decision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for empty sources or a descriptor/color mismatch.
+    pub fn new_with_source_color(
+        format: InputFormat,
+        source_bytes: u64,
+        descriptor: ImageDescriptor,
+        source_color: SourceColor,
+    ) -> Result<Self, DecodeError> {
+        if source_bytes == 0 {
+            return Err(DecodeError::EmptySource);
+        }
+        if descriptor.color_encoding() != source_color.encoding() {
+            return Err(DecodeError::InvalidSourceColor);
+        }
+        Ok(Self {
+            format,
+            source_bytes,
+            descriptor,
+            source_color,
         })
     }
 
@@ -118,6 +148,11 @@ impl DecodeReceipt {
     pub const fn descriptor(&self) -> &ImageDescriptor {
         &self.descriptor
     }
+
+    #[must_use]
+    pub const fn source_color(&self) -> SourceColor {
+        self.source_color
+    }
 }
 
 /// A decoded owned image and the descriptor facts needed to audit it.
@@ -125,6 +160,7 @@ impl DecodeReceipt {
 pub struct DecodedFrame {
     image: OwnedImage,
     receipt: DecodeReceipt,
+    embedded_icc: Option<Vec<u8>>,
 }
 
 impl DecodedFrame {
@@ -137,7 +173,30 @@ impl DecodedFrame {
         if image.descriptor() != receipt.descriptor() {
             return Err(DecodeError::ReceiptMismatch);
         }
-        Ok(Self { image, receipt })
+        Ok(Self {
+            image,
+            receipt,
+            embedded_icc: None,
+        })
+    }
+
+    /// Retains the exact embedded ICC payload after validating its identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source-color contract is not ICC-backed or
+    /// the payload does not match the retained profile identity.
+    pub fn with_embedded_icc(mut self, bytes: Vec<u8>) -> Result<Self, DecodeError> {
+        let Some(profile) = self.receipt.source_color().profile() else {
+            return Err(DecodeError::InvalidSourceColor);
+        };
+        if profile.size() != u64::try_from(bytes.len()).unwrap_or(u64::MAX)
+            || profile.sha256() != <[u8; 32]>::from(Sha256::digest(&bytes))
+        {
+            return Err(DecodeError::InvalidSourceColor);
+        }
+        self.embedded_icc = Some(bytes);
+        Ok(self)
     }
 
     #[must_use]
@@ -148,6 +207,16 @@ impl DecodedFrame {
     #[must_use]
     pub const fn receipt(&self) -> &DecodeReceipt {
         &self.receipt
+    }
+
+    #[must_use]
+    pub const fn source_color(&self) -> SourceColor {
+        self.receipt.source_color()
+    }
+
+    #[must_use]
+    pub fn embedded_icc(&self) -> Option<&[u8]> {
+        self.embedded_icc.as_deref()
     }
 
     #[must_use]
@@ -311,6 +380,7 @@ pub enum DecodeError {
     UnsupportedSampleType,
     LimitExceeded,
     ArithmeticOverflow,
+    InvalidSourceColor,
 }
 
 /// Format and output guarantees advertised by a decoder without registering it.
@@ -443,6 +513,7 @@ impl std::fmt::Display for DecodeError {
             Self::UnsupportedSampleType => "requested decode sample type is unsupported",
             Self::LimitExceeded => "decode request exceeds configured limits",
             Self::ArithmeticOverflow => "decode arithmetic overflowed",
+            Self::InvalidSourceColor => "decoded frame source-color evidence is invalid",
         })
     }
 }

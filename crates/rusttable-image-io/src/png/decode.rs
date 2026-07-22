@@ -138,31 +138,6 @@ pub(crate) fn decode_png_probe(
     Ok(ImageProbe::new(InputFormat::Png, header.dimensions))
 }
 
-pub(crate) fn decode_legacy_rgba8(
-    bytes: &[u8],
-    limits: DecodeLimits,
-) -> Result<(rusttable_image::ImageDimensions, Vec<u8>), ImageInputError> {
-    let request = PngDecodeRequest::new(common_limits(limits));
-    let result = PngDecoder::new()
-        .decode_bytes(bytes, &request)
-        .map_err(map_error)?;
-    let pixels = result
-        .pixels
-        .ok_or_else(|| malformed("PNG full decode returned no pixels"))?;
-    let dimensions = pixels.dimensions();
-    let rgba = pixels.to_rgba8();
-    let expected = dimensions
-        .decoded_byte_count()
-        .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    if u64::try_from(rgba.len()).unwrap_or(u64::MAX) != expected {
-        return Err(ImageInputError::DecodedBufferInvariant {
-            expected,
-            actual: u64::try_from(rgba.len()).unwrap_or(u64::MAX),
-        });
-    }
-    Ok((dimensions, rgba))
-}
-
 fn decode_pixels(
     bytes: &[u8],
     parsed: &ParsedPng,
