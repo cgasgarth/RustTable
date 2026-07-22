@@ -418,6 +418,7 @@ fn source_identity(
         InputFormat::Png => 2,
         InputFormat::Tiff => 3,
         InputFormat::Raw => 4,
+        InputFormat::OpenExr => 5,
     }]);
     hasher.update(dimensions.width().to_be_bytes());
     hasher.update(dimensions.height().to_be_bytes());

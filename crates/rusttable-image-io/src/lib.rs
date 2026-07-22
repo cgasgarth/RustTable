@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
-#![doc = "Bounded pure-Rust JPEG, PNG, TIFF, and `BigTIFF` file input/output for `RustTable`."]
+#![doc = "Bounded pure-Rust JPEG, PNG, TIFF, `BigTIFF`, and `OpenEXR` file input/output for `RustTable`."]
 
 mod input;
 pub mod jpeg;
+pub mod openexr;
 mod output;
 pub mod png;
 mod raster_samples;
@@ -18,6 +19,13 @@ pub use jpeg::{
     JPEG_PROBE_BUDGET_BYTES, JpegCodingProcess, JpegComponentModel, JpegDecodeError,
     JpegDecodeMode, JpegDecodeReceipt, JpegDecodeRequest, JpegDecodeResult, JpegDecoder,
     JpegHeader, JpegMetadataSegment, JpegPixelData, JpegSampling, JpegSof,
+};
+pub use openexr::{
+    EXR_BACKEND_ID, ExrAlphaAssociation, ExrBlobMetadata, ExrChannel, ExrChannelMapping,
+    ExrChannelRole, ExrChromaticities, ExrCompression, ExrDecodeError, ExrDecodeLimits,
+    ExrDecodeMode, ExrDecodeReceipt, ExrDecodeRequest, ExrDecodeResult, ExrDecoder, ExrHeader,
+    ExrLayerView, ExrLevelIndex, ExrLevelMode, ExrMetadataInventory, ExrMissingChannelFill,
+    ExrPart, ExrPixelData, ExrSampleData, ExrSampleType, ExrStorage, ExrWindow,
 };
 pub use output::FileImageOutput;
 pub use png::{

@@ -130,6 +130,7 @@ const fn encode_format(format: InputFormat) -> u8 {
         InputFormat::Png => 2,
         InputFormat::Tiff => 3,
         InputFormat::Raw => 4,
+        InputFormat::OpenExr => 5,
     }
 }
 
@@ -139,6 +140,7 @@ fn decode_format(value: u8) -> Result<InputFormat, ()> {
         2 => Ok(InputFormat::Png),
         3 => Ok(InputFormat::Tiff),
         4 => Ok(InputFormat::Raw),
+        5 => Ok(InputFormat::OpenExr),
         _ => Err(()),
     }
 }

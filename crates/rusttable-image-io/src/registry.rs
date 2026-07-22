@@ -4,6 +4,7 @@ use rusttable_image::{
 };
 
 use crate::jpeg::JpegDecoder;
+use crate::openexr::{decode_exr_probe, decode_legacy_rgba8 as decode_exr_rgba8, is_exr_signature};
 use crate::png::{decode_legacy_rgba8, decode_png_probe, is_png_signature};
 use crate::raw::{decode_raw, is_raw, probe_raw};
 use crate::tiff::{decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature};
@@ -70,7 +71,7 @@ macro_rules! builtin_decoders {
 }
 
 builtin_decoders! {
-    4;
+    5;
     Jpeg {
         id: "rusttable.decoder.jpeg.v1",
         implementation: "image-jpeg-0.25",
@@ -86,6 +87,14 @@ builtin_decoders! {
         probe: decode_png_probe,
         decode: decode_png,
         full_source_probe: false
+    },
+    OpenExr {
+        id: "rusttable.decoder.openexr.v1",
+        implementation: "exr-1.74.2-pure-rust",
+        matches: is_exr_signature,
+        probe: decode_exr_probe,
+        decode: decode_exr,
+        full_source_probe: true
     },
     Raw {
         id: "rusttable.decoder.raw.v1",
@@ -265,6 +274,23 @@ fn decode_jpeg(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, Image
 fn decode_png(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
     let (dimensions, pixels) = decode_legacy_rgba8(bytes, limits)?;
     rusttable_image::DecodedImage::new_with_color_encoding(
+        dimensions,
+        pixels,
+        rusttable_image::ColorEncoding::Unspecified,
+    )
+    .map_err(|error| match error {
+        rusttable_image::DecodedImageError::ArithmeticOverflow => {
+            ImageInputError::ArithmeticOverflow
+        }
+        rusttable_image::DecodedImageError::ByteLengthMismatch { expected, actual } => {
+            ImageInputError::DecodedBufferInvariant { expected, actual }
+        }
+    })
+}
+
+fn decode_exr(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
+    let (dimensions, pixels) = decode_exr_rgba8(bytes, limits)?;
+    DecodedImage::new_with_color_encoding(
         dimensions,
         pixels,
         rusttable_image::ColorEncoding::Unspecified,
