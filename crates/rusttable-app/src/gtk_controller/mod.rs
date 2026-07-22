@@ -22,6 +22,7 @@ use rusttable_catalog_store::{
 };
 use rusttable_core::PhotoId;
 use rusttable_i18n::LocaleTag;
+use rusttable_import::{decode_reference_source, normalize_reference_path};
 use rusttable_ui::{LibraryFailureKind, PhotoWorkspaceViewModel};
 
 use crate::library::{LibraryLoadResult, catalog_path, load_catalog, source_root};
@@ -246,11 +247,8 @@ impl GtkCatalogController {
         };
         records
             .iter()
-            .map(|record| {
-                catalog
-                    .location()
-                    .source_root()
-                    .join(record.source().as_str())
+            .filter_map(|record| {
+                chooser_source_path(record.source(), catalog.location().source_root())
             })
             .collect()
     }
@@ -335,17 +333,24 @@ impl GtkCatalogController {
     }
 }
 
+fn chooser_source_path(source: &rusttable_catalog::SourcePath, root: &Path) -> Option<PathBuf> {
+    let path = decode_reference_source(source).unwrap_or_else(|_| root.join(source.as_str()));
+    normalize_reference_path(&path).ok()
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
+    use rusttable_catalog::SourcePath;
     use rusttable_core::PhotoId;
+    use rusttable_import::encode_reference_source;
     use rusttable_ui::{
         LibraryFailureKind, PhotoCardViewModel, PhotoDetailViewModel, PhotoWorkspaceViewModel,
         PresentationText,
     };
 
-    use super::{GtkCatalogController, GtkCatalogState};
+    use super::{GtkCatalogController, GtkCatalogState, chooser_source_path};
     use crate::library::LibraryLoadResult;
 
     fn photo_id(value: u128) -> PhotoId {
@@ -442,5 +447,20 @@ mod tests {
             Some(expected_catalog_path.as_path())
         );
         assert_eq!(failed.selected_photo(), None);
+    }
+
+    #[test]
+    fn chooser_decodes_reference_v1_before_comparing_physical_paths() {
+        let source = encode_reference_source(Path::new("/photos/./roll/../IMG_0001.JPG"), [7; 32])
+            .expect("reference-v1 source");
+        assert_eq!(
+            chooser_source_path(&source, Path::new("/catalog")),
+            Some(PathBuf::from("/photos/IMG_0001.JPG"))
+        );
+        let logical = SourcePath::new("folder/photo.jpg").expect("logical source");
+        assert_eq!(
+            chooser_source_path(&logical, Path::new("/catalog")),
+            Some(PathBuf::from("/catalog/folder/photo.jpg"))
+        );
     }
 }

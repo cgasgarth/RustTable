@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use rusttable_catalog::{SourcePath, SourcePathError};
 use sha2::{Digest, Sha256};
@@ -11,23 +11,27 @@ pub enum ReferenceSourceError {
     UnsupportedPathEncoding,
     InvalidEncoding,
     InvalidSourcePath,
+    PathEscapesRoot,
 }
 
-/// Encodes an absolute reference-in-place source without exposing path components.
+/// Encodes a canonical reference-in-place source without exposing path components.
+///
+/// `path_identity` must be the value returned by [`reference_path_identity`].
 ///
 /// # Errors
 ///
 /// Returns a typed error for an unrepresentable path or oversized source key.
 pub fn encode_reference_source(
     path: &Path,
-    sha256: [u8; 32],
+    path_identity: [u8; 32],
 ) -> Result<SourcePath, ReferenceSourceError> {
+    let path = normalize_reference_path(path)?;
     let path = path
         .to_str()
         .ok_or(ReferenceSourceError::UnsupportedPathEncoding)?;
     let value = format!(
         "{PREFIX}/{}/{path_hex}",
-        hex(&sha256),
+        hex(&path_identity),
         path_hex = hex(path.as_bytes())
     );
     SourcePath::new(&value).map_err(|_: SourcePathError| ReferenceSourceError::InvalidSourcePath)
@@ -39,6 +43,7 @@ pub fn encode_reference_source(
 ///
 /// Returns a typed error when the path cannot be represented by the reference format.
 pub fn reference_path_identity(path: &Path) -> Result<[u8; 32], ReferenceSourceError> {
+    let path = normalize_reference_path(path)?;
     let path = path
         .to_str()
         .ok_or(ReferenceSourceError::UnsupportedPathEncoding)?;
@@ -46,6 +51,52 @@ pub fn reference_path_identity(path: &Path) -> Result<[u8; 32], ReferenceSourceE
     hasher.update(PATH_IDENTITY_DOMAIN);
     hasher.update(path.as_bytes());
     Ok(hasher.finalize().into())
+}
+
+/// Returns the lexical canonical form used for a reference source.
+///
+/// The policy is deliberately filesystem-independent: `.` components are
+/// removed, `..` components are resolved without following symlinks, and case
+/// is preserved. The snapshot reader separately rejects symlinks, so a path
+/// alias cannot silently merge two physical files. Preserving case also keeps
+/// identity deterministic on case-insensitive filesystems; callers that need
+/// a case-folded policy must normalize before entering this API.
+///
+/// # Errors
+///
+/// Returns a typed error for an unrepresentable path or a relative path that
+/// escapes above its logical root.
+pub fn normalize_reference_path(path: &Path) -> Result<PathBuf, ReferenceSourceError> {
+    if path.as_os_str().is_empty() {
+        return Err(ReferenceSourceError::InvalidSourcePath);
+    }
+    let mut normalized = PathBuf::new();
+    let mut component_count = 0_usize;
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(Path::new(std::path::MAIN_SEPARATOR_STR)),
+            Component::CurDir => {}
+            Component::Normal(value) => {
+                normalized.push(value);
+                component_count = component_count.saturating_add(1);
+            }
+            Component::ParentDir => {
+                if component_count == 0 {
+                    if path.is_absolute() {
+                        continue;
+                    }
+                    return Err(ReferenceSourceError::PathEscapesRoot);
+                }
+                normalized.pop();
+                component_count = component_count.saturating_sub(1);
+            }
+        }
+    }
+    if normalized.as_os_str().is_empty() || (path.is_relative() && component_count == 0) {
+        return Err(ReferenceSourceError::InvalidSourcePath);
+    }
+    Ok(normalized)
 }
 
 /// Decodes one versioned privacy-safe source key into its physical reference.
@@ -57,7 +108,7 @@ pub fn decode_reference_source(source: &SourcePath) -> Result<PathBuf, Reference
     Ok(parse_reference_source(source)?.1)
 }
 
-/// Returns the complete decoder/probe identity embedded in one reference source key.
+/// Returns the canonical path identity embedded in one reference source key.
 ///
 /// # Errors
 ///
@@ -132,8 +183,8 @@ fn digit(byte: u8) -> Result<u8, ReferenceSourceError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_reference_source, encode_reference_source, reference_path_identity,
-        reference_source_identity,
+        decode_reference_source, encode_reference_source, normalize_reference_path,
+        reference_path_identity, reference_source_identity,
     };
 
     #[test]
@@ -146,9 +197,40 @@ mod tests {
         assert!(!source.as_str().contains("private"));
         assert!(!source.as_str().contains("one.png"));
         assert_eq!(reference_path_identity(path), reference_path_identity(path));
-        assert_ne!(
+        assert_eq!(
             reference_path_identity(path),
             reference_path_identity(std::path::Path::new("/private/photos/../photos/one.png"))
+        );
+    }
+
+    #[test]
+    fn normalization_is_lexical_and_does_not_follow_symlinks_or_fold_case() {
+        assert_eq!(
+            normalize_reference_path(std::path::Path::new("/photos/./roll/../IMG.JPG")).unwrap(),
+            std::path::PathBuf::from("/photos/IMG.JPG")
+        );
+        assert_ne!(
+            reference_path_identity(std::path::Path::new("/photos/IMG.JPG")),
+            reference_path_identity(std::path::Path::new("/photos/img.jpg"))
+        );
+        assert_eq!(
+            decode_reference_source(
+                &encode_reference_source(
+                    std::path::Path::new("/photos/./roll/../IMG.JPG"),
+                    [7; 32]
+                )
+                .unwrap()
+            )
+            .unwrap(),
+            std::path::PathBuf::from("/photos/IMG.JPG")
+        );
+    }
+
+    #[test]
+    fn relative_parent_escape_is_rejected() {
+        assert_eq!(
+            normalize_reference_path(std::path::Path::new("../outside/image.jpg")),
+            Err(super::ReferenceSourceError::PathEscapesRoot)
         );
     }
 }

@@ -6,7 +6,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, WriteTransaction};
 use rusttable_catalog::{
     CatalogChangeEvent, CatalogCommand, ColorLabel, EditRepository, EditRepositoryError,
     ImportDetails, ImportMetadataStatus, ImportRecord, ImportRegistration, ImportRepository,
-    PhotoOrganizationState, Rating, RepositoryError, SourcePath,
+    PhotoOrganizationState, Rating, ReferencePathIdentity, RepositoryError, SourcePath,
 };
 use rusttable_core::{AssetId, ContentHash, Edit, EditId, ImageMetadata, PhotoId, Revision};
 
@@ -92,6 +92,14 @@ pub enum AtomicCatalogStoreError {
     CommitFailed,
 }
 
+/// Read-only outcome of the source-identity reconciliation migration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SourceReconciliationReport {
+    pub migrated_entries: usize,
+    pub ambiguous_entries: usize,
+    pub invalid_entries: usize,
+}
+
 impl RedbCatalogRepository {
     /// Opens one schema-versioned database handle for import and edit access.
     ///
@@ -147,6 +155,80 @@ impl RedbCatalogRepository {
         &self.recipes
     }
 
+    /// Finds the current registration for one canonical source path.
+    ///
+    /// This is the authoritative import lookup. Content matches are exposed
+    /// separately as duplicate hints and never participate in this decision.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed store failure when the path index, record, or edit is
+    /// unavailable or inconsistent.
+    pub fn find_by_reference_path(
+        &self,
+        identity: ReferencePathIdentity,
+    ) -> Result<Option<(ImportRecord, Edit)>, AtomicCatalogStoreError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let paths = transaction
+            .open_table(schema::REFERENCE_PATH_INDEX_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let Some(source) = paths
+            .get(identity.as_bytes().as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+        else {
+            return Ok(None);
+        };
+        let source = source.value().to_vec();
+        let records = transaction
+            .open_table(schema::RECORDS_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let record = records
+            .get(source.as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?
+            .map(|value| crate::codec::decode(value.value()))
+            .transpose()
+            .map_err(|()| AtomicCatalogStoreError::Corrupt)?
+            .ok_or(AtomicCatalogStoreError::Corrupt)?;
+        drop(records);
+        drop(paths);
+        drop(transaction);
+        let edit = self.current_edit(record.photo().id())?;
+        Ok(Some((record, edit)))
+    }
+
+    /// Reports legacy source rows that were migrated, preserved as ambiguous,
+    /// or left for manual repair. No row is deleted by this operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed store failure when reconciliation metadata is unreadable.
+    pub fn source_reconciliation_report(
+        &self,
+    ) -> Result<SourceReconciliationReport, AtomicCatalogStoreError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let table = transaction
+            .open_table(schema::SOURCE_RECONCILIATION_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        let mut report = SourceReconciliationReport::default();
+        for entry in table.iter().map_err(|_| AtomicCatalogStoreError::Corrupt)? {
+            let (key, _) = entry.map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+            if key.value().starts_with(b"migrated/") {
+                report.migrated_entries = report.migrated_entries.saturating_add(1);
+            } else if key.value().starts_with(b"ambiguous/") {
+                report.ambiguous_entries = report.ambiguous_entries.saturating_add(1);
+            } else if key.value().starts_with(b"invalid/") {
+                report.invalid_entries = report.invalid_entries.saturating_add(1);
+            }
+        }
+        Ok(report)
+    }
+
     /// Finds an exact-content import and its current persisted edit.
     ///
     /// # Errors
@@ -170,15 +252,18 @@ impl RedbCatalogRepository {
         let Some(record) = record else {
             return Ok(None);
         };
-        let edit = self
-            .edits
+        let edit = self.current_edit(record.photo().id())?;
+        Ok(Some((record, edit)))
+    }
+
+    fn current_edit(&self, photo_id: PhotoId) -> Result<Edit, AtomicCatalogStoreError> {
+        self.edits
             .list()
             .map_err(|_| AtomicCatalogStoreError::Corrupt)?
             .into_iter()
-            .filter(|edit| edit.photo_id() == record.photo().id())
+            .filter(|edit| edit.photo_id() == photo_id)
             .max_by_key(|edit| (edit.revision().get(), edit.id().get()))
-            .ok_or(AtomicCatalogStoreError::Corrupt)?;
-        Ok(Some((record, edit)))
+            .ok_or(AtomicCatalogStoreError::Corrupt)
     }
 
     /// Finds durable registration details by a persisted photo identity.
@@ -428,6 +513,147 @@ impl RedbCatalogRepository {
         transaction
             .commit()
             .map_err(|_| AtomicCatalogStoreError::CommitFailed)
+    }
+
+    /// Atomically updates source evidence for an existing canonical path while
+    /// retaining its photo, edit, organization, and history identities.
+    ///
+    /// # Errors
+    ///
+    /// Returns before commit on any identity, validation, or storage conflict.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the replacement transaction keeps source, index, details, and hook ordering visible"
+    )]
+    pub fn replace_import(
+        &mut self,
+        record: &ImportRecord,
+        replacement_edit: &Edit,
+        registration: &ImportRegistration,
+    ) -> Result<(), AtomicCatalogStoreError> {
+        let path_source = self
+            .source_for_reference_path(registration.reference_path_identity())?
+            .ok_or(AtomicCatalogStoreError::Conflict)?;
+        let old_record = self
+            .imports
+            .find_by_source(
+                &SourcePath::new(
+                    std::str::from_utf8(&path_source)
+                        .map_err(|_| AtomicCatalogStoreError::Corrupt)?,
+                )
+                .map_err(|_| AtomicCatalogStoreError::Corrupt)?,
+            )
+            .map_err(|error| map_repository_error(&error))?
+            .ok_or(AtomicCatalogStoreError::Corrupt)?;
+        let edit = self.current_edit(old_record.photo().id())?;
+        if old_record.photo().id() != record.photo().id()
+            || old_record.photo().primary_asset_id() != record.photo().primary_asset_id()
+            || edit.id() != replacement_edit.id()
+        {
+            // A legacy content-derived record may own this path after the
+            // v10 index reconciliation. Keep it reachable and publish the
+            // path-derived registration as an explicit replacement.
+            return self.commit_import_with_edit(record, replacement_edit, registration);
+        }
+        if registration.details().validate(record, &edit).is_err() {
+            return Err(AtomicCatalogStoreError::Corrupt);
+        }
+        let prepared =
+            crate::codec::encode(record).map_err(|()| AtomicCatalogStoreError::Corrupt)?;
+        let details = crate::import_details_codec::encode(registration.details())
+            .map_err(|()| AtomicCatalogStoreError::Corrupt)?;
+        let new_source = record.source().as_str().as_bytes().to_vec();
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        {
+            let mut records = transaction
+                .open_table(schema::RECORDS_TABLE)
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            let mut details_table = transaction
+                .open_table(schema::IMPORT_DETAILS_TABLE)
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            if path_source != new_source {
+                if records
+                    .get(new_source.as_slice())
+                    .map_err(|_| AtomicCatalogStoreError::Unavailable)?
+                    .is_some()
+                {
+                    return Err(AtomicCatalogStoreError::Conflict);
+                }
+                records
+                    .remove(path_source.as_slice())
+                    .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+                details_table
+                    .remove(path_source.as_slice())
+                    .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            }
+            records
+                .insert(new_source.as_slice(), prepared.as_slice())
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            details_table
+                .insert(new_source.as_slice(), details.as_slice())
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        }
+        if path_source != new_source {
+            let mut photos = transaction
+                .open_table(schema::PHOTO_INDEX_TABLE)
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            let mut assets = transaction
+                .open_table(schema::ASSET_INDEX_TABLE)
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            photos
+                .insert(
+                    record.photo().id().get().to_be_bytes().as_slice(),
+                    new_source.as_slice(),
+                )
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+            assets
+                .insert(
+                    record
+                        .photo()
+                        .primary_asset_id()
+                        .get()
+                        .to_be_bytes()
+                        .as_slice(),
+                    new_source.as_slice(),
+                )
+                .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        }
+        let mut references = transaction
+            .open_table(schema::REFERENCE_PATH_INDEX_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        references
+            .insert(
+                registration.reference_path_identity().as_bytes().as_slice(),
+                new_source.as_slice(),
+            )
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        drop(references);
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| AtomicCatalogStoreError::CommitFailed)
+    }
+
+    fn source_for_reference_path(
+        &self,
+        identity: ReferencePathIdentity,
+    ) -> Result<Option<Vec<u8>>, AtomicCatalogStoreError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
+        let paths = transaction
+            .open_table(schema::REFERENCE_PATH_INDEX_TABLE)
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)?;
+        paths
+            .get(identity.as_bytes().as_slice())
+            .map_err(|_| AtomicCatalogStoreError::Corrupt)
+            .map(|value| value.map(|value| value.value().to_vec()))
     }
 
     /// Atomically replaces metadata for an existing photo while preserving its photo and edit.

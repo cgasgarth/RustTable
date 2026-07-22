@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rusttable_catalog::{ImportMetadataStatus, ImportRecord, ImportRegistration};
+use rusttable_catalog::{
+    ImportMetadataStatus, ImportRecord, ImportRegistration, ReferencePathIdentity,
+};
 use rusttable_core::{AssetId, Edit, EditId, PhotoId};
 use rusttable_image::{ImageProbe, InputFormat};
 
@@ -16,7 +18,7 @@ pub struct RasterDuplicateIdentity {
     pub byte_length: u64,
     pub decoder_identity_version: u8,
     pub probe: ImageProbe,
-    pub source_identity: [u8; 32],
+    pub path_identity: [u8; 32],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -235,7 +237,20 @@ pub enum AtomicRasterCatalogError {
 }
 
 pub trait AtomicRasterCatalog {
-    /// Finds one exact-content import and its current edit.
+    /// Finds the import owning one canonical source path and its current edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed storage failure.
+    fn find_by_source(
+        &self,
+        identity: ReferencePathIdentity,
+    ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError>;
+
+    /// Finds one content match as a duplicate hint.
+    ///
+    /// This lookup is advisory only and must never decide whether a source is
+    /// imported or determine a photo's identity.
     ///
     /// # Errors
     ///
@@ -251,6 +266,20 @@ pub trait AtomicRasterCatalog {
     ///
     /// Returns a typed failure without publishing a partial entry.
     fn commit_import(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        registration: &ImportRegistration,
+    ) -> Result<(), AtomicRasterCatalogError>;
+
+    /// Atomically replaces the source evidence at an existing canonical path.
+    ///
+    /// The existing photo/edit identity remains authoritative, so a changed
+    /// file does not erase user edits or create a second path owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure without publishing a partial entry.
+    fn replace_import(
         &mut self,
         entry: &RasterCatalogEntry,
         registration: &ImportRegistration,

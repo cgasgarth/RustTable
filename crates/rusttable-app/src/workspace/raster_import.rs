@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use rusttable_catalog::{ImportMetadataStatus, ImportRegistration};
+use rusttable_catalog::{ImportMetadataStatus, ImportRegistration, ReferencePathIdentity};
 use rusttable_catalog_store::{AtomicCatalogStoreError, RedbCatalogRepository};
 use rusttable_image::DecodeLimits;
 use rusttable_image_io::FileImageInput;
@@ -9,7 +9,6 @@ use rusttable_import::{
     RasterCatalogEntry, RasterDuplicateIdentity, RasterImportBatch, RasterImportCancellation,
     RasterImportObserver, RasterImportRequest, RasterImportService, RasterPreviewError,
     RasterPreviewPort, RasterPreviewReceipt, SourceSnapshotReader, decode_reference_source,
-    reference_source_identity,
 };
 use rusttable_metadata::{ExifMetadataInput, MetadataLimits};
 use rusttable_render::PreviewBounds;
@@ -84,6 +83,31 @@ pub(crate) fn run_raster_import_with_diagnostics(
 struct AppCatalog(RedbCatalogRepository);
 
 impl AtomicRasterCatalog for AppCatalog {
+    fn find_by_source(
+        &self,
+        identity: ReferencePathIdentity,
+    ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError> {
+        let Some((record, edit)) = self
+            .0
+            .find_by_reference_path(identity)
+            .map_err(map_store_error)?
+        else {
+            return Ok(None);
+        };
+        let metadata_status = self
+            .0
+            .find_import_details_by_photo_id(record.photo().id())
+            .map_err(map_store_error)?
+            .map_or(ImportMetadataStatus::Available, |details| {
+                details.summary().metadata_status()
+            });
+        Ok(Some(RasterCatalogEntry {
+            record,
+            edit,
+            metadata_status,
+        }))
+    }
+
     fn find_by_content(
         &self,
         identity: RasterDuplicateIdentity,
@@ -95,11 +119,7 @@ impl AtomicRasterCatalog for AppCatalog {
         else {
             return Ok(None);
         };
-        if record.probe() != identity.probe
-            || reference_source_identity(record.source())
-                .map_err(|_| AtomicRasterCatalogError::Corrupt)?
-                != identity.source_identity
-        {
+        if record.probe() != identity.probe {
             return Ok(None);
         }
         let metadata_status = self
@@ -126,6 +146,16 @@ impl AtomicRasterCatalog for AppCatalog {
             .map_err(map_store_error)
     }
 
+    fn replace_import(
+        &mut self,
+        entry: &RasterCatalogEntry,
+        registration: &ImportRegistration,
+    ) -> Result<(), AtomicRasterCatalogError> {
+        self.0
+            .replace_import(&entry.record, &entry.edit, registration)
+            .map_err(map_store_error)
+    }
+
     fn refresh_metadata(
         &mut self,
         entry: &RasterCatalogEntry,
@@ -146,6 +176,13 @@ impl AtomicRasterCatalog for AppCatalog {
 struct UnavailableCatalog;
 
 impl AtomicRasterCatalog for UnavailableCatalog {
+    fn find_by_source(
+        &self,
+        _identity: ReferencePathIdentity,
+    ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError> {
+        Err(AtomicRasterCatalogError::Unavailable)
+    }
+
     fn find_by_content(
         &self,
         _identity: RasterDuplicateIdentity,
@@ -154,6 +191,14 @@ impl AtomicRasterCatalog for UnavailableCatalog {
     }
 
     fn commit_import(
+        &mut self,
+        _entry: &RasterCatalogEntry,
+        _registration: &ImportRegistration,
+    ) -> Result<(), AtomicRasterCatalogError> {
+        Err(AtomicRasterCatalogError::Unavailable)
+    }
+
+    fn replace_import(
         &mut self,
         _entry: &RasterCatalogEntry,
         _registration: &ImportRegistration,
@@ -278,7 +323,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use rusttable_catalog::{EditRepository, ImportRegistrationStatus};
+    use rusttable_catalog::{EditRepository, ImportRegistrationStatus, ImportRepository};
     use rusttable_catalog_store::RedbCatalogRepository;
     use rusttable_image::{
         DecodedImage, ImageDimensions, ImageOutput, InputFormat, JpegQuality, OutputLimits,
@@ -381,8 +426,7 @@ mod tests {
         assert_eq!((import_preview.width, import_preview.height), (1, 2));
 
         let repository = RedbCatalogRepository::open(&catalog).expect("restart catalog");
-        let edit = repository
-            .list()
+        let edit = EditRepository::list(&repository)
             .expect("persisted edits")
             .into_iter()
             .find(|edit| edit.photo_id() == photo_id)
@@ -495,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_reuse_and_changed_path_replacement_survive_restart() {
+    fn exact_path_reimport_is_idempotent_but_equal_bytes_at_distinct_paths_are_independent() {
         let directory = TempDirectory::new();
         let source = directory.0.join("reused.png");
         let duplicate = directory.0.join("duplicate.png");
@@ -516,18 +560,29 @@ mod tests {
             &|_| {},
         );
         let first_photo = first.receipts().next().unwrap().photo_id.unwrap();
+        let same_path = run_raster_import(
+            &catalog,
+            vec![source.clone()],
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let same_path_receipt = same_path.receipts().next().unwrap();
+        assert_eq!(
+            same_path_receipt.status,
+            RasterImportStatus::AlreadyImported
+        );
+        assert_eq!(same_path_receipt.photo_id, Some(first_photo));
+
+        let duplicate_path = duplicate.clone();
         let duplicate_batch = run_raster_import(
             &catalog,
-            vec![duplicate],
+            vec![duplicate_path],
             &RasterImportCancellation::default(),
             &|_| {},
         );
         let duplicate_receipt = duplicate_batch.receipts().next().unwrap();
-        assert_eq!(
-            duplicate_receipt.status,
-            RasterImportStatus::AlreadyImported
-        );
-        assert_eq!(duplicate_receipt.photo_id, Some(first_photo));
+        assert_eq!(duplicate_receipt.status, RasterImportStatus::Imported);
+        assert_ne!(duplicate_receipt.photo_id, Some(first_photo));
 
         fs::write(&source, &changed_bytes).unwrap();
         let changed = run_raster_import(
@@ -539,21 +594,31 @@ mod tests {
         let changed_receipt = changed.receipts().next().unwrap();
         let changed_photo = changed_receipt.photo_id.unwrap();
         assert_eq!(changed_receipt.status, RasterImportStatus::Imported);
-        assert_ne!(changed_photo, first_photo);
+        assert_eq!(changed_photo, first_photo);
 
         let repository = RedbCatalogRepository::open(&catalog).expect("restart catalog");
+        let records = ImportRepository::list(&repository).expect("records after restart");
+        assert_eq!(records.len(), 2);
+        assert_ne!(
+            records[0].photo().primary_asset().content_hash(),
+            records[1].photo().primary_asset().content_hash()
+        );
+        assert_ne!(records[0].source(), records[1].source());
+        let edits = EditRepository::list(&repository).expect("independent edits");
+        assert_eq!(edits.len(), 2);
+        assert_ne!(edits[0].id(), edits[1].id());
         let details = repository
             .find_import_details_by_photo_id(changed_photo)
             .expect("details lookup")
             .expect("changed registration details");
-        assert_eq!(details.receipt().replaces_photo_id(), Some(first_photo));
+        assert_eq!(details.receipt().replaces_photo_id(), None);
         assert_eq!(details.receipt().source_alias(), "reused.png");
         assert!(!format!("{details:?}").contains(directory.0.to_str().unwrap()));
         assert_eq!(fs::read(source).unwrap(), changed_bytes);
     }
 
     #[test]
-    fn duplicate_lookup_rejects_a_persisted_source_with_a_different_decoder_identity() {
+    fn content_lookup_is_only_a_duplicate_hint_and_ignores_path_identity() {
         let directory = TempDirectory::new();
         let source = directory.0.join("identity.png");
         let catalog_path = directory.0.join("catalog.redb");
@@ -586,11 +651,11 @@ mod tests {
                 byte_length: u64::try_from(bytes.len()).unwrap(),
                 decoder_identity_version: RASTER_DECODER_IDENTITY_VERSION,
                 probe: record.probe(),
-                source_identity: [0; 32],
+                path_identity: [0; 32],
             })
             .unwrap();
 
-        assert!(found.is_none());
+        assert!(found.is_some());
     }
 
     fn decode_base64(encoded: &str) -> Vec<u8> {

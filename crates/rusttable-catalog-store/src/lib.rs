@@ -12,7 +12,9 @@ use codecs::{
 };
 
 pub use repositories::RedbImportRepository;
-pub use repositories::catalog::{AtomicCatalogStoreError, RedbCatalogRepository};
+pub use repositories::catalog::{
+    AtomicCatalogStoreError, RedbCatalogRepository, SourceReconciliationReport,
+};
 pub use repositories::collection::RedbCollectionRepository;
 pub use repositories::edit::RedbEditRepository;
 pub use repositories::history::RedbHistoryRepository;
