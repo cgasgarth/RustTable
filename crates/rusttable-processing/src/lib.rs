@@ -24,6 +24,7 @@ mod evaluate;
 mod exposure;
 mod graph;
 mod operation;
+mod operation_mask;
 pub mod operation_stack;
 pub mod operations;
 mod output;
@@ -56,8 +57,8 @@ pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, DistortionBorderMode, DistortionInterpolation,
     DistortionPlan, DistortionSamplingPolicy, EvaluatedFrame, EvaluationError, EvaluationOutput,
     FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan, evaluate,
-    evaluate_graph_at_frame_boundaries, evaluate_output, graph_has_discrete_geometry,
-    graph_has_frame_geometry, prepare_basicadj_plans,
+    evaluate_graph_at_frame_boundaries, evaluate_graph_at_frame_boundaries_with_masks,
+    evaluate_output, graph_has_discrete_geometry, graph_has_frame_geometry, prepare_basicadj_plans,
 };
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
@@ -70,6 +71,7 @@ pub use graph::{
     OperationGraphNodeIndex, OperationGraphOutput,
 };
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
+pub use operation_mask::{OperationMaskSet, OperationMaskSetError};
 pub use operations::basicadj::analysis::{
     BASICADJ_HISTOGRAM_BINS, BASICADJ_HISTOGRAM_MAXIMUM, BASICADJ_HISTOGRAM_MINIMUM,
     BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
@@ -178,8 +180,9 @@ pub use registry::{
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
-    evaluate_graph, evaluate_graph_output_with_basicadj_plans, evaluate_graph_window,
-    evaluate_graph_with_basicadj_plans,
+    evaluate_graph, evaluate_graph_output_with_basicadj_plans,
+    evaluate_graph_output_with_basicadj_plans_and_masks, evaluate_graph_window,
+    evaluate_graph_with_basicadj_plans, evaluate_graph_with_basicadj_plans_and_masks,
 };
 
 pub use operation_stack::{

@@ -6,13 +6,15 @@ use rusttable_color::{
     Precision, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion, RenderingIntent,
     TransformPlan,
 };
+use rusttable_masks::MaskExecutionError;
 use rusttable_processing::operations::colorin::{
     ColorInConfig, ColorInNormalization, ColorInPlan, ColorInProfile,
 };
 use rusttable_processing::{
-    BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, SourceRgb, SourceRgbImage, SrgbChannel,
-    WorkingRgbImage, convert_working_to_linear_srgb, encode_working_to_srgb,
-    evaluate_graph_with_basicadj_plans, prepare_basicadj_plans, to_linear_srgb,
+    BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
+    OperationMaskSetError, SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage,
+    convert_working_to_linear_srgb, encode_working_to_srgb,
+    evaluate_graph_with_basicadj_plans_and_masks, prepare_basicadj_plans, to_linear_srgb,
 };
 
 use crate::frame::{execute_frame_image, has_frame_geometry};
@@ -23,6 +25,11 @@ use crate::{
 };
 
 mod errors;
+mod mask;
+mod tile;
+
+use mask::{crop_masks, resolve_masks};
+use tile::{assemble_tile, checked_row_end, pixel_index, tile_pixel_count};
 
 /// The typed presentation boundary requested from a CPU pixelpipe execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -72,6 +79,8 @@ pub enum CpuPixelpipeError {
     OutputBoundary { source: RgbaF32ImageError },
     TilePlan { source: CpuTilePlanError },
     TileAssembly { source: CpuTileAssemblyError },
+    MaskEvaluation { source: MaskExecutionError },
+    MaskBinding { source: OperationMaskSetError },
 }
 
 /// Rejection reason while assembling scalar tile results into a full raster.
@@ -105,9 +114,10 @@ impl CpuPixelpipeExecutor {
         &self,
         request: &CpuPixelpipeSnapshot,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
+        let masks = resolve_masks(request)?;
         if has_frame_geometry(request) {
             let (image, basicadj_identity, frame_plan_identity) =
-                execute_frame_image(request, request.input(), None)?;
+                execute_frame_image(request, request.input(), None, masks.as_ref())?;
             return Ok(Self::result_for(
                 request,
                 image,
@@ -116,7 +126,7 @@ impl CpuPixelpipeExecutor {
             ));
         }
         let plans = Self::prepare_plans(request)?;
-        let image = Self::execute_image(request, request.input(), &plans)?;
+        let image = Self::execute_image(request, request.input(), &plans, masks.as_ref())?;
         Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
     }
 
@@ -132,9 +142,10 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Allocation)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
+        let masks = resolve_masks(request)?;
         if has_frame_geometry(request) {
             let (image, basicadj_identity, frame_plan_identity) =
-                execute_frame_image(request, request.input(), Some(scope))?;
+                execute_frame_image(request, request.input(), Some(scope), masks.as_ref())?;
             scope
                 .child(CancellationStage::Publication)
                 .check()
@@ -147,7 +158,7 @@ impl CpuPixelpipeExecutor {
             ));
         }
         let plans = Self::prepare_plans(request)?;
-        let image = Self::execute_image(request, request.input(), &plans)?;
+        let image = Self::execute_image(request, request.input(), &plans, masks.as_ref())?;
         scope
             .child(CancellationStage::Publication)
             .check()
@@ -196,6 +207,7 @@ impl CpuPixelpipeExecutor {
             return self.execute(request);
         }
         let plans = Self::prepare_plans(request)?;
+        let masks = resolve_masks(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -209,7 +221,12 @@ impl CpuPixelpipeExecutor {
                     source: CpuTileAssemblyError::TileUnavailable,
                 })?;
             let tile_input = tile_input(request.input(), tile)?;
-            let tile_output = Self::execute_image(request, &tile_input, &plans)?;
+            let tile_masks = masks
+                .as_ref()
+                .map(|set| crop_masks(set, tile))
+                .transpose()?;
+            let tile_output =
+                Self::execute_image(request, &tile_input, &plans, tile_masks.as_ref())?;
             assemble_tile(
                 &mut assembled,
                 request.input().descriptor(),
@@ -275,6 +292,7 @@ impl CpuPixelpipeExecutor {
             return Ok(result);
         }
         let plans = Self::prepare_plans(request)?;
+        let masks = resolve_masks(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -292,7 +310,12 @@ impl CpuPixelpipeExecutor {
                     source: CpuTileAssemblyError::TileUnavailable,
                 })?;
             let tile_input = tile_input(request.input(), tile)?;
-            let tile_output = Self::execute_image(request, &tile_input, &plans)?;
+            let tile_masks = masks
+                .as_ref()
+                .map(|set| crop_masks(set, tile))
+                .transpose()?;
+            let tile_output =
+                Self::execute_image(request, &tile_input, &plans, tile_masks.as_ref())?;
             assemble_tile(
                 &mut assembled,
                 request.input().descriptor(),
@@ -318,6 +341,7 @@ impl CpuPixelpipeExecutor {
         request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
         plans: &BasicAdjPlanSet,
+        masks: Option<&OperationMaskSet>,
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
         validate_input_encoding(input)?;
 
@@ -327,6 +351,7 @@ impl CpuPixelpipeExecutor {
                 rusttable_processing::ProcessingOperationKind::Censorize { .. }
             )
         }) && request.graph().nodes().count() == 1
+            && masks.is_none()
         {
             return execute_censorize_image(request, input, node);
         }
@@ -337,14 +362,19 @@ impl CpuPixelpipeExecutor {
                 rusttable_processing::ProcessingOperationKind::Clahe { .. }
             )
         }) && request.graph().nodes().count() == 1
+            && masks.is_none()
         {
             return execute_clahe_image(request, input, node);
         }
 
         let linear_input = to_linear_working(input)?;
-        let evaluated =
-            evaluate_graph_with_basicadj_plans(request.graph(), &linear_input, Some(plans))
-                .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
+        let evaluated = evaluate_graph_with_basicadj_plans_and_masks(
+            request.graph(),
+            &linear_input,
+            Some(plans),
+            masks,
+        )
+        .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
         let output_encoding = output_encoding(request, input);
         let output_descriptor = RgbaF32Descriptor::with_source_representation(
             input.descriptor().dimensions(),
@@ -654,76 +684,6 @@ fn tile_input(
         pixels,
     )
     .map_err(|source| CpuPixelpipeError::InputBridge { source })
-}
-
-fn assemble_tile(
-    assembled: &mut [RgbaF32Pixel],
-    output_descriptor: RgbaF32Descriptor,
-    tile: crate::CpuPixelpipeTile,
-    tile_output: &RgbaF32Image,
-) -> Result<(), CpuPixelpipeError> {
-    if tile_output.descriptor().dimensions() != tile.dimensions() {
-        return Err(CpuPixelpipeError::TileAssembly {
-            source: CpuTileAssemblyError::TileOutputDimensionsMismatch,
-        });
-    }
-    for local_y in 0..tile.dimensions().height() {
-        let output_y =
-            tile.origin_y()
-                .checked_add(local_y)
-                .ok_or(CpuPixelpipeError::TileAssembly {
-                    source: CpuTileAssemblyError::PixelIndexOverflow,
-                })?;
-        let destination_start = pixel_index(output_descriptor, tile.origin_x(), output_y)?;
-        let destination_end = checked_row_end(destination_start, tile.dimensions().width())?;
-        let destination = assembled
-            .get_mut(destination_start..destination_end)
-            .ok_or(CpuPixelpipeError::TileAssembly {
-                source: CpuTileAssemblyError::DestinationRowOutsideOutput,
-            })?;
-        let source_start = pixel_index(tile_output.descriptor(), 0, local_y)?;
-        let source_end = checked_row_end(source_start, tile.dimensions().width())?;
-        let source = tile_output.pixels().get(source_start..source_end).ok_or(
-            CpuPixelpipeError::TileAssembly {
-                source: CpuTileAssemblyError::SourceRowOutsideInput,
-            },
-        )?;
-        destination.copy_from_slice(source);
-    }
-    Ok(())
-}
-
-fn tile_pixel_count(tile: crate::CpuPixelpipeTile) -> Result<usize, CpuPixelpipeError> {
-    usize::try_from(tile.dimensions().pixel_count()).map_err(|_| CpuPixelpipeError::TileAssembly {
-        source: CpuTileAssemblyError::PixelIndexExceedsPlatform {
-            index: tile.dimensions().pixel_count(),
-        },
-    })
-}
-
-fn pixel_index(descriptor: RgbaF32Descriptor, x: u32, y: u32) -> Result<usize, CpuPixelpipeError> {
-    let offset = u64::from(y)
-        .checked_mul(u64::from(descriptor.dimensions().width()))
-        .and_then(|row_offset| row_offset.checked_add(u64::from(x)))
-        .ok_or(CpuPixelpipeError::TileAssembly {
-            source: CpuTileAssemblyError::PixelIndexOverflow,
-        })?;
-    usize::try_from(offset).map_err(|_| CpuPixelpipeError::TileAssembly {
-        source: CpuTileAssemblyError::PixelIndexExceedsPlatform { index: offset },
-    })
-}
-
-fn checked_row_end(start: usize, width: u32) -> Result<usize, CpuPixelpipeError> {
-    let width = usize::try_from(width).map_err(|_| CpuPixelpipeError::TileAssembly {
-        source: CpuTileAssemblyError::PixelIndexExceedsPlatform {
-            index: u64::from(width),
-        },
-    })?;
-    start
-        .checked_add(width)
-        .ok_or(CpuPixelpipeError::TileAssembly {
-            source: CpuTileAssemblyError::RowEndOverflow,
-        })
 }
 
 fn output_pixels(

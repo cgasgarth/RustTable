@@ -75,6 +75,7 @@ pub fn prepare_basicadj_plans(
             Some(&plan_set),
             &mut frame,
             &mut terminal,
+            None,
         )?;
     }
 

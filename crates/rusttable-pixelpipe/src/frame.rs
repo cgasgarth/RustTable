@@ -1,6 +1,7 @@
 use rusttable_processing::{
-    FrameBoundaryMode, FrameBoundaryOptions, WorkingRgbImage, encode_working_to_srgb,
-    evaluate_graph_at_frame_boundaries, graph_has_frame_geometry,
+    FrameBoundaryMode, FrameBoundaryOptions, OperationMaskSet, WorkingRgbImage,
+    encode_working_to_srgb, evaluate_graph_at_frame_boundaries_with_masks,
+    graph_has_frame_geometry,
 };
 
 use crate::{
@@ -16,6 +17,7 @@ pub(crate) fn execute_frame_image(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
     scope: Option<&CancellationScope>,
+    masks: Option<&OperationMaskSet>,
 ) -> Result<(RgbaF32Image, [u8; 32], [u8; 32]), CpuPixelpipeError> {
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         return Err(CpuPixelpipeError::UnsupportedInputEncoding {
@@ -33,12 +35,13 @@ pub(crate) fn execute_frame_image(
         CpuPixelpipeOutputMode::FullExport => FrameBoundaryMode::Export,
     };
     let node_scope = scope.map(|scope| scope.child(CancellationStage::Node));
-    let evaluated = evaluate_graph_at_frame_boundaries(
+    let evaluated = evaluate_graph_at_frame_boundaries_with_masks(
         request.graph(),
         &linear,
         &alpha,
         FrameBoundaryOptions::new(mode)
             .with_source_orientation(input.descriptor().source_orientation()),
+        masks,
         || {
             node_scope
                 .as_ref()

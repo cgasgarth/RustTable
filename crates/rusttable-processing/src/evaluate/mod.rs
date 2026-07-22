@@ -4,27 +4,35 @@ use crate::operations::{
     highlights::{HighlightsInputClass, HighlightsPlan},
 };
 use crate::{
-    CompiledPipeline, FiniteF32, LinearRgb, PipelineStepIndex, PreparedCpuOperation,
-    ProcessingOperation, ProcessingOperationKind, RasterDimensions, RgbChannel,
-    TerminalOutputFrame, WorkingFrameDescriptor, WorkingRgbImage,
+    CompiledPipeline, FiniteF32, LinearRgb, OperationMaskSet, PipelineStepIndex,
+    PreparedCpuOperation, ProcessingOperation, ProcessingOperationKind, RasterDimensions,
+    RgbChannel, TerminalOutputFrame, WorkingFrameDescriptor, WorkingRgbImage,
 };
 use rusttable_core::OperationId;
 use std::fmt;
+mod arithmetic;
 mod basicadj;
 mod basicadj_runtime;
 mod frame;
 mod lab_boundary;
 mod liquify;
+mod mask;
 mod output;
 mod spots;
+pub(super) use arithmetic::{apply_channels, apply_reconstruction, blend};
 pub use basicadj::BasicAdjPlanSet;
-pub(crate) use frame::evaluate_graph_at_frame_boundaries_with_plans;
 pub use frame::{
     DistortionBorderMode, DistortionInterpolation, DistortionPlan, DistortionSamplingPolicy,
     EvaluatedFrame, FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan,
-    evaluate_graph_at_frame_boundaries, graph_has_discrete_geometry, graph_has_frame_geometry,
+    evaluate_graph_at_frame_boundaries, evaluate_graph_at_frame_boundaries_with_masks,
+    graph_has_discrete_geometry, graph_has_frame_geometry,
+};
+pub(crate) use frame::{
+    evaluate_graph_at_frame_boundaries_with_plans,
+    evaluate_graph_at_frame_boundaries_with_plans_and_masks,
 };
 use lab_boundary::{apply_defringe, apply_shadhi};
+use mask::{apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
@@ -154,8 +162,38 @@ pub(crate) fn evaluate_steps_with_frame<'a, I>(
     input: &[LinearRgb],
     dimensions: RasterDimensions,
     pixel_index_offset: usize,
+    frame: WorkingFrameDescriptor,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
+) -> Result<
+    (
+        Vec<LinearRgb>,
+        WorkingFrameDescriptor,
+        Option<TerminalOutputFrame>,
+    ),
+    EvaluationError,
+>
+where
+    I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
+{
+    evaluate_steps_with_frame_and_masks(
+        steps,
+        input,
+        dimensions,
+        pixel_index_offset,
+        frame,
+        basicadj_plans,
+        None,
+    )
+}
+
+pub(crate) fn evaluate_steps_with_frame_and_masks<'a, I>(
+    steps: I,
+    input: &[LinearRgb],
+    dimensions: RasterDimensions,
+    pixel_index_offset: usize,
     mut frame: WorkingFrameDescriptor,
     basicadj_plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
 ) -> Result<
     (
         Vec<LinearRgb>,
@@ -179,6 +217,7 @@ where
             basicadj_plans,
             &mut frame,
             &mut terminal,
+            masks,
         )?;
     }
     Ok((output, frame, terminal))
@@ -226,6 +265,7 @@ fn apply_operation_with_plans(
         basicadj_plans,
         &mut frame,
         &mut None,
+        None,
     )
 }
 #[allow(
@@ -242,13 +282,19 @@ pub(crate) fn apply_operation_with_profile(
     basicadj_plans: Option<&BasicAdjPlanSet>,
     frame: &mut WorkingFrameDescriptor,
     terminal: &mut Option<TerminalOutputFrame>,
+    masks: Option<&OperationMaskSet>,
 ) -> Result<(), EvaluationError> {
     let operation_id = operation.operation_id();
     let opacity = operation.opacity().get();
     if !operation.is_enabled() || opacity.to_bits() == 0.0f32.to_bits() {
         return Ok(());
     }
-    match operation.kind() {
+    let mask = masks.and_then(|set| set.mask_for(operation_id));
+    if let Some(mask) = mask {
+        validate_operation_mask(mask, pixels.len(), dimensions, step_index, operation_id)?;
+    }
+    let before_mask = mask.map(|_| pixels.to_vec());
+    let result = match operation.kind() {
         ProcessingOperationKind::BasicAdj { config } => {
             let plan = basicadj_plans
                 .and_then(|plans| plans.plan(operation_id))
@@ -718,8 +764,21 @@ pub(crate) fn apply_operation_with_profile(
             operation_id,
             OperationExecutionError::GeometryRequiresFrameBoundary,
         )),
+    };
+    result?;
+    if let (Some(mask), Some(before)) = (mask, before_mask.as_deref()) {
+        apply_mask_blend(
+            pixels,
+            before,
+            mask,
+            step_index,
+            operation_id,
+            pixel_index_offset,
+        )?;
     }
+    Ok(())
 }
+
 fn operation_error(
     step_index: PipelineStepIndex,
     operation_id: OperationId,
@@ -742,195 +801,6 @@ fn operation_plan_error<E: fmt::Display>(
         reason: error.to_string(),
     }
 }
-fn apply_reconstruction(
-    pixels: &mut [LinearRgb],
-    candidates: &[LinearRgb],
-    opacity: f32,
-    step_index: PipelineStepIndex,
-    operation_id: OperationId,
-    pixel_index_offset: usize,
-) -> Result<(), EvaluationError> {
-    for (local_index, (pixel, candidate)) in pixels.iter_mut().zip(candidates).enumerate() {
-        let pixel_index = pixel_index_offset + local_index;
-        if opacity.to_bits() == 1.0f32.to_bits() {
-            *pixel = *candidate;
-        } else {
-            let current = *pixel;
-            *pixel = LinearRgb::new(
-                blend(
-                    current.red().get(),
-                    candidate.red().get(),
-                    opacity,
-                    step_index,
-                    operation_id,
-                    pixel_index,
-                    RgbChannel::Red,
-                )?,
-                blend(
-                    current.green().get(),
-                    candidate.green().get(),
-                    opacity,
-                    step_index,
-                    operation_id,
-                    pixel_index,
-                    RgbChannel::Green,
-                )?,
-                blend(
-                    current.blue().get(),
-                    candidate.blue().get(),
-                    opacity,
-                    step_index,
-                    operation_id,
-                    pixel_index,
-                    RgbChannel::Blue,
-                )?,
-            );
-        }
-    }
-    Ok(())
-}
-fn apply_channels<F>(
-    pixels: &mut [LinearRgb],
-    step_index: PipelineStepIndex,
-    operation_id: OperationId,
-    opacity: f32,
-    pixel_index_offset: usize,
-    transform: F,
-) -> Result<(), EvaluationError>
-where
-    F: Fn(RgbChannel, f32) -> f32,
-{
-    for (local_pixel_index, pixel) in pixels.iter_mut().enumerate() {
-        let pixel_index = pixel_index_offset + local_pixel_index;
-        let current = *pixel;
-        if opacity.to_bits() == 1.0f32.to_bits() {
-            let red = checked_channel(
-                transform(RgbChannel::Red, current.red().get()),
-                step_index,
-                operation_id,
-                pixel_index,
-                RgbChannel::Red,
-            )?;
-            let green = checked_channel(
-                transform(RgbChannel::Green, current.green().get()),
-                step_index,
-                operation_id,
-                pixel_index,
-                RgbChannel::Green,
-            )?;
-            let blue = checked_channel(
-                transform(RgbChannel::Blue, current.blue().get()),
-                step_index,
-                operation_id,
-                pixel_index,
-                RgbChannel::Blue,
-            )?;
-            *pixel = LinearRgb::new(red, green, blue);
-            continue;
-        }
-        let red_candidate = checked_channel(
-            transform(RgbChannel::Red, current.red().get()),
-            step_index,
-            operation_id,
-            pixel_index,
-            RgbChannel::Red,
-        )?;
-        let red = blend(
-            current.red().get(),
-            red_candidate.get(),
-            opacity,
-            step_index,
-            operation_id,
-            pixel_index,
-            RgbChannel::Red,
-        )?;
-        let green_candidate = checked_channel(
-            transform(RgbChannel::Green, current.green().get()),
-            step_index,
-            operation_id,
-            pixel_index,
-            RgbChannel::Green,
-        )?;
-        let green = blend(
-            current.green().get(),
-            green_candidate.get(),
-            opacity,
-            step_index,
-            operation_id,
-            pixel_index,
-            RgbChannel::Green,
-        )?;
-        let blue_candidate = checked_channel(
-            transform(RgbChannel::Blue, current.blue().get()),
-            step_index,
-            operation_id,
-            pixel_index,
-            RgbChannel::Blue,
-        )?;
-        let blue = blend(
-            current.blue().get(),
-            blue_candidate.get(),
-            opacity,
-            step_index,
-            operation_id,
-            pixel_index,
-            RgbChannel::Blue,
-        )?;
-        *pixel = LinearRgb::new(red, green, blue);
-    }
-    Ok(())
-}
-fn blend(
-    current: f32,
-    candidate: f32,
-    opacity: f32,
-    step_index: PipelineStepIndex,
-    operation_id: OperationId,
-    pixel_index: usize,
-    channel: RgbChannel,
-) -> Result<FiniteF32, EvaluationError> {
-    let delta =
-        FiniteF32::new(candidate - current).map_err(|_| EvaluationError::NonFiniteBlendResult {
-            step_index,
-            operation_id,
-            pixel_index,
-            channel,
-            stage: BlendArithmeticStage::Delta,
-        })?;
-    let weighted_delta = FiniteF32::new(delta.get() * opacity).map_err(|_| {
-        EvaluationError::NonFiniteBlendResult {
-            step_index,
-            operation_id,
-            pixel_index,
-            channel,
-            stage: BlendArithmeticStage::WeightedDelta,
-        }
-    })?;
-    FiniteF32::new(current + weighted_delta.get()).map_err(|_| {
-        EvaluationError::NonFiniteBlendResult {
-            step_index,
-            operation_id,
-            pixel_index,
-            channel,
-            stage: BlendArithmeticStage::Output,
-        }
-    })
-}
-fn checked_channel(
-    value: f32,
-    step_index: PipelineStepIndex,
-    operation_id: OperationId,
-    pixel_index: usize,
-    channel: RgbChannel,
-) -> Result<FiniteF32, EvaluationError> {
-    FiniteF32::new(value).map_err(|_| EvaluationError::NonFiniteChannelResult {
-        step_index,
-        operation_id,
-        pixel_index,
-        channel,
-    })
-}
-
 impl fmt::Display for EvaluationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

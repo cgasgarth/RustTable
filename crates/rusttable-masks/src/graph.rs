@@ -321,6 +321,54 @@ impl MaskGraph {
         self.evaluate_inner(identity, Some(store))
     }
 
+    /// Resolves and evaluates the producer attached to one operation consumer.
+    /// `None` means that this graph has no edge for the requested consumer;
+    /// an unavailable or corrupt producer remains a typed execution error.
+    pub fn evaluate_for_consumer(
+        &self,
+        consumer_operation: u128,
+        consumer_mask_id: u128,
+        store: Option<&mut crate::RasterMaskStore>,
+    ) -> Result<Option<MaskRaster>, MaskExecutionError> {
+        let Some(producer) = self
+            .edges
+            .iter()
+            .find(|edge| {
+                edge.consumer_operation == consumer_operation
+                    && edge.consumer_mask_id == consumer_mask_id
+            })
+            .map(|edge| edge.producer)
+        else {
+            return Ok(None);
+        };
+        self.evaluate_inner(producer, store).map(Some)
+    }
+
+    /// Resolves the sole mask edge attached to an operation instance.
+    ///
+    /// One operation may have one blend mask in the current CPU contract. A
+    /// graph that carries more than one edge for the same operation is
+    /// rejected instead of silently choosing an arbitrary channel.
+    pub fn evaluate_for_operation(
+        &self,
+        consumer_operation: u128,
+        store: Option<&mut crate::RasterMaskStore>,
+    ) -> Result<Option<MaskRaster>, MaskExecutionError> {
+        let mut edges = self
+            .edges
+            .iter()
+            .filter(|edge| edge.consumer_operation == consumer_operation);
+        let Some(producer) = edges.next().map(|edge| edge.producer) else {
+            return Ok(None);
+        };
+        if edges.next().is_some() {
+            return Err(MaskExecutionError::AmbiguousConsumer {
+                operation: consumer_operation,
+            });
+        }
+        self.evaluate_inner(producer, store).map(Some)
+    }
+
     fn evaluate_inner(
         &self,
         identity: MaskIdentity,
