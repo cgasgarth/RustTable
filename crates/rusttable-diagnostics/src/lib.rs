@@ -7,6 +7,7 @@ mod event;
 mod json;
 mod privacy;
 mod ring;
+mod selected_preview;
 mod storage;
 
 use std::path::PathBuf;
@@ -21,6 +22,10 @@ pub use event::{
 };
 pub use privacy::{Alias, DiagnosticField, PrivacyClass, Redactor};
 pub use ring::{PresentationEvent, RECENT_EVENT_BYTES, RECENT_EVENT_LIMIT};
+pub use selected_preview::{
+    SelectedPreviewFailureCode, SelectedPreviewFailureStage, SelectedPreviewMetadata,
+    SelectedPreviewOperation,
+};
 pub use storage::{DiagnosticsHealth, RETAINED_FILES, ROTATION_BYTES, SinkStatus};
 
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");

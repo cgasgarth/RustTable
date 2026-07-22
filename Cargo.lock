@@ -4130,6 +4130,7 @@ version = "0.1.0"
 dependencies = [
  "directories",
  "rand 0.10.2",
+ "serde_json",
  "sha2",
  "tracing",
 ]
