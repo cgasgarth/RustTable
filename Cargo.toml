@@ -64,7 +64,6 @@ icu_locale = "=2.2.0"
 icu_plurals = "=2.2.0"
 image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
 resvg = { version = "=0.47.0", default-features = false, features = ["raster-images"] }
-rawloader = "=0.37.1"
 rawler = "=0.7.2"
 libheif-rs = { version = "=2.7.0", default-features = false, features = ["v1_21", "embedded-libheif"] }
 avif-parse = "=2.1.0"

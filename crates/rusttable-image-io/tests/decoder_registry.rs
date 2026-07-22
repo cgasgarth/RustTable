@@ -159,9 +159,8 @@ fn standard_registry_selects_jpeg_and_classic_tiff_by_signature() {
 
 #[test]
 fn camera_raw_signature_selects_the_raw_decoder_before_decode() {
-    let mut bytes = vec![0_u8; 128];
-    bytes[32..37].copy_from_slice(b"NIKON");
-    let result = ImageDecoderRegistry::standard().probe(&bytes, limits());
+    let bytes = b"FUJIFILMCCD-RAW";
+    let result = ImageDecoderRegistry::standard().probe(bytes, limits());
 
     assert!(matches!(
         result,

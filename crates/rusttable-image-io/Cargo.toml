@@ -11,7 +11,6 @@ flate2.workspace = true
 image.workspace = true
 png.workspace = true
 resvg.workspace = true
-rawloader.workspace = true
 rawler.workspace = true
 rusttable-color.workspace = true
 rusttable-image.workspace = true
@@ -19,6 +18,9 @@ rusttable-metadata.workspace = true
 sha2.workspace = true
 tiff.workspace = true
 usvg.workspace = true
+
+[dev-dependencies]
+rusttable-testkit.workspace = true
 
 [lints]
 workspace = true
