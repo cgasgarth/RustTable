@@ -239,7 +239,8 @@ fn raw_decode_error_fields(
         RawDecodeError::Cancelled
         | RawDecodeError::Source(_)
         | RawDecodeError::UnsupportedSignature { .. }
-        | RawDecodeError::InvalidFrame(_) => None,
+        | RawDecodeError::InvalidFrame(_)
+        | RawDecodeError::Metadata(_) => None,
     };
     if let Some(container) = container {
         fields.push(DiagnosticField::public_text(
@@ -276,6 +277,7 @@ const fn raw_decode_kind(error: &RawDecodeError) -> &'static str {
         RawDecodeError::Malformed { .. } => "malformed",
         RawDecodeError::Capability(_) => "capability",
         RawDecodeError::InvalidFrame(_) => "invalid_frame",
+        RawDecodeError::Metadata(_) => "metadata",
         RawDecodeError::Backend { .. } => "backend",
     }
 }
@@ -389,7 +391,7 @@ mod tests {
     use rusttable_image::{ImageDimensions, InputFormat};
     use rusttable_image_io::{
         RawCapabilityError, RawCapabilityEvidence, RawCapabilityKind, RawCompression,
-        RawCompressionEvidence, RawContainerKind, RawDecodeError,
+        RawCompressionEvidence, RawContainerKind, RawDecodeError, RawMetadataError,
     };
 
     use super::{
@@ -478,5 +480,16 @@ mod tests {
         for forbidden in ["path", "maker", "model", "mode", "detail", "signature"] {
             assert!(!keys.iter().any(|key| key.contains(forbidden)));
         }
+    }
+
+    #[test]
+    fn raw_metadata_errors_publish_only_the_stable_category() {
+        let fields =
+            raw_decode_error_fields(&RawDecodeError::Metadata(RawMetadataError::UnsafeSourceId))
+                .into_iter()
+                .map(|field| field.expect("bounded diagnostic field").key().to_owned())
+                .collect::<Vec<_>>();
+
+        assert_eq!(fields, ["raw_decode_kind"]);
     }
 }

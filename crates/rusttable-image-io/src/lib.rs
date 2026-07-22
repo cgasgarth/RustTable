@@ -37,18 +37,24 @@ pub use png::{
 };
 pub use raster_samples::{DecodedRgbSamples, decode_png_rgb_samples};
 pub use raw::{
-    RAW_PROBE_BUDGET_BYTES, RAWLER_BACKEND_ID, RawByteSource, RawCameraEvidence, RawCameraIdentity,
-    RawCancellationToken, RawCapabilityDescriptor, RawCapabilityError, RawCapabilityEvidence,
-    RawCapabilityKey, RawCapabilityKind, RawCapabilityLayout, RawCapabilityManifest,
-    RawCapabilityResolveError, RawCfa, RawChannel, RawColorMatrix, RawCompression,
-    RawCompressionEvidence, RawContainerKind, RawContainerProbe, RawContainerRegistry,
-    RawDecodeError, RawDecodeLimits, RawDecodeLimitsError, RawDecodeReceipt, RawDecodeRequest,
-    RawDecodeResult, RawDimensions, RawDngReceipt, RawFrame, RawFrameParts,
-    RawFrameValidationError, RawHeader, RawIlluminant, RawLevelPattern, RawOpcodeDescriptor,
-    RawOpcodeStage, RawOrientation, RawPlane, RawPlaneLayout, RawPreviewDescriptor,
-    RawPreviewFormat, RawPreviewKind, RawProbeEvidence, RawProbeOutcome, RawRect, RawSourceError,
-    RawSourceReceipt, RawVendorFamily, RawlerRawDecoder, SliceRawSource,
-    rawler_capability_manifest,
+    RAW_METADATA_SCHEMA_VERSION, RAW_PROBE_BUDGET_BYTES, RAWLER_BACKEND_ID, RawByteSource,
+    RawCalibrationEvidence, RawCalibrationMatrix, RawCalibrationMatrixKind, RawCalibrationMetadata,
+    RawCameraEvidence, RawCameraIdentity, RawCameraKey, RawCameraMetadata, RawCancellationToken,
+    RawCapabilityDescriptor, RawCapabilityError, RawCapabilityEvidence, RawCapabilityKey,
+    RawCapabilityKind, RawCapabilityLayout, RawCapabilityManifest, RawCapabilityResolveError,
+    RawCfa, RawChannel, RawColorMatrix, RawCompression, RawCompressionEvidence, RawContainerKind,
+    RawContainerProbe, RawContainerRegistry, RawDecodeError, RawDecodeLimits, RawDecodeLimitsError,
+    RawDecodeReceipt, RawDecodeRequest, RawDecodeResult, RawDimensions, RawDngReceipt, RawFrame,
+    RawFrameParts, RawFrameValidationError, RawGeometryEvidence, RawHeader, RawIdentityEvidence,
+    RawIlluminant, RawLevelPattern, RawMetadataConflict, RawMetadataContext, RawMetadataDiagnostic,
+    RawMetadataError, RawMetadataEvidence, RawMetadataFallback, RawMetadataField,
+    RawMetadataFinding, RawMetadataFindingCode, RawMetadataProvenance, RawMetadataReceipt,
+    RawMetadataRecord, RawMetadataSelection, RawMetadataSourceKind, RawMetadataStatus,
+    RawNoiseProfile, RawOpcodeDescriptor, RawOpcodeStage, RawOrientation, RawPixelAspect, RawPlane,
+    RawPlaneLayout, RawPreviewDescriptor, RawPreviewFormat, RawPreviewKind, RawProbeEvidence,
+    RawProbeOutcome, RawRect, RawSensorGeometry, RawSensorKey, RawSourceCameraIdentity,
+    RawSourceError, RawSourceReceipt, RawVendorFamily, RawlerRawDecoder, SliceRawSource,
+    normalize_raw_metadata, rawler_capability_manifest,
 };
 pub use registry::{ImageDecoderRegistry, PROBE_BUDGET_BYTES, ProbeOutcome};
 pub use rusttable_image::{DecoderDescriptor, DecoderIdentity};

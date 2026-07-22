@@ -60,6 +60,15 @@ pub enum RawFrameValidationError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RawMetadataError {
+    TooManyEvidenceItems { actual: usize, limit: usize },
+    UnsafeSourceId,
+    Serialization,
+    CorruptReceipt,
+    UnsupportedSchema { version: u16 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawDecodeError {
     Cancelled,
     Source(RawSourceError),
@@ -72,6 +81,7 @@ pub enum RawDecodeError {
     },
     Capability(RawCapabilityError),
     InvalidFrame(RawFrameValidationError),
+    Metadata(RawMetadataError),
     Backend {
         container: RawContainerKind,
         message: String,
@@ -95,6 +105,9 @@ impl fmt::Display for RawDecodeError {
                 error.missing, error.maker, error.model, error.detail
             ),
             Self::InvalidFrame(error) => write!(formatter, "invalid RAW frame: {error:?}"),
+            Self::Metadata(error) => {
+                write!(formatter, "RAW metadata normalization failed: {error:?}")
+            }
             Self::Backend { container, message } => {
                 write!(formatter, "{container:?} backend failed: {message}")
             }
