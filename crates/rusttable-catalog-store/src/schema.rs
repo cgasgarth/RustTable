@@ -10,8 +10,12 @@ use sha2::{Digest, Sha256};
 
 #[path = "schema/history_migration.rs"]
 mod history_migration;
+#[path = "schema/metadata.rs"]
+mod metadata_schema;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 10;
+pub(crate) use metadata_schema::*;
+
+pub const CURRENT_SCHEMA_VERSION: u8 = 11;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -152,6 +156,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
+        open_metadata_tables(&transaction)?;
     }
     transaction
         .commit()
@@ -198,6 +203,11 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             drop(schema);
             drop(transaction);
             migrate_to_v10(database)
+        }
+        [10] => {
+            drop(schema);
+            drop(transaction);
+            migrate_metadata_to_v11(database)
         }
         [5] => {
             drop(schema);
@@ -248,6 +258,9 @@ fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(), Repository
         HISTORY_REVISIONS_TABLE,
         HISTORY_BLOBS_TABLE,
         HISTORY_BLOB_REFS_TABLE,
+        METADATA_DOCUMENTS_TABLE,
+        METADATA_INDEX_TABLE,
+        METADATA_REVISION_TABLE,
     ] {
         transaction
             .open_table(table)
@@ -306,6 +319,7 @@ fn migrate_legacy_to_v4(database: &Database) -> Result<(), RepositoryError> {
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
         open_organization_tables(&transaction)?;
+        open_metadata_tables(&transaction)?;
         schema
             .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -343,6 +357,7 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
         open_organization_tables(&transaction)?;
+        open_metadata_tables(&transaction)?;
         transaction
             .open_table(SOURCE_RECONCILIATION_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -362,6 +377,7 @@ fn migrate_to_v5(database: &Database) -> Result<(), RepositoryError> {
     open_collection_tables(&transaction)?;
     open_history_tables(&transaction)?;
     open_organization_tables(&transaction)?;
+    open_metadata_tables(&transaction)?;
     transaction
         .open_table(SOURCE_RECONCILIATION_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
@@ -395,6 +411,7 @@ fn migrate_to_v6(database: &Database) -> Result<(), RepositoryError> {
         drop(version);
         open_history_tables(&transaction)?;
         open_organization_tables(&transaction)?;
+        open_metadata_tables(&transaction)?;
         backfill_history_blobs(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
@@ -535,6 +552,7 @@ fn migrate_to_v8(database: &Database) -> Result<(), RepositoryError> {
         drop(version);
         open_history_tables(&transaction)?;
         open_organization_tables(&transaction)?;
+        open_metadata_tables(&transaction)?;
         backfill_history_blob_refs(&transaction)?;
         migrate_current_edits_to_history(&transaction)?;
         transaction
@@ -582,6 +600,7 @@ fn migrate_to_v10(database: &Database) -> Result<(), RepositoryError> {
     let transaction = database
         .begin_write()
         .map_err(|_| RepositoryError::Unavailable)?;
+    open_metadata_tables(&transaction)?;
     let existing = {
         let paths = transaction
             .open_table(REFERENCE_PATH_INDEX_TABLE)

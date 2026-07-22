@@ -9,6 +9,7 @@ pub(crate) mod catalog;
 pub(crate) mod collection;
 pub(crate) mod edit;
 pub(crate) mod history;
+pub(crate) mod metadata;
 pub(crate) mod recipe;
 
 use crate::codecs as codec;

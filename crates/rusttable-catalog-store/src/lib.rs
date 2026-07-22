@@ -18,6 +18,7 @@ pub use repositories::catalog::{
 pub use repositories::collection::RedbCollectionRepository;
 pub use repositories::edit::RedbEditRepository;
 pub use repositories::history::RedbHistoryRepository;
+pub use repositories::metadata::RedbCatalogMetadataRepository;
 pub use repositories::recipe::{RecipeStoreError, RedbRecipeRepository};
 pub use rusttable_export::{
     ExportJobId, ExportJobPriority, ExportJobRecord, ExportJobStage, ExportJobState,
