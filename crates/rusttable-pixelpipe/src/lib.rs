@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "Pixel pipeline composition boundary for the `RustTable` rewrite."]
 
+pub mod analysis;
 mod cache;
 mod cancellation;
 mod cpu;
@@ -18,6 +19,16 @@ mod scheduler;
 mod snapshot;
 mod tiling;
 
+pub use analysis::{
+    ANALYSIS_NUMERICAL_CONTRACT, ANALYSIS_SCHEMA_VERSION, AnalysisAggregator, AnalysisAlphaPolicy,
+    AnalysisBoundary, AnalysisCacheIdentity, AnalysisChannel, AnalysisError, AnalysisGraticule,
+    AnalysisIntensity, AnalysisKind, AnalysisMask, AnalysisNormalization, AnalysisOutputDimensions,
+    AnalysisPartial, AnalysisPlane, AnalysisProvenance, AnalysisRaster, AnalysisRasterError,
+    AnalysisRequest as ScopeAnalysisRequest, AnalysisRequestError, AnalysisRequestIdentity,
+    AnalysisResult, AnalysisSampling, AnalysisSamplingError, AnalysisSourceColorSpace,
+    AnalysisStatistics, AnalysisTile, CpuAnalysisGenerator, MAX_ANALYSIS_BYTES,
+    MAX_ANALYSIS_DIMENSION, MAX_ANALYSIS_TILES, WaveformOrientation,
+};
 pub use cache::key::{
     CacheKey, CacheKeyBuilder, CacheKeyComponent, CacheKeyDigest, CacheKeyError, CachePrecision,
     CacheQuality, NodeBoundary, OutputIdentity,
