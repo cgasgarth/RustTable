@@ -85,6 +85,29 @@ impl ExifMetadataInput {
     pub const fn new(limits: MetadataLimits) -> Self {
         Self { limits }
     }
+
+    /// Reads the bounded EXIF subset into the parser-independent metadata domain.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetadataInputError`] when the source, container, TIFF graph, or
+    /// supported EXIF value cannot be represented in the canonical domain.
+    pub fn read_domain(
+        &self,
+        format: InputFormat,
+        source: &[u8],
+    ) -> Result<crate::MetadataDocument, MetadataInputError> {
+        let actual =
+            u64::try_from(source.len()).map_err(|_| MetadataInputError::ArithmeticOverflow)?;
+        if actual > self.limits.source_bytes {
+            return Err(MetadataInputError::SourceTooLarge {
+                limit: self.limits.source_bytes,
+                actual,
+            });
+        }
+        let metadata = self.read_bytes(format, source)?;
+        crate::canonicalize_exif(&metadata).map_err(MetadataInputError::Domain)
+    }
 }
 
 impl MetadataInput for ExifMetadataInput {

@@ -2,8 +2,8 @@
 
 `rusttable-metadata` exposes a parser-independent metadata domain for values
 that can be shared by import, catalog, sidecar, export, search, and scripting
-layers. The domain deliberately does not parse a container or expose EXIF,
-IPTC, or XMP parser types.
+layers. Its bounded EXIF input adapter maps supported EXIF values into that
+domain without exposing parser-library types to consumers.
 
 ## Contract
 

@@ -5,6 +5,7 @@ mod codec;
 mod container;
 mod domain;
 mod error;
+mod exif_domain;
 mod extract;
 mod image_output;
 mod limits;
@@ -27,6 +28,7 @@ pub use error::{
     MetadataInputError, MetadataLimitsError, MetadataOutputError, MetadataOutputLimit,
     MetadataOutputLimitsError,
 };
+pub use exif_domain::canonicalize_exif;
 pub use extract::{ExifMetadataInput, MetadataInput, MetadataReadResult, MetadataReadStatus};
 pub use image_output::{MetadataImageOutput, MetadataImageOutputError};
 pub use limits::{MetadataLimits, MetadataOutputLimits};
