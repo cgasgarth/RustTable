@@ -143,7 +143,7 @@ pub(super) fn desktop_body(
         .vexpand(true)
         .resize_start_child(false)
         .shrink_start_child(false)
-        .shrink_end_child(false)
+        .shrink_end_child(true)
         .wide_handle(true)
         .position(i32::from(panel_widths.active(workspace).left_px))
         .build();
@@ -163,6 +163,7 @@ pub(super) fn desktop_body(
         .hexpand(true)
         .vexpand(true)
         .resize_end_child(false)
+        .shrink_start_child(true)
         .shrink_end_child(false)
         .wide_handle(true)
         .build();
@@ -376,7 +377,7 @@ fn connect_right_rail_constraints(paned: &gtk4::Paned) {
                     (
                         left_split.position(),
                         paned_handle_width(&left_split),
-                        paned_end_minimum_width(&left_split),
+                        configured_center_minimum_width(),
                     )
                 },
             );
@@ -407,7 +408,7 @@ fn connect_left_rail_constraints(paned: &gtk4::Paned) {
         let configured_maximum = i32::from(layout.side_panel_widths.maximum_px);
         let available_maximum = width
             .saturating_sub(paned_handle_width(paned))
-            .saturating_sub(paned_end_minimum_width(paned))
+            .saturating_sub(configured_center_minimum_width())
             .max(minimum);
         let maximum = configured_maximum.min(available_maximum);
         let position = paned.position().clamp(minimum, maximum);
@@ -540,18 +541,8 @@ fn paned_handle_minimum_width(paned: &gtk4::Paned) -> i32 {
     0
 }
 
-fn paned_end_minimum_width(paned: &gtk4::Paned) -> i32 {
-    paned.end_child().map_or(
-        i32::from(DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px),
-        |child| {
-            child
-                .measure(gtk4::Orientation::Horizontal, -1)
-                .0
-                .max(i32::from(
-                    DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px,
-                ))
-        },
-    )
+fn configured_center_minimum_width() -> i32 {
+    i32::from(DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px)
 }
 
 fn right_rail_width(paned: &gtk4::Paned) -> i32 {

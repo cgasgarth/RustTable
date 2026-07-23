@@ -162,6 +162,35 @@ fn divider_widths_are_clamped_and_retained_per_workspace() {
     assert_eq!(right_rail_width(right_split), lighttable_right_width);
 }
 
+#[gtk4::test]
+fn divider_uses_the_configured_center_minimum_instead_of_chrome_natural_width() {
+    let fixture = PanedFixture::with_center_natural_width(1_228, 900);
+    let right_split = &fixture.right_split;
+    let requested_right_width = 300;
+    right_split.set_position(
+        right_split
+            .allocated_width()
+            .saturating_sub(paned_handle_width(right_split))
+            .saturating_sub(requested_right_width),
+    );
+    settle_gtk();
+
+    assert_eq!(right_rail_width(right_split), requested_right_width);
+    let center_width = fixture
+        .left_split
+        .end_child()
+        .expect("center workspace")
+        .allocated_width();
+    assert!(
+        center_width >= i32::from(DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px),
+        "right drag must preserve Darktable's configured center minimum"
+    );
+    assert!(
+        center_width < 900,
+        "GTK natural chrome width must not make the right divider immovable"
+    );
+}
+
 struct PanedFixture {
     _window: gtk4::Window,
     workspace: gtk4::Stack,
@@ -172,7 +201,12 @@ struct PanedFixture {
 
 impl PanedFixture {
     fn new(window_width: i32) -> Self {
+        Self::with_center_natural_width(window_width, 0)
+    }
+
+    fn with_center_natural_width(window_width: i32, center_natural_width: i32) -> Self {
         let workspace = test_workspace();
+        workspace.set_size_request(center_natural_width, -1);
         let left_panel = test_panel_stack("left-panel-stack", WorkspaceRole::Lighttable);
         let right_panel = test_panel_stack("right-panel-stack", WorkspaceRole::Lighttable);
         let refresh_count = std::rc::Rc::new(std::cell::Cell::new(0_u32));

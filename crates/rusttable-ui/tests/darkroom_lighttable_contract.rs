@@ -185,17 +185,19 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
 }
 
 #[test]
-fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
+fn gtk_parity_keeps_resizable_rails_top_left_grids_and_actions() {
     let header = include_str!("../src/gui/header.rs");
     let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
     let runtime_lighttable = include_str!("../src/gui/runtime/lighttable.rs");
     let components = include_str!("../src/gui/darktable_components.rs");
     let css = include_str!("../src/gui/theme.css");
 
-    assert!(runtime_layout.contains(".shrink_start_child(true)"));
+    assert!(runtime_layout.contains(".wide_handle(true)"));
+    assert!(runtime_layout.contains("connect_panel_width_tracking"));
     assert!(runtime_layout.contains("photos.set_halign(gtk4::Align::Start)"));
     assert!(runtime_layout.contains("let strip_surface = gtk4::Grid::new"));
-    assert!(runtime_lighttable.contains("centered_for_visible_count"));
+    assert!(runtime_lighttable.contains("grid_model_strings"));
+    assert!(runtime_lighttable.contains("reveal_active_photo"));
     assert!(runtime_lighttable.contains("connect_filmstrip_resize"));
     assert!(runtime_lighttable.contains(".parent()"));
     assert!(components.contains("module_action_button"));
