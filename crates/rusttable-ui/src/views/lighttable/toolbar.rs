@@ -12,6 +12,10 @@ use crate::CollectionProperty;
 use crate::gui::darktable_components::{button as shared_button, dropdown as shared_dropdown};
 use crate::gui::{LIGHTTABLE_TOOLBAR, ThemeRole, apply_theme_role};
 
+fn lighttable_toolbar_dropdowns_expand() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LighttableColorLabel {
     Red,
@@ -300,6 +304,7 @@ impl LighttableToolbar {
         );
         property.set_accessible_role(gtk4::AccessibleRole::ComboBox);
         property.set_width_request(94);
+        property.set_hexpand(lighttable_toolbar_dropdowns_expand());
         property.set_tooltip_text(Some("collection filter property"));
         root.append(&property);
 
@@ -315,6 +320,7 @@ impl LighttableToolbar {
 
         let sort = shared_dropdown("lighttable-sort", &["filename", "capture time", "rating"]);
         sort.set_accessible_role(gtk4::AccessibleRole::ComboBox);
+        sort.set_hexpand(lighttable_toolbar_dropdowns_expand());
         sort.set_tooltip_text(Some("sort visible images"));
         root.append(&sort);
         let sort_direction = shared_button("lighttable-sort-direction", "↑");
@@ -602,6 +608,10 @@ mod tests {
         assert!(source.contains("AccessibleRole::SearchBox"));
         assert!(source.contains("AccessibleRole::Status"));
         assert!(source.contains("clear collection filter"));
+        assert!(
+            !lighttable_toolbar_dropdowns_expand(),
+            "filter and sort dropdowns must retain compact Darktable toolbar widths"
+        );
         assert_eq!(LighttableColorLabel::ALL.len(), 5);
         let colors = LighttableColorLabel::ALL.map(LighttableColorLabel::rgba);
         assert_eq!(colors[0], (0.85, 0.29, 0.27, 1.0));
