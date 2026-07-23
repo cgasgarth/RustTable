@@ -188,6 +188,7 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
 
 #[test]
 fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
+    let header = include_str!("../src/gui/header.rs");
     let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
     let runtime_lighttable = include_str!("../src/gui/runtime/lighttable.rs");
     let components = include_str!("../src/gui/darktable_components.rs");
@@ -206,6 +207,11 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
     assert!(css.contains(".dt_darkroom_section_label"));
     assert!(css.contains("#darkroom-filmstrip-boundary"));
     assert!(css.contains(".dt_view_switcher button.active"));
+    assert!(header.contains("header_height.saturating_sub(HEADER_VIEWPORT_CHROME_PX)"));
+    assert!(header.contains(".min_content_height(content_height)"));
+    assert!(header.contains(".max_content_height(content_height)"));
+    assert!(header.contains(".propagate_natural_height(true)"));
+    assert!(header.contains(".has_frame(false)"));
 }
 
 #[test]

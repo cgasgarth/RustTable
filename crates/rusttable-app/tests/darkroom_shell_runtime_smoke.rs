@@ -466,6 +466,12 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
         find_widget(root, "header-profile-diagnostic").is_none(),
         "display-profile prose must not leak into the global header"
     );
+    let header_clip = find_widget(root, "header-clip").expect("bounded product header");
+    assert_eq!(
+        header_clip.allocated_height(),
+        i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px),
+        "stacked brand labels must not grow the shared header past the Darktable contract"
+    );
 
     let viewport = find_widget(root, "darkroom-viewport").expect("darkroom viewport");
     let top = find_widget(root, "darkroom-toolbar-top").expect("legacy top toolbar");
@@ -850,7 +856,7 @@ fn assert_frame_edge_controls(root: &gtk4::Widget) {
         .expect("top panel affordance")
         .downcast::<gtk4::Button>()
         .expect("top panel affordance is a button");
-    let header = find_widget(root, "header").expect("header panel");
+    let header = find_widget(root, "header-clip").expect("bounded header panel");
     top.emit_clicked();
     settle_gtk_until(|| !header.is_visible(), || "header did not collapse".into());
     top.emit_clicked();
