@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export CARGO_BUILD_JOBS=10
+# Ignore inherited job caps so Cargo selects host-detected parallelism.
+unset CARGO_BUILD_JOBS
 
 if [[ "$(uname -s)" != Linux ]]; then
   printf 'Linux distribution smoke requires Linux\n' >&2

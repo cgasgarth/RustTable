@@ -39,7 +39,7 @@ if [ "$1 $2 $3 $4" = 'metadata --locked --no-deps --format-version' ]; then
   exit 0
 fi
 if [ "$1" = build ]; then
-  printf '%s\n' "$*" >"$FAKE_LOG"
+  printf '%s\n' "${CARGO_BUILD_JOBS-}|$*" >"$FAKE_LOG"
   [ "$FAKE_FAIL_BUILD" = 1 ] && exit 77
   mkdir -p "$FAKE_ROOT/target/release"
   printf '#!/bin/sh\n[ "$1" = --version ] && printf "RustTable 0.1.0\\n"\n' >"$FAKE_ROOT/target/release/rusttable-app"
@@ -148,8 +148,8 @@ run_smoke() {
 }
 
 archive="$fixture/target/linux-distribution/RustTable-0.1.0-x86_64-unknown-linux-gnu-unsigned.tar.gz"
-run_smoke bash "$fixture/scripts/linux-distribution-smoke.sh"
-[[ "$(cat "$temporary_directory/build-args")" = 'build --release --package rusttable-app --bin rusttable-app --locked' ]]
+run_smoke env CARGO_BUILD_JOBS=10 bash "$fixture/scripts/linux-distribution-smoke.sh"
+[[ "$(cat "$temporary_directory/build-args")" = '|build --release --package rusttable-app --bin rusttable-app --locked' ]]
 [[ -s "$fixture/target/linux-distribution/smoke.log" ]]
 [[ -f "$archive" && -f "$archive.sha256" ]]
 [[ ! -e "$fixture/target/linux-distribution/.work" ]]

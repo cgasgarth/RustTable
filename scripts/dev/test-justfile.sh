@@ -32,7 +32,15 @@ assert_recipe test 'cargo test --workspace --all-targets --all-features --locked
 assert_recipe ci 'bash scripts/dev/precommit-check.sh'
 assert_recipe run 'cargo run --package rusttable-app --bin rusttable-app --locked'
 
-grep -Fqx 'export CARGO_BUILD_JOBS=10' "$root/scripts/dev/precommit-check.sh"
+grep -Fqx 'unset CARGO_BUILD_JOBS' "$root/scripts/dev/precommit-check.sh"
 grep -Fqx 'cargo xtask check --parallel >"$log" 2>&1' "$root/scripts/dev/precommit-check.sh"
+! grep -Eq '^[[:space:]]*jobs[[:space:]]*=' "$root/.cargo/config.toml"
+for script in \
+  scripts/dev/precommit-check.sh \
+  scripts/dev/install-computer-use-app.ts \
+  scripts/linux-distribution-smoke.sh \
+  scripts/macos-distribution-smoke.sh; do
+  ! grep -Fq 'CARGO_BUILD_JOBS=10' "$root/$script"
+done
 
 printf 'justfile contract: PASS\n'

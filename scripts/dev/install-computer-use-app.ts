@@ -29,6 +29,14 @@ import {
 const releaseBundlePath = (root: string): string =>
   join(root, 'target/release/bundle/macos/RustTable.app');
 
+export const commandEnvironment = (): Record<string, string> => {
+  const environment: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key !== 'CARGO_BUILD_JOBS' && value !== undefined) environment[key] = value;
+  }
+  return environment;
+};
+
 const help = `Usage: bun run install:computer-use [options]
 
 Build, install, and register rusttable - latest.app for Computer Use.
@@ -44,7 +52,7 @@ Options:
 
 const runCommand = async (request: CommandRequest): Promise<CommandResult> => {
   const child = Bun.spawn([request.command, ...request.args], {
-    env: { ...process.env, CARGO_BUILD_JOBS: '10' },
+    env: commandEnvironment(),
     stderr: 'pipe',
     stdout: 'pipe',
   });
