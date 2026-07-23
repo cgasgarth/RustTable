@@ -6,8 +6,13 @@ script="$root/scripts/dev/capture-ui-screenshots.sh"
 help="$("$script" --help)"
 [[ "$help" == *"default: 1280"* ]]
 [[ "$help" == *"default: 768"* ]]
+[[ "$help" == *"reference-app"* ]]
+[[ "$help" == *"reference-dir"* ]]
+[[ "$help" == *"refresh-reference"* ]]
 [[ "$help" == *"rusttable-lighttable.png"* ]]
 [[ "$help" == *"rusttable-darkroom.png"* ]]
+[[ "$help" == *"darktable-lighttable.png"* ]]
+[[ "$help" == *"darktable-darkroom.png"* ]]
 [[ "$help" == *"manifest.json"* ]]
 
 if "$script" --unknown >/dev/null 2>&1; then
