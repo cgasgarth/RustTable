@@ -94,16 +94,18 @@ impl LeftPanel {
 fn import_module(i18n: &I18n) -> (gtk4::Expander, gtk4::Button) {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
     let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+    actions.set_homogeneous(true);
+    actions.add_css_class("dt_import_actions");
     let import = gtk4::Button::with_label("add to library…");
     import.set_widget_name("lighttable-import");
     import.set_tooltip_text(Some(
         &i18n.text(MessageId::ToolbarImport, &MessageArgs::new()),
     ));
-    import.set_hexpand(true);
+    compact_import_action(&import);
     actions.append(&import);
     let copy_import = gtk4::Button::with_label("copy & import…");
     copy_import.set_widget_name("lighttable-copy-import");
-    copy_import.set_hexpand(true);
+    compact_import_action(&copy_import);
     copy_import.set_sensitive(false);
     copy_import.set_tooltip_text(Some(
         "Copy-and-import destinations are not implemented; add to library keeps source files in place",
@@ -122,6 +124,11 @@ fn import_module(i18n: &I18n) -> (gtk4::Expander, gtk4::Button) {
         module_with_child("import", "import", &content, true),
         import,
     )
+}
+
+fn compact_import_action(button: &gtk4::Button) {
+    button.set_width_request(0);
+    button.set_hexpand(true);
 }
 
 fn collection_filters() -> gtk4::Expander {
@@ -212,9 +219,15 @@ mod tests {
     #[test]
     fn rail_keeps_typed_action_widget_ids() {
         let source = include_str!("navigation.rs");
+        let css = include_str!("../gui/theme.css");
 
         assert!(source.contains("lighttable-import"));
         assert!(source.contains("collection_controls.widget()"));
         assert!(source.contains("hscrollbar_policy(gtk4::PolicyType::Never)"));
+        assert!(source.contains("actions.set_homogeneous(true)"));
+        assert!(source.contains("fn compact_import_action"));
+        assert!(source.contains("button.set_width_request(0)"));
+        assert!(css.contains(".dt_import_actions > button"));
+        assert!(css.contains("min-width: 0;"));
     }
 }

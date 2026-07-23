@@ -24,7 +24,7 @@ use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use self::layout::{
     WorkspaceEdgeControls, desktop_body, mode_panel_stack, render_modules, right_panel,
-    synchronize_panel_stacks, workspace_stack,
+    synchronize_panel_stacks, workspace_frame, workspace_stack,
 };
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
@@ -77,6 +77,7 @@ pub struct GtkShell {
     darkroom_preview: PhotoPreview,
     export_panel: ExportPanel,
     external_editor_panel: ExternalEditorPanel,
+    header_root: gtk4::Box,
     filmstrip: gtk4::FlowBox,
     filmstrip_root: gtk4::Box,
     lighttable_layout_controls: super::LighttableLayoutControls,
@@ -203,7 +204,7 @@ impl GtkShell {
             let darkroom = darkroom.clone();
             move || darkroom.refresh_geometry()
         });
-        let (content, filmstrip, filmstrip_root, edge_controls) = desktop_body(
+        let (content, filmstrip, filmstrip_root) = desktop_body(
             &workspace,
             &lighttable_toolbar,
             &left_panel,
@@ -216,7 +217,8 @@ impl GtkShell {
         apply_theme_role(&shell, ThemeRole::Shell);
         shell.append(header.widget());
         shell.append(&content);
-        window.set_child(Some(&shell));
+        let (workspace_frame, edge_controls) = workspace_frame(&shell);
+        window.set_child(Some(&workspace_frame));
 
         let shell = Self {
             window,
@@ -228,6 +230,7 @@ impl GtkShell {
             darkroom_preview,
             export_panel,
             external_editor_panel,
+            header_root: header.widget().clone(),
             filmstrip,
             filmstrip_root,
             lighttable_layout_controls,
@@ -377,6 +380,27 @@ impl GtkShell {
             } else {
                 let visible = shell.lighttable_interaction.borrow().right_panel_visible();
                 shell.set_lighttable_panel_visibility(LighttablePanel::Right, !visible);
+            }
+        });
+        let shell = self.clone();
+        controls.top.connect_clicked(move |_| {
+            shell
+                .header_root
+                .set_visible(!shell.header_root.is_visible());
+        });
+        let shell = self.clone();
+        controls.bottom.connect_clicked(move |_| {
+            if shell.workspace.visible_child_name().as_deref()
+                == Some(WorkspaceRole::Darkroom.stack_name())
+            {
+                shell.darkroom.set_panel_visibility(
+                    DarkroomPanelVisibility::Filmstrip,
+                    !shell.darkroom.filmstrip_visible(),
+                );
+            } else {
+                shell
+                    .filmstrip_root
+                    .set_visible(!shell.filmstrip_root.is_visible());
             }
         });
     }

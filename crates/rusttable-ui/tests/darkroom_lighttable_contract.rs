@@ -211,14 +211,28 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
 #[test]
 fn frame_edge_controls_stay_inside_darktable_outer_border() {
     let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
+    let runtime_shell = include_str!("../src/gui/runtime/mod.rs");
     let css = include_str!("../src/gui/theme.css");
 
     assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
-    assert!(runtime_layout.contains("workspace_frame(&content)"));
+    assert!(runtime_shell.contains("workspace_frame(&shell)"));
+    for id in [
+        "workspace-left-edge-toggle",
+        "workspace-right-edge-toggle",
+        "workspace-top-edge-toggle",
+        "workspace-bottom-edge-toggle",
+    ] {
+        assert!(runtime_layout.contains(id), "missing frame control {id}");
+    }
     assert!(runtime_layout.contains("i32::from(layout.outer_border_px)"));
     assert!(runtime_layout.contains("triangle.set_content_width(4)"));
     assert!(runtime_layout.contains("triangle.set_content_height(10)"));
+    assert!(runtime_layout.contains("triangle.set_content_width(10)"));
+    assert!(runtime_layout.contains("triangle.set_content_height(4)"));
+    assert!(css.contains(".dt_edge_toggle_vertical"));
+    assert!(css.contains(".dt_edge_toggle_horizontal"));
     assert!(css.contains("min-width: {{outer_border_width}}px"));
+    assert!(css.contains("min-height: {{outer_border_width}}px"));
 }
 
 #[test]
