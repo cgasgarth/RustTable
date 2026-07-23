@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use rusttable_catalog::{ImportMetadataStatus, ImportRegistration, ReferencePathIdentity};
+use rusttable_catalog::{
+    DuplicateEvidence, DuplicateSearchResult, ImportMetadataStatus, ImportRegistration,
+    ReferencePathIdentity,
+};
 use rusttable_catalog_store::{AtomicCatalogStoreError, RedbCatalogRepository};
 use rusttable_image::DecodeLimits;
 use rusttable_image_io::FileImageInput;
@@ -136,6 +139,13 @@ impl AtomicRasterCatalog for AppCatalog {
         }))
     }
 
+    fn find_duplicates(
+        &self,
+        evidence: DuplicateEvidence,
+    ) -> Result<DuplicateSearchResult, AtomicRasterCatalogError> {
+        self.0.find_duplicates(evidence).map_err(map_store_error)
+    }
+
     fn commit_import(
         &mut self,
         entry: &RasterCatalogEntry,
@@ -187,6 +197,13 @@ impl AtomicRasterCatalog for UnavailableCatalog {
         &self,
         _identity: RasterDuplicateIdentity,
     ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError> {
+        Err(AtomicRasterCatalogError::Unavailable)
+    }
+
+    fn find_duplicates(
+        &self,
+        _evidence: DuplicateEvidence,
+    ) -> Result<DuplicateSearchResult, AtomicRasterCatalogError> {
         Err(AtomicRasterCatalogError::Unavailable)
     }
 

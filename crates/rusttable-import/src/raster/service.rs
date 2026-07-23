@@ -3,8 +3,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusttable_catalog::{
-    ImportCandidate, ImportDetails, ImportMetadataStatus, ImportMetadataSummary, ImportRecord,
-    ImportRegistration, ImportRegistrationReceipt, ReferencePathIdentity,
+    DuplicateEvidence, DuplicateSearchResult, ImportCandidate, ImportDetails, ImportMetadataStatus,
+    ImportMetadataSummary, ImportRecord, ImportRegistration, ImportRegistrationReceipt,
+    ReferencePathIdentity, VisualFingerprint,
 };
 use rusttable_core::{
     Asset, AssetId, AssetRole, ByteLength, ContentHash, Edit, EditId, FiniteF64, Operation,
@@ -38,6 +39,7 @@ struct PreparedRaster {
     metadata: rusttable_core::ImageMetadata,
     metadata_status: ImportMetadataStatus,
     metadata_diagnostic: Option<rusttable_metadata::MetadataInputError>,
+    visual: VisualFingerprint,
 }
 
 struct BuiltRasterRegistration {
@@ -186,7 +188,7 @@ impl<'a> RasterImportService<'a> {
         };
         report(observer, item_id, RasterImportStage::DecodingHeader);
         report(observer, item_id, RasterImportStage::Decoding);
-        if self.image_input.decode_bytes(&bytes).is_err() {
+        let Ok(decoded) = self.image_input.decode_bytes(&bytes) else {
             return Err(Box::new(failed_with_evidence(
                 item_id,
                 alias,
@@ -195,7 +197,8 @@ impl<'a> RasterImportService<'a> {
                 RasterImportFailure::UnsupportedOrMalformedRaster,
                 observer,
             )));
-        }
+        };
+        let visual = VisualFingerprint::from_decoded(&decoded);
         let (metadata, metadata_status, metadata_diagnostic) = match self
             .metadata_input
             .read_bytes_tolerant(probe.format(), &bytes)
@@ -228,6 +231,7 @@ impl<'a> RasterImportService<'a> {
             metadata,
             metadata_status,
             metadata_diagnostic,
+            visual,
         })
     }
 
@@ -257,6 +261,7 @@ impl<'a> RasterImportService<'a> {
             metadata,
             metadata_status,
             metadata_diagnostic,
+            visual,
         } = prepared;
         if cancellation.is_cancelled() {
             report(observer, item_id, RasterImportStage::Cancelled);
@@ -309,7 +314,7 @@ impl<'a> RasterImportService<'a> {
                 );
             }
         };
-        let (entry, imported) = if let Some(entry) = existing {
+        let (entry, imported, duplicates) = if let Some(entry) = existing {
             let content_matches = entry.record.photo().primary_asset().content_hash()
                 == ContentHash::Sha256(hash)
                 && entry.record.photo().primary_asset().byte_length().get() == byte_length
@@ -323,6 +328,7 @@ impl<'a> RasterImportService<'a> {
                     probe,
                     metadata,
                     metadata_status,
+                    visual,
                 ) {
                     Ok(built) => built,
                     Err(error) => {
@@ -332,6 +338,34 @@ impl<'a> RasterImportService<'a> {
                             hash,
                             Some(probe.format()),
                             error,
+                            observer,
+                        );
+                    }
+                };
+                if cancellation.is_cancelled() {
+                    report(observer, item_id, RasterImportStage::Cancelled);
+                    return evidence_receipt(
+                        item_id,
+                        alias,
+                        hash,
+                        probe.format(),
+                        RasterImportStatus::Cancelled,
+                    );
+                }
+                let duplicates = match catalog.find_duplicates(
+                    built
+                        .registration
+                        .duplicate_evidence()
+                        .expect("raster registrations carry duplicate evidence"),
+                ) {
+                    Ok(duplicates) => duplicates,
+                    Err(error) => {
+                        return failed_with_evidence(
+                            item_id,
+                            alias,
+                            hash,
+                            Some(probe.format()),
+                            map_catalog_error(error),
                             observer,
                         );
                     }
@@ -363,6 +397,7 @@ impl<'a> RasterImportService<'a> {
                         metadata_status,
                     },
                     true,
+                    duplicates,
                 )
             } else {
                 let entry = if metadata_status == ImportMetadataStatus::Available
@@ -384,7 +419,25 @@ impl<'a> RasterImportService<'a> {
                 } else {
                     entry
                 };
-                (entry, false)
+                let evidence = DuplicateEvidence::from_record(
+                    &entry.record,
+                    ReferencePathIdentity::new(path_identity),
+                    Some(visual),
+                );
+                let duplicates = match catalog.find_duplicates(evidence) {
+                    Ok(duplicates) => duplicates,
+                    Err(error) => {
+                        return failed_with_evidence(
+                            item_id,
+                            alias,
+                            hash,
+                            Some(probe.format()),
+                            map_catalog_error(error),
+                            observer,
+                        );
+                    }
+                };
+                (entry, false, duplicates)
             }
         } else {
             let built = match build_entry(
@@ -395,6 +448,7 @@ impl<'a> RasterImportService<'a> {
                 probe,
                 metadata,
                 metadata_status,
+                visual,
             ) {
                 Ok(built) => built,
                 Err(error) => {
@@ -404,6 +458,34 @@ impl<'a> RasterImportService<'a> {
                         hash,
                         Some(probe.format()),
                         error,
+                        observer,
+                    );
+                }
+            };
+            if cancellation.is_cancelled() {
+                report(observer, item_id, RasterImportStage::Cancelled);
+                return evidence_receipt(
+                    item_id,
+                    alias,
+                    hash,
+                    probe.format(),
+                    RasterImportStatus::Cancelled,
+                );
+            }
+            let duplicates = match catalog.find_duplicates(
+                built
+                    .registration
+                    .duplicate_evidence()
+                    .expect("raster registrations carry duplicate evidence"),
+            ) {
+                Ok(duplicates) => duplicates,
+                Err(error) => {
+                    return failed_with_evidence(
+                        item_id,
+                        alias,
+                        hash,
+                        Some(probe.format()),
+                        map_catalog_error(error),
                         observer,
                     );
                 }
@@ -428,7 +510,7 @@ impl<'a> RasterImportService<'a> {
                     observer,
                 );
             }
-            (built.entry, true)
+            (built.entry, true, duplicates)
         };
         let mut result = evidence_receipt(
             item_id,
@@ -445,6 +527,7 @@ impl<'a> RasterImportService<'a> {
         result.asset_id = Some(entry.record.photo().primary_asset_id());
         result.edit_id = Some(entry.edit.id());
         result.metadata_status = metadata_diagnostic;
+        result.duplicates = duplicates;
         if cancellation.is_cancelled() {
             result.status = RasterImportStatus::ImportedPreviewPending;
             report(observer, item_id, RasterImportStage::Completed);
@@ -468,6 +551,10 @@ impl<'a> RasterImportService<'a> {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the registration boundary keeps independently validated import evidence explicit"
+)]
 fn build_entry(
     path: &Path,
     alias: &str,
@@ -476,6 +563,7 @@ fn build_entry(
     probe: rusttable_image::ImageProbe,
     metadata: rusttable_core::ImageMetadata,
     metadata_status: ImportMetadataStatus,
+    visual: VisualFingerprint,
 ) -> Result<BuiltRasterRegistration, RasterImportFailure> {
     let path_identity = reference_path_identity(path).map_err(map_reference_error)?;
     let photo_id = PhotoId::new(derived_id(b"photo", path_identity))
@@ -519,13 +607,19 @@ fn build_entry(
         ImportMetadataSummary::from_record_with_status(&record, metadata_status),
         receipt,
     );
+    let duplicate_evidence = DuplicateEvidence::from_record(
+        &record,
+        ReferencePathIdentity::new(path_identity),
+        Some(visual),
+    );
     Ok(BuiltRasterRegistration {
         entry: RasterCatalogEntry {
             record,
             edit,
             metadata_status,
         },
-        registration: ImportRegistration::new(details, ReferencePathIdentity::new(path_identity)),
+        registration: ImportRegistration::new(details, ReferencePathIdentity::new(path_identity))
+            .with_duplicate_evidence(duplicate_evidence),
     })
 }
 
@@ -680,7 +774,7 @@ fn receipt(
     status: RasterImportStatus,
 ) -> RasterImportReceipt {
     RasterImportReceipt {
-        schema_version: 1,
+        schema_version: 2,
         item_id,
         source_alias,
         content_sha256: None,
@@ -691,6 +785,7 @@ fn receipt(
         status,
         metadata_status: None,
         preview: None,
+        duplicates: DuplicateSearchResult::default(),
     }
 }
 
