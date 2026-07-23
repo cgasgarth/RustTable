@@ -15,10 +15,12 @@ use super::RedbImportRepository;
 use super::edit::RedbEditRepository;
 use super::history::stage_history_commit;
 use super::recipe::RedbRecipeRepository;
+use super::virtual_copies::RedbVirtualCopyRepository;
 use crate::schema;
 
 mod duplicates;
 mod photo_groups;
+mod virtual_copies;
 
 use duplicates::stage_duplicate_evidence;
 
@@ -28,6 +30,7 @@ pub struct RedbCatalogRepository {
     imports: RedbImportRepository,
     edits: RedbEditRepository,
     recipes: RedbRecipeRepository,
+    virtual_copies: RedbVirtualCopyRepository,
     before_commit: Option<BeforeCommitHook>,
     change_listener: Option<ChangeListener>,
 }
@@ -142,6 +145,7 @@ impl RedbCatalogRepository {
             imports: RedbImportRepository::from_database(Arc::clone(&database)),
             edits: RedbEditRepository::from_database(Arc::clone(&database)),
             recipes: RedbRecipeRepository::from_database(Arc::clone(&database)),
+            virtual_copies: RedbVirtualCopyRepository::from_database(Arc::clone(&database)),
             before_commit,
             change_listener: None,
         })

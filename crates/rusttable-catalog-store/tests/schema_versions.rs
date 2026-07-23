@@ -16,6 +16,10 @@ const PHOTO_GROUPS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rustta
 const PHOTO_GROUP_MEMBERS: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_group_member_index");
 const EDITS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_edits");
+const VIRTUAL_COPIES: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_virtual_copies");
+const VIRTUAL_COPY_STATE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_virtual_copy_state");
 const VERSION_KEY: &[u8] = b"schema-version";
 
 fn write_version(path: &Path, version: &[u8]) {
@@ -140,6 +144,31 @@ fn schema_v13_migration_adds_photo_group_tables() {
     let transaction = database.begin_read().unwrap();
     assert!(transaction.open_table(PHOTO_GROUPS).is_ok());
     assert!(transaction.open_table(PHOTO_GROUP_MEMBERS).is_ok());
+    assert!(transaction.open_table(VIRTUAL_COPIES).is_ok());
+    assert!(transaction.open_table(VIRTUAL_COPY_STATE).is_ok());
+    assert_eq!(
+        transaction
+            .open_table(SCHEMA)
+            .unwrap()
+            .get(VERSION_KEY)
+            .unwrap()
+            .unwrap()
+            .value(),
+        &[CURRENT_SCHEMA_VERSION]
+    );
+    support::remove(&path);
+}
+
+#[test]
+fn schema_v14_migration_adds_virtual_copy_tables() {
+    let path = support::temp_path("schema-v14-virtual-copies");
+    write_version(&path, &[14]);
+    let repository = RedbImportRepository::open(&path).unwrap();
+    drop(repository);
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_read().unwrap();
+    assert!(transaction.open_table(VIRTUAL_COPIES).is_ok());
+    assert!(transaction.open_table(VIRTUAL_COPY_STATE).is_ok());
     assert_eq!(
         transaction
             .open_table(SCHEMA)

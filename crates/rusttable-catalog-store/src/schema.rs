@@ -19,13 +19,16 @@ mod photo_group_schema;
 mod tag_schema;
 #[path = "schema/validation.rs"]
 mod validation;
+#[path = "schema/virtual_copies.rs"]
+mod virtual_copy_schema;
 
 pub(crate) use duplicates::*;
 use history_migration::{blob_key, open_history_tables};
 pub(crate) use metadata_schema::*;
 pub(crate) use tag_schema::*;
+pub(crate) use virtual_copy_schema::*;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 14;
+pub const CURRENT_SCHEMA_VERSION: u8 = 15;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -173,6 +176,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         open_history_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
+        virtual_copy_schema::open_tables(&transaction)?;
     }
     transaction
         .commit()
@@ -202,62 +206,73 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
                 .map_err(|_| RepositoryError::Unavailable)?;
             validation::validate_tables(&transaction)
         }
-        [13] => photo_group_schema::migrate_to_v14(database),
+        [14] => virtual_copy_schema::migrate_to_v15(database),
+        [13] => photo_group_schema::migrate_to_v14(database)
+            .and_then(|()| virtual_copy_schema::migrate_to_v15(database)),
         [6] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v7(database).and_then(|()| migrate_to_v8(database))
+            migrate_to_v7(database)
+                .and_then(|()| migrate_to_v8(database))
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [7] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v8(database)
+            migrate_to_v8(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [8] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v9(database).and_then(|()| migrate_to_v10(database))
+            migrate_to_v9(database)
+                .and_then(|()| migrate_to_v10(database))
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [9] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v10(database)
+            migrate_to_v10(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [10] => {
             drop(schema);
             drop(transaction);
             migrate_metadata_and_tags_to_v12(database)
                 .and_then(|()| migrate_duplicates_to_v13(database))
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [11] => {
             drop(schema);
             drop(transaction);
-            migrate_tags_to_v12(database).and_then(|()| migrate_duplicates_to_v13(database))
+            migrate_tags_to_v12(database)
+                .and_then(|()| migrate_duplicates_to_v13(database))
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [12] => {
             drop(schema);
             drop(transaction);
             migrate_duplicates_to_v13(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [5] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v6(database)
+            migrate_to_v6(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [4] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v5(database)
+            migrate_to_v5(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [3] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v4(database)
+            migrate_to_v4(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         [1 | 2] => {
             drop(schema);
             drop(transaction);
             migrate_legacy_to_v4(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
         }
         _ => Err(RepositoryError::CorruptPersistedData),
     }

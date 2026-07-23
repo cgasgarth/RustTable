@@ -12,6 +12,7 @@ pub(crate) mod history;
 pub(crate) mod metadata;
 pub(crate) mod recipe;
 pub(crate) mod tags;
+pub(crate) mod virtual_copies;
 
 use crate::codecs as codec;
 use crate::schema::{self, ASSET_INDEX_TABLE, PHOTO_INDEX_TABLE, RECORDS_TABLE};

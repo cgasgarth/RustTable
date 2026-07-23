@@ -26,6 +26,7 @@ mod snapshot;
 mod source_path;
 mod state;
 mod tags;
+mod virtual_copies;
 
 pub use collections::{
     ACTIVE_LIGHTTABLE_STATE_VERSION, ActiveLibraryView, ActiveLighttableProperty,
@@ -94,4 +95,9 @@ pub use tags::{
     MAX_TAGS_PER_PHOTO, TAG_HIERARCHY_SEPARATOR, TAG_SCHEMA_VERSION, TagAlias, TagCommand,
     TagDefinition, TagError, TagId, TagIndexStats, TagMutationReceipt, TagName, TagProjection,
     TagRepository, TagSnapshot, TagState,
+};
+pub use virtual_copies::{
+    SourceAssetIdentity, VIRTUAL_COPY_FORMAT_VERSION, VirtualCopy, VirtualCopyCatalog,
+    VirtualCopyCommand, VirtualCopyError, VirtualCopyId, VirtualCopyProjection,
+    VirtualCopyRepository, VirtualCopyRepositoryError,
 };
