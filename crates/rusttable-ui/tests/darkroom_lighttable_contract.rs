@@ -200,10 +200,29 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
     assert!(runtime_lighttable.contains("connect_filmstrip_resize"));
     assert!(runtime_lighttable.contains(".parent()"));
     assert!(components.contains("module_action_button"));
+    assert!(runtime_lighttable.contains("lighttable_empty_state.allocated_width()"));
+    assert!(runtime_lighttable.contains("viewport.allocated_height()"));
     assert!(css.contains(".dt_module_action"));
     assert!(css.contains(".dt_darkroom_section_label"));
     assert!(css.contains("#darkroom-filmstrip-boundary"));
     assert!(css.contains(".dt_view_switcher button.active"));
+}
+
+#[test]
+fn implemented_darkroom_panels_use_collapsed_shared_module_chrome() {
+    let panels = include_str!("../src/views/darkroom/panel_widgets.rs");
+
+    assert!(panels.contains("ImplementedModulePanel"));
+    assert!(panels.contains("module.is_visible(group, query)"));
+    for title in [
+        "RGB AI denoise",
+        "RAW AI denoise",
+        "mask manager",
+        "multiscale retouch",
+    ] {
+        assert!(panels.contains(title), "missing implemented panel {title}");
+    }
+    assert!(panels.contains("shared_module_expander"));
 }
 
 #[test]
@@ -213,13 +232,15 @@ fn gtk_workspace_ownership_keeps_lighttable_rail_and_darkroom_refresh_separate()
     let components = include_str!("../src/gui/darktable_components.rs");
     let css = include_str!("../src/gui/theme.css");
 
-    assert!(runtime_layout.contains("center.append(toolbar.widget())"));
+    assert!(runtime_layout.contains(".child(toolbar.widget())"));
+    assert!(runtime_layout.contains("center.append(&toolbar_clip)"));
     assert!(!runtime_layout.contains("lighttable_page.append(lighttable_toolbar.widget())"));
     assert!(!runtime_layout.contains("center.append(external_editor_panel.widget())"));
     assert!(!runtime_layout.contains("center.append(ai_batch_panel.widget())"));
     assert!(!runtime_layout.contains("center.append(camera_panel.widget())"));
     assert!(runtime_layout.contains("connect_position_notify"));
     assert!(runtime_shell.contains("darkroom.refresh_geometry()"));
+    assert!(!runtime_shell.contains("self.window.maximize()"));
     for class in [
         "module_expander",
         "module_row",

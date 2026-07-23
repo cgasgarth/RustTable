@@ -139,6 +139,10 @@ pub fn darktable_theme_css() -> String {
             "{{rail_min_width}}",
             i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px),
         ),
+        (
+            "{{header_height}}",
+            i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px),
+        ),
         ("{{control_height}}", tokens.controls.control_height),
         ("{{module_row_height}}", tokens.controls.module_row_height),
         (

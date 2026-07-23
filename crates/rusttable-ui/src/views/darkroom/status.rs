@@ -21,7 +21,7 @@ impl DarkroomStatusSurface {
     pub(super) fn new() -> Self {
         let root = gtk4::CenterBox::new();
         root.set_widget_name("darkroom-status-bar");
-        root.set_height_request(DARKTABLE_UI_TOKENS.controls.toolbar_height);
+        root.set_height_request(DARKTABLE_UI_TOKENS.controls.status_height);
         root.set_hexpand(true);
         root.set_valign(gtk4::Align::Center);
         apply_theme_role(&root, ThemeRole::Toolbar);

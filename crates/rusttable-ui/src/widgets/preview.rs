@@ -10,7 +10,7 @@ use rusttable_core::PhotoId;
 use crate::presentation::{self, PhotoDetailViewModel, SelectedPreviewState};
 use crate::viewport_presentation::{DisplayPresentationFrame, PresentationStatus};
 
-use crate::gui::{ThemeRole, apply_theme_role};
+use crate::gui::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
 
 /// The central darkroom image surface and its typed metadata presentation.
 ///
@@ -114,6 +114,10 @@ impl PhotoPreview {
         canvas_frame.set_widget_name("darkroom-preview-canvas-frame");
         canvas_frame.set_hexpand(true);
         canvas_frame.set_vexpand(true);
+        let image_border = i32::from(DARKROOM_GEOMETRY.image_border_px);
+        canvas_frame.set_margin_top(image_border / 2);
+        canvas_frame.set_margin_start(image_border / 2);
+        canvas_frame.set_margin_end(image_border / 2);
         canvas_frame.set_child(Some(&overlay));
 
         let facts = gtk4::Grid::new();

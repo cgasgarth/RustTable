@@ -17,7 +17,7 @@ window,
 }
 
 #header {
-  min-height: 36px;
+  min-height: {{header_height}}px;
   padding: 0 3px;
   border-bottom: 1px solid {{border}};
 }
@@ -169,9 +169,11 @@ button:disabled:hover,
 }
 
 .dt_module_expander > title,
-.dt_module_group > title {
+.dt_module_group > title,
+.dt_module_expander > box > title,
+.dt_module_group > box > title {
   min-height: {{module_title_height}}px;
-  padding: 1px 4px;
+  padding: 0 4px;
   font-size: {{base_font_pt}}pt;
   font-weight: bold;
 }
@@ -180,7 +182,9 @@ button:disabled:hover,
  * Keep them in one compact hit target instead of letting title padding push the
  * text away from the arrow at narrow rail widths. */
 .dt_module_expander > title > arrow,
-.dt_module_group > title > arrow {
+.dt_module_group > title > arrow,
+.dt_module_expander > box > title > expander,
+.dt_module_group > box > title > expander {
   min-width: 14px;
   margin: 0 3px 0 0;
 }
@@ -331,7 +335,7 @@ button:disabled:hover,
 }
 
 #left-panel expander > title {
-  min-height: 19px;
+  min-height: {{module_title_height}}px;
   padding: 0;
 }
 
@@ -1014,13 +1018,14 @@ scale:focus-visible {
 }
 
 #darkroom-toolbar-bottom {
+  min-height: {{status_height}}px;
   padding: 0 3px;
   background-color: transparent;
   border: 0;
 }
 
 #darkroom-status-bar {
-  min-height: {{toolbar_height}}px;
+  min-height: {{status_height}}px;
   padding: 0 5px;
   background-color: {{background}};
   border-top: 1px solid {{border}};
