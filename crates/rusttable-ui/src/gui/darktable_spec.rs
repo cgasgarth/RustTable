@@ -322,7 +322,7 @@ pub const LIGHTTABLE_COMPOSITION: LighttableCompositionSpec = LighttableComposit
     footer_toolbar_rows: 1,
     filmstrip_toolbar_rows: 0,
     empty_state_columns: 2,
-    top_toolbar_height_px: 21,
+    top_toolbar_height_px: 25,
 };
 
 /// Geometry of the Darktable darkroom center column and its adjacent rails.
@@ -689,7 +689,7 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     window_width_px: 1_280,
     window_height_px: 768,
     outer_border_px: 7,
-    header_height_px: 30,
+    header_height_px: 34,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
     toolbar_padding_horizontal: EmHundredths::new(28),
@@ -815,7 +815,7 @@ mod tests {
     #[test]
     fn panel_metrics_preserve_darktable_resize_bounds() {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
-        assert_eq!(LAYOUT_METRICS.header_height_px, 30);
+        assert_eq!(LAYOUT_METRICS.header_height_px, 34);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
         assert_eq!(LAYOUT_METRICS.side_panel_widths.minimum_px, 136);
@@ -937,7 +937,7 @@ mod tests {
         assert_eq!(LIGHTTABLE_COMPOSITION.footer_toolbar_rows, 1);
         assert_eq!(LIGHTTABLE_COMPOSITION.filmstrip_toolbar_rows, 0);
         assert_eq!(LIGHTTABLE_COMPOSITION.empty_state_columns, 2);
-        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_height_px, 21);
+        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_height_px, 25);
     }
 
     #[test]
