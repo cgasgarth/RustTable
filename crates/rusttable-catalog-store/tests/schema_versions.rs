@@ -12,6 +12,9 @@ const SCHEMA: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_sc
 const RECORDS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_import_records");
 const PHOTOS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_photo_index");
 const ASSETS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_asset_index");
+const PHOTO_GROUPS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_photo_groups");
+const PHOTO_GROUP_MEMBERS: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_photo_group_member_index");
 const EDITS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("rusttable_edits");
 const VERSION_KEY: &[u8] = b"schema-version";
 
@@ -123,6 +126,29 @@ fn schema_v10_adds_catalog_metadata_tables_without_import_rewrites() {
     assert_eq!(
         imports.find_by_photo_id(record.photo().id()).unwrap(),
         Some(record)
+    );
+    support::remove(&path);
+}
+
+#[test]
+fn schema_v13_migration_adds_photo_group_tables() {
+    let path = support::temp_path("schema-v13-groups");
+    write_version(&path, &[13]);
+    let repository = RedbImportRepository::open(&path).unwrap();
+    drop(repository);
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_read().unwrap();
+    assert!(transaction.open_table(PHOTO_GROUPS).is_ok());
+    assert!(transaction.open_table(PHOTO_GROUP_MEMBERS).is_ok());
+    assert_eq!(
+        transaction
+            .open_table(SCHEMA)
+            .unwrap()
+            .get(VERSION_KEY)
+            .unwrap()
+            .unwrap()
+            .value(),
+        &[CURRENT_SCHEMA_VERSION]
     );
     support::remove(&path);
 }

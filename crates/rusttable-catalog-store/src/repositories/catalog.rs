@@ -18,6 +18,7 @@ use super::recipe::RedbRecipeRepository;
 use crate::schema;
 
 mod duplicates;
+mod photo_groups;
 
 use duplicates::stage_duplicate_evidence;
 
@@ -506,6 +507,10 @@ impl RedbCatalogRepository {
             return Err(AtomicCatalogStoreError::Corrupt);
         }
         let prepared = PreparedImport::new(record, edit)?;
+        let prepared_group = registration
+            .photo_group()
+            .map(|group_id| self.prepare_import_photo_group(group_id, record.photo().id()))
+            .transpose()?;
         let (history, expected_history, _) = self
             .edits
             .prepare_history(edit)
@@ -515,6 +520,9 @@ impl RedbCatalogRepository {
             .begin_write()
             .map_err(|_| AtomicCatalogStoreError::Unavailable)?;
         stage_import(&transaction, &prepared, registration)?;
+        if let Some(group) = prepared_group {
+            Self::stage_photo_group_membership(&transaction, &group, record.photo().id())?;
+        }
         if let Some(evidence) = registration.duplicate_evidence() {
             stage_duplicate_evidence(&transaction, evidence, false)?;
         }

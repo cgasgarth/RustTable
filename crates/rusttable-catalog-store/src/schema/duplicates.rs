@@ -4,7 +4,8 @@ use redb::{Database, ReadableTable, TableDefinition};
 use rusttable_catalog::RepositoryError;
 
 use super::{
-    CURRENT_SCHEMA_VERSION, RECORDS_TABLE, REFERENCE_PATH_INDEX_TABLE, SCHEMA_TABLE, VERSION_KEY,
+    CURRENT_SCHEMA_VERSION, PHOTO_GROUP_MEMBER_INDEX_TABLE, PHOTO_GROUPS_TABLE, RECORDS_TABLE,
+    REFERENCE_PATH_INDEX_TABLE, SCHEMA_TABLE, VERSION_KEY,
 };
 
 pub(crate) const DUPLICATE_EVIDENCE_TABLE: TableDefinition<&[u8], &[u8]> =
@@ -44,6 +45,12 @@ pub(super) fn migrate_duplicates_to_v13(database: &Database) -> Result<(), Repos
         .begin_write()
         .map_err(|_| RepositoryError::Unavailable)?;
     open_duplicate_tables(&transaction)?;
+    transaction
+        .open_table(PHOTO_GROUPS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(PHOTO_GROUP_MEMBER_INDEX_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
     backfill_duplicate_evidence(&transaction)?;
     let mut schema = transaction
         .open_table(SCHEMA_TABLE)

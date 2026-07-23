@@ -13,6 +13,8 @@ mod duplicates;
 mod history_migration;
 #[path = "schema/metadata.rs"]
 mod metadata_schema;
+#[path = "schema/photo_groups.rs"]
+mod photo_group_schema;
 #[path = "schema/tags.rs"]
 mod tag_schema;
 #[path = "schema/validation.rs"]
@@ -23,7 +25,7 @@ use history_migration::{blob_key, open_history_tables};
 pub(crate) use metadata_schema::*;
 pub(crate) use tag_schema::*;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 13;
+pub const CURRENT_SCHEMA_VERSION: u8 = 14;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -37,6 +39,10 @@ pub(crate) const PHOTO_ORGANIZATION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_photo_organization");
 pub(crate) const ORGANIZATION_REVISION_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_organization_revision");
+pub(crate) const PHOTO_GROUPS_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_photo_groups");
+pub(crate) const PHOTO_GROUP_MEMBER_INDEX_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_photo_group_member_index");
 pub(crate) const EDITS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_edits");
 pub(crate) const IMPORT_DETAILS_TABLE: TableDefinition<&[u8], &[u8]> =
@@ -140,7 +146,7 @@ fn initialize(database: &Database) -> Result<(), RepositoryError> {
         transaction
             .open_table(ASSET_INDEX_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
-        open_organization_tables(&transaction)?;
+        photo_group_schema::open_organization_tables(&transaction)?;
         transaction
             .open_table(EDITS_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -196,6 +202,7 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
                 .map_err(|_| RepositoryError::Unavailable)?;
             validation::validate_tables(&transaction)
         }
+        [13] => photo_group_schema::migrate_to_v14(database),
         [6] => {
             drop(schema);
             drop(transaction);
@@ -305,7 +312,7 @@ fn migrate_legacy_to_v4(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
-        open_organization_tables(&transaction)?;
+        photo_group_schema::open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
         open_duplicate_tables(&transaction)?;
@@ -346,7 +353,7 @@ fn migrate_to_v4(database: &Database) -> Result<(), RepositoryError> {
             .map_err(|_| RepositoryError::Unavailable)?;
         open_collection_tables(&transaction)?;
         open_history_tables(&transaction)?;
-        open_organization_tables(&transaction)?;
+        photo_group_schema::open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
         open_duplicate_tables(&transaction)?;
@@ -369,7 +376,7 @@ fn migrate_to_v5(database: &Database) -> Result<(), RepositoryError> {
         .map_err(|_| RepositoryError::Unavailable)?;
     open_collection_tables(&transaction)?;
     open_history_tables(&transaction)?;
-    open_organization_tables(&transaction)?;
+    photo_group_schema::open_organization_tables(&transaction)?;
     open_metadata_tables(&transaction)?;
     open_tag_tables(&transaction)?;
     open_duplicate_tables(&transaction)?;
@@ -406,7 +413,7 @@ fn migrate_to_v6(database: &Database) -> Result<(), RepositoryError> {
         }
         drop(version);
         open_history_tables(&transaction)?;
-        open_organization_tables(&transaction)?;
+        photo_group_schema::open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
         open_duplicate_tables(&transaction)?;
@@ -525,7 +532,7 @@ fn migrate_to_v8(database: &Database) -> Result<(), RepositoryError> {
         }
         drop(version);
         open_history_tables(&transaction)?;
-        open_organization_tables(&transaction)?;
+        photo_group_schema::open_organization_tables(&transaction)?;
         open_metadata_tables(&transaction)?;
         open_tag_tables(&transaction)?;
         open_duplicate_tables(&transaction)?;
@@ -560,7 +567,7 @@ fn migrate_to_v9(database: &Database) -> Result<(), RepositoryError> {
             return Err(RepositoryError::CorruptPersistedData);
         }
         drop(version);
-        open_organization_tables(&transaction)?;
+        photo_group_schema::open_organization_tables(&transaction)?;
         transaction
             .open_table(SOURCE_RECONCILIATION_TABLE)
             .map_err(|_| RepositoryError::Unavailable)?;
@@ -935,16 +942,6 @@ fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), Re
         .map_err(|_| RepositoryError::Unavailable)?;
     transaction
         .open_table(COLLECTION_INTEGRITY_TABLE)
-        .map_err(|_| RepositoryError::Unavailable)?;
-    Ok(())
-}
-
-fn open_organization_tables(transaction: &redb::WriteTransaction) -> Result<(), RepositoryError> {
-    transaction
-        .open_table(PHOTO_ORGANIZATION_TABLE)
-        .map_err(|_| RepositoryError::Unavailable)?;
-    transaction
-        .open_table(ORGANIZATION_REVISION_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
     Ok(())
 }

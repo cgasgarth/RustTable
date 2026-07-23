@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 
 use rusttable_core::PhotoId;
 
+use crate::PhotoGroupId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Rating {
     Zero,
@@ -91,4 +93,6 @@ pub struct OrganizationProjection {
     pub rating: Rating,
     pub rejected: bool,
     pub color_labels: Vec<ColorLabel>,
+    pub group_id: Option<PhotoGroupId>,
+    pub is_representative: bool,
 }
