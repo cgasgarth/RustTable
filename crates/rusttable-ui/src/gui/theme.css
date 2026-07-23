@@ -934,9 +934,10 @@ scale:focus-visible {
 }
 
 .dt_darkroom_module_header button {
-  min-width: {{control_height}}px;
-  min-height: {{control_height}}px;
-  padding: 0 3px;
+  min-width: 1.15em;
+  min-height: 1.15em;
+  margin: 0.07em;
+  padding: 0;
 }
 
 .dt_module_header checkbutton:checked,

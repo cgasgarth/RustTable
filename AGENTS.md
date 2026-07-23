@@ -26,7 +26,7 @@
 ## Development and tests
 
 - Use test-driven development. Add focused deterministic coverage for every behavior change and regression.
-- Prefer `CARGO_BUILD_JOBS=10` for local Rust builds and checks.
+- Let Cargo and Rust tests use host-detected parallelism; do not pass `CARGO_BUILD_JOBS` or test-thread counts on individual commands. Keep one Cargo pipeline owner so concurrent repository checks do not oversubscribe the host.
 - Keep external runtimes, packaging, full reference execution, and other expensive checks out of unit tests.
 - `cargo xtask check` is the complete local gate: source policy, formatting, strict Clippy, all-target/all-feature tests, operation data, fixtures, and standard dependency checks.
 - Local hooks are optional convenience. Pull-request CI on Linux, macOS, Windows, and dependency checks is the merge authority.
@@ -34,15 +34,13 @@
 - Run independent hosted jobs in parallel and use caches; do not impose local elapsed-time caps.
 
 ### Visual comparison workflow
-- For GTK visual parity reviews, the orchestrator uses computer use only to capture screenshots of the installed RustTable and original Darktable apps; Gemini visual-analysis workers do not use computer use.
-- Gemini visual review workers receive paired local full-screen screenshots as image inputs, never computer-use access, and must return concrete pixel-level implemented-behavior findings mapped to RustTable components.
-- Capture matched screenshots locally and pass them to Gemini as image inputs. Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state for each comparison pair.
-- Treat the original Darktable captures as a fixed baseline for a chosen display size and state: reuse the stored pair for iterative RustTable runs, and recapture it only with an explicit refresh when the reference image, display geometry, or Darktable version changes. Every run must still copy the baseline into its artifact directory and record its checksum.
-- Treat screenshot geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate with paired full-screen, same-size captures until measurable drift is removed or explicitly proven out of scope.
-- Capture the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize. Ask Gemini to report concrete geometry/style/render differences and map them to RustTable components.
+- For GTK visual parity reviews, launch the installed RustTable and original Darktable applications directly and inspect them interactively with Computer Use. Do not use the screenshot-capture script or a Gemini visual worker.
+- Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state in both applications.
+- Treat geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate in the live applications until measurable drift is removed or explicitly proven out of scope.
+- Inspect the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize.
 - Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.
 - Keep every UI correction from a review iteration in that batch's single UI parity PR. Reuse the same Sol UI worker that owns the UI PR for follow-up screenshot iterations so visual context and responsibility remain continuous.
-- Gemini visual review is a required merge gate for every UI PR, not optional feedback: the exact PR commit must have a recorded `SIGN-OFF` from the Gemini visual-analysis worker against the paired screenshot set before merge or auto-merge is enabled. A `CHANGES_REQUIRED` result, missing screenshot pair, or inability to inspect leaves the UI PR unmergeable until the Sol worker addresses the findings and Gemini rechecks it. Non-UI PRs are not subject to this visual gate.
+- The orchestrator's direct Computer Use review of the exact PR commit is the UI merge gate. Record the inspected states and any remaining implemented-surface drift in the PR before merge.
 
 ## Issues and pull requests
 

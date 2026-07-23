@@ -136,7 +136,7 @@ pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 15] = [
 ];
 
 /// Stable identifiers for the searchable, grouped module-stack controls.
-pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 8] = [
+pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 9] = [
     "darkroom-module-search",
     "group-active",
     "group-favorites",
@@ -145,6 +145,7 @@ pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 8] = [
     "group-deprecated",
     "exposure-presets",
     "exposure-reset",
+    "exposure-multi",
 ];
 
 type DarkroomModuleGroupHandler = Box<dyn Fn(DarkroomModuleGroup)>;
@@ -225,7 +226,7 @@ impl DarkroomView {
     #[must_use]
     pub fn new(panel_width: i32) -> Self {
         debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 15);
-        debug_assert_eq!(DARKROOM_MODULE_WIDGET_IDS.len(), 8);
+        debug_assert_eq!(DARKROOM_MODULE_WIDGET_IDS.len(), 9);
         let preview = PhotoPreview::new();
         let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
         let viewport_handler = Rc::new(RefCell::new(None));
@@ -928,7 +929,7 @@ mod tests {
         assert_eq!(DARKROOM_RAIL_FOCUS_ORDER[0], "darkroom-navigation");
         assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.last(), Some(&"group-deprecated"));
         assert_eq!(DARKROOM_MODULE_WIDGET_IDS[0], "darkroom-module-search");
-        assert_eq!(DARKROOM_MODULE_WIDGET_IDS.last(), Some(&"exposure-reset"));
+        assert_eq!(DARKROOM_MODULE_WIDGET_IDS.last(), Some(&"exposure-multi"));
         assert_eq!(
             DARKROOM_MODULE_WIDGET_IDS
                 .iter()

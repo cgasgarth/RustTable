@@ -20,9 +20,9 @@ fn full_interaction_and_panicking_handlers() {
     let root: gtk4::Widget = panel.widget().clone().upcast();
     let expander = panel.widget().clone();
     let enabled = find_widget(&root, "exposure-enabled")
-        .expect("exposure enabled switch")
-        .downcast::<gtk4::Switch>()
-        .expect("exposure enabled switch type");
+        .expect("exposure enabled toggle")
+        .downcast::<gtk4::ToggleButton>()
+        .expect("exposure enabled toggle type");
     let mode = find_widget(&root, "exposure-mode")
         .expect("exposure mode dropdown")
         .downcast::<gtk4::DropDown>()
