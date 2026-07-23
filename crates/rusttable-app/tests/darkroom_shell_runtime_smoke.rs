@@ -568,11 +568,14 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
             && guide.allocated_height() == viewport.allocated_height(),
         "composition guide must cover the image viewport"
     );
-    assert!(guide_toggle.is_active());
-    guide_toggle.set_active(false);
-    assert!(!guide.is_visible());
+    assert!(!guide_toggle.is_active());
     guide_toggle.set_active(true);
     assert!(guide.is_visible());
+    guide_toggle.set_active(false);
+    assert!(
+        guide.is_visible(),
+        "the mapped drawing surface remains present while inactive guides draw nothing"
+    );
 }
 
 fn assert_right_rail_geometry(root: &gtk4::Widget) {

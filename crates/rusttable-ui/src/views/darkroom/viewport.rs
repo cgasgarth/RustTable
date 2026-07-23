@@ -270,7 +270,7 @@ pub(super) fn darkroom_page(
     );
     install_viewport_input(&page, preview, &controls, state, handler);
     install_canvas_resize(&controls, preview, state);
-    debug_assert_eq!(DARKROOM_VIEWPORT_FOCUS_ORDER.len(), 5);
+    debug_assert_eq!(DARKROOM_VIEWPORT_FOCUS_ORDER.len(), 4);
     sync_viewport_controls(&controls, preview, state);
     (page, controls, status_surface)
 }

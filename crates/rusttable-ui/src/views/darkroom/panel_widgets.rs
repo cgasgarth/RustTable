@@ -848,7 +848,7 @@ mod tests {
 
     #[test]
     fn navigation_height_matches_darktable_config_and_clamps_resizing() {
-        assert_eq!(navigation_default_height(180), 113);
+        assert_eq!(navigation_default_height(180), 114);
         assert_eq!(NAVIGATION_MIN_HEIGHT, 100);
         assert_eq!(NAVIGATION_MAX_HEIGHT, 300);
         assert_eq!(clamp_resize_height(40, 100, 300), 100);

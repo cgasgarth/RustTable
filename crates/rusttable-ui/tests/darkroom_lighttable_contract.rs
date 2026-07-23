@@ -54,8 +54,6 @@ fn darkroom_stack_keeps_darktable_regions_and_stable_widget_order() {
             "darkroom-toolbar-bottom",
             "darkroom-left-panel",
             "darkroom-navigation",
-            "darkroom-navigation-info",
-            "darkroom-navigation-actions",
             "darkroom-snapshots",
             "darkroom-snapshots-info",
             "darkroom-snapshots-actions",

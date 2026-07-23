@@ -44,15 +44,13 @@ use crate::libs::profiles::diagnostics::{
 };
 
 /// Stable widget identifiers for the initial darkroom surface.
-pub const DARKROOM_WIDGET_IDS: [&str; 30] = [
+pub const DARKROOM_WIDGET_IDS: [&str; 28] = [
     "darkroom-page",
     "darkroom-toolbar-top",
     "darkroom-photo-preview",
     "darkroom-toolbar-bottom",
     "darkroom-left-panel",
     "darkroom-navigation",
-    "darkroom-navigation-info",
-    "darkroom-navigation-actions",
     "darkroom-snapshots",
     "darkroom-snapshots-info",
     "darkroom-snapshots-actions",
@@ -171,11 +169,10 @@ pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 14] = [
 ];
 
 /// Focus order for all controls introduced by the darkroom viewport batch.
-pub const DARKROOM_VIEWPORT_FOCUS_ORDER: [&str; 5] = [
+pub const DARKROOM_VIEWPORT_FOCUS_ORDER: [&str; 4] = [
     "darkroom-soft-proof",
     "darkroom-gamut-check",
     "darkroom-zoom",
-    "darkroom-fit",
     "darkroom-before-after",
 ];
 
