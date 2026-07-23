@@ -26,6 +26,8 @@ use crate::views::lighttable::empty_collection_state;
 pub(super) struct WorkspaceEdgeControls {
     pub(super) left: gtk4::Button,
     pub(super) right: gtk4::Button,
+    pub(super) top: gtk4::Button,
+    pub(super) bottom: gtk4::Button,
 }
 
 pub(super) fn right_panel() -> (
@@ -124,12 +126,7 @@ pub(super) fn desktop_body(
     right_panel: &gtk4::Stack,
     i18n: &I18n,
     geometry_changed: &std::rc::Rc<dyn Fn()>,
-) -> (
-    gtk4::Overlay,
-    gtk4::FlowBox,
-    gtk4::Box,
-    WorkspaceEdgeControls,
-) {
+) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let center = central_workspace(workspace, lighttable_toolbar);
     let (filmstrip_root, filmstrip) = filmstrip(i18n);
@@ -222,65 +219,123 @@ pub(super) fn desktop_body(
     content.set_margin_start(outer_border);
     content.set_margin_end(outer_border);
     content.append(&workspace_with_right_panel);
-    let (workspace_frame, edge_controls) = workspace_frame(&content);
-    (workspace_frame, filmstrip, filmstrip_root, edge_controls)
+    (content, filmstrip, filmstrip_root)
 }
 
-fn workspace_frame(workspace: &impl IsA<gtk4::Widget>) -> (gtk4::Overlay, WorkspaceEdgeControls) {
+pub(super) fn workspace_frame(
+    workspace: &impl IsA<gtk4::Widget>,
+) -> (gtk4::Overlay, WorkspaceEdgeControls) {
     let controls = WorkspaceEdgeControls {
-        left: edge_toggle(
-            "workspace-left-edge-toggle",
-            true,
-            "Show or hide the left panel",
-            gtk4::Align::Start,
-        ),
-        right: edge_toggle(
-            "workspace-right-edge-toggle",
-            false,
-            "Show or hide the right panel",
-            gtk4::Align::End,
-        ),
+        left: edge_toggle(WorkspaceEdge::Left),
+        right: edge_toggle(WorkspaceEdge::Right),
+        top: edge_toggle(WorkspaceEdge::Top),
+        bottom: edge_toggle(WorkspaceEdge::Bottom),
     };
     let overlay = gtk4::Overlay::new();
+    overlay.set_widget_name("workspace-frame");
     overlay.set_hexpand(true);
     overlay.set_vexpand(true);
     overlay.set_child(Some(workspace));
     overlay.add_overlay(&controls.left);
     overlay.add_overlay(&controls.right);
+    overlay.add_overlay(&controls.top);
+    overlay.add_overlay(&controls.bottom);
     (overlay, controls)
 }
 
-fn edge_toggle(
-    id: &str,
-    points_right: bool,
-    accessible_name: &str,
-    align: gtk4::Align,
-) -> gtk4::Button {
+#[derive(Clone, Copy)]
+enum WorkspaceEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+fn edge_toggle(edge: WorkspaceEdge) -> gtk4::Button {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let button = gtk4::Button::new();
+    let (id, accessible_name, horizontal_alignment, vertical_alignment) = match edge {
+        WorkspaceEdge::Left => (
+            "workspace-left-edge-toggle",
+            "Show or hide the left panel",
+            gtk4::Align::Start,
+            gtk4::Align::Center,
+        ),
+        WorkspaceEdge::Right => (
+            "workspace-right-edge-toggle",
+            "Show or hide the right panel",
+            gtk4::Align::End,
+            gtk4::Align::Center,
+        ),
+        WorkspaceEdge::Top => (
+            "workspace-top-edge-toggle",
+            "Show or hide the header",
+            gtk4::Align::Center,
+            gtk4::Align::Start,
+        ),
+        WorkspaceEdge::Bottom => (
+            "workspace-bottom-edge-toggle",
+            "Show or hide the filmstrip",
+            gtk4::Align::Center,
+            gtk4::Align::End,
+        ),
+    };
     button.set_widget_name(id);
-    button.set_halign(align);
-    button.set_valign(gtk4::Align::Center);
-    button.set_size_request(i32::from(layout.outer_border_px), -1);
+    button.set_halign(horizontal_alignment);
+    button.set_valign(vertical_alignment);
+    let outer_border = i32::from(layout.outer_border_px);
+    match edge {
+        WorkspaceEdge::Left | WorkspaceEdge::Right => {
+            button.set_size_request(outer_border, 28);
+            button.add_css_class("dt_edge_toggle_vertical");
+        }
+        WorkspaceEdge::Top | WorkspaceEdge::Bottom => {
+            button.set_size_request(28, outer_border);
+            button.add_css_class("dt_edge_toggle_horizontal");
+        }
+    }
     button.set_focus_on_click(false);
     button.set_tooltip_text(Some(accessible_name));
     button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
     button.add_css_class("dt_edge_toggle");
     let triangle = gtk4::DrawingArea::new();
-    triangle.set_content_width(4);
-    triangle.set_content_height(10);
+    match edge {
+        WorkspaceEdge::Left | WorkspaceEdge::Right => {
+            triangle.set_content_width(4);
+            triangle.set_content_height(10);
+        }
+        WorkspaceEdge::Top | WorkspaceEdge::Bottom => {
+            triangle.set_content_width(10);
+            triangle.set_content_height(4);
+        }
+    }
     triangle.set_can_target(false);
+    triangle.set_halign(gtk4::Align::Center);
+    triangle.set_valign(gtk4::Align::Center);
     triangle.set_draw_func(move |_, context, width, height| {
         let width = f64::from(width);
         let height = f64::from(height);
-        if points_right {
-            context.move_to(0.0, 0.0);
-            context.line_to(width, height / 2.0);
-            context.line_to(0.0, height);
-        } else {
-            context.move_to(width, 0.0);
-            context.line_to(0.0, height / 2.0);
-            context.line_to(width, height);
+        match edge {
+            WorkspaceEdge::Left => {
+                context.move_to(0.0, 0.0);
+                context.line_to(width, height / 2.0);
+                context.line_to(0.0, height);
+            }
+            WorkspaceEdge::Right => {
+                context.move_to(width, 0.0);
+                context.line_to(0.0, height / 2.0);
+                context.line_to(width, height);
+            }
+            WorkspaceEdge::Top => {
+                context.move_to(0.0, height);
+                context.line_to(width / 2.0, 0.0);
+                context.line_to(width, height);
+            }
+            WorkspaceEdge::Bottom => {
+                context.move_to(0.0, 0.0);
+                context.line_to(width / 2.0, height);
+                context.line_to(width, 0.0);
+            }
         }
         context.close_path();
         context.set_source_rgb(0.78, 0.78, 0.78);

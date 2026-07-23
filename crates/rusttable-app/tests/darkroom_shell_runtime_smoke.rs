@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
-use rusttable_ui::gtk_shell::{GtkShell, WorkspaceRole};
+use rusttable_ui::gtk_shell::{DARKTABLE_DESKTOP_SPEC, GtkShell, WorkspaceRole};
 use rusttable_ui::{
     CollectionControlState, CollectionFilterState, CollectionProperty, HistogramData,
     LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableToolbarState,
@@ -430,7 +430,7 @@ fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
     assert_right_rail_geometry(&root);
     assert_filmstrip_rendering(&root);
     assert_right_rail_resize(&root);
-    assert_outer_edge_controls(&root);
+    assert_frame_edge_controls(&root);
 }
 
 fn assert_navigation_rendering(root: &gtk4::Widget) {
@@ -721,7 +721,101 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
     );
 }
 
-fn assert_outer_edge_controls(root: &gtk4::Widget) {
+fn assert_frame_edge_controls(root: &gtk4::Widget) {
+    let border = i32::from(DARKTABLE_DESKTOP_SPEC.layout.outer_border_px);
+    let frame = find_widget(root, "workspace-frame").expect("workspace frame");
+    let frame_width = frame.allocated_width();
+    let frame_height = frame.allocated_height();
+    assert!(frame_width > 0 && frame_height > 0);
+
+    for (toggle_id, horizontal) in [
+        ("workspace-left-edge-toggle", false),
+        ("workspace-right-edge-toggle", false),
+        ("workspace-top-edge-toggle", true),
+        ("workspace-bottom-edge-toggle", true),
+    ] {
+        let toggle = find_widget(root, toggle_id)
+            .expect("frame panel affordance")
+            .downcast::<gtk4::Button>()
+            .expect("frame panel affordance is a button");
+        assert!(
+            toggle.is_visible()
+                && toggle.is_mapped()
+                && toggle.allocated_width() > 0
+                && toggle.allocated_height() > 0,
+            "{toggle_id} must paint on the workspace frame"
+        );
+        if horizontal {
+            assert_eq!(
+                toggle.allocated_height(),
+                border,
+                "{toggle_id} must consume exactly the horizontal frame edge"
+            );
+            assert_eq!(toggle.allocated_width(), 28);
+        } else {
+            assert_eq!(
+                toggle.allocated_width(),
+                border,
+                "{toggle_id} must consume exactly the vertical frame edge"
+            );
+            assert_eq!(toggle.allocated_height(), 28);
+        }
+        let child = toggle.first_child().expect("frame toggle glyph");
+        assert!(
+            child.is_visible()
+                && child.is_mapped()
+                && child.allocated_width() > 0
+                && child.allocated_height() > 0,
+            "{toggle_id} must paint its directional glyph"
+        );
+    }
+
+    for (toggle_id, expected_width, expected_height) in [
+        ("workspace-left-edge-toggle", 4, 10),
+        ("workspace-right-edge-toggle", 4, 10),
+        ("workspace-top-edge-toggle", 10, 4),
+        ("workspace-bottom-edge-toggle", 10, 4),
+    ] {
+        let glyph = find_widget(root, toggle_id)
+            .expect("frame toggle")
+            .first_child()
+            .expect("frame toggle glyph");
+        assert_eq!(glyph.allocated_width(), expected_width);
+        assert_eq!(glyph.allocated_height(), expected_height);
+    }
+
+    let left_bounds = find_widget(root, "workspace-left-edge-toggle")
+        .expect("left frame toggle")
+        .compute_bounds(&frame)
+        .expect("left frame bounds");
+    let right_bounds = find_widget(root, "workspace-right-edge-toggle")
+        .expect("right frame toggle")
+        .compute_bounds(&frame)
+        .expect("right frame bounds");
+    let top_bounds = find_widget(root, "workspace-top-edge-toggle")
+        .expect("top frame toggle")
+        .compute_bounds(&frame)
+        .expect("top frame bounds");
+    let bottom_bounds = find_widget(root, "workspace-bottom-edge-toggle")
+        .expect("bottom frame toggle")
+        .compute_bounds(&frame)
+        .expect("bottom frame bounds");
+    assert_eq!(left_bounds.x(), 0.0);
+    assert_eq!(right_bounds.x() + right_bounds.width(), frame_width as f32);
+    assert_eq!(top_bounds.y(), 0.0);
+    assert_eq!(
+        bottom_bounds.y() + bottom_bounds.height(),
+        frame_height as f32
+    );
+    assert!(
+        ((top_bounds.x() * 2.0 + top_bounds.width()) - frame_width as f32).abs() <= 1.0,
+        "top control must stay horizontally centered"
+    );
+    assert!(
+        ((bottom_bounds.x() * 2.0 + bottom_bounds.width()) - frame_width as f32).abs() <= 1.0,
+        "bottom control must stay horizontally centered"
+    );
+
     for (toggle_id, panel_id) in [
         ("workspace-left-edge-toggle", "darkroom-left-panel"),
         ("workspace-right-edge-toggle", "darkroom-right-panel"),
@@ -749,6 +843,35 @@ fn assert_outer_edge_controls(root: &gtk4::Widget) {
             || format!("{panel_id} did not expand"),
         );
     }
+
+    let top = find_widget(root, "workspace-top-edge-toggle")
+        .expect("top panel affordance")
+        .downcast::<gtk4::Button>()
+        .expect("top panel affordance is a button");
+    let header = find_widget(root, "header").expect("header panel");
+    top.emit_clicked();
+    settle_gtk_until(|| !header.is_visible(), || "header did not collapse".into());
+    top.emit_clicked();
+    settle_gtk_until(
+        || header.is_visible() && header.is_mapped(),
+        || "header did not expand".into(),
+    );
+
+    let bottom = find_widget(root, "workspace-bottom-edge-toggle")
+        .expect("bottom panel affordance")
+        .downcast::<gtk4::Button>()
+        .expect("bottom panel affordance is a button");
+    let filmstrip = find_widget(root, "filmstrip").expect("filmstrip panel");
+    bottom.emit_clicked();
+    settle_gtk_until(
+        || !filmstrip.is_visible(),
+        || "filmstrip did not collapse".into(),
+    );
+    bottom.emit_clicked();
+    settle_gtk_until(
+        || filmstrip.is_visible() && filmstrip.is_mapped(),
+        || "filmstrip did not expand".into(),
+    );
 }
 
 fn assert_histogram_chart_paints(root: &gtk4::Widget, chart: &gtk4::Widget) {

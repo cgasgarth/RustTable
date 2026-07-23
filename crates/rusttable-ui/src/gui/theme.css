@@ -591,6 +591,13 @@ expander:hover {
   font-size: {{compact_font_pt}}pt;
 }
 
+.dt_import_actions > button {
+  min-width: 0;
+  padding-left: 2px;
+  padding-right: 2px;
+  font-size: {{compact_font_pt}}pt;
+}
+
 #darkroom-profile-diagnostic {
   min-width: 0;
   min-height: {{status_height}}px;
@@ -776,8 +783,6 @@ scale:focus-visible {
 
 .dt_edge_toggle,
 .dt_edge_toggle:hover {
-  min-width: {{outer_border_width}}px;
-  min-height: 28px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -787,6 +792,16 @@ scale:focus-visible {
   box-shadow: none;
   color: #f4f4f4ff;
   font-size: 8px;
+}
+
+.dt_edge_toggle_vertical {
+  min-width: {{outer_border_width}}px;
+  min-height: 28px;
+}
+
+.dt_edge_toggle_horizontal {
+  min-width: 28px;
+  min-height: {{outer_border_width}}px;
 }
 
 #darkroom-left-panel expander,
