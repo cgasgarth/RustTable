@@ -4105,6 +4105,7 @@ dependencies = [
 name = "rusttable-color"
 version = "0.1.0"
 dependencies = [
+ "md5",
  "postcard",
  "rusttable-core",
  "serde",

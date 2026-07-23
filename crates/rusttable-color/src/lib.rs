@@ -22,7 +22,12 @@ pub use conversions::{
 pub use matrix::{Matrix3, MatrixError};
 pub use planner::{BuiltinColorTransformPlanner, ColorTransformPlanner, PlannerError};
 pub use profile::{
-    Pcs, ProfileClass, ProfileId, ProfileIdError, ProfileModel, ProfileParserVersion,
+    ICC_PROFILE_PARSER_VERSION, IccByteIdentity, IccCicp, IccClut, IccColorSpace, IccCurve,
+    IccDateTime, IccDescription, IccHeader, IccLocalizedString, IccLut, IccLutDirection,
+    IccMultiStageLut, IccOpaqueTag, IccParametricCurve, IccParseError, IccParseErrorKind,
+    IccProfile, IccProfileIdentity, IccProfileLimits, IccRenderingIntent, IccSemanticIdentity,
+    IccSignature, IccTag, IccTagValue, IccVersion, IccViewingCondition, IccXyz, Pcs, ProfileClass,
+    ProfileId, ProfileIdError, ProfileModel, ProfileParserVersion, parse_icc_profile,
 };
 pub use rusttable_core::numerics::NonFinitePolicy;
 pub use scalar::{FiniteF32, FiniteF32Error};
