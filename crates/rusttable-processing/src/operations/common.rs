@@ -144,6 +144,7 @@ fn tea_word(seed: u64, counter: u64) -> u32 {
 pub enum OperationExecutionError {
     Cancelled,
     MemoryBudgetExceeded { required: usize, budget: usize },
+    AllocationFailed { required: usize },
     DimensionsMismatch { expected: usize, actual: usize },
     NonFiniteResult { pixel: usize, channel: RgbChannel },
     NoReconstructionEvidence,
@@ -159,6 +160,12 @@ impl fmt::Display for OperationExecutionError {
                 write!(
                     formatter,
                     "operation requires {required} bytes, budget is {budget}"
+                )
+            }
+            Self::AllocationFailed { required } => {
+                write!(
+                    formatter,
+                    "operation could not allocate a required {required}-byte buffer"
                 )
             }
             Self::DimensionsMismatch { expected, actual } => {

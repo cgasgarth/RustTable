@@ -1,15 +1,19 @@
 use super::{
-    BILATERAL_RANGE_SIGMA, LAB_MAXIMUM, LAB_MINIMUM, MAX_BILATERAL_SUPPORT, ShadhiAlgorithm,
-    ShadhiConfig, UNBOUND_BILATERAL, UNBOUND_GAUSSIAN, UNBOUND_HIGHLIGHTS_A, UNBOUND_HIGHLIGHTS_B,
-    UNBOUND_HIGHLIGHTS_L, UNBOUND_L, UNBOUND_SHADOWS_A, UNBOUND_SHADOWS_B, UNBOUND_SHADOWS_L,
+    LAB_MAXIMUM, LAB_MINIMUM, ShadhiAlgorithm, ShadhiConfig, UNBOUND_BILATERAL, UNBOUND_GAUSSIAN,
+    UNBOUND_HIGHLIGHTS_A, UNBOUND_HIGHLIGHTS_B, UNBOUND_HIGHLIGHTS_L, UNBOUND_L, UNBOUND_SHADOWS_A,
+    UNBOUND_SHADOWS_B, UNBOUND_SHADOWS_L,
 };
 use sha2::{Digest, Sha256};
+use std::mem::size_of;
 
+use crate::common::bilateral::{BilateralError, BilateralGrid};
 use crate::operations::common::{
     OperationExecutionError, ReconstructionBudget, checked_bytes, validate_shape,
 };
 use crate::operations::convolution::{BoundedGaussianError, bounded_gaussian_4c_order};
 use crate::{FiniteF32, LinearRgb, RasterDimensions};
+
+const SHADHI_WORKING_BUFFERS: usize = 8;
 
 /// Four-channel D50 Lab sample in Darktable's native scale: L in 0..100,
 /// a/b in -128..128, and an opaque spare/alpha channel in 0..1.
@@ -84,16 +88,33 @@ impl ShadhiPlan {
     ) -> Result<Self, OperationExecutionError> {
         let sigma = config.radius().max(0.1);
         let overlap = (4.0 * sigma).ceil().min(256.0) as u32;
-        checked_bytes(
-            usize::try_from(dimensions.pixel_count()).map_err(|_| {
+        let budget = ReconstructionBudget::default();
+        let pixel_count = usize::try_from(dimensions.pixel_count()).map_err(|_| {
+            OperationExecutionError::MemoryBudgetExceeded {
+                required: usize::MAX,
+                budget: budget.maximum_bytes(),
+            }
+        })?;
+        checked_bytes(pixel_count, SHADHI_WORKING_BUFFERS, budget)?;
+        if config.shadhi_algo() == ShadhiAlgorithm::Bilateral {
+            let width = usize::try_from(dimensions.width()).expect("validated width");
+            let height = usize::try_from(dimensions.height()).expect("validated height");
+            let grid_bytes = BilateralGrid::required_memory_bytes(width, height, sigma, 100.0)
+                .map_err(map_bilateral_error)?;
+            let base_bytes = shadhi_base_memory_bytes(pixel_count, budget)?;
+            let required = base_bytes.checked_add(grid_bytes).ok_or(
                 OperationExecutionError::MemoryBudgetExceeded {
                     required: usize::MAX,
-                    budget: ReconstructionBudget::default().maximum_bytes(),
-                }
-            })?,
-            8,
-            ReconstructionBudget::default(),
-        )?;
+                    budget: budget.maximum_bytes(),
+                },
+            )?;
+            if required > budget.maximum_bytes() {
+                return Err(OperationExecutionError::MemoryBudgetExceeded {
+                    required,
+                    budget: budget.maximum_bytes(),
+                });
+            }
+        }
         let analysis_identity = digest_plan(config, dimensions, sigma, overlap);
         Ok(Self {
             config,
@@ -234,16 +255,26 @@ impl ShadhiPlan {
                 .map(|values| values.into_iter().map(ShadhiPixel::from_channels).collect())
                 .map_err(map_filter_error)
             }
-            ShadhiAlgorithm::Bilateral => bilateral_filter(
-                &channels,
-                self.dimensions,
-                self.sigma,
-                self.config.flags(),
-                cancelled,
-            )
-            .map(|values| values.into_iter().map(ShadhiPixel::from_channels).collect()),
+            ShadhiAlgorithm::Bilateral => {
+                bilateral_filter(&channels, self.dimensions, self.sigma, cancelled)
+                    .map(|values| values.into_iter().map(ShadhiPixel::from_channels).collect())
+            }
         }
     }
+}
+
+fn shadhi_base_memory_bytes(
+    pixel_count: usize,
+    budget: ReconstructionBudget,
+) -> Result<usize, OperationExecutionError> {
+    pixel_count
+        .checked_mul(SHADHI_WORKING_BUFFERS)
+        .and_then(|value| value.checked_mul(size_of::<LinearRgb>()))
+        .and_then(|value| value.checked_add(pixel_count.saturating_mul(16)))
+        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            required: usize::MAX,
+            budget: budget.maximum_bytes(),
+        })
 }
 
 fn mix_lab(source: ShadhiPixel, base: ShadhiPixel, config: ShadhiConfig) -> ShadhiPixel {
@@ -419,53 +450,17 @@ fn bilateral_filter<F: FnMut() -> bool>(
     input: &[[f32; 4]],
     dimensions: RasterDimensions,
     sigma: f32,
-    flags: u32,
     cancelled: &mut F,
 ) -> Result<Vec<[f32; 4]>, OperationExecutionError> {
     let width = usize::try_from(dimensions.width()).expect("validated width");
     let height = usize::try_from(dimensions.height()).expect("validated height");
-    let support = (4.0 * sigma).ceil() as i32;
-    let support = support.clamp(1, MAX_BILATERAL_SUPPORT);
-    let (minimum, maximum) = bounds(flags, false);
-    let mut output = Vec::with_capacity(input.len());
-    let width_i64 = i64::try_from(width).expect("width fits signed coordinate");
-    let height_i64 = i64::try_from(height).expect("height fits signed coordinate");
-    for y in 0..height {
-        if cancelled() {
-            return Err(OperationExecutionError::Cancelled);
-        }
-        for x in 0..width {
-            let center = input[y * width + x];
-            let mut total = [0.0; 4];
-            let mut weights = 0.0;
-            for dy in -support..=support {
-                for dx in -support..=support {
-                    let x_i64 = i64::try_from(x).expect("x fits signed coordinate");
-                    let y_i64 = i64::try_from(y).expect("y fits signed coordinate");
-                    let sample_x = (x_i64 + i64::from(dx)).clamp(0, width_i64 - 1) as usize;
-                    let sample_y = (y_i64 + i64::from(dy)).clamp(0, height_i64 - 1) as usize;
-                    let sample = input[sample_y * width + sample_x];
-                    let spatial = ((dx * dx + dy * dy) as f32 / (2.0 * sigma * sigma)).exp();
-                    let range = ((0..3)
-                        .map(|channel| {
-                            let delta = sample[channel] - center[channel];
-                            delta * delta
-                        })
-                        .sum::<f32>()
-                        / (2.0 * BILATERAL_RANGE_SIGMA * BILATERAL_RANGE_SIGMA))
-                        .exp();
-                    let weight = spatial * range;
-                    for channel in 0..4 {
-                        total[channel] +=
-                            sample[channel].clamp(minimum[channel], maximum[channel]) * weight;
-                    }
-                    weights += weight;
-                }
-            }
-            output.push(std::array::from_fn(|channel| total[channel] / weights));
-        }
-    }
-    Ok(output)
+    let mut grid = BilateralGrid::new(width, height, sigma, 100.0).map_err(map_bilateral_error)?;
+    grid.splat_with_cancel(input, cancelled)
+        .map_err(map_bilateral_error)?;
+    grid.blur_with_cancel(cancelled)
+        .map_err(map_bilateral_error)?;
+    grid.slice_with_cancel(input, -1.0, cancelled)
+        .map_err(map_bilateral_error)
 }
 
 fn blend_pixel(
@@ -541,6 +536,37 @@ fn map_filter_error(error: BoundedGaussianError) -> OperationExecutionError {
         BoundedGaussianError::Dimensions => OperationExecutionError::DimensionsMismatch {
             expected: 0,
             actual: 0,
+        },
+    }
+}
+
+fn map_bilateral_error(error: BilateralError) -> OperationExecutionError {
+    match error {
+        BilateralError::Cancelled => OperationExecutionError::Cancelled,
+        BilateralError::BufferShape { expected, actual } => {
+            OperationExecutionError::DimensionsMismatch { expected, actual }
+        }
+        BilateralError::AllocationFailed { required_bytes } => {
+            OperationExecutionError::AllocationFailed {
+                required: required_bytes,
+            }
+        }
+        BilateralError::SizeOverflow => OperationExecutionError::MemoryBudgetExceeded {
+            required: usize::MAX,
+            budget: ReconstructionBudget::default().maximum_bytes(),
+        },
+        BilateralError::InvalidDimensions => OperationExecutionError::DimensionsMismatch {
+            expected: 1,
+            actual: 0,
+        },
+        BilateralError::InvalidParameter(_) => OperationExecutionError::NonFiniteResult {
+            pixel: 0,
+            channel: crate::RgbChannel::Red,
+        },
+        BilateralError::NonFiniteLightness { pixel }
+        | BilateralError::NonFiniteOutput { pixel } => OperationExecutionError::NonFiniteResult {
+            pixel,
+            channel: crate::RgbChannel::Red,
         },
     }
 }

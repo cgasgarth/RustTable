@@ -27,6 +27,14 @@ fn pixel(red: f32, green: f32, blue: f32) -> LinearRgb {
     )
 }
 
+fn assert_close(actual: f32, expected: f32) {
+    let tolerance = 16.0 * f32::EPSILON * expected.abs().max(1.0);
+    assert!(
+        (actual - expected).abs() <= tolerance,
+        "expected {expected}, got {actual} (tolerance {tolerance})"
+    );
+}
+
 fn gaussian_config() -> ShadhiConfig {
     ShadhiConfig::new(ShadhiParametersV5 {
         shadhi_algo: ShadhiAlgorithm::Gaussian.id(),
@@ -117,6 +125,93 @@ fn lab_plan_executes_both_algorithms_and_is_deterministic() {
             .iter()
             .flat_map(|pixel| pixel.channels())
             .all(f32::is_finite)
+    );
+}
+
+#[test]
+fn bilateral_plan_routes_the_darktable_grid_base_layer() {
+    let dimensions = RasterDimensions::new(3, 2).expect("dimensions");
+    let input = [
+        [10.0, -15.0, 22.0, 0.10],
+        [24.0, 18.0, -9.0, 0.20],
+        [41.0, 5.0, 13.0, 0.30],
+        [57.0, -4.0, -21.0, 0.40],
+        [73.0, 27.0, 2.0, 0.50],
+        [91.0, -31.0, 7.0, 0.60],
+    ]
+    .map(ShadhiPixel::from_channels);
+    let config = ShadhiConfig::new(ShadhiParametersV5 {
+        radius: 1.0,
+        ..ShadhiParametersV5::defaults()
+    })
+    .expect("bilateral config");
+    let plan = ShadhiPlan::new(config, dimensions).expect("bilateral plan");
+    let output = plan
+        .execute_lab(&input, None, 1.0, || false)
+        .expect("bilateral execution");
+    let expected_lightness = [
+        15.150_055, 29.017_86, 42.203_65, 56.430_5, 68.676_796, 85.924_04,
+    ];
+    for ((actual, source), expected) in output.iter().zip(&input).zip(expected_lightness) {
+        let actual = actual.channels();
+        let source = source.channels();
+        assert_close(actual[0], expected);
+        assert_close(actual[1], source[1]);
+        assert_close(actual[2], source[2]);
+        assert_eq!(
+            actual[3], source[3],
+            "alpha/spare must pass through the grid route"
+        );
+    }
+
+    let mut cancellation_polls = 0;
+    let cancelled = plan.execute_lab(&input, None, 1.0, || {
+        cancellation_polls += 1;
+        cancellation_polls > 1
+    });
+    assert!(matches!(
+        cancelled,
+        Err(rusttable_processing::operations::OperationExecutionError::Cancelled)
+    ));
+    assert!(
+        cancellation_polls > 1,
+        "cancellation must be polled inside the bilateral grid sequence"
+    );
+}
+
+#[test]
+fn bilateral_plan_rejects_combined_base_and_grid_memory() {
+    let dimensions = RasterDimensions::new(2_000, 2_000).expect("dimensions");
+    let gaussian = ShadhiConfig::new(ShadhiParametersV5 {
+        radius: 0.1,
+        shadhi_algo: ShadhiAlgorithm::Gaussian.id(),
+        ..ShadhiParametersV5::defaults()
+    })
+    .expect("Gaussian config");
+    ShadhiPlan::new(gaussian, dimensions).expect("base buffers fit the default budget");
+
+    let bilateral = ShadhiConfig::new(ShadhiParametersV5 {
+        radius: 0.1,
+        ..ShadhiParametersV5::defaults()
+    })
+    .expect("bilateral config");
+    let error = ShadhiPlan::new(bilateral, dimensions)
+        .expect_err("base plus bilateral grid exceeds budget");
+    let rusttable_processing::operations::OperationExecutionError::MemoryBudgetExceeded {
+        required,
+        budget,
+    } = error
+    else {
+        panic!("unexpected plan error: {error}");
+    };
+    assert!(required > budget);
+
+    let allocation = rusttable_processing::operations::OperationExecutionError::AllocationFailed {
+        required: 4_096,
+    };
+    assert_eq!(
+        allocation.to_string(),
+        "operation could not allocate a required 4096-byte buffer"
     );
 }
 

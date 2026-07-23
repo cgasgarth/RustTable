@@ -17,6 +17,7 @@
 #![doc = "```"]
 
 mod color;
+pub mod common;
 pub mod defringe_compatibility;
 pub mod demosaic;
 pub mod descriptor;
