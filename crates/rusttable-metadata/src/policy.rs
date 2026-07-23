@@ -84,6 +84,9 @@ impl CanonicalMetadataPolicy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MetadataSource {
+    Exif,
+    Iptc,
+    Xmp,
     Imported,
     CatalogEdit,
     RecipeOverride,
@@ -94,7 +97,7 @@ impl MetadataSource {
     #[must_use]
     pub const fn precedence(self) -> u8 {
         match self {
-            Self::Imported => 0,
+            Self::Exif | Self::Iptc | Self::Xmp | Self::Imported => 0,
             Self::CatalogEdit => 1,
             Self::RecipeOverride => 2,
             Self::GeneratedTechnical => 3,
