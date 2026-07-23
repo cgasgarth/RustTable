@@ -17,7 +17,7 @@ window,
 }
 
 #header {
-  min-height: {{header_height}}px;
+  min-height: {{header_content_height}}px;
   padding: 0 3px;
   border-bottom: 1px solid {{border}};
 }
@@ -31,7 +31,7 @@ window,
 
 #header-left {
   min-width: 140px;
-  padding: 2px 7px 2px 2px;
+  padding: 0 7px 0 2px;
   margin: 0;
 }
 

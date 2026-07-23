@@ -210,7 +210,7 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
     assert!(header.contains("header_height.saturating_sub(HEADER_VIEWPORT_CHROME_PX)"));
     assert!(header.contains(".min_content_height(content_height)"));
     assert!(header.contains(".max_content_height(content_height)"));
-    assert!(header.contains(".propagate_natural_height(true)"));
+    assert!(header.contains(".propagate_natural_height(false)"));
     assert!(header.contains(".has_frame(false)"));
 }
 

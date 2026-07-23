@@ -145,6 +145,10 @@ pub fn darktable_theme_css() -> String {
             i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px),
         ),
         (
+            "{{header_content_height}}",
+            i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px) - 5,
+        ),
+        (
             "{{lighttable_toolbar_height}}",
             i32::from(LIGHTTABLE_COMPOSITION.top_toolbar_height_px),
         ),

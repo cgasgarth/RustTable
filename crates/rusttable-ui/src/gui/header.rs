@@ -10,7 +10,7 @@ use super::{
 };
 
 /// Native GTK scrolled-window chrome outside its content-height allocation.
-const HEADER_VIEWPORT_CHROME_PX: i32 = 2;
+const HEADER_VIEWPORT_CHROME_PX: i32 = 5;
 
 #[cfg(test)]
 const HEADER_WIDGET_IDS: [&str; 7] = [
@@ -56,6 +56,7 @@ impl HeaderChrome {
         // natural height behind the exact visual-contract allocation.
         let header_height = i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px);
         let content_height = header_height.saturating_sub(HEADER_VIEWPORT_CHROME_PX);
+        root.set_height_request(content_height);
         let surface = gtk4::ScrolledWindow::builder()
             .child(&root)
             .has_frame(false)
@@ -63,11 +64,11 @@ impl HeaderChrome {
             .vscrollbar_policy(gtk4::PolicyType::Never)
             .min_content_height(content_height)
             .max_content_height(content_height)
-            // GTK only applies max-content-height to the natural request when
-            // propagation is enabled. The viewport adds its measured 2 px
-            // requisition after this content allocation.
-            .propagate_natural_height(true)
+            // Do not propagate the child's larger natural height: Darktable
+            // clips its product chrome to the fixed header allocation.
+            .propagate_natural_height(false)
             .build();
+        surface.set_height_request(header_height);
         surface.set_widget_name("header-clip");
         surface.set_vexpand(false);
 
