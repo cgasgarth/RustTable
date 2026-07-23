@@ -77,7 +77,7 @@ pub struct GtkShell {
     darkroom_preview: PhotoPreview,
     export_panel: ExportPanel,
     external_editor_panel: ExternalEditorPanel,
-    header_root: gtk4::Box,
+    header_root: gtk4::ScrolledWindow,
     filmstrip: gtk4::FlowBox,
     filmstrip_root: gtk4::Box,
     lighttable_layout_controls: super::LighttableLayoutControls,

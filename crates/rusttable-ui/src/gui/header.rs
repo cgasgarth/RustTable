@@ -9,6 +9,9 @@ use super::{
     DARKTABLE_DESKTOP_SPEC, PanelSlot, ShellRegion, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 
+/// Native GTK scrolled-window chrome outside its content-height allocation.
+const HEADER_VIEWPORT_CHROME_PX: i32 = 2;
+
 #[cfg(test)]
 const HEADER_WIDGET_IDS: [&str; 7] = [
     "header",
@@ -22,7 +25,7 @@ const HEADER_WIDGET_IDS: [&str; 7] = [
 
 /// Widgets and actions owned by the persistent top panel.
 pub(super) struct HeaderChrome {
-    root: gtk4::Box,
+    surface: gtk4::ScrolledWindow,
     preferences: gtk4::Button,
     import: gtk4::Button,
 }
@@ -35,7 +38,6 @@ impl HeaderChrome {
     ) -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         root.set_widget_name(ShellRegion::Header.identifier());
-        root.set_height_request(i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px));
         root.set_vexpand(false);
         apply_theme_role(&root, ThemeRole::Header);
 
@@ -48,15 +50,36 @@ impl HeaderChrome {
         root.append(&center);
         root.append(&mode_switcher(workspace, i18n));
 
+        // A GTK height request is only a minimum. The stacked brand labels and
+        // native button metrics otherwise make the shared header taller than
+        // Darktable's fixed product chrome in both workspaces. Clip that
+        // natural height behind the exact visual-contract allocation.
+        let header_height = i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px);
+        let content_height = header_height.saturating_sub(HEADER_VIEWPORT_CHROME_PX);
+        let surface = gtk4::ScrolledWindow::builder()
+            .child(&root)
+            .has_frame(false)
+            .hscrollbar_policy(gtk4::PolicyType::Never)
+            .vscrollbar_policy(gtk4::PolicyType::Never)
+            .min_content_height(content_height)
+            .max_content_height(content_height)
+            // GTK only applies max-content-height to the natural request when
+            // propagation is enabled. The viewport adds its measured 2 px
+            // requisition after this content allocation.
+            .propagate_natural_height(true)
+            .build();
+        surface.set_widget_name("header-clip");
+        surface.set_vexpand(false);
+
         Self {
-            root,
+            surface,
             preferences,
             import,
         }
     }
 
-    pub(super) const fn widget(&self) -> &gtk4::Box {
-        &self.root
+    pub(super) const fn widget(&self) -> &gtk4::ScrolledWindow {
+        &self.surface
     }
 
     pub(super) const fn preferences_button(&self) -> &gtk4::Button {
