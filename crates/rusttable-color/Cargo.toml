@@ -7,6 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+md5.workspace = true
 postcard.workspace = true
 rusttable-core.workspace = true
 serde.workspace = true
