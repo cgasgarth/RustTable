@@ -58,6 +58,7 @@ fn settle_gtk() {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget) {
     assert_eq!(shell.darkroom_panel_target(), Some(expected));
     let root: gtk4::Widget = shell.window().clone().upcast();
@@ -69,16 +70,40 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
     let content = scroll.child().expect("darkroom left-rail content");
     let modules = find_widget(&content, "darkroom-left-modules").expect("darkroom left modules");
     let direct_children = child_names(&modules);
+    assert_eq!(
+        &direct_children[..5],
+        [
+            "darkroom-navigation",
+            "darkroom-image-information",
+            "darkroom-history",
+            "darkroom-snapshots",
+            "darkroom-left-controller-modules",
+        ],
+        "left rail must follow Darktable container positions"
+    );
     for id in [
-        "darkroom-navigation",
-        "darkroom-snapshots",
-        "darkroom-history",
         "darkroom-image-information",
+        "darkroom-history",
+        "darkroom-snapshots",
+    ] {
+        find_widget(&rail, id)
+            .expect("resizable left-center module")
+            .downcast::<gtk4::Expander>()
+            .expect("left-center module expander")
+            .set_expanded(true);
+    }
+    settle_gtk();
+    for id in [
+        "darkroom-navigation-preview",
+        "darkroom-image-information-list",
+        "darkroom-history-list",
+        "darkroom-snapshots-list",
         "darkroom-left-controller-modules",
     ] {
         assert!(
-            direct_children.iter().any(|name| name == id),
-            "left rail lost existing section {id}: {direct_children:?}"
+            find_widget(&rail, id).is_some(),
+            "left rail lost existing surface {id}: {:?}",
+            descendant_names(&rail)
         );
     }
     for id in [
@@ -109,19 +134,28 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
     }
     for id in [
         "darkroom-navigation",
-        "darkroom-snapshots",
-        "darkroom-history",
         "darkroom-image-information",
+        "darkroom-history",
+        "darkroom-snapshots",
     ] {
         let expected_title = id
             .strip_prefix("darkroom-")
             .expect("darkroom section id")
             .replace('-', " ");
-        let expander = find_widget(&rail, id)
-            .expect("left-rail section")
-            .downcast::<gtk4::Expander>()
-            .expect("left-rail section expander");
-        let title_row = expander.label_widget().expect("section title row");
+        let section = find_widget(&rail, id).expect("left-rail section");
+        let title_row = if id == "darkroom-navigation" {
+            assert!(
+                !section.is::<gtk4::Expander>(),
+                "Darktable navigation is fixed and must not expose a disclosure arrow"
+            );
+            find_widget(&section, &format!("{id}-title")).expect("fixed navigation title row")
+        } else {
+            section
+                .downcast::<gtk4::Expander>()
+                .expect("left-center section expander")
+                .label_widget()
+                .expect("section title row")
+        };
         let title_label = find_widget(&title_row, &format!("{id}-label"))
             .expect("section title label")
             .downcast::<gtk4::Label>()
@@ -151,6 +185,13 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
             "section lost action affordance {id}"
         );
     }
+    let navigation_preview =
+        find_widget(&rail, "darkroom-navigation-preview").expect("navigation preview");
+    assert_eq!(
+        navigation_preview.height_request(),
+        200,
+        "navigation uses Darktable's configured default graph height"
+    );
     assert!(matches!(
         shell.darkroom_preview().selection_state(),
         DarkroomSelectionState::Selected(photo_id) if photo_id == expected.photo_id()
@@ -163,6 +204,16 @@ fn child_names(widget: &gtk4::Widget) -> Vec<String> {
     let mut child = widget.first_child();
     while let Some(current) = child {
         names.push(current.widget_name().to_string());
+        child = current.next_sibling();
+    }
+    names
+}
+
+fn descendant_names(widget: &gtk4::Widget) -> Vec<String> {
+    let mut names = vec![widget.widget_name().to_string()];
+    let mut child = widget.first_child();
+    while let Some(current) = child {
+        names.extend(descendant_names(&current));
         child = current.next_sibling();
     }
     names

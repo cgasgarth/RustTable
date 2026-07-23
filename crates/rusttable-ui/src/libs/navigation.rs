@@ -11,10 +11,10 @@ use crate::gui::{
 
 #[cfg(test)]
 const LIGHTTABLE_LEFT_MODULE_IDS: [&str; 5] = [
-    "import",
-    "collections",
-    "collection-filters",
     "image-information",
+    "collection-filters",
+    "collections",
+    "import",
     "scripts",
 ];
 
@@ -35,19 +35,19 @@ impl LeftPanel {
 
         let top = panel_slot(PanelSlot::LeftTop);
         let modules = panel_slot(PanelSlot::LeftCenter);
-        let import = import_module(i18n);
-        modules.append(&import.0);
-        modules.append(&module_separator("import-collections"));
+        modules.append(&image_information());
+        modules.append(&module_separator("information-filters"));
+        modules.append(&collection_filters());
+        modules.append(&module_separator("filters-collections"));
         modules.append(&module_with_child(
             "collections",
             "collections",
             collection_controls.widget(),
             true,
         ));
-        modules.append(&module_separator("collections-filters"));
-        modules.append(&collection_filters());
-        modules.append(&module_separator("filters-information"));
-        modules.append(&image_information());
+        modules.append(&module_separator("collections-import"));
+        let import = import_module(i18n);
+        modules.append(&import.0);
 
         let scroll = gtk4::ScrolledWindow::builder()
             .child(&modules)
@@ -207,10 +207,10 @@ mod tests {
         assert_eq!(
             LIGHTTABLE_LEFT_MODULE_IDS,
             [
-                "import",
-                "collections",
-                "collection-filters",
                 "image-information",
+                "collection-filters",
+                "collections",
+                "import",
                 "scripts",
             ]
         );

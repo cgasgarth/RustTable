@@ -32,6 +32,14 @@ use crate::viewport_presentation::{DarkroomViewportState, NavigationCrop};
 use crate::widgets::thumbnail::ThumbnailSurface;
 use crate::{MaskManagerPanel, MultiscaleRetouchPanel};
 
+const NAVIGATION_DEFAULT_HEIGHT: i32 = 200;
+const NAVIGATION_MIN_HEIGHT: i32 = 100;
+const NAVIGATION_MAX_HEIGHT: i32 = 300;
+const SNAPSHOTS_DEFAULT_HEIGHT: i32 = 200;
+const HISTORY_DEFAULT_HEIGHT: i32 = 1_000;
+const IMAGE_INFORMATION_DEFAULT_HEIGHT: i32 = 1_000;
+const RESIZE_HANDLE_HEIGHT: i32 = 6;
+
 #[derive(Clone)]
 pub(super) struct ImplementedModulePanel {
     id: &'static str,
@@ -103,12 +111,22 @@ pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatu
     let snapshots = build_snapshots_panel(&snapshots_projection, None);
     let history = build_history_panel(&history_projection, None);
     let image_information = build_image_information_panel(&image_projection);
-    let snapshots_body = projection_body(&snapshots);
-    let history_body = projection_body(&history);
-    let image_information_body = projection_body(&image_information);
-    for module in [navigation, snapshots, history, image_information] {
-        modules.append(&module);
-    }
+    let snapshots_body = make_projection_resizable(
+        &snapshots,
+        "darkroom-snapshots-list",
+        SNAPSHOTS_DEFAULT_HEIGHT,
+    );
+    let history_body =
+        make_projection_resizable(&history, "darkroom-history-list", HISTORY_DEFAULT_HEIGHT);
+    let image_information_body = make_projection_resizable(
+        &image_information,
+        "darkroom-image-information-list",
+        IMAGE_INFORMATION_DEFAULT_HEIGHT,
+    );
+    modules.append(&navigation);
+    modules.append(&image_information);
+    modules.append(&history);
+    modules.append(&snapshots);
     let controller_modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     controller_modules.set_widget_name("darkroom-left-controller-modules");
     modules.append(&controller_modules);
@@ -131,6 +149,36 @@ fn projection_body(expander: &gtk4::Expander) -> gtk4::Box {
     child
         .downcast::<gtk4::Box>()
         .expect("panel projection body is a GTK box")
+}
+
+fn make_projection_resizable(
+    expander: &gtk4::Expander,
+    id: &str,
+    default_height: i32,
+) -> gtk4::Box {
+    let source = projection_body(expander);
+    let slot = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    while let Some(child) = source.first_child() {
+        child.unparent();
+        slot.append(&child);
+    }
+    let scroll = gtk4::ScrolledWindow::builder()
+        .child(&slot)
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .vscrollbar_policy(gtk4::PolicyType::Automatic)
+        .max_content_height(default_height)
+        .propagate_natural_height(true)
+        .overlay_scrolling(false)
+        .build();
+    scroll.set_widget_name(id);
+    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    content.append(&scroll);
+    let scroll_for_resize = scroll.clone();
+    content.append(&resize_handle(default_height, 1, 1_000, move |height| {
+        scroll_for_resize.set_max_content_height(height);
+    }));
+    expander.set_child(Some(&content));
+    slot
 }
 
 #[allow(clippy::too_many_lines)]
@@ -564,15 +612,19 @@ pub(super) struct NavigationPreview {
     zoom: gtk4::Label,
 }
 
-fn navigation_module(width: i32) -> (gtk4::Expander, NavigationPreview) {
-    let preview_width = width.saturating_sub(10).max(1);
-    let preview_height = preview_width.saturating_mul(2) / 3;
+fn navigation_module(width: i32) -> (gtk4::Box, NavigationPreview) {
+    let preview_width = width.saturating_sub(RAIL_SCROLLBAR_RESERVE).max(1);
     let thumbnail = ThumbnailSurface::new(
         "darkroom-navigation-preview",
         "Navigation preview for the selected photo",
         preview_width,
-        preview_height,
+        NAVIGATION_DEFAULT_HEIGHT,
     );
+    thumbnail.widget().set_width_request(0);
+    thumbnail
+        .widget()
+        .set_height_request(NAVIGATION_DEFAULT_HEIGHT);
+    thumbnail.widget().set_hexpand(true);
     thumbnail.set_unavailable();
     let crop = Rc::new(Cell::new(
         DarkroomViewportState::default().navigation_crop(),
@@ -594,15 +646,25 @@ fn navigation_module(width: i32) -> (gtk4::Expander, NavigationPreview) {
     zoom.add_css_class("dim-label");
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
     content.append(&surface);
+    let thumbnail_for_resize = thumbnail.widget().clone();
+    content.append(&resize_handle(
+        NAVIGATION_DEFAULT_HEIGHT,
+        NAVIGATION_MIN_HEIGHT,
+        NAVIGATION_MAX_HEIGHT,
+        move |height| thumbnail_for_resize.set_height_request(height),
+    ));
     content.append(&zoom);
-    let expander =
-        shared_module_expander("darkroom-navigation", "navigation", true, Some(&content));
+    let module = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    module.set_widget_name("darkroom-navigation");
+    module.set_focusable(true);
+    module.add_css_class("dt_module_expander");
     let title_row = module_title("darkroom-navigation", "navigation");
-    expander.set_label_widget(Some(&title_row));
-    expander.update_property(&[Property::Label("navigation")]);
-    apply_theme_role(&expander, ThemeRole::ModuleGroup);
+    module.append(&title_row);
+    module.append(&content);
+    module.update_property(&[Property::Label("navigation")]);
+    apply_theme_role(&module, ThemeRole::ModuleGroup);
     (
-        expander,
+        module,
         NavigationPreview {
             thumbnail,
             crop,
@@ -610,6 +672,53 @@ fn navigation_module(width: i32) -> (gtk4::Expander, NavigationPreview) {
             zoom,
         },
     )
+}
+
+fn resize_handle(
+    initial_height: i32,
+    minimum_height: i32,
+    maximum_height: i32,
+    apply_height: impl Fn(i32) + 'static,
+) -> gtk4::DrawingArea {
+    let handle = gtk4::DrawingArea::new();
+    handle.set_widget_name("darkroom-module-resize-handle");
+    handle.set_height_request(RESIZE_HANDLE_HEIGHT);
+    handle.set_hexpand(true);
+    handle.set_cursor_from_name(Some("ns-resize"));
+    handle.set_draw_func(|_, context, width, height| {
+        context.set_source_rgba(1.0, 1.0, 1.0, 0.35);
+        context.set_line_width(1.0);
+        context.move_to(f64::from(width) * 0.375, f64::from(height) / 2.0);
+        context.line_to(f64::from(width) * 0.625, f64::from(height) / 2.0);
+        let _ = context.stroke();
+    });
+    let current_height = Rc::new(Cell::new(initial_height));
+    let start_height = Rc::new(Cell::new(initial_height));
+    let drag = gtk4::GestureDrag::new();
+    let start_for_begin = Rc::clone(&start_height);
+    let current_for_begin = Rc::clone(&current_height);
+    drag.connect_drag_begin(move |_, _, _| start_for_begin.set(current_for_begin.get()));
+    let current_for_update = Rc::clone(&current_height);
+    drag.connect_drag_update(move |_, _, offset_y| {
+        #[allow(clippy::cast_possible_truncation)]
+        let rounded_offset = offset_y.round() as i32;
+        let requested = start_height.get().saturating_add(rounded_offset);
+        let height = clamp_resize_height(requested, minimum_height, maximum_height);
+        current_for_update.set(height);
+        apply_height(height);
+    });
+    handle.add_controller(drag);
+    handle
+}
+
+const fn clamp_resize_height(requested: i32, minimum: i32, maximum: i32) -> i32 {
+    if requested < minimum {
+        minimum
+    } else if requested > maximum {
+        maximum
+    } else {
+        requested
+    }
 }
 
 fn draw_navigation_crop(
@@ -680,5 +789,45 @@ impl NavigationPreview {
         self.crop.set(state.navigation_crop());
         self.zoom.set_text(state.zoom().label());
         self.indicator.queue_draw();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        HISTORY_DEFAULT_HEIGHT, IMAGE_INFORMATION_DEFAULT_HEIGHT, NAVIGATION_DEFAULT_HEIGHT,
+        NAVIGATION_MAX_HEIGHT, NAVIGATION_MIN_HEIGHT, SNAPSHOTS_DEFAULT_HEIGHT,
+        clamp_resize_height,
+    };
+    use crate::presentation::DARKROOM_LEFT_PANEL_ORDER;
+
+    #[test]
+    fn left_rail_follows_darktable_container_positions() {
+        assert_eq!(
+            DARKROOM_LEFT_PANEL_ORDER,
+            [
+                "darkroom-navigation",
+                "darkroom-image-information",
+                "darkroom-history",
+                "darkroom-snapshots",
+            ]
+        );
+    }
+
+    #[test]
+    fn navigation_height_matches_darktable_config_and_clamps_resizing() {
+        assert_eq!(NAVIGATION_DEFAULT_HEIGHT, 200);
+        assert_eq!(NAVIGATION_MIN_HEIGHT, 100);
+        assert_eq!(NAVIGATION_MAX_HEIGHT, 300);
+        assert_eq!(clamp_resize_height(40, 100, 300), 100);
+        assert_eq!(clamp_resize_height(240, 100, 300), 240);
+        assert_eq!(clamp_resize_height(900, 100, 300), 300);
+    }
+
+    #[test]
+    fn resizable_list_defaults_match_darktable_config() {
+        assert_eq!(SNAPSHOTS_DEFAULT_HEIGHT, 200);
+        assert_eq!(HISTORY_DEFAULT_HEIGHT, 1_000);
+        assert_eq!(IMAGE_INFORMATION_DEFAULT_HEIGHT, 1_000);
     }
 }

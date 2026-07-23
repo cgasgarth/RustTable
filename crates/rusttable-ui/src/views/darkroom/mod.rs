@@ -119,9 +119,9 @@ impl DarkroomPanelVisibilityAction {
 /// Stable left-to-right focus order for the darkroom rail controls.
 pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 15] = [
     "darkroom-navigation",
-    "darkroom-snapshots",
-    "darkroom-history",
     "darkroom-image-information",
+    "darkroom-history",
+    "darkroom-snapshots",
     "darkroom-module-search",
     "group-active",
     "group-favorites",
