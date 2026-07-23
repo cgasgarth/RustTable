@@ -10,10 +10,10 @@ use crate::import::ImportSessionPanel;
 
 use crate::gui::darkroom_modules::DarkroomModuleGroup;
 use crate::gui::darktable_components::{
-    dropdown, module_action_button, module_expander as shared_module_expander, module_row, slider,
-    switch,
+    dropdown, module_expander as shared_module_expander, module_row, module_title, slider, switch,
 };
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
+use crate::gui::display_profile::DisplayProfileBanner;
 use crate::gui::{
     DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_PANEL_WIDTHS,
     LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls, LighttableToolbar, ModuleControlKind,
@@ -21,6 +21,12 @@ use crate::gui::{
     apply_theme_role, darkroom_window_layout,
 };
 use crate::views::lighttable::empty_collection_state;
+
+#[derive(Clone)]
+pub(super) struct WorkspaceEdgeControls {
+    pub(super) left: gtk4::Button,
+    pub(super) right: gtk4::Button,
+}
 
 pub(super) fn right_panel() -> (
     gtk4::Box,
@@ -48,11 +54,12 @@ pub(super) fn right_panel() -> (
     // External editors, AI batch, tethering, and import-session controls are
     // services, not lighttable modules. Keep their controllers alive without
     // placing their unrelated surfaces in the collection rail.
-    let bottom = panel_slot(PanelSlot::RightBottom);
-    let search = gtk4::SearchEntry::new();
-    search.set_widget_name("right-module-search");
-    bottom.append(&search);
-    append_panel_slots(&panel, &panel_slot(PanelSlot::RightTop), &center, &bottom);
+    append_panel_slots(
+        &panel,
+        &panel_slot(PanelSlot::RightTop),
+        &center,
+        &panel_slot(PanelSlot::RightBottom),
+    );
     (
         panel,
         export_panel,
@@ -117,7 +124,7 @@ pub(super) fn desktop_body(
     right_panel: &gtk4::Stack,
     i18n: &I18n,
     geometry_changed: &std::rc::Rc<dyn Fn()>,
-) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box) {
+) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box, WorkspaceEdgeControls) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let center = central_workspace(workspace, lighttable_toolbar);
     let (filmstrip_root, filmstrip) = filmstrip(i18n);
@@ -200,14 +207,77 @@ pub(super) fn desktop_body(
         &workspace_with_right_panel,
         std::rc::Rc::clone(geometry_changed),
     );
+    let (workspace_overlay, edge_controls) = workspace_overlay(&workspace_with_right_panel);
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
     content.set_margin_top(outer_border);
     content.set_margin_bottom(outer_border);
     content.set_margin_start(outer_border);
     content.set_margin_end(outer_border);
-    content.append(&workspace_with_right_panel);
-    (content, filmstrip, filmstrip_root)
+    content.append(&workspace_overlay);
+    (content, filmstrip, filmstrip_root, edge_controls)
+}
+
+fn workspace_overlay(workspace: &impl IsA<gtk4::Widget>) -> (gtk4::Overlay, WorkspaceEdgeControls) {
+    let controls = WorkspaceEdgeControls {
+        left: edge_toggle(
+            "workspace-left-edge-toggle",
+            true,
+            "Show or hide the left panel",
+            gtk4::Align::Start,
+        ),
+        right: edge_toggle(
+            "workspace-right-edge-toggle",
+            false,
+            "Show or hide the right panel",
+            gtk4::Align::End,
+        ),
+    };
+    let overlay = gtk4::Overlay::new();
+    overlay.set_hexpand(true);
+    overlay.set_vexpand(true);
+    overlay.set_child(Some(workspace));
+    overlay.add_overlay(&controls.left);
+    overlay.add_overlay(&controls.right);
+    (overlay, controls)
+}
+
+fn edge_toggle(
+    id: &str,
+    points_right: bool,
+    accessible_name: &str,
+    align: gtk4::Align,
+) -> gtk4::Button {
+    let button = gtk4::Button::new();
+    button.set_widget_name(id);
+    button.set_halign(align);
+    button.set_valign(gtk4::Align::Center);
+    button.set_focus_on_click(false);
+    button.set_tooltip_text(Some(accessible_name));
+    button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
+    button.add_css_class("dt_edge_toggle");
+    let triangle = gtk4::DrawingArea::new();
+    triangle.set_content_width(8);
+    triangle.set_content_height(16);
+    triangle.set_can_target(false);
+    triangle.set_draw_func(move |_, context, width, height| {
+        let width = f64::from(width);
+        let height = f64::from(height);
+        if points_right {
+            context.move_to(0.0, 0.0);
+            context.line_to(width, height / 2.0);
+            context.line_to(0.0, height);
+        } else {
+            context.move_to(width, 0.0);
+            context.line_to(0.0, height / 2.0);
+            context.line_to(width, height);
+        }
+        context.close_path();
+        context.set_source_rgb(0.95, 0.95, 0.95);
+        let _ = context.fill();
+    });
+    button.set_child(Some(&triangle));
+    button
 }
 
 fn connect_geometry_refresh(paned: &gtk4::Paned, refresh: std::rc::Rc<dyn Fn()>) {
@@ -309,6 +379,7 @@ pub(super) fn workspace_stack(
     initial_workspace: WorkspaceRole,
     i18n: &I18n,
     darkroom_page: &gtk4::Box,
+    display_profile: &DisplayProfileBanner,
 ) -> (
     gtk4::Stack,
     gtk4::GridView,
@@ -324,7 +395,10 @@ pub(super) fn workspace_stack(
     workspace.set_widget_name("center-workspace");
     apply_theme_role(&workspace, ThemeRole::Workspace);
 
-    let lighttable = gtk4::GridView::builder().valign(gtk4::Align::Start).build();
+    let lighttable = gtk4::GridView::builder()
+        .valign(gtk4::Align::Fill)
+        .vexpand(true)
+        .build();
     lighttable.set_widget_name("lighttable-grid");
     apply_theme_role(&lighttable, ThemeRole::Lighttable);
     let lighttable_page = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -352,7 +426,12 @@ pub(super) fn workspace_stack(
     lighttable_canvas.set_visible_child_name("empty");
     lighttable_page.append(&lighttable_canvas);
     let layout_controls = LighttableLayoutControls::new();
-    lighttable_page.append(&lighttable_footer(i18n, &layout_controls));
+    lighttable_page.append(&lighttable_footer(
+        i18n,
+        &layout_controls,
+        &lighttable_toolbar,
+        display_profile,
+    ));
 
     workspace.add_titled(
         &lighttable_page,
@@ -374,18 +453,26 @@ pub(super) fn workspace_stack(
     )
 }
 
-fn lighttable_footer(_i18n: &I18n, layout_controls: &LighttableLayoutControls) -> gtk4::Box {
-    let bottom_tools = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+fn lighttable_footer(
+    _i18n: &I18n,
+    layout_controls: &LighttableLayoutControls,
+    toolbar: &LighttableToolbar,
+    display_profile: &DisplayProfileBanner,
+) -> gtk4::CenterBox {
+    let bottom_tools = gtk4::CenterBox::new();
     bottom_tools.set_widget_name(PanelSlot::CenterBottom.identifier());
     apply_theme_role(&bottom_tools, ThemeRole::Toolbar);
     bottom_tools.add_css_class("dt_lighttable_footer");
-    let leading_space = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-    leading_space.set_hexpand(true);
-    bottom_tools.append(&leading_space);
-    bottom_tools.append(layout_controls.widget());
-    let trailing_space = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-    trailing_space.set_hexpand(true);
-    bottom_tools.append(&trailing_space);
+    bottom_tools.set_start_widget(Some(toolbar.footer_organization_widget()));
+    bottom_tools.set_center_widget(Some(layout_controls.widget()));
+    let display_controls = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+    display_controls.set_widget_name("lighttable-display-controls");
+    display_controls.set_accessible_role(gtk4::AccessibleRole::Toolbar);
+    display_controls.update_property(&[gtk4::accessible::Property::Label(
+        "Lighttable display controls",
+    )]);
+    display_controls.append(display_profile.widget());
+    bottom_tools.set_end_widget(Some(&display_controls));
     bottom_tools
 }
 
@@ -404,15 +491,30 @@ mod tests {
             return;
         }
         let controls = LighttableLayoutControls::new();
-        let footer = lighttable_footer(&I18n::default(), &controls);
-        let mut child = footer.first_child();
-        let mut count = 0;
-        while let Some(widget) = child {
-            assert!(widget.parent().is_some(), "footer child must be attached");
-            count += 1;
-            child = widget.next_sibling();
-        }
-        assert_eq!(count, 3);
+        let toolbar = LighttableToolbar::new();
+        let display_profile = DisplayProfileBanner::new();
+        let footer = lighttable_footer(&I18n::default(), &controls, &toolbar, &display_profile);
+        assert_eq!(
+            footer
+                .start_widget()
+                .expect("footer organization controls")
+                .widget_name(),
+            "lighttable-footer-organization"
+        );
+        assert_eq!(
+            footer
+                .center_widget()
+                .expect("footer layout selector")
+                .widget_name(),
+            "lighttable-layout-controls"
+        );
+        assert_eq!(
+            footer
+                .end_widget()
+                .expect("footer display controls")
+                .widget_name(),
+            "lighttable-display-controls"
+        );
     }
 }
 
@@ -424,6 +526,7 @@ fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     strip.set_height_request(height);
     strip.set_hexpand(true);
     strip.set_vexpand(false);
+    strip.set_valign(gtk4::Align::Start);
     let photos = gtk4::FlowBox::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .max_children_per_line(FILMSTRIP_MAX_CHILDREN_PER_LINE)
@@ -522,17 +625,7 @@ pub(super) fn render_modules<'a>(
 
 fn module_group(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
     let group_widget = shared_module_expander(id, label, expanded, None::<&gtk4::Widget>);
-    let title = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    title.set_hexpand(true);
-    let title_label = gtk4::Label::new(Some(label));
-    title_label.set_halign(gtk4::Align::Start);
-    title_label.set_hexpand(true);
-    title.append(&title_label);
-    title.append(&module_action_button(
-        &format!("{id}-actions"),
-        "Module actions unavailable",
-    ));
-    group_widget.set_label_widget(Some(&title));
+    group_widget.set_label_widget(Some(&module_title(id, label)));
     apply_theme_role(&group_widget, ThemeRole::ModuleGroup);
     group_widget
 }

@@ -297,7 +297,10 @@ fn selected_ready_thumbnail_supplies_histogram_while_full_preview_loads() {
 
     assert!(shell.darkroom.histogram_available());
     assert_thumbnail_pair_is_ready(&shell, photo_id);
-    assert_eq!(shell.photo_thumbnail_edit_identity(photo_id), None);
+    assert_eq!(
+        shell.photo_thumbnail_edit_identity(photo_id),
+        Some((EditId::new(12).expect("edit id"), Revision::from_u64(3)))
+    );
     assert_eq!(
         shell.darkroom_preview().status_label().text(),
         "loading preview"

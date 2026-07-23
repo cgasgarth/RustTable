@@ -3,6 +3,7 @@
 use gtk4::prelude::*;
 use rusttable_i18n::{I18n, MessageArgs, MessageId};
 
+use crate::gui::darktable_components::module_title;
 use crate::gui::{
     CollectionControls, LIGHTTABLE_PANEL_WIDTHS, PanelSlot, ShellRegion, ThemeRole,
     apply_theme_role,
@@ -92,15 +93,33 @@ impl LeftPanel {
 
 fn import_module(i18n: &I18n) -> (gtk4::Expander, gtk4::Button) {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
+    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
     let import = gtk4::Button::with_label("add to library…");
     import.set_widget_name("lighttable-import");
     import.set_tooltip_text(Some(
         &i18n.text(MessageId::ToolbarImport, &MessageArgs::new()),
     ));
     import.set_hexpand(true);
-    content.append(&import);
+    actions.append(&import);
+    let copy_import = gtk4::Button::with_label("copy & import…");
+    copy_import.set_widget_name("lighttable-copy-import");
+    copy_import.set_hexpand(true);
+    copy_import.set_sensitive(false);
+    copy_import.set_tooltip_text(Some(
+        "Copy-and-import destinations are not implemented; add to library keeps source files in place",
+    ));
+    actions.append(&copy_import);
+    content.append(&actions);
+    let parameters = gtk4::Button::with_label("parameters");
+    parameters.set_widget_name("lighttable-import-parameters");
+    parameters.set_hexpand(true);
+    parameters.set_sensitive(false);
+    parameters.set_tooltip_text(Some(
+        "Import parameters are configured in the source chooser",
+    ));
+    content.append(&parameters);
     (
-        module_with_child("import", "import", &content, false),
+        module_with_child("import", "import", &content, true),
         import,
     )
 }
@@ -143,15 +162,12 @@ fn module_separator(id: &str) -> gtk4::Separator {
 }
 
 fn module(id: &str, label: &str, expanded: bool) -> gtk4::Expander {
-    let (title, disclosure) = module_label(label, expanded);
+    let title = module_title(id, label);
     let group = gtk4::Expander::builder()
         .label_widget(&title)
         .expanded(expanded)
         .build();
     group.set_widget_name(id);
-    group.connect_expanded_notify(move |expander| {
-        disclosure.set_text(if expander.is_expanded() { "⌄" } else { "›" });
-    });
     apply_theme_role(&group, ThemeRole::ModuleGroup);
     group
 }
@@ -164,40 +180,15 @@ fn module_with_child<W: IsA<gtk4::Widget>>(
 ) -> gtk4::Expander {
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
     content.append(child);
-    let (title, disclosure) = module_label(label, expanded);
+    let title = module_title(id, label);
     let group = gtk4::Expander::builder()
         .label_widget(&title)
         .expanded(expanded)
         .child(&content)
         .build();
     group.set_widget_name(id);
-    group.connect_expanded_notify(move |expander| {
-        disclosure.set_text(if expander.is_expanded() { "⌄" } else { "›" });
-    });
     apply_theme_role(&group, ThemeRole::ModuleGroup);
     group
-}
-
-fn module_label(text: &str, expanded: bool) -> (gtk4::Box, gtk4::Label) {
-    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
-    row.set_halign(gtk4::Align::Fill);
-    row.set_hexpand(true);
-    row.set_width_request(126);
-    let disclosure = gtk4::Label::new(Some(if expanded { "⌄" } else { "›" }));
-    disclosure.set_widget_name("module-disclosure");
-    disclosure.add_css_class("dim-label");
-    row.append(&disclosure);
-    let label = gtk4::Label::new(Some(text));
-    label.set_xalign(0.0);
-    label.set_hexpand(true);
-    label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
-    row.append(&label);
-    for glyph in ["⊙", "≡"] {
-        let icon = gtk4::Label::new(Some(glyph));
-        icon.add_css_class("dim-label");
-        row.append(&icon);
-    }
-    (row, disclosure)
 }
 
 #[cfg(test)]

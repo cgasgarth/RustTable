@@ -75,7 +75,7 @@ impl WorkspaceRenderHandle {
         view_model: &PhotoWorkspaceViewModel,
         matching_photo_ids: Option<&[PhotoId]>,
     ) {
-        let mut previous_thumbnail_states = self
+        let previous_thumbnail_states = self
             .photo_tiles
             .borrow()
             .iter()
@@ -88,7 +88,12 @@ impl WorkspaceRenderHandle {
         self.photo_details.borrow_mut().clear();
         let zoom = self.interaction.borrow().zoom();
         let layout = self.interaction.borrow().layout();
-        let grid = lighttable_grid_for_allocation(&self.lighttable, zoom, layout);
+        let grid = lighttable_grid_for_allocation(
+            &self.lighttable,
+            &self.lighttable_empty_state,
+            zoom,
+            layout,
+        );
         let columns = u32::try_from(grid.columns()).expect("lighttable columns fit u32");
         self.lighttable.set_min_columns(if layout.shows_culling() {
             1
@@ -198,7 +203,7 @@ impl WorkspaceRenderHandle {
                 photo_id,
                 &detail,
                 &previous_details,
-                &mut previous_thumbnail_states,
+                &previous_thumbnail_states,
             );
             let thumbnails = ThumbnailPair::new(grid_thumbnail, filmstrip_thumbnail);
             if thumbnails.set_state(&thumbnail_state).is_err() {
@@ -229,7 +234,7 @@ impl WorkspaceRenderHandle {
         // generation-tagged selection state. Rebind the latter after every
         // projection without duplicating the shell's click controllers.
         self.darkroom.install_filmstrip_interaction(&self.filmstrip);
-        let previous_thumbnail_states = Rc::new(RefCell::new(previous_thumbnail_states));
+        let previous_thumbnail_states = Rc::new(previous_thumbnail_states);
         let previous_details = Rc::new(previous_details);
         let photo_tiles = Rc::clone(&self.photo_tiles);
         let photo_details = Rc::clone(&self.photo_details);
@@ -264,7 +269,7 @@ impl WorkspaceRenderHandle {
                 photo_id,
                 &detail,
                 &previous_details,
-                &mut previous_thumbnail_states.borrow_mut(),
+                &previous_thumbnail_states,
             );
             let Some(filmstrip_thumbnail) = photo_tiles
                 .borrow()
@@ -502,9 +507,12 @@ pub(super) fn connect_lighttable_resize(
     let pending = Rc::new(std::cell::Cell::new(false));
     let lighttable = lighttable.clone();
     let measured_lighttable = lighttable.clone();
+    let measured_viewport = render.lighttable_empty_state.clone();
+    let observed_viewport = measured_viewport.clone();
     let schedule: Rc<dyn Fn()> = Rc::new(move || {
         let grid = lighttable_grid_for_allocation(
             &measured_lighttable,
+            &measured_viewport,
             render.interaction.borrow().zoom(),
             render.interaction.borrow().layout(),
         );
@@ -524,7 +532,15 @@ pub(super) fn connect_lighttable_resize(
         let schedule = Rc::clone(&schedule);
         move |_, _| schedule()
     });
-    lighttable.connect_notify_local(Some("height"), move |_, _| schedule());
+    lighttable.connect_notify_local(Some("height"), {
+        let schedule = Rc::clone(&schedule);
+        move |_, _| schedule()
+    });
+    observed_viewport.connect_notify_local(Some("width"), {
+        let schedule = Rc::clone(&schedule);
+        move |_, _| schedule()
+    });
+    observed_viewport.connect_notify_local(Some("height"), move |_, _| schedule());
 }
 
 fn sync_photo_buttons(
@@ -748,14 +764,15 @@ fn lighttable_card(
 
 fn lighttable_grid_for_allocation(
     lighttable: &gtk4::GridView,
+    viewport: &gtk4::Stack,
     zoom: crate::gui::LighttableZoom,
     layout: crate::gui::LighttableLayout,
 ) -> LighttableGridSpec {
     LighttableGridSpec::for_layout_viewport(
         layout,
         zoom,
-        u16::try_from(lighttable.allocated_width()).unwrap_or(0),
-        u16::try_from(lighttable.allocated_height()).unwrap_or(0),
+        u16::try_from(viewport.allocated_width().max(lighttable.allocated_width())).unwrap_or(0),
+        u16::try_from(viewport.allocated_height()).unwrap_or(0),
     )
 }
 
@@ -893,11 +910,12 @@ fn retained_thumbnail_state(
     photo_id: PhotoId,
     detail: &PhotoDetailViewModel,
     previous_details: &BTreeMap<PhotoId, PhotoDetailViewModel>,
-    previous_states: &mut BTreeMap<PhotoId, ThumbnailState>,
+    previous_states: &BTreeMap<PhotoId, ThumbnailState>,
 ) -> ThumbnailState {
     if previous_details.get(&photo_id) == Some(detail) {
         previous_states
-            .remove(&photo_id)
+            .get(&photo_id)
+            .cloned()
             .unwrap_or(ThumbnailState::Loading)
     } else {
         ThumbnailState::Loading
@@ -917,82 +935,5 @@ fn list_item_photo_id(list_item: &gtk4::ListItem) -> Option<PhotoId> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{ThumbnailState, retained_thumbnail_state};
-    use crate::presentation::{
-        PhotoDetailViewModel, PresentationText, PreviewDimensions, Rgba8PreviewMetadata,
-    };
-    use rusttable_core::PhotoId;
-    use std::collections::BTreeMap;
-
-    fn id(value: u128) -> PhotoId {
-        PhotoId::new(value).expect("non-zero test photo ID")
-    }
-
-    fn text(value: &str) -> PresentationText {
-        PresentationText::new(value).expect("valid test text")
-    }
-
-    fn detail(photo_id: PhotoId, title: &str) -> PhotoDetailViewModel {
-        PhotoDetailViewModel::new(photo_id, text(title), Vec::new())
-    }
-
-    fn ready_thumbnail() -> ThumbnailState {
-        ThumbnailState::Ready(
-            Rgba8PreviewMetadata::new(
-                PreviewDimensions::new(2, 1).expect("non-zero dimensions"),
-                text("thumbnail ready"),
-                vec![0; 8],
-            )
-            .expect("valid RGBA8 thumbnail"),
-        )
-    }
-
-    #[test]
-    fn rerender_retains_completed_thumbnail_for_an_unchanged_detail() {
-        let photo_id = id(1);
-        let current = detail(photo_id, "photo.png");
-        let mut previous_states = BTreeMap::from([(photo_id, ready_thumbnail())]);
-        let previous_details = BTreeMap::from([(photo_id, current.clone())]);
-
-        assert_eq!(
-            retained_thumbnail_state(photo_id, &current, &previous_details, &mut previous_states,),
-            ready_thumbnail()
-        );
-        assert!(previous_states.is_empty());
-    }
-
-    #[test]
-    fn rerender_resets_thumbnail_when_catalog_detail_changes() {
-        let photo_id = id(1);
-        let current = detail(photo_id, "new-photo.png");
-        let previous_details = BTreeMap::from([(photo_id, detail(photo_id, "old-photo.png"))]);
-        let mut previous_states = BTreeMap::from([(photo_id, ready_thumbnail())]);
-
-        assert_eq!(
-            retained_thumbnail_state(photo_id, &current, &previous_details, &mut previous_states,),
-            ThumbnailState::Loading
-        );
-        assert_eq!(previous_states.get(&photo_id), Some(&ready_thumbnail()));
-    }
-
-    #[test]
-    fn rerender_retains_unavailable_and_failed_states() {
-        let photo_id = id(1);
-        let current = detail(photo_id, "photo.png");
-        let previous_details = BTreeMap::from([(photo_id, current.clone())]);
-
-        for state in [ThumbnailState::Unavailable, ThumbnailState::Failed] {
-            let mut previous_states = BTreeMap::from([(photo_id, state.clone())]);
-            assert_eq!(
-                retained_thumbnail_state(
-                    photo_id,
-                    &current,
-                    &previous_details,
-                    &mut previous_states,
-                ),
-                state
-            );
-        }
-    }
-}
+#[path = "lighttable/tests.rs"]
+mod tests;

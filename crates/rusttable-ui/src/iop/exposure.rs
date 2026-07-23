@@ -16,8 +16,8 @@ use rusttable_processing::{
 use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
 use crate::gui::darktable_components::{
-    MODULE_GAP, button, dropdown, module_expander as shared_module_expander, module_row, scale_row,
-    slider, switch,
+    MODULE_GAP, button, dropdown, module_action_button, module_expander as shared_module_expander,
+    module_info_button, module_row, scale_row, slider, switch,
 };
 
 type ExposureActionHandler = Rc<dyn Fn(ExposureAction)>;
@@ -142,6 +142,14 @@ impl ExposurePanel {
         title.set_hexpand(true);
         header.append(&title);
         header.append(&enabled);
+        header.append(&module_info_button(
+            "exposure-info",
+            "Exposure module information unavailable",
+        ));
+        header.append(&module_action_button(
+            "exposure-actions",
+            "Exposure module menu unavailable",
+        ));
         header.append(&presets);
         header.append(&reset);
 

@@ -270,6 +270,7 @@ impl LighttableToolbarState {
 #[derive(Clone)]
 pub struct LighttableToolbar {
     root: gtk4::Box,
+    footer_organization: gtk4::Box,
     property: gtk4::DropDown,
     search: gtk4::SearchEntry,
     sort: gtk4::DropDown,
@@ -310,59 +311,7 @@ impl LighttableToolbar {
         search.set_width_request(132);
         search.set_max_width_chars(16);
         root.append(&search);
-        root.append(&toolbar_separator("filter-labels"));
-
-        let mut label_buttons = Vec::new();
-        for label in LighttableColorLabel::ALL {
-            let button = shared_button(&format!("lighttable-color-{}", label.index()), "");
-            button.set_child(Some(&color_label_swatch(label)));
-            button.set_accessible_role(gtk4::AccessibleRole::Button);
-            button.add_css_class("dt_filter_button");
-            button.add_css_class("dt_color_filter");
-            let tooltip = format!("toggle {} label on selected images", label.label());
-            button.update_property(&[Property::Label(&tooltip)]);
-            button.set_tooltip_text(Some(&tooltip));
-            root.append(&button);
-            label_buttons.push((label, button));
-        }
-
-        root.append(&toolbar_separator("labels-rating"));
-
-        let mut rating_buttons = Vec::new();
-        let rejected = shared_button("lighttable-rating-rejected", "×");
-        rejected.add_css_class("dt_filter_button");
-        rejected.add_css_class("dt_rating_filter");
-        rejected.set_accessible_role(gtk4::AccessibleRole::Button);
-        rejected.update_property(&[Property::Label("set rejected rating on selected images")]);
-        rejected.set_tooltip_text(Some("reject selected images"));
-        root.append(&rejected);
-        rating_buttons.push((LighttableRating::Rejected, rejected));
-
-        let unrated = shared_button("lighttable-rating-zero", "0");
-        unrated.add_css_class("dt_filter_button");
-        unrated.add_css_class("dt_rating_filter");
-        unrated.set_accessible_role(gtk4::AccessibleRole::Button);
-        unrated.update_property(&[Property::Label("set zero-star rating on selected images")]);
-        unrated.set_tooltip_text(Some("set zero stars on selected images"));
-        root.append(&unrated);
-        rating_buttons.push((LighttableRating::Zero, unrated));
-
-        for rating in LighttableRating::STARS {
-            let button = shared_button(
-                &format!("lighttable-rating-{}", rating.stars().unwrap_or(0)),
-                "☆",
-            );
-            button.add_css_class("dt_filter_button");
-            button.add_css_class("dt_rating_filter");
-            button.set_accessible_role(gtk4::AccessibleRole::Button);
-            let tooltip = format!("set {} on selected images", rating.label());
-            button.update_property(&[Property::Label(&tooltip)]);
-            button.set_tooltip_text(Some(&tooltip));
-            root.append(&button);
-            rating_buttons.push((rating, button));
-        }
-
-        root.append(&toolbar_separator("rating-sort"));
+        root.append(&toolbar_separator("filter-sort"));
 
         let sort = shared_dropdown("lighttable-sort", &["filename", "capture time", "rating"]);
         sort.set_accessible_role(gtk4::AccessibleRole::ComboBox);
@@ -387,8 +336,44 @@ impl LighttableToolbar {
         reset.set_sensitive(false);
         root.append(&reset);
 
+        let footer_organization = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
+        footer_organization.set_widget_name("lighttable-footer-organization");
+        footer_organization.set_valign(gtk4::Align::Center);
+        footer_organization.set_accessible_role(gtk4::AccessibleRole::Toolbar);
+        footer_organization
+            .update_property(&[Property::Label("Selected image rating and color labels")]);
+        let mut rating_buttons = Vec::new();
+        for rating in LighttableRating::STARS {
+            let button = shared_button(
+                &format!("lighttable-footer-rating-{}", rating.stars().unwrap_or(0)),
+                "☆",
+            );
+            button.add_css_class("dt_filter_button");
+            button.add_css_class("dt_rating_filter");
+            let tooltip = format!("set {} on selected images", rating.label());
+            button.update_property(&[Property::Label(&tooltip)]);
+            button.set_tooltip_text(Some(&tooltip));
+            footer_organization.append(&button);
+            rating_buttons.push((rating, button));
+        }
+        let footer_separator = toolbar_separator("footer-rating-labels");
+        footer_organization.append(&footer_separator);
+        let mut label_buttons = Vec::new();
+        for label in LighttableColorLabel::ALL {
+            let button = shared_button(&format!("lighttable-footer-color-{}", label.index()), "");
+            button.set_child(Some(&color_label_swatch(label)));
+            button.add_css_class("dt_filter_button");
+            button.add_css_class("dt_color_filter");
+            let tooltip = format!("toggle {} label on selected images", label.label());
+            button.update_property(&[Property::Label(&tooltip)]);
+            button.set_tooltip_text(Some(&tooltip));
+            footer_organization.append(&button);
+            label_buttons.push((label, button));
+        }
+
         Self {
             root,
+            footer_organization,
             property,
             search,
             sort,
@@ -405,6 +390,11 @@ impl LighttableToolbar {
     #[must_use]
     pub const fn widget(&self) -> &gtk4::Box {
         &self.root
+    }
+
+    #[must_use]
+    pub const fn footer_organization_widget(&self) -> &gtk4::Box {
+        &self.footer_organization
     }
 
     #[must_use]

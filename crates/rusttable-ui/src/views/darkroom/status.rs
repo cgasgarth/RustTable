@@ -66,6 +66,10 @@ impl DarkroomStatusSurface {
         self.root.set_start_widget(Some(widget));
     }
 
+    pub(super) fn set_utility_controls<W: IsA<gtk4::Widget>>(&self, widget: &W) {
+        self.end.prepend(widget);
+    }
+
     pub(super) fn append<W: IsA<gtk4::Widget>>(&self, widget: &W) {
         widget.set_visible(false);
         self.end.append(widget);

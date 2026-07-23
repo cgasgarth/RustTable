@@ -99,9 +99,12 @@ pub(crate) fn start_selected_preview(
     let token = lifecycle
         .borrow_mut()
         .begin(photo_id, edit.id(), edit.revision());
-    thumbnail_lifecycle.borrow_mut().invalidate(photo_id);
     let generation = ViewportGeneration::new(token.generation());
     shell.begin_darkroom_selection(photo_id, generation);
+    if !shell.photo_thumbnail_has_edit_identity(photo_id, edit.id(), edit.revision()) {
+        thumbnail_lifecycle.borrow_mut().invalidate(photo_id);
+        shell.set_photo_thumbnail_loading(photo_id);
+    }
     shell.set_darkroom_preview_loading(generation);
     let (sender, receiver) = mpsc::channel();
     let worker_diagnostics = diagnostics.clone();
@@ -237,7 +240,10 @@ fn thumbnail_for_preview(state: &GtkPreviewState) -> Option<Rgba8PreviewMetadata
         ColorEncoding::Srgb,
     )
     .ok()?;
-    let size = ThumbnailSize::fit(180, 120).ok()?;
+    // Keep the shared publication below ThumbnailSurface's 2 MiB bound while retaining enough
+    // pixels for Darktable's full-canvas Lighttable preview. Filmstrip and navigation consumers
+    // deterministically downsample this same edit-identity-safe result to their smaller targets.
+    let size = ThumbnailSize::fit(864, 576).ok()?;
     let request = ThumbnailRequest::new(MipmapLevel::zero(), size);
     let thumbnail =
         ThumbnailGenerator::generate(&source, request, 2 * 1024 * 1024, &CancellationToken::new())

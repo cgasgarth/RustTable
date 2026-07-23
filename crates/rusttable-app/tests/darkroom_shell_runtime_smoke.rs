@@ -8,10 +8,10 @@ use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 use rusttable_ui::gtk_shell::{GtkShell, WorkspaceRole};
 use rusttable_ui::{
-    CollectionControlState, CollectionFilterState, CollectionProperty, LighttableColorLabel,
-    LighttablePhotoState, LighttableRating, LighttableToolbarState, PhotoCardViewModel,
-    PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel, PresentationText,
-    PreviewDimensions, Rgba8PreviewMetadata, ViewportGeneration,
+    CollectionControlState, CollectionFilterState, CollectionProperty, HistogramData,
+    LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableToolbarState,
+    PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
+    PresentationText, PreviewDimensions, Rgba8PreviewMetadata, ViewportGeneration,
 };
 
 fn main() {
@@ -52,9 +52,15 @@ fn app_shell_transition_paints_darkroom_titles() {
             shell.set_collection_filter_state(&test_collection(photo_id));
             assert!(shell.open_photo(photo_id), "selected photo opens darkroom");
             shell.begin_darkroom_selection(photo_id, ViewportGeneration::new(1));
+            let metadata = thumbnail_metadata();
             shell
-                .set_photo_thumbnail(photo_id, &thumbnail_metadata())
+                .set_photo_thumbnail(photo_id, &metadata)
                 .expect("bounded navigation and filmstrip thumbnail");
+            let histogram = HistogramData::from_rgba8(metadata.dimensions(), metadata.pixels())
+                .expect("test histogram");
+            shell
+                .set_darkroom_preview_result(ViewportGeneration::new(1), &metadata, Ok(histogram))
+                .expect("darkroom preview publishes");
             shell.show_workspace(WorkspaceRole::Lighttable);
             gtk4::glib::idle_add_local_once(move || {
                 shell.show_workspace(WorkspaceRole::Darkroom);
@@ -88,6 +94,153 @@ fn app_shell_transition_paints_darkroom_titles() {
     );
     assert_darkroom_titles_are_allocated(&shell);
     assert_darkroom_chrome_matches_runtime_geometry(&shell);
+    assert_lighttable_preview_geometry(&shell, photo_id);
+}
+
+fn assert_lighttable_preview_geometry(shell: &GtkShell, photo_id: PhotoId) {
+    let root: gtk4::Widget = shell.window().clone().upcast();
+    find_widget(&root, "view-lighttable")
+        .expect("header Lighttable selector")
+        .downcast::<gtk4::Button>()
+        .expect("header Lighttable selector is a button")
+        .emit_clicked();
+    let lighttable_grid = find_widget(&root, "lighttable-grid").expect("Lighttable grid");
+    let thumbnail_name = format!("photo-thumbnail-{photo_id}");
+    settle_gtk_until(
+        || {
+            find_widget(&lighttable_grid, &thumbnail_name)
+                .is_some_and(|thumbnail| thumbnail.allocated_height() >= 400)
+        },
+        || {
+            find_widget(&lighttable_grid, &thumbnail_name).map_or_else(
+                || "full-preview thumbnail missing".to_owned(),
+                |thumbnail| {
+                    format!(
+                        "full-preview thumbnail={}x{}",
+                        thumbnail.allocated_width(),
+                        thumbnail.allocated_height()
+                    )
+                },
+            )
+        },
+    );
+    settle_next_gtk_frame();
+    settle_gtk_until(
+        || {
+            find_widget(&lighttable_grid, &thumbnail_name)
+                .is_some_and(|thumbnail| thumbnail.allocated_height() >= 400)
+        },
+        || "full-preview thumbnail did not stabilize after the header switch".to_owned(),
+    );
+    shell
+        .set_photo_thumbnail(photo_id, &thumbnail_metadata())
+        .expect("ready thumbnail publishes on the initial preview layout");
+    settle_next_gtk_frame();
+    let thumbnail = find_widget(&lighttable_grid, &thumbnail_name).expect("full-preview thumbnail");
+    let width = thumbnail.allocated_width();
+    let height = thumbnail.allocated_height();
+    assert!(
+        width >= 600 && height >= 400,
+        "full preview must occupy the center canvas, got {width}x{height}"
+    );
+    let picture = find_widget(&thumbnail, &format!("{thumbnail_name}-image"))
+        .expect("full-preview picture")
+        .downcast::<gtk4::Picture>()
+        .expect("full-preview image is a GTK picture");
+    assert_eq!(
+        picture.content_fit(),
+        gtk4::ContentFit::Contain,
+        "full preview must preserve the rendered image aspect ratio"
+    );
+    let paintable = picture.paintable().expect("ready full-preview texture");
+    assert!(
+        paintable.intrinsic_width() * 20 == paintable.intrinsic_height() * 32,
+        "full preview texture must preserve source geometry, got {}x{}",
+        paintable.intrinsic_width(),
+        paintable.intrinsic_height()
+    );
+    assert_lighttable_footer_and_chrome(&root);
+    find_widget(&root, "view-darkroom")
+        .expect("header Darkroom selector")
+        .downcast::<gtk4::Button>()
+        .expect("header Darkroom selector is a button")
+        .emit_clicked();
+    settle_gtk_until(
+        || find_widget(&root, "darkroom-viewport").is_some_and(|viewport| viewport.is_mapped()),
+        || "darkroom viewport did not remap".to_owned(),
+    );
+    settle_next_gtk_frame();
+}
+
+fn assert_lighttable_footer_and_chrome(root: &gtk4::Widget) {
+    for id in [
+        "lighttable-footer-rating-1",
+        "lighttable-footer-rating-5",
+        "lighttable-footer-color-0",
+        "lighttable-footer-color-4",
+        "lighttable-layout-preview",
+    ] {
+        let control = find_widget(root, id).expect("lighttable footer control");
+        assert!(
+            control.is_visible() && control.allocated_width() > 0,
+            "{id} must be visible in the bottom composition"
+        );
+    }
+    let footer_organization =
+        find_widget(root, "lighttable-footer-organization").expect("footer organization controls");
+    let footer_bounds = footer_organization
+        .compute_bounds(root)
+        .expect("footer organization bounds");
+    assert!(
+        footer_bounds.x() < 360.0 && footer_bounds.width() >= 150.0,
+        "rating and color controls must occupy the footer start: {footer_bounds:?}"
+    );
+    assert!(
+        render_widget(root).bright_pixels(footer_bounds) >= 30,
+        "rating stars and color swatches must paint in the footer"
+    );
+    assert!(
+        find_widget(root, "right-module-search").is_none(),
+        "lighttable must not paint a floating right-rail search entry"
+    );
+    for id in [
+        "lighttable-import",
+        "lighttable-copy-import",
+        "lighttable-import-parameters",
+        "lighttable-display-controls",
+    ] {
+        let control = find_widget(root, id).expect("implemented lighttable chrome");
+        assert!(
+            control.is_visible() && control.allocated_width() > 0,
+            "{id} must occupy truthful Lighttable chrome geometry"
+        );
+    }
+    assert!(
+        find_widget(root, "lighttable-import")
+            .expect("add-to-library action")
+            .is_sensitive(),
+        "implemented add-to-library action must remain available"
+    );
+    for id in ["lighttable-copy-import", "lighttable-import-parameters"] {
+        assert!(
+            !find_widget(root, id)
+                .expect("truthful import placeholder")
+                .is_sensitive(),
+            "{id} must not imply unavailable import behavior"
+        );
+    }
+    for id in ["lighttable-rating-1", "lighttable-color-0"] {
+        assert!(
+            find_widget(root, id).is_none(),
+            "{id} must not duplicate the footer organization controls"
+        );
+    }
+    for id in ["header-import", "header-preferences"] {
+        assert!(
+            find_widget(root, id).is_none(),
+            "{id} must not drift into the persistent product header"
+        );
+    }
 }
 
 fn test_workspace(photo_id: PhotoId) -> PhotoWorkspaceViewModel {
@@ -187,6 +340,18 @@ fn settle_gtk_until(done: impl Fn() -> bool, state: impl Fn() -> String) {
     }
 }
 
+fn settle_next_gtk_frame() {
+    let elapsed = Rc::new(Cell::new(false));
+    gtk4::glib::timeout_add_local_once(Duration::from_millis(20), {
+        let elapsed = Rc::clone(&elapsed);
+        move || elapsed.set(true)
+    });
+    settle_gtk_until(
+        || elapsed.get(),
+        || "GTK did not deliver the next frame interval".to_owned(),
+    );
+}
+
 fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
     let root: gtk4::Widget = shell.window().clone().upcast();
     let rail = find_widget(&root, "darkroom-left-panel").expect("darkroom left rail");
@@ -265,11 +430,13 @@ fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
     assert_right_rail_geometry(&root);
     assert_filmstrip_rendering(&root);
     assert_right_rail_resize(&root);
+    assert_outer_edge_controls(&root);
 }
 
 fn assert_navigation_rendering(root: &gtk4::Widget) {
     let navigation = find_widget(root, "darkroom-navigation-preview").expect("navigation preview");
     let crop = find_widget(root, "darkroom-navigation-crop").expect("navigation crop indicator");
+    let visible_split = find_widget(root, "desktop-left-split").expect("visible desktop split");
     let projection = find_widget(root, "darkroom-viewport-projection")
         .expect("inactive viewport projection watermark");
     assert!(navigation.is_visible() && crop.is_visible());
@@ -283,8 +450,11 @@ fn assert_navigation_rendering(root: &gtk4::Widget) {
         !projection.is_visible(),
         "default fit/edited/normal state must not paint a viewport watermark"
     );
-    let rendered = render_widget(root);
-    let crop_bounds = crop.compute_bounds(root).expect("navigation crop bounds");
+    settle_next_gtk_frame();
+    let rendered = render_widget(&visible_split);
+    let crop_bounds = crop
+        .compute_bounds(&visible_split)
+        .expect("navigation crop bounds");
     assert!(
         rendered.bright_pixels(crop_bounds) >= 40,
         "navigation crop frame must paint over the thumbnail"
@@ -342,6 +512,23 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
         assert!(label.is_visible());
         assert_eq!(label.text(), expected);
     }
+    let guide = find_widget(root, "darkroom-composition-guide").expect("composition guide");
+    let guide_toggle = find_widget(root, "darkroom-guides-toggle")
+        .expect("composition guide toggle")
+        .downcast::<gtk4::ToggleButton>()
+        .expect("composition guide toggle button");
+    assert!(
+        guide.is_visible()
+            && guide.is_mapped()
+            && guide.allocated_width() == viewport.allocated_width()
+            && guide.allocated_height() == viewport.allocated_height(),
+        "composition guide must cover the image viewport"
+    );
+    assert!(guide_toggle.is_active());
+    guide_toggle.set_active(false);
+    assert!(!guide.is_visible());
+    guide_toggle.set_active(true);
+    assert!(guide.is_visible());
 }
 
 fn assert_right_rail_geometry(root: &gtk4::Widget) {
@@ -432,6 +619,7 @@ fn assert_filmstrip_rendering(root: &gtk4::Widget) {
         selection_pointer.allocated_height()
     );
     let visible_split = find_widget(root, "desktop-left-split").expect("visible center split");
+    settle_next_gtk_frame();
     let rendered = render_widget(&visible_split);
     let metadata_bounds = filmstrip_metadata
         .compute_bounds(&visible_split)
@@ -469,6 +657,8 @@ fn assert_filmstrip_rendering(root: &gtk4::Widget) {
 fn assert_right_rail_resize(root: &gtk4::Widget) {
     let viewport = find_widget(root, "darkroom-viewport").expect("darkroom viewport");
     let histogram = find_widget(root, "darkroom-histogram").expect("histogram");
+    let histogram_chart =
+        find_widget(root, "darkroom-histogram-chart").expect("rendered histogram chart");
     let right_panel = find_widget(root, "darkroom-right-panel").expect("right panel");
     let right_split = find_widget(root, "desktop-right-split")
         .expect("right split")
@@ -487,24 +677,27 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
         },
     );
     assert!((120..=180).contains(&histogram.allocated_height()));
-    let panel_bounds = right_panel
-        .compute_bounds(root)
-        .expect("right panel bounds");
+    assert_histogram_chart_paints(root, &histogram_chart);
     for id in [
-        "rgb-denoise-model",
-        "rgb-denoise-provider",
-        "raw-denoise-model",
+        "exposure",
+        "rgb-denoise",
+        "raw-denoise",
+        "mask-manager",
+        "multiscale-retouch",
     ] {
-        let field = find_widget(root, id).expect("narrow right-rail field");
-        let bounds = field.compute_bounds(root).expect("right-rail field bounds");
+        let module = find_widget(root, id)
+            .expect("implemented processing module")
+            .downcast::<gtk4::Expander>()
+            .expect("implemented processing module is an expander");
         assert!(
-            bounds.width() >= 40.0,
-            "{id} must retain a usable value width"
+            module.is_visible() && !module.is_expanded(),
+            "{id} must use the compact collapsed module-stack presentation"
         );
-        assert!(
-            bounds.x() + bounds.width() <= panel_bounds.x() + panel_bounds.width() + 1.0,
-            "{id} must stay inside the narrow right rail: {bounds:?} vs {panel_bounds:?}"
-        );
+        for suffix in ["info", "actions"] {
+            let affordance = find_widget(module.upcast_ref(), &format!("{id}-{suffix}"))
+                .expect("module title action");
+            assert!(affordance.is_visible() && affordance.allocated_width() > 0);
+        }
     }
     right_split.set_position(split_width.saturating_sub(180));
     settle_gtk_until(
@@ -521,9 +714,58 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
         },
     );
     assert!((120..=180).contains(&histogram.allocated_height()));
+    assert_histogram_chart_paints(root, &histogram_chart);
     assert!(
         viewport.allocated_width() >= 600,
         "resize must preserve the canvas"
+    );
+}
+
+fn assert_outer_edge_controls(root: &gtk4::Widget) {
+    for (toggle_id, panel_id) in [
+        ("workspace-left-edge-toggle", "darkroom-left-panel"),
+        ("workspace-right-edge-toggle", "darkroom-right-panel"),
+    ] {
+        let toggle = find_widget(root, toggle_id)
+            .expect("outer panel affordance")
+            .downcast::<gtk4::Button>()
+            .expect("outer panel affordance is a button");
+        let panel = find_widget(root, panel_id).expect("darkroom rail");
+        assert!(
+            toggle.is_visible()
+                && toggle.is_mapped()
+                && toggle.allocated_width() > 0
+                && toggle.allocated_height() > 0,
+            "{toggle_id} must paint on the outer workspace edge"
+        );
+        toggle.emit_clicked();
+        settle_gtk_until(
+            || !panel.is_visible(),
+            || format!("{panel_id} did not collapse"),
+        );
+        toggle.emit_clicked();
+        settle_gtk_until(
+            || panel.is_visible() && panel.is_mapped(),
+            || format!("{panel_id} did not expand"),
+        );
+    }
+}
+
+fn assert_histogram_chart_paints(root: &gtk4::Widget, chart: &gtk4::Widget) {
+    assert!(
+        chart.is_visible() && chart.is_mapped(),
+        "ready histogram chart must stay mapped after rail resize"
+    );
+    let _ = root;
+    settle_next_gtk_frame();
+    let rendered = render_widget(chart);
+    let chart_width = u16::try_from(chart.allocated_width()).expect("histogram width fits u16");
+    let chart_height = u16::try_from(chart.allocated_height()).expect("histogram height fits u16");
+    let bounds =
+        gtk4::graphene::Rect::new(0.0, 0.0, f32::from(chart_width), f32::from(chart_height));
+    assert!(
+        rendered.pixels_with_channel_at_least(bounds, 60) >= 80,
+        "histogram graph must rerender visible channel traces inside {bounds:?}"
     );
 }
 

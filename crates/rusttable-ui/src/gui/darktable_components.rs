@@ -15,10 +15,7 @@ pub(crate) const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_ro
 pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
 pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
 const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
-// The title slot must retain enough width for the shortest readable label
-// after the arrow, action slot, and rail padding are allocated.
-const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 80;
-
+const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 52;
 pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     toolbar.set_widget_name(id);
@@ -51,7 +48,7 @@ pub(crate) fn module_expander(
 }
 
 pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
-    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
+    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
     title_row.set_widget_name(&format!("{id}-title"));
     title_row.set_hexpand(true);
     title_row.set_halign(gtk4::Align::Fill);
@@ -152,14 +149,14 @@ pub(crate) fn module_action_button(id: &str, accessible_name: &str) -> gtk4::But
     module_header_button(id, "open-menu-symbolic", accessible_name)
 }
 
-fn module_info_button(id: &str, accessible_name: &str) -> gtk4::Button {
+pub(crate) fn module_info_button(id: &str, accessible_name: &str) -> gtk4::Button {
     module_header_button(id, "help-about-symbolic", accessible_name)
 }
 
 fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {
     let button = gtk4::Button::new();
     button.set_widget_name(id);
-    button.set_size_request(20, 20);
+    button.set_size_request(16, 18);
     button.set_focusable(false);
     button.set_sensitive(false);
     button.add_css_class("dt_module_action");

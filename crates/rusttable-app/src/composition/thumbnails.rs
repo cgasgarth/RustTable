@@ -50,6 +50,11 @@ impl ThumbnailLifecycle {
         self.generation == generation
     }
 
+    fn accepts(&self, target: ThumbnailTarget, generation: u64) -> bool {
+        self.is_current(generation)
+            && self.requested.get(&target.photo_id) == Some(&(target, generation))
+    }
+
     fn reconcile(
         &mut self,
         targets: &[ThumbnailTarget],
@@ -73,11 +78,10 @@ impl ThumbnailLifecycle {
     }
 
     pub(crate) fn invalidate(&mut self, photo_id: PhotoId) {
-        // A preview generation may already have a worker in flight. Clear all pending
-        // requests so that its results cannot be accepted after the selected photo begins a
-        // new edit/selection generation; unchanged published tiles remain valid and are reused.
-        self.generation = self.generation.wrapping_add(1);
-        self.requested.clear();
+        // Invalidate only the selected target. A shared worker may still be rendering visible
+        // filmstrip neighbors, and those requests remain valid. Publication checks the exact
+        // target/generation pair so a late result for this photo cannot restore stale pixels.
+        self.requested.remove(&photo_id);
         self.published.remove(&photo_id);
     }
 
@@ -120,18 +124,9 @@ pub(super) fn start_workspace_thumbnails(
     };
     let catalog_path = ready.location().catalog_path().to_path_buf();
     let source_root = ready.location().source_root().to_path_buf();
-    let selected_darkroom_photo = shell
-        .darkroom_panel_target()
-        .map(rusttable_ui::DarkroomPanelTarget::photo_id);
-    if let Some(photo_id) = selected_darkroom_photo {
-        // The selected darkroom thumbnail is authored by the completed presented preview. Do
-        // not let an independent source/cache worker race it or restore stale pixels on failure.
-        lifecycle.borrow_mut().invalidate(photo_id);
-    }
     let candidate_photo_ids = shell
         .lighttable_thumbnail_photo_ids()
         .into_iter()
-        .filter(|photo_id| Some(*photo_id) != selected_darkroom_photo)
         .collect::<Vec<_>>();
     let targets = candidate_photo_ids
         .iter()
@@ -218,14 +213,14 @@ pub(super) fn start_workspace_thumbnails(
         loop {
             match receiver.try_recv() {
                 Ok(ThumbnailWorkerMessage::Ready(thumbnail)) => {
-                    if !lifecycle.borrow().is_current(generation) {
-                        continue;
-                    }
                     let target = ThumbnailTarget::new(
                         thumbnail.photo_id(),
                         thumbnail.edit_id(),
                         thumbnail.edit_revision(),
                     );
+                    if !lifecycle.borrow().accepts(target, generation) {
+                        continue;
+                    }
                     if shell
                         .set_photo_thumbnail_for_edit(
                             thumbnail.photo_id(),
@@ -240,7 +235,7 @@ pub(super) fn start_workspace_thumbnails(
                     lifecycle.borrow_mut().publish(target, generation);
                 }
                 Ok(ThumbnailWorkerMessage::Failed(target)) => {
-                    if lifecycle.borrow().is_current(generation) {
+                    if lifecycle.borrow().accepts(target, generation) {
                         shell.set_photo_thumbnail_failed(target.photo_id);
                         lifecycle.borrow_mut().publish(target, generation);
                     }
@@ -300,16 +295,19 @@ mod tests {
     #[test]
     fn invalidating_a_selected_photo_rejects_inflight_results() {
         let photo_id = id(4);
-        let target = target(photo_id, 1);
+        let selected = target(photo_id, 1);
+        let neighbor = target(id(5), 1);
         let mut lifecycle = ThumbnailLifecycle::default();
         let generation = lifecycle.begin();
-        lifecycle.request(&[target], generation);
+        lifecycle.request(&[selected, neighbor], generation);
 
         lifecycle.invalidate(photo_id);
-        lifecycle.publish(target, generation);
+        lifecycle.publish(selected, generation);
 
-        assert!(!lifecycle.is_current(generation));
-        assert!(lifecycle.needs_request(target));
+        assert!(lifecycle.is_current(generation));
+        assert!(!lifecycle.accepts(selected, generation));
+        assert!(lifecycle.accepts(neighbor, generation));
+        assert!(lifecycle.needs_request(selected));
         assert!(!lifecycle.published.contains_key(&photo_id));
     }
 

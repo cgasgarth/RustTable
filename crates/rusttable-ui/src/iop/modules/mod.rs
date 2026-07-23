@@ -7,7 +7,8 @@ use gtk4::prelude::*;
 use rusttable_core::Revision;
 
 use crate::gui::darktable_components::{
-    button as shared_button, dropdown as shared_dropdown, module_expander as shared_module_expander,
+    button as shared_button, dropdown as shared_dropdown,
+    module_expander as shared_module_expander, module_title,
 };
 use crate::presentation::PresentationTextError;
 use crate::presentation::darkroom_controls::{
@@ -749,6 +750,7 @@ pub fn build_module_panel_with_actions(
         module.expanded(),
         Some(&content),
     );
+    expander.set_label_widget(Some(&module_title(module.id(), module.title())));
     expander.set_accessible_role(gtk4::AccessibleRole::Group);
     expander.update_property(&[Property::Label(module.title())]);
     apply_theme_role(&expander, ThemeRole::Module);

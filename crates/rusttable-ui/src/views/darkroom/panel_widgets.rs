@@ -32,6 +32,46 @@ use crate::viewport_presentation::{DarkroomViewportState, NavigationCrop};
 use crate::widgets::thumbnail::ThumbnailSurface;
 use crate::{MaskManagerPanel, MultiscaleRetouchPanel};
 
+#[derive(Clone)]
+pub(super) struct ImplementedModulePanel {
+    id: &'static str,
+    title: &'static str,
+    group: DarkroomModuleGroup,
+    widget: gtk4::Widget,
+}
+
+impl ImplementedModulePanel {
+    fn existing(
+        id: &'static str,
+        title: &'static str,
+        group: DarkroomModuleGroup,
+        widget: &impl IsA<gtk4::Widget>,
+    ) -> Self {
+        Self {
+            id,
+            title,
+            group,
+            widget: widget.clone().upcast(),
+        }
+    }
+
+    fn wrapped(
+        id: &'static str,
+        title: &'static str,
+        group: DarkroomModuleGroup,
+        child: &impl IsA<gtk4::Widget>,
+    ) -> Self {
+        let expander = shared_module_expander(id, title, false, Some(child));
+        expander.set_label_widget(Some(&module_title(id, title)));
+        Self::existing(id, title, group, &expander)
+    }
+
+    fn is_visible(&self, group: DarkroomModuleGroup, query: &str) -> bool {
+        (group == DarkroomModuleGroup::Active || group == self.group)
+            && crate::gtk_shell::darkroom_modules::search_matches(query, self.title, self.id, &[])
+    }
+}
+
 pub(super) fn left_panel(width: i32) -> (gtk4::Box, gtk4::Box, DarkroomRailStatus) {
     let panel = rail("darkroom-left-panel", width, "Darkroom left module rail");
     let modules = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -123,11 +163,42 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
     let raw_denoise = RawDenoisePanel::new();
     let mask_manager = MaskManagerPanel::new();
     let multiscale_retouch = MultiscaleRetouchPanel::new();
-    modules.append(exposure.widget());
-    modules.append(rgb_denoise.widget());
-    modules.append(raw_denoise.widget());
-    modules.append(mask_manager.widget());
-    modules.append(multiscale_retouch.widget());
+    exposure.widget().set_expanded(false);
+    let implemented_modules = vec![
+        ImplementedModulePanel::existing(
+            "exposure",
+            "exposure",
+            DarkroomModuleGroup::Basic,
+            exposure.widget(),
+        ),
+        ImplementedModulePanel::wrapped(
+            "rgb-denoise",
+            "RGB AI denoise",
+            DarkroomModuleGroup::Correct,
+            rgb_denoise.widget(),
+        ),
+        ImplementedModulePanel::wrapped(
+            "raw-denoise",
+            "RAW AI denoise",
+            DarkroomModuleGroup::Correct,
+            raw_denoise.widget(),
+        ),
+        ImplementedModulePanel::wrapped(
+            "mask-manager",
+            "mask manager",
+            DarkroomModuleGroup::Correct,
+            mask_manager.widget(),
+        ),
+        ImplementedModulePanel::wrapped(
+            "multiscale-retouch",
+            "multiscale retouch",
+            DarkroomModuleGroup::Correct,
+            multiscale_retouch.widget(),
+        ),
+    ];
+    for module in &implemented_modules {
+        modules.append(&module.widget);
+    }
     let scroll = rail_scroll(&modules, width, "darkroom-right-module-scroll");
     panel.append(&scroll);
     (
@@ -138,6 +209,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         raw_denoise,
         mask_manager,
         multiscale_retouch,
+        implemented_modules,
         histogram,
         search,
         module_group,
@@ -148,11 +220,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
 pub(super) fn render_typed_modules_into(
     left_modules: &gtk4::Box,
     right_modules: &gtk4::Box,
-    exposure: &ExposurePanel,
-    rgb_denoise: &RgbDenoisePanel,
-    raw_denoise: &RawDenoisePanel,
-    mask_manager: &MaskManagerPanel,
-    multiscale_retouch: &MultiscaleRetouchPanel,
+    implemented_modules: &[ImplementedModulePanel],
     typed_modules: &Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     action_handler: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
     group: DarkroomModuleGroup,
@@ -171,43 +239,28 @@ pub(super) fn render_typed_modules_into(
     ));
 
     clear_children(right_modules);
-    let static_modules: [(&str, &str, gtk4::Widget); 5] = [
-        ("exposure", "Exposure", exposure.widget().clone().upcast()),
-        (
-            "rgb-denoise",
-            "RGB AI denoise",
-            rgb_denoise.widget().clone().upcast(),
-        ),
-        (
-            "raw-denoise",
-            "RAW AI denoise",
-            raw_denoise.widget().clone().upcast(),
-        ),
-        (
-            "mask-manager",
-            "Mask manager",
-            mask_manager.widget().clone().upcast(),
-        ),
-        (
-            "multiscale-retouch",
-            "Multiscale retouch",
-            multiscale_retouch.widget().clone().upcast(),
-        ),
-    ];
     let mut rendered = 0;
-    for (id, title, widget) in static_modules {
-        if crate::gtk_shell::darkroom_modules::search_matches(query, title, id, &[]) {
-            right_modules.append(&widget);
+    for module in implemented_modules {
+        if module.is_visible(group, query) {
+            right_modules.append(&module.widget);
             rendered += 1;
         }
     }
-    let filtered_right = modules
-        .right_modules()
-        .filter(|module| module.id() != "exposure")
-        .filter(|module| group.matches(module));
-    let typed = filtered_right
-        .filter(|module| crate::gtk_shell::darkroom_modules::module_matches_search(module, query))
-        .collect::<Vec<_>>();
+    // The active tab is the live controller-owned stack above. Registry descriptors describe
+    // available operations, not active pipeline instances, and therefore belong only to their
+    // truthful category tabs.
+    let typed = if group == DarkroomModuleGroup::Active {
+        Vec::new()
+    } else {
+        modules
+            .right_modules()
+            .filter(|module| module.id() != "exposure")
+            .filter(|module| group.matches(module))
+            .filter(|module| {
+                crate::gtk_shell::darkroom_modules::module_matches_search(module, query)
+            })
+            .collect::<Vec<_>>()
+    };
     rendered += typed.len();
     right_modules.append(&build_module_column_without_empty(
         typed.into_iter(),
@@ -272,7 +325,7 @@ pub(super) fn add_group_buttons(
         (
             DarkroomModuleGroup::Active,
             "group-active",
-            "object-select-symbolic",
+            "system-shutdown-symbolic",
             "Active modules",
         ),
         (
@@ -284,7 +337,7 @@ pub(super) fn add_group_buttons(
         (
             DarkroomModuleGroup::Basic,
             "group-basic",
-            "view-grid-symbolic",
+            "preferences-system-symbolic",
             "Basic modules",
         ),
         (
@@ -302,7 +355,7 @@ pub(super) fn add_group_buttons(
         (
             DarkroomModuleGroup::Correct,
             "group-correct",
-            "tools-check-spelling-symbolic",
+            "find-location-symbolic",
             "Corrective modules",
         ),
         (
