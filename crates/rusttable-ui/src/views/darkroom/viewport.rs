@@ -35,6 +35,10 @@ pub(super) struct ViewportControls {
     overlay_soft_proof: gtk4::Label,
     overlay_gamut: gtk4::Label,
     overlay_sample: gtk4::Label,
+    composition_guide: gtk4::DrawingArea,
+    left_panel: gtk4::ToggleButton,
+    right_panel: gtk4::ToggleButton,
+    filmstrip: gtk4::ToggleButton,
     canvas: Option<gtk4::Picture>,
     sync_guard: Rc<Cell<bool>>,
 }
@@ -56,6 +60,14 @@ impl ViewportControls {
     pub(super) fn clear_histogram_sample(&self) {
         self.overlay_sample.set_text("");
         self.overlay_sample.set_visible(false);
+    }
+
+    pub(super) fn set_panel_visible(&self, panel: DarkroomPanelVisibility, visible: bool) {
+        match panel {
+            DarkroomPanelVisibility::Left => self.left_panel.set_active(visible),
+            DarkroomPanelVisibility::Right => self.right_panel.set_active(visible),
+            DarkroomPanelVisibility::Filmstrip => self.filmstrip.set_active(visible),
+        }
     }
 }
 
@@ -117,6 +129,19 @@ pub(super) fn darkroom_page(
     overlay.append(&overlay_gamut);
     overlay.append(&overlay_sample);
 
+    let composition_guide = composition_guide(preview);
+    let guides = chrome_toggle(
+        "darkroom-guides-toggle",
+        "",
+        "Show or hide rule-of-thirds composition guides",
+    );
+    guides.set_child(Some(&gtk4::Image::from_icon_name("view-grid-symbolic")));
+    guides.set_active(true);
+    guides.connect_toggled({
+        let composition_guide = composition_guide.clone();
+        move |button| composition_guide.set_visible(button.is_active())
+    });
+
     let zoom = shared_dropdown(
         DARKROOM_VIEWPORT_WIDGET_IDS[3],
         &DarkroomZoom::ALL.map(DarkroomZoom::label),
@@ -140,21 +165,6 @@ pub(super) fn darkroom_page(
     soft_proof.set_child(Some(&soft_proof_glyph));
     let gamut_check = chrome_toggle(DARKROOM_VIEWPORT_WIDGET_IDS[2], "", "Toggle gamut warning");
     gamut_check.set_child(Some(&gtk4::Image::from_icon_name("color-select-symbolic")));
-    let controls = ViewportControls {
-        zoom: zoom.clone(),
-        fit: fit.clone(),
-        before_after: before_after.clone(),
-        soft_proof: soft_proof.clone(),
-        gamut_check: gamut_check.clone(),
-        projection: projection.clone(),
-        overlay_before: overlay_before.clone(),
-        overlay_soft_proof: overlay_soft_proof.clone(),
-        overlay_gamut: overlay_gamut.clone(),
-        overlay_sample: overlay_sample.clone(),
-        canvas: find_image_canvas(preview.widget().upcast_ref()),
-        sync_guard: Rc::new(Cell::new(false)),
-    };
-
     let top = toolbar("darkroom-toolbar-top", "Darkroom viewport controls");
     let left_panel = layout_toggle(
         "darkroom-left-panel-toggle",
@@ -174,20 +184,35 @@ pub(super) fn darkroom_page(
         "Show or hide the bottom filmstrip",
         filmstrip_visible.get(),
     );
-    let bottom = toolbar("darkroom-toolbar-bottom", "Darkroom viewport controls");
+    let bottom = toolbar("darkroom-toolbar-bottom", "Darkroom layout controls");
+    let utilities = toolbar("darkroom-utility-controls", "Darkroom display controls");
     top.set_visible(false);
-    for control in [
-        &left_panel,
-        &right_panel,
-        &filmstrip,
-        &soft_proof,
-        &gamut_check,
-    ] {
+    for control in [&left_panel, &right_panel, &filmstrip] {
         bottom.append(control);
     }
     bottom.append(&zoom);
     bottom.append(&fit);
-    bottom.append(&before_after);
+    for control in [&before_after, &soft_proof, &gamut_check, &guides] {
+        utilities.append(control);
+    }
+    let controls = ViewportControls {
+        zoom: zoom.clone(),
+        fit: fit.clone(),
+        before_after: before_after.clone(),
+        soft_proof: soft_proof.clone(),
+        gamut_check: gamut_check.clone(),
+        projection: projection.clone(),
+        overlay_before: overlay_before.clone(),
+        overlay_soft_proof: overlay_soft_proof.clone(),
+        overlay_gamut: overlay_gamut.clone(),
+        overlay_sample: overlay_sample.clone(),
+        composition_guide: composition_guide.clone(),
+        left_panel: left_panel.clone(),
+        right_panel: right_panel.clone(),
+        filmstrip: filmstrip.clone(),
+        canvas: find_image_canvas(preview.widget().upcast_ref()),
+        sync_guard: Rc::new(Cell::new(false)),
+    };
 
     let viewport = gtk4::Overlay::new();
     viewport.set_widget_name(DARKROOM_VIEWPORT_WIDGET_IDS[0]);
@@ -197,6 +222,7 @@ pub(super) fn darkroom_page(
     viewport.set_accessible_role(gtk4::AccessibleRole::Group);
     viewport.update_property(&[Property::Label("Darkroom image viewport")]);
     viewport.set_child(Some(preview.widget()));
+    viewport.add_overlay(&composition_guide);
     viewport.add_overlay(&projection);
     viewport.add_overlay(&overlay);
     let boundary = gtk4::Separator::new(gtk4::Orientation::Horizontal);
@@ -207,6 +233,7 @@ pub(super) fn darkroom_page(
     page.append(&viewport);
     let status_surface = DarkroomStatusSurface::new();
     status_surface.set_controls(&bottom);
+    status_surface.set_utility_controls(&utilities);
     page.append(status_surface.widget());
     page.append(&boundary);
     connect_viewport_controls(&controls, state, handler, preview);
@@ -232,6 +259,84 @@ pub(super) fn darkroom_page(
     debug_assert_eq!(DARKROOM_VIEWPORT_FOCUS_ORDER.len(), 5);
     sync_viewport_controls(&controls, preview, state);
     (page, controls, status_surface)
+}
+
+fn composition_guide(preview: &PhotoPreview) -> gtk4::DrawingArea {
+    let guide = gtk4::DrawingArea::new();
+    guide.set_widget_name("darkroom-composition-guide");
+    guide.set_hexpand(true);
+    guide.set_vexpand(true);
+    guide.set_halign(gtk4::Align::Fill);
+    guide.set_valign(gtk4::Align::Fill);
+    guide.set_can_target(false);
+    guide.set_accessible_role(gtk4::AccessibleRole::Img);
+    guide.update_property(&[Property::Label("Rule-of-thirds composition guide")]);
+    let preview = preview.clone();
+    guide.set_draw_func(move |_, context, width, height| {
+        let Some(texture) = preview.texture() else {
+            return;
+        };
+        draw_rule_of_thirds(context, width, height, texture.width(), texture.height());
+    });
+    guide
+}
+
+fn draw_rule_of_thirds(
+    context: &gtk4::cairo::Context,
+    viewport_width: i32,
+    viewport_height: i32,
+    image_width: i32,
+    image_height: i32,
+) {
+    let Some((left, top, fitted_width, fitted_height)) =
+        fitted_image_rect(viewport_width, viewport_height, image_width, image_height)
+    else {
+        return;
+    };
+    let x_one = left + fitted_width / 3.0;
+    let x_two = left + fitted_width * 2.0 / 3.0;
+    let y_one = top + fitted_height / 3.0;
+    let y_two = top + fitted_height * 2.0 / 3.0;
+
+    for (width, red, green, blue, alpha) in
+        [(2.0, 0.10, 0.02, 0.02, 0.72), (1.0, 0.76, 0.08, 0.08, 0.88)]
+    {
+        context.set_line_width(width);
+        context.set_source_rgba(red, green, blue, alpha);
+        for x in [x_one, x_two] {
+            context.move_to(x, top);
+            context.line_to(x, top + fitted_height);
+        }
+        for y in [y_one, y_two] {
+            context.move_to(left, y);
+            context.line_to(left + fitted_width, y);
+        }
+        let _ = context.stroke();
+    }
+}
+
+fn fitted_image_rect(
+    viewport_width: i32,
+    viewport_height: i32,
+    image_width: i32,
+    image_height: i32,
+) -> Option<(f64, f64, f64, f64)> {
+    if viewport_width <= 0 || viewport_height <= 0 || image_width <= 0 || image_height <= 0 {
+        return None;
+    }
+    let viewport_width = f64::from(viewport_width);
+    let viewport_height = f64::from(viewport_height);
+    let image_width = f64::from(image_width);
+    let image_height = f64::from(image_height);
+    let scale = (viewport_width / image_width).min(viewport_height / image_height);
+    let fitted_width = image_width * scale;
+    let fitted_height = image_height * scale;
+    Some((
+        (viewport_width - fitted_width) / 2.0,
+        (viewport_height - fitted_height) / 2.0,
+        fitted_width,
+        fitted_height,
+    ))
 }
 
 fn layout_toggle(
@@ -530,6 +635,7 @@ pub(super) fn sync_viewport_controls(
         .overlay_gamut
         .set_visible(state.color_mode() == ViewportColorMode::GamutCheck);
     apply_canvas_projection(controls.canvas.as_ref(), preview, state);
+    controls.composition_guide.queue_draw();
     controls.sync_guard.set(false);
 }
 
@@ -614,4 +720,26 @@ fn viewport_badge(id: &str, text: &str, accessible_name: &str) -> gtk4::Label {
     badge.update_property(&[Property::Label(accessible_name)]);
     badge.set_visible(false);
     badge
+}
+
+#[cfg(test)]
+mod composition_guide_tests {
+    use super::fitted_image_rect;
+
+    #[test]
+    fn guide_geometry_tracks_the_aspect_fitted_image_not_canvas_padding() {
+        let (left, top, width, height) =
+            fitted_image_rect(900, 600, 32, 20).expect("valid fitted image");
+        assert_eq!((left, top, width, height), (0.0, 18.75, 900.0, 562.5));
+
+        let (left, top, width, height) =
+            fitted_image_rect(600, 900, 32, 20).expect("valid fitted image");
+        assert_eq!((left, top, width, height), (0.0, 262.5, 600.0, 375.0));
+    }
+
+    #[test]
+    fn guide_geometry_rejects_empty_dimensions() {
+        assert!(fitted_image_rect(0, 600, 32, 20).is_none());
+        assert!(fitted_image_rect(900, 600, -1, 20).is_none());
+    }
 }

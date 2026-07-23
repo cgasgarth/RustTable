@@ -34,7 +34,7 @@ use crate::{MultiscaleRetouchAction, MultiscaleRetouchPanel, MultiscaleRetouchSn
 use interaction::{
     FilmstripState, HistogramView, install_filmstrip_keyboard, sync_filmstrip_buttons,
 };
-use panel_widgets::{left_panel, render_typed_modules_into, right_panel};
+use panel_widgets::{ImplementedModulePanel, left_panel, render_typed_modules_into, right_panel};
 use status::DarkroomStatusSurface;
 pub(super) use viewport::chrome_toggle;
 use viewport::{ViewportControls, darkroom_page, sync_viewport_controls};
@@ -199,6 +199,7 @@ pub struct DarkroomView {
     raw_denoise: RawDenoisePanel,
     mask_manager: MaskManagerPanel,
     multiscale_retouch: MultiscaleRetouchPanel,
+    implemented_modules: Vec<ImplementedModulePanel>,
     rail_status: DarkroomRailStatus,
     histogram: HistogramView,
     histogram_generation: Rc<Cell<Option<ViewportGeneration>>>,
@@ -253,6 +254,7 @@ impl DarkroomView {
             raw_denoise,
             mask_manager,
             multiscale_retouch,
+            implemented_modules,
             histogram,
             module_search,
             module_group,
@@ -281,6 +283,7 @@ impl DarkroomView {
             raw_denoise,
             mask_manager,
             multiscale_retouch,
+            implemented_modules,
             rail_status,
             histogram,
             histogram_generation,
@@ -349,6 +352,10 @@ impl DarkroomView {
     {
         self.panel_visibility_handler
             .replace(Some(Box::new(handler)));
+    }
+
+    pub(crate) fn set_panel_visibility(&self, panel: DarkroomPanelVisibility, visible: bool) {
+        self.viewport_controls.set_panel_visible(panel, visible);
     }
 
     /// Projects the selected edit into the darkroom status row.
@@ -744,22 +751,14 @@ impl DarkroomView {
         let module_action_handler = Rc::clone(&self.module_action_handler);
         let left_modules = self.left_modules.clone();
         let right_modules = self.right_modules.clone();
-        let exposure = self.exposure.clone();
-        let rgb_denoise = self.rgb_denoise.clone();
-        let raw_denoise = self.raw_denoise.clone();
-        let mask_manager = self.mask_manager.clone();
-        let multiscale_retouch = self.multiscale_retouch.clone();
+        let implemented_modules = self.implemented_modules.clone();
         let search = self.module_search.clone();
         self.module_group_handler
             .replace(Some(Box::new(move |group| {
                 render_typed_modules_into(
                     &left_modules,
                     &right_modules,
-                    &exposure,
-                    &rgb_denoise,
-                    &raw_denoise,
-                    &mask_manager,
-                    &multiscale_retouch,
+                    &implemented_modules,
                     &typed_modules,
                     &module_action_handler,
                     group,
@@ -773,11 +772,7 @@ impl DarkroomView {
         render_typed_modules_into(
             &self.left_modules,
             &self.right_modules,
-            &self.exposure,
-            &self.rgb_denoise,
-            &self.raw_denoise,
-            &self.mask_manager,
-            &self.multiscale_retouch,
+            &self.implemented_modules,
             &self.typed_modules,
             &self.module_action_handler,
             self.module_group.get(),
@@ -790,21 +785,13 @@ impl DarkroomView {
         let module_action_handler = Rc::clone(&self.module_action_handler);
         let left_modules = self.left_modules.clone();
         let right_modules = self.right_modules.clone();
-        let exposure = self.exposure.clone();
-        let rgb_denoise = self.rgb_denoise.clone();
-        let raw_denoise = self.raw_denoise.clone();
-        let mask_manager = self.mask_manager.clone();
-        let multiscale_retouch = self.multiscale_retouch.clone();
+        let implemented_modules = self.implemented_modules.clone();
         let group = Rc::clone(&self.module_group);
         self.module_search.connect_search_changed(move |search| {
             render_typed_modules_into(
                 &left_modules,
                 &right_modules,
-                &exposure,
-                &rgb_denoise,
-                &raw_denoise,
-                &mask_manager,
-                &multiscale_retouch,
+                &implemented_modules,
                 &typed_modules,
                 &module_action_handler,
                 group.get(),
@@ -907,6 +894,7 @@ type DarkroomPanelBuild = (
     RawDenoisePanel,
     MaskManagerPanel,
     MultiscaleRetouchPanel,
+    Vec<ImplementedModulePanel>,
     gtk4::Stack,
     gtk4::SearchEntry,
     Rc<Cell<DarkroomModuleGroup>>,

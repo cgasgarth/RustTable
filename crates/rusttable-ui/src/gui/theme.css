@@ -206,8 +206,8 @@ button:disabled:hover,
 }
 
 .dt_module_action {
-  min-width: 20px;
-  min-height: 20px;
+  min-width: 16px;
+  min-height: 18px;
   padding: 0;
   border: 0;
   background-color: transparent;
@@ -224,7 +224,7 @@ button:disabled:hover,
 .dt_darkroom_section_title {
   min-width: 0;
   min-height: {{module_title_height}}px;
-  padding: 0 4px;
+  padding: 0 2px;
   color: {{foreground}};
   background-color: transparent;
 }
@@ -545,10 +545,16 @@ expander:hover {
   color: {{foreground}};
 }
 
-#lighttable-collection-toolbar,
-#center-bottom {
-  min-height: 2em;
+#lighttable-collection-toolbar {
+  min-height: 26px;
   padding: 0.08em 0.28em;
+  background-color: {{background}};
+  border-bottom: 1px solid {{border}};
+}
+
+#center-bottom {
+  min-height: 22px;
+  padding: 0 4px;
   background-color: {{background}};
   border-bottom: 1px solid {{border}};
 }
@@ -613,6 +619,14 @@ expander:hover {
 #lighttable-toolbar-separator-count-reset {
   margin-top: 2px;
   margin-bottom: 2px;
+}
+
+#lighttable-footer-organization {
+  margin-left: 0;
+}
+
+#lighttable-toolbar-separator-footer-rating-labels {
+  margin: 2px 3px;
 }
 
 .dt_filter_button {
@@ -754,6 +768,21 @@ scale:focus-visible {
 
 #darkroom-right-panel {
   border-left: 1px solid {{border}};
+}
+
+.dt_edge_toggle,
+.dt_edge_toggle:hover {
+  min-width: 12px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: #f4f4f4ff;
+  font-size: 8px;
 }
 
 #darkroom-left-panel expander,

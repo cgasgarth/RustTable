@@ -35,17 +35,19 @@
 
 ### Visual comparison workflow
 - For GTK visual parity reviews, the orchestrator uses computer use only to capture screenshots of the installed RustTable and original Darktable apps; Gemini visual-analysis workers do not use computer use.
-- Gemini visual review workers receive paired local full-screen screenshots as image inputs, never computer-use access, and must return concrete implemented-behavior findings mapped to RustTable components.
+- Gemini visual review workers receive paired local full-screen screenshots as image inputs, never computer-use access, and must return concrete pixel-level implemented-behavior findings mapped to RustTable components.
 - Capture matched screenshots locally and pass them to Gemini as image inputs. Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state for each comparison pair.
+- Treat screenshot geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate with paired full-screen, same-size captures until measurable drift is removed or explicitly proven out of scope.
 - Capture the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize. Ask Gemini to report concrete geometry/style/render differences and map them to RustTable components.
 - Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.
+- Keep every UI correction from a review iteration in that batch's single UI parity PR. Reuse the same Sol UI worker that owns the UI PR for follow-up screenshot iterations so visual context and responsibility remain continuous.
 
 ## Issues and pull requests
 
 - GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
 - Select dependency-ready work by priority label, P0 through P4.
 - A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body. Move-only structure migrations may consolidate all directly related lineage issues into one PR when splitting them would create avoidable path churn; link every covered issue and preserve its acceptance criteria.
-- Work in batches of at most two PRs; both must merge before the next batch starts. Use multiple agents to deliver each PR, with at least one PR in every batch replacing real darktable behavior in Rust.
+- After the issue #969 UI parity PR merges, every active batch contains exactly two ready-for-review PRs: one UI parity/iterative screenshot PR and one non-UI product or migration PR. Both PRs must merge before the next batch starts, and UI work must not be split out of the batch's single UI parity PR.
 - Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
 - Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.
 - When fewer than ten open issues remain, start fresh milestone-scoped consults to propose concrete product issues.

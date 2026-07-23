@@ -10,13 +10,14 @@ use super::{
 };
 
 #[cfg(test)]
-const HEADER_WIDGET_IDS: [&str; 6] = [
+const HEADER_WIDGET_IDS: [&str; 7] = [
     "header",
     "header-left",
     "header-center",
     "header-right",
     "view-lighttable",
     "view-darkroom",
+    "view-other",
 ];
 
 /// Widgets and actions owned by the persistent top panel.
@@ -30,7 +31,7 @@ impl HeaderChrome {
     pub(super) fn new(
         workspace: &gtk4::Stack,
         i18n: &I18n,
-        display_profile: &DisplayProfileBanner,
+        _display_profile: &DisplayProfileBanner,
     ) -> Self {
         let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         root.set_widget_name(ShellRegion::Header.identifier());
@@ -39,12 +40,11 @@ impl HeaderChrome {
         apply_theme_role(&root, ThemeRole::Header);
 
         root.append(&brand(i18n));
-        let (toolbar, import, preferences) = header_toolbar(i18n, display_profile);
+        let (import, preferences) = header_actions(i18n);
         let center = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         center.set_widget_name(PanelSlot::HeaderCenter.identifier());
         center.set_hexpand(true);
         center.set_halign(gtk4::Align::Fill);
-        center.append(&toolbar);
         root.append(&center);
         root.append(&mode_switcher(workspace, i18n));
 
@@ -140,16 +140,10 @@ fn aperture_mark() -> gtk4::DrawingArea {
     mark
 }
 
-fn header_toolbar(
-    i18n: &I18n,
-    display_profile: &DisplayProfileBanner,
-) -> (gtk4::Box, gtk4::Button, gtk4::Button) {
-    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
-    toolbar.set_widget_name("header-toolbar");
-    toolbar.set_hexpand(true);
-    toolbar.set_valign(gtk4::Align::Center);
-    apply_theme_role(&toolbar, ThemeRole::Toolbar);
-
+fn header_actions(i18n: &I18n) -> (gtk4::Button, gtk4::Button) {
+    // Darktable keeps the center of the persistent product header empty. These actions remain
+    // controller-owned for the left-rail import route and keyboard/preferences commands, but do
+    // not create a second plus/wrench toolbar in the header.
     let import = gtk4::Button::from_icon_name("list-add-symbolic");
     import.set_widget_name("header-import");
     import.set_tooltip_text(Some(
@@ -157,11 +151,6 @@ fn header_toolbar(
     ));
     import.update_property(&[Property::Label("Import images")]);
     import.add_css_class("dt_header_icon");
-    toolbar.append(&import);
-
-    let profile = display_profile.widget();
-    profile.set_width_chars(2);
-    toolbar.append(profile);
 
     let preferences = gtk4::Button::from_icon_name("preferences-system-symbolic");
     preferences.set_widget_name("header-preferences");
@@ -170,8 +159,7 @@ fn header_toolbar(
     ));
     preferences.update_property(&[Property::Label("Open preferences")]);
     preferences.add_css_class("dt_header_icon");
-    toolbar.append(&preferences);
-    (toolbar, import, preferences)
+    (import, preferences)
 }
 
 fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
@@ -213,6 +201,16 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     modes.append(&lighttable);
     modes.append(&separator());
     modes.append(&darkroom);
+    modes.append(&separator());
+    let other = gtk4::Button::with_label("other ⌄");
+    other.set_widget_name("view-other");
+    other.add_css_class("dt_mode_button");
+    other.set_sensitive(false);
+    other.set_tooltip_text(Some(
+        "Other Darktable workspaces are not implemented in RustTable",
+    ));
+    other.update_property(&[Property::Label("Other workspaces are not implemented")]);
+    modes.append(&other);
     modes
 }
 
@@ -268,6 +266,7 @@ mod tests {
                 "header-right",
                 "view-lighttable",
                 "view-darkroom",
+                "view-other",
             ]
         );
     }

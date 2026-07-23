@@ -53,7 +53,6 @@ impl GtkShell {
         self.darkroom_preview.set_loading();
         self.darkroom.set_status("loading preview");
         if let Some(photo_id) = selected_photo {
-            self.invalidate_photo_thumbnail_edit_identity(photo_id);
             if let Some(metadata) = self.photo_thumbnail_metadata(photo_id) {
                 if let Err(error) = self.darkroom.set_navigation_preview(&metadata) {
                     tracing::warn!(

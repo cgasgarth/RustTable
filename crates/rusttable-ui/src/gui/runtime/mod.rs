@@ -23,8 +23,8 @@ use rusttable_core::{EditId, PhotoId, Revision};
 use rusttable_i18n::{Direction, I18n, MessageArgs, MessageId};
 
 use self::layout::{
-    desktop_body, mode_panel_stack, render_modules, right_panel, synchronize_panel_stacks,
-    workspace_stack,
+    WorkspaceEdgeControls, desktop_body, mode_panel_stack, render_modules, right_panel,
+    synchronize_panel_stacks, workspace_stack,
 };
 use super::{
     CollectionControlAction, CollectionControlState, CollectionControls, CollectionFilterState,
@@ -154,16 +154,21 @@ impl GtkShell {
         let (darkroom, darkroom_preview, darkroom_workspace) = build_darkroom(panel_width);
         let darkroom_left_modules = darkroom.left_modules().clone();
         let darkroom_right_modules = darkroom.right_modules().clone();
+        let display_profile_banner = DisplayProfileBanner::new();
         let (
             workspace,
             lighttable,
             lighttable_empty_state,
             lighttable_layout_controls,
             lighttable_toolbar,
-        ) = workspace_stack(layout.initial_workspace(), &initial_i18n, darkroom.page());
+        ) = workspace_stack(
+            layout.initial_workspace(),
+            &initial_i18n,
+            darkroom.page(),
+            &display_profile_banner,
+        );
         let input_mapping_editor = InputMappingEditor::new(application);
         let ai_models_panel = AiModelsPanel::new();
-        let display_profile_banner = DisplayProfileBanner::new();
         let header = HeaderChrome::new(&workspace, &initial_i18n, &display_profile_banner);
         initialize_profile_diagnostics(&darkroom);
         header.preferences_button().connect_clicked({
@@ -198,7 +203,7 @@ impl GtkShell {
             let darkroom = darkroom.clone();
             move || darkroom.refresh_geometry()
         });
-        let (content, filmstrip, filmstrip_root) = desktop_body(
+        let (content, filmstrip, filmstrip_root, edge_controls) = desktop_body(
             &workspace,
             &lighttable_toolbar,
             &left_panel,
@@ -258,6 +263,7 @@ impl GtkShell {
             photo_details: Rc::new(RefCell::new(BTreeMap::new())),
         };
         shell.install_lighttable_keyboard();
+        shell.install_edge_controls(&edge_controls);
         self::lighttable::connect_lighttable_resize(
             &shell.lighttable,
             shell.workspace_render_handle(),
@@ -269,6 +275,7 @@ impl GtkShell {
         let right_panel = shell.right_panel_stack.clone();
         let darkroom = shell.darkroom.clone();
         let photo_details = Rc::clone(&shell.photo_details);
+        let lighttable_render = shell.workspace_render_handle();
         shell
             .workspace
             .connect_visible_child_name_notify(move |workspace| {
@@ -280,6 +287,12 @@ impl GtkShell {
                         &interaction,
                         &photo_details,
                     );
+                } else {
+                    // Startup may project the catalog before the hidden GridView has a real
+                    // allocation. Rebuild after the header switch maps Lighttable so preview
+                    // sizing uses the visible canvas instead of the first row's natural height.
+                    let render = lighttable_render.clone();
+                    gtk4::glib::idle_add_local_once(move || render.rerender_current());
                 }
                 filmstrip_root.set_visible(if darkroom_visible {
                     darkroom.filmstrip_visible()
@@ -335,6 +348,37 @@ impl GtkShell {
         shell.left_panel_stack.set_visible(true);
         shell.right_panel_stack.set_visible(true);
         shell
+    }
+
+    fn install_edge_controls(&self, controls: &WorkspaceEdgeControls) {
+        let shell = self.clone();
+        controls.left.connect_clicked(move |_| {
+            if shell.workspace.visible_child_name().as_deref()
+                == Some(WorkspaceRole::Darkroom.stack_name())
+            {
+                shell.darkroom.set_panel_visibility(
+                    DarkroomPanelVisibility::Left,
+                    !shell.darkroom.left_panel_visible(),
+                );
+            } else {
+                let visible = shell.lighttable_interaction.borrow().left_panel_visible();
+                shell.set_lighttable_panel_visibility(LighttablePanel::Left, !visible);
+            }
+        });
+        let shell = self.clone();
+        controls.right.connect_clicked(move |_| {
+            if shell.workspace.visible_child_name().as_deref()
+                == Some(WorkspaceRole::Darkroom.stack_name())
+            {
+                shell.darkroom.set_panel_visibility(
+                    DarkroomPanelVisibility::Right,
+                    !shell.darkroom.right_panel_visible(),
+                );
+            } else {
+                let visible = shell.lighttable_interaction.borrow().right_panel_visible();
+                shell.set_lighttable_panel_visibility(LighttablePanel::Right, !visible);
+            }
+        });
     }
 
     /// Applies a locale and GTK text direction to the live shell controls.
