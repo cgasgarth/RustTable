@@ -86,21 +86,89 @@ impl CanonicalMetadataPolicy {
 pub enum MetadataSource {
     Exif,
     Iptc,
+    /// Legacy XMP source when the caller cannot distinguish embedded and sidecar packets.
     Xmp,
+    /// Legacy import-default source.
     Imported,
+    /// Legacy catalog/user-edit source.
     CatalogEdit,
+    /// Legacy export-only override source.
     RecipeOverride,
     GeneratedTechnical,
+    Container,
+    MakerNote,
+    EmbeddedXmp,
+    SidecarXmp,
+    ImportDefault,
+    CatalogValue,
+    UserOverride,
+    ExportOverride,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MetadataSourceClass {
+    Extracted,
+    ImportDefault,
+    Catalog,
+    UserOverride,
+    ExportOnly,
+    Generated,
 }
 
 impl MetadataSource {
     #[must_use]
-    pub const fn precedence(self) -> u8 {
+    pub const fn precedence(self) -> u16 {
         match self {
-            Self::Exif | Self::Iptc | Self::Xmp | Self::Imported => 0,
-            Self::CatalogEdit => 1,
-            Self::RecipeOverride => 2,
-            Self::GeneratedTechnical => 3,
+            Self::Imported | Self::ImportDefault => 0,
+            Self::Container => 10,
+            Self::Exif => 20,
+            Self::MakerNote => 30,
+            Self::Iptc => 40,
+            Self::Xmp | Self::EmbeddedXmp => 50,
+            Self::SidecarXmp => 60,
+            Self::CatalogValue => 70,
+            Self::CatalogEdit | Self::UserOverride => 80,
+            Self::RecipeOverride | Self::ExportOverride => 90,
+            Self::GeneratedTechnical => 100,
+        }
+    }
+
+    #[must_use]
+    pub const fn class(self) -> MetadataSourceClass {
+        match self {
+            Self::Container
+            | Self::Exif
+            | Self::MakerNote
+            | Self::Iptc
+            | Self::Xmp
+            | Self::EmbeddedXmp
+            | Self::SidecarXmp => MetadataSourceClass::Extracted,
+            Self::Imported | Self::ImportDefault => MetadataSourceClass::ImportDefault,
+            Self::CatalogValue => MetadataSourceClass::Catalog,
+            Self::CatalogEdit | Self::UserOverride => MetadataSourceClass::UserOverride,
+            Self::RecipeOverride | Self::ExportOverride => MetadataSourceClass::ExportOnly,
+            Self::GeneratedTechnical => MetadataSourceClass::Generated,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Exif => "exif",
+            Self::Iptc => "iptc",
+            Self::Xmp => "xmp",
+            Self::Imported => "imported",
+            Self::CatalogEdit => "catalog-edit",
+            Self::RecipeOverride => "recipe-override",
+            Self::GeneratedTechnical => "generated-technical",
+            Self::Container => "container",
+            Self::MakerNote => "maker-note",
+            Self::EmbeddedXmp => "embedded-xmp",
+            Self::SidecarXmp => "sidecar-xmp",
+            Self::ImportDefault => "import-default",
+            Self::CatalogValue => "catalog-value",
+            Self::UserOverride => "user-override",
+            Self::ExportOverride => "export-override",
         }
     }
 }
