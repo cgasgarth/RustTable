@@ -322,7 +322,7 @@ pub const LIGHTTABLE_COMPOSITION: LighttableCompositionSpec = LighttableComposit
     footer_toolbar_rows: 1,
     filmstrip_toolbar_rows: 0,
     empty_state_columns: 2,
-    top_toolbar_height_px: 24,
+    top_toolbar_height_px: 21,
 };
 
 /// Geometry of the Darktable darkroom center column and its adjacent rails.
@@ -937,7 +937,7 @@ mod tests {
         assert_eq!(LIGHTTABLE_COMPOSITION.footer_toolbar_rows, 1);
         assert_eq!(LIGHTTABLE_COMPOSITION.filmstrip_toolbar_rows, 0);
         assert_eq!(LIGHTTABLE_COMPOSITION.empty_state_columns, 2);
-        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_height_px, 24);
+        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_height_px, 21);
     }
 
     #[test]

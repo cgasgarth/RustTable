@@ -10,11 +10,14 @@ fn installed_darktable_scale_is_explicit_and_readable() {
     let tokens = DARKTABLE_UI_TOKENS;
     let panels = DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths;
 
-    assert_eq!(tokens.typography.base_pt, 9);
-    assert_eq!(tokens.typography.compact_pt, 8);
-    assert_eq!(tokens.controls.control_height, 18);
-    assert_eq!(tokens.controls.module_row_height, 20);
+    assert_eq!(tokens.typography.base_pt, 8);
+    assert_eq!(tokens.typography.compact_pt, 7);
+    assert_eq!(tokens.controls.control_height, 16);
+    assert_eq!(tokens.controls.module_row_height, 18);
     assert_eq!(tokens.controls.module_title_height, 16);
+    assert_eq!(tokens.controls.module_header_button_size, 14);
+    assert_eq!(tokens.controls.module_header_icon_size, 11);
+    assert_eq!(tokens.controls.toolbar_button_size, 18);
     assert_eq!(tokens.controls.toolbar_height, 18);
     assert_eq!(panels.minimum_px, 136);
     assert_eq!(panels.preferred_px, 180);
@@ -33,7 +36,7 @@ fn module_controls_fit_inside_scrollbar_allocation_at_supported_sizes() {
         assert!(allocation.fits(), "control allocation at {width}x{height}");
         assert_eq!(allocation.control_width_px, 42);
         assert!(allocation.label_width_px >= 60);
-        assert_eq!(allocation.scrollbar_width_px, 10);
+        assert_eq!(allocation.scrollbar_width_px, 8);
         assert!(
             allocation.content_width_px + allocation.scrollbar_width_px <= allocation.rail_width_px
         );
@@ -86,10 +89,11 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
 
     assert!(!css.contains("{{"));
     for declaration in [
-        "font-size: 9pt",
+        "font-size: 8pt",
         "min-width: 136px",
+        "min-height: 14px",
+        "min-height: 16px",
         "min-height: 18px",
-        "min-height: 20px",
         "min-height: 120px",
     ] {
         assert!(

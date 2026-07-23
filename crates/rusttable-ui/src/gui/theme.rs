@@ -16,7 +16,7 @@ use super::{
 const DARKTABLE_THEME_TEMPLATE: &str = include_str!("theme.css");
 const BUTTON_BORDER: ColorToken = ColorToken::new("button_border", [0x82, 0x82, 0x82, 0xff]);
 const BUTTON_HOVER_OVERLAY: ColorToken =
-    ColorToken::new("button_hover_bg", [0xab, 0xab, 0xab, 0x80]);
+    ColorToken::new("button_hover_bg", [0xab, 0xab, 0xab, 0xff]);
 const DISABLED_BUTTON_BORDER: ColorToken =
     ColorToken::new("button_border_disabled", [0x82, 0x82, 0x82, 0x59]);
 const DISABLED_FOREGROUND: ColorToken =
@@ -153,6 +153,18 @@ pub fn darktable_theme_css() -> String {
             "{{module_title_height}}",
             tokens.controls.module_title_height,
         ),
+        (
+            "{{module_header_button_size}}",
+            tokens.controls.module_header_button_size,
+        ),
+        (
+            "{{module_header_icon_size}}",
+            tokens.controls.module_header_icon_size,
+        ),
+        (
+            "{{toolbar_button_size}}",
+            tokens.controls.toolbar_button_size,
+        ),
         ("{{toolbar_height}}", tokens.controls.toolbar_height),
         ("{{status_height}}", tokens.controls.status_height),
         ("{{control_gap}}", tokens.controls.control_gap),
@@ -248,11 +260,11 @@ mod tests {
         assert!(css.contains("#6a6a6aff"));
         assert!(css.contains("#777777ff"));
         assert!(css.contains("#f1f1f1ff"));
-        assert!(css.contains("#ababab80"));
+        assert!(css.contains("#abababff"));
         assert!(css.contains("#c6c6c6ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
-        assert!(css.contains("font-size: 9pt"));
+        assert!(css.contains("font-size: 8pt"));
         assert!(!css.contains("font-size: 0.85em"));
         assert!(css.contains(".dt_view_switcher"));
         assert!(css.contains("button:disabled"));
@@ -266,11 +278,22 @@ mod tests {
         let css = darktable_theme_css();
 
         assert!(css.contains("border: 1px solid #828282ff"));
-        assert!(css.contains("background-color: #ababab80"));
+        assert!(css.contains("background-color: #abababff"));
         assert!(css.contains("border-color: #82828259"));
         assert!(css.contains("color: #9e9e9eff"));
         assert!(css.contains("background-color: #919191ff"));
         assert!(css.contains("background-color: #c6c6c6ff"));
+    }
+
+    #[test]
+    fn css_ports_darktable_reset_and_compact_widget_metrics() {
+        let css = darktable_theme_css();
+
+        assert!(css.contains("min-width: 0;\n  min-height: 0;"));
+        assert!(css.contains("min-width: 14px;\n  min-height: 14px;"));
+        assert!(css.contains("min-width: 18px;\n  min-height: 18px;"));
+        assert!(css.contains("-gtk-icon-size: 11px"));
+        assert!(css.contains("padding: 0.14em 0.28em"));
     }
 
     #[test]

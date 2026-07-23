@@ -18,6 +18,8 @@ pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_heig
 pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
 const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
 const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 52;
+const MODULE_HEADER_BUTTON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_button_size;
+const MODULE_HEADER_ICON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_icon_size;
 
 fn rail_content_width(width: i32) -> i32 {
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
@@ -165,11 +167,13 @@ pub(crate) fn module_info_button(id: &str, accessible_name: &str) -> gtk4::Butto
 fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {
     let button = gtk4::Button::new();
     button.set_widget_name(id);
-    button.set_size_request(16, 18);
+    button.set_size_request(MODULE_HEADER_BUTTON_SIZE, MODULE_HEADER_BUTTON_SIZE);
     button.set_focusable(false);
     button.set_sensitive(false);
     button.add_css_class("dt_module_action");
-    button.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
+    let icon = gtk4::Image::from_icon_name(icon_name);
+    icon.set_pixel_size(MODULE_HEADER_ICON_SIZE);
+    button.set_child(Some(&icon));
     button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
     button.set_tooltip_text(Some(accessible_name));
     button

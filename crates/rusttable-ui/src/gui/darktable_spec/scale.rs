@@ -24,6 +24,9 @@ pub struct ControlScaleTokens {
     pub control_height: i32,
     pub module_row_height: i32,
     pub module_title_height: i32,
+    pub module_header_button_size: i32,
+    pub module_header_icon_size: i32,
+    pub toolbar_button_size: i32,
     pub toolbar_height: i32,
     pub status_height: i32,
     pub control_gap: i32,
@@ -86,25 +89,34 @@ pub struct DarktableUiTokens {
     pub cards: LighttableCardTokens,
 }
 
-/// Compact typography and chrome from the matched Darktable desktop capture.
+/// Compact typography and chrome from Darktable's widget CSS at the matched
+/// desktop scale.
+///
+/// Darktable resets GTK minimums before applying 1.15em module-header buttons,
+/// 1.7em toolbar buttons, 1px control padding, and fractional-em spacing. The
+/// integer requests below are the corresponding GTK4 allocation floor; CSS
+/// retains the source em values for font-relative sizing.
 pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
     typography: TypographyTokens {
-        base_pt: 9,
-        compact_pt: 8,
-        micro_pt: 7,
-        heading_pt: 13,
+        base_pt: 8,
+        compact_pt: 7,
+        micro_pt: 6,
+        heading_pt: 12,
     },
     controls: ControlScaleTokens {
-        control_height: 18,
-        module_row_height: 20,
+        control_height: 16,
+        module_row_height: 18,
         module_title_height: 16,
+        module_header_button_size: 14,
+        module_header_icon_size: 11,
+        toolbar_button_size: 18,
         toolbar_height: 18,
-        status_height: 18,
-        control_gap: 3,
-        module_gap: 1,
+        status_height: 16,
+        control_gap: 2,
+        module_gap: 0,
         module_padding: 3,
         module_control_min_width: 42,
-        rail_scrollbar_reserve: 10,
+        rail_scrollbar_reserve: 8,
     },
     cards: LighttableCardTokens {
         minimum_width_px: 148,
@@ -117,6 +129,48 @@ pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
         image_aspect_height: 3,
     },
 };
+
+#[cfg(test)]
+mod tests {
+    use super::{DARKTABLE_UI_TOKENS, ModuleControlAllocationReceipt};
+
+    #[test]
+    fn control_scale_matches_darktable_widget_css_contract() {
+        let tokens = DARKTABLE_UI_TOKENS;
+
+        assert_eq!(
+            (
+                tokens.typography.base_pt,
+                tokens.typography.compact_pt,
+                tokens.typography.micro_pt,
+                tokens.typography.heading_pt,
+            ),
+            (8, 7, 6, 12)
+        );
+        assert_eq!(tokens.controls.control_height, 16);
+        assert_eq!(tokens.controls.module_row_height, 18);
+        assert_eq!(tokens.controls.module_title_height, 16);
+        assert_eq!(tokens.controls.module_header_button_size, 14);
+        assert_eq!(tokens.controls.module_header_icon_size, 11);
+        assert_eq!(tokens.controls.toolbar_button_size, 18);
+        assert_eq!(tokens.controls.control_gap, 2);
+        assert_eq!(tokens.controls.module_gap, 0);
+        assert_eq!(tokens.controls.module_padding, 3);
+        assert_eq!(tokens.controls.rail_scrollbar_reserve, 8);
+    }
+
+    #[test]
+    fn compact_rail_allocation_reserves_source_sized_scrollbar_chrome() {
+        let receipt = ModuleControlAllocationReceipt::for_rail(150);
+
+        assert_eq!(receipt.rail_width_px, 150);
+        assert_eq!(receipt.scrollbar_width_px, 8);
+        assert_eq!(receipt.content_width_px, 136);
+        assert_eq!(receipt.control_width_px, 42);
+        assert_eq!(receipt.label_width_px, 92);
+        assert!(receipt.fits());
+    }
+}
 
 /// Horizontal allocation used by every module row inside a scrolling rail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
