@@ -721,6 +721,8 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
     );
 }
 
+#[allow(clippy::too_many_lines)] // Keep the native frame geometry and interaction contract auditable together.
+#[allow(clippy::cast_precision_loss, clippy::float_cmp)] // GTK allocates geometry as f32; exact edge assertions are intentional.
 fn assert_frame_edge_controls(root: &gtk4::Widget) {
     let border = i32::from(DARKTABLE_DESKTOP_SPEC.layout.outer_border_px);
     let frame = find_widget(root, "workspace-frame").expect("workspace frame");
