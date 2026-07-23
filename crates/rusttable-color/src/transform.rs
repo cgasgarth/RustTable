@@ -1,3 +1,4 @@
+use crate::conversions::{ColorMathError, lab_to_xyz, xyz_to_lab};
 use crate::{
     AdaptationMethod, ColorEncoding, ColorRole, FiniteF32, FiniteF32Error, Matrix3,
     TransferFunction, TransferFunctionError, WhitePoint,
@@ -57,7 +58,8 @@ impl Adaptation {
         method: AdaptationMethod,
     ) -> Result<Self, MatrixErrorAdapter> {
         let matrix = match method {
-            AdaptationMethod::Identity => Matrix3::identity(),
+            AdaptationMethod::Identity if source == target => Matrix3::identity(),
+            AdaptationMethod::Identity => return Err(MatrixErrorAdapter::InvalidMatrix),
             AdaptationMethod::Bradford => bradford_matrix(source, target)?,
         };
         Ok(Self {
@@ -94,6 +96,9 @@ pub enum MatrixErrorAdapter {
     InvalidMatrix,
 }
 
+/// Linear Bradford CAT as specified by ICC.1 and reproduced in CSS Color 4.
+///
+/// <https://www.w3.org/TR/css-color-4/#bradford>
 fn bradford_matrix(source: WhitePoint, target: WhitePoint) -> Result<Matrix3, MatrixErrorAdapter> {
     if source == target {
         return Ok(Matrix3::identity());
@@ -105,8 +110,15 @@ fn bradford_matrix(source: WhitePoint, target: WhitePoint) -> Result<Matrix3, Ma
     let inverse = bradford
         .inverse()
         .map_err(|_| MatrixErrorAdapter::InvalidMatrix)?;
-    let source_cone = bradford.apply(source.xyz());
-    let target_cone = bradford.apply(target.xyz());
+    let source_cone = bradford
+        .apply_checked(source.xyz())
+        .map_err(|_| MatrixErrorAdapter::InvalidMatrix)?;
+    let target_cone = bradford
+        .apply_checked(target.xyz())
+        .map_err(|_| MatrixErrorAdapter::InvalidMatrix)?;
+    if source_cone.into_iter().any(|value| value == 0.0) {
+        return Err(MatrixErrorAdapter::InvalidMatrix);
+    }
     let diagonal = Matrix3::new([
         target_cone[0] / source_cone[0],
         0.0,
@@ -520,6 +532,7 @@ pub enum TransformExecutionError {
     Cancelled,
     NonFinite,
     Transfer(TransferFunctionError),
+    ColorMath(ColorMathError),
     InvalidLut,
 }
 
@@ -529,6 +542,7 @@ impl fmt::Display for TransformExecutionError {
             Self::Cancelled => "color transform was cancelled",
             Self::NonFinite => "color transform produced a non-finite value",
             Self::Transfer(error) => return error.fmt(formatter),
+            Self::ColorMath(error) => return error.fmt(formatter),
             Self::InvalidLut => "color transform LUT interpolation is invalid",
         })
     }
@@ -539,6 +553,12 @@ impl std::error::Error for TransformExecutionError {}
 impl From<TransferFunctionError> for TransformExecutionError {
     fn from(error: TransferFunctionError) -> Self {
         Self::Transfer(error)
+    }
+}
+
+impl From<ColorMathError> for TransformExecutionError {
+    fn from(error: ColorMathError) -> Self {
+        Self::ColorMath(error)
     }
 }
 
@@ -714,13 +734,15 @@ fn apply_step(step: &TransformStep, value: &mut [f32; 3]) -> Result<(), Transfor
             }
         }
         TransformStep::Matrix(matrix) | TransformStep::Adaptation(Adaptation { matrix, .. }) => {
-            *value = matrix.apply(*value);
+            *value = matrix
+                .apply_checked(*value)
+                .map_err(|_| TransformExecutionError::NonFinite)?;
         }
         TransformStep::XyzToLab { white_point } => {
-            *value = xyz_to_lab(*value, *white_point);
+            *value = xyz_to_lab(*value, *white_point)?;
         }
         TransformStep::LabToXyz { white_point } => {
-            *value = lab_to_xyz(*value, *white_point);
+            *value = lab_to_xyz(*value, *white_point)?;
         }
         TransformStep::Lut1D(lut) => {
             for (channel_index, channel) in value.iter_mut().enumerate() {
@@ -828,53 +850,6 @@ fn step_resource_estimate(step: &TransformStep) -> u64 {
             composite.steps.iter().map(step_resource_estimate).sum()
         }
     }
-}
-
-const LAB_EPSILON: f32 = 0.008_856_452;
-const LAB_KAPPA: f32 = 903.296_3;
-
-#[must_use]
-pub fn xyz_to_lab(xyz: [f32; 3], white_point: WhitePoint) -> [f32; 3] {
-    let white = white_point.xyz();
-    let lab_f = |value: f32, white: f32| {
-        let ratio = value / white;
-        if ratio > LAB_EPSILON {
-            ratio.cbrt()
-        } else {
-            (LAB_KAPPA * ratio + 16.0) / 116.0
-        }
-    };
-    let f = [
-        lab_f(xyz[0], white[0]),
-        lab_f(xyz[1], white[1]),
-        lab_f(xyz[2], white[2]),
-    ];
-    [
-        116.0 * f[1] - 16.0,
-        500.0 * (f[0] - f[1]),
-        200.0 * (f[1] - f[2]),
-    ]
-}
-
-#[must_use]
-pub fn lab_to_xyz(lab: [f32; 3], white_point: WhitePoint) -> [f32; 3] {
-    let fy = (lab[0] + 16.0) / 116.0;
-    let fx = fy + lab[1] / 500.0;
-    let fz = fy - lab[2] / 200.0;
-    let inverse = |value: f32| {
-        let cube = value * value * value;
-        if cube > LAB_EPSILON {
-            cube
-        } else {
-            (116.0 * value - 16.0) / LAB_KAPPA
-        }
-    };
-    let white = white_point.xyz();
-    [
-        inverse(fx) * white[0],
-        inverse(fy) * white[1],
-        inverse(fz) * white[2],
-    ]
 }
 
 fn sha256(bytes: &[u8]) -> [u8; 32] {
