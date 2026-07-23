@@ -2,6 +2,8 @@ use std::fmt;
 
 use rusttable_image::InputFormat;
 
+use crate::domain::MetadataDomainError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MetadataLimitsError {
     ZeroLimit,
@@ -47,6 +49,7 @@ impl std::error::Error for MetadataOutputLimitsError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MetadataInputError {
+    Domain(MetadataDomainError),
     SourceTooLarge {
         limit: u64,
         actual: u64,
