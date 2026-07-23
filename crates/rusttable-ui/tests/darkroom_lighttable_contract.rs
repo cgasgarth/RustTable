@@ -209,6 +209,19 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
 }
 
 #[test]
+fn frame_edge_controls_stay_inside_darktable_outer_border() {
+    let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
+    let css = include_str!("../src/gui/theme.css");
+
+    assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
+    assert!(runtime_layout.contains("workspace_frame(&content)"));
+    assert!(runtime_layout.contains("i32::from(layout.outer_border_px)"));
+    assert!(runtime_layout.contains("triangle.set_content_width(4)"));
+    assert!(runtime_layout.contains("triangle.set_content_height(10)"));
+    assert!(css.contains("min-width: {{outer_border_width}}px"));
+}
+
+#[test]
 fn implemented_darkroom_panels_use_collapsed_shared_module_chrome() {
     let panels = include_str!("../src/views/darkroom/panel_widgets.rs");
 

@@ -550,7 +550,7 @@ expander:hover {
 }
 
 #lighttable-collection-toolbar {
-  min-height: 26px;
+  min-height: {{lighttable_toolbar_height}}px;
   padding: 0.08em 0.28em;
   background-color: {{background}};
   border-bottom: 1px solid {{border}};
@@ -776,8 +776,8 @@ scale:focus-visible {
 
 .dt_edge_toggle,
 .dt_edge_toggle:hover {
-  min-width: 12px;
-  min-height: 34px;
+  min-width: {{outer_border_width}}px;
+  min-height: 28px;
   margin: 0;
   padding: 0;
   border: 0;
