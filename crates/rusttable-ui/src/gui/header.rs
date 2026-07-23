@@ -11,15 +11,45 @@ use super::{
 
 /// Native GTK scrolled-window chrome outside its content-height allocation.
 const HEADER_VIEWPORT_CHROME_PX: i32 = 5;
+const BRAND_MARK_SIZE_PX: i32 = 24;
+const BRAND_MARK_GAP_PX: i32 = 5;
+const BRAND_LEADING_INSET_PX: i32 = 3;
+const MODE_LABEL_PADDING_PX: i32 = 6;
+const MODE_LABEL_SCALE: f64 = 1.5;
+const OTHER_SELECTOR_WIDTH_PX: i32 = 64;
+const MODE_INACTIVE_OPACITY: f64 = 0.64;
+const MODE_HOVER_OPACITY: f64 = 0.82;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModeSwitcherItem {
+    Lighttable,
+    Separator,
+    Darkroom,
+    OtherSeparator,
+    Other,
+}
+
+const MODE_SWITCHER_ORDER: [ModeSwitcherItem; 5] = [
+    ModeSwitcherItem::Lighttable,
+    ModeSwitcherItem::Separator,
+    ModeSwitcherItem::Darkroom,
+    ModeSwitcherItem::OtherSeparator,
+    ModeSwitcherItem::Other,
+];
 
 #[cfg(test)]
-const HEADER_WIDGET_IDS: [&str; 7] = [
+const HEADER_WIDGET_IDS: [&str; 12] = [
     "header",
     "header-left",
+    "rusttable-aperture-mark",
+    "rusttable-brand-title",
+    "rusttable-brand-version",
     "header-center",
     "header-right",
     "view-lighttable",
+    "view-separator-lighttable-darkroom",
     "view-darkroom",
+    "view-separator-darkroom-other",
     "view-other",
 ];
 
@@ -36,19 +66,24 @@ impl HeaderChrome {
         i18n: &I18n,
         _display_profile: &DisplayProfileBanner,
     ) -> Self {
-        let root = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        // GTK4's CenterBox is the direct equivalent of Darktable's start-packed
+        // logo, expandable center, and end-packed view switcher. Keeping a real
+        // center child also aligns the header composition with the shell-owned
+        // top collapse indicator regardless of unequal side widths.
+        let root = gtk4::CenterBox::new();
+        root.set_orientation(gtk4::Orientation::Horizontal);
         root.set_widget_name(ShellRegion::Header.identifier());
         root.set_vexpand(false);
         apply_theme_role(&root, ThemeRole::Header);
 
-        root.append(&brand(i18n));
+        root.set_start_widget(Some(&brand(i18n)));
         let (import, preferences) = header_actions(i18n);
         let center = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         center.set_widget_name(PanelSlot::HeaderCenter.identifier());
-        center.set_hexpand(true);
-        center.set_halign(gtk4::Align::Fill);
-        root.append(&center);
-        root.append(&mode_switcher(workspace, i18n));
+        center.set_width_request(i32::from(DARKTABLE_DESKTOP_SPEC.layout.outer_border_px) * 4);
+        center.set_halign(gtk4::Align::Center);
+        root.set_center_widget(Some(&center));
+        root.set_end_widget(Some(&mode_switcher(workspace, i18n)));
 
         // A GTK height request is only a minimum. The stacked brand labels and
         // native button metrics otherwise make the shared header taller than
@@ -93,11 +128,13 @@ impl HeaderChrome {
 }
 
 fn brand(i18n: &I18n) -> gtk4::Box {
-    let brand = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    let brand = gtk4::Box::new(gtk4::Orientation::Horizontal, BRAND_MARK_GAP_PX);
     brand.set_widget_name(PanelSlot::HeaderLeft.identifier());
-    brand.set_width_request(i32::from(
-        DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px,
-    ));
+    brand.set_width_request(
+        BRAND_MARK_SIZE_PX
+            + i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
+    );
+    brand.set_margin_start(BRAND_LEADING_INSET_PX);
     brand.set_hexpand(false);
     brand.set_halign(gtk4::Align::Start);
     brand.set_valign(gtk4::Align::Center);
@@ -107,7 +144,11 @@ fn brand(i18n: &I18n) -> gtk4::Box {
     brand.append(&mark);
 
     let labels = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    let title = gtk4::Label::new(Some(&i18n.text(MessageId::AppTitle, &MessageArgs::new())));
+    labels.set_valign(gtk4::Align::Center);
+    let title_text = i18n
+        .text(MessageId::AppTitle, &MessageArgs::new())
+        .to_lowercase();
+    let title = gtk4::Label::new(Some(&title_text));
     title.set_widget_name("rusttable-brand-title");
     title.set_halign(gtk4::Align::Start);
     title.add_css_class("dt_brand_title");
@@ -124,8 +165,8 @@ fn brand(i18n: &I18n) -> gtk4::Box {
 fn aperture_mark() -> gtk4::DrawingArea {
     let mark = gtk4::DrawingArea::new();
     mark.set_widget_name("rusttable-aperture-mark");
-    mark.set_content_width(24);
-    mark.set_content_height(24);
+    mark.set_content_width(BRAND_MARK_SIZE_PX);
+    mark.set_content_height(BRAND_MARK_SIZE_PX);
     mark.set_accessible_role(gtk4::AccessibleRole::Img);
     mark.update_property(&[Property::Label("RustTable aperture logo")]);
     mark.set_draw_func(|_, context, width, height| {
@@ -197,24 +238,23 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
     let lighttable_label = i18n
         .text(MessageId::WorkspaceLighttable, &MessageArgs::new())
         .to_lowercase();
-    let lighttable = gtk4::Button::with_label(&lighttable_label);
-    lighttable.set_widget_name("view-lighttable");
-    lighttable.add_css_class("dt_mode_button");
-    lighttable.set_can_focus(true);
-    lighttable.set_accessible_role(gtk4::AccessibleRole::Radio);
-    lighttable.update_property(&[Property::Label("Switch to lighttable")]);
+    let lighttable = mode_link(
+        &lighttable_label,
+        "view-lighttable",
+        "Switch to lighttable",
+        workspace,
+        WorkspaceRole::Lighttable,
+    );
     let darkroom_label = i18n
         .text(MessageId::WorkspaceDarkroom, &MessageArgs::new())
         .to_lowercase();
-    let darkroom = gtk4::Button::with_label(&darkroom_label);
-    darkroom.set_widget_name("view-darkroom");
-    darkroom.add_css_class("dt_mode_button");
-    darkroom.set_can_focus(true);
-    darkroom.set_accessible_role(gtk4::AccessibleRole::Radio);
-    darkroom.update_property(&[Property::Label("Switch to darkroom")]);
-
-    connect_mode(&lighttable, workspace, WorkspaceRole::Lighttable);
-    connect_mode(&darkroom, workspace, WorkspaceRole::Darkroom);
+    let darkroom = mode_link(
+        &darkroom_label,
+        "view-darkroom",
+        "Switch to darkroom",
+        workspace,
+        WorkspaceRole::Darkroom,
+    );
     sync_mode_classes(workspace, &lighttable, &darkroom);
     workspace.connect_visible_child_name_notify({
         let lighttable = lighttable.clone();
@@ -222,28 +262,83 @@ fn mode_switcher(workspace: &gtk4::Stack, i18n: &I18n) -> gtk4::Box {
         move |stack| sync_mode_classes(stack, &lighttable, &darkroom)
     });
 
-    modes.append(&lighttable);
-    modes.append(&separator());
-    modes.append(&darkroom);
-    modes.append(&separator());
-    let other = gtk4::Button::with_label("other ⌄");
-    other.set_widget_name("view-other");
-    other.add_css_class("dt_mode_button");
-    other.set_sensitive(false);
-    other.set_tooltip_text(Some(
-        "Other Darktable workspaces are not implemented in RustTable",
-    ));
-    other.update_property(&[Property::Label("Other workspaces are not implemented")]);
-    modes.append(&other);
+    let primary_separator = separator("view-separator-lighttable-darkroom");
+    let other_separator = separator("view-separator-darkroom-other");
+    let other = other_mode_selector();
+    for item in MODE_SWITCHER_ORDER {
+        match item {
+            ModeSwitcherItem::Lighttable => modes.append(&lighttable),
+            ModeSwitcherItem::Separator => modes.append(&primary_separator),
+            ModeSwitcherItem::Darkroom => modes.append(&darkroom),
+            ModeSwitcherItem::OtherSeparator => modes.append(&other_separator),
+            ModeSwitcherItem::Other => modes.append(&other),
+        }
+    }
     modes
 }
 
-fn connect_mode(button: &gtk4::Button, workspace: &gtk4::Stack, role: WorkspaceRole) {
-    let stack = workspace.clone();
-    button.connect_clicked(move |_| stack.set_visible_child_name(role.stack_name()));
+fn mode_link(
+    text: &str,
+    id: &str,
+    accessible_name: &'static str,
+    workspace: &gtk4::Stack,
+    role: WorkspaceRole,
+) -> gtk4::Label {
+    let label = gtk4::Label::new(Some(text));
+    label.set_widget_name(id);
+    label.add_css_class("dt_mode_button");
+    label.set_margin_start(MODE_LABEL_PADDING_PX);
+    label.set_margin_end(MODE_LABEL_PADDING_PX);
+    label.set_focusable(true);
+    label.set_accessible_role(gtk4::AccessibleRole::Radio);
+    label.update_property(&[Property::Label(accessible_name)]);
+
+    let click = gtk4::GestureClick::new();
+    click.connect_released({
+        let stack = workspace.clone();
+        move |_, _, _, _| stack.set_visible_child_name(role.stack_name())
+    });
+    label.add_controller(click);
+
+    let key = gtk4::EventControllerKey::new();
+    key.connect_key_pressed({
+        let stack = workspace.clone();
+        move |_, key, _, _| {
+            if matches!(
+                key,
+                gtk4::gdk::Key::Return | gtk4::gdk::Key::KP_Enter | gtk4::gdk::Key::space
+            ) {
+                stack.set_visible_child_name(role.stack_name());
+                gtk4::glib::Propagation::Stop
+            } else {
+                gtk4::glib::Propagation::Proceed
+            }
+        }
+    });
+    label.add_controller(key);
+
+    let motion = gtk4::EventControllerMotion::new();
+    motion.connect_enter({
+        let label = label.clone();
+        move |_, _, _| {
+            if !label.has_css_class("active") {
+                label.set_opacity(MODE_HOVER_OPACITY);
+            }
+        }
+    });
+    motion.connect_leave({
+        let label = label.clone();
+        move |_| {
+            if !label.has_css_class("active") {
+                label.set_opacity(MODE_INACTIVE_OPACITY);
+            }
+        }
+    });
+    label.add_controller(motion);
+    label
 }
 
-fn sync_mode_classes(workspace: &gtk4::Stack, lighttable: &gtk4::Button, darkroom: &gtk4::Button) {
+fn sync_mode_classes(workspace: &gtk4::Stack, lighttable: &gtk4::Label, darkroom: &gtk4::Label) {
     match workspace.visible_child_name().as_deref() {
         Some(name) if name == WorkspaceRole::Lighttable.stack_name() => {
             set_mode_active(lighttable, true);
@@ -260,24 +355,64 @@ fn sync_mode_classes(workspace: &gtk4::Stack, lighttable: &gtk4::Button, darkroo
     }
 }
 
-fn set_mode_active(button: &gtk4::Button, active: bool) {
+fn set_mode_active(label: &gtk4::Label, active: bool) {
     if active {
-        button.add_css_class("active");
+        label.add_css_class("active");
     } else {
-        button.remove_css_class("active");
+        label.remove_css_class("active");
     }
-    button.update_state(&[State::Selected(Some(active))]);
+    label.set_opacity(if active { 1.0 } else { MODE_INACTIVE_OPACITY });
+    let attributes = gtk4::pango::AttrList::new();
+    attributes.insert(gtk4::pango::AttrFloat::new_scale(MODE_LABEL_SCALE));
+    if active {
+        attributes.insert(gtk4::pango::AttrInt::new_weight(gtk4::pango::Weight::Bold));
+    }
+    label.set_attributes(Some(&attributes));
+    label.update_state(&[State::Selected(Some(active))]);
 }
 
-fn separator() -> gtk4::Label {
+fn separator(id: &str) -> gtk4::Label {
     let separator = gtk4::Label::new(Some("|"));
+    separator.set_widget_name(id);
     separator.add_css_class("dt_mode_separator");
+    separator.set_margin_start(MODE_LABEL_PADDING_PX);
+    separator.set_margin_end(MODE_LABEL_PADDING_PX);
     separator
+}
+
+fn other_mode_selector() -> gtk4::Box {
+    let other = gtk4::Box::new(gtk4::Orientation::Horizontal, 3);
+    other.set_widget_name("view-other");
+    other.add_css_class("dt_mode_button");
+    other.set_width_request(OTHER_SELECTOR_WIDTH_PX);
+    other.set_margin_start(MODE_LABEL_PADDING_PX);
+    other.set_margin_end(MODE_LABEL_PADDING_PX);
+    other.set_valign(gtk4::Align::Center);
+    other.set_opacity(MODE_INACTIVE_OPACITY);
+    other.set_tooltip_text(Some(
+        "Other Darktable workspaces are not implemented in RustTable",
+    ));
+    other.set_accessible_role(gtk4::AccessibleRole::ComboBox);
+    other.update_property(&[Property::Label("Other workspaces are not implemented")]);
+
+    let label = gtk4::Label::new(Some("other"));
+    label.set_hexpand(true);
+    label.set_halign(gtk4::Align::Start);
+    let arrow = gtk4::Image::from_icon_name("pan-down-symbolic");
+    arrow.set_pixel_size(8);
+    other.append(&label);
+    other.append(&arrow);
+    other
 }
 
 #[cfg(test)]
 mod tests {
-    use super::HEADER_WIDGET_IDS;
+    use super::{
+        BRAND_LEADING_INSET_PX, BRAND_MARK_GAP_PX, BRAND_MARK_SIZE_PX, HEADER_WIDGET_IDS,
+        MODE_LABEL_PADDING_PX, MODE_LABEL_SCALE, MODE_SWITCHER_ORDER, ModeSwitcherItem,
+        OTHER_SELECTOR_WIDTH_PX,
+    };
+    use crate::gui::DARKTABLE_DESKTOP_SPEC;
 
     #[test]
     fn header_contract_keeps_darktable_slots_and_modes() {
@@ -286,11 +421,44 @@ mod tests {
             [
                 "header",
                 "header-left",
+                "rusttable-aperture-mark",
+                "rusttable-brand-title",
+                "rusttable-brand-version",
                 "header-center",
                 "header-right",
                 "view-lighttable",
+                "view-separator-lighttable-darkroom",
                 "view-darkroom",
+                "view-separator-darkroom-other",
                 "view-other",
+            ]
+        );
+    }
+
+    #[test]
+    fn header_geometry_maps_darktable_brand_and_view_spacing() {
+        assert_eq!(BRAND_MARK_SIZE_PX, 24);
+        assert_eq!(
+            DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px,
+            180
+        );
+        assert_eq!(BRAND_LEADING_INSET_PX, 3);
+        assert_eq!(BRAND_MARK_GAP_PX, 5);
+        assert_eq!(MODE_LABEL_PADDING_PX, 6);
+        assert!((MODE_LABEL_SCALE - 1.5).abs() < f64::EPSILON);
+        assert_eq!(OTHER_SELECTOR_WIDTH_PX, 64);
+    }
+
+    #[test]
+    fn mode_switcher_keeps_primary_views_before_the_other_selector() {
+        assert_eq!(
+            MODE_SWITCHER_ORDER,
+            [
+                ModeSwitcherItem::Lighttable,
+                ModeSwitcherItem::Separator,
+                ModeSwitcherItem::Darkroom,
+                ModeSwitcherItem::OtherSeparator,
+                ModeSwitcherItem::Other,
             ]
         );
     }

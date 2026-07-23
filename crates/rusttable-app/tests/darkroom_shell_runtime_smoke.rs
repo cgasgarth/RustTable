@@ -104,11 +104,15 @@ fn app_shell_transition_paints_darkroom_titles() {
 
 fn assert_lighttable_preview_geometry(shell: &GtkShell, photo_id: PhotoId) {
     let root: gtk4::Widget = shell.window().clone().upcast();
-    find_widget(&root, "view-lighttable")
+    let lighttable_selector = find_widget(&root, "view-lighttable")
         .expect("header Lighttable selector")
-        .downcast::<gtk4::Button>()
-        .expect("header Lighttable selector is a button")
-        .emit_clicked();
+        .downcast::<gtk4::Label>()
+        .expect("header Lighttable selector is a direct label link");
+    shell.show_workspace(WorkspaceRole::Lighttable);
+    assert!(
+        lighttable_selector.has_css_class("active"),
+        "header Lighttable selector reflects the visible workspace"
+    );
     let lighttable_grid = find_widget(&root, "lighttable-grid").expect("Lighttable grid");
     let thumbnail_name = format!("photo-thumbnail-{photo_id}");
     settle_gtk_until(
@@ -165,11 +169,15 @@ fn assert_lighttable_preview_geometry(shell: &GtkShell, photo_id: PhotoId) {
         paintable.intrinsic_height()
     );
     assert_lighttable_footer_and_chrome(&root);
-    find_widget(&root, "view-darkroom")
+    let darkroom_selector = find_widget(&root, "view-darkroom")
         .expect("header Darkroom selector")
-        .downcast::<gtk4::Button>()
-        .expect("header Darkroom selector is a button")
-        .emit_clicked();
+        .downcast::<gtk4::Label>()
+        .expect("header Darkroom selector is a direct label link");
+    shell.show_workspace(WorkspaceRole::Darkroom);
+    assert!(
+        darkroom_selector.has_css_class("active"),
+        "header Darkroom selector reflects the visible workspace"
+    );
     settle_gtk_until(
         || find_widget(&root, "darkroom-viewport").is_some_and(|viewport| viewport.is_mapped()),
         || "darkroom viewport did not remap".to_owned(),
