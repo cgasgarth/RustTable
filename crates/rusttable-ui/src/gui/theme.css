@@ -3,6 +3,7 @@
 * {
   color: {{foreground}};
   font-family: sans-serif, "Arial Unicode MS";
+  font-feature-settings: "tnum";
   font-size: {{base_font_pt}}pt;
   font-weight: normal;
 }
@@ -87,7 +88,7 @@ window,
 .dt_view_switcher button.active {
   color: #ffffffff;
   font-weight: bold;
-  border-color: transparent;
+  border-color: {{disabled_button_border}};
   background-color: transparent;
 }
 
@@ -102,7 +103,7 @@ spinbutton,
 textview {
   min-height: {{control_height}}px;
   padding: 1px 4px;
-  border: 1px solid {{button_background}};
+  border: 1px solid {{button_border}};
   border-radius: 2px;
   background-color: {{button_background}};
   background-image: none;
@@ -114,9 +115,9 @@ textview {
 .dt_toolbar button:hover,
 button:hover,
 .dt_button:hover {
-  background-color: #abababff;
-  border-color: #abababff;
-  color: {{background}};
+  background-color: {{button_hover_overlay}};
+  border-color: transparent;
+  color: #ffffffff;
 }
 
 button:disabled,
@@ -126,15 +127,15 @@ dropdown:disabled,
 spinbutton:disabled,
 textview:disabled {
   background-color: transparent;
-  border-color: {{border}};
-  color: #9e9e9eff;
+  border-color: {{disabled_button_border}};
+  color: {{disabled_foreground}};
 }
 
 button:disabled:hover,
 .dt_button:disabled:hover {
   background-color: transparent;
-  border-color: {{border}};
-  color: #9e9e9eff;
+  border-color: {{disabled_button_border}};
+  color: {{disabled_foreground}};
 }
 
 .dt_view_switcher button:checked,
@@ -220,7 +221,7 @@ button:disabled:hover,
 }
 
 .dt_module_action:disabled {
-  color: #d4d4d4ff;
+  color: {{disabled_foreground}};
   background-color: transparent;
   border-color: transparent;
 }
@@ -243,16 +244,16 @@ button:disabled:hover,
 .dt_darkroom_section_label {
   min-width: 0;
   padding: 0;
-  color: {{foreground}};
-  font-size: {{base_font_pt}}pt;
-  font-weight: 500;
+  color: {{module_label}};
+  font-size: 1.1em;
+  font-weight: normal;
 }
 
 .dt_module_expander > title > .dt_darkroom_section_title > .dt_darkroom_section_label,
 .dt_module_group > title > .dt_darkroom_section_title > .dt_darkroom_section_label {
   min-width: 0;
   padding: 0;
-  color: {{foreground}};
+  color: {{module_label}};
 }
 
 .dt_module_expander > box,
@@ -537,7 +538,7 @@ expander:hover {
 .dt_module_group > title {
   min-height: {{module_title_height}}px;
   padding: 1px 4px;
-  color: {{foreground}};
+  color: {{section_label}};
   background-color: transparent;
   font-weight: bold;
 }
@@ -879,7 +880,7 @@ scale:focus-visible {
 
 .dt_export_label {
   font-size: {{compact_font_pt}}pt;
-  color: #e2e2e2ff;
+  color: {{section_label}};
 }
 
 #export-destination,
@@ -1184,11 +1185,29 @@ scale:focus-visible {
 }
 
 scrollbar slider {
-  min-width: 0.45em;
+  background-color: {{scrollbar_inactive}};
+  border: 0.1em solid transparent;
+}
+
+scrollbar.horizontal slider {
+  min-width: 1em;
   min-height: 0.45em;
-  background-color: {{border}};
+}
+
+scrollbar.vertical slider {
+  min-width: 0.45em;
+  min-height: 1em;
 }
 
 scrollbar slider:hover {
-  background-color: {{hovered_thumbnail}};
+  background-color: {{scrollbar_active}};
+}
+
+scrollbar {
+  min-width: 0.5em;
+  min-height: 0.5em;
+  margin: 0.07em;
+  border-color: {{scrollbar_background}};
+  border-radius: 0.42em;
+  background-color: {{scrollbar_background}};
 }

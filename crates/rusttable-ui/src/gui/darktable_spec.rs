@@ -638,8 +638,26 @@ pub struct DarktableColors {
     pub module_background: ColorToken,
     /// Button background (`button_bg`).
     pub button_background: ColorToken,
+    /// One-pixel button border (`button_border`).
+    pub button_border: ColorToken,
+    /// General button hover overlay (`alpha(button_hover_bg, 0.5)`).
+    pub button_hover_overlay: ColorToken,
+    /// Disabled button border (`alpha(button_border, 0.35)`).
+    pub disabled_button_border: ColorToken,
+    /// Disabled control foreground (`disabled_fg_color`).
+    pub disabled_foreground: ColorToken,
     /// Active field background (`field_active_bg`).
     pub active_field_background: ColorToken,
+    /// Utility and processing module title (`plugin_label_color`).
+    pub module_label: ColorToken,
+    /// In-module section title (`section_label`).
+    pub section_label: ColorToken,
+    /// Inactive scrollbar thumb (`scroll_bar_inactive`).
+    pub scrollbar_inactive: ColorToken,
+    /// Hovered scrollbar thumb (`scroll_bar_active`).
+    pub scrollbar_active: ColorToken,
+    /// Scrollbar trough (`scroll_bar_bg`).
+    pub scrollbar_background: ColorToken,
     /// Lighttable canvas (`lighttable_bg_color`).
     pub lighttable_canvas: ColorToken,
     /// Darkroom canvas (`darkroom_bg_color`).
@@ -712,7 +730,16 @@ pub const DARKTABLE_COLORS: DarktableColors = DarktableColors {
     border: ColorToken::new("border_color", [0x5e, 0x5e, 0x5e, 0xff]),
     module_background: ColorToken::new("plugin_bg_color", [0x71, 0x71, 0x71, 0xff]),
     button_background: ColorToken::new("button_bg", [0x7d, 0x7d, 0x7d, 0xff]),
+    button_border: ColorToken::new("button_border", [0x82, 0x82, 0x82, 0xff]),
+    button_hover_overlay: ColorToken::new("button_hover_bg", [0xab, 0xab, 0xab, 0x80]),
+    disabled_button_border: ColorToken::new("button_border_disabled", [0x82, 0x82, 0x82, 0x59]),
+    disabled_foreground: ColorToken::new("disabled_fg_color", [0x9e, 0x9e, 0x9e, 0xff]),
     active_field_background: ColorToken::new("field_active_bg", [0x77, 0x77, 0x77, 0xff]),
+    module_label: ColorToken::new("plugin_label_color", [0xc6, 0xc6, 0xc6, 0xff]),
+    section_label: ColorToken::new("section_label", [0xde, 0xde, 0xde, 0xff]),
+    scrollbar_inactive: ColorToken::new("scroll_bar_inactive", [0x91, 0x91, 0x91, 0xff]),
+    scrollbar_active: ColorToken::new("scroll_bar_active", [0xc6, 0xc6, 0xc6, 0xff]),
+    scrollbar_background: ColorToken::new("scroll_bar_bg", [0x5e, 0x5e, 0x5e, 0xff]),
     lighttable_canvas: ColorToken::new("lighttable_bg_color", [0x91, 0x91, 0x91, 0xff]),
     darkroom_canvas: ColorToken::new("darkroom_bg_color", [0x77, 0x77, 0x77, 0xff]),
     thumbnail_background: ColorToken::new("thumbnail_bg_color", [0xab, 0xab, 0xab, 0xff]),

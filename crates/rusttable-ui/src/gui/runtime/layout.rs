@@ -85,12 +85,12 @@ pub(super) fn mode_panel_stack(
     // child otherwise shifts the darkroom child left inside a narrow Paned,
     // clipping its disclosure arrows and labels while leaving trailing actions.
     stack.set_hhomogeneous(false);
-    let preferred_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    // Paned allocates a child from its minimum/natural width.  The module
-    // contents are intentionally wider than Darktable's rail in places, so
-    // make the stack's initial request explicit and let its inner scroller
-    // handle overflow instead of allowing natural width to consume the
-    // center workspace.
+    let preferred_width = panel_stack_width(id, initial);
+    // Paned allocates a child from its minimum/natural width. Keep the
+    // visible stack at the same workspace-specific width as the Darktable
+    // reference even when the inactive child has a smaller natural width.
+    // Module contents are intentionally wider in places, so the inner
+    // scroller handles overflow instead of consuming the center workspace.
     stack.set_size_request(preferred_width, -1);
     stack.set_hexpand(false);
     stack.set_vexpand(true);
@@ -101,6 +101,19 @@ pub(super) fn mode_panel_stack(
     stack.add_named(darkroom, Some(WorkspaceRole::Darkroom.stack_name()));
     stack.set_visible_child_name(initial.stack_name());
     stack
+}
+
+fn panel_stack_width(id: &str, workspace: WorkspaceRole) -> i32 {
+    let widths = match workspace {
+        WorkspaceRole::Lighttable => LIGHTTABLE_PANEL_WIDTHS,
+        WorkspaceRole::Darkroom => DARKROOM_PANEL_WIDTHS,
+    };
+    let width = if id == "right-panel-stack" {
+        widths.right_px
+    } else {
+        widths.left_px
+    };
+    i32::from(width)
 }
 
 pub(super) fn synchronize_panel_stacks(
@@ -739,5 +752,30 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
 fn clear_children(container: &impl IsA<gtk4::Widget>) {
     while let Some(child) = container.first_child() {
         child.unparent();
+    }
+}
+
+#[cfg(test)]
+mod geometry_tests {
+    use super::{DARKROOM_PANEL_WIDTHS, LIGHTTABLE_PANEL_WIDTHS, WorkspaceRole, panel_stack_width};
+
+    #[test]
+    fn panel_stack_requests_match_the_active_darktable_workspace() {
+        assert_eq!(
+            panel_stack_width("left-panel-stack", WorkspaceRole::Lighttable),
+            i32::from(LIGHTTABLE_PANEL_WIDTHS.left_px)
+        );
+        assert_eq!(
+            panel_stack_width("right-panel-stack", WorkspaceRole::Lighttable),
+            i32::from(LIGHTTABLE_PANEL_WIDTHS.right_px)
+        );
+        assert_eq!(
+            panel_stack_width("left-panel-stack", WorkspaceRole::Darkroom),
+            i32::from(DARKROOM_PANEL_WIDTHS.left_px)
+        );
+        assert_eq!(
+            panel_stack_width("right-panel-stack", WorkspaceRole::Darkroom),
+            i32::from(DARKROOM_PANEL_WIDTHS.right_px)
+        );
     }
 }

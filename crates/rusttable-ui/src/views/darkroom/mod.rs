@@ -326,8 +326,7 @@ impl DarkroomView {
         self.page.queue_draw();
         self.preview.widget().queue_resize();
         self.preview.widget().queue_draw();
-        self.histogram.widget().queue_resize();
-        self.histogram.widget().queue_draw();
+        self.histogram.refresh_geometry();
     }
 
     #[must_use]

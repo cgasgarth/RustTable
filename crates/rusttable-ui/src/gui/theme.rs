@@ -102,28 +102,7 @@ impl DarktableTheme {
 #[must_use]
 pub fn darktable_theme_css() -> String {
     let colors = DARKTABLE_COLORS;
-    let replacements = [
-        ("{{background}}", colors.background),
-        ("{{foreground}}", colors.foreground),
-        ("{{border}}", colors.border),
-        ("{{module_background}}", colors.module_background),
-        ("{{button_background}}", colors.button_background),
-        (
-            "{{active_field_background}}",
-            colors.active_field_background,
-        ),
-        ("{{lighttable_canvas}}", colors.lighttable_canvas),
-        ("{{darkroom_canvas}}", colors.darkroom_canvas),
-        ("{{thumbnail_background}}", colors.thumbnail_background),
-        ("{{filmstrip_background}}", colors.filmstrip_background),
-        ("{{selected_thumbnail}}", colors.selected_thumbnail),
-        ("{{hovered_thumbnail}}", colors.hovered_thumbnail),
-        ("{{active_image_marker}}", colors.active_image_marker),
-    ];
-    let css = replacements.into_iter().fold(
-        DARKTABLE_THEME_TEMPLATE.to_owned(),
-        |css, (placeholder, color)| css.replace(placeholder, &css_color(color)),
-    );
+    let css = apply_color_tokens(DARKTABLE_THEME_TEMPLATE, &colors);
     let tokens = DARKTABLE_UI_TOKENS;
     let dimensions = [
         ("{{base_font_pt}}", i32::from(tokens.typography.base_pt)),
@@ -195,6 +174,41 @@ pub fn darktable_theme_css() -> String {
         })
 }
 
+fn apply_color_tokens(template: &str, colors: &super::DarktableColors) -> String {
+    let replacements = [
+        ("{{background}}", colors.background),
+        ("{{foreground}}", colors.foreground),
+        ("{{border}}", colors.border),
+        ("{{module_background}}", colors.module_background),
+        ("{{button_background}}", colors.button_background),
+        ("{{button_border}}", colors.button_border),
+        ("{{button_hover_overlay}}", colors.button_hover_overlay),
+        ("{{disabled_button_border}}", colors.disabled_button_border),
+        ("{{disabled_foreground}}", colors.disabled_foreground),
+        (
+            "{{active_field_background}}",
+            colors.active_field_background,
+        ),
+        ("{{module_label}}", colors.module_label),
+        ("{{section_label}}", colors.section_label),
+        ("{{scrollbar_inactive}}", colors.scrollbar_inactive),
+        ("{{scrollbar_active}}", colors.scrollbar_active),
+        ("{{scrollbar_background}}", colors.scrollbar_background),
+        ("{{lighttable_canvas}}", colors.lighttable_canvas),
+        ("{{darkroom_canvas}}", colors.darkroom_canvas),
+        ("{{thumbnail_background}}", colors.thumbnail_background),
+        ("{{filmstrip_background}}", colors.filmstrip_background),
+        ("{{selected_thumbnail}}", colors.selected_thumbnail),
+        ("{{hovered_thumbnail}}", colors.hovered_thumbnail),
+        ("{{active_image_marker}}", colors.active_image_marker),
+    ];
+    replacements
+        .into_iter()
+        .fold(template.to_owned(), |css, (placeholder, color)| {
+            css.replace(placeholder, &css_color(color))
+        })
+}
+
 /// Installs the theme for a GTK display.
 pub fn install_darktable_theme(display: &gtk4::gdk::Display) {
     DarktableTheme::install(display);
@@ -222,6 +236,8 @@ mod tests {
         assert!(css.contains("#6a6a6aff"));
         assert!(css.contains("#777777ff"));
         assert!(css.contains("#f1f1f1ff"));
+        assert!(css.contains("#ababab80"));
+        assert!(css.contains("#c6c6c6ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
         assert!(css.contains("font-size: 9pt"));
@@ -231,6 +247,18 @@ mod tests {
         assert!(css.contains("#export-rail-content"));
         assert!(css.contains("#right-panel #export"));
         assert!(!css.contains("max-width:"));
+    }
+
+    #[test]
+    fn css_keeps_darktable_control_states_on_their_semantic_colors() {
+        let css = darktable_theme_css();
+
+        assert!(css.contains("border: 1px solid #828282ff"));
+        assert!(css.contains("background-color: #ababab80"));
+        assert!(css.contains("border-color: #82828259"));
+        assert!(css.contains("color: #9e9e9eff"));
+        assert!(css.contains("background-color: #919191ff"));
+        assert!(css.contains("background-color: #c6c6c6ff"));
     }
 
     #[test]

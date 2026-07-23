@@ -7,7 +7,9 @@
 
 use gtk4::prelude::*;
 
-use super::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role};
+use super::{
+    DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role,
+};
 
 pub(crate) const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
 pub(crate) const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
@@ -16,6 +18,12 @@ pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_heig
 pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
 const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
 const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 52;
+
+fn rail_content_width(width: i32) -> i32 {
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE)
+}
+
 pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     toolbar.set_widget_name(id);
@@ -66,8 +74,9 @@ pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
     title_label.set_width_chars(1);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     let escaped_title = gtk4::glib::markup_escape_text(title);
+    let [red, green, blue, _] = DARKTABLE_COLORS.module_label.rgba();
     title_label.set_markup(&format!(
-        "<span foreground=\"#f1f1f1\">{escaped_title}</span>"
+        "<span foreground=\"#{red:02x}{green:02x}{blue:02x}\">{escaped_title}</span>"
     ));
     title_label.add_css_class("dt_darkroom_section_label");
     title_row.append(&title_label);
@@ -229,13 +238,11 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
         .vexpand(true)
         .build();
     scroll.set_widget_name(id);
-    // Wider module rows may scroll at compact panel widths, but the scrollbars
-    // consume layout space so they cannot cover the final module status row.
-    scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
+    // Darktable side panels scroll vertically only. Letting a wide module
+    // enable horizontal scrolling also steals a row of vertical rail space.
+    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
     scroll.set_overlay_scrolling(false);
-    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    let allocated_content = width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE);
-    scroll.set_min_content_width(allocated_content);
+    scroll.set_min_content_width(rail_content_width(width));
     scroll.set_propagate_natural_width(false);
     scroll.set_propagate_natural_height(false);
     scroll.add_css_class("dt_rail_scroll");
@@ -243,4 +250,20 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     child.set_hexpand(true);
     child.set_margin_bottom(MODULE_GAP);
     scroll
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DARKTABLE_DESKTOP_SPEC, RAIL_SCROLLBAR_RESERVE, rail_content_width};
+
+    #[test]
+    fn rail_content_reserves_only_the_vertical_scrollbar() {
+        let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+
+        assert_eq!(
+            rail_content_width(minimum - 1),
+            minimum - RAIL_SCROLLBAR_RESERVE
+        );
+        assert_eq!(rail_content_width(180), 180 - RAIL_SCROLLBAR_RESERVE);
+    }
 }
