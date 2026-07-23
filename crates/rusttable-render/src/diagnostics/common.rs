@@ -287,10 +287,12 @@ fn apply_step(step: &TransformStep, rgb: &mut [f32; 3]) -> Result<(), Diagnostic
         TransformStep::Matrix(matrix) => *rgb = matrix.apply(*rgb),
         TransformStep::Adaptation(adaptation) => *rgb = adaptation.matrix().apply(*rgb),
         TransformStep::XyzToLab { white_point } => {
-            *rgb = rusttable_color::xyz_to_lab(*rgb, *white_point);
+            *rgb = rusttable_color::xyz_to_lab(*rgb, *white_point)
+                .map_err(|_| DiagnosticFinding::InvalidTransform)?;
         }
         TransformStep::LabToXyz { white_point } => {
-            *rgb = rusttable_color::lab_to_xyz(*rgb, *white_point);
+            *rgb = rusttable_color::lab_to_xyz(*rgb, *white_point)
+                .map_err(|_| DiagnosticFinding::InvalidTransform)?;
         }
         TransformStep::Composite(composite) => {
             for child in composite.steps() {

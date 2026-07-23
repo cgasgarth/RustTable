@@ -1,3 +1,9 @@
+//! Validated 3×3 matrices with deterministic `f64` construction-time planning.
+//!
+//! Coefficients and per-pixel application remain canonical `f32` with explicit
+//! multiply/add order. Determinants and inversion use the `f64` planning class
+//! from the repository numerical contract and are rounded once into `f32` storage.
+
 use crate::{FiniteF32, FiniteF32Error};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -11,6 +17,7 @@ pub struct Matrix3 {
 pub enum MatrixError {
     NonFinite,
     Singular,
+    LengthMismatch,
 }
 
 impl Matrix3 {
@@ -59,20 +66,20 @@ impl Matrix3 {
     }
 
     #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn determinant(self) -> f32 {
-        let m = self.rows();
-        m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6])
-            + m[2] * (m[3] * m[7] - m[4] * m[6])
+        self.determinant_f64() as f32
     }
 
     /// Returns a checked inverse with deterministic singularity rejection.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn inverse(self) -> Result<Self, MatrixError> {
-        let m = self.rows();
-        let determinant = self.determinant();
+        let m = self.rows().map(f64::from);
+        let determinant = self.determinant_f64();
         if !determinant.is_finite() {
             return Err(MatrixError::NonFinite);
         }
-        if determinant.abs() <= 1.0e-7 {
+        if self.is_singular() {
             return Err(MatrixError::Singular);
         }
         let inverse = [
@@ -85,7 +92,8 @@ impl Matrix3 {
             (m[3] * m[7] - m[4] * m[6]) / determinant,
             (m[1] * m[6] - m[0] * m[7]) / determinant,
             (m[0] * m[4] - m[1] * m[3]) / determinant,
-        ];
+        ]
+        .map(|value| value as f32);
         Self::new(inverse)
     }
 
@@ -113,14 +121,62 @@ impl Matrix3 {
         ]
     }
 
-    fn validate(self) -> Result<Self, MatrixError> {
-        if !self.determinant().is_finite() {
+    /// Applies the matrix while rejecting non-finite inputs and outputs.
+    pub fn apply_checked(self, vector: [f32; 3]) -> Result<[f32; 3], MatrixError> {
+        if !vector.into_iter().all(f32::is_finite) {
             return Err(MatrixError::NonFinite);
         }
-        if self.determinant().abs() <= 1.0e-7 {
+        let output = self.apply(vector);
+        output
+            .into_iter()
+            .all(f32::is_finite)
+            .then_some(output)
+            .ok_or(MatrixError::NonFinite)
+    }
+
+    /// Applies the matrix to caller-owned triplet slices without allocation.
+    pub fn apply_slice(
+        self,
+        input: &[[f32; 3]],
+        output: &mut [[f32; 3]],
+    ) -> Result<(), MatrixError> {
+        if input.len() != output.len() {
+            return Err(MatrixError::LengthMismatch);
+        }
+        for (&source, target) in input.iter().zip(output) {
+            *target = self.apply_checked(source)?;
+        }
+        Ok(())
+    }
+
+    fn validate(self) -> Result<Self, MatrixError> {
+        if !self.determinant_f64().is_finite() {
+            return Err(MatrixError::NonFinite);
+        }
+        if self.is_singular() {
             return Err(MatrixError::Singular);
         }
         Ok(self)
+    }
+
+    fn determinant_f64(self) -> f64 {
+        let m = self.rows().map(f64::from);
+        m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6])
+            + m[2] * (m[3] * m[7] - m[4] * m[6])
+    }
+
+    fn is_singular(self) -> bool {
+        let scale = self
+            .rows()
+            .into_iter()
+            .map(f32::abs)
+            .fold(0.0_f32, f32::max);
+        if scale == 0.0 {
+            return true;
+        }
+        let scale = f64::from(scale);
+        let relative_determinant = self.determinant_f64().abs() / (scale * scale * scale);
+        relative_determinant <= 8.0 * f64::from(f32::EPSILON)
     }
 }
 
@@ -148,6 +204,7 @@ impl fmt::Display for MatrixError {
         formatter.write_str(match self {
             Self::NonFinite => "matrix contains a non-finite value",
             Self::Singular => "matrix is singular or numerically unstable",
+            Self::LengthMismatch => "matrix input and output slice lengths differ",
         })
     }
 }

@@ -233,7 +233,12 @@ impl WhitePoint {
     pub fn custom(x: f32, y: f32) -> Result<Self, WhitePointError> {
         let x = FiniteF32::new(x).map_err(|_: FiniteF32Error| WhitePointError::NonFinite)?;
         let y = FiniteF32::new(y).map_err(|_: FiniteF32Error| WhitePointError::NonFinite)?;
-        if x.get() <= 0.0 || y.get() <= 0.0 || x.get() >= 1.0 || y.get() >= 1.0 {
+        if x.get() <= 0.0
+            || y.get() <= 0.0
+            || x.get() >= 1.0
+            || y.get() >= 1.0
+            || x.get() + y.get() >= 1.0
+        {
             return Err(WhitePointError::OutOfRange);
         }
         Ok(Self::Custom { x, y })
@@ -280,7 +285,12 @@ impl Primaries {
         let convert = |(x, y): (f32, f32)| {
             let x = FiniteF32::new(x).map_err(|_: FiniteF32Error| PrimariesError::NonFinite)?;
             let y = FiniteF32::new(y).map_err(|_: FiniteF32Error| PrimariesError::NonFinite)?;
-            if x.get() <= 0.0 || y.get() <= 0.0 || x.get() >= 1.0 || y.get() >= 1.0 {
+            if x.get() <= 0.0
+                || y.get() <= 0.0
+                || x.get() >= 1.0
+                || y.get() >= 1.0
+                || x.get() + y.get() > 1.0
+            {
                 return Err(PrimariesError::OutOfRange);
             }
             Ok((x, y))
@@ -369,82 +379,10 @@ pub enum TransferFunction {
     Rec709,
     Rec2020,
     Gamma(FiniteF32),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TransferFunctionError {
-    NonFinite,
-    InvalidGamma,
-    Overflow,
-}
-
-impl TransferFunction {
-    pub fn gamma(value: f32) -> Result<Self, TransferFunctionError> {
-        let value = FiniteF32::new(value).map_err(|_| TransferFunctionError::NonFinite)?;
-        if value.get() <= 0.0 {
-            return Err(TransferFunctionError::InvalidGamma);
-        }
-        Ok(Self::Gamma(value))
-    }
-
-    /// Decodes a transfer-coded scalar without clamping negative or HDR values.
-    pub fn decode(self, value: f32) -> Result<f32, TransferFunctionError> {
-        self.evaluate(value, false)
-    }
-
-    /// Encodes a linear scalar without clamping negative or HDR values.
-    pub fn encode(self, value: f32) -> Result<f32, TransferFunctionError> {
-        self.evaluate(value, true)
-    }
-
-    fn evaluate(self, value: f32, encode: bool) -> Result<f32, TransferFunctionError> {
-        if !value.is_finite() {
-            return Err(TransferFunctionError::NonFinite);
-        }
-        let sign = value.signum();
-        let magnitude = value.abs();
-        let result = match self {
-            Self::Linear => magnitude,
-            Self::Srgb => {
-                if encode {
-                    if magnitude <= 0.003_130_8 {
-                        12.92 * magnitude
-                    } else {
-                        1.055 * magnitude.powf(1.0 / 2.4) - 0.055
-                    }
-                } else if magnitude <= 0.040_45 {
-                    magnitude / 12.92
-                } else {
-                    ((magnitude + 0.055) / 1.055).powf(2.4)
-                }
-            }
-            Self::Rec709 | Self::Rec2020 => {
-                if encode {
-                    if magnitude < 0.018 {
-                        4.5 * magnitude
-                    } else {
-                        1.099 * magnitude.powf(0.45) - 0.099
-                    }
-                } else if magnitude < 0.081 {
-                    magnitude / 4.5
-                } else {
-                    ((magnitude + 0.099) / 1.099).powf(1.0 / 0.45)
-                }
-            }
-            Self::Gamma(gamma) => {
-                if encode {
-                    magnitude.powf(1.0 / gamma.get())
-                } else {
-                    magnitude.powf(gamma.get())
-                }
-            }
-        };
-        let result = sign * result;
-        result
-            .is_finite()
-            .then_some(result)
-            .ok_or(TransferFunctionError::Overflow)
-    }
+    /// ITU-R BT.2100 / SMPTE ST 2084 perceptual quantizer.
+    Pq,
+    /// ITU-R BT.2100 scene-light Hybrid Log-Gamma OETF and its inverse.
+    Hlg,
 }
 
 impl fmt::Display for WhitePointError {
@@ -468,18 +406,6 @@ impl fmt::Display for PrimariesError {
 }
 
 impl std::error::Error for PrimariesError {}
-
-impl fmt::Display for TransferFunctionError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::NonFinite => "transfer value is non-finite",
-            Self::InvalidGamma => "gamma must be positive",
-            Self::Overflow => "transfer evaluation overflowed",
-        })
-    }
-}
-
-impl std::error::Error for TransferFunctionError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AdaptationMethod {
