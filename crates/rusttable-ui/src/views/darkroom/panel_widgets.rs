@@ -37,9 +37,10 @@ const DENOISE_MODULE_GROUPS: &[DarkroomModuleGroup] =
 const RETOUCH_MODULE_GROUPS: &[DarkroomModuleGroup] =
     &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Effects];
 
-const NAVIGATION_DEFAULT_HEIGHT: i32 = 200;
 const NAVIGATION_MIN_HEIGHT: i32 = 100;
 const NAVIGATION_MAX_HEIGHT: i32 = 300;
+const NAVIGATION_ASPECT_WIDTH: i32 = 3;
+const NAVIGATION_ASPECT_HEIGHT: i32 = 2;
 const SNAPSHOTS_DEFAULT_HEIGHT: i32 = 200;
 const HISTORY_DEFAULT_HEIGHT: i32 = 1_000;
 const IMAGE_INFORMATION_DEFAULT_HEIGHT: i32 = 1_000;
@@ -399,7 +400,7 @@ fn histogram() -> gtk4::Stack {
 }
 
 fn histogram_height_request() -> i32 {
-    i32::from(DARKROOM_GEOMETRY.histogram_height_px)
+    i32::from(DARKROOM_GEOMETRY.histogram_min_height_px)
 }
 
 pub(super) fn add_group_buttons(
@@ -555,8 +556,8 @@ mod parity_tests {
     }
 
     #[test]
-    fn histogram_uses_darktable_default_height() {
-        assert_eq!(histogram_height_request(), 180);
+    fn histogram_uses_compact_darktable_height() {
+        assert_eq!(histogram_height_request(), 120);
     }
 }
 
@@ -638,16 +639,15 @@ pub(super) struct NavigationPreview {
 
 fn navigation_module(width: i32) -> (gtk4::Box, NavigationPreview) {
     let preview_width = width.saturating_sub(RAIL_SCROLLBAR_RESERVE).max(1);
+    let preview_height = navigation_default_height(width);
     let thumbnail = ThumbnailSurface::new(
         "darkroom-navigation-preview",
         "Navigation preview for the selected photo",
         preview_width,
-        NAVIGATION_DEFAULT_HEIGHT,
+        preview_height,
     );
     thumbnail.widget().set_width_request(0);
-    thumbnail
-        .widget()
-        .set_height_request(NAVIGATION_DEFAULT_HEIGHT);
+    thumbnail.widget().set_height_request(preview_height);
     thumbnail.widget().set_hexpand(true);
     thumbnail.set_unavailable();
     let crop = Rc::new(Cell::new(
@@ -667,24 +667,23 @@ fn navigation_module(width: i32) -> (gtk4::Box, NavigationPreview) {
     let zoom = gtk4::Label::new(Some("fit"));
     zoom.set_widget_name("darkroom-navigation-zoom");
     zoom.set_halign(gtk4::Align::End);
+    zoom.set_valign(gtk4::Align::End);
     zoom.add_css_class("dim-label");
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 3);
-    content.append(&surface);
     let thumbnail_for_resize = thumbnail.widget().clone();
-    content.append(&resize_handle(
-        NAVIGATION_DEFAULT_HEIGHT,
+    let resize = resize_handle(
+        preview_height,
         NAVIGATION_MIN_HEIGHT,
         NAVIGATION_MAX_HEIGHT,
         move |height| thumbnail_for_resize.set_height_request(height),
-    ));
-    content.append(&zoom);
+    );
+    resize.set_valign(gtk4::Align::End);
+    surface.add_overlay(&resize);
+    surface.add_overlay(&zoom);
     let module = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     module.set_widget_name("darkroom-navigation");
     module.set_focusable(true);
     module.add_css_class("dt_module_expander");
-    let title_row = module_title("darkroom-navigation", "navigation");
-    module.append(&title_row);
-    module.append(&content);
+    module.append(&surface);
     module.update_property(&[Property::Label("navigation")]);
     apply_theme_role(&module, ThemeRole::ModuleGroup);
     (
@@ -695,6 +694,15 @@ fn navigation_module(width: i32) -> (gtk4::Box, NavigationPreview) {
             indicator,
             zoom,
         },
+    )
+}
+
+fn navigation_default_height(width: i32) -> i32 {
+    let preview_width = width.saturating_sub(RAIL_SCROLLBAR_RESERVE).max(1);
+    clamp_resize_height(
+        preview_width.saturating_mul(NAVIGATION_ASPECT_HEIGHT) / NAVIGATION_ASPECT_WIDTH,
+        NAVIGATION_MIN_HEIGHT,
+        NAVIGATION_MAX_HEIGHT,
     )
 }
 
@@ -819,9 +827,9 @@ impl NavigationPreview {
 #[cfg(test)]
 mod tests {
     use super::{
-        HISTORY_DEFAULT_HEIGHT, IMAGE_INFORMATION_DEFAULT_HEIGHT, NAVIGATION_DEFAULT_HEIGHT,
-        NAVIGATION_MAX_HEIGHT, NAVIGATION_MIN_HEIGHT, SNAPSHOTS_DEFAULT_HEIGHT,
-        clamp_resize_height,
+        HISTORY_DEFAULT_HEIGHT, IMAGE_INFORMATION_DEFAULT_HEIGHT, NAVIGATION_MAX_HEIGHT,
+        NAVIGATION_MIN_HEIGHT, SNAPSHOTS_DEFAULT_HEIGHT, clamp_resize_height,
+        navigation_default_height,
     };
     use crate::presentation::DARKROOM_LEFT_PANEL_ORDER;
 
@@ -840,7 +848,7 @@ mod tests {
 
     #[test]
     fn navigation_height_matches_darktable_config_and_clamps_resizing() {
-        assert_eq!(NAVIGATION_DEFAULT_HEIGHT, 200);
+        assert_eq!(navigation_default_height(180), 113);
         assert_eq!(NAVIGATION_MIN_HEIGHT, 100);
         assert_eq!(NAVIGATION_MAX_HEIGHT, 300);
         assert_eq!(clamp_resize_height(40, 100, 300), 100);

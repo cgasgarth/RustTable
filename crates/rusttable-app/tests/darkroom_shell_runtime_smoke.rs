@@ -363,13 +363,12 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
     let visible_split = find_widget(&root, "desktop-left-split").expect("desktop left split");
     let rendered = render_widget(&visible_split);
     for (id, expected) in [
-        ("darkroom-navigation", "navigation"),
         ("darkroom-snapshots", "snapshots"),
         ("darkroom-history", "history"),
         ("darkroom-image-information", "image information"),
     ] {
         let section = find_widget(&rail, id).expect("darkroom section");
-        let title_row = darkroom_section_title_row(&section, id);
+        let title_row = darkroom_section_title_row(&section);
         let title = find_widget(&title_row, &format!("{id}-label"))
             .expect("darkroom title")
             .downcast::<gtk4::Label>()
@@ -425,14 +424,7 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
     }
 }
 
-fn darkroom_section_title_row(section: &gtk4::Widget, id: &str) -> gtk4::Widget {
-    if id == "darkroom-navigation" {
-        assert!(
-            !section.is::<gtk4::Expander>(),
-            "Darktable navigation must remain a fixed module without a disclosure arrow"
-        );
-        return find_widget(section, &format!("{id}-title")).expect("fixed navigation title row");
-    }
+fn darkroom_section_title_row(section: &gtk4::Widget) -> gtk4::Widget {
     section
         .clone()
         .downcast::<gtk4::Expander>()
@@ -452,18 +444,38 @@ fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
 }
 
 fn assert_navigation_rendering(root: &gtk4::Widget) {
+    let module = find_widget(root, "darkroom-navigation").expect("navigation module");
     let navigation = find_widget(root, "darkroom-navigation-preview").expect("navigation preview");
     let crop = find_widget(root, "darkroom-navigation-crop").expect("navigation crop indicator");
+    let resize =
+        find_widget(&module, "darkroom-module-resize-handle").expect("navigation resize overlay");
+    let zoom = find_widget(&module, "darkroom-navigation-zoom").expect("navigation zoom overlay");
     let visible_split = find_widget(root, "desktop-left-split").expect("visible desktop split");
     let projection = find_widget(root, "darkroom-viewport-projection")
         .expect("inactive viewport projection watermark");
+    assert!(!module.is::<gtk4::Expander>());
+    assert!(
+        find_widget(&module, "darkroom-navigation-title").is_none(),
+        "non-expandable Darktable navigation must not add a title row"
+    );
     assert!(navigation.is_visible() && crop.is_visible());
     assert!(
-        navigation.allocated_width() >= 120 && navigation.allocated_height() >= 80,
-        "navigation preview must keep useful geometry: {}x{}",
+        navigation.allocated_width() >= 120 && (100..=120).contains(&navigation.allocated_height()),
+        "navigation preview must keep compact source geometry: {}x{}",
         navigation.allocated_width(),
         navigation.allocated_height()
     );
+    for overlay in [&resize, &zoom] {
+        let bounds = overlay
+            .compute_bounds(&navigation)
+            .expect("navigation overlay bounds");
+        assert!(
+            bounds.y() >= 0.0
+                && f64::from(bounds.y() + bounds.height())
+                    <= f64::from(navigation.allocated_height()),
+            "navigation chrome must overlay the preview instead of adding a row: {bounds:?}"
+        );
+    }
     assert!(
         !projection.is_visible(),
         "default fit/edited/normal state must not paint a viewport watermark"

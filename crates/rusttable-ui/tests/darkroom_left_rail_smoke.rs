@@ -107,8 +107,6 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         );
     }
     for id in [
-        "darkroom-navigation-info",
-        "darkroom-navigation-actions",
         "darkroom-snapshots-info",
         "darkroom-snapshots-actions",
         "darkroom-history-info",
@@ -133,7 +131,6 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         );
     }
     for id in [
-        "darkroom-navigation",
         "darkroom-image-information",
         "darkroom-history",
         "darkroom-snapshots",
@@ -143,19 +140,11 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
             .expect("darkroom section id")
             .replace('-', " ");
         let section = find_widget(&rail, id).expect("left-rail section");
-        let title_row = if id == "darkroom-navigation" {
-            assert!(
-                !section.is::<gtk4::Expander>(),
-                "Darktable navigation is fixed and must not expose a disclosure arrow"
-            );
-            find_widget(&section, &format!("{id}-title")).expect("fixed navigation title row")
-        } else {
-            section
-                .downcast::<gtk4::Expander>()
-                .expect("left-center section expander")
-                .label_widget()
-                .expect("section title row")
-        };
+        let title_row = section
+            .downcast::<gtk4::Expander>()
+            .expect("left-center section expander")
+            .label_widget()
+            .expect("section title row");
         let title_label = find_widget(&title_row, &format!("{id}-label"))
             .expect("section title label")
             .downcast::<gtk4::Label>()
@@ -185,12 +174,21 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
             "section lost action affordance {id}"
         );
     }
+    let navigation = find_widget(&rail, "darkroom-navigation").expect("navigation module");
+    assert!(
+        !navigation.is::<gtk4::Expander>(),
+        "Darktable navigation is fixed and must not expose a disclosure arrow"
+    );
+    assert!(
+        find_widget(&navigation, "darkroom-navigation-title").is_none(),
+        "fixed navigation must not add a title row"
+    );
     let navigation_preview =
         find_widget(&rail, "darkroom-navigation-preview").expect("navigation preview");
     assert_eq!(
         navigation_preview.height_request(),
-        200,
-        "navigation uses Darktable's configured default graph height"
+        113,
+        "navigation fits the source aspect inside the compact rail"
     );
     assert!(matches!(
         shell.darkroom_preview().selection_state(),
