@@ -381,6 +381,14 @@ fn source_code(source: MetadataSource) -> u8 {
         MetadataSource::CatalogEdit => 4,
         MetadataSource::RecipeOverride => 5,
         MetadataSource::GeneratedTechnical => 6,
+        MetadataSource::Container => 7,
+        MetadataSource::MakerNote => 8,
+        MetadataSource::EmbeddedXmp => 9,
+        MetadataSource::SidecarXmp => 10,
+        MetadataSource::ImportDefault => 11,
+        MetadataSource::CatalogValue => 12,
+        MetadataSource::UserOverride => 13,
+        MetadataSource::ExportOverride => 14,
     }
 }
 fn decode_source(code: u8) -> Result<MetadataSource, MetadataDomainError> {
@@ -392,6 +400,14 @@ fn decode_source(code: u8) -> Result<MetadataSource, MetadataDomainError> {
         4 => Ok(MetadataSource::CatalogEdit),
         5 => Ok(MetadataSource::RecipeOverride),
         6 => Ok(MetadataSource::GeneratedTechnical),
+        7 => Ok(MetadataSource::Container),
+        8 => Ok(MetadataSource::MakerNote),
+        9 => Ok(MetadataSource::EmbeddedXmp),
+        10 => Ok(MetadataSource::SidecarXmp),
+        11 => Ok(MetadataSource::ImportDefault),
+        12 => Ok(MetadataSource::CatalogValue),
+        13 => Ok(MetadataSource::UserOverride),
+        14 => Ok(MetadataSource::ExportOverride),
         _ => Err(MetadataDomainError::InvalidCodec("source")),
     }
 }

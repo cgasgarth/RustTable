@@ -13,6 +13,7 @@ mod limits;
 mod output;
 mod packet;
 mod policy;
+mod resolver;
 mod views;
 
 pub use codec::CanonicalCodec;
@@ -38,7 +39,12 @@ pub use output::{CanonicalExifOutput, EncodedExif, MetadataOutput};
 pub use packet::{MetadataPacket, MetadataPacketBuilder};
 pub use policy::{
     CanonicalMetadataPolicy, MetadataAction, MetadataBuildError, MetadataCategory,
-    MetadataProperty, MetadataSource, MetadataValue,
+    MetadataProperty, MetadataSource, MetadataSourceClass, MetadataValue,
+};
+pub use resolver::{
+    DecisionEvidence, DecisionRule, EvidenceDisposition, FieldDecision, MetadataAssertion,
+    MetadataMergeStrategy, MetadataPrecedencePolicy, MetadataResolutionError,
+    MetadataResolutionReceipt, MetadataResolver, ReceiptValue, ResolvedMetadata,
 };
 pub use rusttable_core::{
     ImageMetadata, MetadataEntry, MetadataText, Orientation, PositiveRational,
