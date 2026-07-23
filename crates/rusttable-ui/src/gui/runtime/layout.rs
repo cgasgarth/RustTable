@@ -15,10 +15,10 @@ use crate::gui::darktable_components::{
 use crate::gui::darktable_spec::{FILMSTRIP_ITEM_GAP_PX, FILMSTRIP_MAX_CHILDREN_PER_LINE};
 use crate::gui::display_profile::DisplayProfileBanner;
 use crate::gui::{
-    DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_PANEL_WIDTHS,
-    LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls, LighttableToolbar, ModuleControlKind,
-    ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole, WorkspacePanelWidths, WorkspaceRole,
-    apply_theme_role, darkroom_window_layout,
+    DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, ExportPanel, LIGHTTABLE_COMPOSITION,
+    LIGHTTABLE_PANEL_WIDTHS, LIGHTTABLE_RIGHT_MODULES, LighttableLayoutControls, LighttableToolbar,
+    ModuleControlKind, ModulePanelViewModel, PanelSlot, ShellRegion, ThemeRole,
+    WorkspacePanelWidths, WorkspaceRole, apply_theme_role, darkroom_window_layout,
 };
 use crate::views::lighttable::empty_collection_state;
 
@@ -211,7 +211,10 @@ pub(super) fn desktop_body(
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
     content.set_margin_top(outer_border);
-    content.set_margin_bottom(outer_border);
+    // Darktable's filmstrip reaches the bottom window edge; retaining the
+    // horizontal and top shell inset while adding it below the strip steals
+    // seven pixels from every image viewport.
+    content.set_margin_bottom(0);
     content.set_margin_start(outer_border);
     content.set_margin_end(outer_border);
     content.append(&workspace_overlay);
@@ -370,7 +373,21 @@ fn central_workspace(workspace: &gtk4::Stack, toolbar: &LighttableToolbar) -> gt
     ));
     center.set_widget_name("workspace");
     apply_theme_role(&center, ThemeRole::Workspace);
-    center.append(toolbar.widget());
+    // SearchEntry and Dropdown carry platform-native natural heights. Bound
+    // those internals behind Darktable's fixed 24 px top chrome so the center
+    // viewport, not macOS widget padding, owns the remaining vertical space.
+    let toolbar_height = i32::from(LIGHTTABLE_COMPOSITION.top_toolbar_height_px);
+    let toolbar_clip = gtk4::ScrolledWindow::builder()
+        .child(toolbar.widget())
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .vscrollbar_policy(gtk4::PolicyType::Never)
+        .min_content_height(toolbar_height)
+        .max_content_height(toolbar_height)
+        .propagate_natural_height(false)
+        .build();
+    toolbar_clip.set_widget_name("lighttable-toolbar-clip");
+    toolbar_clip.set_vexpand(false);
+    center.append(&toolbar_clip);
     center.append(workspace);
     center
 }
@@ -390,13 +407,17 @@ pub(super) fn workspace_stack(
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
-        .transition_type(gtk4::StackTransitionType::Crossfade)
+        // Darktable switches workspaces immediately. Avoid allocating the
+        // incoming Lighttable child at its tiny crossfade natural height.
+        .transition_type(gtk4::StackTransitionType::None)
         .build();
     workspace.set_widget_name("center-workspace");
     apply_theme_role(&workspace, ThemeRole::Workspace);
 
     let lighttable = gtk4::GridView::builder()
+        .halign(gtk4::Align::Fill)
         .valign(gtk4::Align::Fill)
+        .hexpand(true)
         .vexpand(true)
         .build();
     lighttable.set_widget_name("lighttable-grid");

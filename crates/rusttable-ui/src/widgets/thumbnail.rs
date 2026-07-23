@@ -120,7 +120,10 @@ impl ThumbnailSurface {
         self.picture.set_paintable(Some(&texture));
         self.placeholder.set_visible(false);
         self.texture.replace(Some(texture));
-        self.state.replace(ThumbnailState::Ready(bounded));
+        // Keep the validated source pixels while this surface owns the fitted
+        // texture. Lighttable rebuilds on viewport changes and must be able to
+        // fit from the source again instead of enlarging a 180x120 thumbnail.
+        self.state.replace(ThumbnailState::Ready(metadata.clone()));
         Ok(())
     }
 
@@ -321,5 +324,21 @@ mod tests {
         assert_eq!(fitted.dimensions().height(), 52);
         assert_eq!(fitted.pixels().len(), 78 * 52 * 4);
         assert!(fitted.pixels().iter().all(|channel| *channel == 127));
+    }
+
+    #[test]
+    fn a_larger_resize_refits_from_the_original_preview() {
+        let dimensions = PreviewDimensions::new(320, 180).expect("valid source dimensions");
+        let status = PresentationText::new("rendered").expect("valid status");
+        let metadata = Rgba8PreviewMetadata::new(dimensions, status, vec![127; 320 * 180 * 4])
+            .expect("valid source payload");
+
+        let first_fit = fit_metadata(&metadata, 180, 120);
+        assert_eq!(first_fit.dimensions().width(), 180);
+        assert_eq!(first_fit.dimensions().height(), 101);
+
+        let larger_fit = fit_metadata(&metadata, 280, 200);
+        assert_eq!(larger_fit.dimensions().width(), 280);
+        assert_eq!(larger_fit.dimensions().height(), 157);
     }
 }

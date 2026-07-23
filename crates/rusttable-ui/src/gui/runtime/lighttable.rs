@@ -16,7 +16,7 @@ use crate::gui::{
     LighttableInteractionState, LighttablePhotoState, LighttableRating, LighttableSelectionAction,
     PhotoPreview, SelectionModifiers, ThemeRole, WorkspaceRole, apply_theme_role,
 };
-use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel};
+use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel, SelectedPreviewState};
 use crate::views::lighttable::{FilmstripSpec, LighttableCollectionState, LighttableGridSpec};
 use crate::widgets::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 
@@ -157,7 +157,7 @@ impl WorkspaceRenderHandle {
         // GridView keeps its children start-aligned. Center the realized row
         // in the available Darktable thumbtable surface; using the configured
         // density here would pin a short final row to the upper-left corner.
-        let viewport_width = u16::try_from(self.lighttable.allocated_width())
+        let viewport_width = u16::try_from(self.lighttable_empty_state.allocated_width())
             .unwrap_or(0)
             .saturating_sub(12);
         let centered_grid = grid.centered_for_visible_count(viewport_width, display_ids.len());
@@ -912,6 +912,9 @@ fn retained_thumbnail_state(
     previous_details: &BTreeMap<PhotoId, PhotoDetailViewModel>,
     previous_states: &BTreeMap<PhotoId, ThumbnailState>,
 ) -> ThumbnailState {
+    if let SelectedPreviewState::Ready(metadata) = detail.selected_preview() {
+        return ThumbnailState::Ready(metadata.clone());
+    }
     if previous_details.get(&photo_id) == Some(detail) {
         previous_states
             .get(&photo_id)

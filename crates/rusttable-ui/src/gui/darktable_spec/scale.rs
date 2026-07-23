@@ -97,8 +97,8 @@ pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
     controls: ControlScaleTokens {
         control_height: 18,
         module_row_height: 20,
-        module_title_height: 19,
-        toolbar_height: 26,
+        module_title_height: 16,
+        toolbar_height: 18,
         status_height: 18,
         control_gap: 3,
         module_gap: 1,
@@ -181,10 +181,10 @@ impl ResponsiveGeometryReceipt {
             .content_width_px(window_width_px)
             .saturating_sub(rail.saturating_mul(2));
         let vertical_chrome = u16::from(LAYOUT_METRICS.header_height_px)
-            .saturating_add(u16::from(LAYOUT_METRICS.outer_border_px) * 2)
-            .saturating_add(
-                u16::try_from(DARKTABLE_UI_TOKENS.controls.toolbar_height).unwrap_or(u16::MAX) * 2,
-            )
+            .saturating_add(u16::from(LAYOUT_METRICS.outer_border_px))
+            .saturating_add(u16::from(
+                super::LIGHTTABLE_COMPOSITION.top_toolbar_height_px,
+            ))
             .saturating_add(
                 u16::try_from(DARKTABLE_UI_TOKENS.controls.status_height).unwrap_or(u16::MAX),
             )

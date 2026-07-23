@@ -97,8 +97,11 @@ impl LighttableGridSpec {
     /// One 3:2 image fitted into Darktable's full-preview lighttable surface.
     #[must_use]
     pub(crate) fn for_preview_viewport(viewport_width_px: u16, viewport_height_px: u16) -> Self {
-        let available_width = viewport_width_px.saturating_sub(16).max(1);
-        let available_height = viewport_height_px.saturating_sub(12).max(1);
+        // GridView's own padding, child margin, and card border provide the
+        // ten-pixel Darktable inset. Deducting a second inset here makes the
+        // full preview noticeably smaller and turns resize into double chrome.
+        let available_width = viewport_width_px.saturating_sub(2).max(1);
+        let available_height = viewport_height_px.max(1);
         let width_from_height = available_height.saturating_mul(3) / 2;
         let thumbnail_width_px = available_width.min(width_from_height).max(1);
         let thumbnail_height_px = thumbnail_width_px.saturating_mul(2) / 3;
@@ -550,10 +553,10 @@ mod tests {
         let preview = LighttableGridSpec::for_preview_viewport(900, 600);
 
         assert_eq!(preview.columns(), 1);
-        assert_eq!(preview.thumbnail_width_px(), 882);
-        assert_eq!(preview.thumbnail_height_px(), 588);
-        assert_eq!(preview.card_width_px(), 884);
-        assert_eq!(preview.horizontal_offset_px(), 8);
+        assert_eq!(preview.thumbnail_width_px(), 898);
+        assert_eq!(preview.thumbnail_height_px(), 598);
+        assert_eq!(preview.card_width_px(), 900);
+        assert_eq!(preview.horizontal_offset_px(), 0);
     }
 
     #[test]

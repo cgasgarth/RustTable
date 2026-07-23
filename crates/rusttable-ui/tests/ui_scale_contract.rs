@@ -14,13 +14,14 @@ fn installed_darktable_scale_is_explicit_and_readable() {
     assert_eq!(tokens.typography.compact_pt, 8);
     assert_eq!(tokens.controls.control_height, 18);
     assert_eq!(tokens.controls.module_row_height, 20);
-    assert_eq!(tokens.controls.module_title_height, 19);
-    assert_eq!(tokens.controls.toolbar_height, 26);
+    assert_eq!(tokens.controls.module_title_height, 16);
+    assert_eq!(tokens.controls.toolbar_height, 18);
     assert_eq!(panels.minimum_px, 136);
     assert_eq!(panels.preferred_px, 180);
     assert!(panels.accepts(panels.minimum_px));
     assert_eq!(DARKROOM_GEOMETRY.histogram_height_px, 180);
     assert_eq!(DARKROOM_GEOMETRY.histogram_min_height_px, 120);
+    assert_eq!(DARKROOM_GEOMETRY.image_border_px, 10);
 }
 
 #[test]
@@ -79,6 +80,7 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
     let components = include_str!("../src/gui/darktable_components.rs");
     let darkroom_panels = include_str!("../src/views/darkroom/panel_widgets.rs");
     let layout = include_str!("../src/gui/runtime/layout.rs");
+    let runtime = include_str!("../src/gui/runtime/mod.rs");
     let lighttable = include_str!("../src/gui/runtime/lighttable.rs");
 
     assert!(!css.contains("{{"));
@@ -109,4 +111,10 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
     assert!(layout.contains("connect_allocation_refresh"));
     assert!(lighttable.contains("connect_lighttable_resize"));
     assert!(lighttable.contains("lighttable_grid_for_allocation"));
+    assert!(
+        lighttable.contains("SelectedPreviewState::Ready(metadata)"),
+        "Lighttable must prefer the full selected-preview projection when it rerenders"
+    );
+    assert!(layout.contains("StackTransitionType::None"));
+    assert!(runtime.contains("idle_add_local_once(move || render.rerender_current())"));
 }

@@ -312,6 +312,8 @@ pub struct LighttableCompositionSpec {
     pub filmstrip_toolbar_rows: u8,
     /// Columns in Darktable's empty-collection guidance.
     pub empty_state_columns: u8,
+    /// Fixed height of the shared collection chrome in both workspaces.
+    pub top_toolbar_height_px: u8,
 }
 
 /// Darktable lighttable composition rendered by the GTK shell.
@@ -320,6 +322,7 @@ pub const LIGHTTABLE_COMPOSITION: LighttableCompositionSpec = LighttableComposit
     footer_toolbar_rows: 1,
     filmstrip_toolbar_rows: 0,
     empty_state_columns: 2,
+    top_toolbar_height_px: 24,
 };
 
 /// Geometry of the Darktable darkroom center column and its adjacent rails.
@@ -339,6 +342,8 @@ pub struct DarkroomGeometry {
     pub filmstrip_separator_px: u8,
     /// Height of the status and background-job row below the viewport toolbar.
     pub status_bar_height_px: u8,
+    /// Darktable's configured inset around the processed image.
+    pub image_border_px: u8,
 }
 
 /// The two deterministic side-rail modes used by the GTK shell.
@@ -388,13 +393,14 @@ pub const DARKROOM_OPERATION_FOCUS_ORDER: [&str; 5] = [
 ];
 
 pub const DARKROOM_GEOMETRY: DarkroomGeometry = DarkroomGeometry {
-    top_toolbar_height_px: 26,
-    bottom_toolbar_height_px: 26,
+    top_toolbar_height_px: 18,
+    bottom_toolbar_height_px: 18,
     viewport_minimum_height_px: 200,
     histogram_height_px: 180,
     histogram_min_height_px: 120,
     filmstrip_separator_px: 1,
     status_bar_height_px: 18,
+    image_border_px: 10,
 };
 
 /// A display-free allocation receipt for the darkroom's named regions.
@@ -681,7 +687,7 @@ pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     window_width_px: 1_280,
     window_height_px: 768,
     outer_border_px: 7,
-    header_height_px: 36,
+    header_height_px: 30,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
     toolbar_padding_horizontal: EmHundredths::new(28),
@@ -806,7 +812,7 @@ mod tests {
     #[test]
     fn panel_metrics_preserve_darktable_resize_bounds() {
         assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
-        assert_eq!(LAYOUT_METRICS.header_height_px, 36);
+        assert_eq!(LAYOUT_METRICS.header_height_px, 30);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
         assert_eq!(LAYOUT_METRICS.side_panel_widths.minimum_px, 136);
@@ -928,6 +934,7 @@ mod tests {
         assert_eq!(LIGHTTABLE_COMPOSITION.footer_toolbar_rows, 1);
         assert_eq!(LIGHTTABLE_COMPOSITION.filmstrip_toolbar_rows, 0);
         assert_eq!(LIGHTTABLE_COMPOSITION.empty_state_columns, 2);
+        assert_eq!(LIGHTTABLE_COMPOSITION.top_toolbar_height_px, 24);
     }
 
     #[test]
