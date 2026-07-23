@@ -9,7 +9,13 @@ use gtk4::gdk;
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
 
-use super::{PhotoSelectedHandler, lighttable_window::ThumbnailWindowChanged};
+use super::{
+    PhotoSelectedHandler,
+    lighttable_window::{
+        LighttableGridGeometry, ThumbnailWindowChanged, active_photo_position,
+        filmstrip_visible_for_workspace, grid_model_strings, reveal_active_photo,
+    },
+};
 use crate::external_editor::ExternalEditorPanel;
 use crate::gui::{
     DARKTABLE_UI_TOKENS, DarkroomView, ExportPanel, LighttableColorLabel, LighttableContentState,
@@ -17,7 +23,7 @@ use crate::gui::{
     PhotoPreview, SelectionModifiers, ThemeRole, WorkspaceRole, apply_theme_role,
 };
 use crate::presentation::{PhotoDetailViewModel, PhotoWorkspaceViewModel, SelectedPreviewState};
-use crate::views::lighttable::{FilmstripSpec, LighttableCollectionState, LighttableGridSpec};
+use crate::views::lighttable::{FilmstripSpec, LighttableCollectionState};
 use crate::widgets::thumbnail::{ThumbnailPair, ThumbnailState, ThumbnailSurface};
 
 #[derive(Clone)]
@@ -108,7 +114,11 @@ impl WorkspaceRenderHandle {
         let darkroom_visible = self.workspace.visible_child_name().as_deref()
             == Some(WorkspaceRole::Darkroom.stack_name());
         self.filmstrip_root
-            .set_visible(darkroom_visible || layout.shows_filmstrip());
+            .set_visible(filmstrip_visible_for_workspace(
+                layout,
+                darkroom_visible,
+                self.darkroom.filmstrip_visible(),
+            ));
         if layout.shows_culling() {
             self.lighttable.add_css_class("dt_culling_surface");
         } else {
@@ -154,15 +164,8 @@ impl WorkspaceRenderHandle {
                 interaction.ordered().collect::<Vec<_>>()
             }
         };
-        // GridView keeps its children start-aligned. Center the realized row
-        // in the available Darktable thumbtable surface; using the configured
-        // density here would pin a short final row to the upper-left corner.
-        let viewport_width = u16::try_from(self.lighttable_empty_state.allocated_width())
-            .unwrap_or(0)
-            .saturating_sub(12);
-        let centered_grid = grid.centered_for_visible_count(viewport_width, display_ids.len());
         self.lighttable
-            .set_margin_start(i32::from(centered_grid.horizontal_offset_px()));
+            .set_margin_start(i32::try_from(grid.cell_origin_x_px(0)).unwrap_or(i32::MAX));
         let selection = PhotoSelectionContext {
             darkroom_preview: self.darkroom_preview.clone(),
             darkroom: self.darkroom.clone(),
@@ -247,6 +250,7 @@ impl WorkspaceRenderHandle {
             let Some(list_item) = object.downcast_ref::<gtk4::ListItem>() else {
                 return;
             };
+            list_item.set_child(None::<&gtk4::Widget>);
             let Some(photo_id) = list_item_photo_id(list_item) else {
                 return;
             };
@@ -262,7 +266,7 @@ impl WorkspaceRenderHandle {
                 photo.title(),
                 photo.secondary(),
                 photo.indicators(),
-                centered_grid,
+                grid,
                 layout,
             );
             let thumbnail_state = retained_thumbnail_state(
@@ -314,10 +318,18 @@ impl WorkspaceRenderHandle {
             .into_iter()
             .filter(|photo_id| visible_ids.contains(photo_id))
             .collect::<Vec<_>>();
-        let display_strings = display_ids
-            .iter()
-            .map(|photo_id| photo_id.get().to_string())
-            .collect::<Vec<_>>();
+        // GTK centers incomplete GridView rows. Darktable's thumbtable always
+        // advances from the configured top-left cell, so reserve the remaining
+        // cells with non-photo model entries. This deliberately replaces
+        // centered_for_visible_count without moving real cards.
+        let display_strings = grid_model_strings(
+            &display_ids,
+            if layout.shows_culling() {
+                1
+            } else {
+                columns as usize
+            },
+        );
         let display_string_refs = display_strings
             .iter()
             .map(String::as_str)
@@ -326,6 +338,18 @@ impl WorkspaceRenderHandle {
         let selection_model = gtk4::NoSelection::new(Some(model));
         self.lighttable.set_factory(Some(&factory));
         self.lighttable.set_model(Some(&selection_model));
+        let active_position = {
+            let interaction = self.interaction.borrow();
+            active_photo_position(
+                &display_ids,
+                interaction
+                    .focus()
+                    .filter(|photo_id| interaction.is_selected(*photo_id)),
+            )
+        };
+        if let Some(position) = active_position {
+            reveal_active_photo(&self.lighttable, grid, position);
+        }
         let rendered_photos = display_ids.len();
         let collection_state = if rendered_photos == 0 {
             LighttableCollectionState::Empty
@@ -695,7 +719,7 @@ fn lighttable_card(
     title: &str,
     secondary: Option<&str>,
     indicators: crate::presentation::ThumbnailIndicators,
-    grid: LighttableGridSpec,
+    grid: LighttableGridGeometry,
     layout: crate::gui::LighttableLayout,
 ) -> (gtk4::Button, ThumbnailSurface) {
     let preview = layout == crate::gui::LighttableLayout::Preview;
@@ -715,7 +739,6 @@ fn lighttable_card(
         i32::from(grid.thumbnail_width_px()),
         i32::from(grid.thumbnail_height_px()),
     );
-    apply_theme_role(thumbnail.widget(), ThemeRole::ThumbnailImage);
     let thumbnail_overlay = gtk4::Overlay::new();
     thumbnail_overlay.set_child(Some(thumbnail.widget()));
     if !preview {
@@ -753,7 +776,8 @@ fn lighttable_card(
         i32::from(DARKTABLE_UI_TOKENS.cards.metadata_height_px) * i32::from(u8::from(!preview));
     button.set_size_request(
         i32::from(grid.card_width_px()),
-        i32::from(grid.thumbnail_height_px()).saturating_add(metadata_height),
+        i32::from(grid.card_height_px())
+            .max(i32::from(grid.thumbnail_height_px()).saturating_add(metadata_height)),
     );
     button.set_tooltip_text(Some(title));
     button.set_accessible_role(gtk4::AccessibleRole::Button);
@@ -764,14 +788,21 @@ fn lighttable_card(
 
 fn lighttable_grid_for_allocation(
     lighttable: &gtk4::GridView,
-    viewport: &gtk4::Stack,
+    lighttable_empty_state: &gtk4::Stack,
     zoom: crate::gui::LighttableZoom,
     layout: crate::gui::LighttableLayout,
-) -> LighttableGridSpec {
-    LighttableGridSpec::for_layout_viewport(
+) -> LighttableGridGeometry {
+    let viewport_width = lighttable_empty_state.allocated_width();
+    let measured_width = if viewport_width > 20 {
+        viewport_width
+    } else {
+        lighttable.allocated_width()
+    };
+    let viewport = lighttable_empty_state;
+    LighttableGridGeometry::for_viewport(
         layout,
         zoom,
-        u16::try_from(viewport.allocated_width().max(lighttable.allocated_width())).unwrap_or(0),
+        u16::try_from(measured_width).unwrap_or(0),
         u16::try_from(viewport.allocated_height()).unwrap_or(0),
     )
 }
