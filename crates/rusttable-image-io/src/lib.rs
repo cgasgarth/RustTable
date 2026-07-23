@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
-#![doc = "Bounded pure-Rust JPEG, PNG, TIFF, `BigTIFF`, and `OpenEXR` file input/output for `RustTable`."]
+#![doc = "Bounded pure-Rust JPEG, JPEG XL, PNG, TIFF, `BigTIFF`, WebP, and `OpenEXR` file input/output for `RustTable`."]
 
 mod input;
 pub mod jpeg;
+pub mod jpegxl;
 pub mod openexr;
 mod output;
 pub mod png;
@@ -12,6 +13,7 @@ mod registry;
 mod source_color;
 mod svg;
 pub mod tiff;
+pub mod webp;
 
 pub mod dng_output;
 
@@ -20,6 +22,15 @@ pub use jpeg::{
     JPEG_PROBE_BUDGET_BYTES, JpegCodingProcess, JpegComponentModel, JpegDecodeError,
     JpegDecodeMode, JpegDecodeReceipt, JpegDecodeRequest, JpegDecodeResult, JpegDecoder,
     JpegHeader, JpegMetadataSegment, JpegPixelData, JpegSampling, JpegSof,
+};
+pub use jpegxl::{
+    JXL_BACKEND_ID, JXL_PROBE_BUDGET_BYTES, JxlAnimation, JxlBitDepth, JxlBoxDescriptor,
+    JxlCodingMode, JxlColorEncoding, JxlColorSpace, JxlContainerInventory, JxlContainerKind,
+    JxlDecodeError, JxlDecodeLimits, JxlDecodeMode, JxlDecodeReceipt, JxlDecodeRequest,
+    JxlDecodeResult, JxlDecoder, JxlExtraChannel, JxlExtraChannelType, JxlFrameDescriptor,
+    JxlHeader, JxlIccProfile, JxlJpegReconstruction, JxlPixelData, JxlPreviewDescriptor,
+    JxlPrimaries, JxlRenderingIntent, JxlRoiBehavior, JxlStructuredColor, JxlToneMapping,
+    JxlTransferFunction, JxlWhitePoint,
 };
 pub use openexr::{
     EXR_BACKEND_ID, ExrAlphaAssociation, ExrBlobMetadata, ExrChannel, ExrChannelMapping,
@@ -65,4 +76,10 @@ pub use tiff::{
     TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult, TiffDecoder,
     TiffDngMatrix, TiffDngMetadata, TiffHeader, TiffMetadataInventory, TiffPage, TiffPhotometric,
     TiffPixelData, TiffPredictor, TiffSampleData, TiffSampleFormat, TiffStorageLayout,
+};
+pub use webp::{
+    WEBP_BACKEND_ID, WebPChunk, WebPChunkInventory, WebPCodingMode, WebPContainer,
+    WebPDataLocation, WebPDecodeError, WebPDecodeLimits, WebPDecodeMode, WebPDecodeReceipt,
+    WebPDecodeRequest, WebPDecodeResult, WebPDecoder, WebPFeatures, WebPHeader, WebPMetadataChunk,
+    WebPMetadataInventory, WebPPixelData,
 };

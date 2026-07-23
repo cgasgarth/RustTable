@@ -86,6 +86,8 @@ pub(crate) fn encode(record: &ImportRecord) -> Result<Vec<u8>, ()> {
                 InputFormat::Tiff => 3,
                 InputFormat::Raw => 4,
                 InputFormat::OpenExr => 5,
+                InputFormat::JpegXl => 6,
+                InputFormat::Webp => 7,
             },
             width: record.probe().dimensions().width().to_be_bytes(),
             height: record.probe().dimensions().height().to_be_bytes(),
@@ -130,6 +132,8 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<ImportRecord, ()> {
         3 => InputFormat::Tiff,
         4 => InputFormat::Raw,
         5 => InputFormat::OpenExr,
+        6 => InputFormat::JpegXl,
+        7 => InputFormat::Webp,
         _ => return Err(()),
     };
     let dimensions = ImageDimensions::new(
@@ -297,11 +301,23 @@ mod tests {
         assert!(decode(&[1, 2, 3, 4]).is_err());
     }
 
+    #[test]
+    fn modern_raster_formats_round_trip_without_reusing_legacy_codes() {
+        for format in [InputFormat::JpegXl, InputFormat::Webp] {
+            let record = test_record_with_format(format, ImageMetadata::empty());
+            assert_eq!(decode(&encode(&record).unwrap()).unwrap(), record);
+        }
+    }
+
     fn test_record() -> ImportRecord {
         test_record_with_metadata(ImageMetadata::empty())
     }
 
     fn test_record_with_metadata(metadata: ImageMetadata) -> ImportRecord {
+        test_record_with_format(InputFormat::Png, metadata)
+    }
+
+    fn test_record_with_format(format: InputFormat, metadata: ImageMetadata) -> ImportRecord {
         let source = SourcePath::new("fixture.raw").expect("source");
         let candidate = ImportCandidate::new(
             PhotoId::new(1).unwrap(),
@@ -309,7 +325,7 @@ mod tests {
             source,
             ContentHash::Sha256([3; 32]),
             ByteLength::from_bytes(4),
-            ImageProbe::new(InputFormat::Png, ImageDimensions::new(1, 1).unwrap()),
+            ImageProbe::new(format, ImageDimensions::new(1, 1).unwrap()),
             metadata,
         )
         .unwrap();

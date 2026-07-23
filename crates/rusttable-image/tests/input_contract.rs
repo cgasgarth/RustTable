@@ -29,9 +29,11 @@ fn supported_input_formats_have_stable_raster_then_raw_order() {
         rusttable_image::SUPPORTED_INPUT_FORMATS,
         [
             rusttable_image::InputFormat::Jpeg,
+            rusttable_image::InputFormat::JpegXl,
             rusttable_image::InputFormat::Png,
             rusttable_image::InputFormat::Tiff,
             rusttable_image::InputFormat::OpenExr,
+            rusttable_image::InputFormat::Webp,
             rusttable_image::InputFormat::Raw,
         ]
     );
@@ -44,12 +46,17 @@ fn decoder_extensions_are_case_insensitive_and_canonical() {
         InputFormat::from_extension(".jpeg"),
         Some(InputFormat::Jpeg)
     );
+    assert_eq!(
+        InputFormat::from_extension("JXL"),
+        Some(InputFormat::JpegXl)
+    );
     assert_eq!(InputFormat::from_extension("png"), Some(InputFormat::Png));
     assert_eq!(InputFormat::from_extension("TIF"), Some(InputFormat::Tiff));
     assert_eq!(
         InputFormat::from_extension("EXR"),
         Some(InputFormat::OpenExr)
     );
+    assert_eq!(InputFormat::from_extension("WEBP"), Some(InputFormat::Webp));
     assert_eq!(InputFormat::from_extension("raw"), Some(InputFormat::Raw));
     assert_eq!(InputFormat::Jpeg.extensions(), &["jpg", "jpeg"]);
 }

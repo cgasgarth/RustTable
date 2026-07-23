@@ -1,6 +1,6 @@
 use rusttable_color::{
-    Pcs, Primaries, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion, TransferFunction,
-    WhitePoint,
+    IccColorSpace, IccParseErrorKind, IccProfileLimits, Pcs, Primaries, ProfileClass, ProfileId,
+    ProfileModel, ProfileParserVersion, TransferFunction, WhitePoint, parse_icc_profile,
 };
 use rusttable_image::{SourceColor, SourceColorEvidence};
 
@@ -24,6 +24,28 @@ pub(crate) fn embedded_icc(bytes: &[u8]) -> Result<SourceColor, SourceColorParse
         SourceColorEvidence::EmbeddedIcc,
     )
     .map_err(|_| SourceColorParseError::InvalidIcc)
+}
+
+/// Retains a bounded, validated ICC profile even when matrix source-color
+/// fields cannot express its grayscale or LUT transform.
+pub(crate) fn embedded_icc_profile_authoritative(
+    bytes: &[u8],
+    expected_color_space: IccColorSpace,
+) -> Result<SourceColor, SourceColorParseError> {
+    let profile = parse_icc_profile(bytes, IccProfileLimits::strict_for_embedded_images())
+        .map_err(|error| match error.kind() {
+            IccParseErrorKind::Unsupported => SourceColorParseError::UnsupportedIcc,
+            IccParseErrorKind::Malformed | IccParseErrorKind::ResourceLimit => {
+                SourceColorParseError::InvalidIcc
+            }
+        })?;
+    if profile.header().data_color_space() != expected_color_space {
+        return Err(SourceColorParseError::InvalidIcc);
+    }
+    if let Ok(source) = embedded_icc(bytes) {
+        return Ok(source);
+    }
+    Ok(SourceColor::profile_authoritative_icc(profile.profile_id()))
 }
 
 pub(crate) fn embedded_chromaticities(
@@ -298,7 +320,7 @@ impl std::fmt::Display for SourceColorParseError {
         formatter.write_str(match self {
             Self::TruncatedIcc => "embedded ICC profile is truncated",
             Self::InvalidIcc => "embedded ICC profile is malformed",
-            Self::UnsupportedIcc => "embedded ICC profile is not a supported RGB matrix profile",
+            Self::UnsupportedIcc => "embedded ICC profile uses an unsupported structure",
             Self::InvalidChromaticities => "embedded chromaticities are invalid",
         })
     }
@@ -309,6 +331,7 @@ impl std::error::Error for SourceColorParseError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::Digest as _;
 
     #[test]
     fn matrix_icc_preserves_profile_primaries_transfer_and_identity() {
@@ -319,11 +342,12 @@ mod tests {
         assert!(source.profile().is_some());
         assert_eq!(
             source.transfer(),
-            TransferFunction::gamma(563.0_f32 / 256.0_f32).expect("ICC u8.8 gamma")
+            Some(TransferFunction::gamma(563.0_f32 / 256.0_f32).expect("ICC u8.8 gamma"))
         );
-        assert!((source.primaries().red().0.get() - 0.68).abs() < 0.000_1);
-        assert!((source.primaries().green().1.get() - 0.69).abs() < 0.000_1);
-        let (white_x, white_y) = source.white_point().xy();
+        let primaries = source.primaries().expect("matrix primaries");
+        assert!((primaries.red().0.get() - 0.68).abs() < 0.000_1);
+        assert!((primaries.green().1.get() - 0.69).abs() < 0.000_1);
+        let (white_x, white_y) = source.white_point().expect("matrix white point").xy();
         assert!((white_x - 0.3127).abs() < 0.000_1);
         assert!((white_y - 0.3290).abs() < 0.000_1);
     }
@@ -337,13 +361,61 @@ mod tests {
         )
         .expect("valid chromaticities");
 
-        assert_eq!(source.transfer(), TransferFunction::Linear);
-        assert_eq!(source.primaries(), Primaries::srgb());
+        assert_eq!(source.transfer(), Some(TransferFunction::Linear));
+        assert_eq!(source.primaries(), Some(Primaries::srgb()));
         assert_eq!(
             source.evidence(),
             SourceColorEvidence::EmbeddedChromaticities
         );
         assert!(source.profile().is_some());
+    }
+
+    #[test]
+    fn profile_authoritative_gray_icc_is_retained_without_an_implicit_transfer() {
+        let profile = test_profiles::gray();
+        let source = embedded_icc_profile_authoritative(&profile, IccColorSpace::Gray)
+            .expect("valid grayscale ICC");
+        let identity = source.profile().expect("external profile identity");
+
+        assert_eq!(
+            identity.sha256(),
+            <[u8; 32]>::from(sha2::Sha256::digest(&profile))
+        );
+        assert_eq!(identity.model(), ProfileModel::Matrix);
+        assert_eq!(source.transfer(), None);
+        assert_eq!(source.primaries(), None);
+        assert_eq!(source.white_point(), None);
+        assert_eq!(source.matrix(), None);
+        assert_eq!(source.evidence(), SourceColorEvidence::EmbeddedIcc);
+        assert_eq!(source.fallback_used(), None);
+    }
+
+    #[test]
+    fn profile_authoritative_lut_icc_is_retained_without_matrix_projection() {
+        let profile = test_profiles::lut();
+        let source = embedded_icc_profile_authoritative(&profile, IccColorSpace::Rgb)
+            .expect("valid LUT ICC");
+        let identity = source.profile().expect("external profile identity");
+
+        assert_eq!(
+            identity.sha256(),
+            <[u8; 32]>::from(sha2::Sha256::digest(&profile))
+        );
+        assert_eq!(identity.model(), ProfileModel::Lut);
+        assert_eq!(source.transfer(), None);
+        assert_eq!(source.primaries(), None);
+        assert_eq!(source.white_point(), None);
+        assert_eq!(source.matrix(), None);
+        assert_eq!(source.evidence(), SourceColorEvidence::EmbeddedIcc);
+        assert_eq!(source.fallback_used(), None);
+    }
+
+    #[test]
+    fn profile_authoritative_icc_rejects_header_color_mismatch() {
+        assert_eq!(
+            embedded_icc_profile_authoritative(&test_profiles::gray(), IccColorSpace::Rgb),
+            Err(SourceColorParseError::InvalidIcc)
+        );
     }
 
     #[expect(
@@ -405,5 +477,150 @@ mod tests {
 
     fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
         bytes[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_profiles {
+    const D50: [f32; 3] = [0.964_2, 1.0, 0.824_9];
+
+    pub(crate) fn gray() -> Vec<u8> {
+        ProfileBuilder::new(*b"GRAY")
+            .tag(*b"wtpt", xyz_tag(D50))
+            .tag(*b"kTRC", gamma_curve(2.2))
+            .build()
+    }
+
+    pub(crate) fn lut() -> Vec<u8> {
+        ProfileBuilder::new(*b"RGB ")
+            .tag(*b"A2B0", multi_stage_identity())
+            .build()
+    }
+
+    struct ProfileBuilder {
+        data_space: [u8; 4],
+        tags: Vec<([u8; 4], Vec<u8>)>,
+    }
+
+    impl ProfileBuilder {
+        fn new(data_space: [u8; 4]) -> Self {
+            Self {
+                data_space,
+                tags: Vec::new(),
+            }
+        }
+
+        fn tag(mut self, signature: [u8; 4], data: Vec<u8>) -> Self {
+            self.tags.push((signature, data));
+            self
+        }
+
+        fn build(self) -> Vec<u8> {
+            let table_end = 132 + self.tags.len() * 12;
+            let mut cursor = align4(table_end);
+            let entries = self
+                .tags
+                .iter()
+                .map(|(signature, data)| {
+                    let entry = (*signature, cursor, data.len());
+                    cursor = align4(cursor + data.len());
+                    entry
+                })
+                .collect::<Vec<_>>();
+            let mut profile = vec![0_u8; cursor];
+            put_u32(
+                &mut profile,
+                0,
+                u32::try_from(cursor).expect("bounded fixture"),
+            );
+            profile[8] = 4;
+            profile[9] = 0x40;
+            profile[12..16].copy_from_slice(b"mntr");
+            profile[16..20].copy_from_slice(&self.data_space);
+            profile[20..24].copy_from_slice(b"XYZ ");
+            for (offset, value) in [(24, 2026), (26, 7), (28, 23), (30, 12), (32, 0), (34, 0)] {
+                put_u16(&mut profile, offset, value);
+            }
+            profile[36..40].copy_from_slice(b"acsp");
+            for (index, value) in D50.into_iter().enumerate() {
+                put_fixed(&mut profile, 68 + index * 4, value);
+            }
+            put_u32(
+                &mut profile,
+                128,
+                u32::try_from(entries.len()).expect("tag count"),
+            );
+            for (index, ((signature, data), (_, offset, size))) in
+                self.tags.into_iter().zip(entries).enumerate()
+            {
+                let table = 132 + index * 12;
+                profile[table..table + 4].copy_from_slice(&signature);
+                put_u32(
+                    &mut profile,
+                    table + 4,
+                    u32::try_from(offset).expect("tag offset"),
+                );
+                put_u32(
+                    &mut profile,
+                    table + 8,
+                    u32::try_from(size).expect("tag size"),
+                );
+                profile[offset..offset + size].copy_from_slice(&data);
+            }
+            profile
+        }
+    }
+
+    fn xyz_tag(values: [f32; 3]) -> Vec<u8> {
+        let mut data = vec![0; 20];
+        data[..4].copy_from_slice(b"XYZ ");
+        for (index, value) in values.into_iter().enumerate() {
+            put_fixed(&mut data, 8 + index * 4, value);
+        }
+        data
+    }
+
+    fn gamma_curve(gamma: f32) -> Vec<u8> {
+        let mut data = vec![0; 14];
+        data[..4].copy_from_slice(b"curv");
+        put_u32(&mut data, 8, 1);
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        put_u16(&mut data, 12, (gamma * 256.0).round() as u16);
+        data
+    }
+
+    fn multi_stage_identity() -> Vec<u8> {
+        let curve = {
+            let mut value = vec![0; 12];
+            value[..4].copy_from_slice(b"curv");
+            value
+        };
+        let mut data = vec![0; 32 + curve.len() * 3];
+        data[..4].copy_from_slice(b"mAB ");
+        data[8..10].copy_from_slice(&[3, 3]);
+        put_u32(&mut data, 12, 32);
+        for index in 0..3 {
+            let start = 32 + index * curve.len();
+            data[start..start + curve.len()].copy_from_slice(&curve);
+        }
+        data
+    }
+
+    const fn align4(value: usize) -> usize {
+        (value + 3) & !3
+    }
+
+    fn put_u16(bytes: &mut [u8], offset: usize, value: u16) {
+        bytes[offset..offset + 2].copy_from_slice(&value.to_be_bytes());
+    }
+
+    fn put_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    fn put_fixed(bytes: &mut [u8], offset: usize, value: f32) {
+        let fixed = (f64::from(value) * 65_536.0).round() as i32;
+        bytes[offset..offset + 4].copy_from_slice(&fixed.to_be_bytes());
     }
 }

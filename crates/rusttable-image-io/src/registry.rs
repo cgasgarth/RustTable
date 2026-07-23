@@ -6,6 +6,10 @@ use rusttable_image::{
 };
 
 use crate::jpeg::JpegDecoder;
+use crate::jpegxl::{
+    decode_jpegxl_frame, decode_jpegxl_probe, decode_legacy_rgba8 as decode_jpegxl,
+    is_jpegxl_signature,
+};
 use crate::openexr::{
     ExrDecodeRequest, ExrSampleData, decode_exr_probe, decode_legacy_rgba8 as decode_exr_rgba8,
     is_exr_signature,
@@ -15,6 +19,9 @@ use crate::raw::{decode_raw, decode_raw_frame as decode_native_raw_frame, is_raw
 use crate::tiff::{
     TiffDecodeRequest, TiffPhotometric, TiffSampleData, TiffStorageLayout,
     decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature,
+};
+use crate::webp::{
+    decode_legacy_rgba8 as decode_webp, decode_webp_frame, decode_webp_probe, is_webp_signature,
 };
 
 /// Maximum amount of a source that any format probe may inspect.
@@ -82,7 +89,7 @@ macro_rules! builtin_decoders {
 }
 
 builtin_decoders! {
-    5;
+    7;
     Jpeg {
         id: "rusttable.decoder.jpeg.v1",
         implementation: "image-jpeg-0.25",
@@ -91,6 +98,15 @@ builtin_decoders! {
                 decode: decode_jpeg,
         decode_frame: decode_jpeg_frame,
         full_source_probe: false
+    },
+    JpegXl {
+        id: "rusttable.decoder.jpeg-xl.v1",
+        implementation: "jxl-oxide-0.12.6-pure-rust",
+        matches: is_jpegxl_signature,
+        probe: decode_jpegxl_probe,
+        decode: decode_jpegxl,
+        decode_frame: decode_jpegxl_frame,
+        full_source_probe: true
     },
     Png {
         id: "rusttable.decoder.png.v1",
@@ -127,6 +143,15 @@ builtin_decoders! {
         decode: decode_tiff,
         decode_frame: decode_tiff_frame,
         full_source_probe: true
+    },
+    Webp {
+        id: "rusttable.decoder.webp.v1",
+        implementation: "image-webp-0.2.4-pure-rust",
+        matches: is_webp_signature,
+        probe: decode_webp_probe,
+        decode: decode_webp,
+        decode_frame: decode_webp_frame,
+        full_source_probe: true
     }
 }
 
@@ -140,7 +165,7 @@ pub struct ImageDecoderRegistry {
 }
 
 impl ImageDecoderRegistry {
-    /// Returns the deterministic built-in PNG/JPEG/RAW/classic-TIFF registry.
+    /// Returns the deterministic built-in raster and camera-RAW registry.
     #[must_use]
     pub const fn standard() -> Self {
         Self {

@@ -106,6 +106,38 @@ fn qualifies_sqlite_xmp_and_png_semantics() {
     qualify_binary(&png_fixture, &png).expect("PNG dimensions and alpha should qualify");
 }
 
+#[test]
+fn base64_qualification_recognizes_jpeg_xl_and_webp_containers() {
+    for (source, expected) in [
+        (
+            include_bytes!("../../rusttable-image-io/tests/fixtures/lossless-4x3.jxl.b64")
+                .as_slice(),
+            "container=bare",
+        ),
+        (
+            include_bytes!(
+                "../../rusttable-image-io/tests/fixtures/lossless-4x3-container.jxl.b64"
+            )
+            .as_slice(),
+            "container=isobmff",
+        ),
+        (
+            include_bytes!("../../rusttable-image-io/tests/fixtures/lossless-4x3.webp.b64")
+                .as_slice(),
+            "format=webp",
+        ),
+    ] {
+        let fixture = entry(
+            "base64",
+            FixtureExpectation {
+                metadata: vec![expected.to_owned()],
+                ..Default::default()
+            },
+        );
+        qualify_binary(&fixture, source).expect("modern raster fixture should qualify");
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Endian {
     Little,

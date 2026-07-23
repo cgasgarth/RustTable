@@ -1,9 +1,11 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InputFormat {
     Jpeg,
+    JpegXl,
     Png,
     Tiff,
     OpenExr,
+    Webp,
     Raw,
 }
 
@@ -13,9 +15,11 @@ impl InputFormat {
     pub const fn extensions(self) -> &'static [&'static str] {
         match self {
             Self::Jpeg => &["jpg", "jpeg"],
+            Self::JpegXl => &["jxl"],
             Self::Png => &["png"],
             Self::Tiff => &["tif", "tiff"],
             Self::OpenExr => &["exr"],
+            Self::Webp => &["webp"],
             Self::Raw => &[
                 "arw", "cr2", "crw", "dng", "erf", "kdc", "nef", "nrw", "orf", "pef", "raf", "raw",
                 "rw2", "sr2", "srf", "x3f",
@@ -36,16 +40,18 @@ impl InputFormat {
     }
 }
 
-pub const SUPPORTED_INPUT_FORMATS: [InputFormat; 5] = [
+pub const SUPPORTED_INPUT_FORMATS: [InputFormat; 7] = [
     InputFormat::Jpeg,
+    InputFormat::JpegXl,
     InputFormat::Png,
     InputFormat::Tiff,
     InputFormat::OpenExr,
+    InputFormat::Webp,
     InputFormat::Raw,
 ];
 
 /// All extensions advertised by the standard decoder registry in stable order.
-pub const SUPPORTED_INPUT_EXTENSIONS: [&str; 22] = [
-    "jpg", "jpeg", "png", "tif", "tiff", "exr", "arw", "cr2", "crw", "dng", "erf", "kdc", "nef",
-    "nrw", "orf", "pef", "raf", "raw", "rw2", "sr2", "srf", "x3f",
+pub const SUPPORTED_INPUT_EXTENSIONS: [&str; 24] = [
+    "jpg", "jpeg", "jxl", "png", "tif", "tiff", "exr", "webp", "arw", "cr2", "crw", "dng", "erf",
+    "kdc", "nef", "nrw", "orf", "pef", "raf", "raw", "rw2", "sr2", "srf", "x3f",
 ];

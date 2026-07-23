@@ -136,6 +136,8 @@ const fn encode_format(format: InputFormat) -> u8 {
         InputFormat::Tiff => 3,
         InputFormat::Raw => 4,
         InputFormat::OpenExr => 5,
+        InputFormat::JpegXl => 6,
+        InputFormat::Webp => 7,
     }
 }
 
@@ -146,6 +148,8 @@ fn decode_format(value: u8) -> Result<InputFormat, ()> {
         3 => Ok(InputFormat::Tiff),
         4 => Ok(InputFormat::Raw),
         5 => Ok(InputFormat::OpenExr),
+        6 => Ok(InputFormat::JpegXl),
+        7 => Ok(InputFormat::Webp),
         _ => Err(()),
     }
 }
@@ -180,4 +184,27 @@ fn decode_metadata_status(value: u8) -> Result<ImportMetadataStatus, ()> {
 
 const fn default_metadata_status() -> u8 {
     1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_format, encode_format};
+    use rusttable_image::InputFormat;
+
+    #[test]
+    fn format_codes_preserve_legacy_values_and_add_modern_rasters() {
+        for (format, code) in [
+            (InputFormat::Jpeg, 1),
+            (InputFormat::Png, 2),
+            (InputFormat::Tiff, 3),
+            (InputFormat::Raw, 4),
+            (InputFormat::OpenExr, 5),
+            (InputFormat::JpegXl, 6),
+            (InputFormat::Webp, 7),
+        ] {
+            assert_eq!(encode_format(format), code);
+            assert_eq!(decode_format(code), Ok(format));
+        }
+        assert!(decode_format(0).is_err());
+    }
 }

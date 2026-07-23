@@ -3,6 +3,7 @@ use std::fmt;
 use super::manifest::{ArtifactClass, FixtureEntry};
 
 const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+const JXL_CONTAINER_SIGNATURE: &[u8; 12] = b"\0\0\0\x0cJXL \r\n\x87\n";
 const SQLITE_SIGNATURE: &[u8; 16] = b"SQLite format 3\0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,9 +93,11 @@ pub fn qualify_binary(
         "binary" if entry.source == "rusttable-test" => Vec::new(),
         "icc" => inspect_icc(entry, bytes)?,
         "jpeg" => inspect_jpeg(entry, bytes)?,
+        "jpeg-xl" => inspect_jpeg_xl(entry, bytes)?,
         "png" => inspect_png(entry, bytes)?,
         "sqlite" => inspect_sqlite(entry, bytes)?,
         "tiff" => inspect_tiff(entry, bytes)?,
+        "webp" => inspect_webp(entry, bytes)?,
         "xmp" => inspect_xmp(entry, bytes)?,
         format => {
             return Err(QualificationError::UnsupportedFormat {
@@ -121,6 +124,12 @@ fn inspect_base64(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, Qua
         "png".to_owned()
     } else if decoded.starts_with(b"\xff\xd8") {
         "jpeg".to_owned()
+    } else if decoded.starts_with(b"\xff\x0a") || decoded.starts_with(JXL_CONTAINER_SIGNATURE) {
+        "jpeg-xl".to_owned()
+    } else if decoded.starts_with(b"RIFF")
+        && decoded.get(8..12).is_some_and(|fourcc| fourcc == b"WEBP")
+    {
+        "webp".to_owned()
     } else {
         "tiff".to_owned()
     };
@@ -275,6 +284,68 @@ fn inspect_jpeg(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, Quali
     Ok(vec!["format=jpeg".to_owned(), "bits=8".to_owned()])
 }
 
+fn inspect_jpeg_xl(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, QualificationError> {
+    if bytes.starts_with(b"\xff\x0a") {
+        if bytes.len() < 4 {
+            return Err(truncated(entry, "jpeg-xl"));
+        }
+        return Ok(vec![
+            "format=jpeg-xl".to_owned(),
+            "container=bare".to_owned(),
+        ]);
+    }
+    if !bytes.starts_with(JXL_CONTAINER_SIGNATURE) {
+        return Err(signature(entry, "jpeg-xl"));
+    }
+
+    let mut cursor = 0usize;
+    let mut codestream = false;
+    while cursor < bytes.len() {
+        let header = bytes
+            .get(cursor..cursor.saturating_add(8))
+            .ok_or_else(|| truncated(entry, "jpeg-xl"))?;
+        let size32 = u32::from_be_bytes(header[..4].try_into().expect("JXL box size"));
+        let box_type: [u8; 4] = header[4..8].try_into().expect("JXL box type");
+        let (header_bytes, box_bytes) = if size32 == 1 {
+            let extended = bytes
+                .get(cursor + 8..cursor + 16)
+                .ok_or_else(|| truncated(entry, "jpeg-xl"))?;
+            (
+                16usize,
+                usize::try_from(u64::from_be_bytes(
+                    extended.try_into().expect("extended JXL box size"),
+                ))
+                .map_err(|_| invalid(entry, "jpeg-xl", "box size exceeds address space"))?,
+            )
+        } else if size32 == 0 {
+            (8usize, bytes.len().saturating_sub(cursor))
+        } else {
+            (
+                8usize,
+                usize::try_from(size32)
+                    .map_err(|_| invalid(entry, "jpeg-xl", "box size exceeds address space"))?,
+            )
+        };
+        if box_bytes < header_bytes {
+            return Err(invalid(entry, "jpeg-xl", "box is shorter than its header"));
+        }
+        cursor = cursor
+            .checked_add(box_bytes)
+            .ok_or_else(|| invalid(entry, "jpeg-xl", "box range overflows"))?;
+        if cursor > bytes.len() {
+            return Err(truncated(entry, "jpeg-xl"));
+        }
+        codestream |= matches!(&box_type, b"jxlc" | b"jxlp");
+    }
+    if !codestream {
+        return Err(invalid(entry, "jpeg-xl", "codestream box is absent"));
+    }
+    Ok(vec![
+        "format=jpeg-xl".to_owned(),
+        "container=isobmff".to_owned(),
+    ])
+}
+
 fn inspect_png(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, QualificationError> {
     if bytes.len() < 33 || &bytes[..8] != PNG_SIGNATURE {
         return Err(signature(entry, "png"));
@@ -400,6 +471,71 @@ fn inspect_tiff(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, Quali
         format!("bits={bits}"),
         format!("endianness={}", if little { "little" } else { "big" }),
     ])
+}
+
+fn inspect_webp(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, QualificationError> {
+    if bytes.len() < 20 || !bytes.starts_with(b"RIFF") || &bytes[8..12] != b"WEBP" {
+        return Err(signature(entry, "webp"));
+    }
+    let declared = usize::try_from(u32::from_le_bytes(
+        bytes[4..8].try_into().expect("WebP RIFF size"),
+    ))
+    .map_err(|_| invalid(entry, "webp", "RIFF size exceeds address space"))?
+    .checked_add(8)
+    .ok_or_else(|| invalid(entry, "webp", "RIFF size overflows"))?;
+    if declared != bytes.len() {
+        return Err(truncated(entry, "webp"));
+    }
+
+    let mut cursor = 12usize;
+    let mut image_chunk = false;
+    let mut alpha = false;
+    while cursor < bytes.len() {
+        let header = bytes
+            .get(cursor..cursor.saturating_add(8))
+            .ok_or_else(|| truncated(entry, "webp"))?;
+        let chunk_type: [u8; 4] = header[..4].try_into().expect("WebP chunk type");
+        let payload_bytes = usize::try_from(u32::from_le_bytes(
+            header[4..8].try_into().expect("WebP chunk size"),
+        ))
+        .map_err(|_| invalid(entry, "webp", "chunk size exceeds address space"))?;
+        let payload_start = cursor
+            .checked_add(8)
+            .ok_or_else(|| invalid(entry, "webp", "chunk range overflows"))?;
+        let payload_end = payload_start
+            .checked_add(payload_bytes)
+            .ok_or_else(|| invalid(entry, "webp", "chunk range overflows"))?;
+        let payload = bytes
+            .get(payload_start..payload_end)
+            .ok_or_else(|| truncated(entry, "webp"))?;
+        match &chunk_type {
+            b"VP8 " => image_chunk = true,
+            b"VP8L" => {
+                image_chunk = true;
+                alpha |= payload
+                    .get(1..5)
+                    .and_then(|value| value.try_into().ok())
+                    .is_some_and(|bits| u32::from_le_bytes(bits) & (1 << 28) != 0);
+            }
+            b"VP8X" => alpha |= payload.first().is_some_and(|flags| flags & 0x10 != 0),
+            b"ALPH" => alpha = true,
+            _ => {}
+        }
+        cursor = payload_end
+            .checked_add(payload_bytes % 2)
+            .ok_or_else(|| invalid(entry, "webp", "chunk padding overflows"))?;
+        if cursor > bytes.len() {
+            return Err(truncated(entry, "webp"));
+        }
+    }
+    if !image_chunk {
+        return Err(invalid(entry, "webp", "image data chunk is absent"));
+    }
+    let mut observed = vec!["format=webp".to_owned(), "bits=8".to_owned()];
+    if alpha {
+        observed.push("alpha=true".to_owned());
+    }
+    Ok(observed)
 }
 
 fn inspect_xmp(entry: &FixtureEntry, bytes: &[u8]) -> Result<Vec<String>, QualificationError> {

@@ -13,7 +13,7 @@ fn precision_limits() -> DecodeLimits {
 #[test]
 fn standard_registry_has_stable_unique_decoder_identities() {
     let descriptors = ImageDecoderRegistry::standard().descriptors();
-    assert_eq!(descriptors.len(), 5);
+    assert_eq!(descriptors.len(), 7);
     assert_eq!(
         descriptors
             .iter()
@@ -21,10 +21,12 @@ fn standard_registry_has_stable_unique_decoder_identities() {
             .collect::<Vec<_>>(),
         vec![
             "rusttable.decoder.jpeg.v1",
+            "rusttable.decoder.jpeg-xl.v1",
             "rusttable.decoder.png.v1",
             "rusttable.decoder.openexr.v1",
             "rusttable.decoder.raw.v1",
-            "rusttable.decoder.tiff.v1"
+            "rusttable.decoder.tiff.v1",
+            "rusttable.decoder.webp.v1",
         ]
     );
     assert!(
@@ -78,6 +80,43 @@ fn standard_registry_selects_png_without_a_path_or_extension() {
 
     assert_eq!(probe.format(), InputFormat::Png);
     assert_eq!(decoded.dimensions(), probe.dimensions());
+}
+
+#[test]
+fn standard_registry_decodes_jpeg_xl_and_webp_by_container_signature() {
+    let registry = ImageDecoderRegistry::standard();
+    for (fixture, format, sample_type) in [
+        (
+            include_str!("fixtures/lossless-4x3.jxl.b64"),
+            InputFormat::JpegXl,
+            SampleType::F32,
+        ),
+        (
+            include_str!("fixtures/lossless-4x3-container.jxl.b64"),
+            InputFormat::JpegXl,
+            SampleType::F32,
+        ),
+        (
+            include_str!("fixtures/lossless-4x3.webp.b64"),
+            InputFormat::Webp,
+            SampleType::U8,
+        ),
+    ] {
+        let bytes = decode_base64(fixture);
+        let probe = registry
+            .probe_bytes(&bytes, precision_limits())
+            .expect("modern raster signature should probe");
+        let frame = registry
+            .decode_frame_bytes(&bytes, precision_limits())
+            .expect("modern raster signature should decode");
+
+        assert_eq!(probe.format(), format);
+        assert_eq!(probe.dimensions().width(), 4);
+        assert_eq!(probe.dimensions().height(), 3);
+        assert_eq!(frame.receipt().format(), format);
+        assert_eq!(frame.image().descriptor().dimensions(), probe.dimensions());
+        assert_eq!(frame.sample_type(), sample_type);
+    }
 }
 
 #[test]

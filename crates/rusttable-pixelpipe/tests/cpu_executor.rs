@@ -1,12 +1,14 @@
+use rusttable_color::{Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion};
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
 use rusttable_image::{ColorEncoding, SourceColor, SourceColorFallback};
 use rusttable_pixelpipe::{
-    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
-    CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError, RgbaF32Channel,
-    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel,
+    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
+    CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuTilePlan,
+    CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
+    RgbaF32ImageError, RgbaF32Pixel,
 };
 use rusttable_processing::{
     CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
@@ -616,6 +618,35 @@ fn cache_identity_distinguishes_declared_and_fallback_source_evidence() {
     let fallback = snapshot(SourceColor::fallback(SourceColorFallback::EncodedSrgb));
 
     assert_ne!(declared.identity(), fallback.identity());
+}
+
+#[test]
+fn authoritative_icc_returns_typed_unsupported_transform_error() {
+    let profile = ProfileId::from_content(
+        b"validated opaque ICC",
+        ProfileClass::Input,
+        ProfileModel::Lut,
+        Pcs::XyzD50,
+        ProfileParserVersion::new(1).expect("parser version"),
+    )
+    .expect("profile identity");
+    let source_color = SourceColor::profile_authoritative_icc(profile);
+    let input = RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            RasterDimensions::new(1, 1).expect("nonzero dimensions"),
+            RgbaF32ColorEncoding::External(profile),
+        )
+        .with_source_color(source_color),
+        vec![RgbaF32Pixel::new(0.25, 0.5, 0.75, 1.0)],
+    )
+    .expect("profile-authoritative input");
+    let snapshot =
+        CpuPixelpipeSnapshot::new(input, graph(Vec::new()), CpuPixelpipeOutputMode::Preview);
+
+    assert_eq!(
+        CpuPixelpipeExecutor.execute(&snapshot),
+        Err(CpuPixelpipeError::UnsupportedProfileTransform { profile })
+    );
 }
 
 #[test]
