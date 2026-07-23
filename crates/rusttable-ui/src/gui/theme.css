@@ -2,7 +2,13 @@
 
 * {
   color: {{foreground}};
-  font-family: sans-serif, "Arial Unicode MS";
+  font-family: "Roboto Light", "Roboto",
+               "Segoe UI",
+               "SF Pro Display Light", "SF Pro Display",
+               "Ubuntu Light", "Ubuntu", "IPAPGothic",
+               "Cantarell",
+               "Arial Unicode MS",
+               sans-serif;
   font-feature-settings: "tnum";
   font-size: {{base_font_pt}}pt;
   font-weight: normal;
@@ -87,6 +93,7 @@ window,
   background-image: none;
   box-shadow: none;
   color: {{foreground}};
+  font-size: {{heading_font_pt}}pt;
 }
 
 .dt_mode_separator {

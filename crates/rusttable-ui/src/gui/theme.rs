@@ -264,8 +264,10 @@ mod tests {
         assert!(css.contains("#c6c6c6ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
-        assert!(css.contains("font-size: 8pt"));
+        assert!(css.contains("font-size: 12pt"));
         assert!(!css.contains("font-size: 0.85em"));
+        assert!(css.contains("\"Roboto Light\", \"Roboto\""));
+        assert!(css.contains("\"SF Pro Display Light\", \"SF Pro Display\""));
         assert!(css.contains(".dt_view_switcher"));
         assert!(css.contains("button:disabled"));
         assert!(css.contains("#export-rail-content"));
@@ -286,14 +288,17 @@ mod tests {
     }
 
     #[test]
-    fn css_ports_darktable_reset_and_compact_widget_metrics() {
+    fn css_ports_darktable_reset_and_configured_widget_metrics() {
         let css = darktable_theme_css();
 
         assert!(css.contains("min-width: 0;\n  min-height: 0;"));
         assert!(css.contains("min-width: 14px;\n  min-height: 14px;"));
-        assert!(css.contains("min-width: 18px;\n  min-height: 18px;"));
+        assert!(css.contains("min-width: 21px;\n  min-height: 21px;"));
         assert!(css.contains("-gtk-icon-size: 11px"));
         assert!(css.contains("padding: 0.14em 0.28em"));
+        assert!(css.contains("min-height: 20px"));
+        assert!(css.contains("min-height: 25px"));
+        assert!(css.contains("font-size: 18pt"));
     }
 
     #[test]

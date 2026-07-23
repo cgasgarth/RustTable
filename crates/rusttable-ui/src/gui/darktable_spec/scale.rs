@@ -9,7 +9,8 @@
 
 use super::LAYOUT_METRICS;
 
-/// Typography sizes expressed in points, matching Darktable's configured font.
+/// Typography sizes expressed in points, matching Darktable's configured font
+/// and the relative sizes used by its theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypographyTokens {
     pub base_pt: u8,
@@ -89,29 +90,30 @@ pub struct DarktableUiTokens {
     pub cards: LighttableCardTokens,
 }
 
-/// Compact typography and chrome from Darktable's widget CSS at the matched
-/// desktop scale.
+/// Typography and chrome from Darktable's configured 12pt desktop baseline.
 ///
-/// Darktable resets GTK minimums before applying 1.15em module-header buttons,
-/// 1.7em toolbar buttons, 1px control padding, and fractional-em spacing. The
-/// integer requests below are the corresponding GTK4 allocation floor; CSS
-/// retains the source em values for font-relative sizing.
+/// `data/darktableconfig.xml.in` configures a 12pt font and `src/gui/gtk.c`
+/// applies it through GTK when system fonts are disabled. The theme keeps the
+/// global size at `1em`, with 0.8em auxiliary text, 0.75em micro text, 1.1em
+/// module labels, 1.15em module-header buttons, and 1.7em toolbar buttons.
+/// Integer requests are rounded GTK4 allocation floors around those source
+/// ratios; CSS retains the source em padding for font-relative spacing.
 pub const DARKTABLE_UI_TOKENS: DarktableUiTokens = DarktableUiTokens {
     typography: TypographyTokens {
-        base_pt: 8,
-        compact_pt: 7,
-        micro_pt: 6,
-        heading_pt: 12,
+        base_pt: 12,
+        compact_pt: 10,
+        micro_pt: 9,
+        heading_pt: 18,
     },
     controls: ControlScaleTokens {
-        control_height: 16,
-        module_row_height: 18,
-        module_title_height: 16,
+        control_height: 18,
+        module_row_height: 20,
+        module_title_height: 20,
         module_header_button_size: 14,
         module_header_icon_size: 11,
-        toolbar_button_size: 18,
-        toolbar_height: 18,
-        status_height: 16,
+        toolbar_button_size: 21,
+        toolbar_height: 25,
+        status_height: 18,
         control_gap: 2,
         module_gap: 0,
         module_padding: 3,
@@ -135,7 +137,7 @@ mod tests {
     use super::{DARKTABLE_UI_TOKENS, ModuleControlAllocationReceipt};
 
     #[test]
-    fn control_scale_matches_darktable_widget_css_contract() {
+    fn control_scale_matches_darktable_config_and_widget_css_contract() {
         let tokens = DARKTABLE_UI_TOKENS;
 
         assert_eq!(
@@ -145,14 +147,38 @@ mod tests {
                 tokens.typography.micro_pt,
                 tokens.typography.heading_pt,
             ),
-            (8, 7, 6, 12)
+            (12, 10, 9, 18)
         );
-        assert_eq!(tokens.controls.control_height, 16);
-        assert_eq!(tokens.controls.module_row_height, 18);
-        assert_eq!(tokens.controls.module_title_height, 16);
-        assert_eq!(tokens.controls.module_header_button_size, 14);
+        assert_eq!(
+            u16::from(tokens.typography.compact_pt),
+            (u16::from(tokens.typography.base_pt) * 4).div_ceil(5)
+        );
+        assert_eq!(
+            u16::from(tokens.typography.micro_pt),
+            u16::from(tokens.typography.base_pt) * 3 / 4
+        );
+        assert_eq!(
+            u16::from(tokens.typography.heading_pt),
+            u16::from(tokens.typography.base_pt) * 3 / 2
+        );
+        assert_eq!(tokens.controls.control_height, 18);
+        assert_eq!(tokens.controls.module_row_height, 20);
+        assert_eq!(tokens.controls.module_title_height, 20);
+        assert_eq!(
+            tokens.controls.module_header_button_size,
+            (i32::from(tokens.typography.base_pt) * 115 + 99) / 100
+        );
         assert_eq!(tokens.controls.module_header_icon_size, 11);
-        assert_eq!(tokens.controls.toolbar_button_size, 18);
+        assert_eq!(
+            tokens.controls.toolbar_button_size,
+            (i32::from(tokens.typography.base_pt) * 170 + 99) / 100
+        );
+        assert_eq!(
+            tokens.controls.toolbar_height,
+            tokens.controls.toolbar_button_size
+                + (i32::from(tokens.typography.base_pt) * 28 + 99) / 100
+        );
+        assert_eq!(tokens.controls.status_height, 18);
         assert_eq!(tokens.controls.control_gap, 2);
         assert_eq!(tokens.controls.module_gap, 0);
         assert_eq!(tokens.controls.module_padding, 3);

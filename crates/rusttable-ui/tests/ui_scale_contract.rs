@@ -6,19 +6,22 @@ use rusttable_ui::gtk_shell::{
 };
 
 #[test]
-fn installed_darktable_scale_is_explicit_and_readable() {
+fn configured_darktable_scale_is_explicit_and_readable() {
     let tokens = DARKTABLE_UI_TOKENS;
     let panels = DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths;
 
-    assert_eq!(tokens.typography.base_pt, 8);
-    assert_eq!(tokens.typography.compact_pt, 7);
-    assert_eq!(tokens.controls.control_height, 16);
-    assert_eq!(tokens.controls.module_row_height, 18);
-    assert_eq!(tokens.controls.module_title_height, 16);
+    assert_eq!(tokens.typography.base_pt, 12);
+    assert_eq!(tokens.typography.compact_pt, 10);
+    assert_eq!(tokens.typography.micro_pt, 9);
+    assert_eq!(tokens.typography.heading_pt, 18);
+    assert_eq!(tokens.controls.control_height, 18);
+    assert_eq!(tokens.controls.module_row_height, 20);
+    assert_eq!(tokens.controls.module_title_height, 20);
     assert_eq!(tokens.controls.module_header_button_size, 14);
     assert_eq!(tokens.controls.module_header_icon_size, 11);
-    assert_eq!(tokens.controls.toolbar_button_size, 18);
-    assert_eq!(tokens.controls.toolbar_height, 18);
+    assert_eq!(tokens.controls.toolbar_button_size, 21);
+    assert_eq!(tokens.controls.toolbar_height, 25);
+    assert_eq!(tokens.controls.status_height, 18);
     assert_eq!(panels.minimum_px, 136);
     assert_eq!(panels.preferred_px, 180);
     assert!(panels.accepts(panels.minimum_px));
@@ -89,11 +92,13 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
 
     assert!(!css.contains("{{"));
     for declaration in [
-        "font-size: 8pt",
+        "font-size: 12pt",
         "min-width: 136px",
         "min-height: 14px",
-        "min-height: 16px",
         "min-height: 18px",
+        "min-height: 20px",
+        "min-height: 21px",
+        "min-height: 25px",
         "min-height: 120px",
     ] {
         assert!(
