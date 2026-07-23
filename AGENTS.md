@@ -41,13 +41,14 @@
 - Capture the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize. Ask Gemini to report concrete geometry/style/render differences and map them to RustTable components.
 - Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.
 - Keep every UI correction from a review iteration in that batch's single UI parity PR. Reuse the same Sol UI worker that owns the UI PR for follow-up screenshot iterations so visual context and responsibility remain continuous.
+- Gemini visual review is a required merge gate for every UI PR, not optional feedback: the exact PR commit must have a recorded `SIGN-OFF` from the Gemini visual-analysis worker against the paired screenshot set before merge or auto-merge is enabled. A `CHANGES_REQUIRED` result, missing screenshot pair, or inability to inspect leaves the UI PR unmergeable until the Sol worker addresses the findings and Gemini rechecks it. Non-UI PRs are not subject to this visual gate.
 
 ## Issues and pull requests
 
 - GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
 - Select dependency-ready work by priority label, P0 through P4.
 - A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body. Move-only structure migrations may consolidate all directly related lineage issues into one PR when splitting them would create avoidable path churn; link every covered issue and preserve its acceptance criteria.
-- After the issue #969 UI parity PR merges, every active batch contains exactly two ready-for-review PRs: one UI parity/iterative screenshot PR and one non-UI product or migration PR. Both PRs must merge before the next batch starts, and UI work must not be split out of the batch's single UI parity PR.
+- After the issue #969 UI parity PR merges, an active batch may contain up to three ready-for-review PRs, with at least one UI parity/iterative screenshot PR and one non-UI product or migration PR. All PRs in the batch must merge before the next batch starts, and UI work must not be split out of the batch's single UI parity PR. The third PR is only for a genuinely disjoint product slice and must not increase shared-file conflict risk.
 - Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
 - Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.
 - When fewer than ten open issues remain, start fresh milestone-scoped consults to propose concrete product issues.
