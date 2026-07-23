@@ -9,8 +9,6 @@
     "test:computer-use": "bun test scripts/dev/computer-use-app-install.test.ts scripts/dev/rusttable-app-bundle.test.ts",
     "test:precommit-check": "bash scripts/dev/test-precommit-check.sh",
     "test:darktable-ui-smoke": "bash scripts/dev/darktable-ui-smoke.sh",
-    "worktree:create": "bash scripts/dev/create-agent-worktree.sh",
-    "test:worktree:create": "bash scripts/dev/test-create-agent-worktree.sh",
     "test:doctor": "bash scripts/dev/test-doctor.sh",
     "test:macos-artifact-identity": "bun test scripts/macos-artifact-identity.test.ts",
     "test:macos-computer-use-smoke": "bash scripts/macos-computer-use-smoke.sh",

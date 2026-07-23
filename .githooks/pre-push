@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-# Pull-request CI is authoritative. Pre-commit owns the optional full local gate.
+# The complete local pre-commit gate is authoritative; post-merge checks may extend it.

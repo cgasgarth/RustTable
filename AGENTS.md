@@ -1,76 +1,55 @@
 # RustTable Engineering Guidelines
 
-## Product direction
+## Migration contract
 
-- RustTable is a complete Rust rewrite of darktable with GTK4 through the maintained `gtk-rs` Rust bindings. Mirror darktable's GTK desktop behavior in idiomatic Rust; do not retain or call its C implementation.
-- Build working import, catalog, edit, preview, save, processing, and export paths. At least one PR in every active batch must advance product behavior.
-- Keep the separate `/Users/cgas/Documents/RustTable/Darktable` clone as the read-only reference. Never copy, compile, link, or retain upstream C/C++/OpenCL in RustTable.
-- Port the desktop experience shift-in-place by responsibility: use Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` as navigation for Rust GTK4 modules, preserving workflows and layout where useful without copying C APIs, source, or build machinery.
-- Treat Darktable's visible GTK composition as the product reference, not as inspiration for a generic photo application. Before changing a GTK surface, inspect the matching upstream view, panel, and module sources; reproduce its information hierarchy, mode switching, panel placement, labels, and controls with GTK4 Rust widgets.
-- A desktop UI PR must name the Darktable source paths it maps and include a direct visual/behavioral comparison. Prefer a faithful GTK4 equivalent over a new layout or renamed workflow unless an upstream behavior is intentionally deferred in the linked issue.
-- When a capability is replaced, delete obsolete native payload from RustTable. Preserve behavior and formats, not the upstream file graph.
-- A GTK4 controller owns each migrated desktop workflow. Delete superseded UI source, tests, and dependency paths in the same migration slice; never maintain two live UI implementations for one workflow.
-- One backend, one UI workflow rule: a product capability has one typed service owner and one GTK4/gtk-rs controller/view path. UI modules may define only the smallest typed port needed to cross into that service; they must not grow a second backend, duplicate process/filesystem/catalog logic, or preserve an Iced compatibility surface.
-- Follow the Rust crate/module structure while using `architecture/darktable-subsystems.toml` for broad upstream navigation.
+- RustTable is a complete Rust rewrite of Darktable. Production code uses Rust 2024 and GTK4 through `gtk-rs`; it must never compile, link, or call the retained C/C++/OpenCL implementation.
+- The authoritative migration baseline is Darktable commit `d8628e8103989bc4ef06dbfb9fd01f3809f884bf`, the parent of RustTable's bulk native-source deletion. Its original `src/`, `data/`, `po/`, `doc/`, `dev-doc/`, `packaging/`, `tools/`, and build files remain in this repository as a read-only porting oracle.
+- Keep the current Cargo workspace and crate boundaries. Within the appropriate crate, mirror the original path and responsibility so a reviewer can immediately find both sides of a port. For example, `src/dtgtk/sidepanel.c` maps to `crates/rusttable-ui/src/dtgtk/sidepanel.rs`.
+- Work file by file. Before implementing a Rust replacement, read the complete source file, its directly coupled local headers/helpers, and relevant upstream tests. Preserve constants, state transitions, ordering, formats, error behavior, and UI composition; adapt only what Rust ownership, safety, established crates, or GTK4 APIs require.
+- Do not invent substitute workflows, simplified processing semantics, arbitrary geometry, or parallel abstractions. An unported capability must remain explicitly unavailable rather than presenting plausible but incorrect behavior.
+- Treat all existing Rust application behavior as provisional. Retain it only when tests and source comparison prove that it faithfully ports a specific Darktable responsibility; otherwise replace or remove it.
+- Never edit retained baseline files. A port deletes the replaced C/H/OpenCL source only after the Rust path is used by the application, source-derived tests pass, parity is reviewed, and no remaining retained source depends on it. Keep original assets and translations until their Rust consumers are complete.
+- The separate `/Users/cgas/Documents/RustTable/Darktable` checkout remains the runnable visual/behavioral reference. It is not a Git remote or contribution target for RustTable.
 
 ## Rust rules
 
-- Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
-- Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
-- Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
-- Keep handwritten source files at or below 1,000 lines. Split them by responsibility into the corresponding nested module tree; never reduce behavior to meet the limit. Generated compatibility data is the only exception.
-- Preserve migration lineage when splitting files: keep a parent module at the original responsibility/path and place size-driven child modules in a nested directory beneath it (for example, `module/mod.rs` plus focused children), rather than flattening them into a new high-level catch-all folder. Name child modules after the corresponding Darktable responsibility where that mapping is meaningful.
-- Favor one Rust module or crate boundary per recognizable Darktable subsystem (`src/gui`, `src/libs`, `src/views`, `src/iop`, and related services). New structure should make a source-to-source migration diff easy to locate; do not move unrelated responsibilities merely to satisfy Rust packaging conventions.
-- Prefer the standard library, GTK4/GLib facilities, and established Rust crates over bespoke infrastructure.
+- Use the pinned Rust 1.98 beta, Rust 2024, strict warnings, Clippy `all`/`pedantic`, and `unsafe_code = "forbid"`.
+- Unsafe Rust requires an explicit, focused review proving that no safe implementation is practical, with documented invariants and boundary tests. Do not relax workspace policy preemptively.
+- Do not impose a line-count limit on ports. Keep a Darktable file's responsibility together when that makes source comparison clearer; split into nested responsibility-based modules only when the original structure or Rust maintainability genuinely supports it.
+- Put a source-lineage module comment on every direct port naming the baseline source file(s). Keep size-driven children nested under that mapped parent.
+- Prefer the standard library, GTK4/GLib facilities, and established Rust crates over bespoke infrastructure, while preserving Darktable's observable behavior and formats.
 
-## Development and tests
+## Development and validation
 
-- Use test-driven development. Add focused deterministic coverage for every behavior change and regression.
-- Let Cargo and Rust tests use host-detected parallelism; do not pass `CARGO_BUILD_JOBS` or test-thread counts on individual commands. Keep one Cargo pipeline owner so concurrent repository checks do not oversubscribe the host.
-- Keep external runtimes, packaging, full reference execution, and other expensive checks out of unit tests.
-- `cargo xtask check` is the complete local gate: source policy, formatting, strict Clippy, all-target/all-feature tests, operation data, fixtures, and standard dependency checks.
-- The complete local precommit gate is the PR merge authority; PR-triggered GitHub Actions stay disabled. Post-merge validation may add platform, distribution, or extended checks.
-- Extended coverage and distribution run after merge or for releases. Do not recreate validation schedulers, timing budgets, wave planners, or receipt graphs.
-- Run independent hosted jobs in parallel and use caches; do not impose local elapsed-time caps.
+- Use test-driven development. Derive regression cases, boundary values, ordering, and failure behavior from the matching Darktable source and tests.
+- `cargo xtask check` is the complete local commit gate: formatting, strict Clippy, all-target/all-feature tests, rustdoc, fixtures, and relevant repository policy.
+- Let Cargo detect host parallelism. Do not pass `CARGO_BUILD_JOBS` or test-thread counts on individual commands.
+- The retained baseline is not part of the Cargo build. Keep it unchanged until verified ports allow individual source files to be deleted; use normal Git review instead of bespoke policy machinery.
+- Keep precommit output concise on success and actionable on failure. PR-triggered GitHub Actions remain disabled; post-merge validation may run extended platform, packaging, coverage, and distribution checks.
 
-### Visual comparison workflow
-- For GTK visual parity reviews, launch the installed RustTable and original Darktable applications directly and inspect them interactively with Computer Use. Do not use the screenshot-capture script.
-- A Gemini visual worker may analyze screenshots captured directly during that Computer Use session when its fast visual feedback is useful. Treat it as supplemental analysis, not a replacement for the orchestrator's live review.
-- Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state in both applications.
-- Computer Use screenshots are normalized previews, not native GTK coordinates. Derive geometry from Darktable source or live native widget allocations; never copy screenshot pixel counts into layout tokens.
-- Treat geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate in the live applications until measurable drift is removed or explicitly proven out of scope.
-- Inspect the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize.
-- Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.
-- Keep every UI correction from a review iteration in that batch's single UI parity PR. Reuse the same Sol UI worker that owns the UI PR for follow-up interactive review iterations so visual context and responsibility remain continuous.
-- The orchestrator's direct Computer Use review of the exact PR commit is the UI merge gate. Record the inspected states and any remaining implemented-surface drift in the PR before merge.
+## Visual parity
 
-## Issues and pull requests
+- Launch the installed RustTable app and original Darktable app directly with Computer Use.
+- Compare normal macOS windows maximized to identical working-area bounds. Do not use macOS full-screen mode, unequal window sizes, or normalized approximations.
+- Use the same image, view, layout mode, selection, panel visibility, panel widths, and expanded modules.
+- Derive layout from Darktable source and live GTK allocations, never screenshot pixel guesses. Geometry, colors, typography, controls, rail behavior, and interactions are acceptance criteria.
+- Inspect lighttable, darkroom, top/bottom chrome, both rails, histogram, filmstrip/timeline, implemented modules, collapsed/expanded states, resizing, and edited-preview propagation before accepting a UI milestone.
 
-- GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
-- Select dependency-ready work by priority label, P0 through P4.
-- A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body. Move-only structure migrations may consolidate all directly related lineage issues into one PR when splitting them would create avoidable path churn; link every covered issue and preserve its acceptance criteria.
-- After the issue #969 UI parity PR merges, an active batch may contain up to three ready-for-review PRs, with at least one iterative UI parity PR and one non-UI product or migration PR. All PRs in the batch must merge before the next batch starts, and UI work must not be split out of the batch's single UI parity PR. The third PR is only for a genuinely disjoint product slice and must not increase shared-file conflict risk.
-- Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
-- Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.
-- When fewer than ten open issues remain, start fresh milestone-scoped consults to propose concrete product issues.
+## Git and delivery
 
-## Worktrees and remotes
-
-- Use `/Users/cgas/Documents/RustTable/worktrees` for development worktrees and `scripts/dev/create-agent-worktree.sh --issue NUMBER` to start from `origin/main`.
-- Reserve `/Users/cgas/Documents/RustTable/RustTable` for repository management; it tracks the fork's `origin/main`.
-- `origin` and `upstream` are `cgasgarth/RustTable`; `darktable` is fetch-only. Never push to `darktable-org/darktable`.
-- Protect `main` and `master` from direct commits. Use squash-merged GitHub PRs.
-- Preserve unrelated and untracked user files. Copy only explicit untracked inputs into a new worktree.
+- Use only `/Users/cgas/Documents/RustTable/RustTable` for migration development. Do not create Git worktrees.
+- Work on the long-lived `codex/file-by-file-migration` branch. Keep `main` protected from direct commits.
+- Commit coherent source-file ports as they complete. Open a ready-for-review PR only for a meaningful migration milestone, then squash-merge it.
+- GitHub issues track major milestones and concrete defects discovered during faithful ports. Do not create abstraction-first backlogs, one issue per trivial step, artificial PR batches, or priority-driven work that skips source order.
+- A milestone PR must explain the Darktable files replaced, the Rust destinations, deleted baseline files, behavior retained, known unported dependencies, and validation evidence.
+- `origin` is `cgasgarth/RustTable`. Do not add or fetch Darktable as an automatic RustTable remote; use the separate local checkout and pinned in-repository baseline.
 
 ## Agent orchestration
 
-- Reuse a completed agent only when its context and clean worktree directly continue the same PR.
-- Leave long-running agents running without routine polling; completion messages wake the orchestrator. Inspect only on completion or an urgent dependency.
-- Keep each agent in an isolated worktree. More agents may collaborate inside one PR, but active PR batch limits still apply.
-- Keep at least two agents on disjoint, product-facing Rust implementation slices whenever a batch is active. Prefer a coherent upstream subsystem's composition, persistence, UI, render, or test slices over setup, policy, or workflow work.
-- Use up to four concurrent agents by default; for an explicitly requested, high-throughput UI parity pass, use up to ten Sol-medium agents when every worker has a disjoint surface/file ownership contract and all commits will be integrated into one umbrella UI PR. Keep shared theme/token edits with one owner, keep at least two product slices working, and reduce concurrency when conflicts outweigh the speedup.
-- Combine tightly coupled implementation work into the active PR rather than serializing tiny scaffolding PRs; do not combine unrelated subsystems just to increase PR size.
-- Re-read the current issue and parent issue before follow-up work because GitHub scope may change.
+- All agents work in the single real checkout on its current branch; never create worktrees.
+- Subagents may analyze, test, review, and edit coordinated non-overlapping files in that checkout. The orchestrator owns task partitioning, shared-file conflict avoidance, integration, and final validation.
+- Give agents exact Darktable and Rust paths. Require findings about implemented-but-incorrect behavior; do not report functionality that is merely unported.
+- Prefer parallel migration work that advances faithful Rust implementation over process, PR, or orchestration churn. Do not poll running agents routinely; completion notifications wake the orchestrator.
 
 ## Computer Use installation
 

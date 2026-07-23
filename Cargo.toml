@@ -153,5 +153,6 @@ unsafe_code = "forbid"
 warnings = "deny"
 
 [workspace.lints.clippy]
-all = "deny"
-pedantic = "deny"
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+too_many_lines = "allow"

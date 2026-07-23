@@ -1,35 +1,31 @@
 # Contributing to RustTable
 
-RustTable is a Rust and GTK4/gtk-rs rewrite of darktable. The original native project is reference material, not code to extend or merge into this repository.
+RustTable is a safe Rust 2024 and GTK4/gtk-rs rewrite of Darktable. The pinned native implementation remains unchanged in this repository as a non-built porting oracle, and the separate Darktable checkout is the runnable reference.
 
-## Start from GitHub
+## Prepare the single checkout
 
-Choose an issue with a milestone and priority, then create a dedicated worktree:
+Use `/Users/cgas/Documents/RustTable/RustTable` and create or switch to the long-lived `codex/file-by-file-migration` branch before implementation. Do not create Git worktrees.
 
 ```sh
 git config core.hooksPath .githooks
-bash scripts/dev/create-agent-worktree.sh --issue ISSUE_NUMBER
-cd /Users/cgas/Documents/RustTable/worktrees/issue-ISSUE_NUMBER
 bash scripts/dev/doctor.sh
 ```
 
-GitHub is the planning source of truth. Repository tooling does not mirror, hash, schedule, or mutate issue content.
+## Port one complete responsibility
 
-## Implement
-
-- Use the pinned Rust toolchain and workspace dependencies/lints.
-- Keep unsafe code forbidden. Treat 1,000 lines as a maintainability trigger, not a hard ceiling: split growing handwritten files when responsibility-based decomposition improves navigability, keep related children under an explicit parent, and allow cohesive files to exceed the guideline when splitting would obscure ownership.
-- Write deterministic tests first for behavior changes and defects.
-- Prefer Rust, GTK4/GLib facilities, and maintained crates.
-- Shift responsibilities in place from Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` into coherent Rust GTK4 modules. Preserve workflow and layout behavior, not C APIs or source files.
-- Do not add C/C++, CMake, GTK3, or copied OpenCL source.
+- Follow `TASK.md` and `AGENTS.md`; select the next dependency-ready Darktable file in source order.
+- Read the complete source, coupled declarations, callers, tests, constants, assets, CSS, and GTK construction before implementing.
+- Write source-derived tests, port the full responsibility into the matching nested Rust path, and route production callers to it.
+- Keep unsafe code forbidden and preserve observable behavior with Rust, GTK4/GLib, and established crates.
+- Do not edit, compile, link, FFI-call, or ship the retained native oracle.
+- Delete a retained source file only after its Rust replacement is complete, verified, used in production, and no retained dependency still needs it.
 
 ## Validate and submit
 
-Run the complete local gate:
+Run the complete local commit gate:
 
 ```sh
 cargo xtask check
 ```
 
-Open one ready-for-review PR with `Why`, `How`, `Validation`, and `Closes #ISSUE_NUMBER`. Pull-request CI is authoritative on Linux, macOS, Windows, and dependency policy. Use squash auto-merge after required checks and review.
+Commit coherent file ports directly on `codex/file-by-file-migration`. Open a ready-for-review PR only for a meaningful migration milestone; explain why and how, list exact source-to-Rust mappings, record validation and known unported dependencies, then squash merge.
