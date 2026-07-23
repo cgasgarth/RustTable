@@ -32,6 +32,11 @@ use crate::viewport_presentation::{DarkroomViewportState, NavigationCrop};
 use crate::widgets::thumbnail::ThumbnailSurface;
 use crate::{MaskManagerPanel, MultiscaleRetouchPanel};
 
+const DENOISE_MODULE_GROUPS: &[DarkroomModuleGroup] =
+    &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Technical];
+const RETOUCH_MODULE_GROUPS: &[DarkroomModuleGroup] =
+    &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Effects];
+
 const NAVIGATION_DEFAULT_HEIGHT: i32 = 200;
 const NAVIGATION_MIN_HEIGHT: i32 = 100;
 const NAVIGATION_MAX_HEIGHT: i32 = 300;
@@ -246,14 +251,14 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
             "rgb-denoise",
             "RGB AI denoise",
             DarkroomModuleSide::Right,
-            &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Technical],
+            DENOISE_MODULE_GROUPS,
             rgb_denoise.widget(),
         ),
         ImplementedModulePanel::wrapped(
             "raw-denoise",
             "RAW AI denoise",
             DarkroomModuleSide::Right,
-            &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Technical],
+            DENOISE_MODULE_GROUPS,
             raw_denoise.widget(),
         ),
         ImplementedModulePanel::wrapped(
@@ -267,7 +272,7 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
             "multiscale-retouch",
             "multiscale retouch",
             DarkroomModuleSide::Right,
-            &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Effects],
+            RETOUCH_MODULE_GROUPS,
             multiscale_retouch.widget(),
         ),
     ];
@@ -383,7 +388,7 @@ fn rail_scroll(child: &impl IsA<gtk4::Widget>, width: i32, id: &str) -> gtk4::Sc
 fn histogram() -> gtk4::Stack {
     let histogram = gtk4::Stack::new();
     histogram.set_widget_name("darkroom-histogram");
-    histogram.set_height_request(i32::from(DARKROOM_GEOMETRY.histogram_height_px));
+    histogram.set_height_request(histogram_height_request());
     histogram.set_hexpand(true);
     histogram.set_halign(gtk4::Align::Fill);
     histogram.set_vexpand(false);
@@ -391,6 +396,10 @@ fn histogram() -> gtk4::Stack {
     histogram.set_accessible_role(gtk4::AccessibleRole::Img);
     histogram.update_property(&[Property::Label("Image histogram")]);
     histogram
+}
+
+fn histogram_height_request() -> i32 {
+    i32::from(DARKROOM_GEOMETRY.histogram_height_px)
 }
 
 pub(super) fn add_group_buttons(
@@ -494,25 +503,35 @@ pub(super) fn add_group_buttons(
 
 #[cfg(test)]
 mod parity_tests {
-    use super::{DarkroomModuleGroup, implemented_module_matches};
+    use super::{
+        DENOISE_MODULE_GROUPS, DarkroomModuleGroup, RETOUCH_MODULE_GROUPS,
+        histogram_height_request, implemented_module_matches,
+    };
 
     #[test]
-    fn implemented_modules_can_belong_to_each_matching_darktable_group() {
-        let groups = [DarkroomModuleGroup::Correct, DarkroomModuleGroup::Technical];
+    fn implemented_module_groups_match_darktable_defaults() {
+        assert_eq!(
+            DENOISE_MODULE_GROUPS,
+            &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Technical]
+        );
+        assert_eq!(
+            RETOUCH_MODULE_GROUPS,
+            &[DarkroomModuleGroup::Correct, DarkroomModuleGroup::Effects]
+        );
         assert!(implemented_module_matches(
-            &groups,
+            DENOISE_MODULE_GROUPS,
             DarkroomModuleGroup::Correct,
             "",
             true
         ));
         assert!(implemented_module_matches(
-            &groups,
+            DENOISE_MODULE_GROUPS,
             DarkroomModuleGroup::Technical,
             "",
             true
         ));
         assert!(!implemented_module_matches(
-            &groups,
+            DENOISE_MODULE_GROUPS,
             DarkroomModuleGroup::Color,
             "",
             true
@@ -533,6 +552,11 @@ mod parity_tests {
             "exposure",
             false
         ));
+    }
+
+    #[test]
+    fn histogram_uses_darktable_default_height() {
+        assert_eq!(histogram_height_request(), 180);
     }
 }
 
