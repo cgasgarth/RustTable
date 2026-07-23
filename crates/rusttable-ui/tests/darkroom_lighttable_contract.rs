@@ -54,8 +54,6 @@ fn darkroom_stack_keeps_darktable_regions_and_stable_widget_order() {
             "darkroom-toolbar-bottom",
             "darkroom-left-panel",
             "darkroom-navigation",
-            "darkroom-navigation-info",
-            "darkroom-navigation-actions",
             "darkroom-snapshots",
             "darkroom-snapshots-info",
             "darkroom-snapshots-actions",
@@ -166,11 +164,11 @@ fn rail_resize_reallocates_the_center_from_the_same_display_free_contract() {
     let expanded_right =
         DarkroomGeometryReceipt::for_window_with_panel_widths(1_440, 900, 320, 300, true);
 
-    assert_eq!(narrow_left.center_width_px(), 1_126);
-    assert_eq!(expanded_left.center_width_px(), 956);
-    assert_eq!(expanded_right.center_width_px(), 806);
+    assert_eq!(narrow_left.center_width_px(), 1_120);
+    assert_eq!(expanded_left.center_width_px(), 950);
+    assert_eq!(expanded_right.center_width_px(), 800);
     assert!(expanded_right.center_width_px() > 650);
-    assert_eq!(expanded_right.filmstrip_height_px, 82);
+    assert_eq!(expanded_right.filmstrip_height_px, 120);
 }
 
 #[test]
@@ -187,17 +185,19 @@ fn gtk_darkroom_layout_bounds_natural_module_width_before_paned_allocation() {
 }
 
 #[test]
-fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
+fn gtk_parity_keeps_resizable_rails_top_left_grids_and_actions() {
     let header = include_str!("../src/gui/header.rs");
     let runtime_layout = include_str!("../src/gui/runtime/layout.rs");
     let runtime_lighttable = include_str!("../src/gui/runtime/lighttable.rs");
     let components = include_str!("../src/gui/darktable_components.rs");
     let css = include_str!("../src/gui/theme.css");
 
-    assert!(runtime_layout.contains(".shrink_start_child(true)"));
+    assert!(runtime_layout.contains(".wide_handle(true)"));
+    assert!(runtime_layout.contains("connect_panel_width_tracking"));
     assert!(runtime_layout.contains("photos.set_halign(gtk4::Align::Start)"));
     assert!(runtime_layout.contains("let strip_surface = gtk4::Grid::new"));
-    assert!(runtime_lighttable.contains("centered_for_visible_count"));
+    assert!(runtime_lighttable.contains("grid_model_strings"));
+    assert!(runtime_lighttable.contains("reveal_active_photo"));
     assert!(runtime_lighttable.contains("connect_filmstrip_resize"));
     assert!(runtime_lighttable.contains(".parent()"));
     assert!(components.contains("module_action_button"));
@@ -210,7 +210,7 @@ fn gtk_parity_centers_short_surfaces_and_reserves_rail_actions() {
     assert!(header.contains("header_height.saturating_sub(HEADER_VIEWPORT_CHROME_PX)"));
     assert!(header.contains(".min_content_height(content_height)"));
     assert!(header.contains(".max_content_height(content_height)"));
-    assert!(header.contains(".propagate_natural_height(true)"));
+    assert!(header.contains(".propagate_natural_height(false)"));
     assert!(header.contains(".has_frame(false)"));
 }
 
@@ -220,7 +220,7 @@ fn frame_edge_controls_stay_inside_darktable_outer_border() {
     let runtime_shell = include_str!("../src/gui/runtime/mod.rs");
     let css = include_str!("../src/gui/theme.css");
 
-    assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
+    assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
     assert!(runtime_shell.contains("workspace_frame(&shell)"));
     for id in [
         "workspace-left-edge-toggle",
@@ -330,13 +330,13 @@ fn lighttable_contract_has_one_filter_row_and_plain_bottom_filmstrip() {
             "export",
         ]
     );
-    assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 104);
-    assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 78);
-    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 82);
-    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.left_px, 140);
-    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.right_px, 164);
-    assert_eq!(DARKROOM_PANEL_WIDTHS.left_px, 180);
-    assert_eq!(DARKROOM_PANEL_WIDTHS.right_px, 180);
+    assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 120);
+    assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 120);
+    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
+    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.left_px, 206);
+    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.right_px, 241);
+    assert_eq!(DARKROOM_PANEL_WIDTHS.left_px, 265);
+    assert_eq!(DARKROOM_PANEL_WIDTHS.right_px, 265);
 }
 
 #[test]

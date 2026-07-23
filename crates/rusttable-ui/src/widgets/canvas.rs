@@ -105,7 +105,6 @@ impl ViewportZoom {
             Self::Fill => fill,
             Self::Percent(percent) => u32::from(percent.get()) * 10,
         }
-        .min(u32::from(MAX_ZOOM_PERCENT) * 10)
         .max(1)
     }
 }
@@ -201,6 +200,25 @@ impl ViewportSize {
     #[must_use]
     pub const fn height(self) -> u32 {
         self.height
+    }
+
+    /// Returns the paintable viewport after reserving Darktable's fixed border on every side.
+    #[must_use]
+    pub const fn inset(self, border: u32) -> Option<Self> {
+        let Some(inset) = border.checked_mul(2) else {
+            return None;
+        };
+        let Some(width) = self.width.checked_sub(inset) else {
+            return None;
+        };
+        let Some(height) = self.height.checked_sub(inset) else {
+            return None;
+        };
+        if width == 0 || height == 0 {
+            None
+        } else {
+            Some(Self { width, height })
+        }
     }
 }
 
@@ -418,13 +436,17 @@ impl ViewportCanvasState {
     /// Changes zoom and resets pan when entering a fit-like mode.
     pub fn set_zoom(&mut self, zoom: ViewportZoom) -> bool {
         if self.zoom == zoom {
+            if matches!(zoom, ViewportZoom::Small | ViewportZoom::Fit)
+                && self.pan != PanOffset::default()
+            {
+                self.pan = PanOffset::default();
+                self.bump_redraw();
+                return true;
+            }
             return false;
         }
         self.zoom = zoom;
-        if matches!(
-            zoom,
-            ViewportZoom::Small | ViewportZoom::Fit | ViewportZoom::Fill
-        ) {
+        if matches!(zoom, ViewportZoom::Small | ViewportZoom::Fit) {
             self.pan = PanOffset::default();
         }
         self.bump_redraw();
@@ -433,6 +455,9 @@ impl ViewportCanvasState {
 
     /// Applies a bounded pan delta.
     pub fn pan_by(&mut self, delta_x: i32, delta_y: i32) -> bool {
+        if matches!(self.zoom, ViewportZoom::Small | ViewportZoom::Fit) {
+            return false;
+        }
         let pan = self.pan.adjust(delta_x, delta_y);
         if pan == self.pan {
             return false;
@@ -461,6 +486,24 @@ impl ViewportCanvasState {
             height,
             scale_milli,
         })
+    }
+
+    /// Projects into a full widget allocation while reserving an equal image border on all sides.
+    ///
+    /// Darktable computes zoom from `orig_width - 2 * border_size` and
+    /// `orig_height - 2 * border_size`, then offsets the painted image by that border.
+    #[must_use]
+    pub fn geometry_in_allocation(
+        self,
+        allocation: ViewportSize,
+        border: u32,
+    ) -> Option<ProjectedImage> {
+        let viewport = allocation.inset(border)?;
+        let mut projected = self.geometry(viewport)?;
+        let border = i32::try_from(border).ok()?;
+        projected.x = projected.x.saturating_add(border);
+        projected.y = projected.y.saturating_add(border);
+        Some(projected)
     }
 
     fn bump_redraw(&mut self) -> RedrawToken {
@@ -499,14 +542,12 @@ fn ratio_milli(
     } else {
         width.min(height)
     };
-    u32::try_from(ratio)
-        .unwrap_or(u32::MAX)
-        .min(u32::from(MAX_ZOOM_PERCENT) * 10)
-        .max(1)
+    u32::try_from(ratio).unwrap_or(u32::MAX).max(1)
 }
 
 fn scaled_dimension(value: u32, scale_milli: u32) -> u32 {
-    let scaled = (u64::from(value) * u64::from(scale_milli)) / u64::from(SCALE_DENOMINATOR);
+    let scaled = (u64::from(value) * u64::from(scale_milli) + u64::from(SCALE_DENOMINATOR / 2))
+        / u64::from(SCALE_DENOMINATOR);
     u32::try_from(scaled)
         .unwrap_or(MAX_PROJECTED_DIMENSION)
         .clamp(1, MAX_PROJECTED_DIMENSION)
@@ -516,7 +557,7 @@ fn centered_offset(viewport: u32, content: u32, pan: i16) -> i32 {
     let centered = (i64::from(viewport) - i64::from(content)) / 2;
     let overflow = i64::from(content.saturating_sub(viewport));
     let pan_offset = overflow * i64::from(pan) / (2 * i64::from(MAX_PAN));
-    i32::try_from(centered + pan_offset).unwrap_or_else(|_| {
+    i32::try_from(centered - pan_offset).unwrap_or_else(|_| {
         if centered.is_negative() {
             i32::MIN
         } else {
@@ -588,6 +629,73 @@ mod tests {
             .expect("geometry");
         assert_eq!((geometry.width, geometry.height), (800, 400));
         assert_eq!((geometry.x, geometry.y), (0, 200));
+    }
+
+    #[test]
+    fn fit_is_not_capped_by_the_manual_zoom_menu() {
+        let viewport = ViewportSize::new(800, 600).expect("viewport");
+        let image = PreviewDimensions::new(20, 10).expect("image");
+
+        assert_eq!(ViewportZoom::Fit.scale_milli(viewport, image), 40_000);
+    }
+
+    #[test]
+    fn projection_rounds_instead_of_losing_the_limiting_fit_pixel() {
+        let viewport = ViewportSize::new(10, 10).expect("viewport");
+        let image = PreviewDimensions::new(3, 2).expect("image");
+        let scale = ViewportZoom::Fit.scale_milli(viewport, image);
+
+        assert_eq!(scaled_dimension(image.width(), scale), 10);
+    }
+
+    #[test]
+    fn full_allocation_reserves_darktable_border_symmetrically() {
+        let mut state = ViewportCanvasState::default();
+        let current = ticket(12, 3);
+        assert!(state.begin_generation(ViewportGeneration::new(4), current));
+        assert!(matches!(
+            state.accept_frame(ViewportGeneration::new(4), &frame(current)),
+            FrameProjectionResult::Applied(_)
+        ));
+
+        let geometry = state
+            .geometry_in_allocation(ViewportSize::new(820, 620).expect("allocation"), 10)
+            .expect("geometry");
+        assert_eq!((geometry.width, geometry.height), (800, 400));
+        assert_eq!((geometry.x, geometry.y), (10, 110));
+    }
+
+    #[test]
+    fn positive_pan_moves_the_view_toward_the_image_end() {
+        let mut state = ViewportCanvasState::default();
+        let current = ticket(13, 3);
+        assert!(state.begin_generation(ViewportGeneration::new(4), current));
+        assert!(matches!(
+            state.accept_frame(ViewportGeneration::new(4), &frame(current)),
+            FrameProjectionResult::Applied(_)
+        ));
+        assert!(state.set_zoom(ViewportZoom::Percent(ZoomPercent::new(400).expect("zoom"))));
+        assert!(state.pan_by(i32::from(MAX_PAN), 0));
+
+        let geometry = state
+            .geometry(ViewportSize::new(800, 400).expect("viewport"))
+            .expect("geometry");
+        assert_eq!(geometry.x, -800);
+        assert_eq!(geometry.y, -200);
+    }
+
+    #[test]
+    fn fit_and_small_cannot_retain_pan() {
+        let mut state = ViewportCanvasState::default();
+        assert!(!state.pan_by(100, 100));
+        assert_eq!(state.pan(), PanOffset::default());
+
+        assert!(state.set_zoom(ViewportZoom::Percent(ZoomPercent::new(200).expect("zoom"))));
+        assert!(state.pan_by(100, 100));
+        assert!(state.set_zoom(ViewportZoom::Fill));
+        assert_eq!(state.pan(), PanOffset::new(100, 100));
+        assert!(state.fit());
+        assert_eq!(state.pan(), PanOffset::default());
     }
 
     #[test]

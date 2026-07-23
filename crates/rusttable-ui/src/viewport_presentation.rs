@@ -691,6 +691,9 @@ impl DarkroomViewportState {
             DarkroomViewportAction::ZoomOut => self.set_zoom(self.zoom.previous()),
             DarkroomViewportAction::Fit => self.set_zoom(DarkroomZoom::Fit),
             DarkroomViewportAction::Pan { delta_x, delta_y } => {
+                if matches!(self.zoom, DarkroomZoom::Small | DarkroomZoom::Fit) {
+                    return false;
+                }
                 let pan = self.pan.adjust(delta_x, delta_y);
                 if pan == self.pan {
                     false
@@ -752,13 +755,16 @@ impl DarkroomViewportState {
 
     fn set_zoom(&mut self, zoom: DarkroomZoom) -> bool {
         if self.zoom == zoom {
+            if matches!(zoom, DarkroomZoom::Small | DarkroomZoom::Fit)
+                && self.pan != ViewportPan::default()
+            {
+                self.pan = ViewportPan::default();
+                return true;
+            }
             return false;
         }
         self.zoom = zoom;
-        if matches!(
-            zoom,
-            DarkroomZoom::Small | DarkroomZoom::Fit | DarkroomZoom::Fill
-        ) {
+        if matches!(zoom, DarkroomZoom::Small | DarkroomZoom::Fit) {
             self.pan = ViewportPan::default();
         }
         true
@@ -948,5 +954,34 @@ mod tests {
         assert_eq!(crop.height_milli(), 500);
         assert_eq!(crop.x_milli(), 500);
         assert_eq!(crop.y_milli(), 0);
+    }
+
+    #[test]
+    fn fit_and_small_reject_pan_like_darktable_zoom_move() {
+        let mut state = DarkroomViewportState::default();
+        let generation = ViewportGeneration::new(10);
+        state.select(PhotoId::new(42).expect("photo"), Revision::ZERO, generation);
+
+        assert!(!state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::Pan {
+                delta_x: 100,
+                delta_y: 100,
+            },
+        )));
+        assert_eq!(state.pan(), ViewportPan::default());
+
+        assert!(state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::SetZoom(DarkroomZoom::Small),
+        )));
+        assert!(!state.apply(DarkroomViewportCommand::new(
+            generation,
+            DarkroomViewportAction::Pan {
+                delta_x: 100,
+                delta_y: 100,
+            },
+        )));
+        assert_eq!(state.pan(), ViewportPan::default());
     }
 }

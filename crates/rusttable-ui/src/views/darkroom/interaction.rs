@@ -54,7 +54,7 @@ impl HistogramView {
         // The right rail is a live Paned allocation. A fixed content width makes
         // GTK widen the rail back to the old natural size during reflow.
         chart.set_content_width(0);
-        chart.set_content_height(128);
+        chart.set_content_height(0);
         chart.set_hexpand(true);
         chart.set_vexpand(true);
         chart.connect_resize(|chart, _, _| chart.queue_draw());
@@ -104,8 +104,10 @@ impl HistogramView {
         self.chart.queue_draw();
     }
 
-    pub(super) fn widget(&self) -> &gtk4::Stack {
-        &self.stack
+    pub(super) fn refresh_geometry(&self) {
+        self.stack.queue_resize();
+        self.chart.queue_resize();
+        self.chart.queue_draw();
     }
 
     pub(super) fn loading(&self, generation: ViewportGeneration) {

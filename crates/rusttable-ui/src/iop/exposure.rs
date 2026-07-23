@@ -16,8 +16,8 @@ use rusttable_processing::{
 use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
 use crate::gui::darktable_components::{
-    MODULE_GAP, button, dropdown, module_action_button, module_expander as shared_module_expander,
-    module_info_button, module_row, scale_row, slider, switch,
+    MODULE_GAP, dropdown, module_expander as shared_module_expander, module_row, scale_row, slider,
+    switch,
 };
 
 type ExposureActionHandler = Rc<dyn Fn(ExposureAction)>;
@@ -28,7 +28,7 @@ pub struct ExposurePanel {
     expander: gtk4::Expander,
     state: Rc<RefCell<ExposureModuleState>>,
     mode_stack: gtk4::Stack,
-    enabled: gtk4::Switch,
+    enabled: gtk4::ToggleButton,
     mode: gtk4::DropDown,
     exposure: gtk4::Scale,
     exposure_value: gtk4::Label,
@@ -59,7 +59,11 @@ impl ExposurePanel {
         let module_actions = Rc::new(RefCell::new(None));
         let module_revision = Rc::new(RefCell::new(Revision::ZERO));
         let sync_guard = Rc::new(Cell::new(false));
-        let enabled = switch("exposure-enabled");
+        let enabled = module_header_toggle(
+            "exposure-enabled",
+            "system-shutdown-symbolic",
+            "Enable exposure module",
+        );
         let mode = dropdown("exposure-mode", &["manual", "automatic"]);
         let mode_stack = gtk4::Stack::new();
         mode_stack.set_widget_name("exposure-mode-stack");
@@ -118,13 +122,23 @@ impl ExposurePanel {
         automatic.add_css_class("dim-label");
         automatic.set_accessible_role(gtk4::AccessibleRole::Status);
         mode_stack.add_named(&automatic, Some("automatic"));
-        let presets = button("exposure-presets", "⋯");
+        let presets = module_header_button(
+            "exposure-presets",
+            "view-more-symbolic",
+            "Exposure presets unavailable",
+        );
         presets.set_sensitive(false);
-        presets.set_focusable(false);
-        presets.set_tooltip_text(Some("Exposure presets are unavailable"));
-        presets.update_property(&[Property::Label("Exposure presets unavailable")]);
-        let reset = button("exposure-reset", "↺");
-        reset.set_tooltip_text(Some("Reset exposure module"));
+        let reset = module_header_button(
+            "exposure-reset",
+            "edit-undo-symbolic",
+            "Reset exposure module",
+        );
+        let multi = module_header_button(
+            "exposure-multi",
+            "list-add-symbolic",
+            "Multiple exposure instances are unavailable",
+        );
+        multi.set_sensitive(false);
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, MODULE_GAP);
         content.set_width_request(0);
         content.set_hexpand(true);
@@ -140,18 +154,11 @@ impl ExposurePanel {
         let title = gtk4::Label::new(Some("exposure"));
         title.set_halign(gtk4::Align::Start);
         title.set_hexpand(true);
-        header.append(&title);
         header.append(&enabled);
-        header.append(&module_info_button(
-            "exposure-info",
-            "Exposure module information unavailable",
-        ));
-        header.append(&module_action_button(
-            "exposure-actions",
-            "Exposure module menu unavailable",
-        ));
+        header.append(&title);
         header.append(&presets);
         header.append(&reset);
+        header.append(&multi);
 
         let expander = shared_module_expander(
             "exposure",
@@ -164,7 +171,6 @@ impl ExposurePanel {
         apply_theme_role(&expander, ThemeRole::Module);
         expander.set_accessible_role(gtk4::AccessibleRole::Group);
         expander.update_property(&[Property::Label("Exposure processing module")]);
-        identify(&enabled, "exposure-enabled", "Enable exposure module");
         identify(&mode, "exposure-mode", "Exposure mode");
         identify(&exposure, "exposure-ev", "Exposure correction in EV");
         identify(
@@ -282,14 +288,13 @@ impl ExposurePanel {
 
     fn connect_actions(&self, reset: &gtk4::Button) {
         let controls = self.control_set();
-        connect_switch_action(
+        connect_enabled_action(
             &self.enabled,
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
             Rc::clone(&self.module_actions),
             Rc::clone(&self.module_revision),
-            ExposureAction::SetEnabled,
         );
         connect_expander_action(
             &self.expander,
@@ -393,7 +398,7 @@ impl Default for ExposurePanel {
 struct ControlSet {
     expander: gtk4::Expander,
     mode_stack: gtk4::Stack,
-    enabled: gtk4::Switch,
+    enabled: gtk4::ToggleButton,
     mode: gtk4::DropDown,
     exposure: gtk4::Scale,
     exposure_value: gtk4::Label,
@@ -473,6 +478,35 @@ fn value_label(id: &str, accessible_name: &str) -> gtk4::Label {
     label
 }
 
+fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {
+    let button = gtk4::Button::new();
+    configure_module_header_control(&button, id, icon_name, accessible_name);
+    button
+}
+
+fn module_header_toggle(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::ToggleButton {
+    let button = gtk4::ToggleButton::new();
+    configure_module_header_control(&button, id, icon_name, accessible_name);
+    button
+}
+
+fn configure_module_header_control(
+    control: &(impl IsA<gtk4::Button> + IsA<gtk4::Widget> + IsA<gtk4::Accessible>),
+    id: &str,
+    icon_name: &str,
+    accessible_name: &str,
+) {
+    control.set_widget_name(id);
+    control.set_size_request(18, 18);
+    control.set_focusable(false);
+    control.add_css_class("dt_module_action");
+    control.set_tooltip_text(Some(accessible_name));
+    control.update_property(&[Property::Label(accessible_name)]);
+    let icon = gtk4::Image::from_icon_name(icon_name);
+    icon.set_pixel_size(12);
+    control.set_child(Some(&icon));
+}
+
 fn identify(
     widget: &(impl IsA<gtk4::Widget> + IsA<gtk4::Accessible>),
     id: &str,
@@ -502,6 +536,28 @@ fn connect_switch_action<F>(
                 &module_actions,
                 &module_revision,
                 action(control.is_active()),
+            );
+        });
+    });
+}
+
+fn connect_enabled_action(
+    control: &gtk4::ToggleButton,
+    state: Rc<RefCell<ExposureModuleState>>,
+    actions: Rc<RefCell<Option<ExposureActionHandler>>>,
+    controls: ControlSet,
+    module_actions: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    module_revision: Rc<RefCell<Revision>>,
+) {
+    control.connect_toggled(move |control| {
+        run_gtk_callback(|| {
+            dispatch_from_gtk(
+                &state,
+                &actions,
+                &controls,
+                &module_actions,
+                &module_revision,
+                ExposureAction::SetEnabled(control.is_active()),
             );
         });
     });

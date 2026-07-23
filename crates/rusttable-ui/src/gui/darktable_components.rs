@@ -7,7 +7,9 @@
 
 use gtk4::prelude::*;
 
-use super::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role};
+use super::{
+    DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role,
+};
 
 pub(crate) const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
 pub(crate) const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
@@ -16,6 +18,14 @@ pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_heig
 pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
 const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
 const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 52;
+const MODULE_HEADER_BUTTON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_button_size;
+const MODULE_HEADER_ICON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_icon_size;
+
+fn rail_content_width(width: i32) -> i32 {
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE)
+}
+
 pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
     let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     toolbar.set_widget_name(id);
@@ -66,8 +76,9 @@ pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
     title_label.set_width_chars(1);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     let escaped_title = gtk4::glib::markup_escape_text(title);
+    let [red, green, blue, _] = DARKTABLE_COLORS.module_label.rgba();
     title_label.set_markup(&format!(
-        "<span foreground=\"#f1f1f1\">{escaped_title}</span>"
+        "<span foreground=\"#{red:02x}{green:02x}{blue:02x}\">{escaped_title}</span>"
     ));
     title_label.add_css_class("dt_darkroom_section_label");
     title_row.append(&title_label);
@@ -156,11 +167,13 @@ pub(crate) fn module_info_button(id: &str, accessible_name: &str) -> gtk4::Butto
 fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {
     let button = gtk4::Button::new();
     button.set_widget_name(id);
-    button.set_size_request(16, 18);
+    button.set_size_request(MODULE_HEADER_BUTTON_SIZE, MODULE_HEADER_BUTTON_SIZE);
     button.set_focusable(false);
     button.set_sensitive(false);
     button.add_css_class("dt_module_action");
-    button.set_child(Some(&gtk4::Image::from_icon_name(icon_name)));
+    let icon = gtk4::Image::from_icon_name(icon_name);
+    icon.set_pixel_size(MODULE_HEADER_ICON_SIZE);
+    button.set_child(Some(&icon));
     button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
     button.set_tooltip_text(Some(accessible_name));
     button
@@ -202,11 +215,14 @@ pub(crate) fn switch(id: &str) -> gtk4::Switch {
     control
 }
 
-pub(crate) fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
+pub(crate) fn rail(id: &str, _width: i32, accessible_name: &str) -> gtk4::Box {
     let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     panel.set_widget_name(id);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    panel.set_size_request(width.max(minimum), -1);
+    // The enclosing Paned owns the initial and persisted rail width. Requesting
+    // that width here makes GTK keep allocating the child at its startup size
+    // after the divider is dragged narrower.
+    panel.set_size_request(minimum, -1);
     panel.set_hexpand(false);
     panel.set_vexpand(true);
     panel.set_halign(gtk4::Align::Fill);
@@ -220,7 +236,7 @@ pub(crate) fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
 
 pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     child: &W,
-    width: i32,
+    _width: i32,
     id: &str,
 ) -> gtk4::ScrolledWindow {
     let scroll = gtk4::ScrolledWindow::builder()
@@ -229,13 +245,12 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
         .vexpand(true)
         .build();
     scroll.set_widget_name(id);
-    // Wider module rows may scroll at compact panel widths, but the scrollbars
-    // consume layout space so they cannot cover the final module status row.
-    scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
+    // Darktable side panels scroll vertically only. Letting a wide module
+    // enable horizontal scrolling also steals a row of vertical rail space.
+    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
     scroll.set_overlay_scrolling(false);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    let allocated_content = width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE);
-    scroll.set_min_content_width(allocated_content);
+    scroll.set_min_content_width(rail_content_width(minimum));
     scroll.set_propagate_natural_width(false);
     scroll.set_propagate_natural_height(false);
     scroll.add_css_class("dt_rail_scroll");
@@ -243,4 +258,20 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     child.set_hexpand(true);
     child.set_margin_bottom(MODULE_GAP);
     scroll
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DARKTABLE_DESKTOP_SPEC, RAIL_SCROLLBAR_RESERVE, rail_content_width};
+
+    #[test]
+    fn rail_content_reserves_only_the_vertical_scrollbar() {
+        let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+
+        assert_eq!(
+            rail_content_width(minimum - 1),
+            minimum - RAIL_SCROLLBAR_RESERVE
+        );
+        assert_eq!(rail_content_width(180), 180 - RAIL_SCROLLBAR_RESERVE);
+    }
 }

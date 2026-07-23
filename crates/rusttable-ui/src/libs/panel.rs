@@ -14,19 +14,19 @@ use crate::presentation::{PresentationText, PresentationTextError};
 
 pub const DARKROOM_LEFT_PANEL_ORDER: [&str; 4] = [
     "darkroom-navigation",
-    "darkroom-snapshots",
-    "darkroom-history",
     "darkroom-image-information",
+    "darkroom-history",
+    "darkroom-snapshots",
 ];
 
 pub const DARKROOM_LEFT_PANEL_FOCUS_ORDER: [&str; 7] = [
     "darkroom-navigation",
-    "darkroom-snapshots",
-    "snapshot-take",
+    "darkroom-image-information",
     "darkroom-history",
     "history-previous",
     "history-next",
-    "darkroom-image-information",
+    "darkroom-snapshots",
+    "snapshot-take",
 ];
 
 /// The photo/edit generation a left-rail projection belongs to.

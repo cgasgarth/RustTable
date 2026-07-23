@@ -14,6 +14,18 @@ use super::{
 };
 
 const DARKTABLE_THEME_TEMPLATE: &str = include_str!("theme.css");
+const BUTTON_BORDER: ColorToken = ColorToken::new("button_border", [0x82, 0x82, 0x82, 0xff]);
+const BUTTON_HOVER_OVERLAY: ColorToken =
+    ColorToken::new("button_hover_bg", [0xab, 0xab, 0xab, 0xff]);
+const DISABLED_BUTTON_BORDER: ColorToken =
+    ColorToken::new("button_border_disabled", [0x82, 0x82, 0x82, 0x59]);
+const DISABLED_FOREGROUND: ColorToken =
+    ColorToken::new("disabled_fg_color", [0x9e, 0x9e, 0x9e, 0xff]);
+const SECTION_LABEL: ColorToken = ColorToken::new("section_label", [0xde, 0xde, 0xde, 0xff]);
+const SCROLLBAR_INACTIVE: ColorToken =
+    ColorToken::new("scroll_bar_inactive", [0x91, 0x91, 0x91, 0xff]);
+const SCROLLBAR_ACTIVE: ColorToken = ColorToken::new("scroll_bar_active", [0xc6, 0xc6, 0xc6, 0xff]);
+const SCROLLBAR_BACKGROUND: ColorToken = ColorToken::new("scroll_bar_bg", [0x5e, 0x5e, 0x5e, 0xff]);
 
 /// Semantic GTK classes corresponding to the visual roles in Darktable's CSS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,28 +114,7 @@ impl DarktableTheme {
 #[must_use]
 pub fn darktable_theme_css() -> String {
     let colors = DARKTABLE_COLORS;
-    let replacements = [
-        ("{{background}}", colors.background),
-        ("{{foreground}}", colors.foreground),
-        ("{{border}}", colors.border),
-        ("{{module_background}}", colors.module_background),
-        ("{{button_background}}", colors.button_background),
-        (
-            "{{active_field_background}}",
-            colors.active_field_background,
-        ),
-        ("{{lighttable_canvas}}", colors.lighttable_canvas),
-        ("{{darkroom_canvas}}", colors.darkroom_canvas),
-        ("{{thumbnail_background}}", colors.thumbnail_background),
-        ("{{filmstrip_background}}", colors.filmstrip_background),
-        ("{{selected_thumbnail}}", colors.selected_thumbnail),
-        ("{{hovered_thumbnail}}", colors.hovered_thumbnail),
-        ("{{active_image_marker}}", colors.active_image_marker),
-    ];
-    let css = replacements.into_iter().fold(
-        DARKTABLE_THEME_TEMPLATE.to_owned(),
-        |css, (placeholder, color)| css.replace(placeholder, &css_color(color)),
-    );
+    let css = apply_color_tokens(DARKTABLE_THEME_TEMPLATE, &colors);
     let tokens = DARKTABLE_UI_TOKENS;
     let dimensions = [
         ("{{base_font_pt}}", i32::from(tokens.typography.base_pt)),
@@ -145,6 +136,10 @@ pub fn darktable_theme_css() -> String {
             i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px),
         ),
         (
+            "{{header_content_height}}",
+            i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px) - 5,
+        ),
+        (
             "{{lighttable_toolbar_height}}",
             i32::from(LIGHTTABLE_COMPOSITION.top_toolbar_height_px),
         ),
@@ -157,6 +152,18 @@ pub fn darktable_theme_css() -> String {
         (
             "{{module_title_height}}",
             tokens.controls.module_title_height,
+        ),
+        (
+            "{{module_header_button_size}}",
+            tokens.controls.module_header_button_size,
+        ),
+        (
+            "{{module_header_icon_size}}",
+            tokens.controls.module_header_icon_size,
+        ),
+        (
+            "{{toolbar_button_size}}",
+            tokens.controls.toolbar_button_size,
         ),
         ("{{toolbar_height}}", tokens.controls.toolbar_height),
         ("{{status_height}}", tokens.controls.status_height),
@@ -191,6 +198,41 @@ pub fn darktable_theme_css() -> String {
         })
 }
 
+fn apply_color_tokens(template: &str, colors: &super::DarktableColors) -> String {
+    let replacements = [
+        ("{{background}}", colors.background),
+        ("{{foreground}}", colors.foreground),
+        ("{{border}}", colors.border),
+        ("{{module_background}}", colors.module_background),
+        ("{{button_background}}", colors.button_background),
+        ("{{button_border}}", BUTTON_BORDER),
+        ("{{button_hover_overlay}}", BUTTON_HOVER_OVERLAY),
+        ("{{disabled_button_border}}", DISABLED_BUTTON_BORDER),
+        ("{{disabled_foreground}}", DISABLED_FOREGROUND),
+        (
+            "{{active_field_background}}",
+            colors.active_field_background,
+        ),
+        ("{{module_label}}", colors.module_label),
+        ("{{section_label}}", SECTION_LABEL),
+        ("{{scrollbar_inactive}}", SCROLLBAR_INACTIVE),
+        ("{{scrollbar_active}}", SCROLLBAR_ACTIVE),
+        ("{{scrollbar_background}}", SCROLLBAR_BACKGROUND),
+        ("{{lighttable_canvas}}", colors.lighttable_canvas),
+        ("{{darkroom_canvas}}", colors.darkroom_canvas),
+        ("{{thumbnail_background}}", colors.thumbnail_background),
+        ("{{filmstrip_background}}", colors.filmstrip_background),
+        ("{{selected_thumbnail}}", colors.selected_thumbnail),
+        ("{{hovered_thumbnail}}", colors.hovered_thumbnail),
+        ("{{active_image_marker}}", colors.active_image_marker),
+    ];
+    replacements
+        .into_iter()
+        .fold(template.to_owned(), |css, (placeholder, color)| {
+            css.replace(placeholder, &css_color(color))
+        })
+}
+
 /// Installs the theme for a GTK display.
 pub fn install_darktable_theme(display: &gtk4::gdk::Display) {
     DarktableTheme::install(display);
@@ -218,15 +260,45 @@ mod tests {
         assert!(css.contains("#6a6a6aff"));
         assert!(css.contains("#777777ff"));
         assert!(css.contains("#f1f1f1ff"));
+        assert!(css.contains("#abababff"));
+        assert!(css.contains("#c6c6c6ff"));
         assert!(css.contains(".dt_photo_card"));
         assert!(css.contains(".dt_empty_state"));
-        assert!(css.contains("font-size: 9pt"));
+        assert!(css.contains("font-size: 12pt"));
         assert!(!css.contains("font-size: 0.85em"));
+        assert!(css.contains("\"Roboto Light\", \"Roboto\""));
+        assert!(css.contains("\"SF Pro Display Light\", \"SF Pro Display\""));
         assert!(css.contains(".dt_view_switcher"));
         assert!(css.contains("button:disabled"));
         assert!(css.contains("#export-rail-content"));
         assert!(css.contains("#right-panel #export"));
         assert!(!css.contains("max-width:"));
+    }
+
+    #[test]
+    fn css_keeps_darktable_control_states_on_their_semantic_colors() {
+        let css = darktable_theme_css();
+
+        assert!(css.contains("border: 1px solid #828282ff"));
+        assert!(css.contains("background-color: #abababff"));
+        assert!(css.contains("border-color: #82828259"));
+        assert!(css.contains("color: #9e9e9eff"));
+        assert!(css.contains("background-color: #919191ff"));
+        assert!(css.contains("background-color: #c6c6c6ff"));
+    }
+
+    #[test]
+    fn css_ports_darktable_reset_and_configured_widget_metrics() {
+        let css = darktable_theme_css();
+
+        assert!(css.contains("min-width: 0;\n  min-height: 0;"));
+        assert!(css.contains("min-width: 14px;\n  min-height: 14px;"));
+        assert!(css.contains("min-width: 21px;\n  min-height: 21px;"));
+        assert!(css.contains("-gtk-icon-size: 11px"));
+        assert!(css.contains("padding: 0.14em 0.28em"));
+        assert!(css.contains("min-height: 20px"));
+        assert!(css.contains("min-height: 25px"));
+        assert!(css.contains("font-size: 18pt"));
     }
 
     #[test]

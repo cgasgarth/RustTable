@@ -85,13 +85,12 @@ pub(super) fn mode_panel_stack(
     // child otherwise shifts the darkroom child left inside a narrow Paned,
     // clipping its disclosure arrows and labels while leaving trailing actions.
     stack.set_hhomogeneous(false);
-    let preferred_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    // Paned allocates a child from its minimum/natural width.  The module
-    // contents are intentionally wider than Darktable's rail in places, so
-    // make the stack's initial request explicit and let its inner scroller
-    // handle overflow instead of allowing natural width to consume the
-    // center workspace.
-    stack.set_size_request(preferred_width, -1);
+    let minimum_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    // The Paned position owns the active workspace's configured width. Keep
+    // the child request at the configured resize minimum so GTK can move the
+    // handle below a module's natural width without under-allocating the
+    // opposite child during height-for-width measurement.
+    stack.set_size_request(minimum_width, -1);
     stack.set_hexpand(false);
     stack.set_vexpand(true);
     stack.set_halign(gtk4::Align::Fill);
@@ -128,6 +127,7 @@ pub(super) fn desktop_body(
     geometry_changed: &std::rc::Rc<dyn Fn()>,
 ) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
+    let panel_widths = WorkspacePanelWidthState::new();
     let center = central_workspace(workspace, lighttable_toolbar);
     let (filmstrip_root, filmstrip) = filmstrip(i18n);
     let center_column = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -143,15 +143,18 @@ pub(super) fn desktop_body(
         .vexpand(true)
         .resize_start_child(false)
         .shrink_start_child(true)
-        .shrink_end_child(false)
-        .position(i32::from(active_panel_widths(workspace).left_px))
+        .shrink_end_child(true)
+        .wide_handle(true)
+        .position(i32::from(panel_widths.active(workspace).left_px))
         .build();
     split.set_widget_name("desktop-left-split");
     split.connect_map({
         let workspace = workspace.clone();
-        move |paned| paned.set_position(i32::from(active_panel_widths(&workspace).left_px))
+        let panel_widths = panel_widths.clone();
+        move |paned| paned.set_position(i32::from(panel_widths.active(&workspace).left_px))
     });
     connect_left_rail_constraints(&split);
+    connect_panel_width_tracking(&split, workspace, &panel_widths, PanelSide::Left);
     connect_geometry_refresh(&split, std::rc::Rc::clone(geometry_changed));
     let workspace_with_right_panel = gtk4::Paned::builder()
         .orientation(gtk4::Orientation::Horizontal)
@@ -160,44 +163,41 @@ pub(super) fn desktop_body(
         .hexpand(true)
         .vexpand(true)
         .resize_end_child(false)
+        .shrink_start_child(true)
         .shrink_end_child(false)
-        .position(i32::from(
-            layout
-                .content_width_px(layout.window_width_px)
-                .saturating_sub(active_panel_widths(workspace).right_px),
-        ))
+        .wide_handle(true)
         .build();
     workspace_with_right_panel.set_widget_name("desktop-right-split");
     // The scroller may have a wider natural size at 12pt. Permit the Paned to
     // allocate the explicit rail token, then clamp every drag to the readable
     // minimum instead of letting natural width consume the center workspace.
     workspace_with_right_panel.set_shrink_end_child(true);
+    workspace_with_right_panel.set_position(
+        i32::from(layout.content_width_px(layout.window_width_px))
+            .saturating_sub(paned_handle_minimum_width(&workspace_with_right_panel))
+            .saturating_sub(i32::from(panel_widths.active(workspace).right_px)),
+    );
     workspace_with_right_panel.connect_map({
         let workspace = workspace.clone();
+        let panel_widths = panel_widths.clone();
         move |paned| {
             let paned = paned.clone();
             let workspace = workspace.clone();
+            let panel_widths = panel_widths.clone();
             gtk4::glib::idle_add_local_once(move || {
-                let content_width = u16::try_from(paned.allocated_width()).unwrap_or(u16::MAX);
-                if content_width == 0 {
-                    return;
-                }
-                paned.set_position(i32::from(
-                    content_width.saturating_sub(active_panel_widths(&workspace).right_px),
-                ));
+                set_right_rail_width(&paned, i32::from(panel_widths.active(&workspace).right_px));
+                panel_widths.enable_tracking();
             });
         }
     });
     workspace.connect_visible_child_name_notify({
         let left_split = split.clone();
         let right_split = workspace_with_right_panel.clone();
+        let panel_widths = panel_widths.clone();
         move |workspace| {
-            let widths = active_panel_widths(workspace);
+            let widths = panel_widths.active(workspace);
             left_split.set_position(i32::from(widths.left_px));
-            let content_width = u16::try_from(right_split.allocated_width()).unwrap_or(u16::MAX);
-            if content_width > 0 {
-                right_split.set_position(i32::from(content_width.saturating_sub(widths.right_px)));
-            }
+            set_right_rail_width(&right_split, i32::from(widths.right_px));
         }
     });
     connect_geometry_refresh(
@@ -205,9 +205,11 @@ pub(super) fn desktop_body(
         std::rc::Rc::clone(geometry_changed),
     );
     connect_right_rail_constraints(&workspace_with_right_panel);
-    connect_allocation_refresh(
+    connect_panel_width_tracking(
         &workspace_with_right_panel,
-        std::rc::Rc::clone(geometry_changed),
+        workspace,
+        &panel_widths,
+        PanelSide::Right,
     );
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
@@ -346,9 +348,16 @@ fn edge_toggle(edge: WorkspaceEdge) -> gtk4::Button {
 }
 
 fn connect_geometry_refresh(paned: &gtk4::Paned, refresh: std::rc::Rc<dyn Fn()>) {
+    let schedule = geometry_refresh_scheduler(refresh);
+    if let Some(child) = paned.start_child() {
+        connect_allocation_refresh(&child, std::rc::Rc::clone(&schedule));
+    }
+    if let Some(child) = paned.end_child() {
+        connect_allocation_refresh(&child, std::rc::Rc::clone(&schedule));
+    }
     paned.connect_position_notify(move |paned| {
-        paned.queue_resize();
-        (refresh)();
+        paned.queue_allocate();
+        schedule();
     });
 }
 
@@ -358,17 +367,28 @@ fn connect_right_rail_constraints(paned: &gtk4::Paned) {
         if width <= 0 {
             return;
         }
-        let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-        let maximum = width
-            .saturating_sub(i32::from(
-                DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px,
-            ))
-            .saturating_sub(minimum)
-            .max(minimum);
-        let rail_width = width
-            .saturating_sub(paned.position())
-            .clamp(minimum, maximum);
-        let position = width.saturating_sub(rail_width);
+        let layout = DARKTABLE_DESKTOP_SPEC.layout;
+        let minimum = i32::from(layout.side_panel_widths.minimum_px);
+        let configured_maximum = i32::from(layout.side_panel_widths.maximum_px);
+        let (opposite_rail_width, inner_handle_width, center_minimum_width) =
+            paned.start_child().and_downcast::<gtk4::Paned>().map_or(
+                (minimum, 0, i32::from(layout.center_minimum_width_px)),
+                |left_split| {
+                    (
+                        left_split.position(),
+                        paned_handle_width(&left_split),
+                        configured_center_minimum_width(),
+                    )
+                },
+            );
+        let available_maximum = width
+            .saturating_sub(paned_handle_width(paned))
+            .saturating_sub(inner_handle_width)
+            .saturating_sub(center_minimum_width)
+            .saturating_sub(opposite_rail_width);
+        let maximum = configured_maximum.min(available_maximum).max(minimum);
+        let rail_width = right_rail_width(paned).clamp(minimum, maximum);
+        let position = right_rail_position(paned, rail_width);
         if paned.position() != position {
             paned.set_position(position);
         }
@@ -385,9 +405,12 @@ fn connect_left_rail_constraints(paned: &gtk4::Paned) {
         }
         let layout = DARKTABLE_DESKTOP_SPEC.layout;
         let minimum = i32::from(layout.side_panel_widths.minimum_px);
-        let maximum = width
-            .saturating_sub(i32::from(layout.center_minimum_width_px))
+        let configured_maximum = i32::from(layout.side_panel_widths.maximum_px);
+        let available_maximum = width
+            .saturating_sub(paned_handle_width(paned))
+            .saturating_sub(configured_center_minimum_width())
             .max(minimum);
+        let maximum = configured_maximum.min(available_maximum);
         let position = paned.position().clamp(minimum, maximum);
         if paned.position() != position {
             paned.set_position(position);
@@ -397,9 +420,9 @@ fn connect_left_rail_constraints(paned: &gtk4::Paned) {
     paned.connect_notify_local(Some("width"), move |paned, _| clamp(paned));
 }
 
-fn connect_allocation_refresh(widget: &impl IsA<gtk4::Widget>, refresh: std::rc::Rc<dyn Fn()>) {
+fn geometry_refresh_scheduler(refresh: std::rc::Rc<dyn Fn()>) -> std::rc::Rc<dyn Fn()> {
     let pending = std::rc::Rc::new(std::cell::Cell::new(false));
-    let schedule: std::rc::Rc<dyn Fn()> = std::rc::Rc::new(move || {
+    std::rc::Rc::new(move || {
         if pending.replace(true) {
             return;
         }
@@ -409,7 +432,10 @@ fn connect_allocation_refresh(widget: &impl IsA<gtk4::Widget>, refresh: std::rc:
             pending.set(false);
             refresh();
         });
-    });
+    })
+}
+
+fn connect_allocation_refresh(widget: &impl IsA<gtk4::Widget>, schedule: std::rc::Rc<dyn Fn()>) {
     widget.connect_notify_local(Some("width"), {
         let schedule = std::rc::Rc::clone(&schedule);
         move |_, _| schedule()
@@ -417,11 +443,133 @@ fn connect_allocation_refresh(widget: &impl IsA<gtk4::Widget>, refresh: std::rc:
     widget.connect_notify_local(Some("height"), move |_, _| schedule());
 }
 
-fn active_panel_widths(workspace: &gtk4::Stack) -> WorkspacePanelWidths {
-    if workspace.visible_child_name().as_deref() == Some(WorkspaceRole::Darkroom.stack_name()) {
-        DARKROOM_PANEL_WIDTHS
+#[derive(Clone, Copy)]
+enum PanelSide {
+    Left,
+    Right,
+}
+
+#[derive(Clone)]
+struct WorkspacePanelWidthState {
+    lighttable: std::rc::Rc<std::cell::Cell<WorkspacePanelWidths>>,
+    darkroom: std::rc::Rc<std::cell::Cell<WorkspacePanelWidths>>,
+    tracking_enabled: std::rc::Rc<std::cell::Cell<bool>>,
+}
+
+impl WorkspacePanelWidthState {
+    fn new() -> Self {
+        Self {
+            lighttable: std::rc::Rc::new(std::cell::Cell::new(LIGHTTABLE_PANEL_WIDTHS)),
+            darkroom: std::rc::Rc::new(std::cell::Cell::new(DARKROOM_PANEL_WIDTHS)),
+            tracking_enabled: std::rc::Rc::new(std::cell::Cell::new(false)),
+        }
+    }
+
+    fn active(&self, workspace: &gtk4::Stack) -> WorkspacePanelWidths {
+        self.for_workspace(active_workspace(workspace)).get()
+    }
+
+    fn for_workspace(
+        &self,
+        workspace: WorkspaceRole,
+    ) -> &std::rc::Rc<std::cell::Cell<WorkspacePanelWidths>> {
+        match workspace {
+            WorkspaceRole::Lighttable => &self.lighttable,
+            WorkspaceRole::Darkroom => &self.darkroom,
+        }
+    }
+
+    fn enable_tracking(&self) {
+        self.tracking_enabled.set(true);
+    }
+}
+
+fn connect_panel_width_tracking(
+    paned: &gtk4::Paned,
+    workspace: &gtk4::Stack,
+    widths: &WorkspacePanelWidthState,
+    side: PanelSide,
+) {
+    let workspace = workspace.clone();
+    let widths = widths.clone();
+    paned.connect_position_notify(move |paned| {
+        if !widths.tracking_enabled.get() || paned.allocated_width() <= 0 {
+            return;
+        }
+        let state = widths.for_workspace(active_workspace(&workspace));
+        let mut active_widths = state.get();
+        let width = match side {
+            PanelSide::Left => paned.position(),
+            PanelSide::Right => right_rail_width(paned),
+        };
+        let Ok(width) = u16::try_from(width) else {
+            return;
+        };
+        match side {
+            PanelSide::Left => active_widths.left_px = width,
+            PanelSide::Right => active_widths.right_px = width,
+        }
+        state.set(active_widths);
+    });
+}
+
+fn paned_handle_width(paned: &gtk4::Paned) -> i32 {
+    let children_width = paned
+        .start_child()
+        .map_or(0, |child| child.allocated_width())
+        .saturating_add(paned.end_child().map_or(0, |child| child.allocated_width()));
+    let allocated_width = paned.allocated_width().saturating_sub(children_width);
+    if allocated_width > 0 && allocated_width <= 64 {
+        allocated_width
     } else {
-        LIGHTTABLE_PANEL_WIDTHS
+        paned_handle_minimum_width(paned)
+    }
+}
+
+fn paned_handle_minimum_width(paned: &gtk4::Paned) -> i32 {
+    let start = paned.start_child();
+    let end = paned.end_child();
+    let mut child = paned.first_child();
+    while let Some(widget) = child {
+        let is_start = start.as_ref().is_some_and(|start| start == &widget);
+        let is_end = end.as_ref().is_some_and(|end| end == &widget);
+        if !is_start && !is_end {
+            return widget.measure(gtk4::Orientation::Horizontal, -1).0;
+        }
+        child = widget.next_sibling();
+    }
+    0
+}
+
+fn configured_center_minimum_width() -> i32 {
+    i32::from(DARKTABLE_DESKTOP_SPEC.layout.center_minimum_width_px)
+}
+
+fn right_rail_width(paned: &gtk4::Paned) -> i32 {
+    paned
+        .allocated_width()
+        .saturating_sub(paned_handle_width(paned))
+        .saturating_sub(paned.position())
+}
+
+fn right_rail_position(paned: &gtk4::Paned, rail_width: i32) -> i32 {
+    paned
+        .allocated_width()
+        .saturating_sub(paned_handle_width(paned))
+        .saturating_sub(rail_width)
+}
+
+fn set_right_rail_width(paned: &gtk4::Paned, rail_width: i32) {
+    if paned.allocated_width() > 0 {
+        paned.set_position(right_rail_position(paned, rail_width));
+    }
+}
+
+fn active_workspace(workspace: &gtk4::Stack) -> WorkspaceRole {
+    if workspace.visible_child_name().as_deref() == Some(WorkspaceRole::Darkroom.stack_name()) {
+        WorkspaceRole::Darkroom
+    } else {
+        WorkspaceRole::Lighttable
     }
 }
 
@@ -469,6 +617,8 @@ pub(super) fn workspace_stack(
     let workspace = gtk4::Stack::builder()
         .hexpand(true)
         .vexpand(true)
+        // Only the active view participates in Paned resize constraints.
+        .hhomogeneous(false)
         // Darktable switches workspaces immediately. Avoid allocating the
         // incoming Lighttable child at its tiny crossfade natural height.
         .transition_type(gtk4::StackTransitionType::None)
@@ -560,46 +710,8 @@ fn lighttable_footer(
 }
 
 #[cfg(all(test, target_os = "linux"))]
-mod tests {
-    use gtk4::prelude::*;
-
-    use super::lighttable_footer;
-    use rusttable_i18n::I18n;
-
-    use crate::gtk_shell::LighttableLayoutControls;
-
-    #[test]
-    fn lighttable_footer_attaches_every_control_to_one_parent() {
-        if gtk4::init().is_err() {
-            return;
-        }
-        let controls = LighttableLayoutControls::new();
-        let toolbar = LighttableToolbar::new();
-        let display_profile = DisplayProfileBanner::new();
-        let footer = lighttable_footer(&I18n::default(), &controls, &toolbar, &display_profile);
-        assert_eq!(
-            footer
-                .start_widget()
-                .expect("footer organization controls")
-                .widget_name(),
-            "lighttable-footer-organization"
-        );
-        assert_eq!(
-            footer
-                .center_widget()
-                .expect("footer layout selector")
-                .widget_name(),
-            "lighttable-layout-controls"
-        );
-        assert_eq!(
-            footer
-                .end_widget()
-                .expect("footer display controls")
-                .widget_name(),
-            "lighttable-display-controls"
-        );
-    }
-}
+#[path = "layout/tests.rs"]
+mod tests;
 
 fn filmstrip(_i18n: &I18n) -> (gtk4::Box, gtk4::FlowBox) {
     let strip = gtk4::Box::new(gtk4::Orientation::Vertical, 0);

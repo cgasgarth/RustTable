@@ -6,18 +6,24 @@ use rusttable_ui::gtk_shell::{
 };
 
 #[test]
-fn installed_darktable_scale_is_explicit_and_readable() {
+fn configured_darktable_scale_is_explicit_and_readable() {
     let tokens = DARKTABLE_UI_TOKENS;
     let panels = DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths;
 
-    assert_eq!(tokens.typography.base_pt, 9);
-    assert_eq!(tokens.typography.compact_pt, 8);
+    assert_eq!(tokens.typography.base_pt, 12);
+    assert_eq!(tokens.typography.compact_pt, 10);
+    assert_eq!(tokens.typography.micro_pt, 9);
+    assert_eq!(tokens.typography.heading_pt, 18);
     assert_eq!(tokens.controls.control_height, 18);
     assert_eq!(tokens.controls.module_row_height, 20);
-    assert_eq!(tokens.controls.module_title_height, 16);
-    assert_eq!(tokens.controls.toolbar_height, 18);
-    assert_eq!(panels.minimum_px, 136);
-    assert_eq!(panels.preferred_px, 180);
+    assert_eq!(tokens.controls.module_title_height, 20);
+    assert_eq!(tokens.controls.module_header_button_size, 14);
+    assert_eq!(tokens.controls.module_header_icon_size, 11);
+    assert_eq!(tokens.controls.toolbar_button_size, 21);
+    assert_eq!(tokens.controls.toolbar_height, 25);
+    assert_eq!(tokens.controls.status_height, 18);
+    assert_eq!(panels.minimum_px, 150);
+    assert_eq!(panels.preferred_px, 265);
     assert!(panels.accepts(panels.minimum_px));
     assert_eq!(DARKROOM_GEOMETRY.histogram_height_px, 180);
     assert_eq!(DARKROOM_GEOMETRY.histogram_min_height_px, 120);
@@ -33,7 +39,7 @@ fn module_controls_fit_inside_scrollbar_allocation_at_supported_sizes() {
         assert!(allocation.fits(), "control allocation at {width}x{height}");
         assert_eq!(allocation.control_width_px, 42);
         assert!(allocation.label_width_px >= 60);
-        assert_eq!(allocation.scrollbar_width_px, 10);
+        assert_eq!(allocation.scrollbar_width_px, 8);
         assert!(
             allocation.content_width_px + allocation.scrollbar_width_px <= allocation.rail_width_px
         );
@@ -48,7 +54,7 @@ fn supported_windows_keep_both_rails_viewport_and_histogram_synchronized() {
         assert_eq!(geometry.left_rail_width_px, geometry.right_rail_width_px);
         assert_eq!(geometry.histogram_width_px, geometry.right_rail_width_px);
         assert_eq!(geometry.histogram_height_px, 180);
-        assert!(geometry.left_rail_width_px >= 136);
+        assert!(geometry.left_rail_width_px >= 150);
         assert!(geometry.center_width_px >= 650);
         assert!(geometry.viewport_height_px >= 496);
         assert_eq!(
@@ -66,18 +72,19 @@ fn lighttable_cards_grow_between_target_viewports_without_dominating_center() {
     let compact_card = cards.width_for_viewport(compact.center_width_px, 5);
     let full_card = cards.width_for_viewport(full.center_width_px, 5);
 
-    assert_eq!(compact_card, 176);
-    assert_eq!(full_card, 208);
+    assert_eq!(compact_card, 148);
+    assert_eq!(full_card, 173);
     assert!(full_card > compact_card);
     assert!(full_card <= cards.maximum_width_px);
-    assert_eq!(cards.image_width_px(compact_card), 164);
-    assert_eq!(cards.image_height_px(164), 123);
+    assert_eq!(cards.image_width_px(compact_card), 136);
+    assert_eq!(cards.image_height_px(136), 102);
 }
 
 #[test]
 fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
     let css = rusttable_ui::gtk_shell::darktable_theme_css();
     let components = include_str!("../src/gui/darktable_components.rs");
+    let darkroom_interaction = include_str!("../src/views/darkroom/interaction.rs");
     let darkroom_panels = include_str!("../src/views/darkroom/panel_widgets.rs");
     let layout = include_str!("../src/gui/runtime/layout.rs");
     let runtime = include_str!("../src/gui/runtime/mod.rs");
@@ -85,10 +92,13 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
 
     assert!(!css.contains("{{"));
     for declaration in [
-        "font-size: 9pt",
-        "min-width: 136px",
+        "font-size: 12pt",
+        "min-width: 150px",
+        "min-height: 14px",
         "min-height: 18px",
         "min-height: 20px",
+        "min-height: 21px",
+        "min-height: 25px",
         "min-height: 120px",
     ] {
         assert!(
@@ -101,10 +111,10 @@ fn shared_css_and_runtime_own_all_scale_and_resize_behavior() {
         "GTK CSS has no max-height property; runtime owns the histogram cap"
     );
     assert!(components.contains("DARKTABLE_UI_TOKENS"));
-    assert!(components.contains("PolicyType::Automatic, gtk4::PolicyType::Automatic"));
+    assert!(components.contains("PolicyType::Never, gtk4::PolicyType::Automatic"));
     assert!(components.contains("set_overlay_scrolling(false)"));
     assert!(darkroom_panels.contains("DARKROOM_GEOMETRY.histogram_height_px"));
-    assert!(darkroom_panels.contains("connect_notify_local(Some(\"width\")"));
+    assert!(darkroom_interaction.contains("connect_resize(|chart, _, _| chart.queue_draw())"));
     assert!(layout.contains("connect_right_rail_constraints"));
     assert!(layout.contains("connect_left_rail_constraints"));
     assert!(layout.contains(".clamp(minimum, maximum)"));

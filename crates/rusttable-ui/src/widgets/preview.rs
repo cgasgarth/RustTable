@@ -114,10 +114,11 @@ impl PhotoPreview {
         canvas_frame.set_widget_name("darkroom-preview-canvas-frame");
         canvas_frame.set_hexpand(true);
         canvas_frame.set_vexpand(true);
-        let image_border = i32::from(DARKROOM_GEOMETRY.image_border_px);
-        canvas_frame.set_margin_top(image_border / 2);
-        canvas_frame.set_margin_start(image_border / 2);
-        canvas_frame.set_margin_end(image_border / 2);
+        let image_insets = darkroom_image_insets();
+        canvas_frame.set_margin_top(image_insets.top);
+        canvas_frame.set_margin_bottom(image_insets.bottom);
+        canvas_frame.set_margin_start(image_insets.start);
+        canvas_frame.set_margin_end(image_insets.end);
         canvas_frame.set_child(Some(&overlay));
 
         let facts = gtk4::Grid::new();
@@ -360,6 +361,24 @@ impl Default for PhotoPreview {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PreviewInsets {
+    top: i32,
+    bottom: i32,
+    start: i32,
+    end: i32,
+}
+
+fn darkroom_image_insets() -> PreviewInsets {
+    let border = i32::from(DARKROOM_GEOMETRY.image_border_px);
+    PreviewInsets {
+        top: border,
+        bottom: border,
+        start: border,
+        end: border,
+    }
+}
+
 fn format_dimensions(metadata: &presentation::Rgba8PreviewMetadata) -> String {
     format!(
         "{} × {}",
@@ -391,7 +410,8 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DarkroomSelectionState, PhotoPreviewTextureError, format_dimensions, texture_parameters,
+        DarkroomSelectionState, PhotoPreviewTextureError, PreviewInsets, darkroom_image_insets,
+        format_dimensions, texture_parameters,
     };
     use crate::presentation::{
         PresentationText, PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState,
@@ -443,6 +463,19 @@ mod tests {
         assert_eq!(
             texture_parameters(dimensions),
             Err(PhotoPreviewTextureError::WidthTooLarge)
+        );
+    }
+
+    #[test]
+    fn image_allocation_reserves_the_full_darktable_border_on_every_side() {
+        assert_eq!(
+            darkroom_image_insets(),
+            PreviewInsets {
+                top: 10,
+                bottom: 10,
+                start: 10,
+                end: 10,
+            }
         );
     }
 }

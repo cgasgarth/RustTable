@@ -18,7 +18,7 @@
 - Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
 - Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
 - Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
-- Use 1,000 lines as a maintainability trigger, not a functionality ceiling. Split growing handwritten code when responsibility-based decomposition improves navigability; cohesive files may exceed that size when splitting would obscure ownership. Never reduce required behavior or reject a feature merely to satisfy a line count. Generated compatibility data may remain large.
+- Keep handwritten source files at or below 1,000 lines. Split them by responsibility into the corresponding nested module tree; never reduce behavior to meet the limit. Generated compatibility data is the only exception.
 - Preserve migration lineage when splitting files: keep a parent module at the original responsibility/path and place size-driven child modules in a nested directory beneath it (for example, `module/mod.rs` plus focused children), rather than flattening them into a new high-level catch-all folder. Name child modules after the corresponding Darktable responsibility where that mapping is meaningful.
 - Favor one Rust module or crate boundary per recognizable Darktable subsystem (`src/gui`, `src/libs`, `src/views`, `src/iop`, and related services). New structure should make a source-to-source migration diff easy to locate; do not move unrelated responsibilities merely to satisfy Rust packaging conventions.
 - Prefer the standard library, GTK4/GLib facilities, and established Rust crates over bespoke infrastructure.
@@ -26,30 +26,30 @@
 ## Development and tests
 
 - Use test-driven development. Add focused deterministic coverage for every behavior change and regression.
-- Prefer `CARGO_BUILD_JOBS=10` for local Rust builds and checks.
+- Let Cargo and Rust tests use host-detected parallelism; do not pass `CARGO_BUILD_JOBS` or test-thread counts on individual commands. Keep one Cargo pipeline owner so concurrent repository checks do not oversubscribe the host.
 - Keep external runtimes, packaging, full reference execution, and other expensive checks out of unit tests.
 - `cargo xtask check` is the complete local gate: source policy, formatting, strict Clippy, all-target/all-feature tests, operation data, fixtures, and standard dependency checks.
-- Local hooks are optional convenience. Pull-request CI on Linux, macOS, Windows, and dependency checks is the merge authority.
+- The complete local precommit gate is the PR merge authority; PR-triggered GitHub Actions stay disabled. Post-merge validation may add platform, distribution, or extended checks.
 - Extended coverage and distribution run after merge or for releases. Do not recreate validation schedulers, timing budgets, wave planners, or receipt graphs.
 - Run independent hosted jobs in parallel and use caches; do not impose local elapsed-time caps.
 
 ### Visual comparison workflow
-- For GTK visual parity reviews, the orchestrator uses computer use only to capture screenshots of the installed RustTable and original Darktable apps; Gemini visual-analysis workers do not use computer use.
-- Gemini visual review workers receive paired local full-screen screenshots as image inputs, never computer-use access, and must return concrete pixel-level implemented-behavior findings mapped to RustTable components.
-- Capture matched screenshots locally and pass them to Gemini as image inputs. Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state for each comparison pair.
-- Treat the original Darktable captures as a fixed baseline for a chosen display size and state: reuse the stored pair for iterative RustTable runs, and recapture it only with an explicit refresh when the reference image, display geometry, or Darktable version changes. Every run must still copy the baseline into its artifact directory and record its checksum.
-- Treat screenshot geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate with paired full-screen, same-size captures until measurable drift is removed or explicitly proven out of scope.
-- Capture the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize. Ask Gemini to report concrete geometry/style/render differences and map them to RustTable components.
+- For GTK visual parity reviews, launch the installed RustTable and original Darktable applications directly and inspect them interactively with Computer Use. Do not use the screenshot-capture script.
+- A Gemini visual worker may analyze screenshots captured directly during that Computer Use session when its fast visual feedback is useful. Treat it as supplemental analysis, not a replacement for the orchestrator's live review.
+- Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state in both applications.
+- Computer Use screenshots are normalized previews, not native GTK coordinates. Derive geometry from Darktable source or live native widget allocations; never copy screenshot pixel counts into layout tokens.
+- Treat geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate in the live applications until measurable drift is removed or explicitly proven out of scope.
+- Inspect the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize.
 - Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.
-- Keep every UI correction from a review iteration in that batch's single UI parity PR. Reuse the same Sol UI worker that owns the UI PR for follow-up screenshot iterations so visual context and responsibility remain continuous.
-- Gemini visual review is a required merge gate for every UI PR, not optional feedback: the exact PR commit must have a recorded `SIGN-OFF` from the Gemini visual-analysis worker against the paired screenshot set before merge or auto-merge is enabled. A `CHANGES_REQUIRED` result, missing screenshot pair, or inability to inspect leaves the UI PR unmergeable until the Sol worker addresses the findings and Gemini rechecks it. Non-UI PRs are not subject to this visual gate.
+- Keep every UI correction from a review iteration in that batch's single UI parity PR. Reuse the same Sol UI worker that owns the UI PR for follow-up interactive review iterations so visual context and responsibility remain continuous.
+- The orchestrator's direct Computer Use review of the exact PR commit is the UI merge gate. Record the inspected states and any remaining implemented-surface drift in the PR before merge.
 
 ## Issues and pull requests
 
 - GitHub issues, labels, milestones, and priorities are the sole planning source of truth. Do not mirror, hash, compile, or rewrite issue prose in repository tooling.
 - Select dependency-ready work by priority label, P0 through P4.
 - A PR normally groups two directly coupled issues into one complete, shift-in-place Rust vertical slice; keep their shared upstream responsibility explicit in the issue and PR body. Move-only structure migrations may consolidate all directly related lineage issues into one PR when splitting them would create avoidable path churn; link every covered issue and preserve its acceptance criteria.
-- After the issue #969 UI parity PR merges, an active batch may contain up to three ready-for-review PRs, with at least one UI parity/iterative screenshot PR and one non-UI product or migration PR. All PRs in the batch must merge before the next batch starts, and UI work must not be split out of the batch's single UI parity PR. The third PR is only for a genuinely disjoint product slice and must not increase shared-file conflict risk.
+- After the issue #969 UI parity PR merges, an active batch may contain up to three ready-for-review PRs, with at least one iterative UI parity PR and one non-UI product or migration PR. All PRs in the batch must merge before the next batch starts, and UI work must not be split out of the batch's single UI parity PR. The third PR is only for a genuinely disjoint product slice and must not increase shared-file conflict risk.
 - Open PRs ready for review with Why, How, Validation, and issue linkage. Enable squash auto-merge after local validation and required review.
 - Do not let hosted CI outages block locally validated progress, but fix actual CI configuration defects promptly.
 - When fewer than ten open issues remain, start fresh milestone-scoped consults to propose concrete product issues.
@@ -68,7 +68,7 @@
 - Leave long-running agents running without routine polling; completion messages wake the orchestrator. Inspect only on completion or an urgent dependency.
 - Keep each agent in an isolated worktree. More agents may collaborate inside one PR, but active PR batch limits still apply.
 - Keep at least two agents on disjoint, product-facing Rust implementation slices whenever a batch is active. Prefer a coherent upstream subsystem's composition, persistence, UI, render, or test slices over setup, policy, or workflow work.
-- Use up to four concurrent agents when the slices are genuinely disjoint and materially accelerate the active migration batch; keep at least two product slices working, and reduce concurrency when shared-file conflicts outweigh the speedup.
+- Use up to four concurrent agents by default; for an explicitly requested, high-throughput UI parity pass, use up to ten Sol-medium agents when every worker has a disjoint surface/file ownership contract and all commits will be integrated into one umbrella UI PR. Keep shared theme/token edits with one owner, keep at least two product slices working, and reduce concurrency when conflicts outweigh the speedup.
 - Combine tightly coupled implementation work into the active PR rather than serializing tiny scaffolding PRs; do not combine unrelated subsystems just to increase PR size.
 - Re-read the current issue and parent issue before follow-up work because GitHub scope may change.
 

@@ -6,13 +6,20 @@ use std::time::{Duration, Instant};
 
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
-use rusttable_ui::gtk_shell::{DARKTABLE_DESKTOP_SPEC, GtkShell, WorkspaceRole};
+use rusttable_ui::gtk_shell::{
+    DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, GtkShell, WorkspaceRole,
+};
 use rusttable_ui::{
     CollectionControlState, CollectionFilterState, CollectionProperty, HistogramData,
     LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableToolbarState,
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PresentationText, PreviewDimensions, Rgba8PreviewMetadata, ViewportGeneration,
 };
+
+#[path = "darkroom_shell_runtime_smoke/render.rs"]
+mod render;
+
+use render::{find_widget, find_widget_with_prefix, render_widget};
 
 fn main() {
     gtk4::init().expect("GTK must initialize for the app-shell runtime smoke");
@@ -64,7 +71,7 @@ fn app_shell_transition_paints_darkroom_titles() {
             shell.show_workspace(WorkspaceRole::Lighttable);
             gtk4::glib::idle_add_local_once(move || {
                 shell.show_workspace(WorkspaceRole::Darkroom);
-                left_split.set_position(180);
+                left_split.set_position(i32::from(DARKROOM_PANEL_WIDTHS.left_px));
                 transitioned.set(true);
             });
         }
@@ -88,8 +95,8 @@ fn app_shell_transition_paints_darkroom_titles() {
         },
     );
     assert!(
-        left_stack.allocated_width() <= 182,
-        "active darkroom rail must honor the 180px divider, got {}px",
+        left_stack.allocated_width() <= i32::from(DARKROOM_PANEL_WIDTHS.left_px) + 2,
+        "active darkroom rail must honor the native divider, got {}px",
         left_stack.allocated_width()
     );
     assert_darkroom_titles_are_allocated(&shell);
@@ -99,11 +106,15 @@ fn app_shell_transition_paints_darkroom_titles() {
 
 fn assert_lighttable_preview_geometry(shell: &GtkShell, photo_id: PhotoId) {
     let root: gtk4::Widget = shell.window().clone().upcast();
-    find_widget(&root, "view-lighttable")
+    let lighttable_selector = find_widget(&root, "view-lighttable")
         .expect("header Lighttable selector")
-        .downcast::<gtk4::Button>()
-        .expect("header Lighttable selector is a button")
-        .emit_clicked();
+        .downcast::<gtk4::Label>()
+        .expect("header Lighttable selector is a direct label link");
+    shell.show_workspace(WorkspaceRole::Lighttable);
+    assert!(
+        lighttable_selector.has_css_class("active"),
+        "header Lighttable selector reflects the visible workspace"
+    );
     let lighttable_grid = find_widget(&root, "lighttable-grid").expect("Lighttable grid");
     let thumbnail_name = format!("photo-thumbnail-{photo_id}");
     settle_gtk_until(
@@ -160,11 +171,15 @@ fn assert_lighttable_preview_geometry(shell: &GtkShell, photo_id: PhotoId) {
         paintable.intrinsic_height()
     );
     assert_lighttable_footer_and_chrome(&root);
-    find_widget(&root, "view-darkroom")
+    let darkroom_selector = find_widget(&root, "view-darkroom")
         .expect("header Darkroom selector")
-        .downcast::<gtk4::Button>()
-        .expect("header Darkroom selector is a button")
-        .emit_clicked();
+        .downcast::<gtk4::Label>()
+        .expect("header Darkroom selector is a direct label link");
+    shell.show_workspace(WorkspaceRole::Darkroom);
+    assert!(
+        darkroom_selector.has_css_class("active"),
+        "header Darkroom selector reflects the visible workspace"
+    );
     settle_gtk_until(
         || find_widget(&root, "darkroom-viewport").is_some_and(|viewport| viewport.is_mapped()),
         || "darkroom viewport did not remap".to_owned(),
@@ -358,16 +373,12 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
     let visible_split = find_widget(&root, "desktop-left-split").expect("desktop left split");
     let rendered = render_widget(&visible_split);
     for (id, expected) in [
-        ("darkroom-navigation", "navigation"),
         ("darkroom-snapshots", "snapshots"),
         ("darkroom-history", "history"),
         ("darkroom-image-information", "image information"),
     ] {
-        let expander = find_widget(&rail, id)
-            .expect("darkroom section")
-            .downcast::<gtk4::Expander>()
-            .expect("darkroom section expander");
-        let title_row = expander.label_widget().expect("darkroom title row");
+        let section = find_widget(&rail, id).expect("darkroom section");
+        let title_row = darkroom_section_title_row(&section);
         let title = find_widget(&title_row, &format!("{id}-label"))
             .expect("darkroom title")
             .downcast::<gtk4::Label>()
@@ -423,6 +434,15 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
     }
 }
 
+fn darkroom_section_title_row(section: &gtk4::Widget) -> gtk4::Widget {
+    section
+        .clone()
+        .downcast::<gtk4::Expander>()
+        .expect("collapsible darkroom section expander")
+        .label_widget()
+        .expect("darkroom title row")
+}
+
 fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
     let root: gtk4::Widget = shell.window().clone().upcast();
     assert_toolbar_and_status_geometry(&root);
@@ -434,18 +454,38 @@ fn assert_darkroom_chrome_matches_runtime_geometry(shell: &GtkShell) {
 }
 
 fn assert_navigation_rendering(root: &gtk4::Widget) {
+    let module = find_widget(root, "darkroom-navigation").expect("navigation module");
     let navigation = find_widget(root, "darkroom-navigation-preview").expect("navigation preview");
     let crop = find_widget(root, "darkroom-navigation-crop").expect("navigation crop indicator");
+    let resize =
+        find_widget(&module, "darkroom-module-resize-handle").expect("navigation resize overlay");
+    let zoom = find_widget(&module, "darkroom-navigation-zoom").expect("navigation zoom overlay");
     let visible_split = find_widget(root, "desktop-left-split").expect("visible desktop split");
     let projection = find_widget(root, "darkroom-viewport-projection")
         .expect("inactive viewport projection watermark");
+    assert!(!module.is::<gtk4::Expander>());
+    assert!(
+        find_widget(&module, "darkroom-navigation-title").is_none(),
+        "non-expandable Darktable navigation must not add a title row"
+    );
     assert!(navigation.is_visible() && crop.is_visible());
     assert!(
-        navigation.allocated_width() >= 120 && navigation.allocated_height() >= 80,
-        "navigation preview must keep useful geometry: {}x{}",
+        navigation.allocated_width() >= 200 && (180..=210).contains(&navigation.allocated_height()),
+        "navigation preview must keep configured source geometry: {}x{}",
         navigation.allocated_width(),
         navigation.allocated_height()
     );
+    for overlay in [&resize, &zoom] {
+        let bounds = overlay
+            .compute_bounds(&navigation)
+            .expect("navigation overlay bounds");
+        assert!(
+            bounds.y() >= 0.0
+                && f64::from(bounds.y() + bounds.height())
+                    <= f64::from(navigation.allocated_height()),
+            "navigation chrome must overlay the preview instead of adding a row: {bounds:?}"
+        );
+    }
     assert!(
         !projection.is_visible(),
         "default fit/edited/normal state must not paint a viewport watermark"
@@ -530,11 +570,14 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
             && guide.allocated_height() == viewport.allocated_height(),
         "composition guide must cover the image viewport"
     );
-    assert!(guide_toggle.is_active());
-    guide_toggle.set_active(false);
-    assert!(!guide.is_visible());
+    assert!(!guide_toggle.is_active());
     guide_toggle.set_active(true);
     assert!(guide.is_visible());
+    guide_toggle.set_active(false);
+    assert!(
+        guide.is_visible(),
+        "the mapped drawing surface remains present while inactive guides draw nothing"
+    );
 }
 
 fn assert_right_rail_geometry(root: &gtk4::Widget) {
@@ -699,9 +742,21 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
             module.is_visible() && !module.is_expanded(),
             "{id} must use the compact collapsed module-stack presentation"
         );
-        for suffix in ["info", "actions"] {
-            let affordance = find_widget(module.upcast_ref(), &format!("{id}-{suffix}"))
-                .expect("module title action");
+        let action_ids = if id == "exposure" {
+            vec![
+                "exposure-enabled".to_owned(),
+                "exposure-presets".to_owned(),
+                "exposure-reset".to_owned(),
+                "exposure-multi".to_owned(),
+            ]
+        } else {
+            ["info", "actions"]
+                .map(|suffix| format!("{id}-{suffix}"))
+                .into()
+        };
+        for action_id in action_ids {
+            let affordance =
+                find_widget(module.upcast_ref(), &action_id).expect("module title action");
             assert!(affordance.is_visible() && affordance.allocated_width() > 0);
         }
     }
@@ -898,128 +953,4 @@ fn assert_histogram_chart_paints(root: &gtk4::Widget, chart: &gtk4::Widget) {
         rendered.pixels_with_channel_at_least(bounds, 60) >= 80,
         "histogram graph must rerender visible channel traces inside {bounds:?}"
     );
-}
-
-struct RenderedWidget {
-    bytes: Vec<u8>,
-    width: usize,
-}
-
-impl RenderedWidget {
-    fn bright_pixels(&self, bounds: gtk4::graphene::Rect) -> usize {
-        self.pixels_with_channel_at_least(bounds, 128)
-    }
-
-    fn pixels_with_channel_at_least(&self, bounds: gtk4::graphene::Rect, threshold: u8) -> usize {
-        let left = bounds.x();
-        let top = bounds.y();
-        let right = left + bounds.width();
-        let bottom = top + bounds.height();
-        let (pixels, remainder) = self.bytes.as_chunks::<4>();
-        assert!(
-            remainder.is_empty(),
-            "render texture must contain RGBA pixels"
-        );
-        pixels
-            .iter()
-            .enumerate()
-            .filter(|(index, pixel)| {
-                let x = u16::try_from(index % self.width).expect("render x fits u16");
-                let y = u16::try_from(index / self.width).expect("render y fits u16");
-                let x = f32::from(x);
-                let y = f32::from(y);
-                x >= left
-                    && x < right
-                    && y >= top
-                    && y < bottom
-                    && pixel[..3]
-                        .iter()
-                        .copied()
-                        .max()
-                        .is_some_and(|channel| channel >= threshold)
-            })
-            .count()
-    }
-
-    fn pixels_with_channel_at_most(&self, bounds: gtk4::graphene::Rect, threshold: u8) -> usize {
-        let left = bounds.x();
-        let top = bounds.y();
-        let right = left + bounds.width();
-        let bottom = top + bounds.height();
-        let (pixels, remainder) = self.bytes.as_chunks::<4>();
-        assert!(
-            remainder.is_empty(),
-            "render texture must contain RGBA pixels"
-        );
-        pixels
-            .iter()
-            .enumerate()
-            .filter(|(index, pixel)| {
-                let x = u16::try_from(index % self.width).expect("render x fits u16");
-                let y = u16::try_from(index / self.width).expect("render y fits u16");
-                let x = f32::from(x);
-                let y = f32::from(y);
-                x >= left
-                    && x < right
-                    && y >= top
-                    && y < bottom
-                    && pixel[..3].iter().all(|channel| *channel <= threshold)
-            })
-            .count()
-    }
-}
-
-fn render_widget(widget: &gtk4::Widget) -> RenderedWidget {
-    let allocated_width = widget.allocated_width();
-    let allocated_height = widget.allocated_height();
-    let width = usize::try_from(allocated_width).expect("positive widget width");
-    let height = usize::try_from(allocated_height).expect("positive widget height");
-    assert!(width > 0 && height > 0, "widget must be allocated");
-    let paintable = gtk4::WidgetPaintable::new(Some(widget));
-    let snapshot = gtk4::Snapshot::new();
-    paintable.snapshot(
-        &snapshot,
-        f64::from(allocated_width),
-        f64::from(allocated_height),
-    );
-    let node = snapshot.to_node().expect("render node for mapped rail");
-    let renderer = gtk4::gsk::CairoRenderer::new();
-    renderer
-        .realize(None::<&gtk4::gdk::Surface>)
-        .expect("Cairo renderer");
-    let width_f32 = f32::from(u16::try_from(allocated_width).expect("render width fits u16"));
-    let height_f32 = f32::from(u16::try_from(allocated_height).expect("render height fits u16"));
-    let viewport = gtk4::graphene::Rect::new(0.0, 0.0, width_f32, height_f32);
-    let texture = renderer.render_texture(&node, Some(&viewport));
-    let mut bytes = vec![0; width * height * 4];
-    texture.download(&mut bytes, width * 4);
-    RenderedWidget { bytes, width }
-}
-
-fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widget> {
-    if root.widget_name() == name {
-        return Some(root.clone());
-    }
-    let mut child = root.first_child();
-    while let Some(current) = child {
-        if let Some(found) = find_widget(&current, name) {
-            return Some(found);
-        }
-        child = current.next_sibling();
-    }
-    None
-}
-
-fn find_widget_with_prefix(root: &gtk4::Widget, prefix: &str) -> Option<gtk4::Widget> {
-    if root.widget_name().starts_with(prefix) {
-        return Some(root.clone());
-    }
-    let mut child = root.first_child();
-    while let Some(current) = child {
-        if let Some(found) = find_widget_with_prefix(&current, prefix) {
-            return Some(found);
-        }
-        child = current.next_sibling();
-    }
-    None
 }
