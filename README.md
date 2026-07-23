@@ -1,8 +1,8 @@
 # RustTable
 
-RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, using GTK4 through [gtk-rs](https://github.com/gtk-rs/gtk4-rs) for the desktop UI. This repository contains the Rust product; the original project is kept in a separate read-only clone for behavioral, layout, and format reference.
+RustTable is a complete rewrite of [darktable](https://github.com/darktable-org/darktable) in Rust, using GTK4 through [gtk-rs](https://github.com/gtk-rs/gtk4-rs) for the desktop UI. The pinned native tree is retained at its original paths as a non-built, read-only porting oracle; a separate checkout remains available for runnable behavioral and visual comparison.
 
-The migration is shift-in-place by responsibility: Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` behavior guides RustTable's GTK4 module structure and workflows. RustTable ports that behavior in Rust; it does not retain, call, or ship Darktable C/C++/OpenCL code.
+The migration proceeds file by file in dependency order. Each Darktable responsibility maps to an obvious nested path in the existing Rust workspace, with source-derived tests and production routing completed before its retained native file can be deleted. Cargo never compiles, links, or ships the retained C/C++/OpenCL implementation. Historical generated contracts keep their own source-provenance hashes until the corresponding responsibility is faithfully migrated.
 
 ## Setup
 
@@ -13,14 +13,9 @@ git clone https://github.com/cgasgarth/RustTable.git
 cd RustTable
 cargo install cargo-deny --version 0.19.8 --locked
 git config core.hooksPath .githooks
-bash scripts/dev/doctor.sh
 ```
 
-Create issue worktrees under the dedicated directory:
-
-```sh
-bash scripts/dev/create-agent-worktree.sh --issue ISSUE_NUMBER
-```
+Migration development uses one checkout and the long-lived `codex/file-by-file-migration` branch. Create or switch to that branch before implementation, then run `bash scripts/dev/doctor.sh`. Do not create Git worktrees for this repository.
 
 ## Build and run
 
@@ -54,8 +49,8 @@ cargo xtask bench compare --help
 cargo xtask dist
 ```
 
-`cargo xtask check` runs formatting, strict Clippy, full workspace tests, source policy, generated-operation validation, the real fixture corpus, and standard dependency checks. Pull-request CI repeats merge-authoritative checks on Linux, macOS, and Windows. Coverage and distribution run after merge and for releases.
+`cargo xtask check` is the complete local commit gate. It runs formatting, strict all-target/all-feature Clippy and tests, rustdoc, numerical and generated-operation validation, export and fixture checks, and standard dependency checks. Post-merge validation may add platform, coverage, packaging, and distribution checks.
 
 ## Contribution model
 
-GitHub issues, priority labels, and milestones define work. Implement one coherent issue in a dedicated worktree, open a ready-for-review PR against `main`, and squash merge after validation. See [CONTRIBUTING.md](CONTRIBUTING.md), [TASK.md](TASK.md), and [AGENTS.md](AGENTS.md).
+Port the next dependency-ready Darktable file completely in the single checkout and commit coherent mappings on `codex/file-by-file-migration`. Open a ready-for-review PR against `main` only at a meaningful migration milestone, then squash merge it after local validation. See [CONTRIBUTING.md](CONTRIBUTING.md), [TASK.md](TASK.md), and [AGENTS.md](AGENTS.md).

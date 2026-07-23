@@ -96,14 +96,12 @@ remote_matches_rusttable() {
   esac
 }
 
-for remote in origin upstream; do
-  remote_url="$(git remote get-url "$remote" 2>/dev/null || true)"
-  if remote_matches_rusttable "$remote_url"; then
-    pass "$remote resolves to cgasgarth/RustTable"
-  else
-    fail "$remote must resolve to cgasgarth/RustTable"
-  fi
-done
+remote_url="$(git remote get-url origin 2>/dev/null || true)"
+if remote_matches_rusttable "$remote_url"; then
+  pass 'origin resolves to cgasgarth/RustTable'
+else
+  fail 'origin must resolve to cgasgarth/RustTable'
+fi
 
 for remote in $(git remote 2>/dev/null); do
   push_urls="$(git config --get-all "remote.$remote.pushurl" 2>/dev/null || true)"

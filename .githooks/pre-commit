@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-export CARGO_BUILD_JOBS=10
 
 root="$(git rev-parse --show-toplevel)"
 bash "$root/.githooks/pre-commit-guard"

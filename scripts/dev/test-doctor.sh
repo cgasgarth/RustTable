@@ -26,8 +26,7 @@ case "$1 $2 $3" in
   'symbolic-ref --quiet --short') printf '%s\n' "${FAKE_BRANCH:-feature/doctor}" ;;
   'config --get core.hooksPath') printf '.githooks\n' ;;
   'remote get-url origin') printf '%s\n' "${FAKE_ORIGIN:-https://github.com/cgasgarth/RustTable.git}" ;;
-  'remote get-url upstream') printf 'git@github.com:cgasgarth/RustTable.git\n' ;;
-  'remote  ') printf 'origin\nupstream\n' ;;
+  'remote  ') printf 'origin\n' ;;
   ls-files\ --error-unmatch*) exit 0 ;;
 esac
 if [[ "$1 $2" == 'config --get-all' ]]; then
