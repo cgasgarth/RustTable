@@ -19,6 +19,7 @@ import {
   unregisterMissingRepositoryBundles,
   unregisterRepositoryBundles,
 } from './computer-use-app-install';
+import { commandEnvironment } from './install-computer-use-app';
 import {
   createRustTableBundle,
   renderBundlePlist,
@@ -30,6 +31,17 @@ import {
 } from './rusttable-app-bundle';
 
 describe('computer-use installer parsing', () => {
+  test('does not pass a Cargo job override to child commands', () => {
+    const previous = process.env.CARGO_BUILD_JOBS;
+    process.env.CARGO_BUILD_JOBS = '10';
+    try {
+      expect(commandEnvironment()).not.toHaveProperty('CARGO_BUILD_JOBS');
+    } finally {
+      if (previous === undefined) delete process.env.CARGO_BUILD_JOBS;
+      else process.env.CARGO_BUILD_JOBS = previous;
+    }
+  });
+
   test('parses defaults and supported flags', () => {
     const options = parseComputerUseInstallOptions(['--compact', '--no-build', '--no-launch'], '/repo');
     expect(options).toEqual({

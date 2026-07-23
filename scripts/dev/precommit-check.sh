@@ -2,7 +2,8 @@
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
-export CARGO_BUILD_JOBS=10
+# Ignore inherited job caps so Cargo selects host-detected parallelism.
+unset CARGO_BUILD_JOBS
 cd "$root"
 
 log="$(mktemp "${TMPDIR:-/tmp}/rusttable-precommit.XXXXXX")"
@@ -33,4 +34,4 @@ if (( status != 0 )); then
   exit "$status"
 fi
 
-printf 'PASS pre-commit check (CARGO_BUILD_JOBS=%s)\n' "$CARGO_BUILD_JOBS"
+printf '%s\n' 'PASS pre-commit check (Cargo host parallelism, cargo-owner=1)'
