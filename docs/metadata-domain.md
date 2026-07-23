@@ -5,6 +5,23 @@ that can be shared by import, catalog, sidecar, export, search, and scripting
 layers. Its bounded EXIF input adapter maps supported EXIF values into that
 domain without exposing parser-library types to consumers.
 
+## IPTC/XMP packet slice
+
+`XmpMetadataInput` and `IptcMetadataInput` accept standalone packets with an
+explicit `MetadataPacketLimits` budget. XMP extraction accepts UTF-8/UTF-16
+packets, disables DTDs and external entity resolution, and preflights entity,
+node, depth, property, collection, packet, and text limits before creating the
+read-only XML tree. IPTC-IIM datasets are length-checked and decode the UTF-8
+marker or bounded single-byte text without treating any value as a path or
+network resource.
+
+The adapters map RDF `Alt`, `Bag`, and `Seq` values to language alternatives
+and lists, map Lightroom `hierarchicalSubject` values to keyword paths, retain
+unknown namespaces/properties and qualifiers as bounded structures or opaque
+bytes, and attach the canonical packet representation to every record's
+provenance. They intentionally do not select precedence, pair sidecars, or
+write packets back to image containers.
+
 ## Contract
 
 - Keys and namespaces are non-empty, NFC-normalized UTF-8 identifiers with

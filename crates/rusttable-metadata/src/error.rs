@@ -9,6 +9,39 @@ pub enum MetadataLimitsError {
     ZeroLimit,
 }
 
+/// Failure while extracting or canonicalizing a bounded IPTC-IIM or XMP packet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MetadataPacketError {
+    SourceTooLarge { limit: u64, actual: u64 },
+    PacketTooLarge { limit: u64, actual: u64 },
+    InvalidUtf8,
+    InvalidUtf16,
+    MalformedXml,
+    XmlDepthLimit { limit: u32 },
+    XmlNodeLimit { limit: u32 },
+    PropertyLimit { limit: u32 },
+    CollectionLimit { limit: u32 },
+    TextTooLarge { limit: u64, actual: u64 },
+    MalformedIptc,
+    IptcDatasetLimit { limit: u32 },
+    UnsupportedIptcEncoding,
+    Domain(MetadataDomainError),
+}
+
+impl fmt::Display for MetadataPacketError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "metadata packet error: {self:?}")
+    }
+}
+
+impl std::error::Error for MetadataPacketError {}
+
+impl From<MetadataDomainError> for MetadataPacketError {
+    fn from(error: MetadataDomainError) -> Self {
+        Self::Domain(error)
+    }
+}
+
 impl fmt::Display for MetadataLimitsError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("metadata limits must all be nonzero")

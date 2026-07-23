@@ -81,6 +81,91 @@ impl MetadataLimits {
     }
 }
 
+/// Explicit bounds for standalone IPTC-IIM and RDF/XMP packets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetadataPacketLimits {
+    pub(crate) source_bytes: u64,
+    pub(crate) packet_bytes: u64,
+    pub(crate) xml_nodes: u32,
+    pub(crate) xml_depth: u32,
+    pub(crate) properties: u32,
+    pub(crate) collection_items: u32,
+    pub(crate) text_bytes: u64,
+}
+
+impl MetadataPacketLimits {
+    /// Creates nonzero source, packet, XML, collection, and text caps.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::MetadataLimitsError::ZeroLimit`] when any cap is zero.
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        max_source_bytes: u64,
+        max_packet_bytes: u64,
+        max_xml_nodes: u32,
+        max_xml_depth: u32,
+        max_properties: u32,
+        max_collection_items: u32,
+        max_text_bytes: u64,
+    ) -> Result<Self, crate::MetadataLimitsError> {
+        if max_source_bytes == 0
+            || max_packet_bytes == 0
+            || max_xml_nodes == 0
+            || max_xml_depth == 0
+            || max_properties == 0
+            || max_collection_items == 0
+            || max_text_bytes == 0
+        {
+            return Err(crate::MetadataLimitsError::ZeroLimit);
+        }
+        Ok(Self {
+            source_bytes: max_source_bytes,
+            packet_bytes: max_packet_bytes,
+            xml_nodes: max_xml_nodes,
+            xml_depth: max_xml_depth,
+            properties: max_properties,
+            collection_items: max_collection_items,
+            text_bytes: max_text_bytes,
+        })
+    }
+
+    #[must_use]
+    pub const fn max_source_bytes(self) -> u64 {
+        self.source_bytes
+    }
+
+    #[must_use]
+    pub const fn max_packet_bytes(self) -> u64 {
+        self.packet_bytes
+    }
+
+    #[must_use]
+    pub const fn max_xml_nodes(self) -> u32 {
+        self.xml_nodes
+    }
+
+    #[must_use]
+    pub const fn max_xml_depth(self) -> u32 {
+        self.xml_depth
+    }
+
+    #[must_use]
+    pub const fn max_properties(self) -> u32 {
+        self.properties
+    }
+
+    #[must_use]
+    pub const fn max_collection_items(self) -> u32 {
+        self.collection_items
+    }
+
+    #[must_use]
+    pub const fn max_text_bytes(self) -> u64 {
+        self.text_bytes
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetadataOutputLimits {
     pub(crate) payload_bytes: u64,

@@ -139,6 +139,7 @@ tracing = "=0.1.44"
 tokio = { version = "=1.51.1", features = ["macros", "rt", "time"] }
 toml = "=0.9.12"
 unicode-normalization = { package = "unicode-normalization-alignments", version = "=0.1.12" }
+roxmltree = "=0.21.1"
 usvg = { version = "=0.47.0", default-features = false, features = ["text"] }
 wasmtime = { version = "=46.0.1", default-features = false, features = ["async", "component-model", "component-model-async", "cranelift", "runtime", "wat"] }
 wasmtime-wasi = { version = "=46.0.1", default-features = false, features = ["p2"] }
