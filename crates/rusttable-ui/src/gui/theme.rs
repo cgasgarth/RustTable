@@ -14,6 +14,18 @@ use super::{
 };
 
 const DARKTABLE_THEME_TEMPLATE: &str = include_str!("theme.css");
+const BUTTON_BORDER: ColorToken = ColorToken::new("button_border", [0x82, 0x82, 0x82, 0xff]);
+const BUTTON_HOVER_OVERLAY: ColorToken =
+    ColorToken::new("button_hover_bg", [0xab, 0xab, 0xab, 0x80]);
+const DISABLED_BUTTON_BORDER: ColorToken =
+    ColorToken::new("button_border_disabled", [0x82, 0x82, 0x82, 0x59]);
+const DISABLED_FOREGROUND: ColorToken =
+    ColorToken::new("disabled_fg_color", [0x9e, 0x9e, 0x9e, 0xff]);
+const SECTION_LABEL: ColorToken = ColorToken::new("section_label", [0xde, 0xde, 0xde, 0xff]);
+const SCROLLBAR_INACTIVE: ColorToken =
+    ColorToken::new("scroll_bar_inactive", [0x91, 0x91, 0x91, 0xff]);
+const SCROLLBAR_ACTIVE: ColorToken = ColorToken::new("scroll_bar_active", [0xc6, 0xc6, 0xc6, 0xff]);
+const SCROLLBAR_BACKGROUND: ColorToken = ColorToken::new("scroll_bar_bg", [0x5e, 0x5e, 0x5e, 0xff]);
 
 /// Semantic GTK classes corresponding to the visual roles in Darktable's CSS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,19 +193,19 @@ fn apply_color_tokens(template: &str, colors: &super::DarktableColors) -> String
         ("{{border}}", colors.border),
         ("{{module_background}}", colors.module_background),
         ("{{button_background}}", colors.button_background),
-        ("{{button_border}}", colors.button_border),
-        ("{{button_hover_overlay}}", colors.button_hover_overlay),
-        ("{{disabled_button_border}}", colors.disabled_button_border),
-        ("{{disabled_foreground}}", colors.disabled_foreground),
+        ("{{button_border}}", BUTTON_BORDER),
+        ("{{button_hover_overlay}}", BUTTON_HOVER_OVERLAY),
+        ("{{disabled_button_border}}", DISABLED_BUTTON_BORDER),
+        ("{{disabled_foreground}}", DISABLED_FOREGROUND),
         (
             "{{active_field_background}}",
             colors.active_field_background,
         ),
         ("{{module_label}}", colors.module_label),
-        ("{{section_label}}", colors.section_label),
-        ("{{scrollbar_inactive}}", colors.scrollbar_inactive),
-        ("{{scrollbar_active}}", colors.scrollbar_active),
-        ("{{scrollbar_background}}", colors.scrollbar_background),
+        ("{{section_label}}", SECTION_LABEL),
+        ("{{scrollbar_inactive}}", SCROLLBAR_INACTIVE),
+        ("{{scrollbar_active}}", SCROLLBAR_ACTIVE),
+        ("{{scrollbar_background}}", SCROLLBAR_BACKGROUND),
         ("{{lighttable_canvas}}", colors.lighttable_canvas),
         ("{{darkroom_canvas}}", colors.darkroom_canvas),
         ("{{thumbnail_background}}", colors.thumbnail_background),
