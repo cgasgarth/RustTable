@@ -124,7 +124,12 @@ pub(super) fn desktop_body(
     right_panel: &gtk4::Stack,
     i18n: &I18n,
     geometry_changed: &std::rc::Rc<dyn Fn()>,
-) -> (gtk4::Box, gtk4::FlowBox, gtk4::Box, WorkspaceEdgeControls) {
+) -> (
+    gtk4::Overlay,
+    gtk4::FlowBox,
+    gtk4::Box,
+    WorkspaceEdgeControls,
+) {
     let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let center = central_workspace(workspace, lighttable_toolbar);
     let (filmstrip_root, filmstrip) = filmstrip(i18n);
@@ -207,7 +212,6 @@ pub(super) fn desktop_body(
         &workspace_with_right_panel,
         std::rc::Rc::clone(geometry_changed),
     );
-    let (workspace_overlay, edge_controls) = workspace_overlay(&workspace_with_right_panel);
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     let outer_border = i32::from(layout.outer_border_px);
     content.set_margin_top(outer_border);
@@ -217,11 +221,12 @@ pub(super) fn desktop_body(
     content.set_margin_bottom(0);
     content.set_margin_start(outer_border);
     content.set_margin_end(outer_border);
-    content.append(&workspace_overlay);
-    (content, filmstrip, filmstrip_root, edge_controls)
+    content.append(&workspace_with_right_panel);
+    let (workspace_frame, edge_controls) = workspace_frame(&content);
+    (workspace_frame, filmstrip, filmstrip_root, edge_controls)
 }
 
-fn workspace_overlay(workspace: &impl IsA<gtk4::Widget>) -> (gtk4::Overlay, WorkspaceEdgeControls) {
+fn workspace_frame(workspace: &impl IsA<gtk4::Widget>) -> (gtk4::Overlay, WorkspaceEdgeControls) {
     let controls = WorkspaceEdgeControls {
         left: edge_toggle(
             "workspace-left-edge-toggle",
@@ -251,17 +256,19 @@ fn edge_toggle(
     accessible_name: &str,
     align: gtk4::Align,
 ) -> gtk4::Button {
+    let layout = DARKTABLE_DESKTOP_SPEC.layout;
     let button = gtk4::Button::new();
     button.set_widget_name(id);
     button.set_halign(align);
     button.set_valign(gtk4::Align::Center);
+    button.set_size_request(i32::from(layout.outer_border_px), -1);
     button.set_focus_on_click(false);
     button.set_tooltip_text(Some(accessible_name));
     button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
     button.add_css_class("dt_edge_toggle");
     let triangle = gtk4::DrawingArea::new();
-    triangle.set_content_width(8);
-    triangle.set_content_height(16);
+    triangle.set_content_width(4);
+    triangle.set_content_height(10);
     triangle.set_can_target(false);
     triangle.set_draw_func(move |_, context, width, height| {
         let width = f64::from(width);
@@ -276,7 +283,7 @@ fn edge_toggle(
             context.line_to(width, height);
         }
         context.close_path();
-        context.set_source_rgb(0.95, 0.95, 0.95);
+        context.set_source_rgb(0.78, 0.78, 0.78);
         let _ = context.fill();
     });
     button.set_child(Some(&triangle));

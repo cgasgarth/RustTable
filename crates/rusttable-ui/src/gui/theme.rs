@@ -10,6 +10,7 @@ use gtk4::prelude::*;
 
 use super::{
     ColorToken, DARKROOM_GEOMETRY, DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS,
+    LIGHTTABLE_COMPOSITION,
 };
 
 const DARKTABLE_THEME_TEMPLATE: &str = include_str!("theme.css");
@@ -142,6 +143,14 @@ pub fn darktable_theme_css() -> String {
         (
             "{{header_height}}",
             i32::from(DARKTABLE_DESKTOP_SPEC.layout.header_height_px),
+        ),
+        (
+            "{{lighttable_toolbar_height}}",
+            i32::from(LIGHTTABLE_COMPOSITION.top_toolbar_height_px),
+        ),
+        (
+            "{{outer_border_width}}",
+            i32::from(DARKTABLE_DESKTOP_SPEC.layout.outer_border_px),
         ),
         ("{{control_height}}", tokens.controls.control_height),
         ("{{module_row_height}}", tokens.controls.module_row_height),
