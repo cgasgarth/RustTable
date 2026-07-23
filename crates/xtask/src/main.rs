@@ -16,9 +16,6 @@ mod migration;
 mod operations;
 mod organization;
 mod pixelpipe;
-mod pixelpipe_cancellation;
-mod pixelpipe_mode;
-mod pixelpipe_scheduler;
 mod reference;
 mod shaders;
 
