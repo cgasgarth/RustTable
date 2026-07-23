@@ -845,9 +845,11 @@ fn failed_with_evidence(
 fn format_label(format: InputFormat) -> &'static str {
     match format {
         InputFormat::Jpeg => "jpeg",
+        InputFormat::JpegXl => "jpeg-xl",
         InputFormat::Png => "png",
         InputFormat::Tiff => "tiff",
         InputFormat::Raw => "raw",
         InputFormat::OpenExr => "openexr",
+        InputFormat::Webp => "webp",
     }
 }

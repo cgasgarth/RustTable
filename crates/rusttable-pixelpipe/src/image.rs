@@ -291,9 +291,10 @@ impl RgbaF32Image {
                 .color_encoding()
                 .transfer()
                 .is_some_and(|transfer| transfer != rusttable_color::TransferFunction::Linear)
-                || descriptor.source_color().is_some_and(|color| {
-                    color.transfer() != rusttable_color::TransferFunction::Linear
-                });
+                || descriptor
+                    .source_color()
+                    .and_then(SourceColor::transfer)
+                    .is_some_and(|transfer| transfer != rusttable_color::TransferFunction::Linear);
             if transfer_encoded {
                 validate_normalized(pixel_index, RgbaF32Channel::Red, pixel.red())?;
                 validate_normalized(pixel_index, RgbaF32Channel::Green, pixel.green())?;

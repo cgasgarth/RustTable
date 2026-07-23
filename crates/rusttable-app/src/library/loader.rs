@@ -321,9 +321,11 @@ fn fact(
 fn format_label(format: InputFormat) -> &'static str {
     match format {
         InputFormat::Jpeg => "JPEG",
+        InputFormat::JpegXl => "JPEG XL",
         InputFormat::Png => "PNG",
         InputFormat::Tiff => "TIFF",
         InputFormat::OpenExr => "OpenEXR",
+        InputFormat::Webp => "WebP",
         InputFormat::Raw => "RAW",
     }
 }

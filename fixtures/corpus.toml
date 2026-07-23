@@ -175,14 +175,22 @@ malformed_fixture = "image-io.malformed-offset"
 [[matrix]]
 axis = "raster-format"
 value = "jpeg-xl"
-status = "unsupported"
+status = "supported"
+positive_fixture = "image-io.jpeg-xl-bare"
 malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=jpeg-xl", "container=bare", "sample=float"]
 
 [[matrix]]
 axis = "raster-format"
 value = "webp"
-status = "unsupported"
+status = "supported"
+positive_fixture = "image-io.lossless-webp"
 malformed_fixture = "corpus.edge.truncated-container"
+expected_dimensions = { width = 4, height = 3 }
+expected_orientation = "landscape"
+expected_metadata = ["format=webp", "alpha=true", "bits=8"]
 
 [[matrix]]
 axis = "raster-format"

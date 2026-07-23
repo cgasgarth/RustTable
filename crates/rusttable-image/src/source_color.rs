@@ -1,5 +1,5 @@
 use rusttable_color::{
-    BuiltinSpace, ColorEncoding, Primaries, ProfileId, TransferFunction, WhitePoint,
+    BuiltinSpace, ColorEncoding, Primaries, ProfileId, ProfileModel, TransferFunction, WhitePoint,
 };
 
 /// Why `RustTable` selected the source transfer and primary interpretation.
@@ -20,14 +20,25 @@ pub enum SourceColorFallback {
 }
 
 /// Complete color evidence attached to one decoded RGB frame.
+///
+/// Matrix-capable sources carry explicit primaries and transfer parameters.
+/// Profile-authoritative ICC sources intentionally do not: their exact ICC
+/// payload is the only valid color interpretation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceColor {
     encoding: ColorEncoding,
-    transfer: TransferFunction,
-    primaries: Primaries,
-    white_point: WhitePoint,
     profile: Option<ProfileId>,
     evidence: SourceColorEvidence,
+    interpretation: SourceColorInterpretation,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum SourceColorInterpretation {
+    Matrix {
+        primaries: Primaries,
+        transfer: TransferFunction,
+    },
+    ProfileAuthoritative,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +47,7 @@ pub enum SourceColorError {
     UnsupportedEncoding,
     MissingProfileIdentity,
     UnexpectedProfileIdentity,
+    NonMatrixProfile,
     WhitePointMismatch,
 }
 
@@ -78,6 +90,9 @@ impl SourceColor {
         transfer: TransferFunction,
         evidence: SourceColorEvidence,
     ) -> Result<Self, SourceColorError> {
+        if profile.model() != ProfileModel::Matrix {
+            return Err(SourceColorError::NonMatrixProfile);
+        }
         Self::new(
             ColorEncoding::External(profile),
             transfer,
@@ -85,6 +100,21 @@ impl SourceColor {
             Some(profile),
             evidence,
         )
+    }
+
+    /// Retains an embedded ICC as the authoritative source interpretation.
+    ///
+    /// This state exposes no matrix primaries or transfer function. Callers
+    /// that only support matrix transforms must reject it rather than project
+    /// or substitute profile data.
+    #[must_use]
+    pub const fn profile_authoritative_icc(profile: ProfileId) -> Self {
+        Self {
+            encoding: ColorEncoding::External(profile),
+            profile: Some(profile),
+            evidence: SourceColorEvidence::EmbeddedIcc,
+            interpretation: SourceColorInterpretation::ProfileAuthoritative,
+        }
     }
 
     /// Resolves a required format fallback explicitly.
@@ -147,11 +177,12 @@ impl SourceColor {
         }
         Ok(Self {
             encoding,
-            transfer,
-            primaries,
-            white_point,
             profile,
             evidence,
+            interpretation: SourceColorInterpretation::Matrix {
+                primaries,
+                transfer,
+            },
         })
     }
 
@@ -161,18 +192,39 @@ impl SourceColor {
     }
 
     #[must_use]
-    pub const fn transfer(self) -> TransferFunction {
-        self.transfer
+    pub const fn transfer(self) -> Option<TransferFunction> {
+        match self.interpretation {
+            SourceColorInterpretation::Matrix { transfer, .. } => Some(transfer),
+            SourceColorInterpretation::ProfileAuthoritative => None,
+        }
     }
 
     #[must_use]
-    pub const fn primaries(self) -> Primaries {
-        self.primaries
+    pub const fn primaries(self) -> Option<Primaries> {
+        match self.interpretation {
+            SourceColorInterpretation::Matrix { primaries, .. } => Some(primaries),
+            SourceColorInterpretation::ProfileAuthoritative => None,
+        }
     }
 
     #[must_use]
-    pub const fn white_point(self) -> WhitePoint {
-        self.white_point
+    pub const fn white_point(self) -> Option<WhitePoint> {
+        match self.primaries() {
+            Some(primaries) => Some(primaries.white()),
+            None => None,
+        }
+    }
+
+    /// Returns the complete matrix projection when one exists.
+    #[must_use]
+    pub const fn matrix(self) -> Option<(Primaries, TransferFunction)> {
+        match self.interpretation {
+            SourceColorInterpretation::Matrix {
+                primaries,
+                transfer,
+            } => Some((primaries, transfer)),
+            SourceColorInterpretation::ProfileAuthoritative => None,
+        }
     }
 
     #[must_use]
@@ -211,6 +263,7 @@ impl std::fmt::Display for SourceColorError {
             Self::UnexpectedProfileIdentity => {
                 "built-in source color unexpectedly carries an external profile identity"
             }
+            Self::NonMatrixProfile => "matrix source color requires a matrix profile identity",
             Self::WhitePointMismatch => {
                 "source color primaries and encoding have different white points"
             }
@@ -219,3 +272,78 @@ impl std::fmt::Display for SourceColorError {
 }
 
 impl std::error::Error for SourceColorError {}
+
+#[cfg(test)]
+mod tests {
+    use rusttable_color::{Pcs, ProfileClass, ProfileModel, ProfileParserVersion};
+
+    use super::*;
+
+    #[test]
+    fn profile_authoritative_icc_has_no_matrix_projection() {
+        let profile = ProfileId::from_content(
+            b"opaque ICC",
+            ProfileClass::Input,
+            ProfileModel::Lut,
+            Pcs::XyzD50,
+            ProfileParserVersion::new(1).expect("parser version"),
+        )
+        .expect("profile identity");
+        let source = SourceColor::profile_authoritative_icc(profile);
+
+        assert_eq!(source.encoding(), ColorEncoding::External(profile));
+        assert_eq!(source.profile(), Some(profile));
+        assert_eq!(source.evidence(), SourceColorEvidence::EmbeddedIcc);
+        assert_eq!(source.matrix(), None);
+        assert_eq!(source.primaries(), None);
+        assert_eq!(source.transfer(), None);
+        assert_eq!(source.white_point(), None);
+    }
+
+    #[test]
+    fn matrix_external_keeps_complete_projection() {
+        let profile = ProfileId::from_content(
+            b"matrix ICC",
+            ProfileClass::Input,
+            ProfileModel::Matrix,
+            Pcs::XyzD50,
+            ProfileParserVersion::new(1).expect("parser version"),
+        )
+        .expect("profile identity");
+        let source = SourceColor::external(
+            profile,
+            Primaries::srgb(),
+            TransferFunction::Srgb,
+            SourceColorEvidence::EmbeddedIcc,
+        )
+        .expect("matrix source");
+
+        assert_eq!(
+            source.matrix(),
+            Some((Primaries::srgb(), TransferFunction::Srgb))
+        );
+        assert_eq!(source.white_point(), Some(WhitePoint::D65));
+    }
+
+    #[test]
+    fn matrix_external_rejects_lut_profile_identity() {
+        let profile = ProfileId::from_content(
+            b"LUT ICC",
+            ProfileClass::Input,
+            ProfileModel::Lut,
+            Pcs::XyzD50,
+            ProfileParserVersion::new(1).expect("parser version"),
+        )
+        .expect("profile identity");
+
+        assert_eq!(
+            SourceColor::external(
+                profile,
+                Primaries::srgb(),
+                TransferFunction::Srgb,
+                SourceColorEvidence::EmbeddedIcc,
+            ),
+            Err(SourceColorError::NonMatrixProfile)
+        );
+    }
+}

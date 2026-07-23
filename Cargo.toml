@@ -76,7 +76,9 @@ icu_list = "=2.2.0"
 icu_locale = "=2.2.0"
 icu_plurals = "=2.2.0"
 image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
+image-webp = "=0.2.4"
 jpeg-decoder = { version = "=0.3.2", default-features = false, features = ["platform_independent"] }
+jxl-oxide = { version = "=0.12.6", default-features = false, features = ["rayon"] }
 resvg = { version = "=0.47.0", default-features = false, features = ["raster-images"] }
 rawler = "=0.7.2"
 libheif-rs = { version = "=2.7.0", default-features = false, features = ["v1_21", "embedded-libheif"] }

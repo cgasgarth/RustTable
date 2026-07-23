@@ -178,7 +178,7 @@ fn snapshot_identity(
     mask_store: Option<&RasterMaskStore>,
 ) -> CpuPixelpipeSnapshotIdentity {
     let mut hasher = Sha256::new();
-    hasher.update(b"rusttable.cpu-pixelpipe.snapshot.v1");
+    hasher.update(b"rusttable.cpu-pixelpipe.snapshot.v2");
     hasher.update(input.source_identity().as_bytes());
     hasher.update(input.descriptor().dimensions().width().to_le_bytes());
     hasher.update(input.descriptor().dimensions().height().to_le_bytes());
@@ -550,22 +550,22 @@ fn write_source_color(hasher: &mut Sha256, source: Option<rusttable_image::Sourc
     };
     hasher.update([1]);
     hasher.update(postcard::to_allocvec(&source.encoding()).expect("color encoding serializes"));
-    hasher.update(postcard::to_allocvec(&source.transfer()).expect("transfer serializes"));
-    for pair in [
-        source.primaries().red(),
-        source.primaries().green(),
-        source.primaries().blue(),
-    ] {
-        hasher.update(pair.0.get().to_bits().to_le_bytes());
-        hasher.update(pair.1.get().to_bits().to_le_bytes());
+    if let Some((primaries, transfer)) = source.matrix() {
+        hasher.update([0]);
+        hasher.update(postcard::to_allocvec(&transfer).expect("transfer serializes"));
+        for pair in [primaries.red(), primaries.green(), primaries.blue()] {
+            hasher.update(pair.0.get().to_bits().to_le_bytes());
+            hasher.update(pair.1.get().to_bits().to_le_bytes());
+        }
+        let (white_x, white_y) = primaries.white().xy();
+        hasher.update(white_x.to_bits().to_le_bytes());
+        hasher.update(white_y.to_bits().to_le_bytes());
+    } else {
+        hasher.update([1]);
     }
-    let (white_x, white_y) = source.white_point().xy();
-    hasher.update(white_x.to_bits().to_le_bytes());
-    hasher.update(white_y.to_bits().to_le_bytes());
     if let Some(profile) = source.profile() {
         hasher.update([1]);
-        hasher.update(profile.sha256());
-        hasher.update(profile.size().to_le_bytes());
+        hasher.update(postcard::to_allocvec(&profile).expect("profile identity serializes"));
     } else {
         hasher.update([0]);
     }

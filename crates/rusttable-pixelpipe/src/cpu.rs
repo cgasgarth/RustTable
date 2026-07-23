@@ -73,6 +73,7 @@ impl CpuPixelpipeResult {
 pub enum CpuPixelpipeError {
     Cancelled(CancellationError),
     UnsupportedInputEncoding { actual: RgbaF32ColorEncoding },
+    UnsupportedProfileTransform { profile: ProfileId },
     SourceColorPlan(String),
     InputBridge { source: RgbaF32ImageError },
     Evaluation { source: EvaluationError },
@@ -871,13 +872,20 @@ fn to_colorin_working(
     input: &RgbaF32Image,
     source_color: rusttable_image::SourceColor,
 ) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+    let Some((primaries, transfer)) = source_color.matrix() else {
+        return Err(CpuPixelpipeError::UnsupportedProfileTransform {
+            profile: source_color
+                .profile()
+                .expect("profile-authoritative source has an identity"),
+        });
+    };
     let id = source_color
         .profile()
-        .map_or_else(|| synthetic_profile(source_color), Ok)?;
+        .map_or_else(|| synthetic_profile(source_color.encoding(), transfer), Ok)?;
     let input_profile = ColorInProfile::Matrix {
         id,
-        primaries: source_color.primaries(),
-        transfer: source_color.transfer(),
+        primaries,
+        transfer,
     };
     let config = ColorInConfig::new(
         input_profile,
@@ -909,9 +917,10 @@ fn to_colorin_working(
 }
 
 fn synthetic_profile(
-    source_color: rusttable_image::SourceColor,
+    encoding: rusttable_color::ColorEncoding,
+    transfer: rusttable_color::TransferFunction,
 ) -> Result<ProfileId, CpuPixelpipeError> {
-    let bytes = postcard::to_allocvec(&(source_color.encoding(), source_color.transfer()))
+    let bytes = postcard::to_allocvec(&(encoding, transfer))
         .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
     ProfileId::from_content(
         &bytes,
