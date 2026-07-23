@@ -2,6 +2,8 @@ use std::fmt;
 
 use rusttable_core::{EditId, PhotoId, Revision};
 
+use crate::PhotoGroupError;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CatalogError {
     CatalogRevisionConflict {
@@ -71,6 +73,7 @@ pub enum CatalogError {
     DuplicatePhotoInOrganizationBatch {
         photo_id: PhotoId,
     },
+    PhotoGroup(PhotoGroupError),
 }
 
 impl fmt::Display for CatalogError {
@@ -176,6 +179,7 @@ impl fmt::Display for CatalogError {
                 formatter,
                 "organization command selects photo {photo_id} more than once"
             ),
+            Self::PhotoGroup(error) => error.fmt(formatter),
         }
     }
 }

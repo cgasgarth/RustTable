@@ -3,7 +3,8 @@ mod support;
 use redb::{Database, TableDefinition};
 use rusttable_catalog::{
     EditRepository, ImportDetails, ImportMetadataStatus, ImportMetadataSummary, ImportRegistration,
-    ImportRegistrationReceipt, ImportRepository, ReferencePathIdentity,
+    ImportRegistrationReceipt, ImportRepository, PhotoGroupCommand, PhotoGroupId,
+    ReferencePathIdentity,
 };
 use rusttable_catalog_store::{AtomicCatalogStoreError, RedbCatalogRepository};
 use rusttable_core::{
@@ -223,6 +224,49 @@ fn unavailable_metadata_status_and_refresh_are_atomic_and_same_photo() {
         ImportMetadataStatus::Available
     );
     assert_eq!(ImportRepository::list(&repository).unwrap().len(), 1);
+    support::remove(&path);
+}
+
+#[test]
+fn explicit_import_group_membership_is_atomic_and_has_no_global_selection() {
+    let path = support::temp_path("import-photo-group");
+    let first = support::record("reference/group-first", 30, 31, 32);
+    let first_edit = edit(first.photo().id(), 33);
+    let first_registration = registration(&first, &first_edit, "first.png", 3);
+    let group_id = PhotoGroupId::new(900).unwrap();
+    {
+        let mut repository = RedbCatalogRepository::open(&path).unwrap();
+        repository
+            .commit_import_with_edit(&first, &first_edit, &first_registration)
+            .unwrap();
+        repository
+            .apply_photo_group_command(&PhotoGroupCommand::Create {
+                group_id,
+                photo_ids: vec![first.photo().id()],
+                representative: Some(first.photo().id()),
+            })
+            .unwrap();
+
+        let second = support::record("reference/group-second", 34, 35, 36);
+        let second_edit = edit(second.photo().id(), 37);
+        let second_registration =
+            registration(&second, &second_edit, "second.png", 4).with_photo_group(group_id);
+        repository
+            .commit_import_with_edit(&second, &second_edit, &second_registration)
+            .unwrap();
+    }
+
+    let repository = RedbCatalogRepository::open(&path).unwrap();
+    let group = repository.photo_group(group_id).unwrap().unwrap();
+    assert_eq!(
+        group.members(),
+        &[
+            first.photo().id(),
+            rusttable_core::PhotoId::new(34).unwrap()
+        ]
+    );
+    assert_eq!(group.representative(), Some(first.photo().id()));
+    drop(repository);
     support::remove(&path);
 }
 

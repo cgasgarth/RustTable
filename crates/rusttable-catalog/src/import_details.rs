@@ -4,7 +4,7 @@ use rusttable_core::{
 };
 use rusttable_image::{ImageDimensions, InputFormat};
 
-use crate::{DuplicateEvidence, ImportRecord};
+use crate::{DuplicateEvidence, ImportRecord, PhotoGroupId};
 
 pub const IMPORT_DETAILS_VERSION: u8 = 1;
 
@@ -353,6 +353,7 @@ pub struct ImportRegistration {
     details: ImportDetails,
     reference_path_identity: ReferencePathIdentity,
     duplicate_evidence: Option<DuplicateEvidence>,
+    photo_group: Option<PhotoGroupId>,
 }
 
 impl ImportRegistration {
@@ -365,6 +366,7 @@ impl ImportRegistration {
             details,
             reference_path_identity,
             duplicate_evidence: None,
+            photo_group: None,
         }
     }
 
@@ -384,8 +386,21 @@ impl ImportRegistration {
     }
 
     #[must_use]
+    pub const fn photo_group(&self) -> Option<PhotoGroupId> {
+        self.photo_group
+    }
+
+    #[must_use]
     pub fn with_duplicate_evidence(mut self, evidence: DuplicateEvidence) -> Self {
         self.duplicate_evidence = Some(evidence);
+        self
+    }
+
+    /// Requests explicit membership in an already-created persistent group.
+    /// The membership write is committed with the import record.
+    #[must_use]
+    pub const fn with_photo_group(mut self, group_id: PhotoGroupId) -> Self {
+        self.photo_group = Some(group_id);
         self
     }
 }

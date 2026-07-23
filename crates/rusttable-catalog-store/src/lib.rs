@@ -7,6 +7,7 @@ mod schema;
 
 use codecs as codec;
 use codecs::organization as organization_codec;
+use codecs::photo_groups as photo_group_codec;
 use codecs::{
     duplicates as duplicate_codec, edit as edit_codec, history as history_codec,
     import_details as import_details_codec,

@@ -19,6 +19,7 @@ mod import;
 mod import_details;
 mod metadata;
 mod organization;
+mod photo_groups;
 mod repository;
 mod restore;
 mod snapshot;
@@ -78,6 +79,10 @@ pub use metadata::{
 };
 pub use organization::{
     CatalogQuery, ColorLabel, OrganizationProjection, PhotoOrganizationState, Rating,
+};
+pub use photo_groups::{
+    PhotoGroup, PhotoGroupCommand, PhotoGroupError, PhotoGroupId, PhotoGroupProjection,
+    PhotoGroupState,
 };
 pub use repository::{ImportRepository, RepositoryError};
 pub use restore::CatalogRestoreError;

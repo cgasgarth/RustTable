@@ -4,7 +4,8 @@ use rusttable_core::{AssetId, Edit, EditId, Photo, PhotoId, Revision};
 
 use crate::{
     CatalogCommand, CatalogError, CatalogQuery, ColorLabel, OrganizationProjection,
-    PhotoOrganizationState, Rating,
+    PhotoGroupCommand, PhotoGroupId, PhotoGroupProjection, PhotoGroupState, PhotoOrganizationState,
+    Rating,
 };
 
 /// Current catalog aggregates and their derived optimistic revision.
@@ -23,6 +24,7 @@ pub struct CatalogState {
     rating_index: BTreeMap<Rating, BTreeSet<PhotoId>>,
     rejected_index: BTreeSet<PhotoId>,
     color_label_index: BTreeMap<ColorLabel, BTreeSet<PhotoId>>,
+    photo_groups: PhotoGroupState,
 }
 
 impl CatalogState {
@@ -37,6 +39,7 @@ impl CatalogState {
             rating_index: BTreeMap::new(),
             rejected_index: BTreeSet::new(),
             color_label_index: BTreeMap::new(),
+            photo_groups: PhotoGroupState::new(),
         }
     }
 
@@ -129,8 +132,52 @@ impl CatalogState {
                 rating: state.rating,
                 rejected: state.rejected,
                 color_labels: state.color_labels.iter().copied().collect(),
+                group_id: self.photo_groups.group_for_photo(state.photo_id),
+                is_representative: self
+                    .photo_groups
+                    .group_for_photo(state.photo_id)
+                    .and_then(|group_id| self.photo_groups.group(group_id))
+                    .is_some_and(|group| group.representative() == Some(state.photo_id)),
             })
             .collect()
+    }
+
+    #[must_use]
+    pub fn photo_group(&self, group_id: PhotoGroupId) -> Option<&crate::PhotoGroup> {
+        self.photo_groups.group(group_id)
+    }
+
+    pub fn photo_groups(&self) -> impl Iterator<Item = &crate::PhotoGroup> {
+        self.photo_groups.groups()
+    }
+
+    #[must_use]
+    pub fn photo_group_for(&self, photo_id: PhotoId) -> Option<PhotoGroupId> {
+        self.photo_groups.group_for_photo(photo_id)
+    }
+
+    #[must_use]
+    pub fn photo_group_projections(&self) -> Vec<PhotoGroupProjection> {
+        self.photo_groups.projections()
+    }
+
+    /// Applies an explicit group command without a process-global selection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a catalog revision, identity, or group-invariant error.
+    pub fn apply_photo_group_command(
+        &mut self,
+        expected: Revision,
+        command: PhotoGroupCommand,
+    ) -> Result<Revision, CatalogError> {
+        if expected != self.revision {
+            return Err(CatalogError::CatalogRevisionConflict {
+                expected,
+                actual: self.revision,
+            });
+        }
+        self.apply_photo_group(command)
     }
 
     pub fn photos_with_rating(&self, rating: Rating) -> impl Iterator<Item = PhotoId> + '_ {
@@ -173,6 +220,7 @@ impl CatalogState {
             rating_index: BTreeMap::new(),
             rejected_index: BTreeSet::new(),
             color_label_index: BTreeMap::new(),
+            photo_groups: PhotoGroupState::new(),
         };
         let photo_ids = state.photos.keys().copied().collect::<Vec<_>>();
         for photo_id in photo_ids {
@@ -449,6 +497,18 @@ impl CatalogState {
         self.revision = next_revision;
         Ok(next_revision)
     }
+
+    fn apply_photo_group(&mut self, command: PhotoGroupCommand) -> Result<Revision, CatalogError> {
+        let known_photos = self.photos.keys().copied().collect::<BTreeSet<_>>();
+        let mut groups = self.photo_groups.clone();
+        groups
+            .apply(command, &known_photos)
+            .map_err(CatalogError::PhotoGroup)?;
+        let revision = next_revision(self.revision)?;
+        self.photo_groups = groups;
+        self.revision = revision;
+        Ok(revision)
+    }
 }
 
 impl Default for CatalogState {
@@ -513,6 +573,7 @@ mod tests {
             rating_index: BTreeMap::new(),
             rejected_index: BTreeSet::new(),
             color_label_index: BTreeMap::new(),
+            photo_groups: PhotoGroupState::new(),
         };
         let before = state.clone();
 
@@ -544,6 +605,7 @@ mod tests {
             )]),
             rejected_index: BTreeSet::new(),
             color_label_index: BTreeMap::new(),
+            photo_groups: PhotoGroupState::new(),
         };
         let before = state.clone();
 
