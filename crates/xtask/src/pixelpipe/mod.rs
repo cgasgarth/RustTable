@@ -18,6 +18,7 @@ use rusttable_pixelpipe::{
     NodeRoiContract, RoiDescriptor, RoiNode, RoiPlanner, RoiRect, RoiRequest, RoiRequestPolicy,
     RoiSupport,
 };
+
 use rusttable_processing::descriptor::exposure_descriptor;
 use rusttable_processing::operation_stack::{
     InsertPosition, OperationInstance, OperationStackSnapshot, OperationStackTemplate,
@@ -26,6 +27,10 @@ use rusttable_processing::operation_stack::{
 use sha2::{Digest, Sha256};
 
 use crate::Result;
+
+pub(crate) mod cancellation;
+pub(crate) mod mode;
+pub(crate) mod scheduler;
 
 const SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-source-map.toml";
 const CACHE_SOURCE_MAP: &str = "architecture/rusttable-pixelpipe-cache-source-map.toml";
@@ -80,11 +85,11 @@ pub(crate) enum PixelpipeCommand {
         verify_estimates: bool,
     },
     /// Emit the complete purpose/quality mode matrix for the real raster fixture.
-    ModeMatrix(crate::pixelpipe_mode::ModeMatrixArgs),
+    ModeMatrix(mode::ModeMatrixArgs),
     /// Exercise generation cancellation, shared consumers, and stale publication rejection.
-    CancellationMatrix(crate::pixelpipe_cancellation::CancellationMatrixArgs),
+    CancellationMatrix(cancellation::CancellationMatrixArgs),
     /// Exercise bounded priority admission, memory pressure, and fairness.
-    SchedulerMatrix(crate::pixelpipe_scheduler::SchedulerMatrixArgs),
+    SchedulerMatrix(scheduler::SchedulerMatrixArgs),
 }
 
 pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
@@ -118,13 +123,9 @@ pub(crate) fn run(root: &Path, command: PixelpipeCommand) -> Result {
             verify_cover,
             verify_estimates,
         } => tiling(root, &fixtures, &budgets, verify_cover, verify_estimates),
-        PixelpipeCommand::ModeMatrix(arguments) => crate::pixelpipe_mode::run(root, &arguments),
-        PixelpipeCommand::CancellationMatrix(arguments) => {
-            crate::pixelpipe_cancellation::run(root, &arguments)
-        }
-        PixelpipeCommand::SchedulerMatrix(arguments) => {
-            crate::pixelpipe_scheduler::run(root, &arguments)
-        }
+        PixelpipeCommand::ModeMatrix(arguments) => mode::run(root, &arguments),
+        PixelpipeCommand::CancellationMatrix(arguments) => cancellation::run(root, &arguments),
+        PixelpipeCommand::SchedulerMatrix(arguments) => scheduler::run(root, &arguments),
     }
 }
 
