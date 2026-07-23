@@ -4305,6 +4305,7 @@ name = "rusttable-metadata"
 version = "0.1.0"
 dependencies = [
  "kamadak-exif",
+ "roxmltree",
  "rusttable-core",
  "rusttable-image",
  "sha2",

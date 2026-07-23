@@ -8,6 +8,7 @@ mod error;
 mod exif_domain;
 mod extract;
 mod image_output;
+mod iptc_xmp;
 mod limits;
 mod output;
 mod packet;
@@ -26,12 +27,13 @@ pub use domain::{
 };
 pub use error::{
     MetadataInputError, MetadataLimitsError, MetadataOutputError, MetadataOutputLimit,
-    MetadataOutputLimitsError,
+    MetadataOutputLimitsError, MetadataPacketError,
 };
 pub use exif_domain::canonicalize_exif;
 pub use extract::{ExifMetadataInput, MetadataInput, MetadataReadResult, MetadataReadStatus};
 pub use image_output::{MetadataImageOutput, MetadataImageOutputError};
-pub use limits::{MetadataLimits, MetadataOutputLimits};
+pub use iptc_xmp::{IptcMetadataInput, XmpMetadataInput};
+pub use limits::{MetadataLimits, MetadataOutputLimits, MetadataPacketLimits};
 pub use output::{CanonicalExifOutput, EncodedExif, MetadataOutput};
 pub use packet::{MetadataPacket, MetadataPacketBuilder};
 pub use policy::{
