@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+pub use rusttable_core::numerics::ToleranceClass;
 use serde::{Deserialize, Serialize};
 
 mod artifacts;
@@ -19,28 +20,6 @@ pub const MAX_OUTLIERS: usize = 32;
 pub const MAX_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_NEIGHBORHOOD_RADIUS: u32 = 8;
 const DEFAULT_UNPREMULTIPLY_EPSILON: f32 = 1.0e-8;
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-pub enum ToleranceClass {
-    Exact,
-    Transfer,
-    Pointwise,
-    Neighborhood,
-    LegacyGpu,
-}
-
-impl ToleranceClass {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Exact => "Exact",
-            Self::Transfer => "Transfer",
-            Self::Pointwise => "Pointwise",
-            Self::Neighborhood => "Neighborhood",
-            Self::LegacyGpu => "LegacyGpu",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub enum CanonicalProfile {

@@ -2,6 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::sync::OnceLock;
 
+use rusttable_core::numerics::{
+    CompilerBaseline, ConversionPolicy, FloatDomainPolicy, FmaPolicy, ImplementationFamily,
+    ImplementationNumerics, NonFinitePolicy, NumericalContract, ReductionPolicy, SubnormalPolicy,
+    ToleranceClass, TranscendentalPolicy,
+};
 use sha2::{Digest, Sha256};
 
 use super::model::{
@@ -94,24 +99,7 @@ impl ShaderRegistry {
         let substitutions = BTreeMap::from([("WORKGROUP_SIZE".to_owned(), "256u".to_owned())]);
         for spec in ENTRY_SPECS {
             let expanded = catalog.expand(POINT_SOURCE, &substitutions)?;
-            let numerical = NumericalMetadata {
-                uses_f32: true,
-                uses_f16: false,
-                contraction_assumption: "none".to_owned(),
-                transcendental_operations: spec
-                    .transcendental
-                    .iter()
-                    .map(|value| (*value).to_owned())
-                    .collect(),
-                texture_filtering: false,
-                sampling: false,
-                atomics: false,
-                reductions: false,
-                subnormal_policy: "preserve-f32".to_owned(),
-                non_finite_policy: "reject-at-host-boundary".to_owned(),
-                schema_3_tolerance_class: "PointF32".to_owned(),
-                canonical_cpu_reference: spec.cpu_reference.to_owned(),
-            };
+            let (contract, numerical) = numerical_metadata(spec);
             let reflection = validate_and_reflect(
                 POINT_SOURCE,
                 &expanded.text,
@@ -127,6 +115,17 @@ impl ShaderRegistry {
             }
             let source_tree_hash = catalog.source_tree_hash(POINT_SOURCE)?;
             let generated_wgsl_hash = digest(&expanded.text);
+            let implementation_id = format!("rusttable.point.{}", spec.id);
+            let implementation_numerics = ImplementationNumerics::new(
+                &implementation_id,
+                spec.cpu_reference,
+                &generated_wgsl_hash,
+                ImplementationFamily::Gpu,
+                CompilerBaseline::BackendToolchain,
+                ToleranceClass::Pointwise,
+                contract,
+            )
+            .map_err(|error| ShaderError::Reflection(error.to_string()))?;
             let identity = ShaderIdentity {
                 program_id: "rusttable.point".to_owned(),
                 program_version: 1,
@@ -143,6 +142,7 @@ impl ShaderRegistry {
                 owner_kernel_ids: vec![spec.owner_kernel.to_owned()],
                 canonical_cpu_reference: spec.cpu_reference.to_owned(),
                 implementation_version: 1,
+                implementation_numerics,
             };
             let identity_name = identity.entry_id().stable_name();
             if !identities.insert(identity_name.clone()) {
@@ -153,6 +153,16 @@ impl ShaderRegistry {
             }
             if reflection.numerical.schema_3_tolerance_class.is_empty() {
                 return Err(ShaderError::MissingTolerance(spec.id.to_owned()));
+            }
+            if identity.implementation_numerics.contract() != reflection.numerical.contract
+                || identity.implementation_numerics.tolerance() != reflection.numerical.tolerance
+                || identity.implementation_numerics.scalar_reference_id()
+                    != reflection.numerical.canonical_cpu_reference
+            {
+                return Err(ShaderError::Reflection(format!(
+                    "{} numerical registration",
+                    spec.id
+                )));
             }
             entries.push(ShaderEntry {
                 identity,
@@ -197,7 +207,7 @@ impl ShaderRegistry {
             let identity = &entry.identity;
             let _ = writeln!(
                 text,
-                "[[shader]]\nid = \"{}\"\nprogram_version = {}\nentry_point_version = {}\nimplementation_version = {}\nsource_alias = \"{}\"\nsource_tree_hash = \"{}\"\ngenerated_wgsl_hash = \"{}\"\nfeature_plan = \"{:?}\"\nnumerical_class = \"{:?}\"\ncanonical_cpu_reference = \"{}\"\nowner_operations = {:?}\nowner_kernels = {:?}\nworkgroup_size = {:?}\n",
+                "[[shader]]\nid = \"{}\"\nprogram_version = {}\nentry_point_version = {}\nimplementation_version = {}\nsource_alias = \"{}\"\nsource_tree_hash = \"{}\"\ngenerated_wgsl_hash = \"{}\"\nfeature_plan = \"{:?}\"\nnumerical_class = \"{:?}\"\ncanonical_cpu_reference = \"{}\"\nowner_operations = {:?}\nowner_kernels = {:?}\nworkgroup_size = {:?}\nuses_f32 = {}\nuses_f16 = {}\nfloat_domain = \"{:?}\"\nnon_finite_policy = \"{:?}\"\nsubnormal_policy = \"{:?}\"\nfma_policy = \"{:?}\"\nreduction_policy = \"{:?}\"\ntranscendental_policy = \"{:?}\"\ntranscendental_operations = {:?}\ntexture_filtering = {}\nsampling = {}\natomics = {}\nreductions = {}\ntolerance_class = \"{}\"\nnumerical_contract_id = \"{}\"\n",
                 entry.id().stable_name(),
                 identity.program_version,
                 identity.entry_point_version,
@@ -210,7 +220,22 @@ impl ShaderRegistry {
                 identity.canonical_cpu_reference,
                 identity.owner_operation_ids,
                 identity.owner_kernel_ids,
-                entry.reflection.workgroup_size
+                entry.reflection.workgroup_size,
+                entry.reflection.numerical.uses_f32,
+                entry.reflection.numerical.uses_f16,
+                entry.reflection.numerical.contract.float_domain,
+                entry.reflection.numerical.contract.non_finite,
+                entry.reflection.numerical.contract.subnormal,
+                entry.reflection.numerical.contract.fma,
+                entry.reflection.numerical.contract.reduction,
+                entry.reflection.numerical.contract.transcendental,
+                entry.reflection.numerical.transcendental_operations,
+                entry.reflection.numerical.texture_filtering,
+                entry.reflection.numerical.sampling,
+                entry.reflection.numerical.atomics,
+                entry.reflection.numerical.reductions,
+                entry.reflection.numerical.tolerance.as_str(),
+                entry.reflection.numerical.contract.stable_id(),
             );
             for binding in &entry.reflection.bindings {
                 let _ = writeln!(
@@ -278,6 +303,43 @@ impl ShaderRegistry {
     }
 }
 
+fn numerical_metadata(spec: &EntrySpec) -> (NumericalContract, NumericalMetadata) {
+    let contract = NumericalContract {
+        float_domain: FloatDomainPolicy::F32,
+        non_finite: NonFinitePolicy::Reject,
+        subnormal: SubnormalPolicy::BackendDefined,
+        fma: FmaPolicy::BackendDefined,
+        reduction: ReductionPolicy::None,
+        transcendental: if spec.transcendental.is_empty() {
+            TranscendentalPolicy::None
+        } else {
+            TranscendentalPolicy::WgslBackend
+        },
+        conversion: ConversionPolicy::checked_nearest_even(),
+    };
+    let metadata = NumericalMetadata {
+        uses_f32: true,
+        uses_f16: false,
+        contraction_assumption: "backend-defined; PointF32 tolerance required".to_owned(),
+        transcendental_operations: spec
+            .transcendental
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        texture_filtering: false,
+        sampling: false,
+        atomics: false,
+        reductions: false,
+        subnormal_policy: "backend-defined".to_owned(),
+        non_finite_policy: "reject-at-host-boundary".to_owned(),
+        schema_3_tolerance_class: "PointF32".to_owned(),
+        canonical_cpu_reference: spec.cpu_reference.to_owned(),
+        contract,
+        tolerance: ToleranceClass::Pointwise,
+    };
+    (contract, metadata)
+}
+
 fn digest(source: &str) -> String {
     let digest: [u8; 32] = Sha256::digest(source.as_bytes()).into();
     super::model::hex(&digest)
@@ -299,6 +361,23 @@ mod tests {
                 .iter()
                 .any(|entry| entry.id().stable_name() == "rusttable.point.exposure")
         );
+        for entry in registry.entries() {
+            assert_eq!(
+                entry.identity.implementation_numerics.tolerance(),
+                ToleranceClass::Pointwise
+            );
+            assert!(
+                entry
+                    .identity
+                    .implementation_numerics
+                    .contract()
+                    .has_backend_defined_behavior()
+            );
+            assert_eq!(
+                entry.identity.implementation_numerics.contract(),
+                entry.reflection.numerical.contract
+            );
+        }
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::process::Command;
 use std::thread;
 use std::{collections::BTreeSet, env};
 
-use crate::{Result, codegen, export_contract, fixtures, operations, run_process_quiet};
+use crate::{Result, codegen, export_contract, fixtures, numerics, operations, run_process_quiet};
 use sha2::{Digest, Sha256};
 
 const FORBIDDEN_NATIVE_EXTENSIONS: &[&str] = &[
@@ -17,6 +17,7 @@ type CheckFn = fn(&Path) -> Result;
 
 const CHECKS: &[(&str, CheckFn)] = &[
     ("source policy", verify_sources),
+    ("numerical contracts", numerics::verify_registered_choices),
     (
         "cargo format, clippy, tests, and rustdoc",
         run_cargo_pipeline,
@@ -413,10 +414,11 @@ mod tests {
                 .count(),
             1
         );
-        assert_eq!(CHECKS.len(), 7);
+        assert_eq!(CHECKS.len(), 8);
         assert_eq!(CHECKS[0].0, "source policy");
-        assert_eq!(CHECKS[2].0, "operation codegen");
-        assert_eq!(CHECKS[5].0, "fixtures");
+        assert_eq!(CHECKS[1].0, "numerical contracts");
+        assert_eq!(CHECKS[3].0, "operation codegen");
+        assert_eq!(CHECKS[6].0, "fixtures");
     }
 
     #[test]

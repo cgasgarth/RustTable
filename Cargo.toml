@@ -39,6 +39,18 @@ members = [
 ]
 resolver = "3"
 
+# Keep Cargo's release defaults explicit where they affect numerical codegen.
+# Architecture/target features remain baseline-only and are verified by xtask.
+[profile.release]
+opt-level = 3
+lto = false
+codegen-units = 16
+panic = "unwind"
+overflow-checks = false
+debug-assertions = false
+debug = 0
+strip = "none"
+
 [workspace.package]
 edition = "2024"
 license = "GPL-3.0-or-later"

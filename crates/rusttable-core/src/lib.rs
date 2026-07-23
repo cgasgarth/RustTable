@@ -7,6 +7,7 @@ mod edit;
 mod id;
 mod metadata;
 mod model;
+pub mod numerics;
 pub mod platform;
 mod render;
 pub mod template;
