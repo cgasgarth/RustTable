@@ -14,7 +14,7 @@ Rewrite darktable completely in Rust with GTK4 through `gtk-rs`, preserving usef
 ## Engineering constraints
 
 - Use the pinned Rust 1.98 beta, Rust 2024, strict warnings/Clippy, and `unsafe_code = "forbid"`.
-- Keep handwritten source files at or below 1,000 lines.
+- Treat 1,000 lines as a maintainability trigger, not a hard ceiling: split growing handwritten files when responsibility-based decomposition improves navigability, keep related children under an explicit parent, and allow cohesive files to exceed the guideline when splitting would obscure ownership.
 - Prefer established crates and language/framework features.
 - Use deterministic test-driven development.
 - Keep darktable C/C++/OpenCL only in the separate reference clone.

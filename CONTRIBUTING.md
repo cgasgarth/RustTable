@@ -18,7 +18,7 @@ GitHub is the planning source of truth. Repository tooling does not mirror, hash
 ## Implement
 
 - Use the pinned Rust toolchain and workspace dependencies/lints.
-- Keep unsafe code forbidden and handwritten files at or below 1,000 lines.
+- Keep unsafe code forbidden. Treat 1,000 lines as a maintainability trigger, not a hard ceiling: split growing handwritten files when responsibility-based decomposition improves navigability, keep related children under an explicit parent, and allow cohesive files to exceed the guideline when splitting would obscure ownership.
 - Write deterministic tests first for behavior changes and defects.
 - Prefer Rust, GTK4/GLib facilities, and maintained crates.
 - Shift responsibilities in place from Darktable's `src/gui`, `src/libs`, `src/views`, and `src/iop` into coherent Rust GTK4 modules. Preserve workflow and layout behavior, not C APIs or source files.
