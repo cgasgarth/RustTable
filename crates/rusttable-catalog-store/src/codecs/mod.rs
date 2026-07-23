@@ -332,3 +332,4 @@ pub(crate) mod history;
 pub(crate) mod import_details;
 pub(crate) mod organization;
 pub(crate) mod photo_groups;
+pub(crate) mod virtual_copies;

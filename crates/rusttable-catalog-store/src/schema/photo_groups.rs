@@ -2,8 +2,8 @@ use redb::{Database, ReadableTable};
 use rusttable_catalog::RepositoryError;
 
 use super::{
-    CURRENT_SCHEMA_VERSION, ORGANIZATION_REVISION_TABLE, PHOTO_GROUP_MEMBER_INDEX_TABLE,
-    PHOTO_GROUPS_TABLE, PHOTO_ORGANIZATION_TABLE, SCHEMA_TABLE, VERSION_KEY,
+    ORGANIZATION_REVISION_TABLE, PHOTO_GROUP_MEMBER_INDEX_TABLE, PHOTO_GROUPS_TABLE,
+    PHOTO_ORGANIZATION_TABLE, SCHEMA_TABLE, VERSION_KEY,
 };
 
 pub(super) fn open_organization_tables(
@@ -47,7 +47,7 @@ pub(super) fn migrate_to_v14(database: &Database) -> Result<(), RepositoryError>
     }
     drop(version);
     schema
-        .insert(VERSION_KEY, &[CURRENT_SCHEMA_VERSION][..])
+        .insert(VERSION_KEY, &[14][..])
         .map_err(|_| RepositoryError::Unavailable)?;
     drop(schema);
     transaction

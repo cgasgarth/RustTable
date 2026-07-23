@@ -34,7 +34,7 @@ fn recipe(id: &str) -> ExportRecipe {
 
 #[test]
 fn recipe_store_migrates_crud_revisions_and_reference_deletion() {
-    assert_eq!(CURRENT_SCHEMA_VERSION, 14);
+    assert_eq!(CURRENT_SCHEMA_VERSION, 15);
     let path = path();
     let repository = RedbRecipeRepository::open(&path).expect("open");
     let first = recipe("stored");

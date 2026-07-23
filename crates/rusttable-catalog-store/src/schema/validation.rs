@@ -40,6 +40,8 @@ pub(super) fn validate_tables(transaction: &redb::ReadTransaction) -> Result<(),
         super::TAG_ALIAS_INDEX_TABLE,
         super::TAG_PHOTO_INDEX_TABLE,
         super::PHOTO_TAG_INDEX_TABLE,
+        super::VIRTUAL_COPIES_TABLE,
+        super::VIRTUAL_COPY_STATE_TABLE,
     ] {
         transaction
             .open_table(table)
