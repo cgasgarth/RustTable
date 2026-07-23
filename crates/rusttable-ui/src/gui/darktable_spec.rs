@@ -204,15 +204,15 @@ pub struct WorkspacePanelWidths {
     pub right_px: u16,
 }
 
-/// The captured Darktable layouts retain narrower collection rails and wider
-/// editing rails while sharing the same resize bounds and panel components.
+/// Native GTK allocations for Darktable's content-sized panels. Computer Use
+/// screenshots are normalized and must never be treated as GTK pixel values.
 pub const LIGHTTABLE_PANEL_WIDTHS: WorkspacePanelWidths = WorkspacePanelWidths {
-    left_px: 140,
-    right_px: 164,
+    left_px: 206,
+    right_px: 241,
 };
 pub const DARKROOM_PANEL_WIDTHS: WorkspacePanelWidths = WorkspacePanelWidths {
-    left_px: 180,
-    right_px: 180,
+    left_px: 265,
+    right_px: 265,
 };
 
 #[must_use]
@@ -510,8 +510,8 @@ pub struct ThumbnailMetrics {
 pub const THUMBNAIL_METRICS: ThumbnailMetrics = ThumbnailMetrics {
     grid_width_px: 196,
     grid_height_px: 147,
-    filmstrip_width_px: 104,
-    filmstrip_height_px: 78,
+    filmstrip_width_px: 120,
+    filmstrip_height_px: 120,
 };
 
 /// A filmstrip is one horizontally scrolling thumbtable row, not a wrapped
@@ -688,21 +688,21 @@ pub const PANEL_SLOTS: [PanelSlot; 6] = [
 pub const LAYOUT_METRICS: LayoutMetrics = LayoutMetrics {
     window_width_px: 1_280,
     window_height_px: 768,
-    outer_border_px: 7,
-    header_height_px: 34,
+    outer_border_px: 10,
+    header_height_px: 48,
     panel_module_spacing_px: 0,
     toolbar_padding_vertical: EmHundredths::new(14),
     toolbar_padding_horizontal: EmHundredths::new(28),
     toolbar_button_minimum: EmHundredths::new(170),
     center_minimum_width_px: 650,
     side_panel_widths: SidePanelWidths {
-        minimum_px: 136,
-        preferred_px: 180,
+        minimum_px: 150,
+        preferred_px: 265,
         maximum_px: 1_500,
     },
     filmstrip_heights: FilmstripHeights {
         minimum_px: 64,
-        preferred_px: 82,
+        preferred_px: 120,
         maximum_px: 400,
     },
 };
@@ -814,16 +814,16 @@ mod tests {
 
     #[test]
     fn panel_metrics_preserve_darktable_resize_bounds() {
-        assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
-        assert_eq!(LAYOUT_METRICS.header_height_px, 34);
+        assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
+        assert_eq!(LAYOUT_METRICS.header_height_px, 48);
         assert_eq!(LAYOUT_METRICS.panel_module_spacing_px, 0);
         assert_eq!(LAYOUT_METRICS.center_minimum_width_px, 650);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.minimum_px, 136);
-        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 180);
-        assert!(LAYOUT_METRICS.side_panel_widths.accepts(136));
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.minimum_px, 150);
+        assert_eq!(LAYOUT_METRICS.side_panel_widths.preferred_px, 265);
+        assert!(LAYOUT_METRICS.side_panel_widths.accepts(150));
         assert!(LAYOUT_METRICS.side_panel_widths.accepts(1_500));
-        assert!(!LAYOUT_METRICS.side_panel_widths.accepts(135));
-        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 82);
+        assert!(!LAYOUT_METRICS.side_panel_widths.accepts(149));
+        assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(64));
         assert!(LAYOUT_METRICS.filmstrip_heights.accepts(400));
     }
@@ -832,15 +832,12 @@ mod tests {
     fn baseline_rail_geometry_leaves_a_stable_center_column() {
         assert_eq!(LAYOUT_METRICS.window_width_px, 1_280);
         assert_eq!(LAYOUT_METRICS.window_height_px, 768);
-        assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_210);
-        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 850);
+        assert_eq!(LAYOUT_METRICS.content_width_px(1_224), 1_204);
+        assert_eq!(LAYOUT_METRICS.preferred_center_width_px(1_224), 674);
+        assert_eq!(LAYOUT_METRICS.preferred_right_panel_position_px(1_224), 939);
         assert_eq!(
-            LAYOUT_METRICS.preferred_right_panel_position_px(1_224),
-            1_030
-        );
-        assert_eq!(
-            LAYOUT_METRICS.preferred_right_panel_position_for_content_width(1_210),
-            1_030
+            LAYOUT_METRICS.preferred_right_panel_position_for_content_width(1_204),
+            939
         );
         assert!(
             LAYOUT_METRICS.preferred_center_width_px(1_224)
@@ -860,16 +857,16 @@ mod tests {
     #[test]
     fn darkroom_geometry_receipt_is_deterministic_and_visibility_aware() {
         let full = DarkroomGeometryReceipt::for_window(1_224, 768, true, true, true);
-        assert_eq!(full.left_panel_width_px, 180);
-        assert_eq!(full.center_width_px(), 850);
-        assert_eq!(full.right_panel_width_px, 180);
-        assert_eq!(full.filmstrip_height_px, 82);
+        assert_eq!(full.left_panel_width_px, 265);
+        assert_eq!(full.center_width_px(), 674);
+        assert_eq!(full.right_panel_width_px, 265);
+        assert_eq!(full.filmstrip_height_px, 120);
         assert_eq!(full.status_bar_height_px, 18);
 
         let compact = DarkroomGeometryReceipt::for_window(900, 500, false, true, false);
         assert_eq!(compact.left_panel_width_px, 0);
-        assert_eq!(compact.center_width_px(), 706);
-        assert_eq!(compact.right_panel_width_px, 180);
+        assert_eq!(compact.center_width_px(), 615);
+        assert_eq!(compact.right_panel_width_px, 265);
         assert_eq!(compact.filmstrip_height_px, 0);
         assert!(!compact.left_panel_visible);
         assert!(!compact.filmstrip_visible);
@@ -944,8 +941,8 @@ mod tests {
     fn thumbnail_bounds_keep_grid_and_filmstrip_visually_distinct() {
         assert_eq!(THUMBNAIL_METRICS.grid_width_px, 196);
         assert_eq!(THUMBNAIL_METRICS.grid_height_px, 147);
-        assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 104);
-        assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 78);
+        assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 120);
+        assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 120);
         assert_eq!(FILMSTRIP_ITEM_GAP_PX, 4);
         assert_eq!(FILMSTRIP_MAX_CHILDREN_PER_LINE, u32::MAX);
     }

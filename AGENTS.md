@@ -18,7 +18,7 @@
 - Use Rust 2024 and the exact dated Rust 1.98 beta in `rust-toolchain.toml`.
 - Warnings, Clippy `all`, and Clippy `pedantic` are errors. Never weaken them to land a change.
 - Unsafe Rust is forbidden. If a future native boundary makes it unavoidable, require a focused issue, the smallest safe API, documented invariants, and focused tests before changing policy.
-- Use 1,000 lines as a maintainability trigger, not a functionality ceiling. Split growing handwritten code when responsibility-based decomposition improves navigability; cohesive files may exceed that size when splitting would obscure ownership. Never reduce required behavior or reject a feature merely to satisfy a line count. Generated compatibility data may remain large.
+- Keep handwritten source files at or below 1,000 lines. Split them by responsibility into the corresponding nested module tree; never reduce behavior to meet the limit. Generated compatibility data is the only exception.
 - Preserve migration lineage when splitting files: keep a parent module at the original responsibility/path and place size-driven child modules in a nested directory beneath it (for example, `module/mod.rs` plus focused children), rather than flattening them into a new high-level catch-all folder. Name child modules after the corresponding Darktable responsibility where that mapping is meaningful.
 - Favor one Rust module or crate boundary per recognizable Darktable subsystem (`src/gui`, `src/libs`, `src/views`, `src/iop`, and related services). New structure should make a source-to-source migration diff easy to locate; do not move unrelated responsibilities merely to satisfy Rust packaging conventions.
 - Prefer the standard library, GTK4/GLib facilities, and established Rust crates over bespoke infrastructure.
@@ -29,7 +29,7 @@
 - Let Cargo and Rust tests use host-detected parallelism; do not pass `CARGO_BUILD_JOBS` or test-thread counts on individual commands. Keep one Cargo pipeline owner so concurrent repository checks do not oversubscribe the host.
 - Keep external runtimes, packaging, full reference execution, and other expensive checks out of unit tests.
 - `cargo xtask check` is the complete local gate: source policy, formatting, strict Clippy, all-target/all-feature tests, operation data, fixtures, and standard dependency checks.
-- Local hooks are optional convenience. Pull-request CI on Linux, macOS, Windows, and dependency checks is the merge authority.
+- The complete local precommit gate is the PR merge authority; PR-triggered GitHub Actions stay disabled. Post-merge validation may add platform, distribution, or extended checks.
 - Extended coverage and distribution run after merge or for releases. Do not recreate validation schedulers, timing budgets, wave planners, or receipt graphs.
 - Run independent hosted jobs in parallel and use caches; do not impose local elapsed-time caps.
 
@@ -37,6 +37,7 @@
 - For GTK visual parity reviews, launch the installed RustTable and original Darktable applications directly and inspect them interactively with Computer Use. Do not use the screenshot-capture script.
 - A Gemini visual worker may analyze screenshots captured directly during that Computer Use session when its fast visual feedback is useful. Treat it as supplemental analysis, not a replacement for the orchestrator's live review.
 - Use the same RAW/image, full-screen display size, mode, selected image, rail visibility, and resize state in both applications.
+- Computer Use screenshots are normalized previews, not native GTK coordinates. Derive geometry from Darktable source or live native widget allocations; never copy screenshot pixel counts into layout tokens.
 - Treat geometry, exact colors, spacing, typography, control sizes, rail widths, alignment, and chrome composition as hard acceptance criteria wherever the surface is implemented. Iterate in the live applications until measurable drift is removed or explicitly proven out of scope.
 - Inspect the major lighttable/darkroom views, top/bottom chrome, left/right rails, histogram, implemented module controls, filmstrip, collapsed/expanded rails, and a right-rail resize.
 - Apply only findings for implemented behavior; do not turn unimplemented upstream modules into parity defects.

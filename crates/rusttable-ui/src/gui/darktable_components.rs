@@ -215,11 +215,14 @@ pub(crate) fn switch(id: &str) -> gtk4::Switch {
     control
 }
 
-pub(crate) fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
+pub(crate) fn rail(id: &str, _width: i32, accessible_name: &str) -> gtk4::Box {
     let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     panel.set_widget_name(id);
     let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
-    panel.set_size_request(width.max(minimum), -1);
+    // The enclosing Paned owns the initial and persisted rail width. Requesting
+    // that width here makes GTK keep allocating the child at its startup size
+    // after the divider is dragged narrower.
+    panel.set_size_request(minimum, -1);
     panel.set_hexpand(false);
     panel.set_vexpand(true);
     panel.set_halign(gtk4::Align::Fill);
@@ -233,7 +236,7 @@ pub(crate) fn rail(id: &str, width: i32, accessible_name: &str) -> gtk4::Box {
 
 pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     child: &W,
-    width: i32,
+    _width: i32,
     id: &str,
 ) -> gtk4::ScrolledWindow {
     let scroll = gtk4::ScrolledWindow::builder()
@@ -246,7 +249,8 @@ pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
     // enable horizontal scrolling also steals a row of vertical rail space.
     scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
     scroll.set_overlay_scrolling(false);
-    scroll.set_min_content_width(rail_content_width(width));
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    scroll.set_min_content_width(rail_content_width(minimum));
     scroll.set_propagate_natural_width(false);
     scroll.set_propagate_natural_height(false);
     scroll.add_css_class("dt_rail_scroll");

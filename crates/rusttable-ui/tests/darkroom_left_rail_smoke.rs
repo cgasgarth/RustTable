@@ -187,8 +187,8 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         find_widget(&rail, "darkroom-navigation-preview").expect("navigation preview");
     assert_eq!(
         navigation_preview.height_request(),
-        114,
-        "navigation fits the source aspect inside the compact rail"
+        200,
+        "navigation uses Darktable's configured default graph height"
     );
     assert!(matches!(
         shell.darkroom_preview().selection_state(),

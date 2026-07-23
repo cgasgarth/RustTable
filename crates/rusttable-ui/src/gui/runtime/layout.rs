@@ -142,7 +142,7 @@ pub(super) fn desktop_body(
         .hexpand(true)
         .vexpand(true)
         .resize_start_child(false)
-        .shrink_start_child(false)
+        .shrink_start_child(true)
         .shrink_end_child(true)
         .wide_handle(true)
         .position(i32::from(panel_widths.active(workspace).left_px))

@@ -14,11 +14,11 @@ use super::{
     chrome_toggle,
 };
 use super::{ExposurePanel, RawDenoisePanel, RgbDenoisePanel, ThemeRole, apply_theme_role};
-use crate::gui::DARKTABLE_UI_TOKENS;
 use crate::gui::darktable_components::{
     RAIL_SCROLLBAR_RESERVE, module_expander as shared_module_expander, module_title,
     rail as shared_rail, rail_scroll as shared_rail_scroll,
 };
+use crate::gui::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS};
 use crate::iop::modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
     build_module_column_with_filter, build_module_column_without_empty,
@@ -39,8 +39,7 @@ const RETOUCH_MODULE_GROUPS: &[DarkroomModuleGroup] =
 
 const NAVIGATION_MIN_HEIGHT: i32 = 100;
 const NAVIGATION_MAX_HEIGHT: i32 = 300;
-const NAVIGATION_ASPECT_WIDTH: i32 = 3;
-const NAVIGATION_ASPECT_HEIGHT: i32 = 2;
+const NAVIGATION_DEFAULT_HEIGHT: i32 = 200;
 const SNAPSHOTS_DEFAULT_HEIGHT: i32 = 200;
 const HISTORY_DEFAULT_HEIGHT: i32 = 1_000;
 const IMAGE_INFORMATION_DEFAULT_HEIGHT: i32 = 1_000;
@@ -224,7 +223,8 @@ pub(super) fn right_panel(width: i32) -> super::DarkroomPanelBuild {
         .build();
     groups_scroll.set_widget_name("darkroom-module-groups-scroll");
     groups_scroll.set_height_request(DARKTABLE_UI_TOKENS.controls.toolbar_height);
-    groups_scroll.set_min_content_width(width.saturating_sub(RAIL_SCROLLBAR_RESERVE));
+    let minimum_rail_width = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    groups_scroll.set_min_content_width(minimum_rail_width.saturating_sub(RAIL_SCROLLBAR_RESERVE));
     groups_scroll.set_propagate_natural_width(false);
     panel.append(&groups_scroll);
 
@@ -400,7 +400,7 @@ fn histogram() -> gtk4::Stack {
 }
 
 fn histogram_height_request() -> i32 {
-    i32::from(DARKROOM_GEOMETRY.histogram_min_height_px)
+    i32::from(DARKROOM_GEOMETRY.histogram_height_px)
 }
 
 pub(super) fn add_group_buttons(
@@ -556,8 +556,8 @@ mod parity_tests {
     }
 
     #[test]
-    fn histogram_uses_compact_darktable_height() {
-        assert_eq!(histogram_height_request(), 120);
+    fn histogram_uses_darktable_config_height() {
+        assert_eq!(histogram_height_request(), 180);
     }
 }
 
@@ -697,10 +697,9 @@ fn navigation_module(width: i32) -> (gtk4::Box, NavigationPreview) {
     )
 }
 
-fn navigation_default_height(width: i32) -> i32 {
-    let preview_width = width.saturating_sub(RAIL_SCROLLBAR_RESERVE).max(1);
+fn navigation_default_height(_width: i32) -> i32 {
     clamp_resize_height(
-        preview_width.saturating_mul(NAVIGATION_ASPECT_HEIGHT) / NAVIGATION_ASPECT_WIDTH,
+        NAVIGATION_DEFAULT_HEIGHT,
         NAVIGATION_MIN_HEIGHT,
         NAVIGATION_MAX_HEIGHT,
     )
@@ -848,7 +847,7 @@ mod tests {
 
     #[test]
     fn navigation_height_matches_darktable_config_and_clamps_resizing() {
-        assert_eq!(navigation_default_height(180), 114);
+        assert_eq!(navigation_default_height(180), 200);
         assert_eq!(NAVIGATION_MIN_HEIGHT, 100);
         assert_eq!(NAVIGATION_MAX_HEIGHT, 300);
         assert_eq!(clamp_resize_height(40, 100, 300), 100);

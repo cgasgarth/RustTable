@@ -6,7 +6,9 @@ use std::time::{Duration, Instant};
 
 use gtk4::prelude::*;
 use rusttable_core::PhotoId;
-use rusttable_ui::gtk_shell::{DARKTABLE_DESKTOP_SPEC, GtkShell, WorkspaceRole};
+use rusttable_ui::gtk_shell::{
+    DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, GtkShell, WorkspaceRole,
+};
 use rusttable_ui::{
     CollectionControlState, CollectionFilterState, CollectionProperty, HistogramData,
     LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableToolbarState,
@@ -69,7 +71,7 @@ fn app_shell_transition_paints_darkroom_titles() {
             shell.show_workspace(WorkspaceRole::Lighttable);
             gtk4::glib::idle_add_local_once(move || {
                 shell.show_workspace(WorkspaceRole::Darkroom);
-                left_split.set_position(180);
+                left_split.set_position(i32::from(DARKROOM_PANEL_WIDTHS.left_px));
                 transitioned.set(true);
             });
         }
@@ -93,8 +95,8 @@ fn app_shell_transition_paints_darkroom_titles() {
         },
     );
     assert!(
-        left_stack.allocated_width() <= 182,
-        "active darkroom rail must honor the 180px divider, got {}px",
+        left_stack.allocated_width() <= i32::from(DARKROOM_PANEL_WIDTHS.left_px) + 2,
+        "active darkroom rail must honor the native divider, got {}px",
         left_stack.allocated_width()
     );
     assert_darkroom_titles_are_allocated(&shell);
@@ -468,8 +470,8 @@ fn assert_navigation_rendering(root: &gtk4::Widget) {
     );
     assert!(navigation.is_visible() && crop.is_visible());
     assert!(
-        navigation.allocated_width() >= 120 && (100..=120).contains(&navigation.allocated_height()),
-        "navigation preview must keep compact source geometry: {}x{}",
+        navigation.allocated_width() >= 200 && (180..=210).contains(&navigation.allocated_height()),
+        "navigation preview must keep configured source geometry: {}x{}",
         navigation.allocated_width(),
         navigation.allocated_height()
     );

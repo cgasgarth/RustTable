@@ -164,11 +164,11 @@ fn rail_resize_reallocates_the_center_from_the_same_display_free_contract() {
     let expanded_right =
         DarkroomGeometryReceipt::for_window_with_panel_widths(1_440, 900, 320, 300, true);
 
-    assert_eq!(narrow_left.center_width_px(), 1_126);
-    assert_eq!(expanded_left.center_width_px(), 956);
-    assert_eq!(expanded_right.center_width_px(), 806);
+    assert_eq!(narrow_left.center_width_px(), 1_120);
+    assert_eq!(expanded_left.center_width_px(), 950);
+    assert_eq!(expanded_right.center_width_px(), 800);
     assert!(expanded_right.center_width_px() > 650);
-    assert_eq!(expanded_right.filmstrip_height_px, 82);
+    assert_eq!(expanded_right.filmstrip_height_px, 120);
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn frame_edge_controls_stay_inside_darktable_outer_border() {
     let runtime_shell = include_str!("../src/gui/runtime/mod.rs");
     let css = include_str!("../src/gui/theme.css");
 
-    assert_eq!(LAYOUT_METRICS.outer_border_px, 7);
+    assert_eq!(LAYOUT_METRICS.outer_border_px, 10);
     assert!(runtime_shell.contains("workspace_frame(&shell)"));
     for id in [
         "workspace-left-edge-toggle",
@@ -330,13 +330,13 @@ fn lighttable_contract_has_one_filter_row_and_plain_bottom_filmstrip() {
             "export",
         ]
     );
-    assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 104);
-    assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 78);
-    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 82);
-    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.left_px, 140);
-    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.right_px, 164);
-    assert_eq!(DARKROOM_PANEL_WIDTHS.left_px, 180);
-    assert_eq!(DARKROOM_PANEL_WIDTHS.right_px, 180);
+    assert_eq!(THUMBNAIL_METRICS.filmstrip_width_px, 120);
+    assert_eq!(THUMBNAIL_METRICS.filmstrip_height_px, 120);
+    assert_eq!(LAYOUT_METRICS.filmstrip_heights.preferred_px, 120);
+    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.left_px, 206);
+    assert_eq!(LIGHTTABLE_PANEL_WIDTHS.right_px, 241);
+    assert_eq!(DARKROOM_PANEL_WIDTHS.left_px, 265);
+    assert_eq!(DARKROOM_PANEL_WIDTHS.right_px, 265);
 }
 
 #[test]

@@ -11,7 +11,8 @@ use super::{
 
 /// Native GTK scrolled-window chrome outside its content-height allocation.
 const HEADER_VIEWPORT_CHROME_PX: i32 = 5;
-const BRAND_MARK_SIZE_PX: i32 = 24;
+const BRAND_MARK_SIZE_PX: i32 = 40;
+const BRAND_WORDMARK_RESERVE_PX: i32 = 180;
 const BRAND_MARK_GAP_PX: i32 = 5;
 const BRAND_LEADING_INSET_PX: i32 = 3;
 const MODE_LABEL_PADDING_PX: i32 = 6;
@@ -130,10 +131,7 @@ impl HeaderChrome {
 fn brand(i18n: &I18n) -> gtk4::Box {
     let brand = gtk4::Box::new(gtk4::Orientation::Horizontal, BRAND_MARK_GAP_PX);
     brand.set_widget_name(PanelSlot::HeaderLeft.identifier());
-    brand.set_width_request(
-        BRAND_MARK_SIZE_PX
-            + i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px),
-    );
+    brand.set_width_request(BRAND_MARK_SIZE_PX + BRAND_WORDMARK_RESERVE_PX);
     brand.set_margin_start(BRAND_LEADING_INSET_PX);
     brand.set_hexpand(false);
     brand.set_halign(gtk4::Align::Start);
@@ -408,9 +406,9 @@ fn other_mode_selector() -> gtk4::Box {
 #[cfg(test)]
 mod tests {
     use super::{
-        BRAND_LEADING_INSET_PX, BRAND_MARK_GAP_PX, BRAND_MARK_SIZE_PX, HEADER_WIDGET_IDS,
-        MODE_LABEL_PADDING_PX, MODE_LABEL_SCALE, MODE_SWITCHER_ORDER, ModeSwitcherItem,
-        OTHER_SELECTOR_WIDTH_PX,
+        BRAND_LEADING_INSET_PX, BRAND_MARK_GAP_PX, BRAND_MARK_SIZE_PX, BRAND_WORDMARK_RESERVE_PX,
+        HEADER_WIDGET_IDS, MODE_LABEL_PADDING_PX, MODE_LABEL_SCALE, MODE_SWITCHER_ORDER,
+        ModeSwitcherItem, OTHER_SELECTOR_WIDTH_PX,
     };
     use crate::gui::DARKTABLE_DESKTOP_SPEC;
 
@@ -437,10 +435,11 @@ mod tests {
 
     #[test]
     fn header_geometry_maps_darktable_brand_and_view_spacing() {
-        assert_eq!(BRAND_MARK_SIZE_PX, 24);
+        assert_eq!(BRAND_MARK_SIZE_PX, 40);
+        assert_eq!(BRAND_WORDMARK_RESERVE_PX, 180);
         assert_eq!(
             DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.preferred_px,
-            180
+            265
         );
         assert_eq!(BRAND_LEADING_INSET_PX, 3);
         assert_eq!(BRAND_MARK_GAP_PX, 5);

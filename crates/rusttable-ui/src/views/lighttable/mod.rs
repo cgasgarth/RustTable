@@ -592,8 +592,8 @@ mod tests {
         assert_eq!(spec.height_px(), THUMBNAIL_METRICS.filmstrip_height_px);
         assert_eq!(spec.gap_px(), 4);
         assert_eq!(spec.max_children_per_line(), u32::MAX);
-        assert_eq!(spec.content_width_px(3), 242);
-        assert_eq!(spec.leading_offset_px(400, 1), 161);
+        assert_eq!(spec.content_width_px(3), 368);
+        assert_eq!(spec.leading_offset_px(400, 1), 140);
         assert_eq!(super::FilmstripSpec::for_viewport(80).width_px(), 80);
     }
 
