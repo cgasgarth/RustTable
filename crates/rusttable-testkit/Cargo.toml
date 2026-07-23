@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 flate2.workspace = true
 process-wrap.workspace = true
+rusttable-core.workspace = true
 serde.workspace = true
 sha2.workspace = true
 serde_json.workspace = true

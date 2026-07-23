@@ -13,6 +13,7 @@ mod foundation;
 mod gpu;
 mod memory;
 mod migration;
+mod numerics;
 mod operations;
 mod organization;
 mod pixelpipe;
@@ -137,6 +138,11 @@ enum Task {
         #[command(subcommand)]
         command: pixelpipe::PixelpipeCommand,
     },
+    /// Verify numerical contracts and compare observable compiler identities.
+    Numerics {
+        #[command(subcommand)]
+        command: numerics::NumericsCommand,
+    },
     /// Generate, validate, and smoke-test checked-in WGSL shaders.
     Shaders {
         #[command(subcommand)]
@@ -167,6 +173,7 @@ fn main() -> ExitCode {
         Task::OperationManifest { check } => operations::run_manifest(&root, check),
         Task::ExportContract { check } => export_contract::run(&root, check),
         Task::Pixelpipe { command } => pixelpipe::run(&root, command),
+        Task::Numerics { command } => numerics::run(&root, &command),
         Task::Shaders { command } => shaders::run(&root, &command),
     };
     match result {
@@ -264,6 +271,7 @@ mod tests {
             "operation-registry",
             "operation-manifest",
             "pixelpipe",
+            "numerics",
             "shaders",
         ] {
             assert!(help.contains(command), "missing {command}");

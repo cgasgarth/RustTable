@@ -7,6 +7,11 @@ use crate::{
     AdapterIdentity, Backend, DeviceGeneration, ExecutionTier, FaultState, GpuCapabilitySnapshot,
     GpuFeaturePlan, LimitEnvelope, ResourceClass, ResourceId, ResourceKind,
 };
+use rusttable_core::numerics::{
+    CompilerBaseline, ConversionPolicy, FloatDomainPolicy, FmaPolicy, ImplementationFamily,
+    ImplementationNumerics, NonFinitePolicy, NumericalContract, ReductionPolicy, SubnormalPolicy,
+    ToleranceClass, TranscendentalPolicy,
+};
 use rusttable_image::Roi;
 
 const TEST_POINT_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
@@ -14,6 +19,7 @@ const TEST_STORAGE_USAGE: u64 = 1;
 const TEST_UNIFORM_USAGE: u64 = 2;
 
 fn reflection() -> ShaderReflection {
+    let contract = numerical_contract();
     ShaderReflection {
         schema: "rusttable.reflection.v1".to_owned(),
         entry_point: "copy".to_owned(),
@@ -100,12 +106,24 @@ fn reflection() -> ShaderReflection {
             non_finite_policy: "reject".to_owned(),
             schema_3_tolerance_class: "PointF32".to_owned(),
             canonical_cpu_reference: "test.cpu".to_owned(),
+            contract,
+            tolerance: ToleranceClass::Pointwise,
         },
     }
 }
 
 fn entry() -> ShaderEntry {
     let reflection = reflection();
+    let implementation_numerics = ImplementationNumerics::new(
+        "test.copy",
+        "test.cpu",
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ImplementationFamily::Gpu,
+        CompilerBaseline::BackendToolchain,
+        ToleranceClass::Pointwise,
+        numerical_contract(),
+    )
+    .expect("numerics");
     ShaderEntry {
         identity: ShaderIdentity {
             program_id: "test".to_owned(),
@@ -121,10 +139,23 @@ fn entry() -> ShaderEntry {
             owner_kernel_ids: vec!["test.kernel".to_owned()],
             canonical_cpu_reference: "test.cpu".to_owned(),
             implementation_version: 1,
+            implementation_numerics,
         },
         source_alias: "test".to_owned(),
         expanded_source: "@compute fn copy() {}".to_owned(),
         reflection,
+    }
+}
+
+fn numerical_contract() -> NumericalContract {
+    NumericalContract {
+        float_domain: FloatDomainPolicy::F32,
+        non_finite: NonFinitePolicy::Reject,
+        subnormal: SubnormalPolicy::BackendDefined,
+        fma: FmaPolicy::BackendDefined,
+        reduction: ReductionPolicy::None,
+        transcendental: TranscendentalPolicy::None,
+        conversion: ConversionPolicy::checked_nearest_even(),
     }
 }
 

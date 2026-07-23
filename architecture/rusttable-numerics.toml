@@ -1,0 +1,60 @@
+schema = "rusttable.numerics-policy.v1"
+issue = 286
+source_mapping = "NoDirectAnalogue"
+requested_primary_toolchain = "beta-2026-07-18"
+repository_toolchain_source = "rust-toolchain.toml"
+implementation_registry = "architecture/rusttable-shader-manifest.toml"
+
+[release_profile]
+opt_level = 3
+lto = false
+codegen_units = 16
+panic = "unwind"
+overflow_checks = false
+debug_assertions = false
+debug = 0
+strip = "none"
+target_cpu = "baseline"
+target_features = []
+
+# Each product/test source that deliberately requests fused rounding is named.
+# xtask rejects an added or stale `.mul_add` path until this table is reviewed.
+[[explicit_fma]]
+path = "crates/rusttable-gpu/src/point.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-masks/src/model.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/defringe/execution.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/lenscorrection/execution.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/lenscorrection/geometry.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/soften.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/tests/output_srgb.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-render/src/diagnostics/common.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-render/src/diagnostics/overexposed.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-render/src/diagnostics/raw_overexposed.rs"
+policy = "ExplicitFused"

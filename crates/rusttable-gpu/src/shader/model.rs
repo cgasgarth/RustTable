@@ -1,5 +1,6 @@
 use std::fmt;
 
+use rusttable_core::numerics::{ImplementationNumerics, NumericalContract, ToleranceClass};
 use serde::{Deserialize, Serialize};
 
 pub const SHADER_SCHEMA: &str = "rusttable.shader.v1";
@@ -40,6 +41,7 @@ pub struct ShaderIdentity {
     pub owner_kernel_ids: Vec<String>,
     pub canonical_cpu_reference: String,
     pub implementation_version: u16,
+    pub implementation_numerics: ImplementationNumerics,
 }
 
 impl ShaderIdentity {
@@ -62,6 +64,10 @@ impl ShaderIdentity {
             format!("{:?}", self.feature_plan),
             self.canonical_cpu_reference.clone(),
             self.implementation_version.to_string(),
+            self.implementation_numerics.contract().stable_id(),
+            self.implementation_numerics
+                .implementation_hash()
+                .to_owned(),
         ];
         fields.extend(self.owner_operation_ids.iter().cloned());
         fields.extend(self.owner_kernel_ids.iter().cloned());
@@ -94,6 +100,8 @@ pub struct NumericalMetadata {
     pub non_finite_policy: String,
     pub schema_3_tolerance_class: String,
     pub canonical_cpu_reference: String,
+    pub contract: NumericalContract,
+    pub tolerance: ToleranceClass,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
