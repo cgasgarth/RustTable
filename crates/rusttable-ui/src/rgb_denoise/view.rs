@@ -1,4 +1,6 @@
 //! GTK4 projection for the RGB denoise controller state.
+//!
+//! The recovery-strength control maps `src/libs/neural_restore.c:4241-4258`.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -19,6 +21,8 @@ use super::model::{
     RgbDenoiseViewModel,
 };
 use crate::ai_models::{AiProvider, ModelHash};
+use crate::bauhaus::slider_input::{BauhausSlider, SliderInputSpec};
+use crate::gui::darktable_components::slider_with_input_spec;
 
 type ActionHandler = Rc<dyn Fn(RgbDenoiseAction)>;
 
@@ -31,7 +35,7 @@ pub struct RgbDenoisePanel {
     model_profile: gtk4::DropDown,
     scale: gtk4::DropDown,
     tile: gtk4::DropDown,
-    strength: gtk4::Scale,
+    strength: BauhausSlider,
     gamut: gtk4::DropDown,
     shadows: gtk4::DropDown,
     detail: gtk4::DropDown,
@@ -94,17 +98,23 @@ impl RgbDenoisePanel {
         let tile = gtk4::DropDown::from_strings(&["128 px", "256 px", "512 px"]);
         tile.set_widget_name("rgb-denoise-tile");
         root.append(&row("Tile", &tile));
-        let strength = gtk4::Scale::with_range(
-            gtk4::Orientation::Horizontal,
+        let strength = slider_with_input_spec(
+            "rgb-denoise-strength",
             0.0,
             f64::from(RGB_DENOISE_MAX_STRENGTH),
             1.0,
+            true,
+            SliderInputSpec::IDENTITY
+                .with_suffix("%")
+                .with_soft_range(0.0, f64::from(RGB_DENOISE_MAX_STRENGTH))
+                .with_default_value(f64::from(RGB_DENOISE_MAX_STRENGTH))
+                .with_digits(0),
         );
-        strength.set_widget_name("rgb-denoise-strength");
-        strength.set_value(50.0);
-        strength.set_draw_value(true);
-        strength.set_hexpand(true);
-        root.append(&row("Strength", &strength));
+        strength.scale().set_tooltip_text(Some(
+            "100% applies the full AI model output; lower values bring back luminance texture and \
+             grain while keeping color noise suppressed",
+        ));
+        root.append(&row("Strength", strength.widget()));
         let gamut =
             gtk4::DropDown::from_strings(&["Convert to working gamut", "Preserve wide gamut"]);
         gamut.set_widget_name("rgb-denoise-gamut");
@@ -252,7 +262,7 @@ impl RgbDenoisePanel {
         self.cancel.set_sensitive(running);
         self.detail_strength
             .set_sensitive(state.detail() == RgbDenoiseDetailPolicy::Recover && !running);
-        self.strength.set_sensitive(!running);
+        self.strength.scale().set_sensitive(!running);
     }
 
     pub fn connect_action<F>(&self, callback: F)
@@ -309,7 +319,7 @@ impl RgbDenoisePanel {
         );
         let guard = Rc::clone(&self.signal_guard);
         let callback_for_strength = Rc::clone(&callback);
-        self.strength.connect_value_changed(move |scale| {
+        self.strength.scale().connect_value_changed(move |scale| {
             if !guard.get() {
                 callback_for_strength(RgbDenoiseAction::SetStrength(
                     scale

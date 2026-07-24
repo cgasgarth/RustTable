@@ -6,7 +6,7 @@ use gtk4::accessible::Property;
 use gtk4::prelude::*;
 use rusttable_core::Revision;
 
-use crate::gui::darktable_components::{CONTROL_GAP, dropdown, slider, switch};
+use crate::gui::darktable_components::{CONTROL_GAP, dropdown, provisional_scale, switch};
 use crate::presentation::PresentationText;
 use crate::presentation::darkroom_controls::{DarkroomControlKind, DarkroomControlValue};
 
@@ -40,28 +40,29 @@ pub(super) fn build_control_row(
     match control.kind() {
         DarkroomControlKind::Slider => {
             let spec = control.slider_spec().expect("slider has slider metadata");
-            let slider = slider(
+            let slider = provisional_scale(
                 &format!("{}-widget", control.id()),
                 spec.minimum(),
                 spec.maximum(),
                 spec.step(),
                 true,
             );
-            slider.scale().set_value(spec.value());
-            slider.scale().set_sensitive(module_enabled);
-            slider.scale().set_digits(slider_digits(spec.step()));
-            slider.scale().set_draw_value(true);
-            slider.scale().set_value_pos(gtk4::PositionType::Right);
-            slider.scale().set_tooltip_text(Some(&format!(
+            slider.set_value(spec.value());
+            slider.set_sensitive(module_enabled);
+            slider.set_digits(slider_digits(spec.step()));
+            slider.set_draw_value(true);
+            slider.set_value_pos(gtk4::PositionType::Right);
+            slider.set_tooltip_text(Some(&format!(
                 "{}; range {:.3} to {:.3}",
                 control.label().as_str(),
                 spec.minimum(),
                 spec.maximum()
             )));
-            identify_control(slider.scale(), control, "Adjust slider");
+            identify_control(&slider, control, "Adjust slider");
             if let Some(handler) = action_handler {
                 let id = control.id().to_string();
-                slider.scale().connect_value_changed(move |slider| {
+                slider.connect_value_changed(move |slider| {
+                    let expected_revision = *current_revision.borrow();
                     dispatch_module_action(
                         &handler,
                         &status,
@@ -69,14 +70,14 @@ pub(super) fn build_control_row(
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
-                            expected_revision: *current_revision.borrow(),
+                            expected_revision,
                             id: id.clone(),
                             value: DarkroomControlValue::Slider(slider.value()),
                         },
                     );
                 });
             }
-            row.append(slider.widget());
+            row.append(&slider);
         }
         DarkroomControlKind::Choice => {
             let choices = control

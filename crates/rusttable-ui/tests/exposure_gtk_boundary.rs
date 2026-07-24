@@ -71,6 +71,22 @@ fn full_interaction_and_panicking_handlers() {
                 .expect("valid exposure projection");
         });
     }
+    let panel_for_projection = panel.clone();
+    run_main_loop(move || {
+        panel_for_projection
+            .set_module_projection(Revision::from_u64(9), true, true, 10.0, -0.25)
+            .expect("hard-range exposure projection");
+    });
+    assert!((exposure.value() - 10.0).abs() < 0.001);
+    assert_eq!(
+        (exposure.adjustment().lower(), exposure.adjustment().upper()),
+        (-3.0, 10.0)
+    );
+    assert!((black.value() + 0.25).abs() < 0.001);
+    assert_eq!(
+        (black.adjustment().lower(), black.adjustment().upper()),
+        (-0.25, f64::from(0.1_f32))
+    );
     for expanded in [false, true] {
         let expander = expander.clone();
         run_main_loop(move || expander.set_expanded(expanded));
@@ -83,10 +99,39 @@ fn full_interaction_and_panicking_handlers() {
         let mode = mode.clone();
         run_main_loop(move || mode.set_selected(selected));
     }
+    let exposure_action_count = actions
+        .borrow()
+        .iter()
+        .filter(|action| matches!(action, ExposureAction::SetExposureEv(_)))
+        .count();
+    let exposure_for_rounding = exposure.clone();
+    run_main_loop(move || exposure_for_rounding.set_value(0.0014));
+    let rounded_actions = actions
+        .borrow()
+        .iter()
+        .filter_map(|action| match action {
+            ExposureAction::SetExposureEv(value) => Some(*value),
+            _ => None,
+        })
+        .skip(exposure_action_count)
+        .collect::<Vec<_>>();
+    let expected_source_value = {
+        let minimum = -3.0_f32;
+        let maximum = 10.0_f32;
+        let rounded = 0.001_f32;
+        let position = (rounded - minimum) / (maximum - minimum);
+        f64::from(minimum + position * (maximum - minimum))
+    };
+    assert!(
+        rounded_actions.len() == 1
+            && rounded_actions[0].to_bits() == expected_source_value.to_bits(),
+        "one source-rounded value must cross the production action boundary; got \
+         {rounded_actions:?}"
+    );
     let exposure_for_test = exposure.clone();
     run_main_loop(move || exposure_for_test.set_value(1.25));
     let black_for_test = black.clone();
-    run_main_loop(move || black_for_test.set_value(-0.25));
+    run_main_loop(move || black_for_test.set_value(-0.2));
     let reset_for_test = reset.clone();
     run_main_loop(move || reset_for_test.emit_clicked());
 
@@ -114,7 +159,7 @@ fn full_interaction_and_panicking_handlers() {
     )));
     assert!(actions.borrow().iter().any(|action| matches!(
         action,
-        ExposureAction::SetBlackLevel(value) if (*value + 0.25).abs() < 0.001
+        ExposureAction::SetBlackLevel(value) if (*value + 0.2).abs() < 0.001
     )));
     assert!(
         actions

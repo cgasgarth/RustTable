@@ -66,6 +66,9 @@ pub struct UiConfig {
     pub reduced_motion: bool,
     #[serde(default = "default_true")]
     pub sidebar_visible: bool,
+    /// Mirrors Darktable's `bauhaus/zoom_step` preference.
+    #[serde(default = "default_true")]
+    pub bauhaus_zoom_step: bool,
     #[serde(default = "default_preview_edge")]
     pub preview_max_edge: u32,
 }
@@ -75,6 +78,7 @@ impl Default for UiConfig {
             theme: Theme::default(),
             reduced_motion: false,
             sidebar_visible: true,
+            bauhaus_zoom_step: true,
             preview_max_edge: default_preview_edge(),
         }
     }

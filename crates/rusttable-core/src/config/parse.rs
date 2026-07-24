@@ -386,6 +386,9 @@ fn apply_ui_override(document: &mut toml::Value, key: &str, value: &OverrideValu
         ("ui.sidebar_visible", OverrideValue::Boolean(value)) => {
             set_bool(document, "ui", "sidebar_visible", Some(*value))
         }
+        ("ui.bauhaus_zoom_step", OverrideValue::Boolean(value)) => {
+            set_bool(document, "ui", "bauhaus_zoom_step", Some(*value))
+        }
         ("ui.preview_max_edge", OverrideValue::Unsigned(value)) => {
             set_u64(document, "ui", "preview_max_edge", Some(*value))
         }
@@ -681,6 +684,7 @@ fn known_fields(path: &[&str]) -> &'static [&'static str] {
             "theme",
             "reduced_motion",
             "sidebar_visible",
+            "bauhaus_zoom_step",
             "preview_max_edge",
         ],
         ["catalog"] => &["path", "create_if_missing", "checkpoint_interval_seconds"],

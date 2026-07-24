@@ -1,4 +1,6 @@
 //! Display-safe state and service contracts for linear RAW AI denoise.
+//!
+//! The recovery-strength fallback maps `src/libs/neural_restore.c:4227-4229`.
 
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::missing_errors_doc)]
@@ -777,7 +779,7 @@ impl RawDenoiseViewModel {
             snapshot: RawDenoiseSnapshot::unavailable(PhotoSelection::none()),
             model: None,
             provider: None,
-            strength: 50,
+            strength: RAW_DENOISE_MAX_STRENGTH,
             tile_size: 256,
             plan_policy: RawDenoisePlanPolicy::MinimalRaw,
             output_policy: RawDenoiseOutputPolicy::PublishAndImport,

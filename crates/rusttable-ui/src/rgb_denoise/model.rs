@@ -1,4 +1,6 @@
 //! Display-safe state and service contracts for the darkroom RGB denoise module.
+//!
+//! The recovery-strength fallback maps `src/libs/neural_restore.c:4244-4246`.
 
 #![allow(clippy::cast_precision_loss, clippy::items_after_statements)]
 #![allow(clippy::missing_errors_doc)]
@@ -681,7 +683,7 @@ impl RgbDenoiseViewModel {
             model_profile: None,
             scale: 1,
             tile_size: 256,
-            strength: 50,
+            strength: RGB_DENOISE_MAX_STRENGTH,
             gamut: RgbDenoiseGamutPolicy::PreserveWideGamut,
             shadows: RgbDenoiseShadowPolicy::ProtectDeepShadows,
             detail: RgbDenoiseDetailPolicy::Recover,
