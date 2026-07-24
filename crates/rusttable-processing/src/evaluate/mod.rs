@@ -35,7 +35,9 @@ pub use lab_boundary::{
     ShadhiBilateralBoundaryError, ShadhiBilateralEvaluationError, evaluate_bilateral_shadhi_with,
     evaluate_bilateral_shadhi_with_cancellation,
 };
-use lab_boundary::{apply_defringe, apply_relight, apply_shadhi_with_cancellation};
+use lab_boundary::{
+    apply_bloom_with_cancellation, apply_defringe, apply_relight, apply_shadhi_with_cancellation,
+};
 use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -650,19 +652,27 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             )
         }
         ProcessingOperationKind::Bloom { config } => {
-            let plan = crate::operations::bloom::BloomPlan::new(*config, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
-            let candidate = plan
-                .execute(pixels, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
-            apply_reconstruction(
+            let candidate = apply_bloom_with_cancellation(
+                *config,
                 pixels,
-                &candidate,
+                dimensions,
+                frame.encoding(),
+                mask_route.native_values(),
                 opacity,
-                step_index,
-                operation_id,
-                pixel_index_offset,
+                &cancelled,
             )
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
         }
         ProcessingOperationKind::Soften { config } => {
             let plan = crate::operations::soften::SoftenPlan::new(*config, dimensions)

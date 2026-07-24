@@ -1,4 +1,5 @@
-//! Darktable-compatible RGB Orton soft-focus operation.
+//! Darktable-compatible RGB Orton soft focus ported from retained
+//! `src/iop/soften.c`.
 
 #![allow(
     clippy::cast_sign_loss,
@@ -10,10 +11,13 @@
 
 use std::fmt;
 
+use crate::common::box_filters::{BOX_ITERATIONS, BoxFilterError, box_mean};
 use crate::{FiniteF32, LinearRgb, RasterDimensions};
 
-use super::common::{OperationExecutionError, ReconstructionBudget, checked_bytes, validate_shape};
-use super::convolution::GaussianKernel;
+use super::common::{
+    OperationExecutionError, ReconstructionBudget, checked_bytes, hsl_to_rgb, rgb_to_hsl,
+    validate_shape,
+};
 
 pub const SOFTEN_COMPATIBILITY_ID: &str = "soften";
 pub const SOFTEN_SCHEMA_VERSION: u16 = 1;
@@ -216,7 +220,6 @@ impl SoftenConfig {
 pub struct SoftenPlan {
     config: SoftenConfig,
     radius: u32,
-    kernel: GaussianKernel,
 }
 
 impl SoftenPlan {
@@ -225,12 +228,6 @@ impl SoftenPlan {
         dimensions: RasterDimensions,
     ) -> Result<Self, OperationExecutionError> {
         let radius = soften_radius(config.size(), dimensions);
-        let kernel = GaussianKernel::from_box_radius(radius).map_err(|_| {
-            OperationExecutionError::MemoryBudgetExceeded {
-                required: usize::MAX,
-                budget: ReconstructionBudget::default().maximum_bytes(),
-            }
-        })?;
         checked_bytes(
             usize::try_from(dimensions.pixel_count()).map_err(|_| {
                 OperationExecutionError::MemoryBudgetExceeded {
@@ -241,11 +238,7 @@ impl SoftenPlan {
             4,
             ReconstructionBudget::default(),
         )?;
-        Ok(Self {
-            config,
-            radius,
-            kernel,
-        })
+        Ok(Self { config, radius })
     }
 
     #[must_use]
@@ -253,9 +246,9 @@ impl SoftenPlan {
         self.radius
     }
 
-    /// Pre-adjusts a frozen source, blurs it with shared Gaussian support, and
-    /// mixes it with the original source. The adjusted layer is never reused
-    /// as the next operation's source.
+    /// Pre-adjusts a frozen source, applies Darktable's eight-pass, four-channel
+    /// box mean, and mixes it with the original source. The adjusted layer is
+    /// never reused as the next operation's source.
     pub fn execute(
         &self,
         input: &[LinearRgb],
@@ -267,26 +260,54 @@ impl SoftenPlan {
         }
         let saturation = self.config.saturation() / 100.0;
         let brightness = 2.0f32.powf(self.config.brightness());
-        let adjusted = input
-            .iter()
-            .enumerate()
-            .map(|(index, pixel)| adjust(*pixel, saturation, brightness, index))
-            .collect::<Result<Vec<_>, _>>()?;
-        let blurred =
-            self.kernel
-                .apply_rgb(&adjusted, dimensions, ReconstructionBudget::default())?;
+        let float_count =
+            input
+                .len()
+                .checked_mul(4)
+                .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+                    required: usize::MAX,
+                    budget: ReconstructionBudget::default().maximum_bytes(),
+                })?;
+        let required_bytes = float_count.checked_mul(std::mem::size_of::<f32>()).ok_or(
+            OperationExecutionError::MemoryBudgetExceeded {
+                required: usize::MAX,
+                budget: ReconstructionBudget::default().maximum_bytes(),
+            },
+        )?;
+        let mut blurred = Vec::new();
+        blurred.try_reserve_exact(float_count).map_err(|_| {
+            OperationExecutionError::AllocationFailed {
+                required: required_bytes,
+            }
+        })?;
+        for (index, pixel) in input.iter().enumerate() {
+            let adjusted = adjust(*pixel, saturation, brightness, index)?;
+            blurred.extend_from_slice(&[
+                adjusted.red().get(),
+                adjusted.green().get(),
+                adjusted.blue().get(),
+                0.0,
+            ]);
+        }
+        let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
+        let height = usize::try_from(dimensions.height()).expect("validated height fits usize");
+        let radius = usize::try_from(self.radius).expect("soften radius fits usize");
+        box_mean(&mut blurred, height, width, 4, radius, BOX_ITERATIONS)
+            .map_err(box_filter_error)?;
         let amount = self.config.amount() / 100.0;
+        let (blurred_pixels, remainder) = blurred.as_chunks::<4>();
+        debug_assert!(remainder.is_empty());
         input
             .iter()
-            .zip(blurred)
+            .zip(blurred_pixels)
             .enumerate()
             .map(|(index, (original, processed))| {
                 let red = original.red().get()
-                    + (processed.red().get().clamp(0.0, 1.0) - original.red().get()) * amount;
+                    + (processed[0].clamp(0.0, 1.0) - original.red().get()) * amount;
                 let green = original.green().get()
-                    + (processed.green().get().clamp(0.0, 1.0) - original.green().get()) * amount;
+                    + (processed[1].clamp(0.0, 1.0) - original.green().get()) * amount;
                 let blue = original.blue().get()
-                    + (processed.blue().get().clamp(0.0, 1.0) - original.blue().get()) * amount;
+                    + (processed[2].clamp(0.0, 1.0) - original.blue().get()) * amount;
                 Ok(LinearRgb::new(
                     finite(red, index, crate::RgbChannel::Red)?,
                     finite(green, index, crate::RgbChannel::Green)?,
@@ -294,6 +315,29 @@ impl SoftenPlan {
                 ))
             })
             .collect()
+    }
+}
+
+fn box_filter_error(error: BoxFilterError) -> OperationExecutionError {
+    match error {
+        BoxFilterError::AllocationFailed { required_bytes } => {
+            OperationExecutionError::AllocationFailed {
+                required: required_bytes,
+            }
+        }
+        BoxFilterError::SizeOverflow => OperationExecutionError::MemoryBudgetExceeded {
+            required: usize::MAX,
+            budget: ReconstructionBudget::default().maximum_bytes(),
+        },
+        BoxFilterError::BufferShape { expected, actual } => {
+            OperationExecutionError::DimensionsMismatch { expected, actual }
+        }
+        BoxFilterError::InvalidDimensions { .. }
+        | BoxFilterError::UnsupportedChannels { .. }
+        | BoxFilterError::ScratchShape { .. }
+        | BoxFilterError::NonFiniteInput { .. } => OperationExecutionError::UnsupportedCapability(
+            "box mean rejected a validated soften buffer",
+        ),
     }
 }
 
@@ -327,7 +371,8 @@ fn adjust(
     brightness: f32,
     index: usize,
 ) -> Result<LinearRgb, OperationExecutionError> {
-    let (hue, mut saturation_value, mut lightness) = rgb_to_hsl(pixel);
+    let (hue, mut saturation_value, mut lightness) =
+        rgb_to_hsl([pixel.red().get(), pixel.green().get(), pixel.blue().get()]);
     saturation_value = (saturation_value * saturation).clamp(0.0, 1.0);
     lightness = (lightness * brightness).clamp(0.0, 1.0);
     let [red, green, blue] = hsl_to_rgb(hue, saturation_value, lightness);
@@ -336,67 +381,6 @@ fn adjust(
         finite(green, index, crate::RgbChannel::Green)?,
         finite(blue, index, crate::RgbChannel::Blue)?,
     ))
-}
-
-fn rgb_to_hsl(pixel: LinearRgb) -> (f32, f32, f32) {
-    let red = pixel.red().get();
-    let green = pixel.green().get();
-    let blue = pixel.blue().get();
-    let max = red.max(green).max(blue);
-    let min = red.min(green).min(blue);
-    let lightness = f32::midpoint(max, min);
-    let delta = max - min;
-    if delta.to_bits() == 0.0f32.to_bits() {
-        return (0.0, 0.0, lightness);
-    }
-    let saturation = if lightness > 0.5 {
-        delta / (2.0 - max - min)
-    } else {
-        delta / (max + min)
-    };
-    let hue = if max.to_bits() == red.to_bits() {
-        ((green - blue) / delta + if green < blue { 6.0 } else { 0.0 }) / 6.0
-    } else if max.to_bits() == green.to_bits() {
-        ((blue - red) / delta + 2.0) / 6.0
-    } else {
-        ((red - green) / delta + 4.0) / 6.0
-    };
-    (hue, saturation, lightness)
-}
-
-fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> [f32; 3] {
-    if saturation.to_bits() == 0.0f32.to_bits() {
-        return [lightness; 3];
-    }
-    let q = if lightness < 0.5 {
-        lightness * (1.0 + saturation)
-    } else {
-        lightness + saturation - lightness * saturation
-    };
-    let p = 2.0 * lightness - q;
-    [
-        hue_to_rgb(p, q, hue + 1.0 / 3.0),
-        hue_to_rgb(p, q, hue),
-        hue_to_rgb(p, q, hue - 1.0 / 3.0),
-    ]
-}
-
-fn hue_to_rgb(p: f32, q: f32, mut hue: f32) -> f32 {
-    if hue < 0.0 {
-        hue += 1.0;
-    }
-    if hue > 1.0 {
-        hue -= 1.0;
-    }
-    if hue < 1.0 / 6.0 {
-        p + (q - p) * 6.0 * hue
-    } else if hue < 1.0 / 2.0 {
-        q
-    } else if hue < 2.0 / 3.0 {
-        p + (q - p) * (2.0 / 3.0 - hue) * 6.0
-    } else {
-        p
-    }
 }
 
 fn finite(

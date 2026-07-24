@@ -12,6 +12,7 @@
 )]
 
 use super::common::{OperationExecutionError, ReconstructionBudget, checked_bytes, validate_shape};
+use crate::common::box_filters::BOX_ITERATIONS;
 use crate::{FiniteF32, LinearRgb, RasterDimensions};
 
 /// Error from the bounded four-channel recursive Gaussian used by Lab
@@ -202,8 +203,6 @@ fn clamp_channels(value: [f32; 4], minimum: [f32; 4], maximum: [f32; 4]) -> [f32
     std::array::from_fn(|channel| value[channel].clamp(minimum[channel], maximum[channel]))
 }
 
-pub const BOX_ITERATIONS: u8 = 8;
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct GaussianKernel {
     support: u32,
@@ -220,7 +219,7 @@ impl GaussianKernel {
             });
         }
         let radius_f = radius as f32;
-        let sigma = ((radius_f * (radius_f + 1.0) * f32::from(BOX_ITERATIONS) + 2.0) / 3.0).sqrt();
+        let sigma = ((radius_f * (radius_f + 1.0) * BOX_ITERATIONS as f32 + 2.0) / 3.0).sqrt();
         let support = (3.0 * sigma).ceil() as u32;
         let width = support
             .checked_mul(2)
@@ -263,63 +262,6 @@ impl GaussianKernel {
         }
         let horizontal = convolve_rgb(input, dimensions, self.support, &self.weights, true)?;
         convolve_rgb(&horizontal, dimensions, self.support, &self.weights, false)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BoxKernel {
-    radius: u32,
-    iterations: u8,
-}
-
-impl BoxKernel {
-    #[must_use]
-    pub const fn new(radius: u32) -> Self {
-        Self {
-            radius,
-            iterations: BOX_ITERATIONS,
-        }
-    }
-
-    #[must_use]
-    pub const fn radius(self) -> u32 {
-        self.radius
-    }
-
-    #[must_use]
-    pub const fn support(self) -> u32 {
-        self.radius.saturating_mul(self.iterations as u32)
-    }
-
-    pub fn apply_scalar(
-        self,
-        input: &[f32],
-        dimensions: RasterDimensions,
-        budget: ReconstructionBudget,
-    ) -> Result<Vec<f32>, OperationExecutionError> {
-        let expected = usize::try_from(dimensions.pixel_count()).map_err(|_| {
-            OperationExecutionError::DimensionsMismatch {
-                expected: usize::MAX,
-                actual: input.len(),
-            }
-        })?;
-        if expected != input.len() {
-            return Err(OperationExecutionError::DimensionsMismatch {
-                expected,
-                actual: input.len(),
-            });
-        }
-        checked_bytes(input.len(), 2, budget)?;
-        if self.radius == 0 {
-            return Ok(input.to_vec());
-        }
-        let mut current = input.to_vec();
-        let mut scratch = vec![0.0; input.len()];
-        for _ in 0..self.iterations {
-            convolve_scalar(&current, &mut scratch, dimensions, self.radius, true);
-            convolve_scalar(&scratch, &mut current, dimensions, self.radius, false);
-        }
-        Ok(current)
     }
 }
 
@@ -386,28 +328,6 @@ fn convolve_rgb(
         ));
     }
     Ok(output)
-}
-
-fn convolve_scalar(
-    input: &[f32],
-    output: &mut [f32],
-    dimensions: RasterDimensions,
-    radius: u32,
-    horizontal: bool,
-) {
-    let width = usize::try_from(dimensions.width()).expect("validated width");
-    let radius = i32::try_from(radius).expect("bounded radius");
-    let divisor = (radius * 2 + 1) as f32;
-    for index in 0..input.len() {
-        let x = index % width;
-        let y = index / width;
-        let mut sum = 0.0f32;
-        for offset in -radius..=radius {
-            let sample = sample_index(x, y, offset, horizontal, dimensions);
-            sum += input[sample];
-        }
-        output[index] = sum / divisor;
-    }
 }
 
 fn sample_index(

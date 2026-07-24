@@ -1,3 +1,4 @@
+use rusttable_processing::common::box_filters::{BOX_ITERATIONS, box_mean};
 use rusttable_processing::operations::soften::{
     SOFTEN_PARAMETER_BYTES, SoftenConfig, SoftenHistory, SoftenParametersV1, SoftenPlan,
 };
@@ -76,4 +77,62 @@ fn zero_mix_is_exact_pass_through_and_adjustment_is_source_immutable() {
     let second = plan.execute(&input, dimensions).expect("second");
     assert_eq!(first, second);
     assert_ne!(first, input);
+}
+
+#[test]
+fn near_gray_input_uses_darktable_saturation_denominator_floor() {
+    // soften.c delegates to colorspaces.h::rgb2hsl, which floors the
+    // saturation denominator at 2^-16. Below that threshold, the HSL
+    // round-trip deliberately pulls this almost-neutral black toward gray.
+    let dimensions = dimensions(1, 1);
+    let input = vec![pixel(1.0e-6, 1.1e-6, 1.0e-6)];
+    let output = SoftenPlan::new(
+        SoftenConfig::new(0.0, 100.0, 0.0, 100.0).expect("config"),
+        dimensions,
+    )
+    .expect("plan")
+    .execute(&input, dimensions)
+    .expect("soften");
+
+    let expected = [1.043_118_7e-6, 1.056_881_4e-6, 1.043_118_7e-6];
+    let actual = [
+        output[0].red().get(),
+        output[0].green().get(),
+        output[0].blue().get(),
+    ];
+    for (actual, expected) in actual.into_iter().zip(expected) {
+        assert!((actual - expected).abs() < 5.0e-13);
+    }
+}
+
+#[test]
+fn production_soften_uses_the_shared_four_channel_eight_pass_box_mean() {
+    // A 101x1 raster gives soften.c's full-image radius calculation radius 1.
+    // An edge impulse distinguishes clipped-window normalization from both a
+    // clamped-edge box and the former Gaussian substitute.
+    let dimensions = dimensions(101, 1);
+    let mut input = vec![pixel(0.0, 0.0, 0.0); 101];
+    input[0] = pixel(1.0, 1.0, 1.0);
+    let plan = SoftenPlan::new(
+        SoftenConfig::new(100.0, 100.0, 0.0, 100.0).expect("config"),
+        dimensions,
+    )
+    .expect("plan");
+    assert_eq!(plan.radius(), 1);
+
+    let output = plan.execute(&input, dimensions).expect("soften");
+    let mut rgba = vec![0.0; 101 * 4];
+    rgba[0..4].copy_from_slice(&[1.0, 1.0, 1.0, 0.0]);
+    box_mean(&mut rgba, 1, 101, 4, 1, BOX_ITERATIONS).expect("shared soften mean");
+
+    let (expected_pixels, remainder) = rgba.as_chunks::<4>();
+    assert!(remainder.is_empty());
+    for (actual, expected) in output.iter().zip(expected_pixels) {
+        assert!((actual.red().get() - expected[0]).abs() < 1.0e-6);
+        assert!((actual.green().get() - expected[1]).abs() < 1.0e-6);
+        assert!((actual.blue().get() - expected[2]).abs() < 1.0e-6);
+        assert_eq!(expected[3].to_bits(), 0.0f32.to_bits());
+    }
+    assert!(output[0].red().get() > output[1].red().get());
+    assert!(output[1].red().get() > output[8].red().get());
 }

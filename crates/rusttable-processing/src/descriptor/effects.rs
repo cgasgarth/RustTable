@@ -9,7 +9,7 @@ use super::{
 
 #[must_use]
 pub fn bloom_descriptor() -> OperationDescriptor {
-    effect_descriptor(
+    let mut descriptor = effect_descriptor(
         "bloom",
         "rusttable.bloom",
         vec![
@@ -19,7 +19,11 @@ pub fn bloom_descriptor() -> OperationDescriptor {
         ],
         "operation.bloom",
         "bloom",
-    )
+        "display-referred-lab",
+        lab_effect_io(),
+    );
+    descriptor.mask_blend.consumes_mask = true;
+    descriptor
 }
 
 #[must_use]
@@ -35,6 +39,8 @@ pub fn soften_descriptor() -> OperationDescriptor {
         ],
         "operation.soften",
         "soften",
+        "display-linear",
+        rgb_effect_io(),
     )
 }
 
@@ -44,6 +50,8 @@ fn effect_descriptor(
     parameters: Vec<ParameterDescriptor>,
     label_key: &str,
     control: &str,
+    stage: &str,
+    io: InputOutputContract,
 ) -> OperationDescriptor {
     OperationDescriptor {
         id: DescriptorId::new(compatibility_name, rust_id, 1, 1, 1).expect("static ID"),
@@ -53,7 +61,7 @@ fn effect_descriptor(
             .insert(OperationFlags::ANALYSIS)
             .insert(OperationFlags::HISTORY_VISIBLE)
             .insert(OperationFlags::BLENDING),
-        stage: "display-linear".to_owned(),
+        stage: stage.to_owned(),
         roi: RoiKind::FullImage,
         tiling: TilingContract {
             overlap_pixels: 0,
@@ -75,7 +83,7 @@ fn effect_descriptor(
             precision: "f32".to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
         },
-        io: effect_io(),
+        io,
         mask_blend: MaskBlendContract {
             consumes_mask: false,
             publishes_mask: false,
@@ -126,11 +134,25 @@ fn scalar_with_unit(
     }
 }
 
-fn effect_io() -> InputOutputContract {
+fn rgb_effect_io() -> InputOutputContract {
     let image = ImagePredicate {
         channels: 3,
         alpha: AlphaPolicy::Preserve,
         encodings: vec![ColorEncoding::LinearSrgbD65],
+        nonfinite: NonFinitePolicy::Reject,
+    };
+    InputOutputContract {
+        input: image.clone(),
+        output: image,
+        derives_output_encoding: false,
+    }
+}
+
+fn lab_effect_io() -> InputOutputContract {
+    let image = ImagePredicate {
+        channels: 4,
+        alpha: AlphaPolicy::Preserve,
+        encodings: vec![ColorEncoding::LabD50],
         nonfinite: NonFinitePolicy::Reject,
     };
     InputOutputContract {
