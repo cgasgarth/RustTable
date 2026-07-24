@@ -15,6 +15,7 @@ rusttable-catalog-store.workspace = true
 rusttable-diagnostics.workspace = true
 rusttable-display-profile.workspace = true
 rusttable-export.workspace = true
+rusttable-gpu.workspace = true
 rusttable-core.workspace = true
 rusttable-color.workspace = true
 rusttable-image.workspace = true
@@ -36,6 +37,10 @@ tracing.workspace = true
 
 [dev-dependencies]
 rusttable-testkit.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2.workspace = true
+objc2-app-kit.workspace = true
 
 [[test]]
 name = "darkroom_shell_runtime_smoke"

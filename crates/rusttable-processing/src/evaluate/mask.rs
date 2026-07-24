@@ -1,9 +1,40 @@
 use super::{EvaluationError, blend};
-use crate::{LinearRgb, PipelineStepIndex, RasterDimensions, RgbChannel};
+use crate::{LinearRgb, PipelineStepIndex, ProcessingOperationKind, RasterDimensions, RgbChannel};
 use rusttable_core::OperationId;
+use rusttable_masks::MaskRaster;
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct OperationMaskRoute<'a> {
+    native_values: Option<&'a [f32]>,
+    working_rgb_blend: Option<&'a MaskRaster>,
+}
+
+impl<'a> OperationMaskRoute<'a> {
+    pub(super) fn new(kind: &ProcessingOperationKind, mask: Option<&'a MaskRaster>) -> Self {
+        if matches!(kind, ProcessingOperationKind::Shadhi { .. }) {
+            Self {
+                native_values: mask.map(MaskRaster::values),
+                working_rgb_blend: None,
+            }
+        } else {
+            Self {
+                native_values: None,
+                working_rgb_blend: mask,
+            }
+        }
+    }
+
+    pub(super) const fn native_values(self) -> Option<&'a [f32]> {
+        self.native_values
+    }
+
+    pub(super) const fn working_rgb_blend(self) -> Option<&'a MaskRaster> {
+        self.working_rgb_blend
+    }
+}
 
 pub(super) fn validate_operation_mask(
-    mask: &rusttable_masks::MaskRaster,
+    mask: &MaskRaster,
     pixel_count: usize,
     dimensions: RasterDimensions,
     step_index: PipelineStepIndex,
@@ -32,7 +63,7 @@ pub(super) fn validate_operation_mask(
 pub(super) fn apply_mask_blend(
     pixels: &mut [LinearRgb],
     before: &[LinearRgb],
-    mask: &rusttable_masks::MaskRaster,
+    mask: &MaskRaster,
     step_index: PipelineStepIndex,
     operation_id: OperationId,
     pixel_index_offset: usize,

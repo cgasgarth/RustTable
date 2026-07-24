@@ -50,6 +50,100 @@ export interface CommandResult {
 export type CommandRunner = (request: CommandRequest) => Promise<CommandResult>;
 export type BundleIdentifierReader = (bundlePath: string) => Promise<string>;
 
+export const renderComputerUseWindowScript = (bundleIdentifier: string): string => {
+  if (!/^[A-Za-z0-9.-]+$/.test(bundleIdentifier)) {
+    throw new Error('Computer Use bundle identifier contains unsupported characters.');
+  }
+  return `
+ObjC.import('AppKit');
+const bundleIdentifier = ${JSON.stringify(bundleIdentifier)};
+const systemEvents = Application('System Events');
+const targetApplication = Application(bundleIdentifier);
+targetApplication.activate();
+
+function targetWindow() {
+  const processes = systemEvents.applicationProcesses.whose({ bundleIdentifier })();
+  if (processes.length === 0) return null;
+  const windows = processes[0].windows();
+  return windows.length === 0 ? null : { process: processes[0], window: windows[0] };
+}
+
+let target = null;
+for (let attempt = 0; attempt < 200 && target === null; attempt += 1) {
+  target = targetWindow();
+  if (target === null) delay(0.05);
+}
+if (target === null) throw new Error('RustTable window did not become available.');
+
+const fullScreenAttributes = target.window.attributes.whose({ name: 'AXFullScreen' })();
+if (fullScreenAttributes.length > 0) {
+  fullScreenAttributes[0].value = false;
+  for (let attempt = 0; attempt < 200 && fullScreenAttributes[0].value(); attempt += 1) {
+    delay(0.05);
+  }
+  if (fullScreenAttributes[0].value()) {
+    throw new Error('RustTable remained in native macOS full-screen mode.');
+  }
+}
+
+const screen = $.NSScreen.mainScreen;
+const frame = screen.frame;
+const visible = screen.visibleFrame;
+const left = Math.round(Number(visible.origin.x));
+const top = Math.round(Number(frame.size.height - visible.origin.y - visible.size.height));
+const width = Math.round(Number(visible.size.width));
+const height = Math.round(Number(visible.size.height));
+target.window.position = [left, top];
+target.window.size = [width, height];
+target.process.frontmost = true;
+
+const tolerance = 8;
+let geometryMatches = false;
+for (let attempt = 0; attempt < 200 && !geometryMatches; attempt += 1) {
+  const position = target.window.position();
+  const size = target.window.size();
+  geometryMatches =
+    Math.abs(position[0] - left) <= tolerance &&
+    Math.abs(position[1] - top) <= tolerance &&
+    Math.abs(position[0] + size[0] - left - width) <= tolerance &&
+    Math.abs(position[1] + size[1] - top - height) <= tolerance;
+  if (!geometryMatches) delay(0.05);
+}
+if (!geometryMatches) throw new Error('RustTable did not fill the usable macOS working area.');
+
+const subroleAttributes = target.window.attributes.whose({ name: 'AXSubrole' })();
+if (subroleAttributes.length === 0 || subroleAttributes[0].value() !== 'AXStandardWindow') {
+  throw new Error('RustTable Computer Use requires a standard decorated macOS window.');
+}
+const hasCloseButton = target.window.buttons().some((button) => {
+  const attributes = button.attributes.whose({ name: 'AXSubrole' })();
+  return attributes.length > 0 && attributes[0].value() === 'AXCloseButton';
+});
+if (!hasCloseButton) throw new Error('RustTable Computer Use window is missing macOS traffic lights.');
+`.trim();
+};
+
+export const launchComputerUseApp = async ({
+  appPath,
+  bundleIdentifier = RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER,
+  run,
+}: {
+  appPath: string;
+  bundleIdentifier?: string;
+  run: CommandRunner;
+}): Promise<void> => {
+  await run({
+    args: ['-a', appPath],
+    command: 'open',
+    label: 'launch RustTable',
+  });
+  await run({
+    args: ['-l', 'JavaScript', '-e', renderComputerUseWindowScript(bundleIdentifier)],
+    command: 'osascript',
+    label: 'size RustTable for Computer Use',
+  });
+};
+
 export interface ComputerUseInstallOptions {
   installPath: string;
   shouldBuild: boolean;

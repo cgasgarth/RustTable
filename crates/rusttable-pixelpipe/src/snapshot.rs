@@ -490,6 +490,26 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update([24]);
             hasher.update(config.parameters().to_bytes());
         }
+        ProcessingOperationKind::Shadhi { config } => {
+            hasher.update([25]);
+            hasher.update(
+                rusttable_processing::operations::shadhi::ShadhiParametersV5 {
+                    order: config.order(),
+                    radius: config.radius(),
+                    shadows: config.shadows(),
+                    whitepoint: config.whitepoint(),
+                    highlights: config.highlights(),
+                    reserved2: config.reserved2(),
+                    compress: config.compress(),
+                    shadows_ccorrect: config.shadows_ccorrect(),
+                    highlights_ccorrect: config.highlights_ccorrect(),
+                    flags: config.flags(),
+                    low_approximation: config.low_approximation(),
+                    shadhi_algo: config.shadhi_algo().id(),
+                }
+                .to_bytes(),
+            );
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

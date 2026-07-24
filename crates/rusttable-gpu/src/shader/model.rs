@@ -78,6 +78,7 @@ impl ShaderIdentity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NumericalClass {
     F32Point,
+    F32Neighborhood,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

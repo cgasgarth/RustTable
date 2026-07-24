@@ -28,6 +28,10 @@ impl SourceCatalog {
             include_str!("../../shaders/point.wgsl").to_owned(),
         );
         sources.insert(
+            "shaders/bilateral.wgsl".to_owned(),
+            include_str!("../../shaders/bilateral.wgsl").to_owned(),
+        );
+        sources.insert(
             "shaders/includes/point_common.wgsl".to_owned(),
             include_str!("../../shaders/includes/point_common.wgsl").to_owned(),
         );
@@ -42,19 +46,14 @@ impl SourceCatalog {
         self.sources.get(alias).map(String::as_str)
     }
 
-    pub(crate) fn aliases(&self) -> impl Iterator<Item = &str> {
-        self.sources.keys().map(String::as_str)
-    }
-
     pub(crate) fn source_tree_hash(&self, root: &str) -> Result<String, ShaderError> {
         let mut hasher = Sha256::new();
-        for alias in self
-            .aliases()
-            .filter(|alias| *alias == root || alias.starts_with("shaders/includes/"))
-        {
+        let mut aliases = BTreeSet::new();
+        self.collect_hash_sources(root, &mut aliases)?;
+        for alias in aliases {
             let bytes = self
-                .get(alias)
-                .ok_or_else(|| ShaderError::SourceNotFound((*alias).to_owned()))?
+                .get(&alias)
+                .ok_or_else(|| ShaderError::SourceNotFound(alias.clone()))?
                 .as_bytes();
             hasher.update(alias.as_bytes());
             hasher.update([0]);
@@ -62,6 +61,27 @@ impl SourceCatalog {
             hasher.update([0]);
         }
         Ok(hex_digest(hasher.finalize().into()))
+    }
+
+    fn collect_hash_sources(
+        &self,
+        alias: &str,
+        aliases: &mut BTreeSet<String>,
+    ) -> Result<(), ShaderError> {
+        if !aliases.insert(alias.to_owned()) {
+            return Ok(());
+        }
+        let source = self
+            .get(alias)
+            .ok_or_else(|| ShaderError::SourceNotFound(alias.to_owned()))?;
+        for include in source.lines().filter_map(|line| {
+            line.trim()
+                .strip_prefix("// rusttable:include ")
+                .map(str::trim)
+        }) {
+            self.collect_hash_sources(include, aliases)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn expand(
@@ -134,7 +154,7 @@ fn expand_source(
     stack.push(alias.to_owned());
     let mut output = String::new();
     let mut line_aliases = Vec::new();
-    for line in source.lines() {
+    for (source_line, line) in source.lines().enumerate() {
         let trimmed = line.trim();
         if let Some(include) = trimmed.strip_prefix("// rusttable:include ") {
             let include = include.trim();
@@ -162,7 +182,7 @@ fn expand_source(
             let substituted = substitute_line(line, substitutions)?;
             output.push_str(&substituted);
             output.push('\n');
-            let line = u32::try_from(line_aliases.len() + 1).unwrap_or(u32::MAX);
+            let line = u32::try_from(source_line + 1).unwrap_or(u32::MAX);
             line_aliases.push(SourceSpanAlias {
                 source_alias: alias.to_owned(),
                 line,
@@ -242,6 +262,54 @@ mod tests {
         let second = expand_template(source, &includes, &substitutions).expect("expansion");
         assert_eq!(first, second);
         assert!(first.contains("256u"));
+    }
+
+    #[test]
+    fn source_tree_hash_ignores_unrelated_shader_includes() {
+        let mut catalog = SourceCatalog::checked_in();
+        let before = catalog
+            .source_tree_hash("shaders/point.wgsl")
+            .expect("point hash");
+        catalog.sources.insert(
+            "shaders/includes/unrelated.wgsl".to_owned(),
+            "const UNRELATED: u32 = 1u;\n".to_owned(),
+        );
+        let after = catalog
+            .source_tree_hash("shaders/point.wgsl")
+            .expect("point hash");
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn root_lines_after_an_include_keep_source_local_line_numbers() {
+        let catalog = SourceCatalog {
+            sources: BTreeMap::from([
+                (
+                    "shaders/root.wgsl".to_owned(),
+                    "// rusttable:include shaders/includes/common.wgsl\n\
+                     const ROOT_VALUE: u32 = 2u;\n"
+                        .to_owned(),
+                ),
+                (
+                    "shaders/includes/common.wgsl".to_owned(),
+                    "const INCLUDED_A: u32 = 0u;\nconst INCLUDED_B: u32 = 1u;\n".to_owned(),
+                ),
+            ]),
+        };
+
+        let expanded = catalog
+            .expand("shaders/root.wgsl", &BTreeMap::new())
+            .expect("expansion");
+
+        assert_eq!(expanded.line_aliases.len(), 3);
+        assert_eq!(
+            expanded.line_aliases[2],
+            SourceSpanAlias {
+                source_alias: "shaders/root.wgsl".to_owned(),
+                line: 2,
+                column: 1,
+            }
+        );
     }
 
     #[test]

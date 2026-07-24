@@ -66,7 +66,7 @@ pub use failure::{
 };
 pub use gpu::{
     PixelpipeBackend, PixelpipeExecutionReceipt, PixelpipeExecutionResult,
-    PixelpipeExecutionService, PixelpipeTilingReceipt,
+    PixelpipeExecutionService, PixelpipeGpuFallback, PixelpipeTilingReceipt,
 };
 pub use histogram::{
     HistogramAggregationError, HistogramAggregator, HistogramChannel, HistogramChannelModel,

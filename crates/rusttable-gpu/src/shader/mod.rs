@@ -11,6 +11,7 @@ pub use model::{
     ShaderEntryId, ShaderError, ShaderIdentity, ShaderManifest, ShaderReflection, SourceSpanAlias,
 };
 pub use registry::ShaderRegistry;
+pub(crate) use registry::{BILATERAL_ENTRY_CONTRACTS, BilateralEntryContract, BindingContract};
 pub use source::{ExpandedShaderSource, expand_template, validate_source_alias};
 
 pub fn validate_checked_in() -> Result<&'static ShaderRegistry, ShaderError> {

@@ -50,11 +50,9 @@ const UNBOUND_GAUSSIAN: u32 = 64;
 const UNBOUND_BILATERAL: u32 = 128;
 const LAB_MINIMUM: [f32; 4] = [0.0, -128.0, -128.0, 0.0];
 const LAB_MAXIMUM: [f32; 4] = [100.0, 128.0, 128.0, 1.0];
-const BILATERAL_RANGE_SIGMA: f32 = 100.0;
-const MAX_BILATERAL_SUPPORT: i32 = 32;
 
 mod execution;
-pub use execution::{ShadhiPixel, ShadhiPlan, ShadhiReceipt};
+pub use execution::{ShadhiBilateralRequest, ShadhiPixel, ShadhiPlan, ShadhiReceipt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShadhiAlgorithm {

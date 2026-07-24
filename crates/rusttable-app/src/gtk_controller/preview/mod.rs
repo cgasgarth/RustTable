@@ -8,6 +8,7 @@ use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::PhotoId;
 use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_image::ImageDimensions;
+use rusttable_pixelpipe::CancellationScope;
 use rusttable_ui::PresentationStatus;
 
 use crate::CatalogPreviewError;
@@ -21,7 +22,7 @@ use crate::workspace::preview_loader::WorkspacePreviewError;
 use crate::workspace::{
     SelectedPreview,
     preview_loader::{
-        load_selected_preview_from_repository_for_edit_with_generation,
+        load_selected_preview_from_repository_for_edit_with_cancellation,
         load_selected_preview_with_generation,
     },
 };
@@ -100,13 +101,15 @@ impl GtkPreviewController {
         }
     }
 
-    /// Renders the exact edit identity captured by the application publication coordinator.
+    /// Renders the exact edit identity and cancellation scope captured by the
+    /// application publication coordinator.
     pub(crate) fn render_selected_with_generation_for_edit(
         catalog: &GtkCatalogController,
         diagnostics: &AppDiagnostics,
         edit_id: rusttable_core::EditId,
         edit_revision: rusttable_core::Revision,
         generation: u64,
+        cancellation: &CancellationScope,
         display_profile: Option<&DisplayProfileSnapshot>,
     ) -> GtkPreviewState {
         let Some(photo_id) = catalog.selected_photo() else {
@@ -131,13 +134,14 @@ impl GtkPreviewController {
         let result = RedbCatalogRepository::open(ready.location().catalog_path())
             .map_err(WorkspacePreviewError::Catalog)
             .and_then(|repository| {
-                load_selected_preview_from_repository_for_edit_with_generation(
+                load_selected_preview_from_repository_for_edit_with_cancellation(
                     &repository,
                     ready.location().source_root(),
                     photo_id,
                     edit_id,
                     edit_revision,
                     generation,
+                    cancellation,
                 )
             });
         match result {

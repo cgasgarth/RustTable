@@ -1,12 +1,14 @@
 #![allow(clippy::float_cmp)]
 
 use rusttable_core::{
-    FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+    Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+    PhotoId, Revision,
 };
 use rusttable_processing::{
     CLAHE_HISTOGRAM_ENTRIES, CLAHE_PARAMETER_BYTES, CLAHE_SCHEMA_VERSION, ClaheConfig,
-    ClaheHistory, ClaheParametersV1, ClahePixel, ClahePlan, RasterDimensions, builtin_registry,
-    descriptor,
+    ClaheHistory, ClaheParametersV1, ClahePixel, ClahePlan, CompiledOperationGraph,
+    EvaluationError, FiniteF32, LinearRgb, RasterDimensions, WorkingRgbImage, builtin_registry,
+    descriptor, prepare_basicadj_plans_with_cancellation,
 };
 
 fn dimensions(width: u32, height: u32) -> RasterDimensions {
@@ -176,4 +178,63 @@ fn descriptor_registry_and_operation_compilation_are_deprecated_v1_seams() {
             )
             .is_some_and(|capability| capability.available)
     );
+}
+
+#[test]
+fn cancellable_plan_preparation_cancels_clahe_between_output_rows() {
+    let operation_id = OperationId::new(474).expect("operation ID");
+    let operation = Operation::new(
+        operation_id,
+        OperationKey::new("rusttable.clahe").expect("operation key"),
+        true,
+        [
+            (
+                ParameterName::new("radius").expect("parameter name"),
+                ParameterValue::Scalar(FiniteF64::new(2.0).expect("finite radius")),
+            ),
+            (
+                ParameterName::new("slope").expect("parameter name"),
+                ParameterValue::Scalar(FiniteF64::new(2.0).expect("finite slope")),
+            ),
+        ],
+    )
+    .expect("operation");
+    let edit = Edit::from_parts(
+        EditId::new(1).expect("edit ID"),
+        PhotoId::new(2).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [operation],
+    )
+    .expect("edit");
+    let graph = CompiledOperationGraph::compile(&edit).expect("graph");
+    let dimensions = dimensions(7, 5);
+    let input = WorkingRgbImage::new(
+        dimensions,
+        (0_u8..35)
+            .map(|index| {
+                let value = f32::from(index) / 40.0;
+                let value = FiniteF32::new(value).expect("finite sample");
+                LinearRgb::new(value, value, value)
+            })
+            .collect(),
+    )
+    .expect("working image");
+    let polls = std::cell::Cell::new(0_usize);
+
+    let error = prepare_basicadj_plans_with_cancellation(&graph, &input, || {
+        let next = polls.get() + 1;
+        polls.set(next);
+        next >= 4
+    })
+    .expect_err("mid-filter cancellation must not publish a partial plan set");
+
+    assert_eq!(
+        error,
+        EvaluationError::Cancelled {
+            step_index: rusttable_processing::PipelineStepIndex::new(0),
+            operation_id,
+        }
+    );
+    assert_eq!(polls.get(), 4);
 }

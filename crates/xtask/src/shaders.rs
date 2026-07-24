@@ -68,8 +68,31 @@ fn smoke(root: &Path, qualified_backends: bool, cpu_parity: bool) -> Result {
     }
     if cpu_parity {
         for entry in registry.entries() {
-            if entry.reflection.bindings.len() != 3
-                || entry.reflection.workgroup_size != [256, 1, 1]
+            let identity = &entry.identity;
+            let expected = match (
+                identity.program_id.as_str(),
+                identity.entry_point_id.as_str(),
+            ) {
+                ("rusttable.point", "basicadj") => (4, [256, 1, 1]),
+                ("rusttable.point", _) => (3, [256, 1, 1]),
+                ("rusttable.bilateral", "zero" | "splat" | "slice" | "slice_to_output") => (
+                    match identity.entry_point_id.as_str() {
+                        "zero" => 2,
+                        "splat" => 3,
+                        _ => 5,
+                    },
+                    [16, 16, 1],
+                ),
+                ("rusttable.bilateral", "blur_line" | "blur_line_z") => (3, [8, 8, 1]),
+                _ => {
+                    return Err(format!(
+                        "shader smoke: unrecognized registered entry {}",
+                        entry.id().stable_name()
+                    ));
+                }
+            };
+            if entry.reflection.bindings.len() != expected.0
+                || entry.reflection.workgroup_size != expected.1
             {
                 return Err(format!(
                     "shader smoke: binding contract failed for {}",
@@ -134,6 +157,17 @@ pub(crate) fn verify_source_map(root: &Path) -> Result {
         {
             return Err(format!(
                 "shader source map: deferred {id} has no owner issue"
+            ));
+        }
+    }
+    for required in [
+        "kernel-source-bilateral",
+        "host-bilateral-runtime",
+        "shadhi-bilateral-production-route",
+    ] {
+        if !ids.contains(required) {
+            return Err(format!(
+                "shader source map: required bilateral responsibility {required} is missing"
             ));
         }
     }

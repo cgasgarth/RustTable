@@ -3,12 +3,12 @@ use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
-use rusttable_image::{ColorEncoding, SourceColor, SourceColorFallback};
+use rusttable_image::{ColorEncoding, Orientation, SourceColor, SourceColorFallback};
 use rusttable_pixelpipe::{
     CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
     CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuTilePlan,
     CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel,
+    RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
 };
 use rusttable_processing::{
     CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
@@ -598,6 +598,159 @@ fn encoded_and_linear_ramps_share_working_values_and_receipts_keep_evidence() {
 }
 
 #[test]
+fn bare_display_p3_descriptors_use_their_declared_primaries_and_transfer() {
+    let execute = |encoding, source_color, pixel| {
+        let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
+        let mut descriptor = RgbaF32Descriptor::new(dimensions, encoding);
+        if let Some(source_color) = source_color {
+            descriptor = descriptor.with_source_color(source_color);
+        }
+        let snapshot = CpuPixelpipeSnapshot::new(
+            RgbaF32Image::new(descriptor, vec![pixel]).expect("P3 input"),
+            graph(Vec::new()),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect("P3 execution")
+            .image()
+            .pixels()[0]
+    };
+
+    for (descriptor_encoding, source_encoding, pixel) in [
+        (
+            RgbaF32ColorEncoding::DisplayP3D65,
+            ColorEncoding::DisplayP3D65,
+            RgbaF32Pixel::new(0.8, 0.2, 0.1, 0.7),
+        ),
+        (
+            RgbaF32ColorEncoding::LinearDisplayP3D65,
+            ColorEncoding::LinearDisplayP3D65,
+            RgbaF32Pixel::new(0.3, 0.1, 0.2, 0.7),
+        ),
+    ] {
+        let bare = execute(descriptor_encoding, None, pixel);
+        let explicit = execute(
+            descriptor_encoding,
+            Some(SourceColor::declared(source_encoding).expect("declared P3")),
+            pixel,
+        );
+        for (actual, expected) in [
+            (bare.red(), explicit.red()),
+            (bare.green(), explicit.green()),
+            (bare.blue(), explicit.blue()),
+            (bare.alpha(), explicit.alpha()),
+        ] {
+            assert!((actual - expected).abs() <= 0.000_001);
+        }
+    }
+}
+
+#[test]
+fn empty_full_export_is_idempotent_after_encoded_srgb_and_p3_reingress() {
+    let dimensions = RasterDimensions::new(2, 1).expect("dimensions");
+    let executor = CpuPixelpipeExecutor;
+
+    for (encoding, source_encoding, pixels) in [
+        (
+            RgbaF32ColorEncoding::SrgbD65,
+            ColorEncoding::SrgbD65,
+            vec![
+                RgbaF32Pixel::new(0.8, 0.2, 0.1, 0.4),
+                RgbaF32Pixel::new(0.1, 0.6, 0.3, 0.9),
+            ],
+        ),
+        (
+            RgbaF32ColorEncoding::DisplayP3D65,
+            ColorEncoding::DisplayP3D65,
+            vec![
+                RgbaF32Pixel::new(0.7, 0.3, 0.2, 0.4),
+                RgbaF32Pixel::new(0.2, 0.5, 0.8, 0.9),
+            ],
+        ),
+    ] {
+        let source_color = SourceColor::declared(source_encoding).expect("declared source");
+        let descriptor = RgbaF32Descriptor::with_source_representation(
+            dimensions,
+            encoding,
+            RgbaF32SourceRepresentation::F16,
+        )
+        .with_source_orientation(Orientation::Transverse)
+        .with_source_color(source_color);
+        let input = RgbaF32Image::new(descriptor, pixels).expect("encoded input");
+        let first = executor
+            .execute(&CpuPixelpipeSnapshot::new(
+                input,
+                graph(Vec::new()),
+                CpuPixelpipeOutputMode::FullExport,
+            ))
+            .expect("first full export");
+        let second = executor
+            .execute(&CpuPixelpipeSnapshot::new(
+                first.image().clone(),
+                graph(Vec::new()),
+                CpuPixelpipeOutputMode::FullExport,
+            ))
+            .expect("second full export");
+
+        assert_eq!(
+            first.image().descriptor(),
+            descriptor.with_dimensions_and_color_encoding(
+                dimensions,
+                RgbaF32ColorEncoding::LinearSrgbD65,
+            )
+        );
+        assert_eq!(second.image(), first.image());
+    }
+}
+
+#[test]
+fn singleton_censorize_and_clahe_preserve_the_exact_source_descriptor_evidence() {
+    let dimensions = RasterDimensions::new(5, 3).expect("dimensions");
+    let source_color = SourceColor::declared(ColorEncoding::SrgbD65).expect("declared sRGB");
+    let descriptor = RgbaF32Descriptor::with_source_representation(
+        dimensions,
+        RgbaF32ColorEncoding::SrgbD65,
+        RgbaF32SourceRepresentation::U8,
+    )
+    .with_source_orientation(Orientation::Transpose)
+    .with_source_color(source_color);
+    let pixels = tiled_image().pixels().to_vec();
+    let expected = descriptor
+        .with_dimensions_and_color_encoding(dimensions, RgbaF32ColorEncoding::LinearSrgbD65);
+
+    for (id, key, parameters) in [
+        (
+            0xc1,
+            "rusttable.censorize",
+            vec![
+                ("radius_1", 1.0),
+                ("pixelate", 2.0),
+                ("radius_2", 1.0),
+                ("noise", 0.0),
+            ],
+        ),
+        (
+            0xc2,
+            "rusttable.clahe",
+            vec![("radius", 2.0), ("slope", 2.0)],
+        ),
+    ] {
+        let input = RgbaF32Image::new(descriptor, pixels.clone()).expect("singleton input");
+        let result = CpuPixelpipeExecutor
+            .execute(&CpuPixelpipeSnapshot::new(
+                input,
+                graph(vec![operation(id, key, &parameters)]),
+                CpuPixelpipeOutputMode::FullExport,
+            ))
+            .expect("singleton full export");
+
+        assert_eq!(result.image().descriptor(), expected);
+        assert_eq!(result.receipt().output_descriptor(), expected);
+    }
+}
+
+#[test]
 fn cache_identity_distinguishes_declared_and_fallback_source_evidence() {
     let dimensions = RasterDimensions::new(1, 1).expect("nonzero dimensions");
     let pixels = vec![RgbaF32Pixel::new(0.5, 0.5, 0.5, 1.0)];
@@ -618,6 +771,35 @@ fn cache_identity_distinguishes_declared_and_fallback_source_evidence() {
     let fallback = snapshot(SourceColor::fallback(SourceColorFallback::EncodedSrgb));
 
     assert_ne!(declared.identity(), fallback.identity());
+}
+
+#[test]
+fn external_descriptor_without_source_color_is_rejected_before_srgb_fallback() {
+    let profile = ProfileId::from_content(
+        b"matrix profile identity without source evidence",
+        ProfileClass::Input,
+        ProfileModel::Matrix,
+        Pcs::XyzD50,
+        ProfileParserVersion::new(1).expect("parser version"),
+    )
+    .expect("profile identity");
+    let input = RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            RasterDimensions::new(1, 1).expect("dimensions"),
+            RgbaF32ColorEncoding::External(profile),
+        ),
+        vec![RgbaF32Pixel::new(0.25, 0.5, 0.75, 1.0)],
+    )
+    .expect("external input");
+    let snapshot =
+        CpuPixelpipeSnapshot::new(input, graph(Vec::new()), CpuPixelpipeOutputMode::Preview);
+
+    assert_eq!(
+        CpuPixelpipeExecutor.execute(&snapshot),
+        Err(CpuPixelpipeError::MissingSourceColor {
+            actual: RgbaF32ColorEncoding::External(profile),
+        })
+    );
 }
 
 #[test]

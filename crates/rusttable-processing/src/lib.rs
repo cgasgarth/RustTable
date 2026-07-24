@@ -17,6 +17,7 @@
 #![doc = "```"]
 
 mod color;
+pub mod common;
 pub mod defringe_compatibility;
 pub mod demosaic;
 pub mod descriptor;
@@ -56,9 +57,11 @@ pub use descriptor::{
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, DistortionBorderMode, DistortionInterpolation,
     DistortionPlan, DistortionSamplingPolicy, EvaluatedFrame, EvaluationError, EvaluationOutput,
-    FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan, evaluate,
-    evaluate_graph_at_frame_boundaries, evaluate_graph_at_frame_boundaries_with_masks,
-    evaluate_output, graph_has_discrete_geometry, graph_has_frame_geometry, prepare_basicadj_plans,
+    FrameBoundaryMode, FrameBoundaryOptions, FrameBoundaryPlan, ShadhiBilateralBoundaryError,
+    ShadhiBilateralEvaluationError, evaluate, evaluate_bilateral_shadhi_with,
+    evaluate_bilateral_shadhi_with_cancellation, evaluate_graph_at_frame_boundaries,
+    evaluate_graph_at_frame_boundaries_with_masks, evaluate_output, graph_has_discrete_geometry,
+    graph_has_frame_geometry, prepare_basicadj_plans, prepare_basicadj_plans_with_cancellation,
 };
 pub use exposure::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
@@ -140,6 +143,7 @@ pub use operations::retouch::{
     RetouchConfigError, RetouchExecutionError, RetouchFillMode, RetouchForm, RetouchParameters,
     RetouchPixel, RetouchPlan, RetouchReceipt, RetouchScale,
 };
+pub use operations::shadhi::ShadhiBilateralRequest;
 pub use operations::spots::{
     SPOTS_COMPATIBILITY_ID, SPOTS_IMPLEMENTATION_VERSION, SPOTS_MAX_ENTRIES,
     SPOTS_PARAMETER_BYTES_V1, SPOTS_PARAMETER_BYTES_V2, SPOTS_RUST_ID, SPOTS_SCHEMA_VERSION,
@@ -181,8 +185,10 @@ pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
     evaluate_graph, evaluate_graph_output_with_basicadj_plans,
-    evaluate_graph_output_with_basicadj_plans_and_masks, evaluate_graph_window,
+    evaluate_graph_output_with_basicadj_plans_and_masks,
+    evaluate_graph_output_with_basicadj_plans_and_masks_with_cancellation, evaluate_graph_window,
     evaluate_graph_with_basicadj_plans, evaluate_graph_with_basicadj_plans_and_masks,
+    evaluate_graph_with_basicadj_plans_and_masks_with_cancellation,
 };
 
 pub use operation_stack::{

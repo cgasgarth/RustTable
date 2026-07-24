@@ -4,7 +4,7 @@ use rusttable_core::{FiniteF64, OperationId};
 use rusttable_image::Orientation;
 use sha2::{Digest, Sha256};
 
-use super::{BasicAdjPlanSet, apply_operation_with_profile};
+use super::{BasicAdjPlanSet, apply_operation_with_profile_with_cancellation};
 use crate::operations::{
     clipping::{ClippingInterpolation, ClippingPlan},
     crop::{CropPlan, CropPlanMode},
@@ -17,9 +17,9 @@ use crate::operations::{
     scalepixels::ScalePixelsPlan,
 };
 use crate::{
-    BasicAdjAnalysisRaster, BasicAdjPlan, CompiledOperationGraph, EvaluationError, FiniteF32,
-    LinearRgb, OperationGraphNode, OperationMaskSet, PipelineStepIndex, ProcessingOperationKind,
-    RasterDimensions, TerminalOutputFrame, WorkingRgbImage,
+    BasicAdjAnalysisError, BasicAdjAnalysisRaster, BasicAdjPlan, CompiledOperationGraph,
+    EvaluationError, FiniteF32, LinearRgb, OperationGraphNode, OperationMaskSet, PipelineStepIndex,
+    ProcessingOperationKind, RasterDimensions, TerminalOutputFrame, WorkingRgbImage,
 };
 
 /// Purpose-specific choices needed while resolving shape-changing operations.
@@ -106,6 +106,7 @@ impl FrameBoundaryOptions {
 pub struct FrameBoundaryPlan {
     source_dimensions: RasterDimensions,
     output_dimensions: RasterDimensions,
+    output_source_orientation: Orientation,
     steps: Vec<FramePlanStep>,
     boundary_count: usize,
     identity: [u8; 32],
@@ -168,6 +169,7 @@ impl FrameBoundaryPlan {
         Ok(Self {
             source_dimensions,
             output_dimensions: dimensions,
+            output_source_orientation: source_orientation,
             steps,
             boundary_count,
             identity,
@@ -182,6 +184,15 @@ impl FrameBoundaryPlan {
     #[must_use]
     pub const fn output_dimensions(&self) -> RasterDimensions {
         self.output_dimensions
+    }
+
+    /// Remaining source orientation after the planned geometry boundaries.
+    ///
+    /// A flip boundary consumes this evidence; other geometry preserves it
+    /// for a later automatic flip, including across a pixelpipe re-ingress.
+    #[must_use]
+    pub const fn output_source_orientation(&self) -> Orientation {
+        self.output_source_orientation
     }
 
     #[must_use]
@@ -407,6 +418,7 @@ pub struct EvaluatedFrame {
     alpha: Vec<f32>,
     basicadj_plans: BasicAdjPlanSet,
     frame_plan_identity: [u8; 32],
+    output_source_orientation: Orientation,
 }
 
 #[must_use]
@@ -475,6 +487,12 @@ impl EvaluatedFrame {
     #[must_use]
     pub const fn frame_plan_identity(&self) -> [u8; 32] {
         self.frame_plan_identity
+    }
+
+    /// Source orientation still pending after all frame boundaries.
+    #[must_use]
+    pub const fn output_source_orientation(&self) -> Orientation {
+        self.output_source_orientation
     }
 }
 
@@ -581,7 +599,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() ->
                     ) {
                         terminal_working_pixels = Some(pixels.clone());
                     }
-                    apply_operation_with_profile(
+                    apply_operation_with_profile_with_cancellation(
                         node.pipeline_step_index(),
                         node.operation(),
                         &mut pixels,
@@ -591,6 +609,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() ->
                         &mut frame,
                         &mut terminal_output,
                         masks,
+                        &cancelled,
                     )?;
                 }
             }
@@ -615,6 +634,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() ->
         alpha,
         basicadj_plans,
         frame_plan_identity: plan.identity(),
+        output_source_orientation: plan.output_source_orientation(),
     })
 }
 
@@ -895,8 +915,13 @@ fn resolve_basicadj<F: Fn() -> bool>(
     }
     let raster = BasicAdjAnalysisRaster::new(dimensions, pixels, None)
         .map_err(|error| node_error(node, error.to_string()))?;
-    let plan = BasicAdjPlan::resolve_with_cancellation(*config, raster, cancelled)
-        .map_err(|error| node_error(node, error.to_string()))?;
+    let plan =
+        BasicAdjPlan::resolve_with_cancellation(*config, raster, cancelled).map_err(|error| {
+            match error {
+                BasicAdjAnalysisError::Cancelled => cancelled_error(node),
+                error => node_error(node, error.to_string()),
+            }
+        })?;
     plans.insert(operation.operation_id(), plan);
     Ok(())
 }
@@ -967,7 +992,10 @@ fn step_context<'a>(
 }
 
 fn cancelled_error(node: &OperationGraphNode) -> EvaluationError {
-    node_error(node, "frame-boundary execution was cancelled".to_owned())
+    EvaluationError::Cancelled {
+        step_index: node.pipeline_step_index(),
+        operation_id: node.operation().operation_id(),
+    }
 }
 
 fn node_error(node: &OperationGraphNode, reason: String) -> EvaluationError {

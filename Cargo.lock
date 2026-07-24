@@ -3231,6 +3231,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-app-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
+dependencies = [
+ "bitflags",
+ "objc2",
+ "objc2-foundation",
+]
+
+[[package]]
 name = "objc2-core-foundation"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4038,6 +4049,8 @@ dependencies = [
  "directories",
  "futures",
  "gtk4",
+ "objc2",
+ "objc2-app-kit",
  "rusttable-catalog",
  "rusttable-catalog-store",
  "rusttable-color",
@@ -4045,6 +4058,7 @@ dependencies = [
  "rusttable-diagnostics",
  "rusttable-display-profile",
  "rusttable-export",
+ "rusttable-gpu",
  "rusttable-i18n",
  "rusttable-image",
  "rusttable-image-io",
@@ -4412,6 +4426,8 @@ name = "rusttable-ui"
 version = "0.1.0"
 dependencies = [
  "gtk4",
+ "objc2",
+ "objc2-app-kit",
  "rusttable-camera",
  "rusttable-color",
  "rusttable-core",

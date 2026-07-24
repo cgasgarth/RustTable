@@ -78,12 +78,22 @@ impl RenderedWidget {
 }
 
 pub(super) fn render_widget(widget: &gtk4::Widget) -> RenderedWidget {
-    let allocated_width = widget.allocated_width();
-    let allocated_height = widget.allocated_height();
+    // The automated runtime smoke maps its toplevel transparently so it cannot
+    // disturb the desktop. Snapshot the toplevel child directly: compositor
+    // opacity is intentionally absent while the complete child paint tree and
+    // allocation remain under test.
+    let source = widget
+        .clone()
+        .downcast::<gtk4::Window>()
+        .ok()
+        .and_then(|window| window.child())
+        .unwrap_or_else(|| widget.clone());
+    let allocated_width = source.allocated_width();
+    let allocated_height = source.allocated_height();
     let width = usize::try_from(allocated_width).expect("positive widget width");
     let height = usize::try_from(allocated_height).expect("positive widget height");
     assert!(width > 0 && height > 0, "widget must be allocated");
-    let paintable = gtk4::WidgetPaintable::new(Some(widget));
+    let paintable = gtk4::WidgetPaintable::new(Some(&source));
     let snapshot = gtk4::Snapshot::new();
     paintable.snapshot(
         &snapshot,

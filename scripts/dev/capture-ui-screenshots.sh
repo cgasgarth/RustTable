@@ -5,11 +5,12 @@ usage() {
   cat <<'EOF'
 Usage: bun run screenshot:ui-review -- [options]
 
-Build, install, and capture deterministic RustTable/Darktable Lighttable and Darkroom review PNGs.
+Build, install, and capture RustTable/Darktable Lighttable and Darkroom review PNGs.
 
 Options:
-  --width PIXELS     Capture width (default: 1280)
-  --height PIXELS    Capture height (default: 768)
+  --allow-foreground Acknowledge that this command activates and switches apps
+  --width PIXELS     Capture width (default: current screen usable width)
+  --height PIXELS    Capture height (default: current screen usable height)
   --run-id ID        Output directory name (default: UTC timestamp)
   --reference-app PATH
                      Original Darktable bundle (default: /Applications/darktable.app)
@@ -27,17 +28,22 @@ Output:
 EOF
 }
 
-width=1280
-height=768
+width=""
+height=""
 run_id=""
 reference_app="/Applications/darktable.app"
 reference_dir=""
 refresh_reference=false
 no_build=false
 no_install=false
+allow_foreground=false
 
 while (($#)); do
   case "$1" in
+    --allow-foreground)
+      allow_foreground=true
+      shift
+      ;;
     --width)
       [[ $# -ge 2 ]] || { printf 'error: --width requires a value\n' >&2; exit 2; }
       width="$2"
@@ -87,12 +93,22 @@ while (($#)); do
   esac
 done
 
-[[ "$width" =~ ^[1-9][0-9]*$ ]] || { printf 'error: width must be a positive integer\n' >&2; exit 2; }
-[[ "$height" =~ ^[1-9][0-9]*$ ]] || { printf 'error: height must be a positive integer\n' >&2; exit 2; }
+if [[ -n "$width" || -n "$height" ]]; then
+  [[ -n "$width" && -n "$height" ]] || {
+    printf 'error: --width and --height must be supplied together\n' >&2
+    exit 2
+  }
+  [[ "$width" =~ ^[1-9][0-9]*$ ]] || { printf 'error: width must be a positive integer\n' >&2; exit 2; }
+  [[ "$height" =~ ^[1-9][0-9]*$ ]] || { printf 'error: height must be a positive integer\n' >&2; exit 2; }
+fi
 if [[ -n "$run_id" && ! "$run_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
   printf 'error: run ID may contain only letters, digits, dot, underscore, and hyphen\n' >&2
   exit 2
 fi
+[[ "$allow_foreground" == true ]] || {
+  printf 'error: UI review activates and switches foreground apps; rerun with --allow-foreground\n' >&2
+  exit 2
+}
 [[ "$(uname -s)" == "Darwin" ]] || { printf 'error: UI review capture requires macOS\n' >&2; exit 1; }
 
 for command in bun git open osascript screencapture sips shasum; do
@@ -101,6 +117,35 @@ for command in bun git open osascript screencapture sips shasum; do
     exit 1
   }
 done
+
+working_area="$(
+  osascript -l JavaScript <<'JXA'
+ObjC.import('AppKit');
+const screen = $.NSScreen.mainScreen;
+const frame = screen.frame;
+const visible = screen.visibleFrame;
+const left = Math.round(Number(visible.origin.x));
+const top = Math.round(Number(frame.size.height - visible.origin.y - visible.size.height));
+const width = Math.round(Number(visible.size.width));
+const height = Math.round(Number(visible.size.height));
+`${left} ${top} ${width} ${height}`;
+JXA
+)"
+read -r capture_x capture_y working_width working_height <<<"$working_area"
+for value in "$capture_x" "$capture_y" "$working_width" "$working_height"; do
+  [[ "$value" =~ ^-?[0-9]+$ ]] || {
+    printf 'error: failed to resolve the current macOS usable working area\n' >&2
+    exit 1
+  }
+done
+if [[ -z "$width" ]]; then
+  width="$working_width"
+  height="$working_height"
+elif (( width > working_width || height > working_height )); then
+  printf 'error: requested %sx%s capture exceeds usable working area %sx%s\n' \
+    "$width" "$height" "$working_width" "$working_height" >&2
+  exit 2
+fi
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
@@ -147,7 +192,23 @@ tell application "System Events"
       tell process "$process_name"
         set frontmost to true
         if exists window 1 then
-          set position of window 1 to {0, 0}
+          if exists attribute "AXFullScreen" of window 1 then
+            set value of attribute "AXFullScreen" of window 1 to false
+            repeat 80 times
+              if value of attribute "AXFullScreen" of window 1 is false then exit repeat
+              delay 0.05
+            end repeat
+            if value of attribute "AXFullScreen" of window 1 is true then
+              error "$app_label remained in native macOS full-screen mode"
+            end if
+          end if
+          if value of attribute "AXSubrole" of window 1 is not "AXStandardWindow" then
+            error "$app_label is not a standard decorated macOS window"
+          end if
+          if not (exists (first button of window 1 whose subrole is "AXCloseButton")) then
+            error "$app_label window is missing macOS traffic lights"
+          end if
+          set position of window 1 to {$capture_x, $capture_y}
           set size of window 1 to {$width, $height}
           return
         end if
@@ -208,7 +269,7 @@ tell application "System Events"
   set frontmost_bundle to bundle identifier of first application process whose frontmost is true
 end tell
 if frontmost_bundle is not "$bundle_id" then error "$app_label is not the frontmost application"
-do shell script "/usr/sbin/screencapture -x -R0,0,$width,$height " & quoted form of "$current"
+do shell script "/usr/sbin/screencapture -x -R$capture_x,$capture_y,$width,$height " & quoted form of "$current"
 EOF
     [[ -s "$current" ]] || { printf 'error: empty screenshot for view key %s\n' "$view_key" >&2; exit 1; }
     normalize_capture_dimensions "$current"
@@ -264,6 +325,7 @@ cat >"$output_dir/manifest.json" <<EOF
   "commit": "$commit",
   "dirty": $dirty,
   "dimensions": {"width": $width, "height": $height},
+  "working_area": {"x": $capture_x, "y": $capture_y, "width": $working_width, "height": $working_height},
   "app_bundle": "$app_bundle",
   "reference_app": "$reference_app",
   "reference_dir": "$reference_dir",

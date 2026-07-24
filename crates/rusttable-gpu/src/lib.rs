@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![doc = "GPU execution boundary contracts for the `RustTable` rewrite."]
 
+mod bilateral;
 mod cache;
 mod contracts;
 mod dispatch;
@@ -23,6 +24,9 @@ pub use contracts::{
     Platform, PowerPreference, ProbeLedger, RejectedAdapter, SelectionError, select_adapter,
 };
 
+pub use bilateral::{
+    BilateralGridError, BilateralGridRequest, BilateralGridResult, BilateralSlice,
+};
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
 pub use dispatch::{
     BindingResource, CancellationToken, CommandEncoder, DispatchBatch, DispatchError,

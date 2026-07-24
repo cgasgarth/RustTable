@@ -76,6 +76,27 @@ rust_owner = "crates/rusttable-gpu/src/shader/registry.rs"
 status = "Replaced"
 
 [[responsibility]]
+id = "kernel-source-bilateral"
+upstream_path = "data/kernels/bilateral.cl"
+upstream_symbol = "zero/splat/blur_line/blur_line_z/slice/slice_to_output"
+rust_owner = "crates/rusttable-gpu/shaders/bilateral.wgsl"
+status = "Replaced"
+
+[[responsibility]]
+id = "host-bilateral-runtime"
+upstream_path = "src/common/bilateralcl.c;src/common/bilateralcl.h"
+upstream_symbol = "dt_bilateral_*_cl"
+rust_owner = "crates/rusttable-gpu/src/bilateral.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "shadhi-bilateral-production-route"
+upstream_path = "src/iop/shadhi.c"
+upstream_symbol = "process_cl"
+rust_owner = "crates/rusttable-pixelpipe/src/gpu.rs"
+status = "Replaced"
+
+[[responsibility]]
 id = "unported-operation-kernels"
 upstream_path = "data/kernels/programs.conf"
 upstream_symbol = "unported entries"

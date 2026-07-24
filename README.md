@@ -30,6 +30,24 @@ On macOS, install or replace the canonical Computer Use app:
 bun run install:computer-use
 ```
 
+That explicit launcher activates a normal decorated window and sizes it to the current screen's
+usable working area, preserving the menu bar, title bar, traffic lights, and Dock rather than
+entering native macOS full-screen. Add `-- --no-launch` for installation without foreground UI.
+
+Deliberate side-by-side screenshot review is also foreground-only and requires acknowledgement:
+
+```sh
+bun run screenshot:ui-review -- --allow-foreground
+```
+
+The macOS lifecycle smoke is non-activating by default: it launches the installed app hidden and
+quits it without making RustTable frontmost. Real Command-Q validation is deliberately separate:
+
+```sh
+bun run smoke:macos-computer-use
+bun run smoke:macos-computer-use -- --allow-foreground
+```
+
 ## Current interface
 
 | Lighttable | Darkroom |
@@ -49,7 +67,7 @@ cargo xtask bench compare --help
 cargo xtask dist
 ```
 
-`cargo xtask check` is the complete local commit gate. It runs formatting, strict all-target/all-feature Clippy and tests, rustdoc, numerical and generated-operation validation, export and fixture checks, and standard dependency checks. Post-merge validation may add platform, coverage, packaging, and distribution checks.
+`cargo xtask check` is the complete local commit gate. It runs formatting, strict all-target/all-feature Clippy and tests, rustdoc, numerical and generated-operation validation, export and fixture checks, and standard dependency checks. Its GTK runtime smokes use non-activating test windows and do not launch the foreground screenshot workflow. Post-merge validation may add platform, coverage, packaging, and distribution checks.
 
 ## Contribution model
 

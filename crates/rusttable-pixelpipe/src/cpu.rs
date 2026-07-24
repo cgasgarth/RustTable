@@ -12,9 +12,10 @@ use rusttable_processing::operations::colorin::{
 };
 use rusttable_processing::{
     BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
-    OperationMaskSetError, SourceRgb, SourceRgbImage, SrgbChannel, WorkingRgbImage,
-    convert_working_to_linear_srgb, encode_working_to_srgb,
-    evaluate_graph_with_basicadj_plans_and_masks, prepare_basicadj_plans, to_linear_srgb,
+    OperationMaskSetError, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
+    WorkingRgbImage, convert_working_to_linear_srgb, encode_working_to_srgb,
+    evaluate_graph_with_basicadj_plans_and_masks_with_cancellation, prepare_basicadj_plans,
+    prepare_basicadj_plans_with_cancellation, to_linear_srgb,
 };
 
 use crate::frame::{execute_frame_image, has_frame_geometry};
@@ -73,6 +74,7 @@ impl CpuPixelpipeResult {
 pub enum CpuPixelpipeError {
     Cancelled(CancellationError),
     UnsupportedInputEncoding { actual: RgbaF32ColorEncoding },
+    MissingSourceColor { actual: RgbaF32ColorEncoding },
     UnsupportedProfileTransform { profile: ProfileId },
     SourceColorPlan(String),
     InputBridge { source: RgbaF32ImageError },
@@ -158,8 +160,14 @@ impl CpuPixelpipeExecutor {
                 frame_plan_identity,
             ));
         }
-        let plans = Self::prepare_plans(request)?;
-        let image = Self::execute_image(request, request.input(), &plans, masks.as_ref())?;
+        let plans = Self::prepare_plans_with_cancellation(request, scope)?;
+        let image = Self::execute_image_with_cancellation(
+            request,
+            request.input(),
+            &plans,
+            masks.as_ref(),
+            Some(scope),
+        )?;
         scope
             .child(CancellationStage::Publication)
             .check()
@@ -179,28 +187,7 @@ impl CpuPixelpipeExecutor {
         tile_plan: CpuTilePlan,
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
-        if request.graph().nodes().any(|node| {
-            node.operation().requires_full_image_analysis()
-                || matches!(
-                    node.operation().kind(),
-                    rusttable_processing::ProcessingOperationKind::Highlights { .. }
-                        | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
-                        | rusttable_processing::ProcessingOperationKind::Bloom { .. }
-                        | rusttable_processing::ProcessingOperationKind::Soften { .. }
-                        | rusttable_processing::ProcessingOperationKind::Crop { .. }
-                        | rusttable_processing::ProcessingOperationKind::Flip { .. }
-                        | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
-                        | rusttable_processing::ProcessingOperationKind::ScalePixels { .. }
-                        | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
-                        | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
-                        | rusttable_processing::ProcessingOperationKind::Perspective { .. }
-                        | rusttable_processing::ProcessingOperationKind::Clipping { .. }
-                        | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
-                        | rusttable_processing::ProcessingOperationKind::Grain { .. }
-                        | rusttable_processing::ProcessingOperationKind::Censorize { .. }
-                        | rusttable_processing::ProcessingOperationKind::Clahe { .. }
-                )
-        }) {
+        if requires_full_frame_execution(request) {
             // Both Darktable operations freeze full-image evidence before
             // replacement. Running them independently per tile changes their
             // result, so the legal tiled contract is a full-frame analysis
@@ -236,10 +223,10 @@ impl CpuPixelpipeExecutor {
             )?;
         }
 
-        let output_descriptor = RgbaF32Descriptor::with_source_representation(
+        let output_descriptor = output_descriptor(
+            request.output_mode(),
+            request.input().descriptor(),
             request.input().descriptor().dimensions(),
-            request.output_mode().color_encoding(),
-            request.input().descriptor().source_representation(),
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
@@ -259,28 +246,7 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Allocation)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        if request.graph().nodes().any(|node| {
-            node.operation().requires_full_image_analysis()
-                || matches!(
-                    node.operation().kind(),
-                    rusttable_processing::ProcessingOperationKind::Highlights { .. }
-                        | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
-                        | rusttable_processing::ProcessingOperationKind::Bloom { .. }
-                        | rusttable_processing::ProcessingOperationKind::Soften { .. }
-                        | rusttable_processing::ProcessingOperationKind::Crop { .. }
-                        | rusttable_processing::ProcessingOperationKind::Flip { .. }
-                        | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
-                        | rusttable_processing::ProcessingOperationKind::ScalePixels { .. }
-                        | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
-                        | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
-                        | rusttable_processing::ProcessingOperationKind::Perspective { .. }
-                        | rusttable_processing::ProcessingOperationKind::Clipping { .. }
-                        | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
-                        | rusttable_processing::ProcessingOperationKind::Grain { .. }
-                        | rusttable_processing::ProcessingOperationKind::Censorize { .. }
-                        | rusttable_processing::ProcessingOperationKind::Clahe { .. }
-                )
-        }) {
+        if requires_full_frame_execution(request) {
             scope
                 .child(CancellationStage::Tile)
                 .check()
@@ -292,7 +258,7 @@ impl CpuPixelpipeExecutor {
                 .map_err(CpuPixelpipeError::Cancelled)?;
             return Ok(result);
         }
-        let plans = Self::prepare_plans(request)?;
+        let plans = Self::prepare_plans_with_cancellation(request, scope)?;
         let masks = resolve_masks(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
@@ -315,8 +281,13 @@ impl CpuPixelpipeExecutor {
                 .as_ref()
                 .map(|set| crop_masks(set, tile))
                 .transpose()?;
-            let tile_output =
-                Self::execute_image(request, &tile_input, &plans, tile_masks.as_ref())?;
+            let tile_output = Self::execute_image_with_cancellation(
+                request,
+                &tile_input,
+                &plans,
+                tile_masks.as_ref(),
+                Some(scope),
+            )?;
             assemble_tile(
                 &mut assembled,
                 request.input().descriptor(),
@@ -328,10 +299,10 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Publication)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        let output_descriptor = RgbaF32Descriptor::with_source_representation(
+        let output_descriptor = output_descriptor(
+            request.output_mode(),
+            request.input().descriptor(),
             request.input().descriptor().dimensions(),
-            request.output_mode().color_encoding(),
-            request.input().descriptor().source_representation(),
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
@@ -344,7 +315,21 @@ impl CpuPixelpipeExecutor {
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
+        Self::execute_image_with_cancellation(request, input, plans, masks, None)
+    }
+
+    fn execute_image_with_cancellation(
+        request: &CpuPixelpipeSnapshot,
+        input: &RgbaF32Image,
+        plans: &BasicAdjPlanSet,
+        masks: Option<&OperationMaskSet>,
+        scope: Option<&CancellationScope>,
+    ) -> Result<RgbaF32Image, CpuPixelpipeError> {
         validate_input_encoding(input)?;
+        let node_scope = scope.map(|scope| scope.child(CancellationStage::Node));
+        if let Some(scope) = &node_scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
 
         if let Some(node) = request.graph().nodes().find(|node| {
             matches!(
@@ -354,7 +339,7 @@ impl CpuPixelpipeExecutor {
         }) && request.graph().nodes().count() == 1
             && masks.is_none()
         {
-            return execute_censorize_image(request, input, node);
+            return execute_censorize_image(request, input, node, node_scope.as_ref());
         }
 
         if let Some(node) = request.graph().nodes().find(|node| {
@@ -365,26 +350,26 @@ impl CpuPixelpipeExecutor {
         }) && request.graph().nodes().count() == 1
             && masks.is_none()
         {
-            return execute_clahe_image(request, input, node);
+            return execute_clahe_image(request, input, node, node_scope.as_ref());
         }
 
         let linear_input = to_linear_working(input)?;
-        let evaluated = evaluate_graph_with_basicadj_plans_and_masks(
+        let evaluated = evaluate_graph_with_basicadj_plans_and_masks_with_cancellation(
             request.graph(),
             &linear_input,
             Some(plans),
             masks,
+            || {
+                node_scope
+                    .as_ref()
+                    .is_some_and(|scope| scope.check().is_err())
+            },
         )
-        .map_err(|source| CpuPixelpipeError::Evaluation { source })?;
-        let output_encoding = output_encoding(request, input);
-        let output_descriptor = RgbaF32Descriptor::with_source_representation(
-            input.descriptor().dimensions(),
-            output_encoding,
-            input.descriptor().source_representation(),
-        );
-        let output_pixels = output_pixels(request.output_mode(), &evaluated, input)?;
-        RgbaF32Image::new(output_descriptor, output_pixels)
-            .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+        .map_err(|source| cancellable_evaluation_error(source, node_scope.as_ref()))?;
+        if let Some(scope) = &node_scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        output_from_working(request.output_mode(), input, &evaluated)
     }
 
     fn prepare_plans(request: &CpuPixelpipeSnapshot) -> Result<BasicAdjPlanSet, CpuPixelpipeError> {
@@ -392,6 +377,26 @@ impl CpuPixelpipeExecutor {
         let linear = to_linear_working(request.input())?;
         prepare_basicadj_plans(request.graph(), &linear)
             .map_err(|source| CpuPixelpipeError::Evaluation { source })
+    }
+
+    fn prepare_plans_with_cancellation(
+        request: &CpuPixelpipeSnapshot,
+        scope: &CancellationScope,
+    ) -> Result<BasicAdjPlanSet, CpuPixelpipeError> {
+        validate_input_encoding(request.input())?;
+        let analysis_scope = scope.child(CancellationStage::Analysis);
+        analysis_scope
+            .check()
+            .map_err(CpuPixelpipeError::Cancelled)?;
+        let linear = to_linear_working(request.input())?;
+        let plans = prepare_basicadj_plans_with_cancellation(request.graph(), &linear, || {
+            analysis_scope.check().is_err()
+        })
+        .map_err(|source| cancellable_evaluation_error(source, Some(&analysis_scope)))?;
+        analysis_scope
+            .check()
+            .map_err(CpuPixelpipeError::Cancelled)?;
+        Ok(plans)
     }
 
     fn result_for(
@@ -442,6 +447,7 @@ fn execute_censorize_image(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
     node: &rusttable_processing::OperationGraphNode,
+    scope: Option<&CancellationScope>,
 ) -> Result<RgbaF32Image, CpuPixelpipeError> {
     let linear = to_linear_working(input)?;
     let config = match node.operation().kind() {
@@ -462,10 +468,15 @@ fn execute_censorize_image(
         .collect::<Vec<_>>();
     let plan =
         rusttable_processing::CensorizePlan::new(config, input.descriptor().dimensions(), 1.0, 1.0)
-            .map_err(|source| censorize_evaluation_error(node, &source))?;
+            .map_err(|source| censorize_evaluation_error(node, &source, scope))?;
     let output = plan
-        .execute_with_mask(&rgba, None, node.operation().opacity().get(), || false)
-        .map_err(|source| censorize_evaluation_error(node, &source))?;
+        .execute_with_mask(&rgba, None, node.operation().opacity().get(), || {
+            scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|source| censorize_evaluation_error(node, &source, scope))?;
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
     let rgb = output
         .iter()
         .copied()
@@ -517,10 +528,14 @@ fn execute_censorize_image(
             })
             .collect(),
     };
-    let descriptor = RgbaF32Descriptor::new(
+    let descriptor = output_descriptor(
+        request.output_mode(),
+        input.descriptor(),
         input.descriptor().dimensions(),
-        request.output_mode().color_encoding(),
     );
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
     RgbaF32Image::new(descriptor, output_pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
 }
@@ -528,20 +543,27 @@ fn execute_censorize_image(
 fn censorize_evaluation_error(
     node: &rusttable_processing::OperationGraphNode,
     source: &rusttable_processing::CensorizeExecutionError,
+    scope: Option<&CancellationScope>,
 ) -> CpuPixelpipeError {
-    CpuPixelpipeError::Evaluation {
-        source: EvaluationError::OperationExecution {
+    let source = match source {
+        rusttable_processing::CensorizeExecutionError::Cancelled => EvaluationError::Cancelled {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+        },
+        source => EvaluationError::OperationExecution {
             step_index: node.pipeline_step_index(),
             operation_id: node.operation().operation_id(),
             reason: source.to_string(),
         },
-    }
+    };
+    cancellable_evaluation_error(source, scope)
 }
 
 fn execute_clahe_image(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
     node: &rusttable_processing::OperationGraphNode,
+    scope: Option<&CancellationScope>,
 ) -> Result<RgbaF32Image, CpuPixelpipeError> {
     let linear = to_linear_working(input)?;
     let config = match node.operation().kind() {
@@ -562,10 +584,15 @@ fn execute_clahe_image(
         .collect::<Vec<_>>();
     let plan =
         rusttable_processing::ClahePlan::new(config, input.descriptor().dimensions(), 1.0, 1.0)
-            .map_err(|source| clahe_evaluation_error(node, &source))?;
+            .map_err(|source| clahe_evaluation_error(node, &source, scope))?;
     let output = plan
-        .execute_with_mask(&pixels, None, node.operation().opacity().get(), || false)
-        .map_err(|source| clahe_evaluation_error(node, &source))?;
+        .execute_with_mask(&pixels, None, node.operation().opacity().get(), || {
+            scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|source| clahe_evaluation_error(node, &source, scope))?;
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
     let rgb = output
         .iter()
         .copied()
@@ -617,28 +644,75 @@ fn execute_clahe_image(
             })
             .collect(),
     };
-    let descriptor = RgbaF32Descriptor::new(
+    let descriptor = output_descriptor(
+        request.output_mode(),
+        input.descriptor(),
         input.descriptor().dimensions(),
-        request.output_mode().color_encoding(),
     );
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
     RgbaF32Image::new(descriptor, output_pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+pub(crate) fn requires_full_frame_execution(request: &CpuPixelpipeSnapshot) -> bool {
+    request.graph().nodes().any(|node| {
+        node.operation().requires_full_image_analysis()
+            || matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::Highlights { .. }
+                    | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+                    | rusttable_processing::ProcessingOperationKind::Bloom { .. }
+                    | rusttable_processing::ProcessingOperationKind::Soften { .. }
+                    | rusttable_processing::ProcessingOperationKind::Crop { .. }
+                    | rusttable_processing::ProcessingOperationKind::Flip { .. }
+                    | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
+                    | rusttable_processing::ProcessingOperationKind::ScalePixels { .. }
+                    | rusttable_processing::ProcessingOperationKind::FinalScale { .. }
+                    | rusttable_processing::ProcessingOperationKind::EnlargeCanvas { .. }
+                    | rusttable_processing::ProcessingOperationKind::Perspective { .. }
+                    | rusttable_processing::ProcessingOperationKind::Clipping { .. }
+                    | rusttable_processing::ProcessingOperationKind::LensCorrection { .. }
+                    | rusttable_processing::ProcessingOperationKind::Grain { .. }
+                    | rusttable_processing::ProcessingOperationKind::Censorize { .. }
+                    | rusttable_processing::ProcessingOperationKind::Clahe { .. }
+            )
+    })
+}
+
+fn cancellable_evaluation_error(
+    source: EvaluationError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if source.is_cancelled()
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation { source }
 }
 
 fn clahe_evaluation_error(
     node: &rusttable_processing::OperationGraphNode,
     source: &rusttable_processing::ClaheExecutionError,
+    scope: Option<&CancellationScope>,
 ) -> CpuPixelpipeError {
-    CpuPixelpipeError::Evaluation {
-        source: EvaluationError::OperationExecution {
+    let source = match source {
+        rusttable_processing::ClaheExecutionError::Cancelled => EvaluationError::Cancelled {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+        },
+        source => EvaluationError::OperationExecution {
             step_index: node.pipeline_step_index(),
             operation_id: node.operation().operation_id(),
             reason: source.to_string(),
         },
-    }
+    };
+    cancellable_evaluation_error(source, scope)
 }
 
-fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError> {
+pub(crate) fn validate_input_encoding(input: &RgbaF32Image) -> Result<(), CpuPixelpipeError> {
     let actual = input.descriptor().color_encoding();
     if matches!(
         actual,
@@ -677,10 +751,9 @@ fn tile_input(
         pixels.extend_from_slice(source_row);
     }
     RgbaF32Image::new(
-        RgbaF32Descriptor::with_source_representation(
+        input.descriptor().with_dimensions_and_color_encoding(
             tile.dimensions(),
             input.descriptor().color_encoding(),
-            input.descriptor().source_representation(),
         ),
         pixels,
     )
@@ -745,11 +818,11 @@ fn output_pixels(
     }
 }
 
-fn output_encoding(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> RgbaF32ColorEncoding {
-    if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+fn output_encoding(mode: CpuPixelpipeOutputMode, input: RgbaF32Descriptor) -> RgbaF32ColorEncoding {
+    if input.color_encoding() == RgbaF32ColorEncoding::LabD50 {
         RgbaF32ColorEncoding::LabD50
     } else {
-        request.output_mode().color_encoding()
+        mode.color_encoding()
     }
 }
 
@@ -804,6 +877,7 @@ fn to_processing_source(input: &RgbaF32Image) -> Result<SourceRgbImage, CpuPixel
 pub(crate) fn to_linear_working(
     input: &RgbaF32Image,
 ) -> Result<WorkingRgbImage, CpuPixelpipeError> {
+    validate_input_encoding(input)?;
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         let to_rgb = color_transform(
             rusttable_color::ColorEncoding::LabD50,
@@ -839,9 +913,6 @@ pub(crate) fn to_linear_working(
         )
         .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()));
     }
-    if let Some(source_color) = input.descriptor().source_color() {
-        return to_colorin_working(input, source_color);
-    }
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LinearSrgbD65 {
         let pixels = input
             .pixels()
@@ -864,8 +935,53 @@ pub(crate) fn to_linear_working(
             }
         });
     }
+    match input.descriptor().color_encoding() {
+        RgbaF32ColorEncoding::DisplayP3D65 | RgbaF32ColorEncoding::LinearDisplayP3D65 => {
+            let encoding = match input.descriptor().color_encoding() {
+                RgbaF32ColorEncoding::DisplayP3D65 => rusttable_color::ColorEncoding::DisplayP3D65,
+                RgbaF32ColorEncoding::LinearDisplayP3D65 => {
+                    rusttable_color::ColorEncoding::LinearDisplayP3D65
+                }
+                _ => unreachable!("matched Display P3 ingress"),
+            };
+            let source_color = rusttable_image::SourceColor::declared(encoding)
+                .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+            return to_colorin_working(input, source_color);
+        }
+        RgbaF32ColorEncoding::External(_) => {
+            let source_color =
+                input
+                    .descriptor()
+                    .source_color()
+                    .ok_or(CpuPixelpipeError::MissingSourceColor {
+                        actual: input.descriptor().color_encoding(),
+                    })?;
+            return to_colorin_working(input, source_color);
+        }
+        _ => {}
+    }
     let source = to_processing_source(input)?;
     Ok(to_linear_srgb(&source))
+}
+
+pub(crate) fn output_from_working(
+    mode: CpuPixelpipeOutputMode,
+    input: &RgbaF32Image,
+    evaluated: &WorkingRgbImage,
+) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    let output_descriptor =
+        output_descriptor(mode, input.descriptor(), input.descriptor().dimensions());
+    let pixels = output_pixels(mode, evaluated, input)?;
+    RgbaF32Image::new(output_descriptor, pixels)
+        .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+pub(crate) fn output_descriptor(
+    mode: CpuPixelpipeOutputMode,
+    source: RgbaF32Descriptor,
+    dimensions: RasterDimensions,
+) -> RgbaF32Descriptor {
+    source.with_dimensions_and_color_encoding(dimensions, output_encoding(mode, source))
 }
 
 fn to_colorin_working(
@@ -949,4 +1065,126 @@ fn pixel_identity(image: &RgbaF32Image) -> PixelIdentity {
             .iter()
             .flat_map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use rusttable_core::{
+        Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName,
+        ParameterValue, PhotoId, Revision,
+    };
+    use rusttable_processing::PipelineStepIndex;
+
+    use super::*;
+    use crate::{CancellationReason, PipelineGeneration};
+
+    #[test]
+    fn typed_graph_cancellation_maps_to_the_node_scope() {
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(7).expect("nonzero generation"))
+                .child(CancellationStage::Node);
+        scope.cancel(CancellationReason::EditChanged);
+
+        let error = cancellable_evaluation_error(
+            EvaluationError::Cancelled {
+                step_index: PipelineStepIndex::new(0),
+                operation_id: OperationId::new(1).expect("operation ID"),
+            },
+            Some(&scope),
+        );
+
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("typed graph cancellation must remain typed at the pixelpipe boundary");
+        };
+        assert_eq!(error.reason(), CancellationReason::EditChanged);
+        assert_eq!(error.stage(), Some(CancellationStage::Node));
+    }
+
+    #[test]
+    fn typed_preparation_cancellation_maps_to_the_analysis_scope() {
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(8).expect("nonzero generation"))
+                .child(CancellationStage::Analysis);
+        scope.cancel(CancellationReason::UserRequested);
+
+        let error = cancellable_evaluation_error(
+            EvaluationError::Cancelled {
+                step_index: PipelineStepIndex::new(1),
+                operation_id: OperationId::new(2).expect("operation ID"),
+            },
+            Some(&scope),
+        );
+
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("automatic preparation cancellation must be terminal at the CPU boundary");
+        };
+        assert_eq!(error.reason(), CancellationReason::UserRequested);
+        assert_eq!(error.stage(), Some(CancellationStage::Analysis));
+    }
+
+    #[test]
+    fn singleton_filter_cancellation_maps_to_the_node_scope() {
+        let censorize = singleton_graph(
+            3,
+            "rusttable.censorize",
+            &[
+                ("radius_1", 0.0),
+                ("pixelate", 1.0),
+                ("radius_2", 0.0),
+                ("noise", 0.0),
+            ],
+        );
+        let clahe = singleton_graph(4, "rusttable.clahe", &[("radius", 2.0), ("slope", 2.0)]);
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(9).expect("nonzero generation"))
+                .child(CancellationStage::Node);
+        scope.cancel(CancellationReason::EditChanged);
+
+        for error in [
+            censorize_evaluation_error(
+                censorize.nodes().next().expect("censorize node"),
+                &rusttable_processing::CensorizeExecutionError::Cancelled,
+                Some(&scope),
+            ),
+            clahe_evaluation_error(
+                clahe.nodes().next().expect("CLAHE node"),
+                &rusttable_processing::ClaheExecutionError::Cancelled,
+                Some(&scope),
+            ),
+        ] {
+            let CpuPixelpipeError::Cancelled(error) = error else {
+                panic!("singleton cancellation must remain terminal at the CPU boundary");
+            };
+            assert_eq!(error.reason(), CancellationReason::EditChanged);
+            assert_eq!(error.stage(), Some(CancellationStage::Node));
+        }
+    }
+
+    fn singleton_graph(
+        operation_id: u128,
+        key: &str,
+        parameters: &[(&str, f64)],
+    ) -> rusttable_processing::CompiledOperationGraph {
+        let operation = Operation::new(
+            OperationId::new(operation_id).expect("operation ID"),
+            OperationKey::new(key).expect("operation key"),
+            true,
+            parameters.iter().map(|(name, value)| {
+                (
+                    ParameterName::new(*name).expect("parameter name"),
+                    ParameterValue::Scalar(FiniteF64::new(*value).expect("finite parameter")),
+                )
+            }),
+        )
+        .expect("operation");
+        let edit = Edit::from_parts(
+            EditId::new(1).expect("edit ID"),
+            PhotoId::new(2).expect("photo ID"),
+            Revision::ZERO,
+            Revision::from_u64(1),
+            [operation],
+        )
+        .expect("edit");
+        rusttable_processing::CompiledOperationGraph::compile(&edit).expect("compiled graph")
+    }
 }
