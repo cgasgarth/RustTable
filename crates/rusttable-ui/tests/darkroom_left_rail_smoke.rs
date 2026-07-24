@@ -10,9 +10,28 @@ use rusttable_ui::{
 
 fn main() {
     gtk4::init().expect("GTK must initialize for the darkroom left-rail smoke test");
+    prohibit_macos_test_activation();
     cold_launch_left_rail_survives_selected_raw_mode_switch();
     println!("Darkroom left-rail GTK smoke passed");
 }
+
+#[cfg(target_os = "macos")]
+fn prohibit_macos_test_activation() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+    let marker = MainThreadMarker::new().expect("custom GTK smoke must start on the main thread");
+    let application = NSApplication::sharedApplication(marker);
+    application.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+    assert_eq!(
+        application.activationPolicy(),
+        NSApplicationActivationPolicy::Prohibited,
+        "automated GTK smoke must use the non-activating macOS policy"
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+fn prohibit_macos_test_activation() {}
 
 fn cold_launch_left_rail_survives_selected_raw_mode_switch() {
     let application = gtk4::Application::new(
@@ -37,8 +56,12 @@ fn cold_launch_left_rail_survives_selected_raw_mode_switch() {
         "selected RAW must open in darkroom"
     );
     shell.begin_darkroom_selection(photo_id, ViewportGeneration::new(1));
-    shell.present();
+    map_inert_test_window(shell.window());
     settle_gtk();
+    assert!(
+        !shell.window().is_active(),
+        "automated GTK smoke must not activate or steal focus"
+    );
     let expected = shell.darkroom_panel_target().expect("darkroom target");
     assert_eq!(expected.photo_id(), photo_id);
 
@@ -49,6 +72,14 @@ fn cold_launch_left_rail_survives_selected_raw_mode_switch() {
     shell.show_workspace(WorkspaceRole::Darkroom);
     settle_gtk();
     assert_left_rail_is_populated(&shell, expected);
+}
+
+fn map_inert_test_window(window: &gtk4::ApplicationWindow) {
+    // Keep the real mapped/allocation contract without `Window::present`,
+    // which asks macOS to activate and raise the test window.
+    window.set_focusable(false);
+    window.set_opacity(1.0 / 255.0);
+    window.set_visible(true);
 }
 
 fn settle_gtk() {

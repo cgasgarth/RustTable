@@ -6,7 +6,7 @@
     reason = "channel-preservation checks require bit-identical source values"
 )]
 
-use rusttable_processing::common::bilateral::{BilateralError, BilateralGrid};
+use rusttable_processing::common::bilateral::{BilateralError, BilateralGeometry, BilateralGrid};
 
 fn assert_close(actual: f32, expected: f32) {
     let tolerance = 8.0 * f32::EPSILON * expected.abs().max(1.0);
@@ -40,6 +40,16 @@ fn grid_geometry_and_memory_match_the_c_clamps() {
     // planes per worker.  The safe scalar port has one worker:
     // ((17 * 13 * 5) + (3 * 17 * 5)) * sizeof(float) = 5_440.
     assert_eq!(floor.memory_bytes(), 5_440);
+
+    // The OpenCL/WGPU implementation delegates to the same canonical
+    // geometry calculation and allocates two grid buffers.
+    let shared = BilateralGeometry::new(8, 6, 0.1, 100.0).expect("shared bilateral geometry");
+    assert_eq!([shared.width(), shared.height()], [8, 6]);
+    assert_eq!(shared.grid_dimensions(), [17, 13, 5]);
+    assert_eq!(shared.grid_values(), 1_105);
+    assert_eq!(shared.gpu_grid_memory_bytes(), 8_840);
+    assert_close(shared.effective_sigma_s(), 0.5);
+    assert_close(shared.effective_sigma_r(), 25.0);
 
     // A zero or negative spatial sigma follows the same source floor; it is
     // not an invalid parameter in the retained implementation.

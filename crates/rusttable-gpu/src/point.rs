@@ -1,6 +1,7 @@
 use std::fmt;
 use std::num::NonZeroU64;
 
+use crate::shader::{BindingReflection, BindingResourceKind, ShaderRegistry};
 use crate::{FaultState, GpuRuntime};
 
 const WORKGROUP_SIZE: u32 = 256;
@@ -8,6 +9,19 @@ const POINT_PARAMS_SIZE: u64 = 64;
 const POINT_PARAMS_BYTES: usize = 64;
 const BASICADJ_PARAMS_SIZE: u64 = 48;
 const BASICADJ_PARAMS_BYTES: usize = 48;
+
+#[derive(Debug)]
+struct PointEntryContract<'a> {
+    source: &'a str,
+    layout_entries: Vec<wgpu::BindGroupLayoutEntry>,
+    params_size: u64,
+    basic_params_size: Option<u64>,
+}
+
+struct PointParameterBuffers {
+    params: wgpu::Buffer,
+    basic_params: Option<wgpu::Buffer>,
+}
 
 /// Frozen scalar coefficients for one atomic basicadj stage.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -182,8 +196,14 @@ impl GpuRuntime {
             });
         }
         let (device, queue) = self.handles().ok_or(BasicPointError::CpuOnly)?;
-        let source = crate::shader::ShaderRegistry::checked_in().point_source();
-        if source.is_empty() {
+        let registry = ShaderRegistry::checked_in();
+        let contracts = request
+            .operations
+            .iter()
+            .map(|operation| point_entry_contract(registry, operation.entry_point()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let source = contracts.first().map_or("", |contract| contract.source);
+        if source.is_empty() || contracts.iter().any(|contract| contract.source != source) {
             return Err(BasicPointError::ShaderUnavailable);
         }
         let pixel_bytes = floats_as_bytes(request.pixels);
@@ -212,56 +232,6 @@ impl GpuRuntime {
         });
         queue.write_buffer(&input, 0, &pixel_bytes);
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("RustTable basic point bindings"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(16),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(POINT_PARAMS_SIZE),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(BASICADJ_PARAMS_SIZE),
-                    },
-                    count: None,
-                },
-            ],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("RustTable basic point pipeline layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
-            immediate_size: 0,
-        });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("RustTable basic point shader"),
             source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -278,30 +248,50 @@ impl GpuRuntime {
         let parameter_buffers = request
             .operations
             .iter()
-            .map(|operation| {
+            .zip(&contracts)
+            .map(|(operation, contract)| {
                 let params = device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("RustTable basic point parameters"),
-                    size: POINT_PARAMS_SIZE,
+                    size: contract.params_size,
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 });
                 let params_bytes =
                     operation.params(u32::try_from(request.pixels.len() / 4).unwrap_or(u32::MAX));
                 queue.write_buffer(&params, 0, &params_bytes);
-                let basic_params = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("RustTable basicadj parameters"),
-                    size: BASICADJ_PARAMS_SIZE,
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
+                let basic_params = contract.basic_params_size.map(|size| {
+                    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("RustTable basicadj parameters"),
+                        size,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    });
+                    queue.write_buffer(&buffer, 0, &operation.basic_params());
+                    buffer
                 });
-                let basic_bytes = operation.basic_params();
-                queue.write_buffer(&basic_params, 0, &basic_bytes);
-                (params, basic_params)
+                PointParameterBuffers {
+                    params,
+                    basic_params,
+                }
             })
             .collect::<Vec<_>>();
-        for (operation, (params, basic_params)) in request.operations.iter().zip(&parameter_buffers)
+        for ((operation, contract), parameter_buffers) in request
+            .operations
+            .iter()
+            .zip(&contracts)
+            .zip(&parameter_buffers)
         {
             let entry_point = operation.entry_point();
+            let bind_group_layout =
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some(entry_point),
+                    entries: &contract.layout_entries,
+                });
+            let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(entry_point),
+                bind_group_layouts: &[Some(&bind_group_layout)],
+                immediate_size: 0,
+            });
             let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some(entry_point),
                 layout: Some(&pipeline_layout),
@@ -310,27 +300,30 @@ impl GpuRuntime {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 cache: None,
             });
+            let mut bind_group_entries = vec![
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: parameter_buffers.params.as_entire_binding(),
+                },
+            ];
+            if let Some(basic_params) = &parameter_buffers.basic_params {
+                bind_group_entries.push(wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: basic_params.as_entire_binding(),
+                });
+            }
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("RustTable basic point bind group"),
+                label: Some(entry_point),
                 layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: input_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: output_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: basic_params.as_entire_binding(),
-                    },
-                ],
+                entries: &bind_group_entries,
             });
             {
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -374,6 +367,94 @@ impl GpuRuntime {
         readback.unmap();
         Ok(BasicPointResult { pixels, dispatches })
     }
+}
+
+fn point_entry_contract<'a>(
+    registry: &'a ShaderRegistry,
+    entry_point: &str,
+) -> Result<PointEntryContract<'a>, BasicPointError> {
+    let entry = registry
+        .find("rusttable.point", entry_point)
+        .ok_or(BasicPointError::ShaderUnavailable)?;
+    let reflection = &entry.reflection;
+    let expected_bindings: &[u32] = if entry_point == "basicadj" {
+        &[0, 1, 2, 3]
+    } else {
+        &[0, 1, 2]
+    };
+    if entry.expanded_source.is_empty()
+        || reflection.entry_point != entry_point
+        || !reflection.stage.eq_ignore_ascii_case("compute")
+        || reflection.workgroup_size != [WORKGROUP_SIZE, 1, 1]
+        || reflection
+            .bindings
+            .iter()
+            .map(|binding| binding.binding)
+            .ne(expected_bindings.iter().copied())
+    {
+        return Err(BasicPointError::ShaderUnavailable);
+    }
+    let layout_entries = reflection
+        .bindings
+        .iter()
+        .map(point_layout_entry)
+        .collect::<Option<Vec<_>>>()
+        .ok_or(BasicPointError::ShaderUnavailable)?;
+    let params_size = reflected_uniform_size(&reflection.bindings, 2)
+        .filter(|size| *size == POINT_PARAMS_SIZE)
+        .ok_or(BasicPointError::ShaderUnavailable)?;
+    let basic_params_size = reflected_uniform_size(&reflection.bindings, 3);
+    if basic_params_size.is_some() != (entry_point == "basicadj")
+        || basic_params_size.is_some_and(|size| size != BASICADJ_PARAMS_SIZE)
+    {
+        return Err(BasicPointError::ShaderUnavailable);
+    }
+    Ok(PointEntryContract {
+        source: &entry.expanded_source,
+        layout_entries,
+        params_size,
+        basic_params_size,
+    })
+}
+
+fn point_layout_entry(binding: &BindingReflection) -> Option<wgpu::BindGroupLayoutEntry> {
+    if binding.group != 0 || binding.dynamic_offset {
+        return None;
+    }
+    let ty = match binding.resource {
+        BindingResourceKind::StorageBuffer => {
+            let read_only = match binding.access.as_str() {
+                "read" => true,
+                "read_write" => false,
+                _ => return None,
+            };
+            wgpu::BufferBindingType::Storage { read_only }
+        }
+        BindingResourceKind::UniformBuffer if binding.access == "read" => {
+            wgpu::BufferBindingType::Uniform
+        }
+        _ => return None,
+    };
+    Some(wgpu::BindGroupLayoutEntry {
+        binding: binding.binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty,
+            has_dynamic_offset: binding.dynamic_offset,
+            min_binding_size: NonZeroU64::new(u64::from(binding.minimum_binding_size)),
+        },
+        count: None,
+    })
+}
+
+fn reflected_uniform_size(bindings: &[BindingReflection], binding_number: u32) -> Option<u64> {
+    bindings
+        .iter()
+        .find(|binding| {
+            binding.binding == binding_number
+                && binding.resource == BindingResourceKind::UniformBuffer
+        })
+        .map(|binding| u64::from(binding.minimum_binding_size))
 }
 
 fn validate_request(
@@ -456,6 +537,71 @@ mod tests {
         assert_eq!(&bytes[44..48], &3.0_f32.to_le_bytes());
         assert_eq!(&bytes[52..56], &0.0_f32.to_le_bytes());
         assert_eq!(bytes.len(), 64);
+    }
+
+    #[test]
+    fn entry_scoped_runtime_layouts_match_checked_reflection() {
+        let registry = ShaderRegistry::try_checked_in().expect("registry");
+        for (entry_point, expected_bindings, expects_basic_params) in [
+            ("exposure", &[0, 1, 2][..], false),
+            ("linear_offset", &[0, 1, 2][..], false),
+            ("rgb_gain", &[0, 1, 2][..], false),
+            ("basicadj", &[0, 1, 2, 3][..], true),
+        ] {
+            let entry = registry
+                .find("rusttable.point", entry_point)
+                .expect("registered point entry");
+            let contract =
+                point_entry_contract(&registry, entry_point).expect("runtime point contract");
+            assert_eq!(contract.source, entry.expanded_source);
+            assert_eq!(
+                contract
+                    .layout_entries
+                    .iter()
+                    .map(|binding| binding.binding)
+                    .collect::<Vec<_>>(),
+                expected_bindings
+            );
+            assert_eq!(
+                contract.layout_entries.len(),
+                entry.reflection.bindings.len()
+            );
+            assert_eq!(
+                contract.basic_params_size.is_some(),
+                expects_basic_params,
+                "{entry_point} basicadj parameter allocation"
+            );
+            for (runtime, reflected) in contract
+                .layout_entries
+                .iter()
+                .zip(&entry.reflection.bindings)
+            {
+                assert_eq!(runtime.binding, reflected.binding);
+                assert_eq!(runtime.visibility, wgpu::ShaderStages::COMPUTE);
+                assert_eq!(runtime.count, None);
+                let wgpu::BindingType::Buffer {
+                    ty,
+                    has_dynamic_offset,
+                    min_binding_size,
+                } = runtime.ty
+                else {
+                    panic!("point bindings must be buffers");
+                };
+                let expected_type = match reflected.resource {
+                    BindingResourceKind::StorageBuffer => wgpu::BufferBindingType::Storage {
+                        read_only: reflected.access == "read",
+                    },
+                    BindingResourceKind::UniformBuffer => wgpu::BufferBindingType::Uniform,
+                    _ => panic!("unsupported reflected point binding"),
+                };
+                assert_eq!(ty, expected_type);
+                assert_eq!(has_dynamic_offset, reflected.dynamic_offset);
+                assert_eq!(
+                    min_binding_size.map(NonZeroU64::get),
+                    Some(u64::from(reflected.minimum_binding_size))
+                );
+            }
+        }
     }
 
     #[tokio::test]

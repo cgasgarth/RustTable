@@ -1,8 +1,14 @@
 // GENERATED FILE: cargo xtask shaders generate; do not hand-edit.
 
 pub const GENERATED_BINDING_SCHEMA: &str = "rusttable.shader-bindings.v1";
-pub const POINT_PARAMS_SIZE: usize = 48;
+pub const POINT_PARAMS_SIZE: usize = 64;
 
+pub const ENTRY_BILATERAL_BLUR_LINE_ID: &str = "rusttable.bilateral.blur_line";
+pub const ENTRY_BILATERAL_BLUR_LINE_Z_ID: &str = "rusttable.bilateral.blur_line_z";
+pub const ENTRY_BILATERAL_SLICE_ID: &str = "rusttable.bilateral.slice";
+pub const ENTRY_BILATERAL_SLICE_TO_OUTPUT_ID: &str = "rusttable.bilateral.slice_to_output";
+pub const ENTRY_BILATERAL_SPLAT_ID: &str = "rusttable.bilateral.splat";
+pub const ENTRY_BILATERAL_ZERO_ID: &str = "rusttable.bilateral.zero";
 pub const ENTRY_BASICADJ_ID: &str = "rusttable.point.basicadj";
 pub const ENTRY_COPY_ID: &str = "rusttable.point.copy";
 pub const ENTRY_EXPOSURE_ID: &str = "rusttable.point.exposure";

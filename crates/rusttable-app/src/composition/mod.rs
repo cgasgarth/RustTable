@@ -95,6 +95,7 @@ pub fn run() -> Result<(), DesktopRunError> {
                 return Ok(());
             }
 
+            services::preview::initialize_production_pixelpipe();
             let application = create_application();
             let active_shell = Rc::new(RefCell::new(None::<rusttable_ui::GtkShell>));
             let active_catalog = Rc::new(RefCell::new(None::<Rc<RefCell<GtkCatalogController>>>));

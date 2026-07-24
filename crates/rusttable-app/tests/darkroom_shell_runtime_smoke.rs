@@ -23,9 +23,28 @@ use render::{find_widget, find_widget_with_prefix, render_widget};
 
 fn main() {
     gtk4::init().expect("GTK must initialize for the app-shell runtime smoke");
+    prohibit_macos_test_activation();
     app_shell_transition_paints_darkroom_titles();
     println!("Darkroom app-shell runtime smoke passed");
 }
+
+#[cfg(target_os = "macos")]
+fn prohibit_macos_test_activation() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+    let marker = MainThreadMarker::new().expect("custom GTK smoke must start on the main thread");
+    let application = NSApplication::sharedApplication(marker);
+    application.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+    assert_eq!(
+        application.activationPolicy(),
+        NSApplicationActivationPolicy::Prohibited,
+        "automated GTK smoke must use the non-activating macOS policy"
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+fn prohibit_macos_test_activation() {}
 
 fn app_shell_transition_paints_darkroom_titles() {
     let application = gtk4::Application::new(
@@ -38,6 +57,11 @@ fn app_shell_transition_paints_darkroom_titles() {
     let display = gtk4::gdk::Display::default().expect("test display");
     rusttable_ui::install_darktable_theme(&display);
     let shell = GtkShell::new(&application);
+    #[cfg(target_os = "macos")]
+    assert!(
+        shell.window().is_decorated(),
+        "ordinary macOS RustTable windows must retain the title bar and traffic lights"
+    );
     shell.window().set_default_size(1_228, 768);
     let root: gtk4::Widget = shell.window().clone().upcast();
     let rail = find_widget(&root, "darkroom-left-panel").expect("darkroom left rail");
@@ -49,7 +73,7 @@ fn app_shell_transition_paints_darkroom_titles() {
     let photo_id = PhotoId::new(949).expect("test photo id");
     let workspace = test_workspace(photo_id);
 
-    shell.present();
+    map_inert_test_window(shell.window());
     let transitioned = Rc::new(Cell::new(false));
     gtk4::glib::idle_add_local_once({
         let shell = shell.clone();
@@ -95,6 +119,10 @@ fn app_shell_transition_paints_darkroom_titles() {
         },
     );
     assert!(
+        !shell.window().is_active(),
+        "automated GTK smoke must not activate or steal focus"
+    );
+    assert!(
         left_stack.allocated_width() <= i32::from(DARKROOM_PANEL_WIDTHS.left_px) + 2,
         "active darkroom rail must honor the native divider, got {}px",
         left_stack.allocated_width()
@@ -102,6 +130,15 @@ fn app_shell_transition_paints_darkroom_titles() {
     assert_darkroom_titles_are_allocated(&shell);
     assert_darkroom_chrome_matches_runtime_geometry(&shell);
     assert_lighttable_preview_geometry(&shell, photo_id);
+}
+
+fn map_inert_test_window(window: &gtk4::ApplicationWindow) {
+    // Geometry and paint assertions need a mapped native surface. Mapping it
+    // transparently with `set_visible` preserves that coverage without the
+    // focus request made by `Window::present`.
+    window.set_focusable(false);
+    window.set_opacity(1.0 / 255.0);
+    window.set_visible(true);
 }
 
 fn assert_lighttable_preview_geometry(shell: &GtkShell, photo_id: PhotoId) {

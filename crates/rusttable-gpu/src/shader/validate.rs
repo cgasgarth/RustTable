@@ -16,7 +16,7 @@ pub(crate) fn validate_and_reflect(
     entry_name: &str,
     numerical: NumericalMetadata,
 ) -> Result<ShaderReflection, ShaderError> {
-    let module = naga::front::wgsl::parse_str(source).map_err(|error| {
+    let mut module = naga::front::wgsl::parse_str(source).map_err(|error| {
         let (line, column) = error.location(source).map_or((1, 1), |location| {
             (location.line_number, location.line_position)
         });
@@ -36,16 +36,30 @@ pub(crate) fn validate_and_reflect(
         line: 1,
         column: 1,
     })?;
+    if !module
+        .entry_points
+        .iter()
+        .any(|entry| entry.name == entry_name)
+    {
+        return Err(ShaderError::Reflection(
+            "module has no entry point".to_owned(),
+        ));
+    }
+    module.entry_points.retain(|entry| entry.name == entry_name);
+    naga::compact::compact(&mut module, naga::compact::KeepUnused::No);
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .map_err(|_error| ShaderError::Validation {
+        alias: alias.to_owned(),
+        line: 1,
+        column: 1,
+    })?;
     let entry = module
         .entry_points
         .first()
-        .filter(|entry| entry.name == entry_name)
-        .or_else(|| {
-            module
-                .entry_points
-                .iter()
-                .find(|entry| entry.name == entry_name)
-        })
         .ok_or_else(|| ShaderError::Reflection("module has no entry point".to_owned()))?;
     let mut layouter = Layouter::default();
     layouter
@@ -62,7 +76,14 @@ pub(crate) fn validate_and_reflect(
         let (resource, address_space, access) = resource_kind(global.space);
         let binding_type_description = type_description(&module, global.ty);
         let minimum_binding_size = layouter[global.ty].size;
-        let source = source_span(source, line_aliases, binding.group, binding.binding, &name);
+        let source = source_span(
+            alias,
+            source,
+            line_aliases,
+            binding.group,
+            binding.binding,
+            &name,
+        );
         source_spans.push(source.clone());
         bindings.push(BindingReflection {
             group: binding.group,
@@ -177,6 +198,9 @@ fn type_description(module: &naga::Module, handle: naga::Handle<naga::Type>) -> 
             format!("array<{}, {length}>", type_description(module, *base))
         }
         TypeInner::Struct { .. } => "struct".to_owned(),
+        TypeInner::Atomic(scalar) => {
+            format!("atomic<{}>", scalar_description(scalar.kind, scalar.width))
+        }
         TypeInner::Image { .. } => "texture".to_owned(),
         TypeInner::Sampler { .. } => "sampler".to_owned(),
         other => format!("{other:?}"),
@@ -195,28 +219,47 @@ fn scalar_description(kind: ScalarKind, width: u8) -> String {
     if matches!(kind, ScalarKind::Bool) {
         prefix.to_owned()
     } else {
-        format!("{prefix}{width}")
+        format!("{prefix}{}", u16::from(width) * 8)
     }
 }
 
 fn source_span(
+    fallback_alias: &str,
     source: &str,
     line_aliases: &[SourceSpanAlias],
     group: u32,
     binding: u32,
     name: &str,
 ) -> SourceSpanAlias {
-    for (index, line) in source.lines().enumerate() {
-        if line.contains(&format!("@group({group})"))
-            && line.contains(&format!("@binding({binding})"))
-            && line.contains(name)
-            && let Some(alias) = line_aliases.get(index)
+    let group_marker = format!("@group({group})");
+    let binding_marker = format!("@binding({binding})");
+    let mut statement_start = 0;
+    for (semicolon, _) in source.match_indices(';') {
+        let statement_end = semicolon + 1;
+        let statement = &source[statement_start..statement_end];
+        if statement.contains(&group_marker)
+            && statement.contains(&binding_marker)
+            && statement.contains(name)
         {
-            return alias.clone();
+            let marker = statement
+                .find(&group_marker)
+                .into_iter()
+                .chain(statement.find(&binding_marker))
+                .min()
+                .unwrap_or(0);
+            let byte_offset = statement_start + marker;
+            let line = source[..byte_offset]
+                .bytes()
+                .filter(|byte| *byte == b'\n')
+                .count();
+            if let Some(alias) = line_aliases.get(line) {
+                return alias.clone();
+            }
         }
+        statement_start = statement_end;
     }
     SourceSpanAlias {
-        source_alias: "shaders/point.wgsl".to_owned(),
+        source_alias: fallback_alias.to_owned(),
         line: 1,
         column: 1,
     }
@@ -251,4 +294,41 @@ fn required_capabilities(module: &naga::Module, bindings: &[BindingReflection]) 
         capabilities.insert("StorageBufferReadWrite".to_owned());
     }
     capabilities.into_iter().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn multiline_binding_declarations_keep_their_source_alias() {
+        let source = "// prefix\n@group(0)\n@binding(2)\nvar<uniform> params: vec4<f32>;\n";
+        let aliases = [
+            SourceSpanAlias {
+                source_alias: "shaders/root.wgsl".to_owned(),
+                line: 1,
+                column: 1,
+            },
+            SourceSpanAlias {
+                source_alias: "shaders/includes/common.wgsl".to_owned(),
+                line: 7,
+                column: 1,
+            },
+            SourceSpanAlias {
+                source_alias: "shaders/includes/common.wgsl".to_owned(),
+                line: 8,
+                column: 1,
+            },
+            SourceSpanAlias {
+                source_alias: "shaders/includes/common.wgsl".to_owned(),
+                line: 9,
+                column: 1,
+            },
+        ];
+
+        assert_eq!(
+            source_span("shaders/root.wgsl", source, &aliases, 0, 2, "params"),
+            aliases[1]
+        );
+    }
 }

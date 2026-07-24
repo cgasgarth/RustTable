@@ -22,7 +22,7 @@ struct BasicAdjParams {
     saturation: f32,
     vibrance: f32,
     preserve_colors: u32,
-    _reserved: u32,
+    _reserved: vec2<u32>,
 }
 
 @group(0) @binding(0) var<storage, read> input_pixels: array<vec4<f32>>;

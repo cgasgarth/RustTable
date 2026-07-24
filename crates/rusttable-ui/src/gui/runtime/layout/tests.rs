@@ -227,8 +227,14 @@ impl PanedFixture {
             .default_height(768)
             .child(&content)
             .build();
-        window.present();
+        window.set_focusable(false);
+        window.set_opacity(1.0 / 255.0);
+        window.set_visible(true);
         settle_gtk();
+        assert!(
+            !window.is_active(),
+            "automated layout tests must not activate or steal focus"
+        );
         let root: gtk4::Widget = content.upcast();
         Self {
             _window: window,

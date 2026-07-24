@@ -4,6 +4,7 @@ use rusttable_catalog::{EditRepository, RepositoryError};
 use rusttable_catalog_store::RedbCatalogRepository;
 use rusttable_core::{Edit, PhotoId};
 use rusttable_image::{DecodeLimits, ImageDimensions};
+use rusttable_pixelpipe::CancellationScope;
 use rusttable_render::{PreviewBounds, RenderTarget};
 
 use crate::{
@@ -134,6 +135,54 @@ pub(crate) fn load_selected_preview_from_repository_for_edit_with_generation(
     edit_revision: rusttable_core::Revision,
     generation: u64,
 ) -> Result<SelectedPreview, WorkspacePreviewError> {
+    load_selected_preview_from_repository_for_edit(
+        repository,
+        source_root,
+        photo_id,
+        edit_id,
+        edit_revision,
+        generation,
+        None,
+    )
+}
+
+/// Renders an exact selected edit while propagating the lifecycle's
+/// generation-owned cancellation into pixelpipe execution.
+///
+/// # Errors
+///
+/// Returns a typed catalog, edit-selection, source, cancellation, decode, or
+/// render failure.
+pub(crate) fn load_selected_preview_from_repository_for_edit_with_cancellation(
+    repository: &RedbCatalogRepository,
+    source_root: &Path,
+    photo_id: PhotoId,
+    edit_id: rusttable_core::EditId,
+    edit_revision: rusttable_core::Revision,
+    generation: u64,
+    cancellation: &CancellationScope,
+) -> Result<SelectedPreview, WorkspacePreviewError> {
+    load_selected_preview_from_repository_for_edit(
+        repository,
+        source_root,
+        photo_id,
+        edit_id,
+        edit_revision,
+        generation,
+        Some(cancellation),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn load_selected_preview_from_repository_for_edit(
+    repository: &RedbCatalogRepository,
+    source_root: &Path,
+    photo_id: PhotoId,
+    edit_id: rusttable_core::EditId,
+    edit_revision: rusttable_core::Revision,
+    generation: u64,
+    cancellation: Option<&CancellationScope>,
+) -> Result<SelectedPreview, WorkspacePreviewError> {
     let edit = repository
         .list()
         .map_err(|error| {
@@ -146,12 +195,15 @@ pub(crate) fn load_selected_preview_from_repository_for_edit_with_generation(
                 && candidate.revision() == edit_revision
         })
         .ok_or(WorkspacePreviewError::MissingEdit { photo_id })?;
-    let rendered = CatalogPreviewService::new(preview_service())
-        .render_with_receipt(
-            CatalogPreviewRequest::new(source_root, photo_id, edit.id())
-                .with_generation(generation),
-            repository,
-            repository,
+    let service = CatalogPreviewService::new(preview_service());
+    let request =
+        CatalogPreviewRequest::new(source_root, photo_id, edit.id()).with_generation(generation);
+    let rendered = cancellation
+        .map_or_else(
+            || service.render_with_receipt(request, repository, repository),
+            |scope| {
+                service.render_with_receipt_and_cancellation(request, repository, repository, scope)
+            },
         )
         .map_err(WorkspacePreviewError::Preview)?;
     let (output, receipt) = rendered.into_parts();

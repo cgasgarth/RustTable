@@ -12,6 +12,7 @@ use std::time::Duration;
 use gtk4::glib::{self, ControlFlow};
 use rusttable_display_profile::DisplayProfileSnapshot;
 use rusttable_image::{CancellationToken, ColorEncoding, DecodedImage};
+use rusttable_pixelpipe::CancellationReason as PixelpipeCancellationReason;
 use rusttable_render::{MipmapLevel, ThumbnailGenerator, ThumbnailRequest, ThumbnailSize};
 use rusttable_ui::{
     DisplayPresentationFrame, DisplayPresentationRequest, GtkShell, HistogramData, HistogramError,
@@ -46,6 +47,9 @@ pub(crate) fn start_selected_preview(
     display_profile: Option<&DisplayProfileSnapshot>,
 ) {
     let Some(photo_id) = catalog.selected_photo() else {
+        lifecycle
+            .borrow_mut()
+            .invalidate(PixelpipeCancellationReason::SelectionChanged);
         diagnostics.preview_failure(
             "start_selected_preview",
             "catalog_lookup",
@@ -62,6 +66,9 @@ pub(crate) fn start_selected_preview(
     let edit = match catalog.current_edit(photo_id) {
         Ok(Some(edit)) => edit,
         Ok(None) => {
+            lifecycle
+                .borrow_mut()
+                .invalidate(PixelpipeCancellationReason::EditChanged);
             diagnostics.preview_failure(
                 "start_selected_preview",
                 "edit_resolution",
@@ -76,6 +83,9 @@ pub(crate) fn start_selected_preview(
             return;
         }
         Err(error) => {
+            lifecycle
+                .borrow_mut()
+                .invalidate(PixelpipeCancellationReason::EditChanged);
             diagnostics.preview_failure(
                 "start_selected_preview",
                 "edit_resolution",
@@ -96,9 +106,14 @@ pub(crate) fn start_selected_preview(
             return;
         }
     };
-    let token = lifecycle
-        .borrow_mut()
-        .begin(photo_id, edit.id(), edit.revision());
+    let (token, cancellation) = {
+        let mut lifecycle = lifecycle.borrow_mut();
+        let token = lifecycle.begin(photo_id, edit.id(), edit.revision());
+        let cancellation = lifecycle
+            .cancellation_scope(token)
+            .expect("a newly active preview owns its cancellation scope");
+        (token, cancellation)
+    };
     let generation = ViewportGeneration::new(token.generation());
     shell.begin_darkroom_selection(photo_id, generation);
     if !shell.photo_thumbnail_has_edit_identity(photo_id, edit.id(), edit.revision()) {
@@ -118,6 +133,7 @@ pub(crate) fn start_selected_preview(
                 edit.id(),
                 edit.revision(),
                 token.generation(),
+                &cancellation,
                 display_profile_for_worker.as_ref(),
             );
             let histogram = histogram_for_preview(&state);
@@ -438,6 +454,7 @@ mod tests {
     use std::cell::RefCell;
 
     use rusttable_core::{EditId, PhotoId, Revision};
+    use rusttable_pixelpipe::{CancellationReason, PipelineGeneration};
     use rusttable_ui::HistogramError;
 
     use super::{PreviewLifecycle, histogram_cause, install_if_current};
@@ -464,6 +481,89 @@ mod tests {
         });
 
         assert!(!lifecycle.borrow().is_current(completed));
+    }
+
+    #[test]
+    fn supersession_cancels_work_and_only_the_current_generation_can_publish() {
+        let lifecycle = RefCell::new(PreviewLifecycle::default());
+        let first = lifecycle.borrow_mut().begin(
+            photo_id(1),
+            EditId::new(2).unwrap(),
+            Revision::from_u64(1),
+        );
+        let first_cancellation = lifecycle
+            .borrow()
+            .cancellation_scope(first)
+            .expect("first cancellation scope");
+        let second = lifecycle.borrow_mut().begin(
+            photo_id(1),
+            EditId::new(2).unwrap(),
+            Revision::from_u64(2),
+        );
+        let second_cancellation = lifecycle
+            .borrow()
+            .cancellation_scope(second)
+            .expect("second cancellation scope");
+
+        let cancellation = first_cancellation
+            .check()
+            .expect_err("superseded work is cancelled");
+        assert_eq!(
+            cancellation.reason(),
+            CancellationReason::SupersededGeneration(
+                PipelineGeneration::new(second.generation()).expect("generation")
+            )
+        );
+        second_cancellation
+            .check()
+            .expect("current generation remains live");
+
+        let mut first_published = false;
+        assert!(!install_if_current(&lifecycle, first, || {
+            first_published = true;
+        }));
+        assert!(!first_published);
+        let mut second_published = false;
+        assert!(install_if_current(&lifecycle, second, || {
+            second_published = true;
+        }));
+        assert!(second_published);
+    }
+
+    #[test]
+    fn invalidated_selection_rejects_stale_preview_and_thumbnail_fallbacks() {
+        let lifecycle = RefCell::new(PreviewLifecycle::default());
+        let stale = lifecycle.borrow_mut().begin(
+            photo_id(1),
+            EditId::new(2).unwrap(),
+            Revision::from_u64(1),
+        );
+        let cancellation = lifecycle
+            .borrow()
+            .cancellation_scope(stale)
+            .expect("active cancellation scope");
+
+        lifecycle
+            .borrow_mut()
+            .invalidate(CancellationReason::EditChanged);
+
+        let mut preview_mutated = false;
+        assert!(!install_if_current(&lifecycle, stale, || {
+            preview_mutated = true;
+        }));
+        let mut thumbnail_fallback_mutated = false;
+        assert!(!install_if_current(&lifecycle, stale, || {
+            thumbnail_fallback_mutated = true;
+        }));
+        assert!(!preview_mutated);
+        assert!(!thumbnail_fallback_mutated);
+        assert_eq!(
+            cancellation
+                .check()
+                .expect_err("invalidated work is cancelled")
+                .reason(),
+            CancellationReason::EditChanged
+        );
     }
 
     #[test]

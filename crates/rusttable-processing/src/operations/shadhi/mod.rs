@@ -52,7 +52,7 @@ const LAB_MINIMUM: [f32; 4] = [0.0, -128.0, -128.0, 0.0];
 const LAB_MAXIMUM: [f32; 4] = [100.0, 128.0, 128.0, 1.0];
 
 mod execution;
-pub use execution::{ShadhiPixel, ShadhiPlan, ShadhiReceipt};
+pub use execution::{ShadhiBilateralRequest, ShadhiPixel, ShadhiPlan, ShadhiReceipt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShadhiAlgorithm {

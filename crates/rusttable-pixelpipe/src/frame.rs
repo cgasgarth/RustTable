@@ -1,12 +1,12 @@
 use rusttable_processing::{
     FrameBoundaryMode, FrameBoundaryOptions, OperationMaskSet, WorkingRgbImage,
-    encode_working_to_srgb, evaluate_graph_at_frame_boundaries_with_masks,
-    graph_has_frame_geometry,
+    convert_working_to_linear_srgb, encode_working_to_srgb,
+    evaluate_graph_at_frame_boundaries_with_masks, graph_has_frame_geometry,
 };
 
 use crate::{
     CancellationScope, CancellationStage, CpuPixelpipeError, CpuPixelpipeOutputMode,
-    CpuPixelpipeSnapshot, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel,
+    CpuPixelpipeSnapshot, RgbaF32ColorEncoding, RgbaF32Image, RgbaF32Pixel,
 };
 
 pub(crate) fn has_frame_geometry(request: &CpuPixelpipeSnapshot) -> bool {
@@ -60,11 +60,12 @@ pub(crate) fn execute_frame_image(
     if let Some(scope) = &node_scope {
         scope.check().map_err(CpuPixelpipeError::Cancelled)?;
     }
-    let descriptor = RgbaF32Descriptor::with_source_representation(
+    let descriptor = crate::cpu::output_descriptor(
+        request.output_mode(),
+        input.descriptor(),
         evaluated.image().dimensions(),
-        request.output_mode().color_encoding(),
-        input.descriptor().source_representation(),
-    );
+    )
+    .with_source_orientation(evaluated.output_source_orientation());
     let pixels = output_pixels(request.output_mode(), evaluated.image(), evaluated.alpha());
     let image = RgbaF32Image::new(descriptor, pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
@@ -89,7 +90,7 @@ fn output_pixels(
                 RgbaF32Pixel::new(rgb.red().get(), rgb.green().get(), rgb.blue().get(), *alpha)
             })
             .collect(),
-        CpuPixelpipeOutputMode::FullExport => evaluated
+        CpuPixelpipeOutputMode::FullExport => convert_working_to_linear_srgb(evaluated)
             .pixels()
             .zip(alpha)
             .map(|(rgb, alpha)| {

@@ -8,6 +8,7 @@ use rusttable_import::{
     FileSourceSnapshotReader, ImportSourceLimits, SourceSnapshotError, SourceSnapshotReadError,
     SourceSnapshotReader, decode_reference_source,
 };
+use rusttable_pixelpipe::CancellationScope;
 use rusttable_render::{
     RenderOutput, RenderReceipt, RenderRequestContext, RenderSourceProvenance, RenderTarget,
     SourceColorPolicy,
@@ -88,6 +89,36 @@ impl CatalogPreviewService {
                 }
             })?;
         self.render_record_with_receipt(request, &record, &edit)
+    }
+
+    /// Renders a persisted preview while propagating generation cancellation
+    /// into the production pixelpipe execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed catalog, source, cancellation, decode, or render error.
+    pub(crate) fn render_with_receipt_and_cancellation(
+        &self,
+        request: CatalogPreviewRequest<'_>,
+        imports: &dyn ImportRepository,
+        edits: &dyn EditRepository,
+        cancellation: &CancellationScope,
+    ) -> Result<CatalogPreviewRender, CatalogPreviewError> {
+        let record = imports
+            .find_by_photo_id(request.photo_id)
+            .map_err(CatalogPreviewError::ImportRepository)?
+            .ok_or(CatalogPreviewError::UnknownPhoto {
+                photo_id: request.photo_id,
+            })?;
+        let edit = edits
+            .find_by_edit_id(request.edit_id)
+            .map_err(CatalogPreviewError::EditRepository)?
+            .ok_or(CatalogPreviewError::UnknownEdit {
+                edit_id: request.edit_id,
+            })?;
+        self.render_snapshot_with_receipt(request, &record, &edit, |preview, bytes, edit| {
+            preview.render_bytes_with_cancellation(bytes, edit, cancellation)
+        })
     }
 
     /// Renders a caller-provided edit without reading or writing an edit record.

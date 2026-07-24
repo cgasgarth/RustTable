@@ -1,8 +1,10 @@
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
-    ParameterValue, PhotoId, Revision,
+    ParameterText, ParameterValue, PhotoId, Revision,
 };
-use rusttable_image::{ImageDimensions, Orientation, Roi};
+use rusttable_image::{
+    ColorEncoding as ImageColorEncoding, ImageDimensions, Orientation, Roi, SourceColor,
+};
 use rusttable_pixelpipe::{
     CancellationReason, CancellationScope, CpuPixelpipeError, CpuPixelpipeExecutor,
     CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, CpuTilePlan, PipelineGeneration,
@@ -115,6 +117,58 @@ fn image_with_orientation(width: u32, height: u32, orientation: Orientation) -> 
     .expect("valid image")
 }
 
+fn encoded_image_with_evidence(width: u32, height: u32, orientation: Orientation) -> RgbaF32Image {
+    let dimensions = RasterDimensions::new(width, height).expect("dimensions");
+    let pixel_count = u16::try_from(dimensions.pixel_count()).expect("small test image");
+    let denominator = f32::from(pixel_count + 1);
+    let pixels = (0..dimensions.pixel_count())
+        .map(|index| {
+            let index = u16::try_from(index).expect("small test image");
+            let value = f32::from(index + 1) / denominator;
+            RgbaF32Pixel::new(
+                value,
+                value * 0.75,
+                value * 0.25,
+                f32::from(index) / denominator,
+            )
+        })
+        .collect();
+    let source_color = SourceColor::declared(ImageColorEncoding::SrgbD65).expect("declared sRGB");
+    RgbaF32Image::new(
+        RgbaF32Descriptor::with_source_representation(
+            dimensions,
+            RgbaF32ColorEncoding::SrgbD65,
+            RgbaF32SourceRepresentation::U8,
+        )
+        .with_source_orientation(orientation)
+        .with_source_color(source_color),
+        pixels,
+    )
+    .expect("valid encoded image")
+}
+
+fn rec2020_colorin_operation(id: u128) -> Operation {
+    typed_operation(
+        id,
+        "rusttable.colorin",
+        vec![
+            (
+                "input_profile",
+                ParameterValue::Text(ParameterText::new("builtin:srgb").expect("input profile")),
+            ),
+            (
+                "working_profile",
+                ParameterValue::Text(
+                    ParameterText::new("builtin:linear-rec2020").expect("working profile"),
+                ),
+            ),
+            ("intent", ParameterValue::Integer(0)),
+            ("normalize", ParameterValue::Integer(0)),
+            ("blue_mapping", ParameterValue::Bool(true)),
+        ],
+    )
+}
+
 #[test]
 fn automatic_flip_executes_all_source_orientations_once_on_a_non_square_frame() {
     let orientations = [
@@ -170,6 +224,177 @@ fn automatic_flip_executes_all_source_orientations_once_on_a_non_square_frame() 
                 );
             }
         }
+    }
+}
+
+#[test]
+fn automatic_flip_rotate90_is_idempotent_across_snapshot_reingress() {
+    let input = encoded_image_with_evidence(3, 2, Orientation::Rotate90);
+    let input_descriptor = input.descriptor();
+    let automatic_flip = graph(vec![operation(
+        879,
+        "rusttable.flip",
+        &[("mode", 0.0), ("orientation", 0.0)],
+    )]);
+    let executor = CpuPixelpipeExecutor;
+
+    let first = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            input,
+            automatic_flip.clone(),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("first automatic flip");
+    let second = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            first.image().clone(),
+            automatic_flip,
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("re-ingressed automatic flip");
+    let output_dimensions = RasterDimensions::new(2, 3).expect("rotated dimensions");
+    let expected_descriptor = input_descriptor
+        .with_dimensions_and_color_encoding(output_dimensions, RgbaF32ColorEncoding::LinearSrgbD65)
+        .with_source_orientation(Orientation::Normal);
+
+    assert_eq!(first.image().descriptor(), expected_descriptor);
+    assert_eq!(second.image(), first.image());
+}
+
+#[test]
+fn crop_only_preserves_rotate90_for_automatic_flip_after_reingress() {
+    let input = encoded_image_with_evidence(7, 5, Orientation::Rotate90);
+    let input_descriptor = input.descriptor();
+    let crop = operation(
+        883,
+        "rusttable.crop",
+        &[
+            ("cx", 0.0),
+            ("cy", 0.0),
+            ("cw", 0.5),
+            ("ch", 1.0),
+            ("ratio_n", 0.0),
+            ("ratio_d", 0.0),
+        ],
+    );
+    let automatic_flip = operation(
+        884,
+        "rusttable.flip",
+        &[("mode", 0.0), ("orientation", 0.0)],
+    );
+    let executor = CpuPixelpipeExecutor;
+
+    let cropped = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            input.clone(),
+            graph(vec![crop.clone()]),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("source-derived crop");
+    let reingressed = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            cropped.image().clone(),
+            graph(vec![automatic_flip.clone()]),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("automatic flip after crop re-ingress");
+    let direct = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            input,
+            graph(vec![crop, automatic_flip]),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("single-snapshot crop and automatic flip");
+
+    assert_eq!(
+        cropped.image().descriptor(),
+        input_descriptor.with_dimensions_and_color_encoding(
+            cropped.image().descriptor().dimensions(),
+            RgbaF32ColorEncoding::LinearSrgbD65,
+        )
+    );
+    assert_eq!(
+        cropped.image().descriptor().source_orientation(),
+        Orientation::Rotate90
+    );
+    assert_eq!(
+        reingressed.image().descriptor().source_orientation(),
+        Orientation::Normal
+    );
+    assert_eq!(reingressed.image(), direct.image());
+}
+
+#[test]
+fn rec2020_colorin_geometry_exports_canonical_linear_srgb_with_full_evidence() {
+    let input = encoded_image_with_evidence(7, 5, Orientation::Rotate270);
+    let input_descriptor = input.descriptor();
+    let geometry = vec![
+        operation(
+            881,
+            "rusttable.crop",
+            &[
+                ("cx", 0.0),
+                ("cy", 0.0),
+                ("cw", 0.5),
+                ("ch", 1.0),
+                ("ratio_n", 0.0),
+                ("ratio_d", 0.0),
+            ],
+        ),
+        operation(
+            882,
+            "rusttable.flip",
+            &[("mode", 1.0), ("orientation", 6.0)],
+        ),
+    ];
+    let executor = CpuPixelpipeExecutor;
+
+    let canonical = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            input.clone(),
+            graph(vec![rec2020_colorin_operation(880)]),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("canonical non-geometry colorin");
+    let expected = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            canonical.image().clone(),
+            graph(geometry.clone()),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("canonical linear-sRGB geometry");
+    let actual = executor
+        .execute(&CpuPixelpipeSnapshot::new(
+            input,
+            graph(
+                std::iter::once(rec2020_colorin_operation(880))
+                    .chain(geometry)
+                    .collect(),
+            ),
+            CpuPixelpipeOutputMode::FullExport,
+        ))
+        .expect("Rec.2020 colorin geometry");
+
+    assert_eq!(
+        actual.image().descriptor(),
+        input_descriptor
+            .with_dimensions_and_color_encoding(
+                expected.image().descriptor().dimensions(),
+                RgbaF32ColorEncoding::LinearSrgbD65,
+            )
+            .with_source_orientation(Orientation::Normal)
+    );
+    assert_eq!(actual.image().descriptor(), expected.image().descriptor());
+    for (actual, expected) in actual
+        .image()
+        .pixels()
+        .iter()
+        .zip(expected.image().pixels())
+    {
+        assert!((actual.red() - expected.red()).abs() <= 2.0e-6);
+        assert!((actual.green() - expected.green()).abs() <= 2.0e-6);
+        assert!((actual.blue() - expected.blue()).abs() <= 2.0e-6);
+        assert_eq!(actual.alpha().to_bits(), expected.alpha().to_bits());
     }
 }
 

@@ -11,6 +11,7 @@ import {
   discoverRepositoryAppBundles,
   findStaleRepositoryRegistrationPaths,
   installCanonicalComputerUseApp,
+  launchComputerUseApp,
   parseComputerUseInstallOptions,
   parseGitWorktreePaths,
   parseLaunchServicesRegistrations,
@@ -40,6 +41,7 @@ export const commandEnvironment = (): Record<string, string> => {
 const help = `Usage: bun run install:computer-use [options]
 
 Build, install, and register rusttable - latest.app for Computer Use.
+The default foreground launch uses a decorated window sized to the usable macOS working area.
 
 Options:
   The canonical install path is ~/Applications/rusttable - latest.app.
@@ -195,10 +197,9 @@ const main = async (): Promise<void> => {
   }
 
   if (options.shouldLaunch) {
-    await runCommand({
-      args: ['-a', options.shouldInstall ? options.installPath : bundlePath],
-      command: 'open',
-      label: 'launch RustTable',
+    await launchComputerUseApp({
+      appPath: options.shouldInstall ? options.installPath : bundlePath,
+      run: runCommand,
     });
   }
 };

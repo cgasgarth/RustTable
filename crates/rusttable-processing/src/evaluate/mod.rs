@@ -31,8 +31,12 @@ pub(crate) use frame::{
     evaluate_graph_at_frame_boundaries_with_plans,
     evaluate_graph_at_frame_boundaries_with_plans_and_masks,
 };
-use lab_boundary::{apply_defringe, apply_relight, apply_shadhi};
-use mask::{apply_mask_blend, validate_operation_mask};
+pub use lab_boundary::{
+    ShadhiBilateralBoundaryError, ShadhiBilateralEvaluationError, evaluate_bilateral_shadhi_with,
+    evaluate_bilateral_shadhi_with_cancellation,
+};
+use lab_boundary::{apply_defringe, apply_relight, apply_shadhi_with_cancellation};
+use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvaluationError {
@@ -58,9 +62,20 @@ pub enum EvaluationError {
         operation_id: OperationId,
         reason: String,
     },
+    Cancelled {
+        step_index: PipelineStepIndex,
+        operation_id: OperationId,
+    },
     TerminalOutputRequiresTypedPublication {
         encoding: rusttable_color::ColorEncoding,
     },
+}
+
+impl EvaluationError {
+    #[must_use]
+    pub const fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Cancelled { .. })
+    }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlendArithmeticStage {
@@ -191,7 +206,7 @@ pub(crate) fn evaluate_steps_with_frame_and_masks<'a, I>(
     input: &[LinearRgb],
     dimensions: RasterDimensions,
     pixel_index_offset: usize,
-    mut frame: WorkingFrameDescriptor,
+    frame: WorkingFrameDescriptor,
     basicadj_plans: Option<&BasicAdjPlanSet>,
     masks: Option<&OperationMaskSet>,
 ) -> Result<
@@ -205,10 +220,47 @@ pub(crate) fn evaluate_steps_with_frame_and_masks<'a, I>(
 where
     I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
 {
+    evaluate_steps_with_frame_and_masks_with_cancellation(
+        steps,
+        input,
+        dimensions,
+        pixel_index_offset,
+        frame,
+        basicadj_plans,
+        masks,
+        || false,
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the canonical graph boundary carries explicit frame, mask, plan, and cancellation evidence"
+)]
+pub(crate) fn evaluate_steps_with_frame_and_masks_with_cancellation<'a, I, C>(
+    steps: I,
+    input: &[LinearRgb],
+    dimensions: RasterDimensions,
+    pixel_index_offset: usize,
+    mut frame: WorkingFrameDescriptor,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
+    cancelled: C,
+) -> Result<
+    (
+        Vec<LinearRgb>,
+        WorkingFrameDescriptor,
+        Option<TerminalOutputFrame>,
+    ),
+    EvaluationError,
+>
+where
+    I: IntoIterator<Item = (PipelineStepIndex, &'a PreparedCpuOperation)>,
+    C: Fn() -> bool,
+{
     let mut output = input.to_vec();
     let mut terminal = None;
     for (step_index, operation) in steps {
-        apply_operation_with_profile(
+        apply_operation_with_profile_with_cancellation(
             step_index,
             operation.operation(),
             &mut output,
@@ -218,6 +270,7 @@ where
             &mut frame,
             &mut terminal,
             masks,
+            &cancelled,
         )?;
     }
     Ok((output, frame, terminal))
@@ -229,7 +282,7 @@ where
 /// # Errors
 ///
 /// Returns the first graph-operation or automatic-analysis failure.
-pub use basicadj_runtime::prepare_basicadj_plans;
+pub use basicadj_runtime::{prepare_basicadj_plans, prepare_basicadj_plans_with_cancellation};
 pub(crate) fn execute_prepared_operation(
     operation: &PreparedCpuOperation,
     step_index: PipelineStepIndex,
@@ -284,7 +337,44 @@ pub(crate) fn apply_operation_with_profile(
     terminal: &mut Option<TerminalOutputFrame>,
     masks: Option<&OperationMaskSet>,
 ) -> Result<(), EvaluationError> {
+    apply_operation_with_profile_with_cancellation(
+        step_index,
+        operation,
+        pixels,
+        dimensions,
+        pixel_index_offset,
+        basicadj_plans,
+        frame,
+        terminal,
+        masks,
+        || false,
+    )
+}
+
+#[allow(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    reason = "the operation dispatcher keeps typed graph semantics centralized"
+)]
+pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
+    step_index: PipelineStepIndex,
+    operation: &ProcessingOperation,
+    pixels: &mut [LinearRgb],
+    dimensions: RasterDimensions,
+    pixel_index_offset: usize,
+    basicadj_plans: Option<&BasicAdjPlanSet>,
+    frame: &mut WorkingFrameDescriptor,
+    terminal: &mut Option<TerminalOutputFrame>,
+    masks: Option<&OperationMaskSet>,
+    cancelled: C,
+) -> Result<(), EvaluationError> {
     let operation_id = operation.operation_id();
+    if cancelled() {
+        return Err(EvaluationError::Cancelled {
+            step_index,
+            operation_id,
+        });
+    }
     let opacity = operation.opacity().get();
     if !operation.is_enabled() || opacity.to_bits() == 0.0f32.to_bits() {
         return Ok(());
@@ -293,7 +383,8 @@ pub(crate) fn apply_operation_with_profile(
     if let Some(mask) = mask {
         validate_operation_mask(mask, pixels.len(), dimensions, step_index, operation_id)?;
     }
-    let before_mask = mask.map(|_| pixels.to_vec());
+    let mask_route = OperationMaskRoute::new(operation.kind(), mask);
+    let before_mask = mask_route.working_rgb_blend().map(|_| pixels.to_vec());
     let result = match operation.kind() {
         ProcessingOperationKind::BasicAdj { config } => {
             let plan = basicadj_plans
@@ -416,8 +507,14 @@ pub(crate) fn apply_operation_with_profile(
                 })
                 .collect::<Vec<_>>();
             let candidate = plan
-                .execute(&rgba, || false)
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+                .execute(&rgba, &cancelled)
+                .map_err(|error| censorize_operation_error(step_index, operation_id, error))?;
+            if cancelled() {
+                return Err(EvaluationError::Cancelled {
+                    step_index,
+                    operation_id,
+                });
+            }
             let candidate = candidate
                 .into_iter()
                 .enumerate()
@@ -446,6 +543,12 @@ pub(crate) fn apply_operation_with_profile(
                 })
                 .collect::<Result<Vec<_>, OperationExecutionError>>()
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
+            if cancelled() {
+                return Err(EvaluationError::Cancelled {
+                    step_index,
+                    operation_id,
+                });
+            }
             apply_reconstruction(
                 pixels,
                 &candidate,
@@ -477,8 +580,14 @@ pub(crate) fn apply_operation_with_profile(
                 })
                 .collect::<Vec<_>>();
             let candidate = plan
-                .execute(&rgba, || false)
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+                .execute(&rgba, &cancelled)
+                .map_err(|error| clahe_operation_error(step_index, operation_id, error))?;
+            if cancelled() {
+                return Err(EvaluationError::Cancelled {
+                    step_index,
+                    operation_id,
+                });
+            }
             let candidate = candidate
                 .into_iter()
                 .enumerate()
@@ -507,6 +616,12 @@ pub(crate) fn apply_operation_with_profile(
                 })
                 .collect::<Result<Vec<_>, OperationExecutionError>>()
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
+            if cancelled() {
+                return Err(EvaluationError::Cancelled {
+                    step_index,
+                    operation_id,
+                });
+            }
             apply_reconstruction(
                 pixels,
                 &candidate,
@@ -572,8 +687,25 @@ pub(crate) fn apply_operation_with_profile(
             Ok(())
         }
         ProcessingOperationKind::Shadhi { config } => {
-            let candidate = apply_shadhi(*config, pixels, dimensions, frame.encoding(), opacity)
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let candidate = apply_shadhi_with_cancellation(
+                *config,
+                pixels,
+                dimensions,
+                frame.encoding(),
+                mask_route.native_values(),
+                opacity,
+                &cancelled,
+            )
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
             pixels.copy_from_slice(&candidate);
             Ok(())
         }
@@ -759,7 +891,13 @@ pub(crate) fn apply_operation_with_profile(
         )),
     };
     result?;
-    if let (Some(mask), Some(before)) = (mask, before_mask.as_deref()) {
+    if cancelled() {
+        return Err(EvaluationError::Cancelled {
+            step_index,
+            operation_id,
+        });
+    }
+    if let (Some(mask), Some(before)) = (mask_route.working_rgb_blend(), before_mask.as_deref()) {
         apply_mask_blend(
             pixels,
             before,
@@ -768,6 +906,12 @@ pub(crate) fn apply_operation_with_profile(
             operation_id,
             pixel_index_offset,
         )?;
+    }
+    if cancelled() {
+        return Err(EvaluationError::Cancelled {
+            step_index,
+            operation_id,
+        });
     }
     Ok(())
 }
@@ -792,6 +936,36 @@ fn operation_plan_error<E: fmt::Display>(
         step_index,
         operation_id,
         reason: error.to_string(),
+    }
+}
+
+fn censorize_operation_error(
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    error: crate::operations::censorize::CensorizeExecutionError,
+) -> EvaluationError {
+    match error {
+        crate::operations::censorize::CensorizeExecutionError::Cancelled => {
+            EvaluationError::Cancelled {
+                step_index,
+                operation_id,
+            }
+        }
+        error => operation_plan_error(step_index, operation_id, error),
+    }
+}
+
+fn clahe_operation_error(
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    error: crate::operations::clahe::ClaheExecutionError,
+) -> EvaluationError {
+    match error {
+        crate::operations::clahe::ClaheExecutionError::Cancelled => EvaluationError::Cancelled {
+            step_index,
+            operation_id,
+        },
+        error => operation_plan_error(step_index, operation_id, error),
     }
 }
 impl fmt::Display for EvaluationError {
@@ -833,6 +1007,14 @@ impl fmt::Display for EvaluationError {
             } => write!(
                 formatter,
                 "operation {operation_id} at pipeline step {} failed during reconstruction: {reason}",
+                step_index.get()
+            ),
+            Self::Cancelled {
+                step_index,
+                operation_id,
+            } => write!(
+                formatter,
+                "operation {operation_id} at pipeline step {} was cancelled",
                 step_index.get()
             ),
             Self::TerminalOutputRequiresTypedPublication { encoding } => write!(

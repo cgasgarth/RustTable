@@ -28,4 +28,9 @@ Run the complete local commit gate:
 cargo xtask check
 ```
 
+The commit gate must not activate, raise, or switch desktop applications. Foreground visual review
+and real Command-Q validation are separate, explicit workflows:
+`bun run screenshot:ui-review -- --allow-foreground` and
+`bun run smoke:macos-computer-use -- --allow-foreground`.
+
 Commit coherent file ports directly on `codex/file-by-file-migration`. Open a ready-for-review PR only for a meaningful migration milestone; explain why and how, list exact source-to-Rust mappings, record validation and known unported dependencies, then squash merge.

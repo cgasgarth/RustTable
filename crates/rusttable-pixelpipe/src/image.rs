@@ -160,6 +160,20 @@ impl RgbaF32Descriptor {
         self
     }
 
+    /// Derives a raster boundary while retaining all decoded-source evidence.
+    #[must_use]
+    pub const fn with_dimensions_and_color_encoding(
+        self,
+        dimensions: RasterDimensions,
+        color_encoding: RgbaF32ColorEncoding,
+    ) -> Self {
+        Self {
+            dimensions,
+            color_encoding,
+            ..self
+        }
+    }
+
     #[must_use]
     pub const fn dimensions(self) -> RasterDimensions {
         self.dimensions
@@ -287,14 +301,18 @@ impl RgbaF32Image {
             validate_component(pixel_index, RgbaF32Channel::Green, pixel.green())?;
             validate_component(pixel_index, RgbaF32Channel::Blue, pixel.blue())?;
             validate_component(pixel_index, RgbaF32Channel::Alpha, pixel.alpha())?;
-            let transfer_encoded = descriptor
-                .color_encoding()
-                .transfer()
-                .is_some_and(|transfer| transfer != rusttable_color::TransferFunction::Linear)
-                || descriptor
-                    .source_color()
-                    .and_then(SourceColor::transfer)
-                    .is_some_and(|transfer| transfer != rusttable_color::TransferFunction::Linear);
+            let transfer = descriptor.color_encoding().transfer().or_else(|| {
+                if matches!(
+                    descriptor.color_encoding(),
+                    RgbaF32ColorEncoding::External(_)
+                ) {
+                    descriptor.source_color().and_then(SourceColor::transfer)
+                } else {
+                    None
+                }
+            });
+            let transfer_encoded = transfer
+                .is_some_and(|transfer| transfer != rusttable_color::TransferFunction::Linear);
             if transfer_encoded {
                 validate_normalized(pixel_index, RgbaF32Channel::Red, pixel.red())?;
                 validate_normalized(pixel_index, RgbaF32Channel::Green, pixel.green())?;

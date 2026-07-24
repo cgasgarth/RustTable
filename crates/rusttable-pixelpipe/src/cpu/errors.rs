@@ -9,6 +9,10 @@ impl fmt::Display for CpuPixelpipeError {
             Self::UnsupportedInputEncoding { actual } => {
                 write!(formatter, "CPU pixelpipe does not accept {actual:?} input")
             }
+            Self::MissingSourceColor { actual } => write!(
+                formatter,
+                "CPU pixelpipe input {actual:?} requires complete source-color evidence"
+            ),
             Self::UnsupportedProfileTransform { profile } => write!(
                 formatter,
                 "CPU pixelpipe has no pure-Rust transform for authoritative ICC profile {profile}"
@@ -42,6 +46,7 @@ impl std::error::Error for CpuPixelpipeError {
         match self {
             Self::Cancelled(_)
             | Self::UnsupportedInputEncoding { .. }
+            | Self::MissingSourceColor { .. }
             | Self::UnsupportedProfileTransform { .. }
             | Self::SourceColorPlan(_) => None,
             Self::InputBridge { source } | Self::OutputBoundary { source } => Some(source),

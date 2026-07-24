@@ -7,6 +7,7 @@ import {
   findStaleRepositoryRegistrationPaths,
   cleanupRepositoryAppBundles,
   installCanonicalComputerUseApp,
+  launchComputerUseApp,
   parseBundleIdentifier,
   parseComputerUseInstallOptions,
   parseGitWorktreePaths,
@@ -18,6 +19,7 @@ import {
   DEFAULT_COMPUTER_USE_APP_PATH,
   unregisterMissingRepositoryBundles,
   unregisterRepositoryBundles,
+  renderComputerUseWindowScript,
 } from './computer-use-app-install';
 import { commandEnvironment } from './install-computer-use-app';
 import {
@@ -57,6 +59,36 @@ describe('computer-use installer parsing', () => {
   test('rejects unknown flags and missing app paths', () => {
     expect(() => parseComputerUseInstallOptions(['--wat'])).toThrow('Unknown computer-use install option');
     expect(() => parseComputerUseInstallOptions(['--app-path', '/tmp/other.app'])).toThrow('fixed');
+  });
+
+  test('launches deliberate Computer Use as a decorated usable-area window, never native full-screen', async () => {
+    const requests: Array<{ args: string[]; command: string; label: string }> = [];
+    await launchComputerUseApp({
+      appPath: '/Applications/rusttable - latest.app',
+      run: async (request) => {
+        requests.push(request);
+        return { exitCode: 0, stderr: '', stdout: '' };
+      },
+    });
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toEqual({
+      args: ['-a', '/Applications/rusttable - latest.app'],
+      command: 'open',
+      label: 'launch RustTable',
+    });
+    expect(requests[1]?.command).toBe('osascript');
+    expect(requests[1]?.args.slice(0, 3)).toEqual(['-l', 'JavaScript', '-e']);
+    const script = requests[1]?.args[3] ?? '';
+    expect(script).toContain('visibleFrame');
+    expect(script).toContain("name: 'AXFullScreen'");
+    expect(script).toContain('fullScreenAttributes[0].value = false');
+    expect(script).toContain("'AXStandardWindow'");
+    expect(script).toContain("'AXCloseButton'");
+    expect(script).not.toContain('fullScreenAttributes[0].value = true');
+  });
+
+  test('rejects unsafe bundle identifiers before rendering the launch script', () => {
+    expect(() => renderComputerUseWindowScript('com.example.bad\";')).toThrow('unsupported characters');
   });
 
   test('parses a bundle identifier from a plist', () => {

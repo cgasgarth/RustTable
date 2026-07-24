@@ -3,7 +3,7 @@ use std::fmt;
 use crate::evaluate::{
     BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions,
     evaluate_graph_at_frame_boundaries_with_plans_and_masks, evaluate_steps,
-    evaluate_steps_with_frame_and_masks, graph_has_frame_geometry,
+    evaluate_steps_with_frame_and_masks_with_cancellation, graph_has_frame_geometry,
 };
 use crate::{
     CompiledOperationGraph, EvaluationError, LinearRgb, OperationMaskSet, RasterDimensions,
@@ -279,6 +279,29 @@ pub fn evaluate_graph_output_with_basicadj_plans_and_masks(
     plans: Option<&BasicAdjPlanSet>,
     masks: Option<&OperationMaskSet>,
 ) -> Result<crate::EvaluationOutput, EvaluationError> {
+    evaluate_graph_output_with_basicadj_plans_and_masks_with_cancellation(
+        graph,
+        input,
+        plans,
+        masks,
+        || false,
+    )
+}
+
+/// Cancellable form of
+/// [`evaluate_graph_output_with_basicadj_plans_and_masks`].
+///
+/// # Errors
+///
+/// Returns [`EvaluationError::Cancelled`] when the signal is observed before
+/// a graph node or by a cancellable operation.
+pub fn evaluate_graph_output_with_basicadj_plans_and_masks_with_cancellation<F: Fn() -> bool>(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
+    cancelled: F,
+) -> Result<crate::EvaluationOutput, EvaluationError> {
     if graph_has_frame_geometry(graph) {
         let alpha = vec![1.0; input.pixel_slice().len()];
         let evaluated = evaluate_graph_at_frame_boundaries_with_plans_and_masks(
@@ -288,14 +311,14 @@ pub fn evaluate_graph_output_with_basicadj_plans_and_masks(
             FrameBoundaryOptions::new(FrameBoundaryMode::Preview),
             plans,
             masks,
-            || false,
+            &cancelled,
         )?;
         return Ok(evaluated.terminal_output().cloned().map_or_else(
             || crate::EvaluationOutput::Working(evaluated.image().clone()),
             crate::EvaluationOutput::Terminal,
         ));
     }
-    let (pixels, frame, terminal) = evaluate_steps_with_frame_and_masks(
+    let (pixels, frame, terminal) = evaluate_steps_with_frame_and_masks_with_cancellation(
         graph
             .nodes()
             .map(|node| (node.pipeline_step_index(), node.prepared())),
@@ -305,6 +328,7 @@ pub fn evaluate_graph_output_with_basicadj_plans_and_masks(
         input.frame(),
         plans,
         masks,
+        cancelled,
     )?;
     Ok(terminal.map_or_else(
         || {
@@ -345,7 +369,31 @@ pub fn evaluate_graph_with_basicadj_plans_and_masks(
     plans: Option<&BasicAdjPlanSet>,
     masks: Option<&OperationMaskSet>,
 ) -> Result<WorkingRgbImage, EvaluationError> {
-    match evaluate_graph_output_with_basicadj_plans_and_masks(graph, input, plans, masks)? {
+    evaluate_graph_with_basicadj_plans_and_masks_with_cancellation(
+        graph,
+        input,
+        plans,
+        masks,
+        || false,
+    )
+}
+
+/// Cancellable form of [`evaluate_graph_with_basicadj_plans_and_masks`].
+///
+/// # Errors
+///
+/// Returns [`EvaluationError::Cancelled`] when the signal is observed before
+/// publication, or the first ordinary graph-evaluation error.
+pub fn evaluate_graph_with_basicadj_plans_and_masks_with_cancellation<F: Fn() -> bool>(
+    graph: &CompiledOperationGraph,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
+    cancelled: F,
+) -> Result<WorkingRgbImage, EvaluationError> {
+    match evaluate_graph_output_with_basicadj_plans_and_masks_with_cancellation(
+        graph, input, plans, masks, cancelled,
+    )? {
         crate::EvaluationOutput::Working(output) => Ok(output),
         crate::EvaluationOutput::Terminal(output) => {
             Err(EvaluationError::TerminalOutputRequiresTypedPublication {

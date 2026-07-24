@@ -11,7 +11,8 @@
     "test:darktable-ui-smoke": "bash scripts/dev/darktable-ui-smoke.sh",
     "test:doctor": "bash scripts/dev/test-doctor.sh",
     "test:macos-artifact-identity": "bun test scripts/macos-artifact-identity.test.ts",
-    "test:macos-computer-use-smoke": "bash scripts/macos-computer-use-smoke.sh",
+    "test:macos-computer-use-smoke": "bash scripts/test-macos-computer-use-smoke.sh",
+    "smoke:macos-computer-use": "bash scripts/macos-computer-use-smoke.sh",
     "test:linux-artifact-identity": "bun test scripts/linux-artifact-identity.test.ts",
     "test:linux-distribution-smoke": "bash scripts/test-linux-distribution-smoke.sh",
     "test:platform-support": "bun test scripts/platform-support.test.ts"

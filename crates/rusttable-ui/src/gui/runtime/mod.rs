@@ -147,7 +147,7 @@ impl GtkShell {
             .title(initial_i18n.text(MessageId::AppTitle, &MessageArgs::new()))
             .build();
         #[cfg(target_os = "macos")]
-        window.set_decorated(false);
+        window.set_decorated(true);
         window.set_widget_name("rusttable-window");
         apply_theme_role(&window, ThemeRole::Shell);
         let import_dialog = ImportDialog::new(&window);

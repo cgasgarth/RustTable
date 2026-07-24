@@ -76,8 +76,14 @@ impl fmt::Display for BilateralError {
 
 impl std::error::Error for BilateralError {}
 
+/// Canonical bilateral-grid geometry shared by the CPU and GPU ports.
+///
+/// Darktable's `OpenCL` implementation calls the CPU
+/// `dt_bilateral_grid_size` helper rather than maintaining a second formula.
+/// Keeping this type public preserves that single source of truth for safe
+/// Rust backends as well.
 #[derive(Debug, Clone, Copy)]
-struct GridGeometry {
+pub struct BilateralGeometry {
     width: usize,
     height: usize,
     pixels: usize,
@@ -90,10 +96,17 @@ struct GridGeometry {
     range_reciprocal: f32,
     grid_values: usize,
     memory_bytes: usize,
+    gpu_memory_bytes: usize,
 }
 
-impl GridGeometry {
-    fn new(
+impl BilateralGeometry {
+    /// Resolves Darktable's clamped grid dimensions and effective sigmas.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for zero image dimensions, a non-finite spatial
+    /// sigma, a non-finite or non-positive range sigma, or size overflow.
+    pub fn new(
         width: usize,
         height: usize,
         sigma_s: f32,
@@ -145,6 +158,10 @@ impl GridGeometry {
             .checked_add(scratch_values)
             .and_then(|values| values.checked_mul(size_of::<f32>()))
             .ok_or(BilateralError::SizeOverflow)?;
+        let gpu_memory_bytes = grid_values
+            .checked_mul(2)
+            .and_then(|values| values.checked_mul(size_of::<f32>()))
+            .ok_or(BilateralError::SizeOverflow)?;
 
         Ok(Self {
             width,
@@ -159,14 +176,57 @@ impl GridGeometry {
             range_reciprocal,
             grid_values,
             memory_bytes,
+            gpu_memory_bytes,
         })
+    }
+
+    #[must_use]
+    pub const fn width(self) -> usize {
+        self.width
+    }
+
+    #[must_use]
+    pub const fn height(self) -> usize {
+        self.height
+    }
+
+    #[must_use]
+    pub const fn pixel_count(self) -> usize {
+        self.pixels
+    }
+
+    #[must_use]
+    pub const fn grid_dimensions(self) -> [usize; 3] {
+        [self.size_x, self.size_y, self.size_z]
+    }
+
+    #[must_use]
+    pub const fn grid_values(self) -> usize {
+        self.grid_values
+    }
+
+    #[must_use]
+    pub const fn effective_sigma_s(self) -> f32 {
+        self.sigma_s
+    }
+
+    #[must_use]
+    pub const fn effective_sigma_r(self) -> f32 {
+        self.sigma_r
+    }
+
+    /// Bytes used by the two full grid buffers in Darktable's `OpenCL` path.
+    ///
+    #[must_use]
+    pub const fn gpu_grid_memory_bytes(self) -> usize {
+        self.gpu_memory_bytes
     }
 }
 
 /// Darktable's scalar x/y/L bilateral grid.
 #[derive(Debug)]
 pub struct BilateralGrid {
-    geometry: GridGeometry,
+    geometry: BilateralGeometry,
     buffer: Vec<f32>,
 }
 
@@ -186,7 +246,7 @@ impl BilateralGrid {
         sigma_s: f32,
         sigma_r: f32,
     ) -> Result<Self, BilateralError> {
-        let geometry = GridGeometry::new(width, height, sigma_s, sigma_r)?;
+        let geometry = BilateralGeometry::new(width, height, sigma_s, sigma_r)?;
         let allocation_bytes = geometry
             .grid_values
             .checked_mul(size_of::<f32>())
@@ -212,7 +272,8 @@ impl BilateralGrid {
         sigma_s: f32,
         sigma_r: f32,
     ) -> Result<usize, BilateralError> {
-        GridGeometry::new(width, height, sigma_s, sigma_r).map(|geometry| geometry.memory_bytes)
+        BilateralGeometry::new(width, height, sigma_s, sigma_r)
+            .map(|geometry| geometry.memory_bytes)
     }
 
     #[must_use]
