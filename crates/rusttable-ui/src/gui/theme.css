@@ -313,6 +313,48 @@ button:disabled:hover,
   margin: 0 2px;
 }
 
+.dt_bauhaus {
+  min-width: 0;
+}
+
+.dt_bauhaus_anchor {
+  min-width: 1px;
+  min-height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+}
+
+menubutton.dt_bauhaus_anchor > button {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+menubutton.dt_bauhaus_anchor .dt_bauhaus_anchor_content {
+  min-width: 1px;
+  min-height: 1px;
+}
+
+popover.dt_bauhaus_popup {
+  padding: 0.42em;
+  border: 1px solid {{border}};
+  border-radius: 2px;
+  background-color: {{button_background}};
+}
+
+popover.dt_bauhaus_popup .dt_bauhaus_numeric_text {
+  padding: 0.42em;
+  font-size: 3em;
+}
+
+popover.dt_bauhaus_popup .dt_bauhaus_current_value {
+  padding: 0.42em;
+}
+
 .dt_field,
 .dt_module_row dropdown {
   min-width: 48px;

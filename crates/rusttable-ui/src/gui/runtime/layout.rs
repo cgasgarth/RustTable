@@ -830,7 +830,10 @@ fn module_expander(module: &ModulePanelViewModel, index: usize) -> gtk4::Expande
     content.set_widget_name(&format!("module-{index}-controls"));
     for control in module.controls() {
         let widget: gtk4::Widget = match control.kind() {
-            ModuleControlKind::Slider => slider("module-slider", 0.0, 1.0, 0.01, false).upcast(),
+            ModuleControlKind::Slider => slider("module-slider", 0.0, 1.0, 0.01, false)
+                .widget()
+                .clone()
+                .upcast(),
             ModuleControlKind::Toggle => switch("module-switch").upcast(),
             ModuleControlKind::Choice => dropdown("module-dropdown", &["default"]).upcast(),
         };

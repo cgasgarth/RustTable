@@ -7,6 +7,8 @@
 
 use gtk4::prelude::*;
 
+use crate::bauhaus::slider_input::{BauhausSlider, SliderInputSpec, attach as attach_slider_input};
+
 use super::{
     DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role,
 };
@@ -112,7 +114,7 @@ pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4:
 
 pub(crate) fn scale_row(
     label: &str,
-    scale: &gtk4::Scale,
+    scale: &BauhausSlider,
     value: &gtk4::Label,
     unit: &str,
 ) -> gtk4::Box {
@@ -132,7 +134,7 @@ pub(crate) fn scale_row(
     heading.append(&label_widget);
     heading.append(value);
     row.append(&heading);
-    row.append(scale);
+    row.append(scale.widget());
     row
 }
 
@@ -195,7 +197,25 @@ pub(crate) fn slider(
     maximum: f64,
     step: f64,
     draw_value: bool,
-) -> gtk4::Scale {
+) -> BauhausSlider {
+    slider_with_input_spec(
+        id,
+        minimum,
+        maximum,
+        step,
+        draw_value,
+        SliderInputSpec::IDENTITY,
+    )
+}
+
+pub(crate) fn slider_with_input_spec(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    step: f64,
+    draw_value: bool,
+    input_spec: SliderInputSpec,
+) -> BauhausSlider {
     let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, minimum, maximum, step);
     slider.set_widget_name(id);
     slider.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
@@ -203,7 +223,7 @@ pub(crate) fn slider(
     slider.set_hexpand(true);
     slider.set_draw_value(draw_value);
     slider.add_css_class("dt_slider");
-    slider
+    attach_slider_input(slider, input_spec)
 }
 
 pub(crate) fn switch(id: &str) -> gtk4::Switch {

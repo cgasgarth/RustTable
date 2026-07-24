@@ -15,9 +15,10 @@ use rusttable_processing::{
 
 use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
+use crate::bauhaus::slider_input::{BauhausSlider, SliderInputSpec};
 use crate::gui::darktable_components::{
     MODULE_GAP, dropdown, module_expander as shared_module_expander, module_row, scale_row, slider,
-    switch,
+    slider_with_input_spec, switch,
 };
 
 type ExposureActionHandler = Rc<dyn Fn(ExposureAction)>;
@@ -68,27 +69,28 @@ impl ExposurePanel {
         let mode_stack = gtk4::Stack::new();
         mode_stack.set_widget_name("exposure-mode-stack");
         mode_stack.set_hhomogeneous(false);
-        let exposure = slider(
+        let exposure_slider = slider_with_input_spec(
             "exposure-ev",
             EXPOSURE_EV_MINIMUM,
             EXPOSURE_EV_MAXIMUM,
             0.001,
             false,
+            SliderInputSpec::IDENTITY.with_suffix(" EV"),
         );
-        let black = slider(
+        let black_slider = slider(
             "exposure-black",
             BLACK_LEVEL_MINIMUM,
             BLACK_LEVEL_MAXIMUM,
             0.0001,
             false,
         );
-        exposure.set_digits(3);
-        exposure.set_tooltip_text(Some(&format!(
+        exposure_slider.scale().set_digits(3);
+        exposure_slider.scale().set_tooltip_text(Some(&format!(
             "adjust exposure correction; soft range {EXPOSURE_EV_SOFT_MINIMUM:.0} to \
              {EXPOSURE_EV_SOFT_MAXIMUM:.0} EV"
         )));
-        black.set_digits(4);
-        black.set_tooltip_text(Some(&format!(
+        black_slider.scale().set_digits(4);
+        black_slider.scale().set_tooltip_text(Some(&format!(
             "adjust black level; soft range {BLACK_LEVEL_SOFT_MINIMUM:.1} to \
              {BLACK_LEVEL_SOFT_MAXIMUM:.1}"
         )));
@@ -114,7 +116,7 @@ impl ExposurePanel {
             "compensate highlight preservation",
             &compensate_highlight_preservation,
         );
-        append_scale_row(&manual, "exposure", &exposure, &exposure_value, "EV");
+        append_scale_row(&manual, "exposure", &exposure_slider, &exposure_value, "EV");
         mode_stack.add_named(&manual, Some("manual"));
         let automatic = gtk4::Label::new(Some("automatic exposure uses the source histogram"));
         automatic.set_widget_name("exposure-automatic-status");
@@ -144,7 +146,7 @@ impl ExposurePanel {
         content.set_hexpand(true);
         append_dropdown_row(&content, "mode", &mode);
         content.append(&mode_stack);
-        append_scale_row(&content, "black", &black, &black_value, "");
+        append_scale_row(&content, "black", &black_slider, &black_value, "");
         content.append(&status);
 
         let header = gtk4::Box::new(gtk4::Orientation::Horizontal, MODULE_GAP);
@@ -172,13 +174,21 @@ impl ExposurePanel {
         expander.set_accessible_role(gtk4::AccessibleRole::Group);
         expander.update_property(&[Property::Label("Exposure processing module")]);
         identify(&mode, "exposure-mode", "Exposure mode");
-        identify(&exposure, "exposure-ev", "Exposure correction in EV");
+        identify(
+            exposure_slider.scale(),
+            "exposure-ev",
+            "Exposure correction in EV",
+        );
         identify(
             &exposure_value,
             "exposure-value",
             "Current exposure correction in EV",
         );
-        identify(&black, "exposure-black", "Exposure black level");
+        identify(
+            black_slider.scale(),
+            "exposure-black",
+            "Exposure black level",
+        );
         identify(&black_value, "black-value", "Current exposure black level");
         identify(
             &compensate_exposure_bias,
@@ -192,6 +202,8 @@ impl ExposurePanel {
         );
         identify(&reset, "exposure-reset", "Reset exposure module");
 
+        let exposure = exposure_slider.scale().clone();
+        let black = black_slider.scale().clone();
         let panel = Self {
             expander,
             state,
@@ -460,7 +472,7 @@ fn append_dropdown_row(container: &gtk4::Box, label: &str, control: &gtk4::DropD
 fn append_scale_row(
     container: &gtk4::Box,
     label: &str,
-    control: &gtk4::Scale,
+    control: &BauhausSlider,
     value: &gtk4::Label,
     unit: &str,
 ) {
