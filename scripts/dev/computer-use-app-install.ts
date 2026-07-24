@@ -167,6 +167,7 @@ export const parseComputerUseInstallOptions = (
     '--compact',
     '--help',
     '-h',
+    '--launch',
     '--no-build',
     '--no-install',
     '--no-launch',
@@ -177,12 +178,15 @@ export const parseComputerUseInstallOptions = (
     if (!knownFlags.has(argument)) throw new Error(`Unknown computer-use install option: ${argument}`);
     if (argument === '--app-path') throw new Error('Computer Use install path is fixed and cannot be overridden.');
   }
+  if (args.includes('--launch') && args.includes('--no-launch')) {
+    throw new Error('Computer Use install options --launch and --no-launch are mutually exclusive.');
+  }
 
   return {
     installPath: resolve(cwd, DEFAULT_COMPUTER_USE_APP_PATH),
     shouldBuild: !args.includes('--no-build'),
     shouldInstall: !args.includes('--no-install'),
-    shouldLaunch: !args.includes('--no-launch'),
+    shouldLaunch: args.includes('--launch'),
     showHelp: args.includes('--help') || args.includes('-h'),
     verboseBuildLogs: !args.includes('--compact'),
   };
@@ -383,12 +387,20 @@ export const installCanonicalComputerUseApp = async ({
   try {
     await run({ args: [sourcePath, stagingPath], command: 'ditto', label: 'stage computer-use app' });
     await assertCompleteBundle(stagingPath, readIdentifier, readManifestValue);
-    await run({
+    const installedProcess = await run({
       allowedExitCodes: [0, 1],
-      args: ['-e', `tell application id "${RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER}" to quit`],
-      command: 'osascript',
-      label: 'quit installed RustTable',
+      args: ['-f', join(installPath, 'Contents/MacOS/RustTable')],
+      command: 'pgrep',
+      label: 'check whether installed RustTable is running',
     });
+    if (installedProcess.exitCode === 0) {
+      await run({
+        allowedExitCodes: [0, 1],
+        args: ['-e', `tell application id "${RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER}" to quit`],
+        command: 'osascript',
+        label: 'quit installed RustTable',
+      });
+    }
     if (await pathExists(installPath)) {
       await assertCompleteBundle(installPath, readIdentifier, readManifestValue, {
         allowLegacyIcon: true,

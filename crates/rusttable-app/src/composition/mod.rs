@@ -530,9 +530,14 @@ fn install_action_input(shell: &rusttable_ui::GtkShell) {
             modifiers: Modifiers::empty(),
         },
     ));
+    let window_action = if cfg!(target_os = "macos") {
+        "window/maximize"
+    } else {
+        "window/fullscreen"
+    };
     service.add_mapping(
         ActionMapping::new(
-            ActionId::new("window/fullscreen").expect("static action id"),
+            ActionId::new(window_action).expect("static action id"),
             Binding::Keyboard {
                 key: KeyCode::named("F11"),
                 modifiers: Modifiers::empty(),
@@ -551,6 +556,13 @@ fn install_action_input(shell: &rusttable_ui::GtkShell) {
         match event.action.as_str() {
             "view/lighttable" => shell.show_workspace(rusttable_ui::WorkspaceRole::Lighttable),
             "view/darkroom" => shell.show_workspace(rusttable_ui::WorkspaceRole::Darkroom),
+            "window/maximize" => {
+                if callback_window.is_maximized() {
+                    callback_window.unmaximize();
+                } else {
+                    callback_window.maximize();
+                }
+            }
             "window/fullscreen" => {
                 if callback_window.is_fullscreen() {
                     callback_window.unfullscreen();

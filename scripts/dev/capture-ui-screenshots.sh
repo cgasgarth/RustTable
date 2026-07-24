@@ -9,8 +9,6 @@ Build, install, and capture RustTable/Darktable Lighttable and Darkroom review P
 
 Options:
   --allow-foreground Acknowledge that this command activates and switches apps
-  --width PIXELS     Capture width (default: current screen usable width)
-  --height PIXELS    Capture height (default: current screen usable height)
   --run-id ID        Output directory name (default: UTC timestamp)
   --reference-app PATH
                      Original Darktable bundle (default: /Applications/darktable.app)
@@ -28,8 +26,6 @@ Output:
 EOF
 }
 
-width=""
-height=""
 run_id=""
 reference_app="/Applications/darktable.app"
 reference_dir=""
@@ -43,16 +39,6 @@ while (($#)); do
     --allow-foreground)
       allow_foreground=true
       shift
-      ;;
-    --width)
-      [[ $# -ge 2 ]] || { printf 'error: --width requires a value\n' >&2; exit 2; }
-      width="$2"
-      shift 2
-      ;;
-    --height)
-      [[ $# -ge 2 ]] || { printf 'error: --height requires a value\n' >&2; exit 2; }
-      height="$2"
-      shift 2
       ;;
     --run-id)
       [[ $# -ge 2 ]] || { printf 'error: --run-id requires a value\n' >&2; exit 2; }
@@ -93,14 +79,6 @@ while (($#)); do
   esac
 done
 
-if [[ -n "$width" || -n "$height" ]]; then
-  [[ -n "$width" && -n "$height" ]] || {
-    printf 'error: --width and --height must be supplied together\n' >&2
-    exit 2
-  }
-  [[ "$width" =~ ^[1-9][0-9]*$ ]] || { printf 'error: width must be a positive integer\n' >&2; exit 2; }
-  [[ "$height" =~ ^[1-9][0-9]*$ ]] || { printf 'error: height must be a positive integer\n' >&2; exit 2; }
-fi
 if [[ -n "$run_id" && ! "$run_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
   printf 'error: run ID may contain only letters, digits, dot, underscore, and hyphen\n' >&2
   exit 2
@@ -138,14 +116,8 @@ for value in "$capture_x" "$capture_y" "$working_width" "$working_height"; do
     exit 1
   }
 done
-if [[ -z "$width" ]]; then
-  width="$working_width"
-  height="$working_height"
-elif (( width > working_width || height > working_height )); then
-  printf 'error: requested %sx%s capture exceeds usable working area %sx%s\n' \
-    "$width" "$height" "$working_width" "$working_height" >&2
-  exit 2
-fi
+width="$working_width"
+height="$working_height"
 
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
