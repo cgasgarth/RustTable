@@ -87,10 +87,14 @@ pub fn run() -> Result<(), DesktopRunError> {
         rusttable_diagnostics::install,
         |guard| {
             let diagnostics = AppDiagnostics::from_guard(guard);
-            if crate::configuration::load().is_err() {
+            let slider_zoom_step = if let Ok(report) = crate::configuration::load() {
+                report.snapshot.configuration.ui.bauhaus_zoom_step
+            } else {
                 diagnostics.lifecycle_failure("configuration_rejected", "configuration_load");
                 tracing::warn!(target: "rusttable.app", operation = "configuration_load", cause = "configuration_rejected", "configuration rejected; using compiled defaults");
-            }
+                true
+            };
+            rusttable_ui::bauhaus::set_slider_zoom_step(slider_zoom_step);
             if !preflight.is_supported() {
                 return Ok(());
             }

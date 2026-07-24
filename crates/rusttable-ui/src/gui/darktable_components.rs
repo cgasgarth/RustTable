@@ -216,6 +216,26 @@ pub(crate) fn slider_with_input_spec(
     draw_value: bool,
     input_spec: SliderInputSpec,
 ) -> BauhausSlider {
+    let slider = styled_scale(id, minimum, maximum, step, draw_value);
+    attach_slider_input(slider, input_spec)
+}
+
+/// Builds a styled plain scale for provisional descriptor-driven controls.
+///
+/// Generic processing descriptors do not yet carry Darktable's presentation
+/// curve, soft range, digits, or formatting metadata, so they must not expose
+/// the source-specific Bauhaus fine-tune popup until that mapping exists.
+pub(crate) fn provisional_scale(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    step: f64,
+    draw_value: bool,
+) -> gtk4::Scale {
+    styled_scale(id, minimum, maximum, step, draw_value)
+}
+
+fn styled_scale(id: &str, minimum: f64, maximum: f64, step: f64, draw_value: bool) -> gtk4::Scale {
     let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, minimum, maximum, step);
     slider.set_widget_name(id);
     slider.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
@@ -223,7 +243,7 @@ pub(crate) fn slider_with_input_spec(
     slider.set_hexpand(true);
     slider.set_draw_value(draw_value);
     slider.add_css_class("dt_slider");
-    attach_slider_input(slider, input_spec)
+    slider
 }
 
 pub(crate) fn switch(id: &str) -> gtk4::Switch {

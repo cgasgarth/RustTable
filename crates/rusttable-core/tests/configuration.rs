@@ -19,6 +19,35 @@ fn defaults_are_complete_and_layer_precedence_is_explicit() {
     assert_eq!(configuration.gpu.mode, GpuMode::Gpu);
     assert_eq!(configuration.processing.cpu_threads, 8);
     assert_eq!(configuration.ui.preview_max_edge, 1536);
+    assert!(configuration.ui.bauhaus_zoom_step);
+}
+
+#[test]
+fn bauhaus_zoom_step_is_a_typed_ui_preference() {
+    let (configuration, _, findings) = resolve_layers(
+        Some("schema_version = 1\n[ui]\nbauhaus_zoom_step = false\n"),
+        &EnvironmentOverrides::default(),
+        &BTreeMap::new(),
+    )
+    .expect("configured Bauhaus slider step policy");
+
+    assert!(!configuration.ui.bauhaus_zoom_step);
+    assert!(findings.is_empty());
+
+    let mut startup = BTreeMap::new();
+    startup.insert(
+        "ui.bauhaus_zoom_step".to_owned(),
+        OverrideValue::Boolean(false),
+    );
+    let (configuration, _, findings) = resolve_layers(
+        Some("schema_version = 1\n[ui]\nbauhaus_zoom_step = true\n"),
+        &EnvironmentOverrides::default(),
+        &startup,
+    )
+    .expect("startup override for Bauhaus slider step policy");
+
+    assert!(!configuration.ui.bauhaus_zoom_step);
+    assert!(findings.is_empty());
 }
 
 #[test]

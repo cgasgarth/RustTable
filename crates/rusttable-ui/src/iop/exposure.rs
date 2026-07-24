@@ -9,15 +9,16 @@ use gtk4::prelude::*;
 use rusttable_core::Revision;
 use rusttable_processing::{
     BLACK_LEVEL_MAXIMUM, BLACK_LEVEL_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM, BLACK_LEVEL_SOFT_MINIMUM,
-    EXPOSURE_EV_MAXIMUM, EXPOSURE_EV_MINIMUM, EXPOSURE_EV_SOFT_MAXIMUM, EXPOSURE_EV_SOFT_MINIMUM,
-    ExposureAction, ExposureActionError, ExposureMode, ExposureModuleState,
+    DEFAULT_BLACK_LEVEL, DEFAULT_EXPOSURE_EV, EXPOSURE_EV_MAXIMUM, EXPOSURE_EV_MINIMUM,
+    EXPOSURE_EV_SOFT_MAXIMUM, EXPOSURE_EV_SOFT_MINIMUM, ExposureAction, ExposureActionError,
+    ExposureMode, ExposureModuleState,
 };
 
 use super::modules::{DarkroomModuleAction, DarkroomModuleActionHandler, DarkroomModuleError};
 use super::{ThemeRole, apply_theme_role};
 use crate::bauhaus::slider_input::{BauhausSlider, SliderInputSpec};
 use crate::gui::darktable_components::{
-    MODULE_GAP, dropdown, module_expander as shared_module_expander, module_row, scale_row, slider,
+    MODULE_GAP, dropdown, module_expander as shared_module_expander, module_row, scale_row,
     slider_with_input_spec, switch,
 };
 
@@ -31,9 +32,9 @@ pub struct ExposurePanel {
     mode_stack: gtk4::Stack,
     enabled: gtk4::ToggleButton,
     mode: gtk4::DropDown,
-    exposure: gtk4::Scale,
+    exposure: BauhausSlider,
     exposure_value: gtk4::Label,
-    black: gtk4::Scale,
+    black: BauhausSlider,
     black_value: gtk4::Label,
     status: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
@@ -75,21 +76,29 @@ impl ExposurePanel {
             EXPOSURE_EV_MAXIMUM,
             0.001,
             false,
-            SliderInputSpec::IDENTITY.with_suffix(" EV"),
+            SliderInputSpec::IDENTITY
+                .with_suffix(" EV")
+                .with_default_value(DEFAULT_EXPOSURE_EV)
+                .with_digits(3)
+                .with_soft_range(EXPOSURE_EV_SOFT_MINIMUM, EXPOSURE_EV_SOFT_MAXIMUM)
+                .with_automatic_step(),
         );
-        let black_slider = slider(
+        let black_slider = slider_with_input_spec(
             "exposure-black",
             BLACK_LEVEL_MINIMUM,
             BLACK_LEVEL_MAXIMUM,
             0.0001,
             false,
+            SliderInputSpec::IDENTITY
+                .with_default_value(DEFAULT_BLACK_LEVEL)
+                .with_digits(4)
+                .with_soft_range(BLACK_LEVEL_SOFT_MINIMUM, BLACK_LEVEL_SOFT_MAXIMUM)
+                .with_automatic_step(),
         );
-        exposure_slider.scale().set_digits(3);
         exposure_slider.scale().set_tooltip_text(Some(&format!(
             "adjust exposure correction; soft range {EXPOSURE_EV_SOFT_MINIMUM:.0} to \
              {EXPOSURE_EV_SOFT_MAXIMUM:.0} EV"
         )));
-        black_slider.scale().set_digits(4);
         black_slider.scale().set_tooltip_text(Some(&format!(
             "adjust black level; soft range {BLACK_LEVEL_SOFT_MINIMUM:.1} to \
              {BLACK_LEVEL_SOFT_MAXIMUM:.1}"
@@ -202,17 +211,15 @@ impl ExposurePanel {
         );
         identify(&reset, "exposure-reset", "Reset exposure module");
 
-        let exposure = exposure_slider.scale().clone();
-        let black = black_slider.scale().clone();
         let panel = Self {
             expander,
             state,
             mode_stack,
             enabled,
             mode,
-            exposure,
+            exposure: exposure_slider,
             exposure_value,
-            black,
+            black: black_slider,
             black_value,
             status,
             compensate_exposure_bias,
@@ -325,7 +332,7 @@ impl ExposurePanel {
             Rc::clone(&self.module_revision),
         );
         connect_scale_action(
-            &self.exposure,
+            self.exposure.scale(),
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
@@ -334,7 +341,7 @@ impl ExposurePanel {
             ExposureAction::SetExposureEv,
         );
         connect_scale_action(
-            &self.black,
+            self.black.scale(),
             Rc::clone(&self.state),
             Rc::clone(&self.actions),
             controls.clone(),
@@ -412,9 +419,9 @@ struct ControlSet {
     mode_stack: gtk4::Stack,
     enabled: gtk4::ToggleButton,
     mode: gtk4::DropDown,
-    exposure: gtk4::Scale,
+    exposure: BauhausSlider,
     exposure_value: gtk4::Label,
-    black: gtk4::Scale,
+    black: BauhausSlider,
     black_value: gtk4::Label,
     status: gtk4::Label,
     compensate_exposure_bias: gtk4::Switch,
@@ -436,14 +443,14 @@ fn sync_controls(state: &Rc<RefCell<ExposureModuleState>>, controls: &ControlSet
         });
     controls.mode.set_sensitive(state.enabled());
     controls.mode_stack.set_sensitive(state.enabled());
-    controls.black.set_sensitive(state.enabled());
+    controls.black.scale().set_sensitive(state.enabled());
     controls
         .compensate_exposure_bias
         .set_sensitive(state.enabled());
     controls
         .compensate_highlight_preservation
         .set_sensitive(state.enabled());
-    controls.exposure.set_sensitive(state.enabled());
+    controls.exposure.scale().set_sensitive(state.enabled());
     controls.exposure.set_value(state.exposure_ev());
     controls
         .exposure_value

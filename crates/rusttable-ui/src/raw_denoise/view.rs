@@ -1,4 +1,6 @@
 //! GTK4 projection for the linear RAW denoise controller state.
+//!
+//! The recovery-strength control maps `src/libs/neural_restore.c:4225-4239`.
 
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_precision_loss)]
@@ -16,6 +18,8 @@ use super::model::{
     RawDenoiseOutputPolicy, RawDenoisePlanPolicy, RawDenoiseStatus, RawDenoiseViewModel,
 };
 use crate::ai_models::{AiProvider, ModelHash};
+use crate::bauhaus::slider_input::{BauhausSlider, SliderInputSpec};
+use crate::gui::darktable_components::slider_with_input_spec;
 
 type ActionHandler = Rc<dyn Fn(RawDenoiseAction)>;
 
@@ -24,7 +28,7 @@ pub struct RawDenoisePanel {
     root: gtk4::Box,
     model: gtk4::DropDown,
     provider: gtk4::DropDown,
-    strength: gtk4::Scale,
+    strength: BauhausSlider,
     tile: gtk4::DropDown,
     plan_policy: gtk4::DropDown,
     output_policy: gtk4::DropDown,
@@ -88,17 +92,22 @@ impl RawDenoisePanel {
         profile.set_halign(gtk4::Align::Start);
         root.append(&profile);
 
-        let strength = gtk4::Scale::with_range(
-            gtk4::Orientation::Horizontal,
+        let strength = slider_with_input_spec(
+            "raw-denoise-strength",
             0.0,
             f64::from(RAW_DENOISE_MAX_STRENGTH),
             1.0,
+            true,
+            SliderInputSpec::IDENTITY
+                .with_suffix("%")
+                .with_soft_range(0.0, f64::from(RAW_DENOISE_MAX_STRENGTH))
+                .with_default_value(f64::from(RAW_DENOISE_MAX_STRENGTH))
+                .with_digits(0),
         );
-        strength.set_widget_name("raw-denoise-strength");
-        strength.set_value(50.0);
-        strength.set_draw_value(true);
-        strength.set_hexpand(true);
-        root.append(&row("Strength", &strength));
+        strength.scale().set_tooltip_text(Some(
+            "blend between the source CFA (0%) and the denoised output (100%)",
+        ));
+        root.append(&row("Strength", strength.widget()));
         let tile = gtk4::DropDown::from_strings(&["128 px", "256 px", "512 px"]);
         tile.set_widget_name("raw-denoise-tile");
         root.append(&row("Tile", &tile));
@@ -242,7 +251,7 @@ impl RawDenoisePanel {
         self.full.set_sensitive(ready);
         self.export.set_sensitive(ready);
         self.cancel.set_sensitive(running);
-        self.strength.set_sensitive(!running);
+        self.strength.scale().set_sensitive(!running);
         self.tile.set_sensitive(!running);
         self.output_policy.set_sensitive(!running);
     }
@@ -269,7 +278,7 @@ impl RawDenoisePanel {
         );
         let guard = Rc::clone(&self.signal_guard);
         let callback_for_strength = Rc::clone(&callback);
-        self.strength.connect_value_changed(move |scale| {
+        self.strength.scale().connect_value_changed(move |scale| {
             if !guard.get() {
                 callback_for_strength(RawDenoiseAction::SetStrength(
                     scale
