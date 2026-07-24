@@ -67,6 +67,10 @@ impl CpuPixelpipeResult {
     pub const fn receipt(&self) -> &CpuPipelineReceipt {
         &self.receipt
     }
+
+    pub(crate) fn into_parts(self) -> (RgbaF32Image, CpuPipelineReceipt) {
+        (self.image, self.receipt)
+    }
 }
 
 /// Failure from the narrow scalar CPU pixelpipe executor.

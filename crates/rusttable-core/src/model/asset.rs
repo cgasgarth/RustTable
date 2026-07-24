@@ -29,7 +29,7 @@ pub enum HashAlgorithm {
     Sha256,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ContentHash {
     Sha256([u8; 32]),
 }

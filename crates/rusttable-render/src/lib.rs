@@ -47,10 +47,11 @@ pub use provenance::{
 pub use resampling::{ResamplingChannel, ResamplingError};
 pub use thumbnail::cache::{
     CURRENT_CACHE_SCHEMA, CacheEntry, CacheError, CacheLease, CacheLimits, CachePin, CacheStore,
-    CacheTime, ReconciliationReport,
+    CacheTime, ReconciliationReport, ThumbnailMemoryCache,
 };
 pub use thumbnail::lifecycle::{
     CacheChangeEvent, CacheInvalidationReport, CacheLifecycle, CacheLifecycleError,
+    CacheResolution, CacheResolutionError, CacheResolutionSource,
 };
 pub use thumbnail::scheduler::{
     PrefetchCancellation, PrefetchCompletion, PrefetchError, PrefetchHandle, PrefetchJob,
@@ -59,6 +60,7 @@ pub use thumbnail::scheduler::{
 pub use thumbnail::{
     MipmapLevel, ResamplingQuality, ThumbnailError, ThumbnailGenerator, ThumbnailKey,
     ThumbnailKeyError, ThumbnailProvenance, ThumbnailRequest, ThumbnailSize,
+    thumbnail_edit_operations_identity,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

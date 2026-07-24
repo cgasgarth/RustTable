@@ -235,7 +235,7 @@ fn initialize_production_gpu() {
             let mut service = production_pixelpipe()
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            *service = PixelpipeExecutionService::with_gpu(gpu);
+            service.install_gpu(gpu);
             tracing::info!(
                 target: "rusttable.preview",
                 operation = "gpu_initialization",
@@ -952,6 +952,14 @@ mod tests {
                 .count(),
             2,
             "both production snapshot paths must use the shared execution service"
+        );
+        assert!(
+            production_source.contains("service.install_gpu(gpu);"),
+            "GPU initialization must preserve the process-lifetime execution cache"
+        );
+        assert!(
+            !production_source.contains("*service = PixelpipeExecutionService::with_gpu(gpu)"),
+            "GPU initialization must not replace the shared execution service"
         );
     }
 }

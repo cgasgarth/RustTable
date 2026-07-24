@@ -1,15 +1,16 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
 use rusttable_color::ColorEncoding;
 use rusttable_image::{ImageDimensions, PixelFormat, Roi};
 use rusttable_pixelpipe::{
-    Cache, CacheConfig, CacheError, CacheKey, CachePrecision, CacheQuality, CacheScope,
-    CancellationToken, ColorIdentity, CreationCost, ImplementationIdentity, NodeBoundary,
-    OutputIdentity, PipelineGeneration, PipelinePurpose, PipelineSnapshotIdentity, SourceIdentity,
-    ValueDescriptor, ValueKind,
+    Cache, CacheConfig, CacheError, CacheEvent, CacheKey, CachePrecision, CacheQuality,
+    CacheReceipt, CacheScope, CancellationToken, ColorIdentity, CreationCost,
+    ImplementationIdentity, NodeBoundary, OutputIdentity, PipelineGeneration, PipelinePurpose,
+    PipelineSnapshotIdentity, SourceIdentity, ValueDescriptor, ValueKind,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,7 +120,7 @@ fn cache_promotes_hits_and_keeps_leases_pinned_until_drop() {
 }
 
 #[test]
-fn oversize_values_are_direct_leases_and_never_resident() {
+fn oversize_values_are_shared_directly_but_never_become_resident() {
     let cache = Cache::new(CacheConfig::new(4));
     let token = CancellationToken::new();
     let lease = cache
@@ -127,6 +128,70 @@ fn oversize_values_are_direct_leases_and_never_resident() {
         .expect("direct lease");
     assert!(!lease.is_cached());
     assert_eq!(cache.metrics().entries, 0);
+    assert_eq!(cache.metrics().resident_bytes, 0);
+    assert_eq!(
+        cache.receipts().last().map(CacheReceipt::event),
+        Some(CacheEvent::OversizeDirect)
+    );
+}
+
+#[test]
+fn concurrent_oversize_consumers_share_one_successful_build() {
+    let cache = Arc::new(Cache::new(CacheConfig::new(4)));
+    let builds = Arc::new(AtomicUsize::new(0));
+    let owner_cache = cache.clone();
+    let owner_builds = builds.clone();
+    let owner = thread::spawn(move || {
+        owner_cache.get_or_build::<TestValue, _>(key(8), &CancellationToken::new(), |_| {
+            owner_builds.fetch_add(1, Ordering::AcqRel);
+            thread::sleep(Duration::from_millis(25));
+            Ok(TestValue(8))
+        })
+    });
+    while builds.load(Ordering::Acquire) == 0 {
+        thread::yield_now();
+    }
+    let waiter_cache = cache.clone();
+    let waiter = thread::spawn(move || {
+        waiter_cache
+            .get_or_build::<TestValue, _>(key(8), &CancellationToken::new(), |_| Ok(TestValue(99)))
+    });
+    assert_eq!(
+        owner.join().expect("owner").expect("owner value").value().0,
+        8
+    );
+    assert_eq!(
+        waiter
+            .join()
+            .expect("waiter")
+            .expect("waiter value")
+            .value()
+            .0,
+        8
+    );
+    assert_eq!(builds.load(Ordering::Acquire), 1);
+}
+
+#[test]
+fn budget_shrink_before_publication_keeps_oversize_in_flight_value_direct() {
+    let cache = Arc::new(Cache::new(CacheConfig::new(16)));
+    let owner_cache = cache.clone();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let owner = thread::spawn(move || {
+        owner_cache.get_or_build::<TestValue, _>(key(9), &CancellationToken::new(), move |_| {
+            started_tx.send(()).expect("signal builder");
+            release_rx.recv().expect("release builder");
+            Ok(TestValue(8))
+        })
+    });
+    started_rx.recv().expect("builder started");
+    cache.set_budget(4).expect("shrink budget");
+    release_tx.send(()).expect("release builder");
+    let lease = owner.join().expect("owner").expect("direct value");
+    assert!(!lease.is_cached());
+    assert_eq!(cache.metrics().entries, 0);
+    assert_eq!(cache.metrics().resident_bytes, 0);
 }
 
 #[test]
@@ -168,6 +233,38 @@ fn invalidation_removes_matches_and_rejects_stale_publication() {
         handle.join().expect("worker"),
         Err(CacheError::StalePublication)
     ));
+}
+
+#[test]
+fn stale_flight_survives_bounded_invalidation_diagnostic_churn() {
+    let cache = Arc::new(Cache::new(CacheConfig::new(64)));
+    let owner_cache = cache.clone();
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let owner = thread::spawn(move || {
+        owner_cache.get_or_build::<TestValue, _>(key(3), &CancellationToken::new(), move |_| {
+            started_tx.send(()).expect("signal blocked flight");
+            release_rx.recv().expect("release blocked flight");
+            Ok(TestValue(3))
+        })
+    });
+    started_rx.recv().expect("blocked flight started");
+
+    cache
+        .invalidate(CacheScope::Source(SourceIdentity::new([3; 32])))
+        .expect("matching invalidation");
+    for _ in 0..300 {
+        cache
+            .invalidate(CacheScope::Source(SourceIdentity::new([99; 32])))
+            .expect("unrelated invalidation");
+    }
+    release_tx.send(()).expect("release stale flight");
+
+    assert!(matches!(
+        owner.join().expect("owner thread"),
+        Err(CacheError::StalePublication)
+    ));
+    assert!(cache.lookup::<TestValue>(&key(3)).expect("miss").is_none());
 }
 
 #[test]

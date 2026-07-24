@@ -6,12 +6,17 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 use rusttable_catalog::{EditRepository, ImportRepository};
 use rusttable_catalog_store::RedbCatalogRepository;
-use rusttable_core::{Edit, EditId, PhotoId, Revision};
-use rusttable_image::{CancellationToken, ColorEncoding, DecodedImage};
-use rusttable_import::RASTER_DECODER_IDENTITY_VERSION;
+use rusttable_core::{ContentHash, Edit, EditId, PhotoId, Revision};
+use rusttable_image::{CancellationToken, DecodeLimits, DecodedImage};
+use rusttable_import::{
+    FileSourceSnapshotReader, ImportSourceLimits, RASTER_DECODER_IDENTITY_VERSION,
+    SourceSnapshotReader, decode_reference_source,
+};
 use rusttable_render::{
-    CacheLifecycle, CacheLimits, CacheStore, CacheTime, MipmapLevel, ThumbnailGenerator,
-    ThumbnailKey, ThumbnailRequest, ThumbnailSize,
+    CacheLifecycle, CacheLimits, CacheResolutionError, CacheResolutionSource, CacheStore,
+    CacheTime, MipmapLevel, PreviewBounds, RenderReceipt, RenderRequestContext,
+    RenderSourceProvenance, SourceColorPolicy, ThumbnailGenerator, ThumbnailKey,
+    ThumbnailMemoryCache, ThumbnailRequest, ThumbnailSize, thumbnail_edit_operations_identity,
 };
 use rusttable_ui::{PresentationText, PreviewDimensions, Rgba8PreviewMetadata};
 use sha2::{Digest, Sha256};
@@ -22,12 +27,19 @@ const THUMBNAIL_WIDTH: u32 = 180;
 const THUMBNAIL_HEIGHT: u32 = 120;
 const MAX_THUMBNAIL_BYTES: u64 = 2 * 1024 * 1024;
 const CACHE_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
+const MEMORY_CACHE_TOTAL_BYTES: usize = 100 * 1024 * 1024;
+const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_DECODE_DIMENSION: u32 = 16_384;
+const MAX_DECODE_PIXELS: u64 = 64 * 1024 * 1024;
+const MAX_DECODE_BYTES: u64 = 256 * 1024 * 1024;
+const PREVIEW_EDGE: u32 = 1_536;
 const RENDERER_VERSION: u32 = 2;
 const PROFILE_VERSION: u32 = 2;
 
-/// Whether the visible thumbnail came from durable cache or a fresh bounded render.
+/// Whether the visible thumbnail came from memory, durable cache, or a fresh bounded render.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GtkThumbnailSource {
+    MemoryCache,
     Cache,
     Render,
 }
@@ -101,7 +113,6 @@ pub enum GtkThumbnailError {
 /// Serial background worker that shares one bounded cache lifecycle across a visible batch.
 pub struct GtkThumbnailController {
     source_root: PathBuf,
-    repository: RedbCatalogRepository,
     cache: CacheLifecycle,
     records: BTreeMap<PhotoId, rusttable_catalog::ImportRecord>,
     edits: BTreeMap<PhotoId, Edit>,
@@ -118,6 +129,43 @@ impl GtkThumbnailController {
         source_root: impl Into<PathBuf>,
         cache_root: impl Into<PathBuf>,
     ) -> Result<Self, GtkThumbnailError> {
+        Self::open_with_memory_cache(
+            catalog_path,
+            source_root,
+            cache_root,
+            default_thumbnail_memory_cache(),
+        )
+    }
+
+    /// Opens catalog and durable state while sharing a caller-owned process-resident tier.
+    ///
+    /// # Errors
+    ///
+    /// Returns a closed catalog/cache error when durable inputs cannot be opened or validated.
+    pub fn open_with_memory_cache(
+        catalog_path: impl Into<PathBuf>,
+        source_root: impl Into<PathBuf>,
+        cache_root: impl Into<PathBuf>,
+        memory_cache: ThumbnailMemoryCache,
+    ) -> Result<Self, GtkThumbnailError> {
+        let cache = open_thumbnail_cache(cache_root)?;
+        Self::open_with_caches(catalog_path, source_root, cache, memory_cache)
+    }
+
+    /// Opens catalog state around caller-owned durable and process-resident cache handles.
+    ///
+    /// This constructor lets process-long composition state retain the durable root coordinator
+    /// while short-lived background controllers borrow it through cheap clones.
+    ///
+    /// # Errors
+    ///
+    /// Returns a closed catalog error when the durable catalog cannot be opened or read.
+    pub fn open_with_caches(
+        catalog_path: impl Into<PathBuf>,
+        source_root: impl Into<PathBuf>,
+        cache: CacheStore,
+        memory_cache: ThumbnailMemoryCache,
+    ) -> Result<Self, GtkThumbnailError> {
         let catalog_path = catalog_path.into();
         let catalog =
             RedbCatalogRepository::open(&catalog_path).map_err(|_| GtkThumbnailError::Catalog)?;
@@ -131,14 +179,9 @@ impl GtkThumbnailController {
             .into_iter()
             .map(|edit| (edit.photo_id(), edit))
             .collect();
-        let limits = CacheLimits::new(CACHE_TOTAL_BYTES, MAX_THUMBNAIL_BYTES)
-            .map_err(|_| GtkThumbnailError::Cache)?;
-        let (cache, _) =
-            CacheStore::open(cache_root, limits).map_err(|_| GtkThumbnailError::Cache)?;
         Ok(Self {
             source_root: source_root.into(),
-            repository: catalog,
-            cache: CacheLifecycle::new(cache),
+            cache: CacheLifecycle::with_memory(cache, memory_cache),
             records,
             edits,
         })
@@ -196,7 +239,7 @@ impl GtkThumbnailController {
         photo_id: PhotoId,
         edit_id: EditId,
         edit_revision: Revision,
-        generation: u64,
+        _generation: u64,
     ) -> Result<GtkThumbnail, GtkThumbnailError> {
         let record = self
             .records
@@ -211,54 +254,72 @@ impl GtkThumbnailController {
                     && edit.revision() == edit_revision
             })
             .ok_or(GtkThumbnailError::MissingEdit)?;
+        let source = decode_reference_source(record.source())
+            .unwrap_or_else(|_| self.source_root.join(record.source().as_str()));
+        let source_limits =
+            ImportSourceLimits::new(MAX_SOURCE_BYTES).map_err(|_| GtkThumbnailError::Preview)?;
+        let snapshot_reader = FileSourceSnapshotReader;
+        let snapshot = snapshot_reader
+            .read_snapshot(&source, source_limits)
+            .map_err(|_| GtkThumbnailError::Preview)?;
+        let asset = record.photo().primary_asset();
+        if ContentHash::Sha256(snapshot.content_sha256()) != asset.content_hash() {
+            return Err(GtkThumbnailError::Preview);
+        }
         let request = thumbnail_request()?;
         let key = thumbnail_key(record, edit, request);
         let now = CacheTime::now().map_err(|_| GtkThumbnailError::Cache)?;
-        if let Some(entry) = self
-            .cache
-            .store_mut()
-            .get(key, now)
-            .map_err(|_| GtkThumbnailError::Cache)?
-        {
-            return present(
-                photo_id,
-                entry.image(),
-                GtkThumbnailSource::Cache,
-                key.digest(),
-                None,
-                key.edit_id(),
-                key.edit_revision(),
-            );
-        }
-
-        let preview = crate::workspace::preview_loader::load_selected_preview_from_repository_for_edit_with_generation(
-            &self.repository,
-            &self.source_root,
+        let source_provenance = RenderSourceProvenance::new(
             photo_id,
-            edit_id,
-            edit_revision,
-            generation,
-        )
-        .map_err(|_| GtkThumbnailError::Preview)?;
-        let (_, dimensions, pixels, receipt) = preview.into_render_parts();
-        let render_receipt_identity = Some(receipt.identity_hash());
-        let source = DecodedImage::new_with_color_encoding(dimensions, pixels, ColorEncoding::Srgb)
-            .map_err(|_| GtkThumbnailError::Preview)?;
-        let thumbnail = ThumbnailGenerator::generate(
-            &source,
-            request,
-            MAX_THUMBNAIL_BYTES,
-            &CancellationToken::new(),
-        )
-        .map_err(|_| GtkThumbnailError::Render)?;
-        self.cache
-            .store_mut()
-            .put(key, &thumbnail, now)
-            .map_err(|_| GtkThumbnailError::Cache)?;
+            asset.id(),
+            asset.content_hash(),
+            asset.byte_length(),
+            record.probe(),
+        );
+        let mut render_receipt_identity = None;
+        let resolution = self
+            .cache
+            .resolve_with(key, now, || {
+                let bytes = snapshot
+                    .materialize(source_limits)
+                    .map_err(|_| GtkThumbnailError::Preview)?;
+                let output = thumbnail_preview_service()
+                    .render_bytes(&bytes, edit)
+                    .map_err(|_| GtkThumbnailError::Preview)?;
+                snapshot
+                    .revalidate_opened_source()
+                    .map_err(|_| GtkThumbnailError::Preview)?;
+                let context = RenderRequestContext::new(
+                    source_provenance,
+                    edit,
+                    SourceColorPolicy::AssumeSrgbWhenUnspecified,
+                    output.plan(),
+                );
+                render_receipt_identity =
+                    Some(RenderReceipt::new(context, &output).identity_hash());
+                ThumbnailGenerator::generate(
+                    output.image(),
+                    request,
+                    MAX_THUMBNAIL_BYTES,
+                    &CancellationToken::new(),
+                )
+                .map_err(|_| GtkThumbnailError::Render)
+            })
+            .map_err(|error| match error {
+                CacheResolutionError::Cache(_) => GtkThumbnailError::Cache,
+                CacheResolutionError::Producer(error) => error,
+            })?;
+        let (source, render_receipt_identity) = match resolution.source() {
+            CacheResolutionSource::Memory => (GtkThumbnailSource::MemoryCache, None),
+            CacheResolutionSource::Durable => (GtkThumbnailSource::Cache, None),
+            CacheResolutionSource::Produced => {
+                (GtkThumbnailSource::Render, render_receipt_identity)
+            }
+        };
         present(
             photo_id,
-            &thumbnail,
-            GtkThumbnailSource::Render,
+            resolution.image(),
+            source,
             key.digest(),
             render_receipt_identity,
             key.edit_id(),
@@ -275,10 +336,47 @@ pub fn default_thumbnail_cache_root() -> PathBuf {
     )
 }
 
+/// Opens the default bounded durable thumbnail cache.
+///
+/// # Errors
+///
+/// Returns a closed cache error when the configured cache root cannot be initialized.
+pub fn open_default_thumbnail_cache() -> Result<CacheStore, GtkThumbnailError> {
+    open_thumbnail_cache(default_thumbnail_cache_root())
+}
+
+#[must_use]
+pub fn default_thumbnail_memory_cache() -> ThumbnailMemoryCache {
+    ThumbnailMemoryCache::new(MEMORY_CACHE_TOTAL_BYTES)
+}
+
+fn open_thumbnail_cache(cache_root: impl Into<PathBuf>) -> Result<CacheStore, GtkThumbnailError> {
+    let limits = CacheLimits::new(CACHE_TOTAL_BYTES, MAX_THUMBNAIL_BYTES)
+        .map_err(|_| GtkThumbnailError::Cache)?;
+    CacheStore::open(cache_root, limits)
+        .map(|(cache, _)| cache)
+        .map_err(|_| GtkThumbnailError::Cache)
+}
+
 fn thumbnail_request() -> Result<ThumbnailRequest, GtkThumbnailError> {
     let size = ThumbnailSize::fit(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
         .map_err(|_| GtkThumbnailError::Render)?;
     Ok(ThumbnailRequest::new(MipmapLevel::zero(), size))
+}
+
+fn thumbnail_preview_service() -> crate::PreviewService {
+    crate::PreviewService::new(
+        DecodeLimits::new(
+            MAX_SOURCE_BYTES,
+            MAX_DECODE_DIMENSION,
+            MAX_DECODE_DIMENSION,
+            MAX_DECODE_PIXELS,
+            MAX_DECODE_BYTES,
+        )
+        .expect("constant thumbnail decode limits are valid"),
+        PreviewBounds::new(PREVIEW_EDGE, PREVIEW_EDGE)
+            .expect("constant thumbnail preview bounds are valid"),
+    )
 }
 
 fn thumbnail_key(
@@ -295,6 +393,7 @@ fn thumbnail_key(
         edit.id(),
         photo.revision(),
         edit.revision(),
+        thumbnail_edit_operations_identity(edit),
         u32::from(RASTER_DECODER_IDENTITY_VERSION),
         RENDERER_VERSION,
         output_transform_identity(),
@@ -358,7 +457,8 @@ mod tests {
     use rusttable_import::RasterImportCancellation;
 
     use super::{
-        GtkThumbnailController, GtkThumbnailSource, configuration_identity, thumbnail_request,
+        GtkThumbnailController, GtkThumbnailSource, configuration_identity,
+        default_thumbnail_memory_cache, open_thumbnail_cache, thumbnail_request,
     };
     use crate::workspace::run_raster_import;
 
@@ -449,20 +549,43 @@ mod tests {
         );
         let photo_id = batch.first_selected_photo().expect("imported photo");
 
-        let mut first = GtkThumbnailController::open(&catalog, &directory.0, &cache)
-            .expect("open first controller");
+        let memory_cache = default_thumbnail_memory_cache();
+        let durable_cache = open_thumbnail_cache(&cache).expect("open durable cache");
+        let mut first = GtkThumbnailController::open_with_caches(
+            &catalog,
+            &directory.0,
+            durable_cache.clone(),
+            memory_cache.clone(),
+        )
+        .expect("open first controller");
         let rendered = first.render(photo_id).expect("render thumbnail");
         assert_eq!(rendered.source(), GtkThumbnailSource::Render);
         assert_eq!(rendered.metadata().dimensions().width(), 2);
         drop(first);
 
+        let mut same_process = GtkThumbnailController::open_with_caches(
+            &catalog,
+            &directory.0,
+            durable_cache,
+            memory_cache,
+        )
+        .expect("reopen with shared memory");
+        let resident = same_process
+            .render(photo_id)
+            .expect("read resident thumbnail");
+        assert_eq!(resident.source(), GtkThumbnailSource::MemoryCache);
+        assert_eq!(resident.metadata(), rendered.metadata());
+        assert_eq!(resident.cache_identity(), rendered.cache_identity());
+        drop(same_process);
+
         let mut reopened =
             GtkThumbnailController::open(&catalog, &directory.0, &cache).expect("reopen cache");
-        let cached = reopened.render(photo_id).expect("read cached thumbnail");
+        let cached = reopened.render(photo_id).expect("read durable thumbnail");
         assert_eq!(cached.source(), GtkThumbnailSource::Cache);
         assert_eq!(cached.metadata(), rendered.metadata());
         assert_eq!(cached.cache_identity(), rendered.cache_identity());
         assert!(rendered.render_receipt_identity().is_some());
+        assert!(resident.render_receipt_identity().is_none());
         assert!(cached.render_receipt_identity().is_none());
         assert_eq!(
             cached.output_transform(),
@@ -491,8 +614,14 @@ mod tests {
         );
         let photo_id = batch.first_selected_photo().expect("imported photo");
 
-        let mut first = GtkThumbnailController::open(&catalog, &directory.0, &cache)
-            .expect("open first controller");
+        let memory_cache = default_thumbnail_memory_cache();
+        let mut first = GtkThumbnailController::open_with_memory_cache(
+            &catalog,
+            &directory.0,
+            &cache,
+            memory_cache.clone(),
+        )
+        .expect("open first controller");
         let old = first.render(photo_id).expect("old thumbnail");
         let old_identity = (old.edit_id(), old.edit_revision(), old.cache_identity());
         drop(first);
@@ -512,8 +641,13 @@ mod tests {
             .expect("persist replacement");
         drop(repository);
 
-        let mut second = GtkThumbnailController::open(&catalog, &directory.0, &cache)
-            .expect("reopen edited controller");
+        let mut second = GtkThumbnailController::open_with_memory_cache(
+            &catalog,
+            &directory.0,
+            &cache,
+            memory_cache,
+        )
+        .expect("reopen edited controller");
         let current = second.render(photo_id).expect("current thumbnail");
         assert_eq!(current.source(), GtkThumbnailSource::Render);
         assert_ne!(
@@ -526,5 +660,48 @@ mod tests {
         );
         assert_eq!(current.edit_id(), old.edit_id());
         assert!(current.edit_revision() > old.edit_revision());
+    }
+
+    #[test]
+    fn changed_source_is_rejected_before_a_resident_cache_hit() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("changed.png");
+        let catalog = directory.0.join("catalog.redb");
+        let cache = directory.0.join("cache");
+        fs::write(
+            &source,
+            decode_base64(include_str!(
+                "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+            )),
+        )
+        .expect("fixture source");
+        let batch = run_raster_import(
+            &catalog,
+            vec![source.clone()],
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let photo_id = batch.first_selected_photo().expect("imported photo");
+        let memory_cache = default_thumbnail_memory_cache();
+        let mut controller = GtkThumbnailController::open_with_memory_cache(
+            &catalog,
+            &directory.0,
+            &cache,
+            memory_cache,
+        )
+        .expect("open controller");
+        assert_eq!(
+            controller
+                .render(photo_id)
+                .expect("populate thumbnail")
+                .source(),
+            GtkThumbnailSource::Render
+        );
+
+        fs::write(&source, b"changed after import").expect("mutate source");
+        assert_eq!(
+            controller.render(photo_id),
+            Err(super::GtkThumbnailError::Preview)
+        );
     }
 }

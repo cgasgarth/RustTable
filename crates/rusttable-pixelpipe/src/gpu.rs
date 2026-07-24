@@ -1,4 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rusttable_core::OperationId;
 use rusttable_gpu::{
@@ -20,9 +23,9 @@ use crate::cpu::{
     validate_input_encoding,
 };
 use crate::{
-    CancellationError, CancellationReason, CancellationScope, CancellationStage, CpuPixelpipeError,
-    CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, PipelineGeneration,
-    RgbaF32Image, RgbaF32Pixel,
+    Cache, CacheConfig, CacheError, CacheKey, CancellationError, CancellationReason,
+    CancellationScope, CancellationStage, CpuPixelpipeError, CpuPixelpipeExecutor,
+    CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, PipelineGeneration, RgbaF32Image, RgbaF32Pixel,
 };
 
 /// The backend that published one pixelpipe result.
@@ -167,14 +170,14 @@ impl PixelpipeExecutionReceipt {
 /// An image and the backend receipt that authorized its publication.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PixelpipeExecutionResult {
-    image: RgbaF32Image,
+    image: Arc<RgbaF32Image>,
     receipt: PixelpipeExecutionReceipt,
 }
 
 impl PixelpipeExecutionResult {
     #[must_use]
-    pub const fn image(&self) -> &RgbaF32Image {
-        &self.image
+    pub fn image(&self) -> &RgbaF32Image {
+        self.image.as_ref()
     }
 
     #[must_use]
@@ -193,6 +196,10 @@ impl PixelpipeExecutionResult {
 pub struct PixelpipeExecutionService {
     cpu: CpuPixelpipeExecutor,
     gpu: Option<GpuRuntime>,
+    cache: OnceLock<Cache>,
+    execution_errors: OnceLock<Mutex<VecDeque<(CacheKey, CpuPixelpipeError)>>>,
+    #[cfg(test)]
+    uncached_executions: AtomicUsize,
 }
 
 impl PixelpipeExecutionService {
@@ -201,6 +208,10 @@ impl PixelpipeExecutionService {
         Self {
             cpu: CpuPixelpipeExecutor,
             gpu: None,
+            cache: OnceLock::new(),
+            execution_errors: OnceLock::new(),
+            #[cfg(test)]
+            uncached_executions: AtomicUsize::new(0),
         }
     }
 
@@ -209,7 +220,17 @@ impl PixelpipeExecutionService {
         Self {
             cpu: CpuPixelpipeExecutor,
             gpu: Some(gpu),
+            cache: OnceLock::new(),
+            execution_errors: OnceLock::new(),
+            #[cfg(test)]
+            uncached_executions: AtomicUsize::new(0),
         }
+    }
+
+    /// Installs the initialized backend without replacing process-lifetime
+    /// cache state or diagnostics.
+    pub fn install_gpu(&mut self, gpu: GpuRuntime) {
+        self.gpu = Some(gpu);
     }
 
     /// Executes the snapshot, selecting WGPU for a qualified point range or
@@ -239,6 +260,54 @@ impl PixelpipeExecutionService {
         scope: &CancellationScope,
     ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
         check_cancellation(scope, CancellationStage::Preparation)?;
+        let key =
+            CacheKey::for_cpu_execution(snapshot, self.backend_identity(), direct_mode_identity());
+        let builder_key = key.clone();
+        check_cancellation(scope, CancellationStage::CacheBuild)?;
+        let cached = self.cache().get_or_build_until(
+            &key,
+            scope.token(),
+            scope.deadline(),
+            |shared_token| {
+                let shared_scope = CancellationScope::from_shared_token(shared_token.clone());
+                self.execute_uncached_with_cancellation(snapshot, &shared_scope)
+                    .map_err(|error| match error {
+                        CpuPixelpipeError::Cancelled(error) => CacheError::Cancellation(error),
+                        error => {
+                            self.record_execution_error(&builder_key, error.clone());
+                            CacheError::BuildFailed(error.to_string())
+                        }
+                    })
+            },
+        );
+        match cached {
+            Ok(lease) => {
+                self.clear_execution_error(lease.key());
+                check_cancellation(scope, CancellationStage::Publication)?;
+                Ok(lease.value().clone())
+            }
+            Err(error) => {
+                check_cancellation(scope, CancellationStage::CacheBuild)?;
+                if let CacheError::Cancellation(error) = error {
+                    return Err(CpuPixelpipeError::Cancelled(error));
+                }
+                if let Some(error) = self.execution_error(&builder_key) {
+                    Err(error)
+                } else {
+                    self.execute_uncached_with_cancellation(snapshot, scope)
+                }
+            }
+        }
+    }
+
+    fn execute_uncached_with_cancellation(
+        &self,
+        snapshot: &CpuPixelpipeSnapshot,
+        scope: &CancellationScope,
+    ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
+        #[cfg(test)]
+        self.uncached_executions.fetch_add(1, Ordering::AcqRel);
+        check_cancellation(scope, CancellationStage::Preparation)?;
         let Some(qualified) = gpu_plan(snapshot, scope)? else {
             return self.cpu_result(snapshot, None, scope);
         };
@@ -262,7 +331,7 @@ impl PixelpipeExecutionService {
             Ok((image, dispatches)) => {
                 check_cancellation(scope, CancellationStage::Publication)?;
                 Ok(PixelpipeExecutionResult {
-                    image,
+                    image: Arc::new(image),
                     receipt: PixelpipeExecutionReceipt {
                         snapshot_identity: snapshot.identity(),
                         basicadj_plan_identity: qualified.basicadj_plan_identity,
@@ -287,11 +356,11 @@ impl PixelpipeExecutionService {
         scope: &CancellationScope,
     ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
         let cpu_result = self.cpu.execute_with_cancellation(snapshot, scope)?;
-        let basicadj_plan_identity = cpu_result.receipt().basicadj_plan_identity();
-        let image = cpu_result.image().clone();
+        let (image, receipt) = cpu_result.into_parts();
+        let basicadj_plan_identity = receipt.basicadj_plan_identity();
         check_cancellation(scope, CancellationStage::Publication)?;
         Ok(PixelpipeExecutionResult {
-            image,
+            image: Arc::new(image),
             receipt: PixelpipeExecutionReceipt {
                 snapshot_identity: snapshot.identity(),
                 basicadj_plan_identity,
@@ -337,6 +406,58 @@ impl PixelpipeExecutionService {
         scope: &CancellationScope,
     ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
         check_cancellation(scope, CancellationStage::Preparation)?;
+        let key = CacheKey::for_cpu_execution(
+            snapshot,
+            self.backend_identity(),
+            tiled_mode_identity(tile_plan),
+        );
+        let builder_key = key.clone();
+        check_cancellation(scope, CancellationStage::CacheBuild)?;
+        let cached = self.cache().get_or_build_until(
+            &key,
+            scope.token(),
+            scope.deadline(),
+            |shared_token| {
+                let shared_scope = CancellationScope::from_shared_token(shared_token.clone());
+                self.execute_tiled_uncached_with_cancellation(snapshot, tile_plan, &shared_scope)
+                    .map_err(|error| match error {
+                        CpuPixelpipeError::Cancelled(error) => CacheError::Cancellation(error),
+                        error => {
+                            self.record_execution_error(&builder_key, error.clone());
+                            CacheError::BuildFailed(error.to_string())
+                        }
+                    })
+            },
+        );
+        match cached {
+            Ok(lease) => {
+                self.clear_execution_error(lease.key());
+                check_cancellation(scope, CancellationStage::Publication)?;
+                Ok(lease.value().clone())
+            }
+            Err(error) => {
+                check_cancellation(scope, CancellationStage::CacheBuild)?;
+                if let CacheError::Cancellation(error) = error {
+                    return Err(CpuPixelpipeError::Cancelled(error));
+                }
+                if let Some(error) = self.execution_error(&builder_key) {
+                    Err(error)
+                } else {
+                    self.execute_tiled_uncached_with_cancellation(snapshot, tile_plan, scope)
+                }
+            }
+        }
+    }
+
+    fn execute_tiled_uncached_with_cancellation(
+        &self,
+        snapshot: &CpuPixelpipeSnapshot,
+        tile_plan: crate::CpuTilePlan,
+        scope: &CancellationScope,
+    ) -> Result<PixelpipeExecutionResult, CpuPixelpipeError> {
+        #[cfg(test)]
+        self.uncached_executions.fetch_add(1, Ordering::AcqRel);
+        check_cancellation(scope, CancellationStage::Preparation)?;
         let Some(qualified) = gpu_plan(snapshot, scope)? else {
             return self.cpu_tiled_result(snapshot, tile_plan, None, 0, scope);
         };
@@ -361,7 +482,7 @@ impl PixelpipeExecutionService {
                     let tiling = full_frame_tiling_receipt(snapshot);
                     check_cancellation(scope, CancellationStage::Publication)?;
                     Ok(PixelpipeExecutionResult {
-                        image,
+                        image: Arc::new(image),
                         receipt: PixelpipeExecutionReceipt {
                             snapshot_identity: snapshot.identity(),
                             basicadj_plan_identity: qualified.basicadj_plan_identity,
@@ -400,7 +521,7 @@ impl PixelpipeExecutionService {
                     let tiling = tiling_receipt(snapshot, candidate, tile_count, index + 1);
                     check_cancellation(scope, CancellationStage::Publication)?;
                     return Ok(PixelpipeExecutionResult {
-                        image,
+                        image: Arc::new(image),
                         receipt: PixelpipeExecutionReceipt {
                             snapshot_identity: snapshot.identity(),
                             basicadj_plan_identity: qualified.basicadj_plan_identity,
@@ -442,14 +563,15 @@ impl PixelpipeExecutionService {
         let result = self
             .cpu
             .execute_tiled_with_cancellation(snapshot, plan, scope)?;
-        let basicadj_plan_identity = result.receipt().basicadj_plan_identity();
+        let (image, receipt) = result.into_parts();
+        let basicadj_plan_identity = receipt.basicadj_plan_identity();
         let grid = plan
             .grid_for(snapshot.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
         let tiling = tiling_receipt(snapshot, plan, grid.tile_count(), usize::from(attempts));
         check_cancellation(scope, CancellationStage::Publication)?;
         Ok(PixelpipeExecutionResult {
-            image: result.image().clone(),
+            image: Arc::new(image),
             receipt: PixelpipeExecutionReceipt {
                 snapshot_identity: snapshot.identity(),
                 basicadj_plan_identity,
@@ -460,6 +582,83 @@ impl PixelpipeExecutionService {
             },
         })
     }
+
+    fn cache(&self) -> &Cache {
+        self.cache
+            .get_or_init(|| Cache::new(CacheConfig::default()))
+    }
+
+    fn backend_identity(&self) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(b"rusttable.pixelpipe.execution-backend.v1");
+        match self.gpu.as_ref() {
+            None => hasher.update([0]),
+            Some(gpu) => {
+                hasher.update([1]);
+                hasher.update(
+                    gpu.snapshot()
+                        .canonical_hash()
+                        .expect("bounded GPU capability snapshot is serializable"),
+                );
+                hasher.update(
+                    postcard::to_allocvec(&gpu.fault_snapshot())
+                        .expect("bounded GPU fault snapshot is serializable"),
+                );
+            }
+        }
+        hasher.finalize().into()
+    }
+
+    fn record_execution_error(&self, key: &CacheKey, error: CpuPixelpipeError) {
+        let errors = self
+            .execution_errors
+            .get_or_init(|| Mutex::new(VecDeque::new()));
+        if let Ok(mut errors) = errors.lock() {
+            errors.retain(|(candidate, _)| candidate != key);
+            errors.push_back((key.clone(), error));
+            while errors.len() > 64 {
+                errors.pop_front();
+            }
+        }
+    }
+
+    fn execution_error(&self, key: &CacheKey) -> Option<CpuPixelpipeError> {
+        self.execution_errors
+            .get()
+            .and_then(|errors| errors.lock().ok())
+            .and_then(|errors| {
+                errors
+                    .iter()
+                    .find(|(candidate, _)| candidate == key)
+                    .map(|(_, error)| error.clone())
+            })
+    }
+
+    fn clear_execution_error(&self, key: &CacheKey) {
+        if let Some(errors) = self.execution_errors.get()
+            && let Ok(mut errors) = errors.lock()
+        {
+            errors.retain(|(candidate, _)| candidate != key);
+        }
+    }
+
+    #[cfg(test)]
+    fn uncached_execution_count(&self) -> usize {
+        self.uncached_executions.load(Ordering::Acquire)
+    }
+}
+
+fn direct_mode_identity() -> [u8; 32] {
+    Sha256::digest(b"rusttable.pixelpipe.execution-mode.direct.v1").into()
+}
+
+fn tiled_mode_identity(plan: crate::CpuTilePlan) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rusttable.pixelpipe.execution-mode.tiled.v1");
+    hasher.update(plan.tile_width().to_le_bytes());
+    hasher.update(plan.tile_height().to_le_bytes());
+    hasher.update([3]);
+    hasher.finalize().into()
 }
 
 fn uncancelled_scope() -> CancellationScope {
@@ -1211,6 +1410,8 @@ fn place_tile(
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::sync::Barrier;
+    use std::time::Instant;
 
     use rusttable_core::{Edit, EditId, PhotoId, Revision};
 
@@ -1315,6 +1516,10 @@ mod tests {
     }
 
     fn empty_snapshot() -> CpuPixelpipeSnapshot {
+        snapshot_with_encoding(RgbaF32ColorEncoding::SrgbD65)
+    }
+
+    fn snapshot_with_encoding(encoding: RgbaF32ColorEncoding) -> CpuPixelpipeSnapshot {
         let edit = Edit::from_parts(
             EditId::new(1).expect("edit ID"),
             PhotoId::new(2).expect("photo ID"),
@@ -1325,7 +1530,7 @@ mod tests {
         .expect("edit");
         let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
         let input = RgbaF32Image::new(
-            RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::SrgbD65),
+            RgbaF32Descriptor::new(dimensions, encoding),
             vec![RgbaF32Pixel::new(0.25, 0.5, 0.75, 1.0)],
         )
         .expect("input");
@@ -1334,6 +1539,126 @@ mod tests {
             rusttable_processing::CompiledOperationGraph::compile(&edit).expect("graph"),
             CpuPixelpipeOutputMode::FullExport,
         )
+    }
+
+    #[test]
+    fn production_execution_reuses_the_complete_result_and_receipt() {
+        let service = PixelpipeExecutionService::cpu_only();
+        let snapshot = empty_snapshot();
+        let first = service.execute(&snapshot).expect("first execution");
+        let second_scope =
+            CancellationScope::root(PipelineGeneration::new(99).expect("generation"));
+        let second = service
+            .execute_with_cancellation(&snapshot, &second_scope)
+            .expect("cached execution");
+
+        assert_eq!(first, second);
+        assert!(
+            Arc::ptr_eq(&first.image, &second.image),
+            "a warm hit must share the immutable full-frame raster"
+        );
+        assert_eq!(service.uncached_execution_count(), 1);
+    }
+
+    #[test]
+    fn typed_execution_failure_is_reused_without_duplicate_work() {
+        let service = PixelpipeExecutionService::cpu_only();
+        let snapshot = snapshot_with_encoding(RgbaF32ColorEncoding::Rec2020D65);
+        let first = service
+            .execute(&snapshot)
+            .expect_err("unsupported encoding");
+        let second = service.execute(&snapshot).expect_err("suppressed repeat");
+
+        assert_eq!(first, second);
+        assert!(matches!(
+            second,
+            CpuPixelpipeError::UnsupportedInputEncoding {
+                actual: RgbaF32ColorEncoding::Rec2020D65
+            }
+        ));
+        assert_eq!(service.uncached_execution_count(), 1);
+    }
+
+    #[test]
+    fn concurrent_consumers_share_one_typed_execution_failure() {
+        let service = Arc::new(PixelpipeExecutionService::cpu_only());
+        let snapshot = Arc::new(snapshot_with_encoding(RgbaF32ColorEncoding::Rec2020D65));
+        let start = Arc::new(Barrier::new(3));
+        let workers = (0..2)
+            .map(|_| {
+                let service = service.clone();
+                let snapshot = snapshot.clone();
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    start.wait();
+                    service
+                        .execute(&snapshot)
+                        .expect_err("unsupported encoding")
+                })
+            })
+            .collect::<Vec<_>>();
+        start.wait();
+        let errors = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(errors[0], errors[1]);
+        assert!(matches!(
+            errors[0],
+            CpuPixelpipeError::UnsupportedInputEncoding {
+                actual: RgbaF32ColorEncoding::Rec2020D65
+            }
+        ));
+        assert_eq!(service.uncached_execution_count(), 1);
+    }
+
+    #[test]
+    fn cancellation_wins_over_a_warm_production_cache_hit() {
+        let service = PixelpipeExecutionService::cpu_only();
+        let snapshot = empty_snapshot();
+        service.execute(&snapshot).expect("warm cache");
+        let scope = CancellationScope::root(PipelineGeneration::new(7).expect("generation"));
+        scope.cancel(CancellationReason::SelectionChanged);
+
+        let error = service
+            .execute_with_cancellation(&snapshot, &scope)
+            .expect_err("cancelled consumer");
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("expected typed cancellation");
+        };
+        assert_eq!(error.reason(), CancellationReason::SelectionChanged);
+        assert_eq!(service.uncached_execution_count(), 1);
+    }
+
+    #[test]
+    fn expired_deadline_never_enters_a_cold_cache_build() {
+        let service = PixelpipeExecutionService::cpu_only();
+        let snapshot = empty_snapshot();
+        let scope = CancellationScope::root(PipelineGeneration::new(8).expect("generation"))
+            .with_deadline(crate::CancellationDeadline::at(Instant::now()));
+
+        let error = service
+            .execute_with_cancellation(&snapshot, &scope)
+            .expect_err("expired deadline");
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("expected typed cancellation");
+        };
+        assert_eq!(error.reason(), CancellationReason::DeadlineExceeded);
+        assert_eq!(service.uncached_execution_count(), 0);
+    }
+
+    #[test]
+    fn direct_and_tiled_production_receipts_never_alias() {
+        let service = PixelpipeExecutionService::cpu_only();
+        let snapshot = empty_snapshot();
+        service.execute(&snapshot).expect("direct execution");
+        let tiled = service
+            .execute_tiled(&snapshot, crate::CpuTilePlan::new(1, 1).expect("tile plan"))
+            .expect("tiled execution");
+
+        assert!(tiled.receipt().tiling().is_some());
+        assert_eq!(service.uncached_execution_count(), 2);
     }
 
     #[test]

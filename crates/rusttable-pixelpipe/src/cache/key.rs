@@ -3,7 +3,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use rusttable_color::Precision;
+use rusttable_color::{ColorEncoding, Precision};
 use rusttable_image::{
     AlphaMode, ByteOrder, ChannelLayout, ImageDimensions, Orientation, PixelFormat, Roi,
     SampleType, StorageLayout,
@@ -11,8 +11,10 @@ use rusttable_image::{
 use sha2::{Digest, Sha256};
 
 use crate::{
-    BlendStatus, ColorIdentity, ImplementationIdentity, MaskStatus, ModePlan, PipelineGeneration,
-    PipelinePurpose, PipelineQuality, PipelineSnapshot, PipelineSnapshotIdentity, SourceIdentity,
+    BlendStatus, ColorIdentity, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot,
+    ImplementationIdentity, MaskStatus, ModePlan, PipelineGeneration, PipelinePurpose,
+    PipelineQuality, PipelineSnapshot, PipelineSnapshotIdentity, RgbaF32ColorEncoding,
+    RgbaF32Descriptor, RgbaF32SourceRepresentation, SourceIdentity,
 };
 
 /// Version of the structured in-memory cache identity.
@@ -301,6 +303,87 @@ impl CacheKey {
             plan.request().target().as_bytes(),
         );
         key
+    }
+
+    /// Creates the whole-execution identity used by the production CPU/GPU
+    /// coordinator. Request cancellation generations are deliberately absent:
+    /// identical immutable work remains reusable by a newer UI consumer.
+    pub(crate) fn for_cpu_execution(
+        snapshot: &CpuPixelpipeSnapshot,
+        backend_identity: [u8; 32],
+        mode_identity: [u8; 32],
+    ) -> Self {
+        let descriptor = snapshot.input().descriptor();
+        let raster_dimensions = descriptor.dimensions();
+        let dimensions =
+            ImageDimensions::new(raster_dimensions.width(), raster_dimensions.height())
+                .expect("validated CPU raster dimensions");
+        let output_encoding = match snapshot.output_mode() {
+            CpuPixelpipeOutputMode::Preview => ColorEncoding::SrgbD65,
+            CpuPixelpipeOutputMode::FullExport => ColorEncoding::LinearSrgbD65,
+        };
+        let output_color =
+            ColorIdentity::new(output_encoding, 1).expect("production output color is explicit");
+        let generation =
+            PipelineGeneration::new(snapshot.graph().revision().get().saturating_add(1))
+                .expect("revision plus one is nonzero");
+        let mask_graph_identity = snapshot
+            .mask_graph()
+            .map_or([0; 32], rusttable_masks::MaskGraph::identity);
+        let source_descriptor = cpu_source_descriptor_bytes(descriptor);
+        let mut parameters = Vec::with_capacity(34);
+        parameters.extend_from_slice(&snapshot.identity().as_bytes());
+        parameters.push(match snapshot.output_mode() {
+            CpuPixelpipeOutputMode::Preview => 0,
+            CpuPixelpipeOutputMode::FullExport => 1,
+        });
+        parameters.push(u8::from(snapshot.mask_store().is_some()));
+        let purpose = match snapshot.output_mode() {
+            CpuPixelpipeOutputMode::Preview => PipelinePurpose::Preview,
+            CpuPixelpipeOutputMode::FullExport => PipelinePurpose::Full,
+        };
+        let quality = match snapshot.output_mode() {
+            CpuPixelpipeOutputMode::Preview => CacheQuality::Normal,
+            CpuPixelpipeOutputMode::FullExport => CacheQuality::Maximum,
+        };
+        let implementation =
+            ImplementationIdentity::new("rusttable.pixelpipe.execution", 1, "cpu-gpu-coordinator")
+                .expect("constant implementation identity");
+        Self {
+            schema_version: CACHE_KEY_SCHEMA_VERSION,
+            source: SourceIdentity::new(snapshot.source_identity().as_bytes()),
+            source_descriptor,
+            snapshot: PipelineSnapshotIdentity::new(snapshot.identity().as_bytes()),
+            generation,
+            purpose,
+            quality,
+            precision: CachePrecision::F32,
+            node: NodeBoundary::whole(implementation),
+            inputs: Vec::new(),
+            output: OutputIdentity::new(
+                dimensions,
+                Roi::full(dimensions),
+                PixelFormat::canonical_rgba_f32(),
+                output_color,
+                transform_identity(output_color),
+            ),
+            params: parameters,
+            params_version: 1,
+            enabled: true,
+            opacity_basis_points: 10_000,
+            mask: if snapshot.mask_graph().is_some() || snapshot.mask_store().is_some() {
+                MaskStatus::Referenced
+            } else {
+                MaskStatus::NotReferenced
+            },
+            blend: BlendStatus::Referenced,
+            raster_identity: snapshot.source_identity().as_bytes(),
+            mask_graph_identity,
+            analysis_identity: [0; 32],
+            backend_identity,
+            mode_identity,
+            working_profile_identity: transform_identity(ColorIdentity::working()),
+        }
     }
 
     fn from_snapshot_identity(plan: &ModePlan) -> Self {
@@ -697,6 +780,24 @@ fn source_descriptor_bytes(snapshot: &PipelineSnapshot) -> Vec<u8> {
     bytes
 }
 
+fn cpu_source_descriptor_bytes(descriptor: RgbaF32Descriptor) -> Vec<u8> {
+    let dimensions = descriptor.dimensions();
+    let mut bytes = Vec::with_capacity(96);
+    bytes.extend_from_slice(&dimensions.width().to_le_bytes());
+    bytes.extend_from_slice(&dimensions.height().to_le_bytes());
+    bytes.push(rgba_encoding_tag(descriptor.color_encoding()));
+    if let RgbaF32ColorEncoding::External(profile) = descriptor.color_encoding() {
+        write_bytes(
+            &postcard::to_allocvec(&profile).expect("profile identity is serializable"),
+            &mut bytes,
+        );
+    }
+    bytes.push(rgba_representation_tag(descriptor.source_representation()));
+    bytes.push(orientation_tag(descriptor.source_orientation()));
+    bytes.push(u8::from(descriptor.source_color().is_some()));
+    bytes
+}
+
 fn write_node(node: &NodeBoundary, output: &mut Vec<u8>) {
     match node.boundary() {
         Some(value) => {
@@ -762,6 +863,29 @@ fn write_bytes(value: &[u8], output: &mut Vec<u8>) {
 
 fn transform_identity(color: ColorIdentity) -> [u8; 32] {
     Sha256::digest(postcard::to_allocvec(&color.encoding()).expect("color is serializable")).into()
+}
+
+const fn rgba_encoding_tag(value: RgbaF32ColorEncoding) -> u8 {
+    match value {
+        RgbaF32ColorEncoding::SrgbD65 => 0,
+        RgbaF32ColorEncoding::LinearSrgbD65 => 1,
+        RgbaF32ColorEncoding::DisplayP3D65 => 2,
+        RgbaF32ColorEncoding::LinearDisplayP3D65 => 3,
+        RgbaF32ColorEncoding::Rec2020D65 => 4,
+        RgbaF32ColorEncoding::LinearRec2020D65 => 5,
+        RgbaF32ColorEncoding::AcesCgD60 => 6,
+        RgbaF32ColorEncoding::External(_) => 7,
+        RgbaF32ColorEncoding::LabD50 => 8,
+    }
+}
+
+const fn rgba_representation_tag(value: RgbaF32SourceRepresentation) -> u8 {
+    match value {
+        RgbaF32SourceRepresentation::U8 => 0,
+        RgbaF32SourceRepresentation::U16 => 1,
+        RgbaF32SourceRepresentation::F16 => 2,
+        RgbaF32SourceRepresentation::F32 => 3,
+    }
 }
 
 fn implementation_identity(value: &ImplementationIdentity) -> [u8; 32] {
@@ -857,5 +981,42 @@ const fn storage_tag(value: StorageLayout) -> u8 {
     match value {
         StorageLayout::Interleaved => 0,
         StorageLayout::Planar => 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rusttable_color::{Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion};
+    use rusttable_processing::RasterDimensions;
+
+    use super::*;
+
+    #[test]
+    fn cpu_source_descriptor_keeps_exact_external_profile_identity() {
+        let parser = ProfileParserVersion::new(1).expect("parser version");
+        let first = ProfileId::from_content(
+            b"profile-one",
+            ProfileClass::Input,
+            ProfileModel::Matrix,
+            Pcs::XyzD50,
+            parser,
+        )
+        .expect("first profile");
+        let second = ProfileId::from_content(
+            b"profile-two",
+            ProfileClass::Input,
+            ProfileModel::Matrix,
+            Pcs::XyzD50,
+            parser,
+        )
+        .expect("second profile");
+        let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
+        let first = RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::External(first));
+        let second = RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::External(second));
+
+        assert_ne!(
+            cpu_source_descriptor_bytes(first),
+            cpu_source_descriptor_bytes(second)
+        );
     }
 }

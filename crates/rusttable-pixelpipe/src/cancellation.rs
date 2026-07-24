@@ -321,6 +321,18 @@ impl CancellationScope {
         }
     }
 
+    /// Creates an execution scope around a cache flight's shared token.
+    ///
+    /// Consumer-specific deadlines are intentionally not inherited: the
+    /// shared build remains useful while any registered consumer is active.
+    pub(crate) fn from_shared_token(token: CancellationToken) -> Self {
+        Self {
+            token,
+            stage: CancellationStage::Preparation,
+            deadline: None,
+        }
+    }
+
     #[must_use]
     pub fn with_deadline(mut self, deadline: CancellationDeadline) -> Self {
         self.deadline = Some(deadline);
