@@ -273,7 +273,10 @@ fn gtk_workspace_ownership_keeps_lighttable_rail_and_darkroom_refresh_separate()
     assert!(!runtime_layout.contains("center.append(camera_panel.widget())"));
     assert!(runtime_layout.contains("connect_position_notify"));
     assert!(runtime_shell.contains("darkroom.refresh_geometry()"));
+    assert!(runtime_shell.contains("window.set_decorated(true)"));
+    assert!(runtime_shell.contains("window.maximize()"));
     assert!(!runtime_shell.contains("self.window.maximize()"));
+    assert!(!runtime_shell.contains("window.fullscreen()"));
     for class in [
         "module_expander",
         "module_row",
