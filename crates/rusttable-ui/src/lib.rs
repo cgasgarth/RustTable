@@ -3,6 +3,7 @@
 
 pub mod ai_batch;
 pub mod ai_models;
+pub mod bauhaus;
 pub mod camera;
 pub mod collection;
 pub mod external_editor;

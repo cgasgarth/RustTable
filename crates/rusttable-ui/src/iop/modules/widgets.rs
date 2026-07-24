@@ -47,21 +47,21 @@ pub(super) fn build_control_row(
                 spec.step(),
                 true,
             );
-            slider.set_value(spec.value());
-            slider.set_sensitive(module_enabled);
-            slider.set_digits(slider_digits(spec.step()));
-            slider.set_draw_value(true);
-            slider.set_value_pos(gtk4::PositionType::Right);
-            slider.set_tooltip_text(Some(&format!(
+            slider.scale().set_value(spec.value());
+            slider.scale().set_sensitive(module_enabled);
+            slider.scale().set_digits(slider_digits(spec.step()));
+            slider.scale().set_draw_value(true);
+            slider.scale().set_value_pos(gtk4::PositionType::Right);
+            slider.scale().set_tooltip_text(Some(&format!(
                 "{}; range {:.3} to {:.3}",
                 control.label().as_str(),
                 spec.minimum(),
                 spec.maximum()
             )));
-            identify_control(&slider, control, "Adjust slider");
+            identify_control(slider.scale(), control, "Adjust slider");
             if let Some(handler) = action_handler {
                 let id = control.id().to_string();
-                slider.connect_value_changed(move |slider| {
+                slider.scale().connect_value_changed(move |slider| {
                     dispatch_module_action(
                         &handler,
                         &status,
@@ -76,7 +76,7 @@ pub(super) fn build_control_row(
                     );
                 });
             }
-            row.append(&slider);
+            row.append(slider.widget());
         }
         DarkroomControlKind::Choice => {
             let choices = control
