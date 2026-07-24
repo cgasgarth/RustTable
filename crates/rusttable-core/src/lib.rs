@@ -2,6 +2,7 @@
 #![doc = "Core domain foundation for the `RustTable` rewrite."]
 #![doc = "The core crate owns typed domain/configuration contracts; product services may depend on it, never the reverse."]
 
+pub mod common;
 pub mod config;
 mod edit;
 mod id;
