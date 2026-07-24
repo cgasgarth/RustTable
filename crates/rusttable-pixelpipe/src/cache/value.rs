@@ -3,8 +3,8 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use crate::RgbaF32Image;
 use crate::cache::CacheError;
+use crate::{PixelpipeExecutionReceipt, PixelpipeExecutionResult, RgbaF32Image};
 
 /// Creation cost helps diagnostics explain why a result was retained.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -106,6 +106,23 @@ impl CacheValue for RgbaF32Image {
         } else {
             Err("image contains a non-finite component".to_owned())
         }
+    }
+}
+
+impl CacheValue for PixelpipeExecutionResult {
+    fn descriptor(&self) -> ValueDescriptor {
+        let image = <RgbaF32Image as CacheValue>::descriptor(self.image());
+        ValueDescriptor::new(
+            ValueKind::Image,
+            image.resident_bytes(),
+            u64::try_from(std::mem::size_of::<PixelpipeExecutionReceipt>()).unwrap_or(u64::MAX),
+            CreationCost::Expensive,
+            true,
+        )
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        <RgbaF32Image as CacheValue>::validate(self.image())
     }
 }
 

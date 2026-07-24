@@ -6,8 +6,8 @@ usage() {
 Usage: bun run smoke:macos-computer-use -- [options]
 
 Build, install, and validate the canonical macOS Computer Use app lifecycle.
-The default launches hidden/in the background, never activates RustTable, and
-quits through a non-activating application request.
+The default validates the installation without launching or activating
+RustTable.
 
 Options:
   --allow-foreground  Activate RustTable and send real Command-Q
@@ -146,15 +146,12 @@ wait_for_exit() {
 }
 
 run_background_smoke() {
-  open -g -j "$bundle"
-  wait_for_launch true
-  assert_not_frontmost launched
-  # The target can close its AppleEvent connection before `osascript` receives
-  # the quit reply. Process exit below is the authoritative lifecycle receipt.
-  osascript -e "tell application id \"$bundle_identifier\" to quit" >/dev/null 2>&1 || :
-  wait_for_exit 'non-activating quit did not terminate the installed RustTable bundle' true
-  assert_not_frontmost exited
-  printf 'computer-use background install smoke passed\n'
+  process_running && {
+    printf 'RustTable unexpectedly remained running after non-launching installation validation\n' >&2
+    exit 1
+  }
+  assert_not_frontmost validated
+  printf 'computer-use non-launching install validation passed\n'
 }
 
 run_foreground_command_q_smoke() {

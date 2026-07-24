@@ -8,14 +8,16 @@
 use std::fmt;
 
 use rusttable_core::{
-    AssetId, ContentHash, EditId, PhotoId, RenderSizeError, RenderSizeRequest, Revision,
+    AssetId, ContentHash, Edit, EditId, ParameterValue, PhotoId, RenderSizeError,
+    RenderSizeRequest, Revision,
 };
 use rusttable_image::{
     CancellationToken, ColorEncoding, DecodedImage, ImageDimensions, Orientation,
 };
 use sha2::{Digest, Sha256};
 
-const KEY_MAGIC: &[u8; 4] = b"TMK1";
+const KEY_MAGIC: &[u8; 4] = b"TMK2";
+const EDIT_OPERATIONS_MAGIC: &[u8] = b"RTTHUMB-EDIT-OPERATIONS-1";
 
 /// A power-of-two mipmap level. Level zero is the decoded source size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -149,7 +151,7 @@ impl ThumbnailRequest {
 }
 
 /// Stable identity for the source/edit/render/profile inputs of one entry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ThumbnailKey {
     source_content: ContentHash,
     photo_id: PhotoId,
@@ -157,6 +159,7 @@ pub struct ThumbnailKey {
     edit_id: EditId,
     base_photo_revision: Revision,
     edit_revision: Revision,
+    edit_operations_identity: [u8; 32],
     decoder_version: u32,
     renderer_version: u32,
     profile_identity: [u8; 32],
@@ -175,6 +178,7 @@ impl ThumbnailKey {
         edit_id: EditId,
         base_photo_revision: Revision,
         edit_revision: Revision,
+        edit_operations_identity: [u8; 32],
         decoder_version: u32,
         renderer_version: u32,
         profile_identity: [u8; 32],
@@ -189,6 +193,7 @@ impl ThumbnailKey {
             edit_id,
             base_photo_revision,
             edit_revision,
+            edit_operations_identity,
             decoder_version,
             renderer_version,
             profile_identity,
@@ -219,6 +224,10 @@ impl ThumbnailKey {
         self.edit_revision
     }
     #[must_use]
+    pub const fn edit_operations_identity(self) -> [u8; 32] {
+        self.edit_operations_identity
+    }
+    #[must_use]
     pub const fn profile_identity(self) -> [u8; 32] {
         self.profile_identity
     }
@@ -242,7 +251,7 @@ impl ThumbnailKey {
     /// Canonical bytes deliberately avoid debug formatting and platform-sized integers.
     #[must_use]
     pub fn canonical_bytes(self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(160);
+        let mut bytes = Vec::with_capacity(192);
         bytes.extend_from_slice(KEY_MAGIC);
         bytes.extend_from_slice(self.source_content.bytes());
         bytes.extend_from_slice(&self.photo_id.get().to_be_bytes());
@@ -250,6 +259,7 @@ impl ThumbnailKey {
         bytes.extend_from_slice(&self.edit_id.get().to_be_bytes());
         bytes.extend_from_slice(&self.base_photo_revision.get().to_be_bytes());
         bytes.extend_from_slice(&self.edit_revision.get().to_be_bytes());
+        bytes.extend_from_slice(&self.edit_operations_identity);
         bytes.extend_from_slice(&self.decoder_version.to_be_bytes());
         bytes.extend_from_slice(&self.renderer_version.to_be_bytes());
         bytes.extend_from_slice(&self.profile_identity);
@@ -301,6 +311,7 @@ impl ThumbnailKey {
         let edit_id = EditId::new(reader.u128()?).ok_or(ThumbnailKeyError::ZeroId)?;
         let base_photo_revision = Revision::from_u64(reader.u64()?);
         let edit_revision = Revision::from_u64(reader.u64()?);
+        let edit_operations_identity = reader.array::<32>()?;
         let decoder_version = reader.u32()?;
         let renderer_version = reader.u32()?;
         let profile_identity = reader.array::<32>()?;
@@ -346,6 +357,7 @@ impl ThumbnailKey {
             edit_id,
             base_photo_revision,
             edit_revision,
+            edit_operations_identity,
             decoder_version,
             renderer_version,
             profile_identity,
@@ -357,6 +369,57 @@ impl ThumbnailKey {
                 .with_provenance(provenance),
         ))
     }
+}
+
+/// Hashes the exact ordered edit stack using typed, length-delimited canonical fields.
+#[must_use]
+pub fn thumbnail_edit_operations_identity(edit: &Edit) -> [u8; 32] {
+    let operations = edit.operations().collect::<Vec<_>>();
+    let mut digest = Sha256::new();
+    digest.update(EDIT_OPERATIONS_MAGIC);
+    hash_length(&mut digest, operations.len());
+    for operation in operations {
+        digest.update(operation.id().get().to_be_bytes());
+        hash_bytes(&mut digest, operation.key().as_str().as_bytes());
+        digest.update([u8::from(operation.is_enabled())]);
+        digest.update(operation.opacity().get().to_bits().to_be_bytes());
+        let parameters = operation.parameters().collect::<Vec<_>>();
+        hash_length(&mut digest, parameters.len());
+        for (name, value) in parameters {
+            hash_bytes(&mut digest, name.as_str().as_bytes());
+            match value {
+                ParameterValue::Bool(value) => {
+                    digest.update([0, u8::from(*value)]);
+                }
+                ParameterValue::Integer(value) => {
+                    digest.update([1]);
+                    digest.update(value.to_be_bytes());
+                }
+                ParameterValue::Scalar(value) => {
+                    digest.update([2]);
+                    digest.update(value.get().to_bits().to_be_bytes());
+                }
+                ParameterValue::Text(value) => {
+                    digest.update([3]);
+                    hash_bytes(&mut digest, value.as_str().as_bytes());
+                }
+            }
+        }
+    }
+    digest.finalize().into()
+}
+
+fn hash_bytes(digest: &mut Sha256, value: &[u8]) {
+    hash_length(digest, value.len());
+    digest.update(value);
+}
+
+fn hash_length(digest: &mut Sha256, value: usize) {
+    digest.update(
+        u64::try_from(value)
+            .expect("bounded edit content length fits u64")
+            .to_be_bytes(),
+    );
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

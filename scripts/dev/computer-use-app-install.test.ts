@@ -45,6 +45,11 @@ describe('computer-use installer parsing', () => {
   });
 
   test('parses defaults and supported flags', () => {
+    expect(parseComputerUseInstallOptions([], '/repo')).toMatchObject({
+      shouldBuild: true,
+      shouldInstall: true,
+      shouldLaunch: false,
+    });
     const options = parseComputerUseInstallOptions(['--compact', '--no-build', '--no-launch'], '/repo');
     expect(options).toEqual({
       installPath: DEFAULT_COMPUTER_USE_APP_PATH,
@@ -54,11 +59,15 @@ describe('computer-use installer parsing', () => {
       showHelp: false,
       verboseBuildLogs: false,
     });
+    expect(parseComputerUseInstallOptions(['--launch'], '/repo')).toMatchObject({
+      shouldLaunch: true,
+    });
   });
 
   test('rejects unknown flags and missing app paths', () => {
     expect(() => parseComputerUseInstallOptions(['--wat'])).toThrow('Unknown computer-use install option');
     expect(() => parseComputerUseInstallOptions(['--app-path', '/tmp/other.app'])).toThrow('fixed');
+    expect(() => parseComputerUseInstallOptions(['--launch', '--no-launch'])).toThrow('mutually exclusive');
   });
 
   test('launches deliberate Computer Use as a decorated usable-area window, never native full-screen', async () => {
@@ -85,6 +94,21 @@ describe('computer-use installer parsing', () => {
     expect(script).toContain("'AXStandardWindow'");
     expect(script).toContain("'AXCloseButton'");
     expect(script).not.toContain('fullScreenAttributes[0].value = true');
+  });
+
+  test('targets the bundle identifier that belongs to the deliberately launched bundle', async () => {
+    const requests: Array<{ args: string[]; command: string; label: string }> = [];
+    await launchComputerUseApp({
+      appPath: '/repo/target/release/bundle/macos/RustTable.app',
+      bundleIdentifier: RUSTTABLE_BUNDLE_IDENTIFIER,
+      run: async (request) => {
+        requests.push(request);
+        return { exitCode: 0, stderr: '', stdout: '' };
+      },
+    });
+    const script = requests[1]?.args[3] ?? '';
+    expect(script).toContain(`const bundleIdentifier = "${RUSTTABLE_BUNDLE_IDENTIFIER}"`);
+    expect(script).not.toContain(RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER);
   });
 
   test('rejects unsafe bundle identifiers before rendering the launch script', () => {
@@ -261,7 +285,11 @@ describe('computer-use installer parsing', () => {
         calls.push(request.label);
         requests.push(request);
         if (request.label === 'stage computer-use app') await cp(request.args[0]!, request.args[1]!, { recursive: true });
-        return { exitCode: 0, stderr: '', stdout: '' };
+        return {
+          exitCode: request.label === 'check whether installed RustTable is running' ? 1 : 0,
+          stderr: '',
+          stdout: '',
+        };
       };
       await expect(
         installCanonicalComputerUseApp({
@@ -271,13 +299,17 @@ describe('computer-use installer parsing', () => {
           transactionId: 'installed-invalid',
         }),
       ).rejects.toThrow();
-      expect(calls).toEqual(['stage computer-use app', 'quit installed RustTable']);
+      expect(calls).toEqual([
+        'stage computer-use app',
+        'check whether installed RustTable is running',
+      ]);
       expect(requests[1]).toEqual({
         allowedExitCodes: [0, 1],
-        args: ['-e', `tell application id "${RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTIFIER}" to quit`],
-        command: 'osascript',
-        label: 'quit installed RustTable',
+        args: ['-f', join(invalidInstalled, 'Contents/MacOS/RustTable')],
+        command: 'pgrep',
+        label: 'check whether installed RustTable is running',
       });
+      expect(requests.some((request) => request.command === 'osascript')).toBe(false);
       expect(await readFile(join(invalidInstalled, 'Contents/Info.plist'), 'utf8')).toBe(invalidManifest());
 
       const stagedCalls: string[] = [];

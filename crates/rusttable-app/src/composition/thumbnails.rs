@@ -4,22 +4,39 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
 use crate::gtk_controller::{GtkCatalogController, GtkCatalogState};
 use crate::gtk_thumbnail_controller::{
-    GtkThumbnail, GtkThumbnailController, default_thumbnail_cache_root,
+    GtkThumbnail, GtkThumbnailController, default_thumbnail_memory_cache,
+    open_default_thumbnail_cache,
 };
 use gtk4::glib::{self, ControlFlow};
 use rusttable_core::{EditId, PhotoId, Revision};
+use rusttable_render::{CacheStore, ThumbnailMemoryCache};
 use rusttable_ui::GtkShell;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct ThumbnailLifecycle {
     generation: u64,
     requested: BTreeMap<PhotoId, (ThumbnailTarget, u64)>,
     published: BTreeMap<PhotoId, ThumbnailTarget>,
+    memory_cache: ThumbnailMemoryCache,
+    durable_cache: Arc<OnceLock<CacheStore>>,
+}
+
+impl Default for ThumbnailLifecycle {
+    fn default() -> Self {
+        Self {
+            generation: 0,
+            requested: BTreeMap::new(),
+            published: BTreeMap::new(),
+            memory_cache: default_thumbnail_memory_cache(),
+            durable_cache: Arc::new(OnceLock::new()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -40,19 +57,21 @@ impl ThumbnailTarget {
 }
 
 impl ThumbnailLifecycle {
+    fn memory_cache(&self) -> ThumbnailMemoryCache {
+        self.memory_cache.clone()
+    }
+
+    fn durable_cache(&self) -> Arc<OnceLock<CacheStore>> {
+        Arc::clone(&self.durable_cache)
+    }
+
     fn begin(&mut self) -> u64 {
         self.generation = self.generation.wrapping_add(1);
-        self.requested.clear();
         self.generation
     }
 
-    fn is_current(&self, generation: u64) -> bool {
-        self.generation == generation
-    }
-
     fn accepts(&self, target: ThumbnailTarget, generation: u64) -> bool {
-        self.is_current(generation)
-            && self.requested.get(&target.photo_id) == Some(&(target, generation))
+        self.requested.get(&target.photo_id) == Some(&(target, generation))
     }
 
     fn reconcile(
@@ -167,13 +186,28 @@ pub(super) fn start_workspace_thumbnails(
 
     let (sender, receiver) = mpsc::channel();
     let worker_targets = targets.clone();
+    let worker_memory_cache = lifecycle.borrow().memory_cache();
+    let worker_durable_cache = lifecycle.borrow().durable_cache();
     let worker = thread::Builder::new()
         .name("rusttable-thumbnails".to_owned())
         .spawn(move || {
-            let Ok(mut controller) = GtkThumbnailController::open(
+            let durable_cache = worker_durable_cache
+                .get()
+                .cloned()
+                .map_or_else(open_default_thumbnail_cache, Ok);
+            let Ok(durable_cache) = durable_cache else {
+                for target in worker_targets {
+                    let _ = sender.send(ThumbnailWorkerMessage::Failed(target));
+                }
+                let _ = sender.send(ThumbnailWorkerMessage::Finished);
+                return;
+            };
+            let _ = worker_durable_cache.set(durable_cache.clone());
+            let Ok(mut controller) = GtkThumbnailController::open_with_caches(
                 catalog_path,
                 source_root,
-                default_thumbnail_cache_root(),
+                durable_cache,
+                worker_memory_cache,
             ) else {
                 for target in worker_targets {
                     let _ = sender.send(ThumbnailWorkerMessage::Failed(target));
@@ -283,13 +317,13 @@ mod tests {
     }
 
     #[test]
-    fn a_new_refresh_rejects_late_thumbnail_results() {
-        let mut lifecycle = ThumbnailLifecycle::default();
-        let first = lifecycle.begin();
-        let second = lifecycle.begin();
+    fn durable_cache_initialization_is_deferred_and_shared() {
+        let lifecycle = ThumbnailLifecycle::default();
+        let first = lifecycle.durable_cache();
+        let second = lifecycle.durable_cache();
 
-        assert!(!lifecycle.is_current(first));
-        assert!(lifecycle.is_current(second));
+        assert!(first.get().is_none());
+        assert!(std::sync::Arc::ptr_eq(&first, &second));
     }
 
     #[test]
@@ -304,7 +338,6 @@ mod tests {
         lifecycle.invalidate(photo_id);
         lifecycle.publish(selected, generation);
 
-        assert!(lifecycle.is_current(generation));
         assert!(!lifecycle.accepts(selected, generation));
         assert!(lifecycle.accepts(neighbor, generation));
         assert!(lifecycle.needs_request(selected));
@@ -352,6 +385,27 @@ mod tests {
 
         lifecycle.publish(target, second_generation);
         assert!(!lifecycle.needs_request(target));
+    }
+
+    #[test]
+    fn disjoint_batches_keep_per_photo_publication_authority() {
+        let first = target(id(6), 1);
+        let second = target(id(7), 1);
+        let mut lifecycle = ThumbnailLifecycle::default();
+        let first_generation = lifecycle.begin();
+        lifecycle.request(&[first], first_generation);
+
+        let second_generation = lifecycle.begin();
+        lifecycle.request(&[second], second_generation);
+
+        assert!(lifecycle.accepts(first, first_generation));
+        assert!(lifecycle.accepts(second, second_generation));
+
+        let replacement_generation = lifecycle.begin();
+        lifecycle.request(&[first], replacement_generation);
+        assert!(!lifecycle.accepts(first, first_generation));
+        assert!(lifecycle.accepts(first, replacement_generation));
+        assert!(lifecycle.accepts(second, second_generation));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Darktable-compatible bloom glow with an immutable extraction layer.
+//! Darktable-compatible bloom glow ported from retained `src/iop/bloom.c`.
 
 #![allow(
     clippy::cast_sign_loss,
@@ -9,12 +9,10 @@
 
 use std::fmt;
 
-use crate::{FiniteF32, LinearRgb, RasterDimensions};
+use crate::common::box_filters::{BOX_ITERATIONS, BoxFilterError, box_mean};
+use crate::{FiniteF32, RasterDimensions, RgbChannel};
 
-use super::common::{
-    OperationExecutionError, ReconstructionBudget, checked_bytes, luma, validate_shape,
-};
-use super::convolution::BoxKernel;
+use super::common::{OperationExecutionError, ReconstructionBudget, checked_bytes};
 
 pub const BLOOM_COMPATIBILITY_ID: &str = "bloom";
 pub const BLOOM_SCHEMA_VERSION: u16 = 1;
@@ -193,9 +191,56 @@ impl BloomConfig {
     }
 }
 
+/// Four-channel D50 Lab sample in Darktable's native scale: L in 0..100,
+/// a/b in -128..128, and an alpha/spare channel in 0..1.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BloomPixel {
+    channels: [f32; 4],
+}
+
+impl BloomPixel {
+    #[must_use]
+    pub const fn new(lightness: f32, a: f32, b: f32, alpha: f32) -> Self {
+        Self {
+            channels: [lightness, a, b, alpha],
+        }
+    }
+
+    #[must_use]
+    pub const fn from_channels(channels: [f32; 4]) -> Self {
+        Self { channels }
+    }
+
+    #[must_use]
+    pub const fn channels(self) -> [f32; 4] {
+        self.channels
+    }
+
+    #[must_use]
+    pub const fn lightness(self) -> f32 {
+        self.channels[0]
+    }
+
+    #[must_use]
+    pub const fn a(self) -> f32 {
+        self.channels[1]
+    }
+
+    #[must_use]
+    pub const fn b(self) -> f32 {
+        self.channels[2]
+    }
+
+    #[must_use]
+    pub const fn alpha(self) -> f32 {
+        self.channels[3]
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BloomPlan {
     config: BloomConfig,
+    dimensions: RasterDimensions,
     radius: u32,
 }
 
@@ -215,7 +260,11 @@ impl BloomPlan {
             3,
             ReconstructionBudget::default(),
         )?;
-        Ok(Self { config, radius })
+        Ok(Self {
+            config,
+            dimensions,
+            radius,
+        })
     }
 
     #[must_use]
@@ -223,66 +272,149 @@ impl BloomPlan {
         self.radius
     }
 
-    /// Extracts from the frozen source, blurs the extracted luminance, and
-    /// screen-blends only the luminance back into RGB, preserving chroma.
-    pub fn execute(
-        self,
-        input: &[LinearRgb],
-        dimensions: RasterDimensions,
-    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
-        validate_shape(dimensions, input)?;
-        if self.config.strength().to_bits() == 0.0f32.to_bits() {
+    /// Thresholds and blurs D50 Lab L, then screen-blends only L while
+    /// preserving a, b, and alpha exactly.
+    pub fn execute_lab<F: FnMut() -> bool>(
+        &self,
+        input: &[BloomPixel],
+        mask: Option<&[f32]>,
+        opacity: f32,
+        mut cancelled: F,
+    ) -> Result<Vec<BloomPixel>, OperationExecutionError> {
+        let expected = usize::try_from(self.dimensions.pixel_count()).map_err(|_| {
+            OperationExecutionError::DimensionsMismatch {
+                expected: usize::MAX,
+                actual: input.len(),
+            }
+        })?;
+        if expected != input.len() {
+            return Err(OperationExecutionError::DimensionsMismatch {
+                expected,
+                actual: input.len(),
+            });
+        }
+        validate_mask(mask, expected)?;
+        if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
+            return Err(OperationExecutionError::NonFiniteResult {
+                pixel: 0,
+                channel: RgbChannel::Red,
+            });
+        }
+        if cancelled() {
+            return Err(OperationExecutionError::Cancelled);
+        }
+        if opacity.to_bits() == 0.0f32.to_bits() {
             return Ok(input.to_vec());
         }
+        for (pixel_index, pixel) in input.iter().enumerate() {
+            for (channel_index, channel) in pixel.channels().into_iter().enumerate() {
+                if !channel.is_finite() {
+                    return Err(OperationExecutionError::NonFiniteResult {
+                        pixel: pixel_index,
+                        channel: lab_channel(channel_index),
+                    });
+                }
+            }
+        }
         let threshold = self.config.threshold();
-        let scale = 2.0f32.powf((self.config.strength() + 1.0) / 100.0);
-        let extracted = input
+        let strength_exponent = (self.config.strength() + 1.0).min(100.0) / 100.0;
+        let scale = 1.0 / (-strength_exponent).exp2();
+        let mut blurred = input
             .iter()
             .map(|pixel| {
-                let lightness = luma(*pixel) * 100.0;
-                if lightness * scale > threshold {
-                    lightness * scale
+                let lightness = pixel.lightness() * scale;
+                if lightness > threshold {
+                    lightness
                 } else {
                     0.0
                 }
             })
             .collect::<Vec<_>>();
-        let blurred = BoxKernel::new(self.radius).apply_scalar(
-            &extracted,
-            dimensions,
-            ReconstructionBudget::default(),
-        )?;
-        input
-            .iter()
-            .zip(blurred)
-            .enumerate()
-            .map(|(index, (pixel, glow))| {
-                let old_luma = luma(*pixel) * 100.0;
-                let new_luma = 100.0 - ((100.0 - old_luma) * (100.0 - glow) / 100.0);
-                let delta = (new_luma - old_luma) / 100.0;
-                let result = LinearRgb::new(
-                    FiniteF32::new(pixel.red().get() + delta).map_err(|_| {
-                        OperationExecutionError::NonFiniteResult {
-                            pixel: index,
-                            channel: crate::RgbChannel::Red,
-                        }
-                    })?,
-                    FiniteF32::new(pixel.green().get() + delta).map_err(|_| {
-                        OperationExecutionError::NonFiniteResult {
-                            pixel: index,
-                            channel: crate::RgbChannel::Green,
-                        }
-                    })?,
-                    FiniteF32::new(pixel.blue().get() + delta).map_err(|_| {
-                        OperationExecutionError::NonFiniteResult {
-                            pixel: index,
-                            channel: crate::RgbChannel::Blue,
-                        }
-                    })?,
-                );
-                Ok(result)
-            })
-            .collect()
+        let width = usize::try_from(self.dimensions.width()).expect("validated width fits usize");
+        let height =
+            usize::try_from(self.dimensions.height()).expect("validated height fits usize");
+        let radius = usize::try_from(self.radius).expect("bloom radius is at most 256");
+        box_mean(&mut blurred, height, width, 1, radius, BOX_ITERATIONS)
+            .map_err(box_filter_error)?;
+        if cancelled() {
+            return Err(OperationExecutionError::Cancelled);
+        }
+        let mut output = Vec::with_capacity(expected);
+        for (index, (pixel, glow)) in input.iter().zip(blurred).enumerate() {
+            if index % width == 0 && cancelled() {
+                return Err(OperationExecutionError::Cancelled);
+            }
+            let candidate = 100.0 - ((100.0 - pixel.lightness()) * (100.0 - glow) / 100.0);
+            let coverage = mask.map_or(opacity, |values| values[index] * opacity);
+            let lightness = pixel.lightness() + (candidate - pixel.lightness()) * coverage;
+            if !lightness.is_finite() {
+                return Err(OperationExecutionError::NonFiniteResult {
+                    pixel: index,
+                    channel: RgbChannel::Red,
+                });
+            }
+            output.push(BloomPixel::new(
+                lightness,
+                pixel.a(),
+                pixel.b(),
+                pixel.alpha(),
+            ));
+        }
+        Ok(output)
+    }
+
+    /// Executes the native Lab operation without cancellation.
+    pub fn execute(
+        &self,
+        input: &[BloomPixel],
+    ) -> Result<Vec<BloomPixel>, OperationExecutionError> {
+        self.execute_lab(input, None, 1.0, || false)
+    }
+}
+
+fn validate_mask(mask: Option<&[f32]>, expected: usize) -> Result<(), OperationExecutionError> {
+    if let Some(mask) = mask
+        && (mask.len() != expected
+            || mask
+                .iter()
+                .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value)))
+    {
+        return Err(OperationExecutionError::DimensionsMismatch {
+            expected,
+            actual: mask.len(),
+        });
+    }
+    Ok(())
+}
+
+const fn lab_channel(channel: usize) -> RgbChannel {
+    match channel {
+        0 => RgbChannel::Red,
+        1 => RgbChannel::Green,
+        _ => RgbChannel::Blue,
+    }
+}
+
+fn box_filter_error(error: BoxFilterError) -> OperationExecutionError {
+    match error {
+        BoxFilterError::AllocationFailed { required_bytes } => {
+            OperationExecutionError::AllocationFailed {
+                required: required_bytes,
+            }
+        }
+        BoxFilterError::SizeOverflow => OperationExecutionError::MemoryBudgetExceeded {
+            required: usize::MAX,
+            budget: ReconstructionBudget::default().maximum_bytes(),
+        },
+        BoxFilterError::BufferShape { expected, actual } => {
+            OperationExecutionError::DimensionsMismatch { expected, actual }
+        }
+        BoxFilterError::InvalidDimensions { .. }
+        | BoxFilterError::UnsupportedChannels { .. }
+        | BoxFilterError::ScratchShape { .. }
+        | BoxFilterError::NonFiniteInput { .. } => OperationExecutionError::UnsupportedCapability(
+            "box mean rejected a validated bloom buffer",
+        ),
     }
 }
 
@@ -305,7 +437,5 @@ fn bounded(
 }
 
 fn bloom_radius(size: f32, _dimensions: RasterDimensions) -> u32 {
-    (256.0 * ((size + 1.0).min(100.0) / 100.0))
-        .ceil()
-        .min(256.0) as u32
+    (256.0 * ((size + 1.0).min(100.0) / 100.0)).min(256.0) as u32
 }

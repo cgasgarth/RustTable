@@ -30,9 +30,10 @@ On macOS, install or replace the canonical Computer Use app:
 bun run install:computer-use
 ```
 
-That explicit launcher activates a normal decorated window and sizes it to the current screen's
-usable working area, preserving the menu bar, title bar, traffic lights, and Dock rather than
-entering native macOS full-screen. Add `-- --no-launch` for installation without foreground UI.
+Installation does not open or activate RustTable. Add `-- --launch` for a deliberate foreground
+launch; it uses a normal decorated window sized to the current screen's usable working area,
+preserving the menu bar, title bar, traffic lights, and Dock rather than entering native macOS
+full-screen.
 
 Deliberate side-by-side screenshot review is also foreground-only and requires acknowledgement:
 
@@ -40,8 +41,8 @@ Deliberate side-by-side screenshot review is also foreground-only and requires a
 bun run screenshot:ui-review -- --allow-foreground
 ```
 
-The macOS lifecycle smoke is non-activating by default: it launches the installed app hidden and
-quits it without making RustTable frontmost. Real Command-Q validation is deliberately separate:
+The macOS lifecycle command validates the installed bundle without launching it by default.
+Foreground launch and real Command-Q validation are deliberately separate:
 
 ```sh
 bun run smoke:macos-computer-use

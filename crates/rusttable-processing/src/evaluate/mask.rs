@@ -11,7 +11,10 @@ pub(super) struct OperationMaskRoute<'a> {
 
 impl<'a> OperationMaskRoute<'a> {
     pub(super) fn new(kind: &ProcessingOperationKind, mask: Option<&'a MaskRaster>) -> Self {
-        if matches!(kind, ProcessingOperationKind::Shadhi { .. }) {
+        if matches!(
+            kind,
+            ProcessingOperationKind::Bloom { .. } | ProcessingOperationKind::Shadhi { .. }
+        ) {
             Self {
                 native_values: mask.map(MaskRaster::values),
                 working_rgb_blend: None,

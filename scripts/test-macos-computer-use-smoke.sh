@@ -5,7 +5,7 @@ root="$(git rev-parse --show-toplevel)"
 script="$root/scripts/macos-computer-use-smoke.sh"
 package_json="$root/package.json"
 help="$("$script" --help)"
-[[ "$help" == *"default launches hidden/in the background"* ]]
+[[ "$help" == *"default validates the installation without launching"* ]]
 [[ "$help" == *"--allow-foreground"* ]]
 [[ "$help" == *"send real Command-Q"* ]]
 
@@ -21,9 +21,9 @@ mixed_error="$("$script" --allow-foreground --unknown 2>&1 || true)"
 
 background_body="$(sed -n '/^run_background_smoke()/,/^}/p' "$script")"
 foreground_body="$(sed -n '/^run_foreground_command_q_smoke()/,/^}/p' "$script")"
-[[ "$background_body" == *'open -g -j "$bundle"'* ]]
-[[ "$background_body" == *'assert_not_frontmost launched'* ]]
-[[ "$background_body" == *'tell application id \"$bundle_identifier\" to quit'* ]]
+[[ "$background_body" != *'open '* ]]
+[[ "$background_body" == *'assert_not_frontmost validated'* ]]
+[[ "$background_body" != *'tell application id'* ]]
 [[ "$background_body" != *'to activate'* ]]
 [[ "$background_body" != *'keystroke "q"'* ]]
 

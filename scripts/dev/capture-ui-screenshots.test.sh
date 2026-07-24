@@ -5,8 +5,8 @@ root="$(git rev-parse --show-toplevel)"
 script="$root/scripts/dev/capture-ui-screenshots.sh"
 help="$("$script" --help)"
 [[ "$help" == *"--allow-foreground"* ]]
-[[ "$help" == *"default: current screen usable width"* ]]
-[[ "$help" == *"default: current screen usable height"* ]]
+[[ "$help" != *"--width"* ]]
+[[ "$help" != *"--height"* ]]
 [[ "$help" == *"reference-app"* ]]
 [[ "$help" == *"reference-dir"* ]]
 [[ "$help" == *"refresh-reference"* ]]
@@ -20,8 +20,8 @@ if "$script" --unknown >/dev/null 2>&1; then
   printf 'unknown capture option unexpectedly succeeded\n' >&2
   exit 1
 fi
-if "$script" --width 0 >/dev/null 2>&1; then
-  printf 'invalid capture width unexpectedly succeeded\n' >&2
+if "$script" --width 1600 --height 900 >/dev/null 2>&1; then
+  printf 'custom capture geometry unexpectedly succeeded\n' >&2
   exit 1
 fi
 if "$script" --run-id '../escape' >/dev/null 2>&1; then
@@ -32,6 +32,8 @@ fi
 foreground_error="$("$script" --run-id contract 2>&1 || true)"
 [[ "$foreground_error" == *"rerun with --allow-foreground"* ]]
 grep -Fq "screen.visibleFrame" "$script"
+grep -Fq 'width="$working_width"' "$script"
+grep -Fq 'height="$working_height"' "$script"
 grep -Fq 'set value of attribute "AXFullScreen" of window 1 to false' "$script"
 grep -Fq '"AXStandardWindow"' "$script"
 grep -Fq '"AXCloseButton"' "$script"

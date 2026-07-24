@@ -21,6 +21,7 @@ import {
 } from './computer-use-app-install';
 import {
   createRustTableBundle,
+  RUSTTABLE_BUNDLE_IDENTIFIER,
   RUSTTABLE_BUNDLE_IDENTITY,
   RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY,
   resolveRustTableVersion,
@@ -41,14 +42,15 @@ export const commandEnvironment = (): Record<string, string> => {
 const help = `Usage: bun run install:computer-use [options]
 
 Build, install, and register rusttable - latest.app for Computer Use.
-The default foreground launch uses a decorated window sized to the usable macOS working area.
+The default does not open or activate the installed app.
 
 Options:
   The canonical install path is ~/Applications/rusttable - latest.app.
   --compact        Reduce build output
+  --launch         Open a decorated window sized to the usable working area
   --no-build       Use the existing release bundle
   --no-install     Build/validate without changing the canonical install
-  --no-launch      Do not open the installed app
+  --no-launch      Compatibility alias for the non-launching default
   -h, --help       Show this help
 `;
 
@@ -199,6 +201,9 @@ const main = async (): Promise<void> => {
   if (options.shouldLaunch) {
     await launchComputerUseApp({
       appPath: options.shouldInstall ? options.installPath : bundlePath,
+      bundleIdentifier: options.shouldInstall
+        ? RUSTTABLE_COMPUTER_USE_BUNDLE_IDENTITY.bundleIdentifier
+        : RUSTTABLE_BUNDLE_IDENTIFIER,
       run: runCommand,
     });
   }

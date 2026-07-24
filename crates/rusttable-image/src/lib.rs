@@ -13,6 +13,14 @@ mod raw;
 mod source_color;
 mod view;
 
+pub mod common;
+
+pub use common::cache::{
+    CacheAccounting, CacheAllocation, CacheCallbacks, CacheError, CacheGcReport, CacheLease,
+    CacheLeaseError, CacheMode, CachePoison, CacheReadLease, CacheRemoveResult,
+    CacheTryAcquireResult, CacheValueRead, CacheValueWrite, CacheWriteLease, ConcurrentCache,
+    DefaultCacheCallbacks,
+};
 pub use decode::{
     DecodeError, DecodeReceipt, DecodeRequest, DecodeResult, DecodeStage, DecodedFrame,
     DecodedFrameError, DecoderCapabilities, DecoderDescriptor, DecoderIdentity,
