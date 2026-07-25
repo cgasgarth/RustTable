@@ -15,6 +15,9 @@ use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
 use rusttable_processing::operations::vibrance::{VibranceConfig, VibranceParametersV2};
+use rusttable_processing::{
+    COLORZONES_V5_PARAMETER_BYTES, ColorZonesConfig, ColorZonesHistory, ColorZonesParametersV5,
+};
 use rusttable_sqlite_native::{
     DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow, RawModuleOrderRow,
 };
@@ -117,6 +120,123 @@ fn colorcorrection_finite_outlier_decodes_while_unknown_malformed_and_nonfinite_
         &history_step(b"colorcorrection", Some(1), Some(1), nonfinite.clone()),
         DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
         &nonfinite,
+    );
+}
+
+#[test]
+fn colorzones_v1_migrates_to_canonical_v5_but_retains_the_exact_pending_row() {
+    let payload = colorzones_v1_payload();
+    let source = history_step(b"colorzones", Some(1), Some(1), payload.clone());
+    let current = ColorZonesHistory::decode(1, &payload)
+        .expect("source-sized v1 Color Zones payload")
+        .current()
+        .expect("pinned v1-to-v5 migration");
+    let expected_config =
+        ColorZonesConfig::try_from(&current).expect("migrated active curve semantics");
+
+    let DarktableHistoryStepDecode::ColorZonesPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("known Color Zones v1 row must decode as pending blend");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+    assert_eq!(imported.source_version, 1);
+    assert!(imported.migrated);
+    assert!(imported.enabled);
+    assert_eq!(imported.config, expected_config);
+    assert_eq!(imported.canonical_parameters, current.to_bytes());
+    assert_eq!(
+        imported.canonical_parameters.len(),
+        COLORZONES_V5_PARAMETER_BYTES
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+}
+
+#[test]
+fn colorzones_v5_is_canonical_without_claiming_executable_blend_semantics() {
+    let parameters = ColorZonesParametersV5::defaults();
+    let payload = parameters.to_bytes().to_vec();
+    let source = history_step(b"colorzones", Some(5), Some(0), payload.clone());
+
+    let DarktableHistoryStepDecode::ColorZonesPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("known Color Zones v5 row must decode as pending blend");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+    assert_eq!(imported.source_version, 5);
+    assert!(!imported.migrated);
+    assert!(!imported.enabled);
+    assert_eq!(
+        imported.config,
+        ColorZonesConfig::try_from(&parameters).expect("default v5 active curve semantics")
+    );
+    assert_eq!(imported.canonical_parameters, parameters.to_bytes());
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+}
+
+#[test]
+fn colorzones_v5_spline_v2_single_node_curves_remain_pending_blend() {
+    let mut parameters = ColorZonesParametersV5::defaults();
+    parameters.curve_num_nodes = [1, 1, 1];
+    let payload = parameters.to_bytes().to_vec();
+    let source = history_step(b"colorzones", Some(5), Some(1), payload.clone());
+
+    let DarktableHistoryStepDecode::ColorZonesPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("native spline-v2 one-node curves must remain typed pending blend");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert!(
+        imported
+            .config
+            .curves()
+            .iter()
+            .all(|curve| curve.node_count() == 1)
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+}
+
+#[test]
+fn colorzones_unknown_malformed_and_invalid_active_semantics_remain_byte_exact() {
+    let unknown = history_step(b"colorzones", Some(6), Some(1), vec![9, 8, 7]);
+    assert_preserved_exact(
+        &unknown,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+
+    let malformed = history_step(
+        b"colorzones",
+        Some(5),
+        Some(1),
+        vec![0; COLORZONES_V5_PARAMETER_BYTES - 1],
+    );
+    assert_preserved_exact(
+        &malformed,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+
+    let mut invalid_active = ColorZonesParametersV5::defaults().to_bytes();
+    invalid_active[..4].copy_from_slice(&99_i32.to_le_bytes());
+    let invalid_active = history_step(b"colorzones", Some(5), Some(1), invalid_active.to_vec());
+    assert_preserved_exact(
+        &invalid_active,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
     );
 }
 
@@ -529,6 +649,7 @@ fn manifest() -> DarktableOperationManifest {
     let mut manifest = DarktableOperationManifest::new();
     manifest.insert("colorcontrast", 2, [1, 2], None);
     manifest.insert("colorcorrection", 1, [1], None);
+    manifest.insert("colorzones", 5, [1, 2, 3, 4, 5], None);
     manifest.insert("velvia", 2, [1, 2], None);
     manifest.insert("vibrance", 2, [2], None);
     manifest
@@ -615,4 +736,34 @@ fn assert_preserved(
     assert_eq!(finding.code, code);
     assert_eq!(preserved.operation_params.bytes, bytes);
     assert_eq!(preserved.blend_params.bytes, [0xaa, 0xbb]);
+}
+
+fn assert_preserved_exact(source: &CompatHistoryStep, code: DarktableHistoryDecodeFindingCode) {
+    let DarktableHistoryStepDecode::Preserved {
+        source: preserved,
+        finding,
+    } = decode_history_step(source)
+    else {
+        panic!("row must remain opaque");
+    };
+    assert_eq!(finding.code, code);
+    assert_eq!(&preserved, source);
+    assert_eq!(preserved.blend_params.bytes, [0xaa, 0xbb]);
+}
+
+fn colorzones_v1_payload() -> Vec<u8> {
+    let mut payload = Vec::with_capacity(148);
+    payload.extend_from_slice(&2_i32.to_le_bytes());
+    for _channel in 0..3 {
+        for x in [0.0_f32, 0.2, 0.4, 0.6, 0.8, 1.0] {
+            payload.extend_from_slice(&x.to_le_bytes());
+        }
+    }
+    for _channel in 0..3 {
+        for y in [0.5_f32; 6] {
+            payload.extend_from_slice(&y.to_le_bytes());
+        }
+    }
+    assert_eq!(payload.len(), 148);
+    payload
 }

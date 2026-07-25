@@ -128,6 +128,20 @@ pub use operations::colorcorrection::{
     ColorCorrectionPresetBlendColorSpace, presets as colorcorrection_presets,
 };
 pub use operations::colorout::{TerminalOutputDescriptor, TerminalOutputFrame};
+pub use operations::colorzones::{
+    COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_LEGACY_BANDS,
+    COLORZONES_MAX_NODES, COLORZONES_RUST_ID, COLORZONES_SCHEMA_VERSION, COLORZONES_V1_BANDS,
+    COLORZONES_V1_PARAMETER_BYTES, COLORZONES_V2_PARAMETER_BYTES, COLORZONES_V3_PARAMETER_BYTES,
+    COLORZONES_V4_PARAMETER_BYTES, COLORZONES_V5_PARAMETER_BYTES, ColorZonesChannel,
+    ColorZonesCodecError, ColorZonesConfig, ColorZonesCurve, ColorZonesCurveType,
+    ColorZonesHistory, ColorZonesMode, ColorZonesNode, ColorZonesParameterError,
+    ColorZonesParametersV1, ColorZonesParametersV2, ColorZonesParametersV3, ColorZonesParametersV4,
+    ColorZonesParametersV5, ColorZonesPoint, ColorZonesSplinesVersion,
+    migrate_v1_to_v5 as migrate_colorzones_v1_to_v5,
+    migrate_v2_to_v5 as migrate_colorzones_v2_to_v5,
+    migrate_v3_to_v5 as migrate_colorzones_v3_to_v5,
+    migrate_v4_to_v5 as migrate_colorzones_v4_to_v5,
+};
 pub use operations::defringe::{
     DEFRINGE_ALIAS, DEFRINGE_COMPATIBILITY_ID, DEFRINGE_GAUSSIAN_ORDER,
     DEFRINGE_MAGIC_THRESHOLD_COEFFICIENT, DEFRINGE_PARAMETER_BYTES, DEFRINGE_RADIUS_DEFAULT,

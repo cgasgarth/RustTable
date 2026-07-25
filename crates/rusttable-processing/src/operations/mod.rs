@@ -16,6 +16,7 @@ pub mod colorcorrection;
 pub mod colorin;
 pub mod colorout;
 pub mod colorreconstruction;
+pub mod colorzones;
 mod common;
 pub mod convolution;
 pub mod crop;
