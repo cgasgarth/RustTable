@@ -28,6 +28,195 @@ pub(super) struct ControlRowActionContext {
     pub(super) operation_id: Option<OperationId>,
 }
 
+pub(super) struct InstanceMenuWidgets {
+    anchor: gtk4::MenuButton,
+    popover: gtk4::Popover,
+    new_instance: gtk4::Button,
+    delete: gtk4::Button,
+}
+
+#[derive(Clone)]
+pub(super) struct InstanceActionContext {
+    pub(super) action_handler: DarkroomModuleActionHandler,
+    pub(super) status: gtk4::Label,
+    pub(super) recover: gtk4::Button,
+    pub(super) current_revision: Rc<RefCell<Revision>>,
+    pub(super) module_id: String,
+    pub(super) operation_id: OperationId,
+}
+
+#[derive(Clone, Copy)]
+enum InstanceActionKind {
+    New,
+    Delete,
+}
+
+impl InstanceActionKind {
+    fn action(
+        self,
+        module_id: String,
+        operation_id: OperationId,
+        expected_revision: Revision,
+    ) -> DarkroomModuleAction {
+        match self {
+            Self::New => DarkroomModuleAction::NewInstance {
+                module_id,
+                operation_id: Some(operation_id),
+                expected_revision,
+            },
+            Self::Delete => DarkroomModuleAction::DeleteInstance {
+                module_id,
+                operation_id: Some(operation_id),
+                expected_revision,
+            },
+        }
+    }
+}
+
+pub(super) fn build_instance_menu(
+    title: &gtk4::Box,
+    module: &super::DarkroomModuleViewModel,
+    has_action_handler: bool,
+) -> Option<InstanceMenuWidgets> {
+    if !module.supports_multi_instance() || module.operation_id().is_none() {
+        return None;
+    }
+    let widget_id = module.widget_id();
+    let existing = direct_child_named(title, &format!("{widget_id}-actions"))?
+        .downcast::<gtk4::Button>()
+        .ok()?;
+    let action_size = (existing.width_request(), existing.height_request());
+    let icon = existing.child();
+    existing.set_child(None::<&gtk4::Widget>);
+    existing.unparent();
+
+    let interactive = has_action_handler && module.can_add_instance();
+    let popover = gtk4::Popover::builder()
+        .autohide(true)
+        .has_arrow(true)
+        .build();
+    popover.set_widget_name(&format!("{widget_id}-instance-menu"));
+    popover.set_position(gtk4::PositionType::Bottom);
+
+    let menu = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    menu.set_widget_name(&format!("{widget_id}-instance-menu-items"));
+    let new_instance = instance_menu_button(
+        &format!("{widget_id}-instance-new"),
+        "new instance",
+        interactive,
+    );
+    let delete = instance_menu_button(
+        &format!("{widget_id}-instance-delete"),
+        "delete",
+        has_action_handler && module.can_delete_instance(),
+    );
+    for button in [&new_instance, &delete] {
+        menu.append(button);
+    }
+    popover.set_child(Some(&menu));
+
+    let anchor = gtk4::MenuButton::new();
+    anchor.set_widget_name(&format!("{widget_id}-actions"));
+    anchor.set_size_request(action_size.0, action_size.1);
+    anchor.set_has_frame(false);
+    anchor.set_always_show_arrow(false);
+    anchor.set_focusable(interactive);
+    anchor.set_sensitive(interactive);
+    anchor.add_css_class("dt_module_action");
+    anchor.set_tooltip_text(Some(
+        "multiple instance actions\nright-click creates new instance",
+    ));
+    anchor.update_property(&[Property::Label("Multiple instance actions")]);
+    if let Some(icon) = icon {
+        anchor.set_child(Some(&icon));
+    }
+    anchor.set_popover(Some(&popover));
+    title.append(&anchor);
+
+    Some(InstanceMenuWidgets {
+        anchor,
+        popover,
+        new_instance,
+        delete,
+    })
+}
+
+pub(super) fn connect_instance_menu(menu: &InstanceMenuWidgets, context: InstanceActionContext) {
+    connect_instance_button(
+        &menu.new_instance,
+        &menu.popover,
+        &context,
+        InstanceActionKind::New,
+    );
+    connect_instance_button(
+        &menu.delete,
+        &menu.popover,
+        &context,
+        InstanceActionKind::Delete,
+    );
+
+    let secondary = gtk4::GestureClick::new();
+    secondary.set_button(3);
+    secondary.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    let secondary_context = context;
+    secondary.connect_pressed(move |gesture, _, _, _| {
+        let _ = gesture.set_state(gtk4::EventSequenceState::Claimed);
+        dispatch_instance_action(&secondary_context, InstanceActionKind::New);
+    });
+    menu.anchor.add_controller(secondary);
+}
+
+fn connect_instance_button(
+    button: &gtk4::Button,
+    popover: &gtk4::Popover,
+    context: &InstanceActionContext,
+    kind: InstanceActionKind,
+) {
+    let popover = popover.clone();
+    let context = context.clone();
+    button.connect_clicked(move |_| {
+        popover.popdown();
+        dispatch_instance_action(&context, kind);
+    });
+}
+
+fn dispatch_instance_action(context: &InstanceActionContext, kind: InstanceActionKind) {
+    let expected_revision = *context.current_revision.borrow();
+    dispatch_module_action(
+        &context.action_handler,
+        &context.status,
+        &context.recover,
+        &context.current_revision,
+        kind.action(
+            context.module_id.clone(),
+            context.operation_id,
+            expected_revision,
+        ),
+    );
+}
+
+fn instance_menu_button(id: &str, label: &str, sensitive: bool) -> gtk4::Button {
+    let button = gtk4::Button::with_label(label);
+    button.set_widget_name(id);
+    button.set_halign(gtk4::Align::Fill);
+    button.set_focusable(sensitive);
+    button.set_sensitive(sensitive);
+    button.add_css_class("flat");
+    button.update_property(&[Property::Label(label)]);
+    button
+}
+
+fn direct_child_named(root: &gtk4::Box, name: &str) -> Option<gtk4::Widget> {
+    let mut child = root.first_child();
+    while let Some(current) = child {
+        if current.widget_name() == name {
+            return Some(current);
+        }
+        child = current.next_sibling();
+    }
+    None
+}
+
 /// Builds one ordered control row from the typed presentation snapshot.
 #[allow(clippy::too_many_lines)]
 pub(super) fn build_control_row(
@@ -272,12 +461,13 @@ pub(super) fn dispatch_module_action(
     recover: &gtk4::Button,
     current_revision: &RefCell<Revision>,
     action: DarkroomModuleAction,
-) {
+) -> bool {
     match handler(action) {
         Ok(revision) => {
             *current_revision.borrow_mut() = revision;
             status.set_label(&format!("Ready · revision {revision}"));
             recover.set_sensitive(false);
+            true
         }
         Err(error) => {
             if let Some(actual) = stale_actual_revision(&error) {
@@ -287,6 +477,7 @@ pub(super) fn dispatch_module_action(
             } else {
                 status.set_label(&format!("Module error · {error}"));
             }
+            false
         }
     }
 }

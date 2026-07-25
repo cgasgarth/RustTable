@@ -36,8 +36,8 @@ pub use lab_boundary::{
     evaluate_bilateral_shadhi_with_cancellation,
 };
 use lab_boundary::{
-    apply_bloom_with_cancellation, apply_colorcontrast, apply_defringe, apply_relight,
-    apply_shadhi_with_cancellation,
+    apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection, apply_defringe,
+    apply_relight, apply_shadhi_with_cancellation, apply_vibrance,
 };
 use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
@@ -718,6 +718,13 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             pixels.copy_from_slice(&candidate);
             Ok(())
         }
+        ProcessingOperationKind::Vibrance { config } => {
+            let candidate =
+                apply_vibrance(*config, pixels, *frame, mask_route.native_values(), opacity)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
         ProcessingOperationKind::Shadhi { config } => {
             let candidate = apply_shadhi_with_cancellation(
                 *config,
@@ -865,19 +872,11 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             Ok(())
         }
         ProcessingOperationKind::ColorCorrection { config } => {
-            let plan = crate::operations::colorcorrection::ColorCorrectionPlan::new(*config)
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
-            let execution = plan
-                .execute(pixels)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
-            apply_reconstruction(
-                pixels,
-                execution.pixels(),
-                opacity,
-                step_index,
-                operation_id,
-                pixel_index_offset,
-            )
+            let candidate =
+                apply_colorcorrection(*config, pixels, *frame, mask_route.native_values(), opacity)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
         }
         ProcessingOperationKind::MaskManager { .. }
         | ProcessingOperationKind::RasterFile { .. } => Ok(()),

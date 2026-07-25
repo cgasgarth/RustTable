@@ -19,7 +19,7 @@ use rusttable_processing::{
 use sha2::{Digest, Sha256};
 
 use crate::cpu::{
-    operation_is_semantically_active, output_descriptor, output_from_working,
+    color_transform, operation_is_semantically_active, output_descriptor, output_from_working,
     requires_full_frame_execution, to_linear_working, validate_input_encoding,
 };
 use crate::{
@@ -971,11 +971,23 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                 }
                 BasicPointCandidate::Ready(velvia_point_operation(*config))
             }
+            rusttable_processing::ProcessingOperationKind::ColorCorrection { config } => {
+                if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
+                    return None;
+                }
+                BasicPointCandidate::Ready(colorcorrection_point_operation(*config))
+            }
             rusttable_processing::ProcessingOperationKind::ColorContrast { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
                     return None;
                 }
                 BasicPointCandidate::Ready(colorcontrast_point_operation(*config))
+            }
+            rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
+                if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
+                    return None;
+                }
+                BasicPointCandidate::Ready(vibrance_point_operation(*config))
             }
             rusttable_processing::ProcessingOperationKind::Grain { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits()
@@ -1082,6 +1094,19 @@ fn velvia_point_operation(
     }
 }
 
+fn colorcorrection_point_operation(
+    config: rusttable_processing::operations::colorcorrection::ColorCorrectionConfig,
+) -> BasicPointOperation {
+    let coefficients = config.committed_coefficients();
+    BasicPointOperation::ColorCorrection {
+        saturation: coefficients.saturation(),
+        a_scale: coefficients.a_scale(),
+        a_base: coefficients.a_base(),
+        b_scale: coefficients.b_scale(),
+        b_base: coefficients.b_base(),
+    }
+}
+
 fn colorcontrast_point_operation(
     config: rusttable_processing::operations::colorcontrast::ColorContrastConfig,
 ) -> BasicPointOperation {
@@ -1091,6 +1116,14 @@ fn colorcontrast_point_operation(
         b_steepness: config.b_steepness(),
         b_offset: config.b_offset(),
         unbound: config.is_unbound(),
+    }
+}
+
+fn vibrance_point_operation(
+    config: rusttable_processing::operations::vibrance::VibranceConfig,
+) -> BasicPointOperation {
+    BasicPointOperation::Vibrance {
+        amount: config.normalized_amount(),
     }
 }
 
@@ -1188,13 +1221,19 @@ fn execute_gpu_image(
     let color_space =
         basic_point_chain_color_space(input.descriptor().color_encoding(), operations)?;
     if color_space == BasicPointColorSpace::LabD50 {
-        let packed = packed_lab_d50(input);
+        let (packed, boundary) = packed_lab_d50(input)?;
         let result = gpu.execute_basic_point(BasicPointRequest {
             pixels: &packed,
             operations,
             color_space,
         })?;
-        return lab_image_from_packed(input, result.pixels(), result.dispatches());
+        return lab_image_from_packed(
+            input,
+            result.pixels(),
+            result.dispatches(),
+            boundary,
+            output_mode,
+        );
     }
     let (frame, packed) = packed_linear_working(input)?;
     let result = gpu.execute_basic_point(BasicPointRequest {
@@ -1222,17 +1261,18 @@ fn basic_point_chain_color_space(
             BasicPointColorSpace::LinearRgb
         });
     }
-    let contains_colorcontrast = operations
-        .iter()
-        .any(|operation| matches!(operation, BasicPointOperation::ColorContrast { .. }));
-    if !contains_colorcontrast {
+    let is_lab_point = |operation: &BasicPointOperation| {
+        matches!(
+            operation,
+            BasicPointOperation::ColorContrast { .. }
+                | BasicPointOperation::ColorCorrection { .. }
+                | BasicPointOperation::Vibrance { .. }
+        )
+    };
+    if !operations.iter().any(is_lab_point) {
         return Ok(BasicPointColorSpace::LinearRgb);
     }
-    if input_encoding == RgbaF32ColorEncoding::LabD50
-        && operations
-            .iter()
-            .all(|operation| matches!(operation, BasicPointOperation::ColorContrast { .. }))
-    {
+    if operations.iter().all(is_lab_point) {
         return Ok(BasicPointColorSpace::LabD50);
     }
     Err(BasicPointError::ColorSpaceBoundaryUnavailable {
@@ -1240,22 +1280,108 @@ fn basic_point_chain_color_space(
     })
 }
 
-fn packed_lab_d50(input: &RgbaF32Image) -> Vec<f32> {
-    let mut packed = Vec::with_capacity(input.pixels().len() * 4);
-    for pixel in input.pixels() {
-        packed.extend([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
+struct LabGpuBoundary {
+    from_lab: rusttable_color::TransformPlan,
+    frame: WorkingFrameDescriptor,
+}
+
+fn packed_lab_d50(
+    input: &RgbaF32Image,
+) -> Result<(Vec<f32>, Option<LabGpuBoundary>), PixelpipeGpuFallback> {
+    if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+        let mut packed = Vec::with_capacity(input.pixels().len() * 4);
+        for pixel in input.pixels() {
+            packed.extend([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
+        }
+        return Ok((packed, None));
     }
-    packed
+    let working =
+        to_linear_working(input).map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    let to_lab = color_transform(
+        working.frame().encoding(),
+        rusttable_color::ColorEncoding::LabD50,
+    )
+    .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    let from_lab = color_transform(
+        rusttable_color::ColorEncoding::LabD50,
+        working.frame().encoding(),
+    )
+    .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    let mut packed = Vec::with_capacity(input.pixels().len() * 4);
+    for (pixel_index, (pixel, source)) in working.pixels().zip(input.pixels()).enumerate() {
+        let channels = to_lab
+            .apply_rgb(
+                [pixel.red().get(), pixel.green().get(), pixel.blue().get()],
+                || false,
+            )
+            .map_err(|error| {
+                BasicPointError::Readback(format!(
+                    "GPU Lab point ingress failed at pixel {pixel_index}: {error}"
+                ))
+            })?;
+        packed.extend([channels[0], channels[1], channels[2], source.alpha()]);
+    }
+    Ok((
+        packed,
+        Some(LabGpuBoundary {
+            from_lab,
+            frame: working.frame(),
+        }),
+    ))
 }
 
 fn lab_image_from_packed(
     input: &RgbaF32Image,
     packed: &[f32],
     dispatches: u32,
+    boundary: Option<LabGpuBoundary>,
+    output_mode: CpuPixelpipeOutputMode,
 ) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
     let (packed_pixels, remainder) = packed.as_chunks::<4>();
     if !remainder.is_empty() || packed_pixels.len() != input.pixels().len() {
         return Err(BasicPointError::InvalidPixelPacking.into());
+    }
+    if let Some(boundary) = boundary {
+        let pixels = packed_pixels
+            .iter()
+            .enumerate()
+            .map(|(pixel_index, pixel)| {
+                let rgb = boundary
+                    .from_lab
+                    .apply_rgb([pixel[0], pixel[1], pixel[2]], || false)
+                    .map_err(|error| {
+                        BasicPointError::Readback(format!(
+                            "GPU Lab point egress failed at pixel {pixel_index}: {error}"
+                        ))
+                    })?;
+                Ok(LinearRgb::new(
+                    FiniteF32::new(rgb[0]).map_err(|_| {
+                        BasicPointError::Readback(format!(
+                            "GPU Lab point egress produced non-finite red at pixel {pixel_index}"
+                        ))
+                    })?,
+                    FiniteF32::new(rgb[1]).map_err(|_| {
+                        BasicPointError::Readback(format!(
+                            "GPU Lab point egress produced non-finite green at pixel {pixel_index}"
+                        ))
+                    })?,
+                    FiniteF32::new(rgb[2]).map_err(|_| {
+                        BasicPointError::Readback(format!(
+                            "GPU Lab point egress produced non-finite blue at pixel {pixel_index}"
+                        ))
+                    })?,
+                ))
+            })
+            .collect::<Result<Vec<_>, BasicPointError>>()?;
+        let evaluated = WorkingRgbImage::new_with_frame(
+            input.descriptor().dimensions(),
+            pixels,
+            boundary.frame,
+        )
+        .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+        let image = output_from_working(output_mode, input, &evaluated)
+            .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+        return Ok((image, dispatches));
     }
     let pixels = packed_pixels
         .iter()
@@ -1639,6 +1765,108 @@ mod tests {
     }
 
     #[test]
+    fn vibrance_qualification_normalizes_native_percent_amount_once() {
+        let config = rusttable_processing::operations::vibrance::VibranceConfig::new(25.0)
+            .expect("Vibrance config");
+        assert_eq!(
+            vibrance_point_operation(config),
+            BasicPointOperation::Vibrance { amount: 0.25 }
+        );
+    }
+
+    #[test]
+    fn colorcorrection_qualification_uses_native_committed_coefficients() {
+        let config =
+            rusttable_processing::ColorCorrectionConfig::new(20.0, -30.0, -10.0, 5.0, 1.25)
+                .expect("Color Correction config");
+
+        assert_eq!(
+            colorcorrection_point_operation(config),
+            BasicPointOperation::ColorCorrection {
+                saturation: 1.25,
+                a_scale: 0.3,
+                a_base: -10.0,
+                b_scale: -0.35,
+                b_base: 5.0,
+            }
+        );
+    }
+
+    #[test]
+    fn colorcorrection_gpu_plan_preserves_mixed_multiple_instances_in_authored_order() {
+        use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
+        use rusttable_processing::operations::vibrance::VibranceConfig;
+
+        let first_correction =
+            rusttable_processing::ColorCorrectionConfig::new(20.0, -30.0, -10.0, 5.0, 1.25)
+                .expect("first Color Correction config");
+        let contrast =
+            ColorContrastConfig::new(2.0, 3.0, 1.5, -4.0, 1).expect("Color Contrast config");
+        let first_vibrance = VibranceConfig::new(25.0).expect("first Vibrance config");
+        let second_correction =
+            rusttable_processing::ColorCorrectionConfig::new(-8.0, 18.0, 2.0, -7.0, 0.8)
+                .expect("second Color Correction config");
+        let second_vibrance = VibranceConfig::new(-40.0).expect("second Vibrance config");
+        let snapshot = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [
+                colorcorrection_edit_operation(
+                    0xc001,
+                    OperationOpacity::ONE,
+                    [20.0, -30.0, -10.0, 5.0, 1.25],
+                ),
+                colorcontrast_edit_operation(
+                    0xcc09,
+                    OperationOpacity::ONE,
+                    [2.0, 3.0, 1.5, -4.0],
+                    1,
+                ),
+                scalar_edit_operation(
+                    0x5101,
+                    "rusttable.vibrance",
+                    true,
+                    OperationOpacity::ONE,
+                    &[("amount", 25.0)],
+                ),
+                colorcorrection_edit_operation(
+                    0xc002,
+                    OperationOpacity::ONE,
+                    [-8.0, 18.0, 2.0, -7.0, 0.8],
+                ),
+                scalar_edit_operation(
+                    0x5102,
+                    "rusttable.vibrance",
+                    true,
+                    OperationOpacity::ONE,
+                    &[("amount", -40.0)],
+                ),
+            ],
+        );
+        let candidate = gpu_plan_candidate(&snapshot).expect("continuous Lab GPU candidate");
+        let qualified = resolve_gpu_plan_candidate(candidate, || {
+            panic!("Lab point operations do not require BasicAdj analysis")
+        })
+        .expect("qualification")
+        .expect("qualified plan");
+        let expected = vec![
+            colorcorrection_point_operation(first_correction),
+            colorcontrast_point_operation(contrast),
+            vibrance_point_operation(first_vibrance),
+            colorcorrection_point_operation(second_correction),
+            vibrance_point_operation(second_vibrance),
+        ];
+
+        assert_eq!(qualified.plan, GpuPlan::Basic(expected.clone()));
+        assert_eq!(
+            basic_point_chain_color_space(
+                snapshot.input().descriptor().color_encoding(),
+                &expected,
+            ),
+            Ok(BasicPointColorSpace::LabD50)
+        );
+    }
+
+    #[test]
     fn colorcontrast_gpu_plan_preserves_an_opaque_unmasked_lab_chain_in_authored_order() {
         use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
 
@@ -1779,7 +2007,14 @@ mod tests {
     }
 
     #[test]
-    fn colorcontrast_gpu_routing_keeps_rgb_and_mixed_domain_chains_on_cpu() {
+    fn lab_gpu_routing_adds_an_rgb_boundary_but_rejects_mixed_domain_chains() {
+        let colorcorrection = BasicPointOperation::ColorCorrection {
+            saturation: 1.25,
+            a_scale: 0.3,
+            a_base: -10.0,
+            b_scale: -0.35,
+            b_base: 5.0,
+        };
         let colorcontrast = BasicPointOperation::ColorContrast {
             a_steepness: 2.0,
             a_offset: 3.0,
@@ -1798,11 +2033,16 @@ mod tests {
         assert_eq!(
             basic_point_chain_color_space(
                 RgbaF32ColorEncoding::LinearSrgbD65,
-                &[colorcontrast, colorcontrast],
+                &[colorcorrection, colorcontrast],
             ),
-            fallback
+            Ok(BasicPointColorSpace::LabD50)
         );
-        for operations in [[colorcontrast, exposure], [exposure, colorcontrast]] {
+        for operations in [
+            [colorcorrection, exposure],
+            [exposure, colorcorrection],
+            [colorcontrast, exposure],
+            [exposure, colorcontrast],
+        ] {
             assert_eq!(
                 basic_point_chain_color_space(RgbaF32ColorEncoding::LabD50, &operations),
                 fallback
@@ -1838,6 +2078,55 @@ mod tests {
 
         assert!(gpu_plan_candidate(&partial).is_none());
         assert!(gpu_plan_candidate(&masked).is_none());
+    }
+
+    #[test]
+    fn colorcorrection_gpu_plan_rejects_partial_opacity_and_mask_state() {
+        let partial = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [colorcorrection_edit_operation(
+                0xc003,
+                OperationOpacity::new(0.5).expect("partial opacity"),
+                [20.0, -30.0, -10.0, 5.0, 1.25],
+            )],
+        );
+        let masked = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [colorcorrection_edit_operation(
+                0xc004,
+                OperationOpacity::ONE,
+                [20.0, -30.0, -10.0, 5.0, 1.25],
+            )],
+        )
+        .with_mask_graph(
+            rusttable_masks::MaskGraphBuilder::new()
+                .build()
+                .expect("empty mask graph"),
+        );
+
+        assert!(gpu_plan_candidate(&partial).is_none());
+        assert!(gpu_plan_candidate(&masked).is_none());
+    }
+
+    fn colorcorrection_edit_operation(
+        id: u128,
+        opacity: OperationOpacity,
+        parameters: [f64; 5],
+    ) -> Operation {
+        let [hia, hib, loa, lob, saturation] = parameters;
+        scalar_edit_operation(
+            id,
+            "rusttable.colorcorrection",
+            true,
+            opacity,
+            &[
+                ("hia", hia),
+                ("hib", hib),
+                ("loa", loa),
+                ("lob", lob),
+                ("saturation", saturation),
+            ],
+        )
     }
 
     fn colorcontrast_edit_operation(

@@ -485,6 +485,16 @@ impl GtkShell {
         self.darkroom.set_module_stack(modules, action_handler);
     }
 
+    /// Updates controller-owned module state without replacing mounted controls.
+    pub fn update_darkroom_module_stack_snapshot(
+        &self,
+        modules: &super::DarkroomModulesViewModel,
+        revision: Revision,
+    ) {
+        self.darkroom
+            .update_module_stack_snapshot(modules, revision);
+    }
+
     /// Projects a controller-owned darkroom status or typed error.
     pub fn set_darkroom_status(&self, text: &str) {
         self.darkroom.set_status(text);

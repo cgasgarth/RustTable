@@ -73,7 +73,10 @@ fn smoke(root: &Path, qualified_backends: bool, cpu_parity: bool) -> Result {
                 identity.program_id.as_str(),
                 identity.entry_point_id.as_str(),
             ) {
-                ("rusttable.point", "basicadj" | "colorcontrast") => (4, [256, 1, 1]),
+                (
+                    "rusttable.point",
+                    "basicadj" | "colorcontrast" | "vibrance" | "colorcorrection",
+                ) => (4, [256, 1, 1]),
                 ("rusttable.point", _) => (3, [256, 1, 1]),
                 ("rusttable.bilateral", "zero" | "splat" | "slice" | "slice_to_output") => (
                     match identity.entry_point_id.as_str() {

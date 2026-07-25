@@ -1,6 +1,6 @@
 //! WGPU point-operation execution, including direct ports from
-//! `data/kernels/extended.cl::{colorcontrast,velvia}` and their matching
-//! `src/iop/*.c` modules.
+//! `data/kernels/{basic.cl::colorcorrection,extended.cl::{colorcontrast,velvia,vibrance}}`
+//! and their matching `src/iop/*.c` modules.
 
 use std::fmt;
 use std::num::NonZeroU64;
@@ -17,6 +17,10 @@ const BASICADJ_PARAMS_SIZE: u64 = 48;
 const BASICADJ_PARAMS_BYTES: usize = 48;
 const COLORCONTRAST_PARAMS_SIZE: u64 = 32;
 const COLORCONTRAST_PARAMS_BYTES: usize = 32;
+const VIBRANCE_PARAMS_SIZE: u64 = 16;
+const VIBRANCE_PARAMS_BYTES: usize = 16;
+const COLORCORRECTION_PARAMS_SIZE: u64 = 32;
+const COLORCORRECTION_PARAMS_BYTES: usize = 32;
 
 #[derive(Debug)]
 struct PointEntryContract<'a> {
@@ -25,12 +29,16 @@ struct PointEntryContract<'a> {
     params_size: u64,
     basic_params_size: Option<u64>,
     colorcontrast_params_size: Option<u64>,
+    vibrance_params_size: Option<u64>,
+    colorcorrection_params_size: Option<u64>,
 }
 
 struct PointParameterBuffers {
     params: wgpu::Buffer,
     basic_params: Option<wgpu::Buffer>,
     colorcontrast_params: Option<wgpu::Buffer>,
+    vibrance_params: Option<wgpu::Buffer>,
+    colorcorrection_params: Option<wgpu::Buffer>,
 }
 
 /// Explicit channel domain for one shared point-dispatch chain.
@@ -80,6 +88,17 @@ pub enum BasicPointOperation {
         b_offset: f32,
         unbound: bool,
     },
+    ColorCorrection {
+        saturation: f32,
+        a_scale: f32,
+        a_base: f32,
+        b_scale: f32,
+        b_base: f32,
+    },
+    Vibrance {
+        /// Native normalized amount (`params.amount / 100.0`).
+        amount: f32,
+    },
     Velvia {
         strength: f32,
         bias: f32,
@@ -94,6 +113,8 @@ impl BasicPointOperation {
             Self::LinearOffset { .. } => "linear_offset",
             Self::RgbGain { .. } => "rgb_gain",
             Self::ColorContrast { .. } => "colorcontrast",
+            Self::ColorCorrection { .. } => "colorcorrection",
+            Self::Vibrance { .. } => "vibrance",
             Self::Velvia { .. } => "velvia",
         }
     }
@@ -102,7 +123,9 @@ impl BasicPointOperation {
     #[must_use]
     pub const fn required_color_space(self) -> BasicPointColorSpace {
         match self {
-            Self::ColorContrast { .. } => BasicPointColorSpace::LabD50,
+            Self::ColorContrast { .. } | Self::ColorCorrection { .. } | Self::Vibrance { .. } => {
+                BasicPointColorSpace::LabD50
+            }
             Self::BasicAdj(_)
             | Self::Exposure { .. }
             | Self::LinearOffset { .. }
@@ -115,9 +138,11 @@ impl BasicPointOperation {
         let mut bytes = [0_u8; POINT_PARAMS_BYTES];
         bytes[0..4].copy_from_slice(&pixel_count.to_le_bytes());
         let values = match self {
-            Self::BasicAdj(_) | Self::ColorContrast { .. } | Self::Velvia { .. } => {
-                [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0]
-            }
+            Self::BasicAdj(_)
+            | Self::ColorContrast { .. }
+            | Self::ColorCorrection { .. }
+            | Self::Vibrance { .. }
+            | Self::Velvia { .. } => [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::Exposure { stops, black } => [stops, 0.0, 1.0, 1.0, 1.0, 2.2, black],
             Self::LinearOffset { value } => [0.0, value, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::RgbGain { red, green, blue } => [0.0, 0.0, red, green, blue, 2.2, 0.0],
@@ -131,6 +156,15 @@ impl BasicPointOperation {
                 .copy_from_slice(&strength.to_le_bytes());
             bytes[VELVIA_BIAS_OFFSET..POINT_PARAMS_BYTES].copy_from_slice(&bias.to_le_bytes());
         }
+        bytes
+    }
+
+    fn vibrance_params(self) -> [u8; VIBRANCE_PARAMS_BYTES] {
+        let mut bytes = [0_u8; VIBRANCE_PARAMS_BYTES];
+        let Self::Vibrance { amount } = self else {
+            return bytes;
+        };
+        bytes[0..4].copy_from_slice(&amount.to_le_bytes());
         bytes
     }
 
@@ -154,6 +188,28 @@ impl BasicPointOperation {
             bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
         }
         bytes[16..20].copy_from_slice(&u32::from(unbound).to_le_bytes());
+        bytes
+    }
+
+    fn colorcorrection_params(self) -> [u8; COLORCORRECTION_PARAMS_BYTES] {
+        let mut bytes = [0_u8; COLORCORRECTION_PARAMS_BYTES];
+        let Self::ColorCorrection {
+            saturation,
+            a_scale,
+            a_base,
+            b_scale,
+            b_base,
+        } = self
+        else {
+            return bytes;
+        };
+        for (index, value) in [saturation, a_scale, a_base, b_scale, b_base]
+            .into_iter()
+            .enumerate()
+        {
+            let offset = index * 4;
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
         bytes
     }
 
@@ -212,6 +268,16 @@ impl BasicPointOperation {
             } => [a_steepness, a_offset, b_steepness, b_offset]
                 .iter()
                 .all(|value| value.is_finite()),
+            Self::ColorCorrection {
+                saturation,
+                a_scale,
+                a_base,
+                b_scale,
+                b_base,
+            } => [saturation, a_scale, a_base, b_scale, b_base]
+                .iter()
+                .all(|value| value.is_finite()),
+            Self::Vibrance { amount } => amount.is_finite(),
             Self::Velvia { strength, bias } => strength.is_finite() && bias.is_finite(),
         }
     }
@@ -418,10 +484,32 @@ impl GpuRuntime {
                     queue.write_buffer(&buffer, 0, &operation.colorcontrast_params());
                     buffer
                 });
+                let vibrance_params = contract.vibrance_params_size.map(|size| {
+                    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("RustTable Vibrance parameters"),
+                        size,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    });
+                    queue.write_buffer(&buffer, 0, &operation.vibrance_params());
+                    buffer
+                });
+                let colorcorrection_params = contract.colorcorrection_params_size.map(|size| {
+                    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("RustTable color correction parameters"),
+                        size,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    });
+                    queue.write_buffer(&buffer, 0, &operation.colorcorrection_params());
+                    buffer
+                });
                 PointParameterBuffers {
                     params,
                     basic_params,
                     colorcontrast_params,
+                    vibrance_params,
+                    colorcorrection_params,
                 }
             })
             .collect::<Vec<_>>();
@@ -474,6 +562,18 @@ impl GpuRuntime {
                 bind_group_entries.push(wgpu::BindGroupEntry {
                     binding: 4,
                     resource: colorcontrast_params.as_entire_binding(),
+                });
+            }
+            if let Some(vibrance_params) = &parameter_buffers.vibrance_params {
+                bind_group_entries.push(wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: vibrance_params.as_entire_binding(),
+                });
+            }
+            if let Some(colorcorrection_params) = &parameter_buffers.colorcorrection_params {
+                bind_group_entries.push(wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: colorcorrection_params.as_entire_binding(),
                 });
             }
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -536,6 +636,8 @@ fn point_entry_contract<'a>(
     let expected_bindings: &[u32] = match entry_point {
         "basicadj" => &[0, 1, 2, 3],
         "colorcontrast" => &[0, 1, 2, 4],
+        "vibrance" => &[0, 1, 2, 5],
+        "colorcorrection" => &[0, 1, 2, 6],
         _ => &[0, 1, 2],
     };
     if entry.expanded_source.is_empty()
@@ -571,12 +673,26 @@ fn point_entry_contract<'a>(
     {
         return Err(BasicPointError::ShaderUnavailable);
     }
+    let vibrance_params_size = reflected_uniform_size(&reflection.bindings, 5);
+    if vibrance_params_size.is_some() != (entry_point == "vibrance")
+        || vibrance_params_size.is_some_and(|size| size != VIBRANCE_PARAMS_SIZE)
+    {
+        return Err(BasicPointError::ShaderUnavailable);
+    }
+    let colorcorrection_params_size = reflected_uniform_size(&reflection.bindings, 6);
+    if colorcorrection_params_size.is_some() != (entry_point == "colorcorrection")
+        || colorcorrection_params_size.is_some_and(|size| size != COLORCORRECTION_PARAMS_SIZE)
+    {
+        return Err(BasicPointError::ShaderUnavailable);
+    }
     Ok(PointEntryContract {
         source: &entry.expanded_source,
         layout_entries,
         params_size,
         basic_params_size,
         colorcontrast_params_size,
+        vibrance_params_size,
+        colorcorrection_params_size,
     })
 }
 
@@ -771,6 +887,61 @@ mod tests {
     }
 
     #[test]
+    fn colorcorrection_parameters_follow_the_native_dedicated_uniform_layout() {
+        let operation = BasicPointOperation::ColorCorrection {
+            saturation: 1.25,
+            a_scale: -0.125,
+            a_base: 3.5,
+            b_scale: 0.25,
+            b_base: -4.5,
+        };
+        let bytes = operation.colorcorrection_params();
+        for (index, expected) in [1.25_f32, -0.125, 3.5, 0.25, -4.5].into_iter().enumerate() {
+            let offset = index * 4;
+            assert_eq!(&bytes[offset..offset + 4], &expected.to_le_bytes());
+        }
+        assert!(bytes[20..].iter().all(|byte| *byte == 0));
+        assert_eq!(bytes.len(), COLORCORRECTION_PARAMS_BYTES);
+    }
+
+    #[test]
+    fn vibrance_parameters_follow_the_dedicated_uniform_layout() {
+        let operation = BasicPointOperation::Vibrance { amount: 0.25 };
+        let bytes = operation.vibrance_params();
+        assert_eq!(&bytes[0..4], &0.25_f32.to_le_bytes());
+        assert!(bytes[4..].iter().all(|byte| *byte == 0));
+        assert_eq!(bytes.len(), VIBRANCE_PARAMS_BYTES);
+    }
+
+    #[test]
+    fn vibrance_rejects_non_finite_amount_and_requires_lab_d50() {
+        assert!(!BasicPointOperation::Vibrance { amount: f32::NAN }.parameters_are_finite());
+        assert!(
+            !BasicPointOperation::Vibrance {
+                amount: f32::INFINITY,
+            }
+            .parameters_are_finite()
+        );
+        let operation = BasicPointOperation::Vibrance { amount: 0.25 };
+        assert!(operation.parameters_are_finite());
+        assert_eq!(
+            operation.required_color_space(),
+            BasicPointColorSpace::LabD50
+        );
+        assert_eq!(
+            validate_operation_color_space(BasicPointRequest {
+                pixels: &[50.0, 10.0, -20.0, 1.0],
+                operations: &[operation],
+                color_space: BasicPointColorSpace::LinearRgb,
+            }),
+            Err(BasicPointError::ColorSpaceMismatch {
+                requested: BasicPointColorSpace::LinearRgb,
+                required: BasicPointColorSpace::LabD50,
+            })
+        );
+    }
+
+    #[test]
     fn colorcontrast_rejects_non_finite_parameters_and_requires_lab_d50() {
         for operation in [
             BasicPointOperation::ColorContrast {
@@ -816,15 +987,83 @@ mod tests {
     }
 
     #[test]
+    fn colorcorrection_rejects_non_finite_parameters_and_requires_lab_d50() {
+        for operation in [
+            BasicPointOperation::ColorCorrection {
+                saturation: f32::NAN,
+                a_scale: 0.0,
+                a_base: 0.0,
+                b_scale: 0.0,
+                b_base: 0.0,
+            },
+            BasicPointOperation::ColorCorrection {
+                saturation: 1.0,
+                a_scale: 0.0,
+                a_base: 0.0,
+                b_scale: f32::INFINITY,
+                b_base: 0.0,
+            },
+        ] {
+            assert!(!operation.parameters_are_finite());
+        }
+        let operation = BasicPointOperation::ColorCorrection {
+            saturation: 1.0,
+            a_scale: -0.025,
+            a_base: 3.0,
+            b_scale: 0.075,
+            b_base: -2.0,
+        };
+        assert!(operation.parameters_are_finite());
+        assert_eq!(
+            operation.required_color_space(),
+            BasicPointColorSpace::LabD50
+        );
+        assert_eq!(
+            validate_operation_color_space(BasicPointRequest {
+                pixels: &[50.0, 0.0, 0.0, 1.0],
+                operations: &[operation],
+                color_space: BasicPointColorSpace::LinearRgb,
+            }),
+            Err(BasicPointError::ColorSpaceMismatch {
+                requested: BasicPointColorSpace::LinearRgb,
+                required: BasicPointColorSpace::LabD50,
+            })
+        );
+    }
+
+    #[test]
     fn entry_scoped_runtime_layouts_match_checked_reflection() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        for (entry_point, expected_bindings, expects_basic_params, expects_colorcontrast_params) in [
-            ("exposure", &[0, 1, 2][..], false, false),
-            ("linear_offset", &[0, 1, 2][..], false, false),
-            ("rgb_gain", &[0, 1, 2][..], false, false),
-            ("velvia", &[0, 1, 2][..], false, false),
-            ("basicadj", &[0, 1, 2, 3][..], true, false),
-            ("colorcontrast", &[0, 1, 2, 4][..], false, true),
+        for (
+            entry_point,
+            expected_bindings,
+            expects_basic_params,
+            expects_colorcontrast_params,
+            expects_vibrance_params,
+            expects_colorcorrection_params,
+        ) in [
+            ("exposure", &[0, 1, 2][..], false, false, false, false),
+            ("linear_offset", &[0, 1, 2][..], false, false, false, false),
+            ("rgb_gain", &[0, 1, 2][..], false, false, false, false),
+            ("velvia", &[0, 1, 2][..], false, false, false, false),
+            ("basicadj", &[0, 1, 2, 3][..], true, false, false, false),
+            (
+                "colorcontrast",
+                &[0, 1, 2, 4][..],
+                false,
+                true,
+                false,
+                false,
+            ),
+            ("vibrance", &[0, 1, 2, 5][..], false, false, true, false),
+            (
+                "colorcorrection",
+                &[0, 1, 2, 6][..],
+                false,
+                false,
+                false,
+                true,
+            ),
         ] {
             let entry = registry
                 .find("rusttable.point", entry_point)
@@ -853,6 +1092,16 @@ mod tests {
                 contract.colorcontrast_params_size.is_some(),
                 expects_colorcontrast_params,
                 "{entry_point} color contrast parameter allocation"
+            );
+            assert_eq!(
+                contract.vibrance_params_size.is_some(),
+                expects_vibrance_params,
+                "{entry_point} Vibrance parameter allocation"
+            );
+            assert_eq!(
+                contract.colorcorrection_params_size.is_some(),
+                expects_colorcorrection_params,
+                "{entry_point} color correction parameter allocation"
             );
             for (runtime, reflected) in contract
                 .layout_entries
@@ -1079,6 +1328,492 @@ mod tests {
             },
             pixel[3],
         ]
+    }
+
+    fn colorcorrection_cpu(
+        pixel: [f32; 4],
+        saturation: f32,
+        a_scale: f32,
+        a_base: f32,
+        b_scale: f32,
+        b_base: f32,
+    ) -> [f32; 4] {
+        [
+            pixel[0],
+            saturation * (pixel[1] + pixel[0] * a_scale + a_base),
+            saturation * (pixel[2] + pixel[0] * b_scale + b_base),
+            pixel[3],
+        ]
+    }
+
+    fn opencl_default_hypot(x: f32, y: f32) -> f32 {
+        let absolute_x = x.abs();
+        let absolute_y = y.abs();
+        let maximum = absolute_x.max(absolute_y);
+        if maximum == 0.0 {
+            return 0.0;
+        }
+        let ratio = absolute_x.min(absolute_y) / maximum;
+        maximum * (1.0 + ratio * ratio).sqrt()
+    }
+
+    fn vibrance_opencl_default(pixel: [f32; 4], amount: f32) -> [f32; 4] {
+        let sw = opencl_default_hypot(pixel[1], pixel[2]) / 256.0;
+        let lightness_scale = 1.0 - amount * sw * 0.25;
+        let saturation_scale = 1.0 + amount * sw;
+        [
+            pixel[0] * lightness_scale,
+            pixel[1] * saturation_scale,
+            pixel[2] * saturation_scale,
+            pixel[3],
+        ]
+    }
+
+    #[test]
+    fn default_opencl_hypot_avoids_intermediate_overflow_until_the_true_norm_overflows() {
+        assert_eq!(
+            opencl_default_hypot(f32::MAX, 1.0).to_bits(),
+            f32::MAX.to_bits()
+        );
+        assert!(opencl_default_hypot(f32::MAX, f32::MAX).is_infinite());
+    }
+
+    #[tokio::test]
+    async fn vibrance_dispatch_matches_default_opencl_lab_formula_without_clamping() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let corpus = [
+            [50.0, 10.0, -20.0, 0.0],
+            [80.0, 100.0, -100.0, 0.37],
+            [0.0, -128.0, 128.0, 1.0],
+            [100.0, 0.0, 0.0, f32::from_bits(1)],
+        ];
+        let input = corpus.into_iter().flatten().collect::<Vec<_>>();
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: 1.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("Vibrance point dispatch");
+        let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
+        assert!(remainder.is_empty());
+        for (index, (actual, source)) in actual_pixels.iter().zip(corpus).enumerate() {
+            let expected = vibrance_opencl_default(source, 1.0);
+            for channel in 0..3 {
+                assert!(
+                    (actual[channel] - expected[channel]).abs() <= 0.000_02,
+                    "pixel {index} channel {channel}: {} != {}",
+                    actual[channel],
+                    expected[channel]
+                );
+            }
+            assert_eq!(
+                actual[3].to_bits(),
+                expected[3].to_bits(),
+                "pixel {index} alpha"
+            );
+        }
+        assert!(
+            actual_pixels[2][1].abs() > 128.0,
+            "native Vibrance does not clamp Lab chroma"
+        );
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    #[tokio::test]
+    async fn vibrance_dispatch_overflows_when_the_true_opencl_hypot_exceeds_f32() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let input = [50.0, f32::MAX, -f32::MAX, f32::from_bits(0x3eaa_aaab)];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: 1.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("extreme-finite Vibrance point dispatch");
+        assert!(
+            result.pixels()[0].is_infinite(),
+            "extreme Vibrance result: {:?}",
+            result.pixels()
+        );
+        assert!(result.pixels()[0].is_sign_negative());
+        assert!(result.pixels()[1].is_infinite());
+        assert!(result.pixels()[1].is_sign_positive());
+        assert!(result.pixels()[2].is_infinite());
+        assert!(result.pixels()[2].is_sign_negative());
+        assert_eq!(result.pixels()[3].to_bits(), input[3].to_bits());
+        assert_eq!(result.dispatches(), 1);
+
+        let negative = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: -1.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("negative extreme-finite Vibrance point dispatch");
+        assert!(negative.pixels()[0].is_infinite());
+        assert!(negative.pixels()[0].is_sign_positive());
+        assert!(negative.pixels()[1].is_infinite());
+        assert!(negative.pixels()[1].is_sign_negative());
+        assert!(negative.pixels()[2].is_infinite());
+        assert!(negative.pixels()[2].is_sign_positive());
+        assert_eq!(negative.pixels()[3].to_bits(), input[3].to_bits());
+
+        let zero = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: 0.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("zero extreme-finite Vibrance point dispatch");
+        assert!(
+            zero.pixels()[..3].iter().all(|channel| channel.is_nan()),
+            "OpenCL zero times an infinite true chroma norm is NaN: {:?}",
+            zero.pixels()
+        );
+        assert_eq!(zero.pixels()[3].to_bits(), input[3].to_bits());
+
+        let negative_zero = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: -0.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("negative-zero extreme-finite Vibrance point dispatch");
+        assert!(
+            negative_zero.pixels()[..3]
+                .iter()
+                .all(|channel| channel.is_nan()),
+            "negative zero times an infinite true chroma norm is NaN: {:?}",
+            negative_zero.pixels()
+        );
+        assert_eq!(negative_zero.pixels()[3].to_bits(), input[3].to_bits());
+
+        let zero_lightness = [
+            0.0,
+            f32::MAX,
+            f32::MAX,
+            f32::from_bits(1),
+            -0.0,
+            f32::MAX,
+            -f32::MAX,
+            f32::from_bits(2),
+        ];
+        let zero_lightness_result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &zero_lightness,
+                operations: &[BasicPointOperation::Vibrance { amount: 1.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("zero-lightness extreme-finite Vibrance point dispatch");
+        let (zero_lightness_pixels, remainder) = zero_lightness_result.pixels().as_chunks::<4>();
+        assert!(remainder.is_empty());
+        assert!(zero_lightness_pixels[0][0].is_nan());
+        assert!(zero_lightness_pixels[1][0].is_nan());
+        for channel in [
+            zero_lightness_pixels[0][1],
+            zero_lightness_pixels[0][2],
+            zero_lightness_pixels[1][1],
+            zero_lightness_pixels[1][2],
+        ] {
+            assert!(channel.is_infinite());
+        }
+        assert!(zero_lightness_pixels[0][1].is_sign_positive());
+        assert!(zero_lightness_pixels[0][2].is_sign_positive());
+        assert!(zero_lightness_pixels[1][1].is_sign_positive());
+        assert!(zero_lightness_pixels[1][2].is_sign_negative());
+        assert_eq!(
+            zero_lightness_pixels[0][3].to_bits(),
+            zero_lightness[3].to_bits()
+        );
+        assert_eq!(
+            zero_lightness_pixels[1][3].to_bits(),
+            zero_lightness[7].to_bits()
+        );
+
+        let near_boundary = [
+            50.0,
+            f32::MAX,
+            f32::from_bits(0x7957_44fd),
+            f32::from_bits(0x3eaa_aaab),
+        ];
+        let near_boundary_result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &near_boundary,
+                operations: &[BasicPointOperation::Vibrance { amount: 1.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("near-boundary Vibrance point dispatch");
+        assert!(
+            near_boundary_result.pixels()[0].is_infinite(),
+            "the declared WGSL-backend overflow boundary remains stable: {:?}",
+            near_boundary_result.pixels()
+        );
+    }
+
+    #[tokio::test]
+    async fn zero_amount_vibrance_is_identity_when_only_the_naive_square_would_overflow() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let input = [50.0, f32::MAX, 1.0, f32::from_bits(0x3eaa_aaab)];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: 0.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("default non-fast Vibrance point dispatch");
+        assert_eq!(
+            result
+                .pixels()
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            input
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    #[tokio::test]
+    async fn vibrance_dispatch_composes_with_colorcontrast_in_authored_lab_order() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let source = [50.0, 10.0, -20.0, 0.37];
+        let operations = [
+            BasicPointOperation::ColorContrast {
+                a_steepness: 2.0,
+                a_offset: 3.0,
+                b_steepness: 1.5,
+                b_offset: -4.0,
+                unbound: true,
+            },
+            BasicPointOperation::Vibrance { amount: 0.25 },
+            BasicPointOperation::ColorContrast {
+                a_steepness: 0.5,
+                a_offset: -2.0,
+                b_steepness: 2.0,
+                b_offset: 5.0,
+                unbound: false,
+            },
+        ];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &source,
+                operations: &operations,
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("mixed Lab point dispatch");
+        let first = colorcontrast_cpu(source, 2.0, 3.0, 1.5, -4.0, true);
+        let second = vibrance_opencl_default(first, 0.25);
+        let expected = colorcontrast_cpu(second, 0.5, -2.0, 2.0, 5.0, false);
+        for (channel, (actual, expected)) in
+            result.pixels().iter().copied().zip(expected).enumerate()
+        {
+            if channel == 3 {
+                assert_eq!(actual.to_bits(), expected.to_bits(), "alpha");
+            } else {
+                assert!(
+                    (actual - expected).abs() <= 0.000_02,
+                    "channel {channel}: {actual} != {expected}"
+                );
+            }
+        }
+        assert_eq!(result.dispatches(), 3);
+    }
+
+    #[tokio::test]
+    async fn zero_amount_vibrance_is_bit_exact_identity() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let input = [
+            50.0,
+            -128.0,
+            128.0,
+            f32::from_bits(1),
+            0.0,
+            0.0,
+            0.0,
+            f32::from_bits(0x3eaa_aaab),
+        ];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Vibrance { amount: 0.0 }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("zero-amount Vibrance point dispatch");
+        assert_eq!(
+            result
+                .pixels()
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            input
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    #[tokio::test]
+    async fn colorcorrection_dispatch_matches_native_lab_formula_without_clamping() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let corpus = [
+            [50.0, 10.0, -20.0, 0.0],
+            [80.0, 100.0, -100.0, 0.37],
+            [0.0, -128.0, 128.0, 1.0],
+            [100.0, 0.0, 0.0, f32::from_bits(1)],
+        ];
+        let input = corpus.into_iter().flatten().collect::<Vec<_>>();
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::ColorCorrection {
+                    saturation: 1.5,
+                    a_scale: 0.25,
+                    a_base: 3.0,
+                    b_scale: -0.125,
+                    b_base: -4.0,
+                }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("Color Correction point dispatch");
+        let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
+        assert!(remainder.is_empty());
+        for (index, (actual, source)) in actual_pixels.iter().zip(corpus).enumerate() {
+            let expected = colorcorrection_cpu(source, 1.5, 0.25, 3.0, -0.125, -4.0);
+            for channel in 0..3 {
+                assert!(
+                    (actual[channel] - expected[channel]).abs() <= 0.000_02,
+                    "pixel {index} channel {channel}: {} != {}",
+                    actual[channel],
+                    expected[channel]
+                );
+            }
+            assert_eq!(
+                actual[3].to_bits(),
+                expected[3].to_bits(),
+                "pixel {index} alpha"
+            );
+        }
+        assert!(
+            actual_pixels[1][1].abs() > 128.0,
+            "native Color Correction does not clamp Lab chroma"
+        );
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    #[tokio::test]
+    async fn colorcorrection_dispatch_composes_with_colorcontrast_and_vibrance_in_authored_order() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let source = [50.0, 10.0, -20.0, f32::from_bits(0x3eaa_aaab)];
+        let operations = [
+            BasicPointOperation::ColorCorrection {
+                saturation: 1.25,
+                a_scale: 0.1,
+                a_base: 3.0,
+                b_scale: -0.05,
+                b_base: -4.0,
+            },
+            BasicPointOperation::ColorContrast {
+                a_steepness: 1.5,
+                a_offset: -2.0,
+                b_steepness: 0.75,
+                b_offset: 5.0,
+                unbound: true,
+            },
+            BasicPointOperation::Vibrance { amount: 0.25 },
+        ];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &source,
+                operations: &operations,
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("mixed Color Correction Lab point dispatch");
+        let corrected = colorcorrection_cpu(source, 1.25, 0.1, 3.0, -0.05, -4.0);
+        let contrasted = colorcontrast_cpu(corrected, 1.5, -2.0, 0.75, 5.0, true);
+        let expected = vibrance_opencl_default(contrasted, 0.25);
+        for (channel, (actual, expected)) in
+            result.pixels().iter().copied().zip(expected).enumerate()
+        {
+            if channel == 3 {
+                assert_eq!(actual.to_bits(), expected.to_bits(), "alpha");
+            } else {
+                assert!(
+                    (actual - expected).abs() <= 0.000_03,
+                    "channel {channel}: {actual} != {expected}"
+                );
+            }
+        }
+        assert_eq!(result.dispatches(), 3);
+    }
+
+    #[tokio::test]
+    async fn colorcorrection_dispatch_preserves_extreme_finite_overflow_and_alpha() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let input = [f32::MAX, 1.0, -1.0, f32::from_bits(0x3e55_5555)];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::ColorCorrection {
+                    saturation: 2.0,
+                    a_scale: 1.0,
+                    a_base: 0.0,
+                    b_scale: -1.0,
+                    b_base: 0.0,
+                }],
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("extreme-finite Color Correction point dispatch");
+        assert_eq!(result.pixels()[0].to_bits(), input[0].to_bits());
+        assert!(result.pixels()[1].is_infinite());
+        assert!(result.pixels()[1].is_sign_positive());
+        assert!(result.pixels()[2].is_infinite());
+        assert!(result.pixels()[2].is_sign_negative());
+        assert_eq!(result.pixels()[3].to_bits(), input[3].to_bits());
+        assert_eq!(result.dispatches(), 1);
     }
 
     #[tokio::test]

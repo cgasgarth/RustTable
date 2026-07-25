@@ -21,7 +21,8 @@ use crate::gui::darktable_components::{
 use crate::gui::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS};
 use crate::iop::modules::{
     DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModuleViewModel,
-    DarkroomModulesViewModel, build_module_column_with_filter, build_module_column_without_empty,
+    DarkroomModulesViewModel, build_module_column_with_filter_at_revision,
+    build_module_column_without_empty_at_revision,
 };
 use crate::presentation::{
     DarkroomHistoryViewModel, DarkroomImageInformationViewModel, DarkroomPanelProjection,
@@ -307,6 +308,7 @@ pub(super) fn render_typed_modules_into(
     implemented_modules: &[ImplementedModulePanel],
     typed_modules: &Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     action_handler: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    current_revision: &Rc<RefCell<Revision>>,
     group: DarkroomModuleGroup,
     query: &str,
 ) {
@@ -321,11 +323,12 @@ pub(super) fn render_typed_modules_into(
     {
         left_modules.append(&module.widget);
     }
-    left_modules.append(&build_module_column_with_filter(
+    left_modules.append(&build_module_column_with_filter_at_revision(
         modules.left_modules(),
         DarkroomModuleSide::Left,
         query,
         action_handler.as_ref(),
+        current_revision,
     ));
 
     clear_children(right_modules);
@@ -347,11 +350,12 @@ pub(super) fn render_typed_modules_into(
         .filter(|module| typed_module_matches(module, group, query))
         .collect::<Vec<_>>();
     rendered += typed.len();
-    right_modules.append(&build_module_column_without_empty(
+    right_modules.append(&build_module_column_without_empty_at_revision(
         typed.into_iter(),
         DarkroomModuleSide::Right,
         query,
         action_handler.as_ref(),
+        current_revision,
     ));
     if rendered == 0 {
         let empty = gtk4::Label::new(Some(if query.trim().is_empty() {
@@ -374,6 +378,7 @@ fn typed_module_matches(
 ) -> bool {
     let searching = !query.trim().is_empty();
     module.id() != "exposure"
+        && (!searching || !module.availability().is_deprecated() || module.enabled())
         && (searching || group.matches(module))
         && crate::gtk_shell::darkroom_modules::module_matches_search(module, query)
 }
@@ -582,6 +587,47 @@ mod parity_tests {
             typed_module_matches(&colorcontrast, DarkroomModuleGroup::Active, ""),
             "enabled Color Contrast must appear in the default Active group"
         );
+    }
+
+    #[test]
+    fn deprecated_search_only_includes_enabled_instances() {
+        let mut vibrance = reference_modules()
+            .expect("registry-derived darkroom modules")
+            .module("vibrance")
+            .expect("Vibrance module")
+            .clone();
+        assert!(
+            !typed_module_matches(&vibrance, DarkroomModuleGroup::Active, "vibrance"),
+            "search must hide disabled deprecated modules"
+        );
+        assert!(
+            !typed_module_matches(&vibrance, DarkroomModuleGroup::Deprecated, "saturation"),
+            "native search hides disabled deprecated modules even from the deprecated group"
+        );
+        assert!(
+            typed_module_matches(&vibrance, DarkroomModuleGroup::Deprecated, ""),
+            "the explicit deprecated group must retain disabled compatibility modules"
+        );
+
+        let revision = vibrance.revision();
+        vibrance
+            .set_enabled(revision, true)
+            .expect("controller enables Vibrance");
+        assert!(typed_module_matches(
+            &vibrance,
+            DarkroomModuleGroup::Active,
+            ""
+        ));
+        assert!(typed_module_matches(
+            &vibrance,
+            DarkroomModuleGroup::Color,
+            ""
+        ));
+        assert!(typed_module_matches(
+            &vibrance,
+            DarkroomModuleGroup::Active,
+            "saturation"
+        ));
     }
 
     #[test]

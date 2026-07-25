@@ -523,8 +523,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "rusttable.cpu.basicadj"
@@ -560,7 +560,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -576,7 +576,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -592,7 +592,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader.binding]]
@@ -608,7 +608,7 @@ minimum_binding_size = 48
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 43
+source_line = 61
 source_column = 1
 
 [[shader]]
@@ -617,8 +617,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "rusttable.cpu.colorcontrast"
@@ -654,7 +654,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -670,7 +670,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -686,7 +686,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader.binding]]
@@ -702,7 +702,101 @@ minimum_binding_size = 32
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 44
+source_line = 62
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.colorcorrection"
+program_version = 1
+entry_point_version = 2
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "rusttable.cpu.colorcorrection"
+owner_operations = ["rusttable.colorcorrection"]
+owner_kernels = ["basic.cl::colorcorrection"]
+workgroup_size = [256, 1, 1]
+uses_f32 = true
+uses_f16 = false
+float_domain = "F32"
+non_finite_policy = "Reject"
+subnormal_policy = "BackendDefined"
+fma_policy = "BackendDefined"
+reduction_policy = "None"
+transcendental_policy = "None"
+transcendental_operations = []
+texture_filtering = false
+sampling = false
+atomics = false
+reductions = false
+tolerance_class = "Pointwise"
+numerical_contract_id = "f32-reject-backend-subnormal-backend-fma-none-none-checked-nearest-even"
+
+[[shader.binding]]
+shader = "rusttable.point.colorcorrection"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 58
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.colorcorrection"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 59
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.colorcorrection"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 60
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.colorcorrection"
+group = 0
+binding = 6
+name = "colorcorrection_params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 32
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 64
 source_column = 1
 
 [[shader]]
@@ -711,8 +805,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "infrastructure.none"
@@ -748,7 +842,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -764,7 +858,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -780,7 +874,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -789,8 +883,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "rusttable.cpu.exposure"
@@ -826,7 +920,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -842,7 +936,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -858,7 +952,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -867,8 +961,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "infrastructure.none"
@@ -904,7 +998,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -920,7 +1014,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -936,7 +1030,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -945,8 +1039,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "infrastructure.none"
@@ -982,7 +1076,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -998,7 +1092,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -1014,7 +1108,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -1023,8 +1117,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "infrastructure.none"
@@ -1060,7 +1154,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -1076,7 +1170,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -1092,7 +1186,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -1101,8 +1195,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "infrastructure.none"
@@ -1138,7 +1232,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -1154,7 +1248,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -1170,7 +1264,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -1179,8 +1273,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "infrastructure.none"
@@ -1216,7 +1310,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -1232,7 +1326,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -1248,7 +1342,7 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
 source_column = 1
 
 [[shader]]
@@ -1257,8 +1351,8 @@ program_version = 1
 entry_point_version = 2
 implementation_version = 1
 source_alias = "shaders/point.wgsl"
-source_tree_hash = "d9f0115e03094228939d7647c6b24625b485b1a16863a15261c191c728d02222"
-generated_wgsl_hash = "b1e7bc4ee52f6df1f41bf1a02ce435253caf78239cded669d18e88f13262ee07"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
 feature_plan = "CoreCompute"
 numerical_class = "F32Point"
 canonical_cpu_reference = "rusttable.cpu.velvia"
@@ -1294,7 +1388,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 40
+source_line = 58
 source_column = 1
 
 [[shader.binding]]
@@ -1310,7 +1404,7 @@ minimum_binding_size = 16
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 41
+source_line = 59
 source_column = 1
 
 [[shader.binding]]
@@ -1326,6 +1420,100 @@ minimum_binding_size = 64
 dynamic_offset = false
 dynamic_offset_alignment = 256
 source_alias = "shaders/includes/point_common.wgsl"
-source_line = 42
+source_line = 60
+source_column = 1
+
+[[shader]]
+id = "rusttable.point.vibrance"
+program_version = 1
+entry_point_version = 2
+implementation_version = 1
+source_alias = "shaders/point.wgsl"
+source_tree_hash = "6a51335160d36d248d4226d38d196a6e07638b722903d2ac793e174ff1e35d98"
+generated_wgsl_hash = "f8950196a913c80a6e250bc291218d09f3432ab0b3f2007348bc2b00789faf03"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "rusttable.cpu.vibrance"
+owner_operations = ["rusttable.vibrance"]
+owner_kernels = ["extended.cl::vibrance"]
+workgroup_size = [256, 1, 1]
+uses_f32 = true
+uses_f16 = false
+float_domain = "F32"
+non_finite_policy = "Reject"
+subnormal_policy = "BackendDefined"
+fma_policy = "BackendDefined"
+reduction_policy = "None"
+transcendental_policy = "WgslBackend"
+transcendental_operations = ["sqrt"]
+texture_filtering = false
+sampling = false
+atomics = false
+reductions = false
+tolerance_class = "Pointwise"
+numerical_contract_id = "f32-reject-backend-subnormal-backend-fma-none-wgsl-backend-checked-nearest-even"
+
+[[shader.binding]]
+shader = "rusttable.point.vibrance"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 58
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.vibrance"
+group = 0
+binding = 1
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 59
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.vibrance"
+group = 0
+binding = 2
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 64
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 60
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.point.vibrance"
+group = 0
+binding = 5
+name = "vibrance_params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/includes/point_common.wgsl"
+source_line = 63
 source_column = 1
 

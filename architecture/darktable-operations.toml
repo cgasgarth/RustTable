@@ -8831,8 +8831,8 @@ kernels = ["colorcontrast"]
 name = "colorcorrection"
 reference_path = "src/iop/colorcorrection.c"
 module_version = 1
-parameter_size = 8
-parameter_layout_hash = "63d81ca88d8255603f54e7e660198dc3f59d43d8f94d0a3564005c4f58bf4f0c"
+parameter_size = 20
+parameter_layout_hash = "1384abf72e8a84a45fb18496ecc030c29a8008ea30d60b4790b94d5b5c4241ef"
 default_enabled = false
 default_order = 77
 group = "color"
@@ -8843,12 +8843,12 @@ tags = [
     "IOP_GROUP_COLOR",
     "IOP_GROUP_GRADING",
 ]
-multi_instance = false
-supports_blend_masks = false
-input_color_space = "scene-linear"
-output_color_space = "scene-linear"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
 roi_behavior = "identity"
-tiling_requirement = "full-frame"
+tiling_requirement = "tiled"
 cpu_implementation = "process"
 opencl_programs = ["basic"]
 opencl_kernels = ["colorcorrection"]
@@ -8862,7 +8862,7 @@ tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
 version = 1
-byte_size = 8
+byte_size = 20
 layout_hash = "c06df7180f2b0334524d9a617a4aea3d2227b73286ea82d50ef59fa20de38b03"
 decoder = "generated.bytes.decode.v1"
 opaque_blocking = false
@@ -8884,17 +8884,17 @@ c_abi_model = "x86_64-unknown-linux-gnu"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 8
+total_size = 20
 alignment = 1
-layout_hash = "63d81ca88d8255603f54e7e660198dc3f59d43d8f94d0a3564005c4f58bf4f0c"
+layout_hash = "1384abf72e8a84a45fb18496ecc030c29a8008ea30d60b4790b94d5b5c4241ef"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
 name = "raw"
-type_name = "uint8_t[8]"
-array_extent = 8
+type_name = "uint8_t[20]"
+array_extent = 20
 offset = 0
-size = 8
+size = 20
 alignment = 1
 
 [[operations.parameter_versions.abi_layouts]]
@@ -8903,17 +8903,17 @@ c_abi_model = "aarch64-apple-darwin"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 8
+total_size = 20
 alignment = 1
-layout_hash = "dbb1beebc3bb88004703bb7e9ea388dad8442b37d002862192377a9023289884"
+layout_hash = "32e5a8e0a233b7a6ba2c5dbc4c075141ca5774550c9b42dc11f146ea86794395"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
 name = "raw"
-type_name = "uint8_t[8]"
-array_extent = 8
+type_name = "uint8_t[20]"
+array_extent = 20
 offset = 0
-size = 8
+size = 20
 alignment = 1
 
 [[operations.parameter_versions.abi_layouts]]
@@ -8922,21 +8922,21 @@ c_abi_model = "x86_64-pc-windows-msvc"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 8
+total_size = 20
 alignment = 1
-layout_hash = "0ce2e503cb60ed7c353f9ca648ea3108e7e6bc14a0662ab2a14f068a17a52fba"
+layout_hash = "a1e99f2f97625f80bfa737db45948703bf8b158493244d7cb652d44f4c2b97a0"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
 name = "raw"
-type_name = "uint8_t[8]"
-array_extent = 8
+type_name = "uint8_t[20]"
+array_extent = 20
 offset = 0
-size = 8
+size = 20
 alignment = 1
 
 [operations.parameter_versions.codec]
-byte_size = 8
+byte_size = 20
 decoder = "generated.bytes.decode.v1"
 encoder = "generated.bytes.encode.v1"
 byte_order = "little"
@@ -8947,8 +8947,8 @@ format = "rusttable.operation.v1"
 name = "raw"
 kind = "bytes"
 offset = 0
-size = 8
-array_extent = 8
+size = 20
+array_extent = 20
 enum_values = []
 
 [[operations.evidence]]
@@ -9007,17 +9007,17 @@ c_abi_model = "x86_64-unknown-linux-gnu"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 8
+total_size = 20
 alignment = 1
-layout_hash = "63d81ca88d8255603f54e7e660198dc3f59d43d8f94d0a3564005c4f58bf4f0c"
+layout_hash = "1384abf72e8a84a45fb18496ecc030c29a8008ea30d60b4790b94d5b5c4241ef"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
 name = "raw"
-type_name = "uint8_t[8]"
-array_extent = 8
+type_name = "uint8_t[20]"
+array_extent = 20
 offset = 0
-size = 8
+size = 20
 alignment = 1
 
 [[operations.abi_layouts]]
@@ -9026,17 +9026,17 @@ c_abi_model = "aarch64-apple-darwin"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 8
+total_size = 20
 alignment = 1
-layout_hash = "dbb1beebc3bb88004703bb7e9ea388dad8442b37d002862192377a9023289884"
+layout_hash = "32e5a8e0a233b7a6ba2c5dbc4c075141ca5774550c9b42dc11f146ea86794395"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
 name = "raw"
-type_name = "uint8_t[8]"
-array_extent = 8
+type_name = "uint8_t[20]"
+array_extent = 20
 offset = 0
-size = 8
+size = 20
 alignment = 1
 
 [[operations.abi_layouts]]
@@ -9045,21 +9045,21 @@ c_abi_model = "x86_64-pc-windows-msvc"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 8
+total_size = 20
 alignment = 1
-layout_hash = "0ce2e503cb60ed7c353f9ca648ea3108e7e6bc14a0662ab2a14f068a17a52fba"
+layout_hash = "a1e99f2f97625f80bfa737db45948703bf8b158493244d7cb652d44f4c2b97a0"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
 name = "raw"
-type_name = "uint8_t[8]"
-array_extent = 8
+type_name = "uint8_t[20]"
+array_extent = 20
 offset = 0
-size = 8
+size = 20
 alignment = 1
 
 [operations.codec]
-byte_size = 8
+byte_size = 20
 decoder = "generated.bytes.decode.v1"
 encoder = "generated.bytes.encode.v1"
 byte_order = "little"
@@ -9070,13 +9070,13 @@ format = "rusttable.operation.v1"
 name = "raw"
 kind = "bytes"
 offset = 0
-size = 8
-array_extent = 8
+size = 20
+array_extent = 20
 enum_values = []
 
 [operations.color_contract.input]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.input.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -9089,7 +9089,7 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.color_contract.output]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.output.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -9102,9 +9102,9 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.capability_contract]
 supports_shared_blending = true
-supports_drawn_masks = false
+supports_drawn_masks = true
 publishes_raster_mask = false
-consumes_raster_mask = false
+consumes_raster_mask = true
 flags = [
     "IOP_FLAGS_ALLOW_TILING",
     "IOP_FLAGS_INCLUDE_IN_STYLES",
@@ -9122,7 +9122,7 @@ fast_pipe = "not-supported"
 scale = "preserve"
 
 [operations.tiling_contract]
-class = "full-frame"
+class = "tiled"
 overlap = 0
 
 [[operations.opencl_resolution]]
@@ -34157,12 +34157,12 @@ tags = [
     "IOP_GROUP_COLOR",
     "IOP_GROUP_GRADING",
 ]
-multi_instance = false
-supports_blend_masks = false
-input_color_space = "scene-linear"
-output_color_space = "scene-linear"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
 roi_behavior = "identity"
-tiling_requirement = "full-frame"
+tiling_requirement = "tiled"
 cpu_implementation = "process"
 opencl_programs = ["extended"]
 opencl_kernels = ["vibrance"]
@@ -34377,7 +34377,7 @@ enum_values = []
 
 [operations.color_contract.input]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.input.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -34390,7 +34390,7 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.color_contract.output]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.output.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -34403,9 +34403,9 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.capability_contract]
 supports_shared_blending = true
-supports_drawn_masks = false
+supports_drawn_masks = true
 publishes_raster_mask = false
-consumes_raster_mask = false
+consumes_raster_mask = true
 flags = [
     "IOP_FLAGS_ALLOW_TILING",
     "IOP_FLAGS_DEPRECATED",
@@ -34424,7 +34424,7 @@ fast_pipe = "not-supported"
 scale = "preserve"
 
 [operations.tiling_contract]
-class = "full-frame"
+class = "tiled"
 overlap = 0
 
 [[operations.opencl_resolution]]

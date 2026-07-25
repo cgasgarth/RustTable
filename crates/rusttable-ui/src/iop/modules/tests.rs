@@ -85,6 +85,7 @@ fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_t
             .focus_order(),
         [
             format!("{first_widget_id}-disclosure"),
+            format!("{first_widget_id}-actions"),
             format!("{first_widget_id}-enabled"),
             format!("{first_widget_id}-reset"),
             format!("{first_widget_id}-a-steepness-widget"),
@@ -98,6 +99,7 @@ fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_t
             .focus_order(),
         [
             format!("{second_widget_id}-disclosure"),
+            format!("{second_widget_id}-actions"),
             format!("{second_widget_id}-enabled"),
             format!("{second_widget_id}-reset"),
             format!("{second_widget_id}-a-steepness-widget"),
@@ -140,6 +142,94 @@ fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_t
         })
         .expect_err("forged operation target");
     assert!(matches!(error, DarkroomModuleError::WrongOperation { .. }));
+}
+
+#[test]
+fn multi_instance_model_actions_enforce_exact_source_boundaries() {
+    let first_id = OperationId::new(811).expect("first Vibrance operation id");
+    let second_id = OperationId::new(812).expect("second Vibrance operation id");
+    let template = reference_modules()
+        .expect("source-derived reference modules")
+        .module("vibrance")
+        .expect("Vibrance template")
+        .clone();
+    let mut first = template.clone().with_operation_instance(first_id, 0, 2);
+    let mut second = template.clone().with_operation_instance(second_id, 1, 2);
+
+    assert!(first.supports_multi_instance());
+    assert!(first.can_add_instance());
+    assert!(first.can_delete_instance());
+
+    let revision = first
+        .apply(DarkroomModuleAction::NewInstance {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(first_id),
+            expected_revision: Revision::ZERO,
+        })
+        .expect("new instance advances the processing revision");
+    assert_eq!(revision, Revision::from_u64(1));
+
+    for action in [
+        DarkroomModuleAction::DuplicateInstance {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(second_id),
+            expected_revision: Revision::ZERO,
+        },
+        DarkroomModuleAction::MoveInstanceUp {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(second_id),
+            expected_revision: Revision::ZERO,
+        },
+        DarkroomModuleAction::MoveInstanceDown {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(second_id),
+            expected_revision: Revision::ZERO,
+        },
+    ] {
+        let (expected_action, expected_reason) = match &action {
+            DarkroomModuleAction::DuplicateInstance { .. } => (
+                "duplicate instance",
+                "the current edit model cannot copy native blend and mask state",
+            ),
+            DarkroomModuleAction::MoveInstanceUp { .. } => (
+                "move up",
+                "the current edit model cannot apply native adjacent-module ordering",
+            ),
+            DarkroomModuleAction::MoveInstanceDown { .. } => (
+                "move down",
+                "the current edit model cannot apply native adjacent-module ordering",
+            ),
+            _ => unreachable!("test constructs only gated instance actions"),
+        };
+        let error = second
+            .apply(action)
+            .expect_err("unfaithful instance action stays gated");
+        assert!(matches!(
+            error,
+            DarkroomModuleError::InstanceActionUnavailable {
+                action,
+                reason,
+                ..
+            } if action == expected_action && reason == expected_reason
+        ));
+        assert_eq!(second.revision(), Revision::ZERO);
+    }
+
+    let mut sole = template.with_operation_instance(first_id, 0, 1);
+    let error = sole
+        .apply(DarkroomModuleAction::DeleteInstance {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(first_id),
+            expected_revision: Revision::ZERO,
+        })
+        .expect_err("the final same-key instance cannot be deleted");
+    assert!(matches!(
+        error,
+        DarkroomModuleError::InstanceActionUnavailable {
+            action: "delete",
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -303,6 +393,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "colorcorrection",
             "colorcontrast",
             "velvia",
+            "vibrance",
             "shadhi",
             "temperature",
             "bloom",
@@ -364,6 +455,30 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
     let vignette = modules.module("vignette").expect("vignette");
     assert!(vignette.controls().control("vignette-center-x").is_some());
     assert!(vignette.availability().is_supported());
+}
+
+#[test]
+fn deprecated_groups_follow_native_enabled_visibility() {
+    let mut vibrance = reference_modules()
+        .expect("reference module snapshot")
+        .module("vibrance")
+        .expect("Vibrance module")
+        .clone();
+    assert!(vibrance.availability().is_deprecated());
+    assert!(!vibrance.enabled());
+    assert!(!DarkroomModuleGroup::Active.matches(&vibrance));
+    assert!(!DarkroomModuleGroup::Color.matches(&vibrance));
+    assert!(!DarkroomModuleGroup::Grading.matches(&vibrance));
+    assert!(DarkroomModuleGroup::Deprecated.matches(&vibrance));
+
+    let revision = vibrance.revision();
+    vibrance
+        .set_enabled(revision, true)
+        .expect("deprecated compatibility module remains usable");
+    assert!(DarkroomModuleGroup::Active.matches(&vibrance));
+    assert!(DarkroomModuleGroup::Color.matches(&vibrance));
+    assert!(DarkroomModuleGroup::Grading.matches(&vibrance));
+    assert!(DarkroomModuleGroup::Deprecated.matches(&vibrance));
 }
 
 #[test]
@@ -542,6 +657,366 @@ fn velvia_projects_the_source_module_and_slider_presentation() {
         assert_eq!(source.suffix(), suffix);
         assert_eq!(source.tooltip(), tooltip);
     }
+}
+
+#[test]
+fn vibrance_projects_exact_deprecated_source_module_and_amount_slider() {
+    let modules = reference_modules().expect("reference modules");
+    let vibrance = modules.module("vibrance").expect("Vibrance module");
+    let descriptor = rusttable_processing::builtin_registry()
+        .definition("rusttable.vibrance")
+        .expect("Vibrance definition")
+        .descriptor();
+
+    assert_eq!(vibrance.title(), "vibrance");
+    assert_eq!(vibrance.aliases().collect::<Vec<_>>(), ["saturation"]);
+    assert_eq!(
+        vibrance.group_keys().collect::<Vec<_>>(),
+        ["group.color", "group.grading"]
+    );
+    assert!(!vibrance.enabled());
+    assert!(!vibrance.expanded());
+    assert!(vibrance.is_style_eligible());
+    assert!(vibrance.availability().is_deprecated());
+    assert!(vibrance.availability().is_supported());
+    assert_eq!(
+        vibrance.availability().reason(),
+        Some(
+            "this module is deprecated. please use the vibrance slider in the color balance rgb module instead."
+        )
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::MULTI_INSTANCE),
+        "omitting Darktable's ONE_INSTANCE flag enables native multi-instance behavior"
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::BLENDING)
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::MASKS),
+        "Darktable enables masks when SUPPORTS_BLENDING is present without NO_MASKS"
+    );
+    assert!(!DarkroomModuleGroup::Color.matches(vibrance));
+    assert!(!DarkroomModuleGroup::Grading.matches(vibrance));
+    assert!(!DarkroomModuleGroup::Active.matches(vibrance));
+    assert!(DarkroomModuleGroup::Deprecated.matches(vibrance));
+    assert!(module_matches_query(vibrance, "saturation"));
+    assert_eq!(
+        vibrance
+            .controls()
+            .controls()
+            .map(|control| control.id().as_str())
+            .collect::<Vec<_>>(),
+        ["vibrance-amount"]
+    );
+
+    let amount = vibrance
+        .controls()
+        .control("vibrance-amount")
+        .expect("native amount control");
+    assert_eq!(amount.label().as_str(), "vibrance");
+    let slider = amount.slider_spec().expect("Vibrance slider");
+    assert_eq!((slider.minimum(), slider.maximum()), (0.0, 100.0));
+    assert_float_eq(slider.default_value(), 25.0);
+    assert_float_eq(slider.value(), 25.0);
+    assert_float_eq(slider.step(), 1.0);
+    let source = amount
+        .source_mapped_slider_spec()
+        .expect("source-qualified Bauhaus slider");
+    assert_eq!(source.digits(), 2);
+    assert!(source.automatic_step());
+    assert_eq!(source.suffix(), "%");
+    assert_eq!(source.tooltip(), "the amount of vibrance");
+}
+
+#[test]
+fn vibrance_reset_enables_and_preserves_exact_operation_target() {
+    let operation_id = OperationId::new(611).expect("Vibrance operation id");
+    let mut vibrance = reference_modules()
+        .expect("reference modules")
+        .module("vibrance")
+        .expect("Vibrance module")
+        .clone()
+        .with_operation_instance(operation_id, 0, 1);
+    vibrance
+        .reconcile_operation(
+            Revision::from_u64(8),
+            false,
+            [(
+                "vibrance-amount".to_owned(),
+                DarkroomControlValue::Slider(125.0),
+            )],
+        )
+        .expect("finite persisted outlier remains projectable");
+
+    let wrong = vibrance
+        .apply(DarkroomModuleAction::Reset {
+            module_id: "vibrance".to_owned(),
+            operation_id: None,
+            expected_revision: Revision::from_u64(8),
+        })
+        .expect_err("persisted panels reject an ambiguous operation target");
+    assert!(matches!(wrong, DarkroomModuleError::WrongOperation { .. }));
+
+    vibrance
+        .apply(DarkroomModuleAction::Reset {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: Revision::from_u64(8),
+        })
+        .expect("native reset");
+    assert!(vibrance.enabled());
+    assert_eq!(
+        vibrance
+            .controls()
+            .control("vibrance-amount")
+            .expect("reset amount")
+            .value(),
+        DarkroomControlValue::Slider(25.0)
+    );
+}
+
+#[test]
+fn colorcorrection_projects_one_atomic_grid_one_slider_and_gates_unpersistable_presets() {
+    let modules = reference_modules().expect("reference modules");
+    let module = modules
+        .module("colorcorrection")
+        .expect("Color Correction module");
+    assert_eq!(module.title(), "color correction");
+    assert_eq!(
+        module.group_keys().collect::<Vec<_>>(),
+        ["group.color", "group.grading"]
+    );
+    assert!(!module.enabled());
+    assert!(!module.expanded());
+    assert!(module.is_style_eligible());
+    assert_eq!(
+        module
+            .controls()
+            .controls()
+            .map(|control| control.id().as_str())
+            .collect::<Vec<_>>(),
+        ["colorcorrection-saturation"],
+        "hia, hib, loa, and lob are one grid state, not invented sliders"
+    );
+    let saturation = module
+        .controls()
+        .control("colorcorrection-saturation")
+        .expect("native saturation slider");
+    let slider = saturation.slider_spec().expect("slider contract");
+    assert_eq!((slider.minimum(), slider.maximum()), (-3.0, 3.0));
+    assert_float_eq(slider.default_value(), 1.0);
+    assert_float_eq(slider.step(), 0.01);
+    let source = saturation
+        .source_mapped_slider_spec()
+        .expect("source slider presentation");
+    assert_eq!(source.digits(), 2);
+    assert!(source.automatic_step());
+    assert_eq!(source.tooltip(), "set the global saturation");
+    assert_eq!(
+        module.color_correction_grid(),
+        Some(crate::iop::colorcorrection::ColorCorrectionGridState::DEFAULT)
+    );
+    assert_eq!(module.presets().len(), 0);
+    assert_eq!(
+        module.presets_unavailable_reason(),
+        Some(
+            "Color Correction presets require RGB-display blend state, which the current edit model cannot persist"
+        )
+    );
+    let source_presets = rusttable_processing::operations::colorcorrection::presets();
+    assert_eq!(
+        source_presets
+            .iter()
+            .map(|preset| preset.name)
+            .collect::<Vec<_>>(),
+        ["warm tone", "warming filter", "cooling filter"],
+        "source-derived processing definitions remain intact behind the UI gate"
+    );
+    assert!(source_presets.iter().all(|preset| preset.enabled));
+    assert_eq!(
+        f64::from(source_presets[2].parameters.lob).to_bits(),
+        (-0.0_f64).to_bits(),
+        "native cooling-filter -0.0 survives in the source-derived definition"
+    );
+}
+
+#[test]
+fn colorcorrection_grid_action_is_exact_targeted_and_advances_once() {
+    let operation_id = OperationId::new(901).expect("Color Correction operation id");
+    let mut module = reference_modules()
+        .expect("reference modules")
+        .module("colorcorrection")
+        .expect("Color Correction")
+        .clone()
+        .with_operation_instance(operation_id, 0, 1);
+    assert!(!module.enabled());
+    let grid = crate::iop::colorcorrection::ColorCorrectionGridState::new(-0.95, 4.5, 3.55, 0.0)
+        .expect("warming grid");
+    let revision = module
+        .apply(DarkroomModuleAction::ColorCorrectionGrid {
+            module_id: "colorcorrection".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: Revision::ZERO,
+            grid,
+        })
+        .expect("atomic grid action");
+    assert_eq!(revision, Revision::from_u64(1));
+    assert!(
+        module.enabled(),
+        "native history insertion enables Color Correction on the first grid edit"
+    );
+    assert_eq!(module.color_correction_grid(), Some(grid));
+    assert_eq!(
+        module
+            .focus_order()
+            .into_iter()
+            .filter(|id| id.ends_with("-grid") || id.ends_with("saturation-widget"))
+            .collect::<Vec<_>>(),
+        ["colorcorrection-grid", "colorcorrection-saturation-widget"]
+    );
+
+    let wrong = module
+        .apply(DarkroomModuleAction::ColorCorrectionGrid {
+            module_id: "colorcorrection".to_owned(),
+            operation_id: Some(OperationId::new(902).expect("wrong operation id")),
+            expected_revision: revision,
+            grid: crate::iop::colorcorrection::ColorCorrectionGridState::DEFAULT,
+        })
+        .expect_err("exact persisted target is required");
+    assert!(matches!(wrong, DarkroomModuleError::WrongOperation { .. }));
+    assert_eq!(module.color_correction_grid(), Some(grid));
+    assert_eq!(module.revision(), revision);
+}
+
+#[test]
+fn colorcorrection_saturation_edit_enables_disabled_exact_instance() {
+    let operation_id = OperationId::new(902).expect("Color Correction operation id");
+    let mut module = reference_modules()
+        .expect("reference modules")
+        .module("colorcorrection")
+        .expect("Color Correction")
+        .clone()
+        .with_operation_instance(operation_id, 0, 1);
+    assert!(!module.enabled());
+
+    let revision = module
+        .apply(DarkroomModuleAction::Control {
+            module_id: "colorcorrection".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: Revision::ZERO,
+            id: "colorcorrection-saturation".to_owned(),
+            value: DarkroomControlValue::Slider(0.25),
+        })
+        .expect("native saturation edit");
+
+    assert_eq!(revision, Revision::from_u64(1));
+    assert!(module.enabled());
+    assert_eq!(
+        module
+            .controls()
+            .control("colorcorrection-saturation")
+            .expect("saturation")
+            .value(),
+        DarkroomControlValue::Slider(0.25)
+    );
+}
+
+#[test]
+fn colorcorrection_parameter_reset_defaults_five_parameters_and_enables_once() {
+    let operation_id = OperationId::new(904).expect("Color Correction operation id");
+    let mut module = reference_modules()
+        .expect("reference modules")
+        .module("colorcorrection")
+        .expect("Color Correction")
+        .clone()
+        .with_operation_instance(operation_id, 0, 1);
+    module
+        .reconcile_operation(
+            Revision::from_u64(7),
+            false,
+            [(
+                "colorcorrection-saturation".to_owned(),
+                DarkroomControlValue::Slider(2.25),
+            )],
+        )
+        .expect("persisted saturation");
+    module
+        .reconcile_color_correction_grid(
+            Revision::from_u64(7),
+            crate::iop::colorcorrection::ColorCorrectionGridState::new(1.0, 2.0, 3.0, 4.0)
+                .expect("persisted grid"),
+        )
+        .expect("persisted grid projection");
+
+    let revision = module
+        .apply(DarkroomModuleAction::ColorCorrectionResetParameters {
+            module_id: "colorcorrection".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: Revision::from_u64(7),
+        })
+        .expect("source-specific parameter reset");
+
+    assert_eq!(revision, Revision::from_u64(8));
+    assert!(module.enabled());
+    assert_eq!(
+        module.color_correction_grid(),
+        Some(crate::iop::colorcorrection::ColorCorrectionGridState::DEFAULT)
+    );
+    assert_eq!(
+        module
+            .controls()
+            .control("colorcorrection-saturation")
+            .expect("saturation")
+            .value(),
+        DarkroomControlValue::Slider(1.0)
+    );
+}
+
+#[test]
+fn colorcorrection_preset_action_is_rejected_until_blend_state_is_persistable() {
+    let operation_id = OperationId::new(903).expect("Color Correction operation id");
+    let mut module = reference_modules()
+        .expect("reference modules")
+        .module("colorcorrection")
+        .expect("Color Correction")
+        .clone()
+        .with_operation_instance(operation_id, 0, 1);
+    assert!(!module.enabled());
+    let error = module
+        .apply(DarkroomModuleAction::Preset {
+            module_id: "colorcorrection".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: Revision::ZERO,
+            preset_id: "cooling filter".to_owned(),
+        })
+        .expect_err("incomplete Color Correction preset cannot reach production");
+    assert!(matches!(
+        error,
+        DarkroomModuleError::Unsupported { module_id, reason }
+            if module_id == "colorcorrection"
+                && reason.contains("RGB-display blend state")
+    ));
+    assert_eq!(module.revision(), Revision::ZERO);
+    assert!(!module.enabled());
+    assert_eq!(
+        module
+            .controls()
+            .control("colorcorrection-saturation")
+            .expect("saturation")
+            .value(),
+        DarkroomControlValue::Slider(1.0)
+    );
+    assert_eq!(
+        module.color_correction_grid(),
+        Some(crate::iop::colorcorrection::ColorCorrectionGridState::DEFAULT)
+    );
 }
 
 #[test]

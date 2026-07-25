@@ -8,9 +8,13 @@ use rusttable_import::darktable::{
 use rusttable_processing::operations::colorcontrast::{
     ColorContrastConfig, ColorContrastParametersV2,
 };
+use rusttable_processing::operations::colorcorrection::{
+    ColorCorrectionConfig, ColorCorrectionParametersV1,
+};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
+use rusttable_processing::operations::vibrance::{VibranceConfig, VibranceParametersV2};
 use rusttable_sqlite_native::{
     DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow, RawModuleOrderRow,
 };
@@ -28,6 +32,93 @@ const COLORCONTRAST_V2_NATIVE_LE: [u8; 20] = [
     0x00, 0x00, 0xc8, 0x43, // b_offset = 400.0
     0xf9, 0xff, 0xff, 0xff, // unbound = -7
 ];
+const COLORCORRECTION_V1_BENCHMARK_LE: [u8; 20] = [
+    0x66, 0x3b, 0x9a, 0x40, // hia = 4.8197508
+    0x31, 0x53, 0x4c, 0x40, // hib = 3.1925776
+    0x7f, 0x04, 0x95, 0xc0, // loa = -4.656799
+    0x0a, 0x72, 0x7e, 0xc0, // lob = -3.9757104
+    0x00, 0x00, 0x80, 0x3f, // saturation = 1.0
+];
+const VIBRANCE_V2_NATIVE_LE: [u8; 4] = [
+    0x00, 0x00, 0xc8, 0x41, // amount = 25.0
+];
+
+#[test]
+fn colorcorrection_v1_decodes_exact_checked_payload_but_remains_pending_blend() {
+    let payload = COLORCORRECTION_V1_BENCHMARK_LE.to_vec();
+    let source = history_step(b"colorcorrection", Some(1), Some(1), payload.clone());
+
+    let DarktableHistoryStepDecode::ColorCorrectionPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("known Color Correction v1 row must decode");
+    };
+
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.source_version, 1);
+    assert!(imported.enabled);
+    assert_eq!(
+        imported.canonical_parameters,
+        COLORCORRECTION_V1_BENCHMARK_LE
+    );
+    assert_eq!(
+        imported.config,
+        ColorCorrectionConfig::new(
+            f32::from_bits(0x409a_3b66),
+            f32::from_bits(0x404c_5331),
+            f32::from_bits(0xc095_047f),
+            f32::from_bits(0xc07e_720a),
+            1.0,
+        )
+        .expect("checked finite native parameters")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+}
+
+#[test]
+fn colorcorrection_finite_outlier_decodes_while_unknown_malformed_and_nonfinite_stay_exact() {
+    let outlier = ColorCorrectionParametersV1::new(400.0, -500.0, 600.0, -700.0, 8.0);
+    let source = history_step(
+        b"colorcorrection",
+        Some(1),
+        Some(0),
+        outlier.to_bytes().to_vec(),
+    );
+    let DarktableHistoryStepDecode::ColorCorrectionPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("native commit_params accepts finite persisted values outside UI bounds");
+    };
+    assert!(!imported.enabled);
+    assert_eq!(
+        imported.config,
+        ColorCorrectionConfig::try_from(outlier).expect("finite native parameters")
+    );
+    assert_eq!(imported.canonical_parameters, outlier.to_bytes());
+
+    assert_preserved(
+        &history_step(b"colorcorrection", Some(9), Some(1), vec![9, 8, 7]),
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+        &[9, 8, 7],
+    );
+    assert_preserved(
+        &history_step(b"colorcorrection", Some(1), Some(1), vec![1, 2, 3]),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        &[1, 2, 3],
+    );
+    let nonfinite = ColorCorrectionParametersV1::new(f32::NAN, 0.0, 0.0, 0.0, 1.0)
+        .to_bytes()
+        .to_vec();
+    assert_preserved(
+        &history_step(b"colorcorrection", Some(1), Some(1), nonfinite.clone()),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        &nonfinite,
+    );
+}
 
 #[test]
 fn colorcontrast_v1_decodes_exact_bounded_migration_but_remains_pending_blend() {
@@ -194,6 +285,63 @@ fn unknown_version_and_malformed_or_nonfinite_payloads_remain_exact() {
     nonfinite.extend_from_slice(&1.0_f32.to_le_bytes());
     assert_preserved(
         &history_step(b"velvia", Some(2), Some(1), nonfinite.clone()),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        &nonfinite,
+    );
+}
+
+#[test]
+fn vibrance_v2_decodes_exact_native_payload_but_remains_pending_blend() {
+    let payload = VIBRANCE_V2_NATIVE_LE.to_vec();
+    let source = history_step(b"vibrance", Some(2), Some(0), payload.clone());
+
+    let DarktableHistoryStepDecode::VibrancePendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("known Vibrance v2 row must decode");
+    };
+
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.source_version, 2);
+    assert!(!imported.enabled);
+    assert_eq!(imported.canonical_parameters, VIBRANCE_V2_NATIVE_LE);
+    assert_eq!(
+        imported.config,
+        VibranceConfig::new(25.0).expect("native default amount")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+}
+
+#[test]
+fn vibrance_finite_outlier_decodes_while_unknown_malformed_and_nonfinite_stay_exact() {
+    let outlier = VibranceParametersV2::new(125.0).to_bytes().to_vec();
+    let source = history_step(b"vibrance", Some(2), Some(1), outlier.clone());
+    let DarktableHistoryStepDecode::VibrancePendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("native commit_params accepts finite persisted values outside UI bounds");
+    };
+    assert_eq!(
+        imported.config,
+        VibranceConfig::new(125.0).expect("finite native amount")
+    );
+    assert_eq!(imported.canonical_parameters.as_slice(), outlier.as_slice());
+
+    assert_preserved(
+        &history_step(b"vibrance", Some(9), Some(1), vec![9, 8, 7]),
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+        &[9, 8, 7],
+    );
+    assert_preserved(
+        &history_step(b"vibrance", Some(2), Some(1), vec![1, 2, 3]),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        &[1, 2, 3],
+    );
+    let nonfinite = f32::NAN.to_le_bytes().to_vec();
+    assert_preserved(
+        &history_step(b"vibrance", Some(2), Some(1), nonfinite.clone()),
         DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
         &nonfinite,
     );
@@ -380,7 +528,9 @@ fn history_step(
 fn manifest() -> DarktableOperationManifest {
     let mut manifest = DarktableOperationManifest::new();
     manifest.insert("colorcontrast", 2, [1, 2], None);
+    manifest.insert("colorcorrection", 1, [1], None);
     manifest.insert("velvia", 2, [1, 2], None);
+    manifest.insert("vibrance", 2, [2], None);
     manifest
 }
 

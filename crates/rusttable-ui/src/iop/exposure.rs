@@ -265,6 +265,11 @@ impl ExposurePanel {
         self.module_revision.replace(revision);
     }
 
+    /// Advances the persistence revision without resynchronizing an active control.
+    pub(crate) fn set_module_revision(&self, revision: Revision) {
+        self.module_revision.replace(revision);
+    }
+
     /// Projects persisted exposure parameters into the native panel.
     ///
     /// # Errors

@@ -1,7 +1,4 @@
 use rusttable_color::{BuiltinSpace, Primaries, rgb_to_xyz_matrix};
-use rusttable_processing::operations::colorcorrection::{
-    ColorCorrectionConfig, ColorCorrectionMode, ColorCorrectionPlan,
-};
 use rusttable_processing::operations::colorin::{
     ColorInConfig, ColorInConfigError, ColorInLegacyParameters, ColorInPlan, ColorInProfile,
     migrate,
@@ -223,32 +220,4 @@ fn colorout_rejects_missing_profiles_and_publishes_gamut_diagnostics() {
         .execute(&[pixel(2.0, 0.0, 0.0)])
         .expect("diagnostic output");
     assert!(output.gamut_mask()[0]);
-}
-
-#[test]
-fn colorcorrection_neutral_is_identity_and_axis_mode_is_cancelable() {
-    let neutral =
-        ColorCorrectionPlan::new(ColorCorrectionConfig::defaults()).expect("neutral plan");
-    let input = [pixel(0.2, 0.4, 0.8), pixel(-0.1, 1.5, 0.3)];
-    let output = neutral.execute(&input).expect("neutral execution");
-    for (actual, expected) in output.pixels().iter().zip(input) {
-        assert_close(actual.red().get(), expected.red().get(), 0.000_01);
-        assert_close(actual.green().get(), expected.green().get(), 0.000_01);
-        assert_close(actual.blue().get(), expected.blue().get(), 0.000_01);
-    }
-    let config = ColorCorrectionConfig::new(
-        [0.0, -0.15, 0.1],
-        [0.0, 0.2, -0.1],
-        1.15,
-        0.6,
-        0.0,
-        ColorCorrectionMode::Axis,
-    )
-    .expect("axis config");
-    let plan = ColorCorrectionPlan::new(config).expect("axis plan");
-    assert!(plan.execute_with_cancel(&input, || true).is_err());
-    let cpu = plan.execute(&input).expect("axis CPU");
-    let gpu = plan.execute_wgpu(&input, || false).expect("axis WGPU");
-    assert_eq!(cpu, gpu);
-    assert_ne!(cpu.receipt().plan_identity(), [0; 32]);
 }

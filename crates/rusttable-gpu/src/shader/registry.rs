@@ -79,6 +79,20 @@ const ENTRY_SPECS: &[EntrySpec] = &[
         transcendental: &[],
     },
     EntrySpec {
+        id: "colorcorrection",
+        owner_operation: Some("rusttable.colorcorrection"),
+        owner_kernel: "basic.cl::colorcorrection",
+        cpu_reference: "rusttable.cpu.colorcorrection",
+        transcendental: &[],
+    },
+    EntrySpec {
+        id: "vibrance",
+        owner_operation: Some("rusttable.vibrance"),
+        owner_kernel: "extended.cl::vibrance",
+        cpu_reference: "rusttable.cpu.vibrance",
+        transcendental: &["sqrt"],
+    },
+    EntrySpec {
         id: "velvia",
         owner_operation: Some("rusttable.velvia"),
         owner_kernel: "extended.cl::velvia",
@@ -166,6 +180,34 @@ const POINT_COLORCONTRAST_BINDINGS: &[BindingContract] = &[
     BindingContract {
         binding: 4,
         name: "colorcontrast_params",
+        storage: false,
+        access: "read",
+        minimum_binding_size: 32,
+        type_description: "struct",
+    },
+];
+
+const POINT_VIBRANCE_BINDINGS: &[BindingContract] = &[
+    POINT_COMMON_BINDINGS[0],
+    POINT_COMMON_BINDINGS[1],
+    POINT_COMMON_BINDINGS[2],
+    BindingContract {
+        binding: 5,
+        name: "vibrance_params",
+        storage: false,
+        access: "read",
+        minimum_binding_size: 16,
+        type_description: "struct",
+    },
+];
+
+const POINT_COLORCORRECTION_BINDINGS: &[BindingContract] = &[
+    POINT_COMMON_BINDINGS[0],
+    POINT_COMMON_BINDINGS[1],
+    POINT_COMMON_BINDINGS[2],
+    BindingContract {
+        binding: 6,
+        name: "colorcorrection_params",
         storage: false,
         access: "read",
         minimum_binding_size: 32,
@@ -384,6 +426,8 @@ fn point_bindings_match(entry_point: &str, actual: &[BindingReflection]) -> bool
     let expected = match entry_point {
         "basicadj" => POINT_BASICADJ_BINDINGS,
         "colorcontrast" => POINT_COLORCONTRAST_BINDINGS,
+        "vibrance" => POINT_VIBRANCE_BINDINGS,
+        "colorcorrection" => POINT_COLORCORRECTION_BINDINGS,
         _ => POINT_COMMON_BINDINGS,
     };
     bindings_match(actual, expected)
@@ -878,7 +922,7 @@ mod tests {
     #[test]
     fn checked_in_registry_has_stable_initial_entries() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        assert_eq!(registry.entries().len(), 16);
+        assert_eq!(registry.entries().len(), 18);
         let exposure = registry
             .find("rusttable.point", "exposure")
             .expect("point exposure");
@@ -923,6 +967,49 @@ mod tests {
         assert_eq!(
             colorcontrast.identity.canonical_cpu_reference,
             "rusttable.cpu.colorcontrast"
+        );
+        let colorcorrection = registry
+            .find("rusttable.point", "colorcorrection")
+            .expect("point Color Correction");
+        assert_eq!(colorcorrection.reflection.bindings.len(), 4);
+        assert_eq!(
+            colorcorrection.identity.owner_operation_ids,
+            ["rusttable.colorcorrection"]
+        );
+        assert_eq!(
+            colorcorrection.identity.owner_kernel_ids,
+            ["basic.cl::colorcorrection"]
+        );
+        assert_eq!(
+            colorcorrection.identity.canonical_cpu_reference,
+            "rusttable.cpu.colorcorrection"
+        );
+        assert!(
+            colorcorrection
+                .reflection
+                .numerical
+                .transcendental_operations
+                .is_empty()
+        );
+        let vibrance = registry
+            .find("rusttable.point", "vibrance")
+            .expect("point Vibrance");
+        assert_eq!(vibrance.reflection.bindings.len(), 4);
+        assert_eq!(
+            vibrance.identity.owner_operation_ids,
+            ["rusttable.vibrance"]
+        );
+        assert_eq!(
+            vibrance.identity.owner_kernel_ids,
+            ["extended.cl::vibrance"]
+        );
+        assert_eq!(
+            vibrance.identity.canonical_cpu_reference,
+            "rusttable.cpu.vibrance"
+        );
+        assert_eq!(
+            vibrance.reflection.numerical.transcendental_operations,
+            ["sqrt"]
         );
         let velvia = registry
             .find("rusttable.point", "velvia")
@@ -1039,6 +1126,9 @@ mod tests {
         ));
         assert!(
             generated.contains("pub const ENTRY_VELVIA_ID: &str = \"rusttable.point.velvia\";")
+        );
+        assert!(
+            generated.contains("pub const ENTRY_VIBRANCE_ID: &str = \"rusttable.point.vibrance\";")
         );
         assert!(
             registry.point_source().contains("fn exposure"),

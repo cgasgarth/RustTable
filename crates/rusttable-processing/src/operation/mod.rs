@@ -27,6 +27,7 @@ use crate::operations::{
     spots::SpotsParametersV2,
     temperature::{TemperatureConfig, WhiteBalanceSource},
     velvia::VelviaConfig,
+    vibrance::VibranceConfig,
     vignette::VignetteConfig,
 };
 use crate::{FiniteF32, ScalarNarrowingError};
@@ -46,6 +47,7 @@ pub(crate) use geometry::{
 mod censorize;
 mod clahe;
 mod colorcontrast;
+mod colorcorrection;
 mod defringe;
 mod effects;
 mod grain;
@@ -56,10 +58,12 @@ mod spatial;
 mod spots;
 mod text;
 mod velvia;
+mod vibrance;
 pub(crate) use basicadj::compile_basicadj;
 pub(crate) use censorize::compile_censorize;
 pub(crate) use clahe::compile_clahe;
 pub(crate) use colorcontrast::compile_colorcontrast;
+pub(crate) use colorcorrection::compile_colorcorrection;
 pub(crate) use compat::{compile_dither, compile_invert};
 pub(crate) use defringe::compile_defringe;
 pub(crate) use effects::{compile_bloom, compile_soften};
@@ -72,6 +76,7 @@ pub(crate) use parameters::{
 pub(crate) use spatial::{compile_graduatednd, compile_vignette};
 use text::{invalid_parameters, optional_parameter_text, parameter_bool, parameter_text};
 pub(crate) use velvia::compile_velvia;
+pub(crate) use vibrance::compile_vibrance;
 const EXPOSURE_PARAMETER: &str = "stops";
 const EXPOSURE_BLACK_PARAMETER: &str = "black";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -178,6 +183,9 @@ pub enum ProcessingOperationKind {
     },
     Velvia {
         config: VelviaConfig,
+    },
+    Vibrance {
+        config: VibranceConfig,
     },
     Shadhi {
         config: ShadhiConfig,
@@ -400,6 +408,9 @@ impl ProcessingOperation {
     pub(crate) fn compile_velvia(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_velvia(operation)
     }
+    pub(crate) fn compile_vibrance(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_vibrance(operation)
+    }
     pub(crate) fn compile_shadhi(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_shadhi(operation)
     }
@@ -603,18 +614,6 @@ const COLOROUT_PARAMETERS: [&str; 5] = [
     "proof_profile",
     "gamut",
 ];
-const COLORCORRECTION_PARAMETERS: [&str; 10] = [
-    "shadow_l",
-    "shadow_a",
-    "shadow_b",
-    "highlight_l",
-    "highlight_a",
-    "highlight_b",
-    "saturation",
-    "tonal_range",
-    "balance",
-    "mode",
-];
 const TEMPERATURE_PARAMETERS: [&str; 14] = [
     "red",
     "green",
@@ -759,39 +758,6 @@ fn compile_colorout(operation: &Operation) -> Result<ProcessingOperation, Operat
         enabled: operation.is_enabled(),
         opacity,
         kind: ProcessingOperationKind::ColorOut { config },
-    })
-}
-
-fn compile_colorcorrection(
-    operation: &Operation,
-) -> Result<ProcessingOperation, OperationCompileError> {
-    reject_unexpected(operation, &COLORCORRECTION_PARAMETERS)?;
-    let config = crate::operations::colorcorrection::migrate(
-        5,
-        &crate::operations::colorcorrection::ColorCorrectionLegacyParameters {
-            shadow: [
-                parameter_f32(operation, "shadow_l", 0.0)?,
-                parameter_f32(operation, "shadow_a", 0.0)?,
-                parameter_f32(operation, "shadow_b", 0.0)?,
-            ],
-            highlight: [
-                parameter_f32(operation, "highlight_l", 0.0)?,
-                parameter_f32(operation, "highlight_a", 0.0)?,
-                parameter_f32(operation, "highlight_b", 0.0)?,
-            ],
-            saturation: parameter_f32(operation, "saturation", 1.0)?,
-            tonal_range: parameter_f32(operation, "tonal_range", 0.5)?,
-            balance: parameter_f32(operation, "balance", 0.0)?,
-            mode: i64::from(parameter_integer(operation, "mode", 0.0)?),
-        },
-    )
-    .map_err(|error| invalid_parameters(operation, error))?;
-    let opacity = compile_opacity(operation)?;
-    Ok(ProcessingOperation {
-        operation_id: operation.id(),
-        enabled: operation.is_enabled(),
-        opacity,
-        kind: ProcessingOperationKind::ColorCorrection { config },
     })
 }
 

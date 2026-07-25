@@ -4,6 +4,10 @@ use rusttable_masks::{MaskGraph, RasterMaskStore};
 use rusttable_processing::{CompiledOperationGraph, OperationGraphInput, ProcessingOperationKind};
 use sha2::{Digest, Sha256};
 
+const BASICADJ_SNAPSHOT_KIND_TAG: u8 = 21;
+const CLIPPING_SNAPSHOT_KIND_TAG: u8 = 29;
+const _: () = assert!(BASICADJ_SNAPSHOT_KIND_TAG != CLIPPING_SNAPSHOT_KIND_TAG);
+
 use crate::{CpuPixelpipeOutputMode, RgbaF32ColorEncoding, RgbaF32Image, SourceRasterIdentity};
 
 /// The stable identity of one prepared CPU pixelpipe snapshot.
@@ -244,7 +248,7 @@ fn write_operation_kind(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
 fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
         ProcessingOperationKind::BasicAdj { config } => {
-            hasher.update([21]);
+            hasher.update([BASICADJ_SNAPSHOT_KIND_TAG]);
             for value in [
                 config.black_point(),
                 config.exposure(),
@@ -326,16 +330,9 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
     match kind {
         ProcessingOperationKind::ColorCorrection { config } => {
             hasher.update([8]);
-            for value in config.shadow().into_iter().chain(config.highlight()) {
-                hasher.update(value.get().to_bits().to_le_bytes());
+            for value in config.committed_coefficients().as_array() {
+                hasher.update(value.to_bits().to_le_bytes());
             }
-            hasher.update(config.saturation().get().to_bits().to_le_bytes());
-            hasher.update(config.tonal_range().get().to_bits().to_le_bytes());
-            hasher.update(config.balance().get().to_bits().to_le_bytes());
-            hasher.update([match config.mode() {
-                rusttable_processing::operations::colorcorrection::ColorCorrectionMode::TwoColor => 0,
-                rusttable_processing::operations::colorcorrection::ColorCorrectionMode::Axis => 1,
-            }]);
         }
         ProcessingOperationKind::Temperature { config } => {
             hasher.update([9]);
@@ -441,7 +438,7 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update(config.canonical_identity_bytes());
         }
         ProcessingOperationKind::Clipping { config } => {
-            hasher.update([21]);
+            hasher.update([CLIPPING_SNAPSHOT_KIND_TAG]);
             hasher.update(config.parameters().to_bytes());
             if let Some(source) = config.opaque_source() {
                 hasher.update([1]);
@@ -522,6 +519,10 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update(config.b_steepness().to_bits().to_le_bytes());
             hasher.update(config.b_offset().to_bits().to_le_bytes());
             hasher.update(config.unbound().to_le_bytes());
+        }
+        ProcessingOperationKind::Vibrance { config } => {
+            hasher.update([28]);
+            hasher.update(config.amount().to_bits().to_le_bytes());
         }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }

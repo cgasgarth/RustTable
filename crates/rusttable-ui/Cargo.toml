@@ -53,5 +53,15 @@ name = "colorcontrast_gtk_boundary"
 path = "tests/colorcontrast_gtk_boundary.rs"
 harness = false
 
+[[test]]
+name = "colorcorrection_gtk_boundary"
+path = "tests/colorcorrection_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "vibrance_gtk_boundary"
+path = "tests/vibrance_gtk_boundary.rs"
+harness = false
+
 [lints]
 workspace = true

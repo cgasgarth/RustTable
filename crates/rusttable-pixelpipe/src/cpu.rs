@@ -11,9 +11,10 @@ use rusttable_processing::operations::colorin::{
     ColorInConfig, ColorInNormalization, ColorInPlan, ColorInProfile,
 };
 use rusttable_processing::{
-    BasicAdjPlanSet, ColorContrastPixel, ColorContrastPlan, EvaluationError, FiniteF32, LinearRgb,
-    OperationMaskSet, OperationMaskSetError, ProcessingOperation, RasterDimensions, SourceRgb,
-    SourceRgbImage, SrgbChannel, WorkingRgbImage, convert_working_to_linear_srgb,
+    BasicAdjPlanSet, ColorContrastPixel, ColorContrastPlan, ColorCorrectionPixel,
+    ColorCorrectionPlan, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
+    OperationMaskSetError, ProcessingOperation, RasterDimensions, SourceRgb, SourceRgbImage,
+    SrgbChannel, VibrancePixel, VibrancePlan, WorkingRgbImage, convert_working_to_linear_srgb,
     encode_working_to_srgb, evaluate_graph_with_basicadj_plans_and_masks_with_cancellation,
     prepare_basicadj_plans, prepare_basicadj_plans_with_cancellation, to_linear_srgb,
 };
@@ -133,7 +134,7 @@ impl CpuPixelpipeExecutor {
             ));
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans(request)?
@@ -176,7 +177,7 @@ impl CpuPixelpipeExecutor {
             ));
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans_with_cancellation(request, scope)?
@@ -216,7 +217,7 @@ impl CpuPixelpipeExecutor {
             return self.execute(request);
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans(request)?
@@ -290,7 +291,7 @@ impl CpuPixelpipeExecutor {
             return Ok(result);
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans_with_cancellation(request, scope)?
@@ -381,8 +382,8 @@ impl CpuPixelpipeExecutor {
             return Ok(input.clone());
         }
 
-        if is_colorcontrast_chain(request, input) {
-            return execute_colorcontrast_chain(request, input, masks, node_scope.as_ref());
+        if is_lab_point_chain(request, input) {
+            return execute_lab_point_chain(request, input, masks, node_scope.as_ref());
         }
 
         if let Some(node) = request.graph().nodes().find(|node| {
@@ -511,7 +512,7 @@ fn preserves_inert_lab_input(request: &CpuPixelpipeSnapshot, input: &RgbaF32Imag
             .all(|node| !operation_is_semantically_active(node.operation()))
 }
 
-fn is_colorcontrast_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
+fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
     let input_supported = match input.descriptor().color_encoding() {
         RgbaF32ColorEncoding::SrgbD65
         | RgbaF32ColorEncoding::LinearSrgbD65
@@ -527,7 +528,7 @@ fn is_colorcontrast_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) 
     if !input_supported {
         return false;
     }
-    let mut has_active_colorcontrast = false;
+    let mut has_active_lab_point = false;
     for node in request.graph().nodes() {
         let operation = node.operation();
         if !operation_is_semantically_active(operation) {
@@ -535,16 +536,18 @@ fn is_colorcontrast_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) 
         }
         if !matches!(
             operation.kind(),
-            rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+            rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+                | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
         ) {
             return false;
         }
-        has_active_colorcontrast = true;
+        has_active_lab_point = true;
     }
-    has_active_colorcontrast
+    has_active_lab_point
 }
 
-fn execute_colorcontrast_chain(
+fn execute_lab_point_chain(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
     masks: Option<&OperationMaskSet>,
@@ -556,9 +559,7 @@ fn execute_colorcontrast_chain(
         input
             .pixels()
             .iter()
-            .map(|pixel| {
-                ColorContrastPixel::new(pixel.red(), pixel.green(), pixel.blue(), pixel.alpha())
-            })
+            .map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()])
             .collect::<Vec<_>>()
     } else {
         let working = to_linear_working(input)?;
@@ -581,19 +582,9 @@ fn execute_colorcontrast_chain(
                         || scope.is_some_and(|scope| scope.check().is_err()),
                     )
                     .map_err(|error| {
-                        colorcontrast_transform_error(
-                            "RGB-to-Lab ingress",
-                            pixel_index,
-                            error,
-                            scope,
-                        )
+                        lab_point_transform_error("RGB-to-Lab ingress", pixel_index, error, scope)
                     })?;
-                Ok(ColorContrastPixel::new(
-                    channels[0],
-                    channels[1],
-                    channels[2],
-                    source.alpha(),
-                ))
+                Ok([channels[0], channels[1], channels[2], source.alpha()])
             })
             .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
         rgb_boundary = Some((from_lab, working.frame()));
@@ -608,10 +599,6 @@ fn execute_colorcontrast_chain(
         if !operation_is_semantically_active(operation) {
             continue;
         }
-        let config = match operation.kind() {
-            rusttable_processing::ProcessingOperationKind::ColorContrast { config } => *config,
-            _ => unreachable!("active nodes in a Lab Color Contrast chain are Color Contrast"),
-        };
         let mask = masks.and_then(|set| set.mask_for(operation.operation_id()));
         let dimensions = input.descriptor().dimensions();
         if mask.is_some_and(|raster| {
@@ -623,17 +610,64 @@ fn execute_colorcontrast_chain(
                 source: EvaluationError::OperationExecution {
                     step_index: node.pipeline_step_index(),
                     operation_id: operation.operation_id(),
-                    reason: "Color Contrast mask sample count does not match the Lab raster"
+                    reason: "Lab point-operation mask sample count does not match the Lab raster"
                         .to_owned(),
                 },
             });
         }
         let mask = mask.map(rusttable_masks::MaskRaster::values);
-        let plan = ColorContrastPlan::new(config);
-        output = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
-            plan.execute_lab(&output)
-        } else {
-            plan.execute_lab_normal_blend(&output, mask, opacity)
+        output = match operation.kind() {
+            rusttable_processing::ProcessingOperationKind::ColorCorrection { config } => {
+                let input = output
+                    .iter()
+                    .copied()
+                    .map(ColorCorrectionPixel::from_channels)
+                    .collect::<Vec<_>>();
+                let plan = ColorCorrectionPlan::new(*config);
+                let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+                    plan.execute_lab(&input)
+                } else {
+                    plan.execute_lab_normal_blend(&input, mask, opacity)
+                };
+                result
+                    .into_iter()
+                    .map(ColorCorrectionPixel::channels)
+                    .collect()
+            }
+            rusttable_processing::ProcessingOperationKind::ColorContrast { config } => {
+                let input = output
+                    .iter()
+                    .copied()
+                    .map(ColorContrastPixel::from_channels)
+                    .collect::<Vec<_>>();
+                let plan = ColorContrastPlan::new(*config);
+                let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+                    plan.execute_lab(&input)
+                } else {
+                    plan.execute_lab_normal_blend(&input, mask, opacity)
+                };
+                result
+                    .into_iter()
+                    .map(ColorContrastPixel::channels)
+                    .collect()
+            }
+            rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
+                let input = output
+                    .iter()
+                    .copied()
+                    .map(VibrancePixel::from_channels)
+                    .collect::<Vec<_>>();
+                let plan = VibrancePlan::new(*config);
+                let result = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+                    plan.execute_lab(&input)
+                } else {
+                    plan.execute_lab_normal_blend(&input, mask, opacity)
+                };
+                result.into_iter().map(VibrancePixel::channels).collect()
+            }
+            _ => unreachable!(
+                "active nodes in a Lab point chain are registered Lab point operations"
+            ),
         };
     }
     if let Some(scope) = scope {
@@ -643,14 +677,13 @@ fn execute_colorcontrast_chain(
         let pixels = output
             .iter()
             .enumerate()
-            .map(|(pixel_index, lab)| {
-                let channels = lab.channels();
+            .map(|(pixel_index, channels)| {
                 let rgb = from_lab
                     .apply_rgb([channels[0], channels[1], channels[2]], || {
                         scope.is_some_and(|scope| scope.check().is_err())
                     })
                     .map_err(|error| {
-                        colorcontrast_transform_error(
+                        lab_point_transform_error(
                             "Lab-to-RGB egress",
                             pixel_index,
                             error,
@@ -660,17 +693,17 @@ fn execute_colorcontrast_chain(
                 Ok(LinearRgb::new(
                     FiniteF32::new(rgb[0]).map_err(|_| {
                         CpuPixelpipeError::SourceColorPlan(format!(
-                            "Color Contrast Lab-to-RGB egress produced non-finite red at pixel {pixel_index}"
+                            "Lab point-operation egress produced non-finite red at pixel {pixel_index}"
                         ))
                     })?,
                     FiniteF32::new(rgb[1]).map_err(|_| {
                         CpuPixelpipeError::SourceColorPlan(format!(
-                            "Color Contrast Lab-to-RGB egress produced non-finite green at pixel {pixel_index}"
+                            "Lab point-operation egress produced non-finite green at pixel {pixel_index}"
                         ))
                     })?,
                     FiniteF32::new(rgb[2]).map_err(|_| {
                         CpuPixelpipeError::SourceColorPlan(format!(
-                            "Color Contrast Lab-to-RGB egress produced non-finite blue at pixel {pixel_index}"
+                            "Lab point-operation egress produced non-finite blue at pixel {pixel_index}"
                         ))
                     })?,
                 ))
@@ -684,8 +717,7 @@ fn execute_colorcontrast_chain(
     let pixels = output
         .iter()
         .zip(input.pixels())
-        .map(|(lab, source)| {
-            let channels = lab.channels();
+        .map(|(channels, source)| {
             RgbaF32Pixel::new(channels[0], channels[1], channels[2], source.alpha())
         })
         .collect();
@@ -698,7 +730,7 @@ fn execute_colorcontrast_chain(
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
 }
 
-fn colorcontrast_transform_error(
+fn lab_point_transform_error(
     boundary: &str,
     pixel_index: usize,
     source: rusttable_color::TransformExecutionError,
@@ -710,7 +742,7 @@ fn colorcontrast_transform_error(
         return CpuPixelpipeError::Cancelled(error);
     }
     CpuPixelpipeError::SourceColorPlan(format!(
-        "Color Contrast {boundary} failed at pixel {pixel_index}: {source}"
+        "Lab point-operation {boundary} failed at pixel {pixel_index}: {source}"
     ))
 }
 
@@ -1097,7 +1129,7 @@ fn output_encoding(mode: CpuPixelpipeOutputMode, input: RgbaF32Descriptor) -> Rg
     }
 }
 
-fn color_transform(
+pub(crate) fn color_transform(
     source: rusttable_color::ColorEncoding,
     target: rusttable_color::ColorEncoding,
 ) -> Result<TransformPlan, CpuPixelpipeError> {
@@ -1348,6 +1380,7 @@ mod tests {
     use rusttable_image::{SourceColor, SourceColorEvidence};
     use rusttable_processing::PipelineStepIndex;
     use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
+    use rusttable_processing::operations::vibrance::VibranceConfig;
 
     use super::*;
     use crate::{CancellationReason, PipelineGeneration};
@@ -1387,7 +1420,7 @@ mod tests {
                 CpuPixelpipeOutputMode::FullExport,
             );
 
-            assert!(!is_colorcontrast_chain(&snapshot, snapshot.input()));
+            assert!(!is_lab_point_chain(&snapshot, snapshot.input()));
             assert_eq!(
                 CpuPixelpipeExecutor
                     .execute(&snapshot)
@@ -1465,7 +1498,7 @@ mod tests {
             CpuPixelpipeOutputMode::FullExport,
         );
 
-        assert!(is_colorcontrast_chain(&routed, routed.input()));
+        assert!(is_lab_point_chain(&routed, routed.input()));
         assert_eq!(
             CpuPixelpipeExecutor
                 .execute(&routed)
@@ -1531,7 +1564,7 @@ mod tests {
             CpuPixelpipeOutputMode::FullExport,
         );
 
-        assert!(is_colorcontrast_chain(&snapshot, snapshot.input()));
+        assert!(is_lab_point_chain(&snapshot, snapshot.input()));
         assert_eq!(
             CpuPixelpipeExecutor
                 .execute(&snapshot)
@@ -1543,6 +1576,82 @@ mod tests {
                 CpuPixelpipeOutputMode::FullExport,
             )
         );
+    }
+
+    #[test]
+    fn external_matrix_multiple_vibrance_instances_match_one_lab_boundary() {
+        let profile = ProfileId::from_content(
+            b"CPU Vibrance continuous Lab matrix profile",
+            ProfileClass::Input,
+            ProfileModel::Matrix,
+            Pcs::XyzD50,
+            ProfileParserVersion::new(1).expect("parser version"),
+        )
+        .expect("profile identity");
+        let source_color = SourceColor::external(
+            profile,
+            Primaries::display_p3(),
+            TransferFunction::Srgb,
+            SourceColorEvidence::EmbeddedChromaticities,
+        )
+        .expect("external matrix source");
+        let dimensions = RasterDimensions::new(3, 1).expect("dimensions");
+        let input = RgbaF32Image::new(
+            RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::External(profile))
+                .with_source_color(source_color),
+            vec![
+                RgbaF32Pixel::new(0.82, 0.15, 0.07, 0.2),
+                RgbaF32Pixel::new(0.12, 0.68, 0.31, 0.6),
+                RgbaF32Pixel::new(0.21, 0.24, 0.91, 0.9),
+            ],
+        )
+        .expect("external matrix input");
+        let configs = [
+            VibranceConfig::new(35.0).expect("first config"),
+            VibranceConfig::new(-20.0).expect("second config"),
+        ];
+        let snapshot = CpuPixelpipeSnapshot::new(
+            input.clone(),
+            operation_graph(vec![
+                vibrance_operation(0x5101, true, OperationOpacity::ONE, 35.0),
+                vibrance_operation(0x5102, true, OperationOpacity::ONE, -20.0),
+            ]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+
+        assert!(is_lab_point_chain(&snapshot, snapshot.input()));
+        assert_eq!(
+            CpuPixelpipeExecutor
+                .execute(&snapshot)
+                .expect("external matrix Vibrance chain")
+                .image(),
+            &one_boundary_vibrance_reference(&input, &configs, CpuPixelpipeOutputMode::FullExport,)
+        );
+    }
+
+    #[test]
+    fn cancelled_vibrance_chain_is_terminal_before_publication() {
+        let snapshot = CpuPixelpipeSnapshot::new(
+            extreme_lab_colorcontrast_input(),
+            operation_graph(vec![vibrance_operation(
+                0x5103,
+                true,
+                OperationOpacity::ONE,
+                100.0,
+            )]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(10).expect("nonzero generation"));
+        scope.cancel(CancellationReason::EditChanged);
+
+        let error = CpuPixelpipeExecutor
+            .execute_with_cancellation(&snapshot, &scope)
+            .expect_err("cancelled Vibrance chain");
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("Vibrance cancellation must remain terminal at the pixelpipe boundary");
+        };
+        assert_eq!(error.reason(), CancellationReason::EditChanged);
     }
 
     #[test]
@@ -1700,6 +1809,21 @@ mod tests {
         .expect("Color Contrast operation")
     }
 
+    fn vibrance_operation(
+        operation_id: u128,
+        enabled: bool,
+        opacity: OperationOpacity,
+        amount: f64,
+    ) -> Operation {
+        scalar_operation(
+            operation_id,
+            "rusttable.vibrance",
+            enabled,
+            opacity,
+            &[("amount", amount)],
+        )
+    }
+
     fn linear_colorcontrast_input() -> RgbaF32Image {
         RgbaF32Image::new(
             RgbaF32Descriptor::new(
@@ -1798,6 +1922,61 @@ mod tests {
             .collect::<Vec<_>>();
         for config in configs {
             lab = ColorContrastPlan::new(*config).execute_lab(&lab);
+        }
+        let pixels = lab
+            .iter()
+            .map(|pixel| {
+                let channels = pixel.channels();
+                let rgb = from_lab
+                    .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                    .expect("Lab-to-RGB reference");
+                LinearRgb::new(
+                    FiniteF32::new(rgb[0]).expect("finite reference red"),
+                    FiniteF32::new(rgb[1]).expect("finite reference green"),
+                    FiniteF32::new(rgb[2]).expect("finite reference blue"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let evaluated = WorkingRgbImage::new_with_frame(
+            input.descriptor().dimensions(),
+            pixels,
+            working.frame(),
+        )
+        .expect("reference working image");
+        output_from_working(mode, input, &evaluated).expect("reference output")
+    }
+
+    fn one_boundary_vibrance_reference(
+        input: &RgbaF32Image,
+        configs: &[VibranceConfig],
+        mode: CpuPixelpipeOutputMode,
+    ) -> RgbaF32Image {
+        let working = to_linear_working(input).expect("matrix source ingress");
+        let to_lab = color_transform(
+            working.frame().encoding(),
+            rusttable_color::ColorEncoding::LabD50,
+        )
+        .expect("RGB-to-Lab plan");
+        let from_lab = color_transform(
+            rusttable_color::ColorEncoding::LabD50,
+            working.frame().encoding(),
+        )
+        .expect("Lab-to-RGB plan");
+        let mut lab = working
+            .pixels()
+            .zip(input.pixels())
+            .map(|(pixel, source)| {
+                let channels = to_lab
+                    .apply_rgb(
+                        [pixel.red().get(), pixel.green().get(), pixel.blue().get()],
+                        || false,
+                    )
+                    .expect("RGB-to-Lab reference");
+                VibrancePixel::new(channels[0], channels[1], channels[2], source.alpha())
+            })
+            .collect::<Vec<_>>();
+        for config in configs {
+            lab = VibrancePlan::new(*config).execute_lab(&lab);
         }
         let pixels = lab
             .iter()

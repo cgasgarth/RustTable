@@ -8,6 +8,7 @@ use rusttable_core::{Edit, FiniteF64, Operation, OperationId, ParameterText, Par
 use rusttable_processing::builtin_registry;
 use rusttable_processing::defringe_compatibility::DefringeMode;
 use rusttable_processing::descriptor::OperationFlags;
+use rusttable_ui::iop::colorcorrection::{COLORCORRECTION_MODULE_ID, ColorCorrectionGridState};
 use rusttable_ui::presentation::{DarkroomControlKind, DarkroomControlValue};
 use rusttable_ui::{
     DarkroomModuleAction, DarkroomModuleError, DarkroomModuleViewModel, DarkroomModulesViewModel,
@@ -95,8 +96,6 @@ impl GtkDarkroomEditController {
     }
 
     /// Applies one GTK action through the selected edit's atomic repository transaction.
-    ///
-    /// # Errors
     ///
     /// # Errors
     ///
@@ -272,6 +271,12 @@ fn project_edit(edit: &Edit) -> Result<DarkroomModulesViewModel, DarkroomModuleE
             let values = control_values(&module, operation)?;
             let enabled = operation.is_enabled() && module.availability().is_supported();
             module.reconcile_operation(edit.revision(), enabled, values)?;
+            if module.color_correction_grid().is_some() {
+                module.reconcile_color_correction_grid(
+                    edit.revision(),
+                    color_correction_grid_from_operation(operation)?,
+                )?;
+            }
             projected.push(module);
         }
     }
@@ -336,6 +341,36 @@ fn control_values(
             Some(parameter_value_to_control(control, parameter.1))
         })
         .collect()
+}
+
+fn color_correction_grid_from_operation(
+    operation: &Operation,
+) -> Result<ColorCorrectionGridState, DarkroomModuleError> {
+    ColorCorrectionGridState::new(
+        color_correction_parameter(operation, "hia")?,
+        color_correction_parameter(operation, "hib")?,
+        color_correction_parameter(operation, "loa")?,
+        color_correction_parameter(operation, "lob")?,
+    )
+    .map_err(|error| persistence_error(error.to_string()))
+}
+
+fn color_correction_parameter(
+    operation: &Operation,
+    name: &str,
+) -> Result<f64, DarkroomModuleError> {
+    let name = rusttable_core::ParameterName::new(name).map_err(|error| {
+        persistence_error(format!(
+            "invalid Color Correction parameter name {name}: {error:?}"
+        ))
+    })?;
+    match operation.parameter(&name) {
+        Some(ParameterValue::Scalar(value)) => Ok(value.get()),
+        None => Ok(0.0),
+        Some(_) => Err(persistence_error(format!(
+            "Color Correction parameter {name} must be scalar"
+        ))),
+    }
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -416,6 +451,9 @@ fn rewrite_operations(
             actual: action.operation_id(),
         });
     }
+    if action.is_instance_lifecycle() {
+        return rewrite_instance_operations(edit, module, action);
+    }
     let registry = builtin_registry();
     let target = if let Some(operation_id) = module.operation_id() {
         let operation = edit
@@ -481,6 +519,149 @@ fn rewrite_operations(
         .collect()
 }
 
+fn rewrite_instance_operations(
+    edit: &Edit,
+    module: &DarkroomModuleViewModel,
+    action: &DarkroomModuleAction,
+) -> Result<Vec<Operation>, DarkroomModuleError> {
+    let operation_id =
+        action
+            .operation_id()
+            .ok_or_else(|| DarkroomModuleError::InstanceActionUnavailable {
+                module_id: module.id().to_owned(),
+                action: instance_action_name(action),
+                reason: "an exact persisted operation target is required",
+            })?;
+    let definition = builtin_registry()
+        .definitions()
+        .iter()
+        .find(|definition| definition.descriptor().id.compatibility_name == module.id())
+        .ok_or_else(|| DarkroomModuleError::MissingOperation {
+            module_id: module.id().to_owned(),
+        })?;
+    if !definition
+        .descriptor()
+        .flags
+        .contains(OperationFlags::MULTI_INSTANCE)
+    {
+        return Err(DarkroomModuleError::InstanceActionUnavailable {
+            module_id: module.id().to_owned(),
+            action: instance_action_name(action),
+            reason: "the operation is single-instance",
+        });
+    }
+
+    let mut operations = edit.operations().cloned().collect::<Vec<_>>();
+    let target_index = operations
+        .iter()
+        .position(|operation| operation.id() == operation_id)
+        .ok_or_else(|| DarkroomModuleError::MissingOperation {
+            module_id: format!("{} operation {operation_id}", module.id()),
+        })?;
+    if !operation_matches_module(&operations[target_index], module.id()) {
+        return Err(DarkroomModuleError::WrongOperation {
+            module_id: module.id().to_owned(),
+            expected: Some(operation_id),
+            actual: Some(operations[target_index].id()),
+        });
+    }
+    let target_key = operations[target_index].key().clone();
+
+    match action {
+        DarkroomModuleAction::NewInstance { .. } => {
+            let new_id =
+                multi_instance_operation_id(edit, operation_id, target_key.as_str(), "new");
+            let operation = builtin_registry()
+                .materialize_operation(target_key.as_str(), new_id)
+                .map_err(|error| materialization_error(module.id(), error.to_string()))?;
+            operations.insert(target_index + 1, operation);
+        }
+        DarkroomModuleAction::DuplicateInstance { .. } => {
+            let new_id =
+                multi_instance_operation_id(edit, operation_id, target_key.as_str(), "duplicate");
+            let completed = complete_operation_defaults(&operations[target_index])
+                .map_err(|error| materialization_error(module.id(), error.to_string()))?;
+            let duplicate = Operation::new_with_opacity(
+                new_id,
+                completed.key().clone(),
+                true,
+                completed.opacity(),
+                completed
+                    .parameters()
+                    .map(|(name, value)| (name.clone(), value.clone())),
+            )
+            .map_err(|error| persistence_error(error.to_string()))?;
+            operations.insert(target_index + 1, duplicate);
+        }
+        DarkroomModuleAction::MoveInstanceUp { .. } => {
+            let previous = (0..target_index)
+                .rev()
+                .find(|index| operations[*index].key() == &target_key)
+                .ok_or_else(|| DarkroomModuleError::InstanceActionUnavailable {
+                    module_id: module.id().to_owned(),
+                    action: "move up",
+                    reason: "the instance is already first",
+                })?;
+            operations.swap(previous, target_index);
+        }
+        DarkroomModuleAction::MoveInstanceDown { .. } => {
+            let next = ((target_index + 1)..operations.len())
+                .find(|index| operations[*index].key() == &target_key)
+                .ok_or_else(|| DarkroomModuleError::InstanceActionUnavailable {
+                    module_id: module.id().to_owned(),
+                    action: "move down",
+                    reason: "the instance is already last",
+                })?;
+            operations.swap(target_index, next);
+        }
+        DarkroomModuleAction::DeleteInstance { .. } => {
+            let instance_count = operations
+                .iter()
+                .filter(|operation| operation.key() == &target_key)
+                .count();
+            if instance_count <= 1 {
+                return Err(DarkroomModuleError::InstanceActionUnavailable {
+                    module_id: module.id().to_owned(),
+                    action: "delete",
+                    reason: "the final instance cannot be deleted",
+                });
+            }
+            operations.remove(target_index);
+        }
+        DarkroomModuleAction::Disclosure { .. }
+        | DarkroomModuleAction::Enable { .. }
+        | DarkroomModuleAction::Reset { .. }
+        | DarkroomModuleAction::Preset { .. }
+        | DarkroomModuleAction::Control { .. }
+        | DarkroomModuleAction::ColorCorrectionGrid { .. }
+        | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
+        | DarkroomModuleAction::Recover { .. } => {
+            return Err(persistence_error(
+                "non-instance action reached the instance rewrite path",
+            ));
+        }
+    }
+    Ok(operations)
+}
+
+fn instance_action_name(action: &DarkroomModuleAction) -> &'static str {
+    match action {
+        DarkroomModuleAction::NewInstance { .. } => "new instance",
+        DarkroomModuleAction::DuplicateInstance { .. } => "duplicate instance",
+        DarkroomModuleAction::MoveInstanceUp { .. } => "move up",
+        DarkroomModuleAction::MoveInstanceDown { .. } => "move down",
+        DarkroomModuleAction::DeleteInstance { .. } => "delete",
+        DarkroomModuleAction::Disclosure { .. }
+        | DarkroomModuleAction::Enable { .. }
+        | DarkroomModuleAction::Reset { .. }
+        | DarkroomModuleAction::Preset { .. }
+        | DarkroomModuleAction::Control { .. }
+        | DarkroomModuleAction::ColorCorrectionGrid { .. }
+        | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
+        | DarkroomModuleAction::Recover { .. } => "instance action",
+    }
+}
+
 fn complete_operation_defaults(
     operation: &Operation,
 ) -> Result<Operation, rusttable_processing::OperationMaterializationError> {
@@ -523,6 +704,14 @@ fn rewrite_target_operation(
     let enabled = match action {
         DarkroomModuleAction::Enable { enabled, .. } => *enabled,
         DarkroomModuleAction::Reset { .. } => true,
+        DarkroomModuleAction::Preset { .. } => module.enabled(),
+        DarkroomModuleAction::ColorCorrectionGrid { .. }
+        | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
+        | DarkroomModuleAction::Control { .. }
+            if module.id() == COLORCORRECTION_MODULE_ID =>
+        {
+            module.enabled()
+        }
         _ => operation.is_enabled(),
     };
     let base = if matches!(action, DarkroomModuleAction::Reset { .. }) {
@@ -546,6 +735,26 @@ fn rewrite_target_operation(
             *value = replacement;
         }
     }
+    if let Some(grid) = module.color_correction_grid() {
+        for (name, replacement) in [
+            ("hia", grid.hia()),
+            ("hib", grid.hib()),
+            ("loa", grid.loa()),
+            ("lob", grid.lob()),
+        ] {
+            let Some((_, value)) = parameters
+                .iter_mut()
+                .find(|(parameter, _)| parameter.as_str() == name)
+            else {
+                return Err(persistence_error(format!(
+                    "Color Correction operation is missing {name}"
+                )));
+            };
+            *value = ParameterValue::Scalar(FiniteF64::new(replacement).map_err(|_| {
+                persistence_error(format!("Color Correction parameter {name} must be finite"))
+            })?);
+        }
+    }
     Operation::new_with_opacity(
         base.id(),
         base.key().clone(),
@@ -567,6 +776,39 @@ fn materialized_operation_id(edit: &Edit, key: &str) -> OperationId {
     id_bytes.copy_from_slice(&bytes[..16]);
     let id = u128::from_be_bytes(id_bytes);
     OperationId::new(if id == 0 { 1 } else { id }).expect("materialized operation ID is nonzero")
+}
+
+fn multi_instance_operation_id(
+    edit: &Edit,
+    base_id: OperationId,
+    key: &str,
+    action: &str,
+) -> OperationId {
+    for nonce in 0_u64.. {
+        let mut digest = Sha256::new();
+        digest.update(b"rusttable.darkroom.multi-instance-operation.v1\0");
+        digest.update(edit.id().get().to_be_bytes());
+        digest.update(edit.photo_id().get().to_be_bytes());
+        digest.update(edit.revision().get().to_be_bytes());
+        digest.update(base_id.get().to_be_bytes());
+        digest.update(key.as_bytes());
+        digest.update([0]);
+        digest.update(action.as_bytes());
+        digest.update(nonce.to_be_bytes());
+        let bytes = digest.finalize();
+        let mut id_bytes = [0_u8; 16];
+        id_bytes.copy_from_slice(&bytes[..16]);
+        let id = u128::from_be_bytes(id_bytes);
+        let candidate = OperationId::new(if id == 0 { 1 } else { id })
+            .expect("derived multi-instance operation ID is nonzero");
+        if edit
+            .operations()
+            .all(|operation| operation.id() != candidate)
+        {
+            return candidate;
+        }
+    }
+    unreachable!("the operation ID space cannot be exhausted by a finite edit")
 }
 
 fn canonical_rank(operation: &Operation) -> usize {
@@ -599,9 +841,8 @@ fn canonical_rank(operation: &Operation) -> usize {
         "relight",
         "colorcorrection",
         "colorcontrast",
-        // Native order keeps Color Contrast immediately before Velvia, with
-        // Vibrance as the next operation when it is eventually registered.
         "velvia",
+        "vibrance",
         "bloom",
         "grain",
         "soften",
@@ -902,6 +1143,120 @@ mod tests {
     }
 
     #[test]
+    fn enabling_vibrance_materializes_native_default_between_velvia_and_bloom() {
+        let registry = builtin_registry();
+        let original = Edit::from_parts(
+            EditId::new(306).expect("edit id"),
+            PhotoId::new(307).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(7),
+            [
+                registry
+                    .materialize_operation(
+                        "rusttable.velvia",
+                        OperationId::new(74).expect("Velvia id"),
+                    )
+                    .expect("Velvia defaults"),
+                registry
+                    .materialize_operation(
+                        "rusttable.bloom",
+                        OperationId::new(75).expect("bloom id"),
+                    )
+                    .expect("bloom defaults"),
+            ],
+        )
+        .expect("source-relative edit");
+        let mut modules = project_edit(&original).expect("projection");
+        let vibrance = modules.module_mut("vibrance").expect("Vibrance module");
+        let action = DarkroomModuleAction::Enable {
+            module_id: "vibrance".to_owned(),
+            operation_id: None,
+            expected_revision: original.revision(),
+            enabled: true,
+        };
+        vibrance.apply(action.clone()).expect("enable Vibrance");
+
+        let operations =
+            rewrite_operations(&original, vibrance, &action).expect("materialize Vibrance");
+        assert_eq!(
+            operations
+                .iter()
+                .map(|operation| operation.key().as_str())
+                .collect::<Vec<_>>(),
+            ["rusttable.velvia", "rusttable.vibrance", "rusttable.bloom"]
+        );
+        let vibrance = &operations[1];
+        assert!(vibrance.is_enabled());
+        assert_eq!(vibrance.parameters().count(), 1);
+        assert_eq!(
+            vibrance.parameter(&ParameterName::new("amount").expect("amount")),
+            Some(&scalar(25.0))
+        );
+    }
+
+    #[test]
+    fn persisted_vibrance_outlier_survives_disable_and_reset_targets_exact_id() {
+        let operation_id = OperationId::new(418).expect("Vibrance id");
+        let original = Edit::from_parts(
+            EditId::new(416).expect("edit id"),
+            PhotoId::new(417).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(9),
+            [Operation::new_with_opacity(
+                operation_id,
+                OperationKey::new("rusttable.vibrance").expect("Vibrance key"),
+                true,
+                OperationOpacity::new(0.4).expect("opacity"),
+                [(ParameterName::new("amount").expect("amount"), scalar(125.0))],
+            )
+            .expect("Vibrance operation")],
+        )
+        .expect("persisted Vibrance edit");
+        let mut modules = project_edit(&original).expect("finite native value projects");
+        let vibrance = modules
+            .module_target_mut("vibrance", Some(operation_id))
+            .expect("exact Vibrance module");
+        let disable = DarkroomModuleAction::Enable {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: original.revision(),
+            enabled: false,
+        };
+        vibrance.apply(disable.clone()).expect("disable Vibrance");
+        let disabled =
+            rewrite_operations(&original, vibrance, &disable).expect("rewrite exact Vibrance");
+        assert!(!disabled[0].is_enabled());
+        assert_eq!(
+            disabled[0].opacity(),
+            OperationOpacity::new(0.4).expect("opacity")
+        );
+        assert_eq!(
+            disabled[0].parameter(&ParameterName::new("amount").expect("amount")),
+            Some(&scalar(125.0))
+        );
+
+        let disabled_edit = original.revised(disabled).expect("disabled edit");
+        let mut projected = project_edit(&disabled_edit).expect("disabled projection");
+        let vibrance = projected
+            .module_target_mut("vibrance", Some(operation_id))
+            .expect("exact disabled Vibrance");
+        let reset = DarkroomModuleAction::Reset {
+            module_id: "vibrance".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: disabled_edit.revision(),
+        };
+        vibrance.apply(reset.clone()).expect("reset Vibrance");
+        let reset_operations =
+            rewrite_operations(&disabled_edit, vibrance, &reset).expect("native reset rewrite");
+        assert!(reset_operations[0].is_enabled());
+        assert_eq!(reset_operations[0].opacity(), OperationOpacity::ONE);
+        assert_eq!(
+            reset_operations[0].parameter(&ParameterName::new("amount").expect("amount")),
+            Some(&scalar(25.0))
+        );
+    }
+
+    #[test]
     fn enabling_colorcontrast_materializes_hidden_defaults_immediately_before_velvia() {
         let registry = builtin_registry();
         let original = Edit::from_parts(
@@ -1139,6 +1494,550 @@ mod tests {
             instances[1].widget_id(),
             format!("colorcontrast-instance-{second_id}")
         );
+    }
+
+    #[test]
+    fn controller_persists_only_truthful_multi_instance_lifecycle_by_exact_id() {
+        let registry = builtin_registry();
+        let upstream_id = OperationId::new(801).expect("Velvia id");
+        let base_id = OperationId::new(802).expect("base Vibrance id");
+        let downstream_id = OperationId::new(803).expect("bloom id");
+        let original = Edit::from_parts(
+            EditId::new(800).expect("edit id"),
+            PhotoId::new(800).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(50),
+            [
+                registry
+                    .materialize_operation("rusttable.velvia", upstream_id)
+                    .expect("Velvia defaults"),
+                vibrance_operation(base_id, false, 80.0, 0.35),
+                registry
+                    .materialize_operation("rusttable.bloom", downstream_id)
+                    .expect("bloom defaults"),
+            ],
+        )
+        .expect("multi-instance lifecycle edit");
+        let new_id = multi_instance_operation_id(&original, base_id, "rusttable.vibrance", "new");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select lifecycle edit");
+
+        let new_outcome = controller
+            .apply(&DarkroomModuleAction::NewInstance {
+                module_id: "vibrance".to_owned(),
+                operation_id: Some(base_id),
+                expected_revision: original.revision(),
+            })
+            .expect("new instance persists defaults");
+        assert!(new_outcome.processing_changed());
+        assert_eq!(new_outcome.revision(), Revision::from_u64(51));
+        let after_new = catalog.load(original.id());
+        assert_eq!(
+            after_new
+                .operations()
+                .map(Operation::id)
+                .collect::<Vec<_>>(),
+            [upstream_id, base_id, new_id, downstream_id]
+        );
+        let new_operation = after_new
+            .operations()
+            .find(|operation| operation.id() == new_id)
+            .expect("new Vibrance operation");
+        assert!(new_operation.is_enabled());
+        assert_eq!(new_operation.opacity(), OperationOpacity::ONE);
+        assert_eq!(
+            new_operation.parameter(&ParameterName::new("amount").expect("amount")),
+            Some(&scalar(25.0))
+        );
+        let projected = new_outcome
+            .modules()
+            .instances("vibrance")
+            .collect::<Vec<_>>();
+        assert_eq!(projected.len(), 2);
+        assert_eq!(
+            projected
+                .iter()
+                .map(|module| module.widget_id())
+                .collect::<Vec<_>>(),
+            [
+                format!("vibrance-instance-{base_id}"),
+                format!("vibrance-instance-{new_id}")
+            ]
+        );
+
+        for (action, expected_action, expected_reason) in [
+            (
+                DarkroomModuleAction::DuplicateInstance {
+                    module_id: "vibrance".to_owned(),
+                    operation_id: Some(base_id),
+                    expected_revision: new_outcome.revision(),
+                },
+                "duplicate instance",
+                "the current edit model cannot copy native blend and mask state",
+            ),
+            (
+                DarkroomModuleAction::MoveInstanceDown {
+                    module_id: "vibrance".to_owned(),
+                    operation_id: Some(base_id),
+                    expected_revision: new_outcome.revision(),
+                },
+                "move down",
+                "the current edit model cannot apply native adjacent-module ordering",
+            ),
+            (
+                DarkroomModuleAction::MoveInstanceUp {
+                    module_id: "vibrance".to_owned(),
+                    operation_id: Some(new_id),
+                    expected_revision: new_outcome.revision(),
+                },
+                "move up",
+                "the current edit model cannot apply native adjacent-module ordering",
+            ),
+        ] {
+            let error = controller
+                .apply(&action)
+                .expect_err("unfaithful structural action is rejected before persistence");
+            assert!(matches!(
+                error,
+                DarkroomModuleError::InstanceActionUnavailable {
+                    module_id,
+                    action,
+                    reason,
+                } if module_id == "vibrance"
+                    && action == expected_action
+                    && reason == expected_reason
+            ));
+            assert_eq!(
+                catalog.load(original.id()),
+                after_new,
+                "rejected {expected_action} must not change revision or operation state"
+            );
+        }
+
+        let deleted_new = controller
+            .apply(&DarkroomModuleAction::DeleteInstance {
+                module_id: "vibrance".to_owned(),
+                operation_id: Some(new_id),
+                expected_revision: new_outcome.revision(),
+            })
+            .expect("delete down to one same-key instance");
+        assert_eq!(deleted_new.revision(), Revision::from_u64(52));
+        assert_eq!(
+            catalog
+                .load(original.id())
+                .operations()
+                .map(Operation::id)
+                .collect::<Vec<_>>(),
+            [upstream_id, base_id, downstream_id]
+        );
+
+        let error = controller
+            .apply(&DarkroomModuleAction::DeleteInstance {
+                module_id: "vibrance".to_owned(),
+                operation_id: Some(base_id),
+                expected_revision: deleted_new.revision(),
+            })
+            .expect_err("the final same-key instance cannot be deleted");
+        assert!(matches!(
+            error,
+            DarkroomModuleError::InstanceActionUnavailable {
+                module_id,
+                action: "delete",
+                reason: "the final instance cannot be deleted",
+            } if module_id == "vibrance"
+        ));
+        assert_eq!(
+            catalog.load(original.id()).revision(),
+            Revision::from_u64(52),
+            "rejected structural actions must not persist a replacement"
+        );
+    }
+
+    #[test]
+    fn targetless_colorcorrection_grid_materializes_exact_enabled_instance() {
+        let registry = builtin_registry();
+        let original = Edit::from_parts(
+            EditId::new(840).expect("edit id"),
+            PhotoId::new(840).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(20),
+            [
+                registry
+                    .materialize_operation(
+                        "rusttable.relight",
+                        OperationId::new(841).expect("Relight id"),
+                    )
+                    .expect("Relight defaults"),
+                registry
+                    .materialize_operation(
+                        "rusttable.velvia",
+                        OperationId::new(842).expect("Velvia id"),
+                    )
+                    .expect("Velvia defaults"),
+            ],
+        )
+        .expect("edit without Color Correction");
+        let generated_id = materialized_operation_id(&original, "rusttable.colorcorrection");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        let initial = controller
+            .select_photo(original.photo_id())
+            .expect("select edit without Color Correction");
+        let template = initial
+            .module("colorcorrection")
+            .expect("targetless Color Correction template");
+        assert_eq!(template.operation_id(), None);
+        assert!(!template.can_add_instance());
+
+        let grid =
+            ColorCorrectionGridState::new(-0.95, 4.5, 3.55, 0.0).expect("warming-filter grid");
+        let outcome = controller
+            .apply(&DarkroomModuleAction::ColorCorrectionGrid {
+                module_id: "colorcorrection".to_owned(),
+                operation_id: None,
+                expected_revision: original.revision(),
+                grid,
+            })
+            .expect("first targetless grid edit");
+
+        assert_eq!(outcome.revision(), Revision::from_u64(21));
+        assert!(outcome.processing_changed());
+        let projected = outcome
+            .modules()
+            .module_target("colorcorrection", Some(generated_id))
+            .expect("materialized exact Color Correction instance");
+        assert_eq!(projected.operation_id(), Some(generated_id));
+        assert_eq!(projected.color_correction_grid(), Some(grid));
+        assert!(projected.enabled());
+        assert!(projected.supports_multi_instance());
+        assert!(projected.can_add_instance());
+        assert_eq!(
+            outcome.modules().instances("colorcorrection").count(),
+            1,
+            "the targetless template is replaced by one exact instance"
+        );
+
+        let persisted = catalog.load(original.id());
+        let operations = persisted.operations().collect::<Vec<_>>();
+        assert_eq!(
+            operations
+                .iter()
+                .map(|operation| operation.key().as_str())
+                .collect::<Vec<_>>(),
+            [
+                "rusttable.relight",
+                "rusttable.colorcorrection",
+                "rusttable.velvia"
+            ],
+            "first persistence inserts Color Correction at its canonical source position"
+        );
+        let colorcorrection = operations[1];
+        assert_eq!(colorcorrection.id(), generated_id);
+        assert!(colorcorrection.is_enabled());
+        assert_eq!(colorcorrection.opacity(), OperationOpacity::ONE);
+        for (name, expected) in [
+            ("hia", -0.95),
+            ("hib", 4.5),
+            ("loa", 3.55),
+            ("lob", 0.0),
+            ("saturation", 1.0),
+        ] {
+            assert_eq!(
+                colorcorrection.parameter(&ParameterName::new(name).expect("parameter name")),
+                Some(&scalar(expected)),
+                "{name} is persisted from the grid plus registry defaults"
+            );
+        }
+    }
+
+    #[test]
+    fn targetless_colorcorrection_parameter_reset_materializes_enabled_defaults() {
+        let registry = builtin_registry();
+        let original = Edit::from_parts(
+            EditId::new(843).expect("edit id"),
+            PhotoId::new(843).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(24),
+            [
+                registry
+                    .materialize_operation(
+                        "rusttable.relight",
+                        OperationId::new(844).expect("Relight id"),
+                    )
+                    .expect("Relight defaults"),
+                registry
+                    .materialize_operation(
+                        "rusttable.velvia",
+                        OperationId::new(845).expect("Velvia id"),
+                    )
+                    .expect("Velvia defaults"),
+            ],
+        )
+        .expect("edit without Color Correction");
+        let generated_id = materialized_operation_id(&original, "rusttable.colorcorrection");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select edit without Color Correction");
+
+        let outcome = controller
+            .apply(&DarkroomModuleAction::ColorCorrectionResetParameters {
+                module_id: "colorcorrection".to_owned(),
+                operation_id: None,
+                expected_revision: original.revision(),
+            })
+            .expect("first targetless parameter reset");
+
+        assert_eq!(outcome.revision(), Revision::from_u64(25));
+        assert!(outcome.processing_changed());
+        let projected = outcome
+            .modules()
+            .module_target("colorcorrection", Some(generated_id))
+            .expect("materialized exact Color Correction instance");
+        assert_eq!(projected.operation_id(), Some(generated_id));
+        assert!(projected.enabled());
+        assert!(projected.can_add_instance());
+        assert_eq!(
+            projected.color_correction_grid(),
+            Some(ColorCorrectionGridState::DEFAULT)
+        );
+        assert_eq!(
+            projected
+                .controls()
+                .control("colorcorrection-saturation")
+                .expect("saturation")
+                .value(),
+            DarkroomControlValue::Slider(1.0)
+        );
+
+        let persisted = catalog.load(original.id());
+        let operations = persisted.operations().collect::<Vec<_>>();
+        assert_eq!(
+            operations
+                .iter()
+                .map(|operation| operation.key().as_str())
+                .collect::<Vec<_>>(),
+            [
+                "rusttable.relight",
+                "rusttable.colorcorrection",
+                "rusttable.velvia"
+            ]
+        );
+        let colorcorrection = operations[1];
+        assert_eq!(colorcorrection.id(), generated_id);
+        assert!(colorcorrection.is_enabled());
+        assert_eq!(colorcorrection.opacity(), OperationOpacity::ONE);
+        for (name, expected) in [
+            ("hia", 0.0),
+            ("hib", 0.0),
+            ("loa", 0.0),
+            ("lob", 0.0),
+            ("saturation", 1.0),
+        ] {
+            assert_eq!(
+                colorcorrection.parameter(&ParameterName::new(name).expect("parameter name")),
+                Some(&scalar(expected)),
+                "{name} uses the source default"
+            );
+        }
+    }
+
+    #[test]
+    fn colorcorrection_grid_persists_four_parameters_atomically_to_exact_instance() {
+        let first_id = OperationId::new(851).expect("first Color Correction id");
+        let second_id = OperationId::new(852).expect("second Color Correction id");
+        let original = Edit::from_parts(
+            EditId::new(850).expect("edit id"),
+            PhotoId::new(850).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(30),
+            [
+                colorcorrection_operation(first_id, 1.0, 2.0, 3.0, 4.0, 0.75),
+                colorcorrection_operation_with_enabled(
+                    second_id, false, -1.0, -2.0, -3.0, -4.0, 4.25,
+                ),
+            ],
+        )
+        .expect("two-instance Color Correction edit");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select Color Correction edit");
+        let next_grid =
+            ColorCorrectionGridState::new(-0.95, 4.5, 3.55, 0.0).expect("warming-filter grid");
+        let outcome = controller
+            .apply(&DarkroomModuleAction::ColorCorrectionGrid {
+                module_id: "colorcorrection".to_owned(),
+                operation_id: Some(second_id),
+                expected_revision: original.revision(),
+                grid: next_grid,
+            })
+            .expect("persist one atomic endpoint state");
+        assert_eq!(outcome.revision(), Revision::from_u64(31));
+        assert!(outcome.processing_changed());
+        let projected = outcome
+            .modules()
+            .module_target("colorcorrection", Some(second_id))
+            .expect("exact second projection");
+        assert_eq!(projected.color_correction_grid(), Some(next_grid));
+        assert!(
+            projected.enabled(),
+            "native history insertion enables the exact disabled instance"
+        );
+
+        let persisted = catalog.load(original.id());
+        let operations = persisted.operations().collect::<Vec<_>>();
+        assert_eq!(operations.len(), 2);
+        assert_eq!(operations[0].id(), first_id);
+        for (name, expected) in [
+            ("hia", 1.0),
+            ("hib", 2.0),
+            ("loa", 3.0),
+            ("lob", 4.0),
+            ("saturation", 0.75),
+        ] {
+            assert_eq!(
+                operations[0].parameter(&ParameterName::new(name).expect("parameter name")),
+                Some(&scalar(expected)),
+                "the untargeted first instance remains byte-for-byte semantic state"
+            );
+        }
+        assert_eq!(operations[1].id(), second_id);
+        assert!(operations[1].is_enabled());
+        for (name, expected) in [
+            ("hia", -0.95),
+            ("hib", 4.5),
+            ("loa", 3.55),
+            ("lob", 0.0),
+            ("saturation", 4.25),
+        ] {
+            assert_eq!(
+                operations[1].parameter(&ParameterName::new(name).expect("parameter name")),
+                Some(&scalar(expected))
+            );
+        }
+
+        let preset_error = controller
+            .apply(&DarkroomModuleAction::Preset {
+                module_id: "colorcorrection".to_owned(),
+                operation_id: Some(second_id),
+                expected_revision: outcome.revision(),
+                preset_id: "cooling filter".to_owned(),
+            })
+            .expect_err("incomplete Color Correction preset remains gated");
+        assert!(matches!(
+            preset_error,
+            DarkroomModuleError::Unsupported { .. }
+        ));
+        assert_eq!(
+            catalog.load(original.id()).revision(),
+            Revision::from_u64(31)
+        );
+
+        let stale = controller
+            .apply(&DarkroomModuleAction::ColorCorrectionGrid {
+                module_id: "colorcorrection".to_owned(),
+                operation_id: Some(second_id),
+                expected_revision: original.revision(),
+                grid: ColorCorrectionGridState::DEFAULT,
+            })
+            .expect_err("stale grid callback");
+        assert!(matches!(
+            stale,
+            DarkroomModuleError::StaleRevision {
+                expected,
+                actual
+            } if expected == Revision::from_u64(30) && actual == Revision::from_u64(31)
+        ));
+        assert_eq!(
+            catalog.load(original.id()).revision(),
+            Revision::from_u64(31),
+            "stale endpoint actions cannot partially replace the edit"
+        );
+    }
+
+    #[test]
+    fn colorcorrection_parameter_reset_targets_second_instance_and_retains_opacity() {
+        let first_id = OperationId::new(853).expect("first Color Correction id");
+        let second_id = OperationId::new(854).expect("second Color Correction id");
+        let original = Edit::from_parts(
+            EditId::new(855).expect("edit id"),
+            PhotoId::new(855).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(40),
+            [
+                colorcorrection_operation(first_id, 1.0, 2.0, 3.0, 4.0, 0.75),
+                colorcorrection_operation_with_opacity(
+                    second_id, false, -1.0, -2.0, -3.0, -4.0, 2.25, 0.37,
+                ),
+            ],
+        )
+        .expect("two-instance Color Correction edit");
+        let before = original.operations().cloned().collect::<Vec<_>>();
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select Color Correction edit");
+
+        let outcome = controller
+            .apply(&DarkroomModuleAction::ColorCorrectionResetParameters {
+                module_id: "colorcorrection".to_owned(),
+                operation_id: Some(second_id),
+                expected_revision: original.revision(),
+            })
+            .expect("source-specific parameter reset");
+
+        assert_eq!(outcome.revision(), Revision::from_u64(41));
+        let projected = outcome
+            .modules()
+            .module_target("colorcorrection", Some(second_id))
+            .expect("exact reset projection");
+        assert!(projected.enabled());
+        assert_eq!(
+            projected.color_correction_grid(),
+            Some(ColorCorrectionGridState::DEFAULT)
+        );
+        assert_eq!(
+            projected
+                .controls()
+                .control("colorcorrection-saturation")
+                .expect("saturation")
+                .value(),
+            DarkroomControlValue::Slider(1.0)
+        );
+
+        let persisted = catalog.load(original.id());
+        let operations = persisted.operations().collect::<Vec<_>>();
+        assert_eq!(
+            operations[0], &before[0],
+            "untargeted instance is unchanged"
+        );
+        assert_eq!(operations[1].id(), second_id);
+        assert!(operations[1].is_enabled());
+        assert_eq!(
+            operations[1].opacity(),
+            OperationOpacity::new(0.37).expect("fixture opacity"),
+            "empty-grid reset does not replace blend opacity"
+        );
+        for (name, expected) in [
+            ("hia", 0.0),
+            ("hib", 0.0),
+            ("loa", 0.0),
+            ("lob", 0.0),
+            ("saturation", 1.0),
+        ] {
+            assert_eq!(
+                operations[1].parameter(&ParameterName::new(name).expect("parameter name")),
+                Some(&scalar(expected)),
+                "{name} resets to the source default"
+            );
+        }
     }
 
     #[test]
@@ -1422,6 +2321,73 @@ mod tests {
             unbound,
             opacity,
         )
+    }
+
+    fn colorcorrection_operation(
+        id: OperationId,
+        hia: f64,
+        hib: f64,
+        loa: f64,
+        lob: f64,
+        saturation: f64,
+    ) -> Operation {
+        colorcorrection_operation_with_enabled(id, true, hia, hib, loa, lob, saturation)
+    }
+
+    fn colorcorrection_operation_with_enabled(
+        id: OperationId,
+        enabled: bool,
+        hia: f64,
+        hib: f64,
+        loa: f64,
+        lob: f64,
+        saturation: f64,
+    ) -> Operation {
+        colorcorrection_operation_with_opacity(id, enabled, hia, hib, loa, lob, saturation, 1.0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn colorcorrection_operation_with_opacity(
+        id: OperationId,
+        enabled: bool,
+        hia: f64,
+        hib: f64,
+        loa: f64,
+        lob: f64,
+        saturation: f64,
+        opacity: f64,
+    ) -> Operation {
+        Operation::new_with_opacity(
+            id,
+            OperationKey::new("rusttable.colorcorrection").expect("Color Correction key"),
+            enabled,
+            OperationOpacity::new(opacity).expect("Color Correction opacity"),
+            [
+                (ParameterName::new("hia").expect("hia"), scalar(hia)),
+                (ParameterName::new("hib").expect("hib"), scalar(hib)),
+                (ParameterName::new("loa").expect("loa"), scalar(loa)),
+                (ParameterName::new("lob").expect("lob"), scalar(lob)),
+                (
+                    ParameterName::new("saturation").expect("saturation"),
+                    scalar(saturation),
+                ),
+            ],
+        )
+        .expect("Color Correction operation")
+    }
+
+    fn vibrance_operation(id: OperationId, enabled: bool, amount: f64, opacity: f64) -> Operation {
+        Operation::new_with_opacity(
+            id,
+            OperationKey::new("rusttable.vibrance").expect("Vibrance key"),
+            enabled,
+            OperationOpacity::new(opacity).expect("Vibrance opacity"),
+            [(
+                ParameterName::new("amount").expect("amount"),
+                scalar(amount),
+            )],
+        )
+        .expect("Vibrance operation")
     }
 
     #[allow(clippy::too_many_arguments)]

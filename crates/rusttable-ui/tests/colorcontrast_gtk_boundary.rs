@@ -330,10 +330,30 @@ fn assert_multi_instance_descendant_identity_and_targets(shell: &GtkShell, root:
         let module_id = action.module_id().to_owned();
         let operation_id = action.operation_id();
         let mut modules = state_for_handler.borrow_mut();
-        modules
+        let revision = modules
             .module_target_mut(module_id.as_str(), operation_id)
             .expect("GTK action carries an exact operation target")
-            .apply(action)
+            .apply(action)?;
+        let snapshots = modules
+            .left_modules()
+            .chain(modules.right_modules())
+            .map(|module| {
+                (
+                    module.id().to_owned(),
+                    module.operation_id(),
+                    module.expanded(),
+                    module.enabled(),
+                    module.controls().controls().cloned().collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (module_id, operation_id, expanded, enabled, controls) in snapshots {
+            modules
+                .module_target_mut(&module_id, operation_id)
+                .expect("controller projection retains every exact module target")
+                .reconcile_snapshot(revision, expanded, enabled, controls)?;
+        }
+        Ok(revision)
     });
     shell.set_darkroom_module_stack(&modules, Some(handler));
     settle_gtk();

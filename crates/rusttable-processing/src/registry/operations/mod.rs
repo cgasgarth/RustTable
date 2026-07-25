@@ -20,7 +20,7 @@ use crate::descriptor::{
     finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
     invert_descriptor, linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor,
     rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor, soften_descriptor,
-    temperature_descriptor, velvia_descriptor, vignette_descriptor,
+    temperature_descriptor, velvia_descriptor, vibrance_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -245,6 +245,17 @@ fn prepare_velvia(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_velvia(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_vibrance(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_vibrance(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -611,6 +622,33 @@ pub fn velvia_definition() -> OperationDefinition {
         ],
         RoiKind::Identity,
         [MigrationBinding::new(1, 2, "velvia.migration.v1-v2")],
+        Some(gpu),
+    )
+}
+
+pub fn vibrance_definition() -> OperationDefinition {
+    let descriptor = vibrance_descriptor();
+    let gpu = GpuBinding::new(
+        crate::operations::vibrance::VIBRANCE_WGPU_PASS_ID,
+        crate::operations::vibrance::VIBRANCE_GPU_TIER,
+        descriptor.capability.required_features.clone(),
+        descriptor.capability.required_formats.clone(),
+    );
+    geometry_definition_with_gpu(
+        descriptor,
+        prepare_vibrance,
+        &[
+            "iop.vibrance.params.v2",
+            "iop.vibrance.cpu.lab-d50-chroma-weight",
+            "iop.vibrance.wgpu.point.unmasked-full-opacity",
+            "iop.vibrance.wgpu.lab-d50-snapshot",
+            "iop.vibrance.opacity-mask-reconstruction",
+            "iop.vibrance.alpha-preserve",
+            "iop.vibrance.deprecated-visibility",
+            "iop.vibrance.order.v30-58",
+        ],
+        RoiKind::Identity,
+        std::iter::empty(),
         Some(gpu),
     )
 }
@@ -1037,6 +1075,7 @@ macro_rules! builtin_operations {
             $crate::registry::color::colorcorrection_definition,
             $crate::registry::colorcontrast_definition,
             $crate::registry::velvia_definition,
+            $crate::registry::vibrance_definition,
             $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,

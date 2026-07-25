@@ -17,13 +17,15 @@ use rusttable_masks::{
     MaskSource,
 };
 use rusttable_pixelpipe::{
+    CancellationReason, CancellationScope, CancellationStage, CpuPixelpipeError,
     CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, CpuTilePlan,
-    PixelpipeBackend, PixelpipeExecutionService, PixelpipeGpuFallback, RgbaF32ColorEncoding,
-    RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel, RgbaF32SourceRepresentation,
+    PipelineGeneration, PixelpipeBackend, PixelpipeExecutionService, PixelpipeGpuFallback,
+    RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel,
+    RgbaF32SourceRepresentation,
 };
 use rusttable_processing::{
-    ColorContrastConfig, ColorContrastPixel, ColorContrastPlan, CompiledOperationGraph,
-    RasterDimensions,
+    ColorContrastConfig, ColorContrastPixel, ColorContrastPlan, ColorCorrectionConfig,
+    CompiledOperationGraph, RasterDimensions,
 };
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
@@ -594,6 +596,342 @@ async fn masked_and_partial_opacity_velvia_remain_truthful_cpu_fallbacks() {
     }
 }
 
+fn colorcorrection_operation(
+    id: u128,
+    opacity: OperationOpacity,
+    parameters: [f64; 5],
+) -> Operation {
+    let [hia, hib, loa, lob, saturation] = parameters;
+    operation_with_opacity(
+        id,
+        "rusttable.colorcorrection",
+        opacity,
+        &[
+            ("hia", hia),
+            ("hib", hib),
+            ("loa", loa),
+            ("lob", lob),
+            ("saturation", saturation),
+        ],
+    )
+}
+
+fn colorcorrection_input() -> RgbaF32Image {
+    let dimensions = RasterDimensions::new(4, 2).expect("dimensions");
+    RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LabD50),
+        vec![
+            RgbaF32Pixel::new(50.0, 10.0, -20.0, 0.0),
+            RgbaF32Pixel::new(80.0, 100.0, -100.0, 0.37),
+            RgbaF32Pixel::new(0.0, -128.0, 128.0, 1.0),
+            RgbaF32Pixel::new(100.0, 0.0, 0.0, f32::from_bits(1)),
+            RgbaF32Pixel::new(25.0, -30.0, 40.0, 0.25),
+            RgbaF32Pixel::new(65.0, 75.0, -85.0, 0.50),
+            RgbaF32Pixel::new(42.0, -4.0, 7.0, 0.75),
+            RgbaF32Pixel::new(91.0, 3.0, -2.0, f32::from_bits(0x3eaa_aaab)),
+        ],
+    )
+    .expect("Color Correction input")
+}
+
+fn colorcorrection_snapshot_with_input(
+    input: RgbaF32Image,
+    opacity: OperationOpacity,
+    parameters: [f64; 5],
+) -> CpuPixelpipeSnapshot {
+    let edit = Edit::from_parts(
+        EditId::new(0xc000).expect("edit ID"),
+        PhotoId::new(0xc010).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [colorcorrection_operation(0xc001, opacity, parameters)],
+    )
+    .expect("Color Correction edit");
+    CpuPixelpipeSnapshot::new(
+        input,
+        CompiledOperationGraph::compile(&edit).expect("Color Correction graph"),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+}
+
+fn colorcorrection_snapshot(
+    opacity: OperationOpacity,
+    parameters: [f64; 5],
+) -> CpuPixelpipeSnapshot {
+    colorcorrection_snapshot_with_input(colorcorrection_input(), opacity, parameters)
+}
+
+fn native_colorcorrection_pixel(
+    source: RgbaF32Pixel,
+    config: ColorCorrectionConfig,
+) -> RgbaF32Pixel {
+    let coefficients = config.committed_coefficients();
+    RgbaF32Pixel::new(
+        source.red(),
+        coefficients.saturation()
+            * (source.green() + source.red() * coefficients.a_scale() + coefficients.a_base()),
+        coefficients.saturation()
+            * (source.blue() + source.red() * coefficients.b_scale() + coefficients.b_base()),
+        source.alpha(),
+    )
+}
+
+#[test]
+fn colorcorrection_snapshot_identity_includes_every_committed_native_coefficient() {
+    let baseline =
+        colorcorrection_snapshot(OperationOpacity::ONE, [20.0, -30.0, -10.0, 5.0, 1.25]).identity();
+    for changed in [
+        [21.0, -30.0, -10.0, 5.0, 1.25],
+        [20.0, -29.0, -10.0, 5.0, 1.25],
+        [20.0, -30.0, -9.0, 5.0, 1.25],
+        [20.0, -30.0, -10.0, 6.0, 1.25],
+        [20.0, -30.0, -10.0, 5.0, 1.5],
+    ] {
+        assert_ne!(
+            baseline,
+            colorcorrection_snapshot(OperationOpacity::ONE, changed).identity()
+        );
+    }
+}
+
+#[test]
+fn cpu_colorcorrection_matches_native_lab_formula_without_clamping_full_frame_and_tiled() {
+    let parameters = [20.0, -30.0, -10.0, 5.0, 1.25];
+    let config =
+        ColorCorrectionConfig::new(20.0, -30.0, -10.0, 5.0, 1.25).expect("Color Correction config");
+    let snapshot = colorcorrection_snapshot(OperationOpacity::ONE, parameters);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU Color Correction result");
+    let tiled = CpuPixelpipeExecutor
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled CPU Color Correction result");
+
+    for (index, (source, actual)) in snapshot
+        .input()
+        .pixels()
+        .iter()
+        .zip(canonical.image().pixels())
+        .enumerate()
+    {
+        let expected = native_colorcorrection_pixel(*source, config);
+        assert_eq!(
+            actual.red().to_bits(),
+            expected.red().to_bits(),
+            "pixel {index} L"
+        );
+        assert_eq!(
+            actual.green().to_bits(),
+            expected.green().to_bits(),
+            "pixel {index} a"
+        );
+        assert_eq!(
+            actual.blue().to_bits(),
+            expected.blue().to_bits(),
+            "pixel {index} b"
+        );
+        assert_eq!(
+            actual.alpha().to_bits(),
+            expected.alpha().to_bits(),
+            "pixel {index} alpha"
+        );
+    }
+    assert!(
+        canonical.image().pixels()[1].green().abs() > 128.0,
+        "native Color Correction does not clamp Lab chroma"
+    );
+    assert_eq!(tiled.image(), canonical.image());
+}
+
+#[test]
+fn cpu_colorcorrection_preserves_extreme_finite_native_arithmetic() {
+    let parameters = [1.0e20, -1.0e20, -1.0e20, 1.0e20, 1.0e10];
+    let config = ColorCorrectionConfig::new(1.0e20, -1.0e20, -1.0e20, 1.0e20, 1.0e10)
+        .expect("extreme finite config");
+    let input = RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            RasterDimensions::new(1, 1).expect("dimensions"),
+            RgbaF32ColorEncoding::LabD50,
+        ),
+        vec![RgbaF32Pixel::new(1.0e10, -1.0e10, 1.0e10, 0.625)],
+    )
+    .expect("extreme finite input");
+    let snapshot = colorcorrection_snapshot_with_input(input, OperationOpacity::ONE, parameters);
+    let actual = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("extreme CPU Color Correction result")
+        .image()
+        .pixels()[0];
+    let expected = native_colorcorrection_pixel(snapshot.input().pixels()[0], config);
+
+    assert_eq!(actual.red().to_bits(), expected.red().to_bits());
+    assert_eq!(actual.green().to_bits(), expected.green().to_bits());
+    assert_eq!(actual.blue().to_bits(), expected.blue().to_bits());
+    assert_eq!(actual.alpha().to_bits(), 0.625_f32.to_bits());
+}
+
+#[tokio::test]
+async fn wgpu_colorcorrection_matches_cpu_full_frame_and_tiled() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let snapshot = colorcorrection_snapshot(OperationOpacity::ONE, [20.0, -30.0, -10.0, 5.0, 1.25]);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU Color Correction result");
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let full = service
+        .execute(&snapshot)
+        .expect("full-frame GPU Color Correction result");
+    let tiled = service
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled GPU Color Correction result");
+
+    assert_eq!(full.receipt().backend(), PixelpipeBackend::WgpuBasic);
+    assert_eq!(full.receipt().dispatches(), 1);
+    assert_eq!(tiled.receipt().backend(), PixelpipeBackend::WgpuTiled);
+    assert_eq!(tiled.receipt().dispatches(), 4);
+    assert_gpu_image_matches_cpu(
+        "Color Correction full frame",
+        full.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.000_02,
+    );
+    assert_gpu_image_matches_cpu(
+        "Color Correction tiled",
+        tiled.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.000_02,
+    );
+}
+
+#[tokio::test]
+async fn wgpu_colorcorrection_uses_one_lab_boundary_for_supported_rgb_and_external_profiles() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    for (label, input) in source_boundary_images() {
+        let source_descriptor = input.descriptor();
+        let snapshot = colorcorrection_snapshot_with_input(
+            input,
+            OperationOpacity::ONE,
+            [20.0, -30.0, -10.0, 5.0, 1.25],
+        );
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} CPU Color Correction result: {error}"));
+        let full = service
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} GPU Color Correction result: {error}"));
+        let tiled = service
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .unwrap_or_else(|error| panic!("{label} tiled Color Correction result: {error}"));
+
+        assert_eq!(
+            full.receipt().backend(),
+            PixelpipeBackend::WgpuBasic,
+            "{label}: full-frame fallback {:?}",
+            full.receipt().gpu_fallback()
+        );
+        assert_eq!(
+            tiled.receipt().backend(),
+            PixelpipeBackend::WgpuTiled,
+            "{label}: tiled fallback {:?}",
+            tiled.receipt().gpu_fallback()
+        );
+        assert_eq!(full.receipt().dispatches(), 1, "{label}");
+        assert_eq!(tiled.receipt().dispatches(), 4, "{label}");
+        assert_gpu_image_matches_cpu(
+            label,
+            full.image(),
+            canonical.image(),
+            source_descriptor,
+            0.002,
+        );
+        assert_gpu_image_matches_cpu(
+            label,
+            tiled.image(),
+            canonical.image(),
+            source_descriptor,
+            0.002,
+        );
+    }
+}
+
+#[tokio::test]
+async fn masked_and_partial_opacity_colorcorrection_remain_truthful_cpu_fallbacks() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let cases = [
+        (
+            "masked",
+            with_uniform_mask(
+                colorcorrection_snapshot(OperationOpacity::ONE, [20.0, -30.0, -10.0, 5.0, 1.25]),
+                0xc001,
+            ),
+        ),
+        (
+            "partial opacity",
+            colorcorrection_snapshot(
+                OperationOpacity::new(0.5).expect("partial opacity"),
+                [20.0, -30.0, -10.0, 5.0, 1.25],
+            ),
+        ),
+    ];
+    for (label, snapshot) in cases {
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} CPU result: {error}"));
+        let full = service
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} selected result: {error}"));
+        let tiled = service
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .unwrap_or_else(|error| panic!("{label} tiled result: {error}"));
+
+        assert_eq!(full.receipt().backend(), PixelpipeBackend::CpuCanonical);
+        assert_eq!(
+            tiled.receipt().backend(),
+            PixelpipeBackend::CpuTiledFallback
+        );
+        assert_eq!(full.receipt().gpu_fallback(), None);
+        assert_eq!(tiled.receipt().gpu_fallback(), None);
+        assert_eq!(full.image(), canonical.image());
+        assert_eq!(tiled.image(), canonical.image());
+    }
+}
+
+#[test]
+fn pre_cancelled_colorcorrection_never_executes_or_publishes_a_fallback() {
+    let snapshot = colorcorrection_snapshot(OperationOpacity::ONE, [20.0, -30.0, -10.0, 5.0, 1.25]);
+    let scope = CancellationScope::root(PipelineGeneration::new(0xc0).expect("generation"));
+    scope.cancel(CancellationReason::UserRequested);
+    let service = PixelpipeExecutionService::cpu_only();
+    let full = service
+        .execute_with_cancellation(&snapshot, &scope)
+        .expect_err("pre-cancelled full-frame request");
+    let tiled = service
+        .execute_tiled_with_cancellation(
+            &snapshot,
+            CpuTilePlan::new(2, 1).expect("tile plan"),
+            &scope,
+        )
+        .expect_err("pre-cancelled tiled request");
+
+    for error in [full, tiled] {
+        let CpuPixelpipeError::Cancelled(cancelled) = error else {
+            panic!("pre-cancellation must be terminal: {error:?}");
+        };
+        assert_eq!(cancelled.reason(), CancellationReason::UserRequested);
+        assert_eq!(cancelled.stage(), Some(CancellationStage::Preparation));
+    }
+}
+
 fn colorcontrast_operation(
     id: u128,
     opacity: OperationOpacity,
@@ -1039,7 +1377,7 @@ async fn wgpu_colorcontrast_matches_native_lab_formula_full_frame_and_tiled() {
 }
 
 #[tokio::test]
-async fn colorcontrast_without_a_proven_lab_chain_reports_cpu_fallback() {
+async fn mixed_linear_and_lab_point_chain_reports_cpu_fallback() {
     let Some(runtime) = gpu_runtime().await else {
         return;
     };
@@ -1047,47 +1385,31 @@ async fn colorcontrast_without_a_proven_lab_chain_reports_cpu_fallback() {
     let fallback = PixelpipeGpuFallback::Basic(BasicPointError::ColorSpaceBoundaryUnavailable {
         required: BasicPointColorSpace::LabD50,
     });
-    for (label, snapshot) in [
-        (
-            "RGB source",
-            colorcontrast_snapshot(
-                RgbaF32ColorEncoding::LinearSrgbD65,
-                OperationOpacity::ONE,
-                false,
-                [2.0, 3.0, 1.5, -4.0],
-                0,
-            ),
-        ),
-        (
-            "mixed Lab chain",
-            colorcontrast_snapshot(
-                RgbaF32ColorEncoding::LabD50,
-                OperationOpacity::ONE,
-                true,
-                [2.0, 3.0, 1.5, -4.0],
-                0,
-            ),
-        ),
-    ] {
-        let canonical = CpuPixelpipeExecutor
-            .execute(&snapshot)
-            .unwrap_or_else(|error| panic!("{label} CPU result: {error}"));
-        let full = service
-            .execute(&snapshot)
-            .unwrap_or_else(|error| panic!("{label} selected result: {error}"));
-        let tiled = service
-            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
-            .unwrap_or_else(|error| panic!("{label} tiled result: {error}"));
-        assert_eq!(full.receipt().backend(), PixelpipeBackend::CpuCanonical);
-        assert_eq!(full.receipt().gpu_fallback(), Some(&fallback));
-        assert_eq!(
-            tiled.receipt().backend(),
-            PixelpipeBackend::CpuTiledFallback
-        );
-        assert_eq!(tiled.receipt().gpu_fallback(), Some(&fallback));
-        assert_eq!(full.image(), canonical.image());
-        assert_eq!(tiled.image(), canonical.image());
-    }
+    let snapshot = colorcontrast_snapshot(
+        RgbaF32ColorEncoding::LabD50,
+        OperationOpacity::ONE,
+        true,
+        [2.0, 3.0, 1.5, -4.0],
+        0,
+    );
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("mixed-domain CPU result");
+    let full = service
+        .execute(&snapshot)
+        .expect("mixed-domain selected result");
+    let tiled = service
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("mixed-domain tiled result");
+    assert_eq!(full.receipt().backend(), PixelpipeBackend::CpuCanonical);
+    assert_eq!(full.receipt().gpu_fallback(), Some(&fallback));
+    assert_eq!(
+        tiled.receipt().backend(),
+        PixelpipeBackend::CpuTiledFallback
+    );
+    assert_eq!(tiled.receipt().gpu_fallback(), Some(&fallback));
+    assert_eq!(full.image(), canonical.image());
+    assert_eq!(tiled.image(), canonical.image());
 }
 
 #[tokio::test]
@@ -1141,6 +1463,251 @@ async fn masked_and_partial_opacity_colorcontrast_remain_cpu_only() {
         assert_eq!(full.image(), canonical.image());
         assert_eq!(tiled.image(), canonical.image());
     }
+}
+
+fn vibrance_operation(
+    id: u128,
+    enabled: bool,
+    opacity: OperationOpacity,
+    amount: f64,
+) -> Operation {
+    Operation::new_with_opacity(
+        OperationId::new(id).expect("nonzero ID"),
+        OperationKey::new("rusttable.vibrance").expect("valid key"),
+        enabled,
+        opacity,
+        [(
+            ParameterName::new("amount").expect("valid parameter"),
+            ParameterValue::Scalar(FiniteF64::new(amount).expect("finite parameter")),
+        )],
+    )
+    .expect("valid Vibrance operation")
+}
+
+fn vibrance_snapshot(
+    opacity: OperationOpacity,
+    enabled: bool,
+    amount: f64,
+) -> CpuPixelpipeSnapshot {
+    let dimensions = RasterDimensions::new(4, 2).expect("dimensions");
+    let image = RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LabD50),
+        vec![
+            RgbaF32Pixel::new(50.0, 10.0, -20.0, 0.0),
+            RgbaF32Pixel::new(80.0, 100.0, -100.0, 0.37),
+            RgbaF32Pixel::new(0.0, -128.0, 128.0, 1.0),
+            RgbaF32Pixel::new(100.0, 0.0, 0.0, f32::from_bits(1)),
+            RgbaF32Pixel::new(25.0, -30.0, 40.0, 0.25),
+            RgbaF32Pixel::new(65.0, 75.0, -85.0, 0.50),
+            RgbaF32Pixel::new(42.0, -4.0, 7.0, 0.75),
+            RgbaF32Pixel::new(91.0, 3.0, -2.0, f32::from_bits(0x3eaa_aaab)),
+        ],
+    )
+    .expect("Vibrance input");
+    let edit = Edit::from_parts(
+        EditId::new(0x5000).expect("edit ID"),
+        PhotoId::new(0x5010).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [vibrance_operation(0x5001, enabled, opacity, amount)],
+    )
+    .expect("Vibrance edit");
+    CpuPixelpipeSnapshot::new(
+        image,
+        CompiledOperationGraph::compile(&edit).expect("Vibrance graph"),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+}
+
+fn native_vibrance_pixel(pixel: RgbaF32Pixel, amount: f32) -> RgbaF32Pixel {
+    let sw = (pixel.green() * pixel.green() + pixel.blue() * pixel.blue()).sqrt() / 256.0;
+    let lightness_scale = 1.0 - amount * sw * 0.25;
+    let saturation_scale = 1.0 + amount * sw;
+    RgbaF32Pixel::new(
+        pixel.red() * lightness_scale,
+        pixel.green() * saturation_scale,
+        pixel.blue() * saturation_scale,
+        pixel.alpha(),
+    )
+}
+
+#[test]
+fn vibrance_snapshot_identity_includes_native_amount_bits() {
+    assert_ne!(
+        vibrance_snapshot(OperationOpacity::ONE, true, 25.0).identity(),
+        vibrance_snapshot(OperationOpacity::ONE, true, 25.5).identity()
+    );
+}
+
+#[test]
+fn cpu_vibrance_matches_native_lab_formula_without_clamping_full_frame_and_tiled() {
+    let snapshot = vibrance_snapshot(OperationOpacity::ONE, true, 100.0);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU Vibrance result");
+    let tiled = CpuPixelpipeExecutor
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled CPU Vibrance result");
+    for (index, (source, actual)) in snapshot
+        .input()
+        .pixels()
+        .iter()
+        .zip(canonical.image().pixels())
+        .enumerate()
+    {
+        let expected = native_vibrance_pixel(*source, 1.0);
+        for (channel, (actual, expected)) in [
+            (actual.red(), expected.red()),
+            (actual.green(), expected.green()),
+            (actual.blue(), expected.blue()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(
+                (actual - expected).abs() <= 0.000_02,
+                "pixel {index} channel {channel}: {actual} != {expected}"
+            );
+        }
+        assert_eq!(actual.alpha().to_bits(), source.alpha().to_bits());
+    }
+    assert!(
+        canonical.image().pixels()[2].green().abs() > 128.0,
+        "native Vibrance does not clamp Lab chroma"
+    );
+    assert_eq!(tiled.image(), canonical.image());
+}
+
+#[tokio::test]
+async fn wgpu_vibrance_matches_cpu_full_frame_and_tiled() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let snapshot = vibrance_snapshot(OperationOpacity::ONE, true, 25.0);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU Vibrance result");
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let full = service
+        .execute(&snapshot)
+        .expect("full-frame GPU Vibrance result");
+    let tiled = service
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled GPU Vibrance result");
+
+    assert_eq!(full.receipt().backend(), PixelpipeBackend::WgpuBasic);
+    assert_eq!(full.receipt().dispatches(), 1);
+    assert_eq!(tiled.receipt().backend(), PixelpipeBackend::WgpuTiled);
+    assert_eq!(tiled.receipt().dispatches(), 4);
+    assert_gpu_image_matches_cpu(
+        "Vibrance full frame",
+        full.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.000_02,
+    );
+    assert_gpu_image_matches_cpu(
+        "Vibrance tiled",
+        tiled.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.000_02,
+    );
+}
+
+#[tokio::test]
+async fn vibrance_mask_partial_opacity_and_inert_states_route_truthfully() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let cases = [
+        (
+            "masked",
+            with_uniform_mask(vibrance_snapshot(OperationOpacity::ONE, true, 25.0), 0x5001),
+        ),
+        (
+            "partial opacity",
+            vibrance_snapshot(
+                OperationOpacity::new(0.5).expect("partial opacity"),
+                true,
+                25.0,
+            ),
+        ),
+        (
+            "disabled",
+            vibrance_snapshot(OperationOpacity::ONE, false, 25.0),
+        ),
+        (
+            "zero opacity",
+            vibrance_snapshot(OperationOpacity::ZERO, true, 25.0),
+        ),
+    ];
+    for (label, snapshot) in cases {
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} CPU result: {error}"));
+        let selected = service
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} selected result: {error}"));
+        assert_eq!(
+            selected.receipt().backend(),
+            PixelpipeBackend::CpuCanonical,
+            "{label}"
+        );
+        assert_eq!(selected.receipt().gpu_fallback(), None, "{label}");
+        assert_eq!(selected.image(), canonical.image(), "{label}");
+    }
+}
+
+#[tokio::test]
+async fn wgpu_colorcorrection_colorcontrast_and_vibrance_share_one_ordered_lab_chain() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let input = vibrance_snapshot(OperationOpacity::ONE, true, 25.0)
+        .input()
+        .clone();
+    let edit = Edit::from_parts(
+        EditId::new(0x5100).expect("edit ID"),
+        PhotoId::new(0x5110).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [
+            colorcorrection_operation(
+                0x5101,
+                OperationOpacity::ONE,
+                [20.0, -30.0, -10.0, 5.0, 1.25],
+            ),
+            colorcontrast_operation(0x5102, OperationOpacity::ONE, [2.0, 3.0, 1.5, -4.0], 1),
+            vibrance_operation(0x5103, true, OperationOpacity::ONE, 25.0),
+            colorcorrection_operation(0x5104, OperationOpacity::ONE, [-8.0, 18.0, 2.0, -7.0, 0.8]),
+            vibrance_operation(0x5105, true, OperationOpacity::ONE, -40.0),
+            colorcontrast_operation(0x5106, OperationOpacity::ONE, [0.5, -2.0, 2.0, 5.0], 0),
+        ],
+    )
+    .expect("mixed Lab edit");
+    let snapshot = CpuPixelpipeSnapshot::new(
+        input,
+        CompiledOperationGraph::compile(&edit).expect("mixed Lab graph"),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU mixed Lab result");
+    let selected = PixelpipeExecutionService::with_gpu(runtime)
+        .execute(&snapshot)
+        .expect("GPU mixed Lab result");
+
+    assert_eq!(selected.receipt().backend(), PixelpipeBackend::WgpuBasic);
+    assert_eq!(selected.receipt().dispatches(), 6);
+    assert_gpu_image_matches_cpu(
+        "Color Correction/Color Contrast/Vibrance authored order",
+        selected.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.000_02,
+    );
 }
 
 #[tokio::test]

@@ -15,6 +15,8 @@ impl<'a> OperationMaskRoute<'a> {
             kind,
             ProcessingOperationKind::Bloom { .. }
                 | ProcessingOperationKind::ColorContrast { .. }
+                | ProcessingOperationKind::ColorCorrection { .. }
+                | ProcessingOperationKind::Vibrance { .. }
                 | ProcessingOperationKind::Shadhi { .. }
         ) {
             Self {
