@@ -46,13 +46,14 @@ pub use color::{
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
     basicadj_descriptor, bloom_descriptor, censorize_descriptor, clahe_descriptor,
-    clipping_descriptor, color_reconstruction_descriptor, colorin_descriptor, crop_descriptor,
-    defringe_descriptor, dither_descriptor, enlargecanvas_descriptor, exposure_descriptor,
-    finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
-    highlights_descriptor, invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
-    liquify_descriptor, mask_manager_descriptor, perspective_descriptor, primaries_descriptor,
-    retouch_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
-    soften_descriptor, temperature_descriptor, velvia_descriptor, vignette_descriptor,
+    clipping_descriptor, color_reconstruction_descriptor, colorcorrection_descriptor,
+    colorin_descriptor, crop_descriptor, defringe_descriptor, dither_descriptor,
+    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
+    graduatednd_descriptor, grain_descriptor, highlights_descriptor, invert_descriptor,
+    lenscorrection_descriptor, linear_offset_descriptor, liquify_descriptor,
+    mask_manager_descriptor, perspective_descriptor, primaries_descriptor, retouch_descriptor,
+    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor,
+    temperature_descriptor, velvia_descriptor, vibrance_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, DistortionBorderMode, DistortionInterpolation,
@@ -116,6 +117,16 @@ pub use operations::colorcontrast::{
     ColorContrastParametersV2, ColorContrastPixel, ColorContrastPlan,
     migrate_v1_to_v2 as migrate_colorcontrast_v1_to_v2,
 };
+pub use operations::colorcorrection::{
+    COLORCORRECTION_COMPATIBILITY_ID, COLORCORRECTION_DEFAULT_HIA, COLORCORRECTION_DEFAULT_HIB,
+    COLORCORRECTION_DEFAULT_LOA, COLORCORRECTION_DEFAULT_LOB, COLORCORRECTION_DEFAULT_SATURATION,
+    COLORCORRECTION_GPU_TIER, COLORCORRECTION_PRESETS, COLORCORRECTION_RUST_ID,
+    COLORCORRECTION_SCHEMA_VERSION, COLORCORRECTION_V1_PARAMETER_BYTES,
+    COLORCORRECTION_WGPU_PASS_ID, ColorCorrectionCodecError, ColorCorrectionCoefficients,
+    ColorCorrectionConfig, ColorCorrectionHistory, ColorCorrectionParameterError,
+    ColorCorrectionParametersV1, ColorCorrectionPixel, ColorCorrectionPlan, ColorCorrectionPreset,
+    ColorCorrectionPresetBlendColorSpace, presets as colorcorrection_presets,
+};
 pub use operations::colorout::{TerminalOutputDescriptor, TerminalOutputFrame};
 pub use operations::defringe::{
     DEFRINGE_ALIAS, DEFRINGE_COMPATIBILITY_ID, DEFRINGE_GAUSSIAN_ORDER,
@@ -166,6 +177,12 @@ pub use operations::velvia::{
     VELVIA_SCHEMA_VERSION, VELVIA_V1_PARAMETER_BYTES, VELVIA_V2_PARAMETER_BYTES, VelviaCodecError,
     VelviaConfig, VelviaHistory, VelviaParameterError, VelviaParametersV1, VelviaParametersV2,
     VelviaPixel, VelviaPlan, migrate_v1_to_v2 as migrate_velvia_v1_to_v2,
+};
+pub use operations::vibrance::{
+    VIBRANCE_COMPATIBILITY_ID, VIBRANCE_DEFAULT_AMOUNT, VIBRANCE_GPU_TIER, VIBRANCE_RUST_ID,
+    VIBRANCE_SCHEMA_VERSION, VIBRANCE_V2_PARAMETER_BYTES, VIBRANCE_WGPU_PASS_ID,
+    VibranceCodecError, VibranceConfig, VibranceHistory, VibranceParameterError,
+    VibranceParametersV2, VibrancePixel, VibrancePlan,
 };
 pub use operations::watermark::{
     ExpandedWatermark, WATERMARK_ALLOWED_FONT_SET_HASH, WATERMARK_COMPATIBILITY_ID,

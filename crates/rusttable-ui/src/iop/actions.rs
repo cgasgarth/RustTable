@@ -4,6 +4,7 @@ use std::{fmt, rc::Rc};
 
 use rusttable_core::{OperationId, Revision};
 
+use crate::iop::colorcorrection::ColorCorrectionGridState;
 use crate::presentation::darkroom_controls::{DarkroomControlError, DarkroomControlValue};
 
 /// Error returned by a module-level action.
@@ -41,6 +42,11 @@ pub enum DarkroomModuleError {
         module_id: String,
         expected: Option<OperationId>,
         actual: Option<OperationId>,
+    },
+    InstanceActionUnavailable {
+        module_id: String,
+        action: &'static str,
+        reason: &'static str,
     },
     UnknownPreset {
         module_id: String,
@@ -98,6 +104,16 @@ impl fmt::Display for DarkroomModuleError {
                 write!(
                     formatter,
                     "action targets {module_id} operation {expected:?}, received {actual:?}"
+                )
+            }
+            Self::InstanceActionUnavailable {
+                module_id,
+                action,
+                reason,
+            } => {
+                write!(
+                    formatter,
+                    "{action} is unavailable for module {module_id}: {reason}"
                 )
             }
             Self::UnknownPreset {
@@ -161,6 +177,42 @@ pub enum DarkroomModuleAction {
         id: String,
         value: DarkroomControlValue,
     },
+    ColorCorrectionGrid {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+        grid: ColorCorrectionGridState,
+    },
+    ColorCorrectionResetParameters {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+    },
+    NewInstance {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+    },
+    DuplicateInstance {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+    },
+    MoveInstanceUp {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+    },
+    MoveInstanceDown {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+    },
+    DeleteInstance {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+    },
     Recover {
         module_id: String,
         operation_id: Option<OperationId>,
@@ -177,6 +229,13 @@ impl DarkroomModuleAction {
             | Self::Reset { module_id, .. }
             | Self::Preset { module_id, .. }
             | Self::Control { module_id, .. }
+            | Self::ColorCorrectionGrid { module_id, .. }
+            | Self::ColorCorrectionResetParameters { module_id, .. }
+            | Self::NewInstance { module_id, .. }
+            | Self::DuplicateInstance { module_id, .. }
+            | Self::MoveInstanceUp { module_id, .. }
+            | Self::MoveInstanceDown { module_id, .. }
+            | Self::DeleteInstance { module_id, .. }
             | Self::Recover { module_id, .. } => module_id,
         }
     }
@@ -194,6 +253,13 @@ impl DarkroomModuleAction {
             | Self::Reset { operation_id, .. }
             | Self::Preset { operation_id, .. }
             | Self::Control { operation_id, .. }
+            | Self::ColorCorrectionGrid { operation_id, .. }
+            | Self::ColorCorrectionResetParameters { operation_id, .. }
+            | Self::NewInstance { operation_id, .. }
+            | Self::DuplicateInstance { operation_id, .. }
+            | Self::MoveInstanceUp { operation_id, .. }
+            | Self::MoveInstanceDown { operation_id, .. }
+            | Self::DeleteInstance { operation_id, .. }
             | Self::Recover { operation_id, .. } => *operation_id,
         }
     }
@@ -225,6 +291,34 @@ impl DarkroomModuleAction {
                 operation_id: target,
                 ..
             }
+            | Self::ColorCorrectionGrid {
+                operation_id: target,
+                ..
+            }
+            | Self::ColorCorrectionResetParameters {
+                operation_id: target,
+                ..
+            }
+            | Self::NewInstance {
+                operation_id: target,
+                ..
+            }
+            | Self::DuplicateInstance {
+                operation_id: target,
+                ..
+            }
+            | Self::MoveInstanceUp {
+                operation_id: target,
+                ..
+            }
+            | Self::MoveInstanceDown {
+                operation_id: target,
+                ..
+            }
+            | Self::DeleteInstance {
+                operation_id: target,
+                ..
+            }
             | Self::Recover {
                 operation_id: target,
                 ..
@@ -251,10 +345,43 @@ impl DarkroomModuleAction {
             | Self::Control {
                 expected_revision, ..
             }
+            | Self::ColorCorrectionGrid {
+                expected_revision, ..
+            }
+            | Self::ColorCorrectionResetParameters {
+                expected_revision, ..
+            }
+            | Self::NewInstance {
+                expected_revision, ..
+            }
+            | Self::DuplicateInstance {
+                expected_revision, ..
+            }
+            | Self::MoveInstanceUp {
+                expected_revision, ..
+            }
+            | Self::MoveInstanceDown {
+                expected_revision, ..
+            }
+            | Self::DeleteInstance {
+                expected_revision, ..
+            }
             | Self::Recover {
                 expected_revision, ..
             } => *expected_revision,
         }
+    }
+
+    #[must_use]
+    pub const fn is_instance_lifecycle(&self) -> bool {
+        matches!(
+            self,
+            Self::NewInstance { .. }
+                | Self::DuplicateInstance { .. }
+                | Self::MoveInstanceUp { .. }
+                | Self::MoveInstanceDown { .. }
+                | Self::DeleteInstance { .. }
+        )
     }
 }
 
@@ -264,6 +391,8 @@ pub struct DarkroomModulePreset {
     id: String,
     label: String,
     values: Vec<(String, DarkroomControlValue)>,
+    color_correction_grid: Option<ColorCorrectionGridState>,
+    enables_module: bool,
 }
 
 impl DarkroomModulePreset {
@@ -277,7 +406,21 @@ impl DarkroomModulePreset {
             id: id.into(),
             label: label.into(),
             values,
+            color_correction_grid: None,
+            enables_module: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_color_correction_grid(mut self, grid: ColorCorrectionGridState) -> Self {
+        self.color_correction_grid = Some(grid);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_enabled_module(mut self, enabled: bool) -> Self {
+        self.enables_module = enabled;
+        self
     }
 
     #[must_use]
@@ -293,6 +436,16 @@ impl DarkroomModulePreset {
     #[must_use]
     pub(super) fn values(&self) -> &[(String, DarkroomControlValue)] {
         &self.values
+    }
+
+    #[must_use]
+    pub(super) const fn color_correction_grid(&self) -> Option<ColorCorrectionGridState> {
+        self.color_correction_grid
+    }
+
+    #[must_use]
+    pub const fn enables_module(&self) -> bool {
+        self.enables_module
     }
 }
 

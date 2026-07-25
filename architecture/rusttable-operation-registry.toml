@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "7faff639a352215d0128b1b8c78ac7929ea509471cb24a064a994618409ebea9"
+snapshot_hash = "b4c883acfe00c0a27268ebcea439edf33a09b7901602e635f2f79fb6399c60ef"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -69,8 +69,8 @@ status = "available"
 [[operation]]
 rust_id = "rusttable.colorcorrection"
 compatibility_name = "colorcorrection"
-descriptor_version = 5
-parameter_version = 5
+descriptor_version = 1
+parameter_version = 1
 implementation_version = 1
 status = "available"
 
@@ -317,6 +317,14 @@ status = "available"
 [[operation]]
 rust_id = "rusttable.velvia"
 compatibility_name = "velvia"
+descriptor_version = 2
+parameter_version = 2
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.vibrance"
+compatibility_name = "vibrance"
 descriptor_version = 2
 parameter_version = 2
 implementation_version = 1

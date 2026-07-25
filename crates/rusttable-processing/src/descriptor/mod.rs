@@ -8,9 +8,7 @@ mod basicadj;
 pub use basicadj::basicadj_descriptor;
 
 mod color;
-pub use color::{
-    colorcorrection_descriptor, colorin_descriptor, colorout_descriptor, primaries_descriptor,
-};
+pub use color::{colorin_descriptor, colorout_descriptor, primaries_descriptor};
 
 mod censorize;
 mod effects;
@@ -21,6 +19,7 @@ pub use crate::operations::borders::borders_descriptor;
 pub use crate::operations::clahe::clahe_descriptor;
 pub use crate::operations::clipping::clipping_descriptor;
 pub use crate::operations::colorcontrast::colorcontrast_descriptor;
+pub use crate::operations::colorcorrection::colorcorrection_descriptor;
 pub use crate::operations::crop::crop_descriptor;
 pub use crate::operations::defringe::defringe_descriptor;
 pub use crate::operations::dither::dither_descriptor;
@@ -41,6 +40,7 @@ pub use crate::operations::scalepixels::scalepixels_descriptor;
 pub use crate::operations::shadhi::shadhi_descriptor;
 pub use crate::operations::spots::spots_descriptor;
 pub use crate::operations::velvia::velvia_descriptor;
+pub use crate::operations::vibrance::vibrance_descriptor;
 pub use crate::operations::vignette::vignette_descriptor;
 pub use crate::operations::watermark::watermark_descriptor;
 pub use censorize::censorize_descriptor;

@@ -44,6 +44,7 @@ pub mod soften;
 pub mod spots;
 pub mod temperature;
 pub mod velvia;
+pub mod vibrance;
 pub mod vignette;
 pub mod watermark;
 

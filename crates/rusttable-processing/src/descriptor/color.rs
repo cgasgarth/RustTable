@@ -108,49 +108,6 @@ pub fn primaries_descriptor() -> OperationDescriptor {
     }
 }
 
-/// Returns the typed legacy color-correction descriptor.
-///
-/// # Panics
-///
-/// Panics only if the checked-in descriptor identity is malformed.
-#[must_use]
-pub fn colorcorrection_descriptor() -> OperationDescriptor {
-    let parameters = [
-        scalar("shadow_l", -4.0, 4.0, 0.0),
-        scalar("shadow_a", -4.0, 4.0, 0.0),
-        scalar("shadow_b", -4.0, 4.0, 0.0),
-        scalar("highlight_l", -4.0, 4.0, 0.0),
-        scalar("highlight_a", -4.0, 4.0, 0.0),
-        scalar("highlight_b", -4.0, 4.0, 0.0),
-        scalar("saturation", 0.0, 4.0, 1.0),
-        scalar("tonal_range", 0.001, 1.0, 0.5),
-        scalar("balance", -1.0, 1.0, 0.0),
-        integer("mode", 0, 1, 0),
-    ];
-    OperationDescriptor {
-        id: DescriptorId::new("colorcorrection", "rusttable.colorcorrection", 5, 5, 1)
-            .expect("static ID"),
-        parameters: parameters.into_iter().collect(),
-        flags: OperationFlags::DETERMINISTIC_CPU
-            .insert(OperationFlags::DETERMINISTIC_GPU)
-            .insert(OperationFlags::TILEABLE)
-            .insert(OperationFlags::COLOR)
-            .insert(OperationFlags::BLENDING),
-        stage: "scene-linear".to_owned(),
-        roi: RoiKind::Identity,
-        tiling: tiling(),
-        capability: capability(&["colorcorrection_opponent"]),
-        io: color_io(false),
-        mask_blend: mask_blend(),
-        migration: MigrationContract {
-            source_versions: (1..=5).collect(),
-            target_version: 5,
-            opaque_unknown_allowed: true,
-        },
-        ui: None,
-    }
-}
-
 /// Returns the typed output-profile transform descriptor.
 ///
 /// # Panics

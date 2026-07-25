@@ -8,7 +8,8 @@ use rusttable_core::{PhotoId, Revision};
 use rusttable_display_profile::{DisplayProfileReceipt, DisplayProfileSnapshot};
 
 use crate::iop::modules::{
-    DarkroomModuleActionHandler, DarkroomModuleGroup, DarkroomModulesViewModel, reference_modules,
+    DarkroomModuleActionHandler, DarkroomModuleGroup, DarkroomModuleViewModel,
+    DarkroomModulesViewModel, reference_modules,
 };
 mod interaction;
 mod panel_widgets;
@@ -205,6 +206,7 @@ pub struct DarkroomView {
     module_group: Rc<Cell<DarkroomModuleGroup>>,
     module_group_handler: Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
     typed_modules: Rc<RefCell<Option<DarkroomModulesViewModel>>>,
+    module_revision: Rc<RefCell<Revision>>,
     module_action_handler: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
     filmstrip_state: Rc<RefCell<FilmstripState>>,
     filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
@@ -261,6 +263,7 @@ impl DarkroomView {
         let histogram = HistogramView::new(histogram);
         let histogram_generation = Rc::new(Cell::new(None));
         let typed_modules = Rc::new(RefCell::new(reference_modules().ok()));
+        let module_revision = Rc::new(RefCell::new(Revision::ZERO));
         let module_action_handler = Rc::new(RefCell::new(None));
         let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
         let filmstrip_handler = Rc::new(RefCell::new(None));
@@ -289,6 +292,7 @@ impl DarkroomView {
             module_group,
             module_group_handler,
             typed_modules,
+            module_revision,
             module_action_handler,
             filmstrip_state,
             filmstrip_handler,
@@ -651,13 +655,14 @@ impl DarkroomView {
     /// Installs a controller-owned typed module stack in both side rails.
     ///
     /// The snapshot is copied so a later controller update cannot invalidate
-    /// GTK callbacks. Each callback still carries the module revision that
-    /// created its widget.
+    /// GTK callbacks. Mounted callbacks share the current controller revision so
+    /// coalesced slider edits remain valid without replacing their live widgets.
     pub fn set_module_stack(
         &self,
         modules: &DarkroomModulesViewModel,
         action_handler: Option<DarkroomModuleActionHandler>,
     ) {
+        self.module_revision.replace(module_stack_revision(modules));
         self.typed_modules.replace(Some(modules.clone()));
         if let Some(exposure) = modules.module("exposure") {
             let exposure_ev = exposure
@@ -691,6 +696,21 @@ impl DarkroomView {
         }
         self.module_action_handler.replace(action_handler);
         self.render_typed_modules();
+    }
+
+    /// Reconciles a non-structural processing edit without replacing mounted controls.
+    ///
+    /// Slider callbacks already hold the changed value locally. Updating the
+    /// controller-owned snapshot and the shared edit revision keeps every live
+    /// panel current while preserving an active drag, popup, or smooth scroll.
+    pub fn update_module_stack_snapshot(
+        &self,
+        modules: &DarkroomModulesViewModel,
+        revision: Revision,
+    ) {
+        self.typed_modules.replace(Some(modules.clone()));
+        self.module_revision.replace(revision);
+        self.exposure.set_module_revision(revision);
     }
 
     /// Returns the searchable module entry for shell-level focus and tests.
@@ -745,6 +765,7 @@ impl DarkroomView {
         F: Fn(DarkroomModuleGroup) + 'static,
     {
         let typed_modules = Rc::clone(&self.typed_modules);
+        let module_revision = Rc::clone(&self.module_revision);
         let module_action_handler = Rc::clone(&self.module_action_handler);
         let left_modules = self.left_modules.clone();
         let right_modules = self.right_modules.clone();
@@ -758,6 +779,7 @@ impl DarkroomView {
                     &implemented_modules,
                     &typed_modules,
                     &module_action_handler,
+                    &module_revision,
                     group,
                     search.text().as_str(),
                 );
@@ -772,6 +794,7 @@ impl DarkroomView {
             &self.implemented_modules,
             &self.typed_modules,
             &self.module_action_handler,
+            &self.module_revision,
             self.module_group.get(),
             self.module_search.text().as_str(),
         );
@@ -779,6 +802,7 @@ impl DarkroomView {
 
     fn install_module_search(&self) {
         let typed_modules = Rc::clone(&self.typed_modules);
+        let module_revision = Rc::clone(&self.module_revision);
         let module_action_handler = Rc::clone(&self.module_action_handler);
         let left_modules = self.left_modules.clone();
         let right_modules = self.right_modules.clone();
@@ -791,6 +815,7 @@ impl DarkroomView {
                 &implemented_modules,
                 &typed_modules,
                 &module_action_handler,
+                &module_revision,
                 group.get(),
                 search.text().as_str(),
             );
@@ -873,6 +898,15 @@ impl DarkroomView {
         self.viewport_controls.clear_histogram_sample();
         self.preview.clear_selection();
     }
+}
+
+fn module_stack_revision(modules: &DarkroomModulesViewModel) -> Revision {
+    modules
+        .left_modules()
+        .chain(modules.right_modules())
+        .map(DarkroomModuleViewModel::revision)
+        .max()
+        .unwrap_or(Revision::ZERO)
 }
 
 #[derive(Clone)]

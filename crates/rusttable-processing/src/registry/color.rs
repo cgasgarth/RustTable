@@ -69,26 +69,43 @@ pub(crate) fn colorout_definition() -> OperationDefinition {
 }
 
 pub(crate) fn colorcorrection_definition() -> OperationDefinition {
-    definition(
-        crate::descriptor::colorcorrection_descriptor(),
-        prepare_colorcorrection,
-        &crate::operations::colorcorrection::wgpu_passes(),
-        (1..5)
-            .map(|version| {
-                MigrationBinding::new(
-                    version,
-                    version + 1,
-                    format!("colorcorrection.migration.v{version}"),
-                )
-            })
-            .collect(),
-        &[
-            "iop.colorcorrection.legacy-parameters",
+    let descriptor = crate::descriptor::colorcorrection_descriptor();
+    let gpu = GpuBinding::new(
+        crate::operations::colorcorrection::COLORCORRECTION_WGPU_PASS_ID,
+        crate::operations::colorcorrection::COLORCORRECTION_GPU_TIER,
+        descriptor.capability.required_features.clone(),
+        descriptor.capability.required_formats.clone(),
+    );
+    OperationDefinition::new(
+        descriptor,
+        Some(CpuFactory::new(
+            prepare_colorcorrection,
+            crate::evaluate::execute_prepared_operation,
+            RoiKind::Identity,
+            true,
+            false,
+        )),
+        Some(gpu),
+        Vec::new(),
+        ImplementationIdentity::new(
+            format!("{}.colorcorrection", crate::registry::REGISTRY_BUILD_ID),
+            1,
+            format!("{}.colorcorrection", crate::registry::REGISTRY_BUILD_ID),
+        ),
+        [
+            "iop.colorcorrection.params-v1",
+            "iop.colorcorrection.commit",
             "iop.colorcorrection.cpu",
-            "iop.colorcorrection.wgsl",
-            "iop.colorcorrection.receipt",
-        ],
-        false,
+            "iop.colorcorrection.wgpu.point.unmasked-full-opacity",
+            "iop.colorcorrection.wgpu.lab-d50-snapshot",
+            "iop.colorcorrection.opacity-mask-reconstruction",
+            "iop.colorcorrection.alpha-preserve",
+            "iop.colorcorrection.presets",
+            "iop.colorcorrection.order.v30-55",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
     )
 }
 

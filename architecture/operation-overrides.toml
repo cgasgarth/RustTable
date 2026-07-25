@@ -2429,8 +2429,14 @@ evidence_hash = "aa38aae10d3d893eede02d2983ce55ddd95cf4121b9171d3bf2fceebde8e5dd
 [[operation]]
 name = "colorcorrection"
 module_version = 1
-parameter_size = 8
+parameter_size = 20
 parameter_layout_hash = "4f4b77ae74328d541fe19522281e69dfb474dcd589b6c65b6c429345cb9fad6e"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -2490,7 +2496,7 @@ line_end = 106
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 8
+byte_size = 20
 layout_hash = "c06df7180f2b0334524d9a617a4aea3d2227b73286ea82d50ef59fa20de38b03"
 decoder = "opaque"
 opaque_blocking = true
@@ -9795,6 +9801,12 @@ name = "vibrance"
 module_version = 2
 parameter_size = 4
 parameter_layout_hash = "952f27a2986a4c2b1a9d9b4c3d243c6b42f7cb498f1bcef2e58f17fecec1c8cc"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"

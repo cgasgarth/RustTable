@@ -137,6 +137,98 @@ fn colorcontrast(@builtin(global_invocation_id) id: vec3<u32>) {
     output_pixels[id.x] = vec4<f32>(pixel.x, a, b, pixel.w);
 }
 
+// Direct scalar port of data/kernels/basic.cl::colorcorrection. The caller
+// must prove that these four channels are Darktable-scale D50 Lab plus alpha.
+// Keep the native coefficient association and intentionally do not clamp.
+@compute @workgroup_size(${WORKGROUP_SIZE}, 1, 1)
+fn colorcorrection(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (!in_bounds(id.x)) { return; }
+    let pixel = input_pixels[id.x];
+    output_pixels[id.x] = vec4<f32>(
+        pixel.x,
+        colorcorrection_params.saturation
+            * (pixel.y + pixel.x * colorcorrection_params.a_scale + colorcorrection_params.a_base),
+        colorcorrection_params.saturation
+            * (pixel.z + pixel.x * colorcorrection_params.b_scale + colorcorrection_params.b_base),
+        pixel.w,
+    );
+}
+
+// Mirrors data/kernels/common.h::dt_fast_hypot when Darktable's default
+// non-fast OpenCL mode is active. OpenCL permits bounded ULP error at the
+// overflow boundary, so the rounded scaled-square predicate below defines
+// RustTable's declared WGSL-backend choice there. It also prevents Metal from
+// erasing a far-overflow result by saturating multiplication to finite MAX.
+fn opencl_default_hypot_overflows(x: f32, y: f32) -> bool {
+    // Scale by the exact power-of-two 2^-65 before squaring. The two squares
+    // and their sum remain finite, avoiding backend-specific overflow
+    // saturation while retaining the same true-norm threshold.
+    let overflow_scale = bitcast<f32>(0x1f000000u);
+    let scaled_x = abs(x) * overflow_scale;
+    let scaled_y = abs(y) * overflow_scale;
+    let maximum_finite = bitcast<f32>(0x7f7fffffu);
+    let scaled_maximum = maximum_finite * overflow_scale;
+    return scaled_x * scaled_x + scaled_y * scaled_y
+        > scaled_maximum * scaled_maximum;
+}
+
+fn opencl_default_hypot(x: f32, y: f32) -> f32 {
+    let absolute_x = abs(x);
+    let absolute_y = abs(y);
+    let maximum = max(absolute_x, absolute_y);
+    if (maximum == 0.0) { return 0.0; }
+    let ratio = min(absolute_x, absolute_y) / maximum;
+    let scale = sqrt(1.0 + ratio * ratio);
+    if (opencl_default_hypot_overflows(x, y)) {
+        // Preserve the WGSL-backend overflow choice across Metal's
+        // finite-saturating multiplication.
+        return bitcast<f32>(0x7f800000u);
+    }
+    return maximum * scale;
+}
+
+fn multiply_by_signed_infinity(value: f32, factor_is_negative: bool) -> f32 {
+    if (value == 0.0) {
+        return bitcast<f32>(0x7fc00000u);
+    }
+    let value_is_negative = (bitcast<u32>(value) & 0x80000000u) != 0u;
+    let result_is_negative = value_is_negative != factor_is_negative;
+    return bitcast<f32>(select(0x7f800000u, 0xff800000u, result_is_negative));
+}
+
+// Direct scalar port of default non-fast data/kernels/extended.cl::vibrance.
+// The caller must prove that these channels are Darktable-scale D50 Lab plus
+// alpha. src/iop/vibrance.c intentionally uses an overflow-prone sqrtf
+// sequence instead; that distinct CPU behavior stays in the CPU path.
+@compute @workgroup_size(${WORKGROUP_SIZE}, 1, 1)
+fn vibrance(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (!in_bounds(id.x)) { return; }
+    let pixel = input_pixels[id.x];
+    if (opencl_default_hypot_overflows(pixel.y, pixel.z)) {
+        if (vibrance_params.amount == 0.0) {
+            let quiet_nan = bitcast<f32>(0x7fc00000u);
+            output_pixels[id.x] = vec4<f32>(quiet_nan, quiet_nan, quiet_nan, pixel.w);
+            return;
+        }
+        output_pixels[id.x] = vec4<f32>(
+            multiply_by_signed_infinity(pixel.x, vibrance_params.amount > 0.0),
+            multiply_by_signed_infinity(pixel.y, vibrance_params.amount < 0.0),
+            multiply_by_signed_infinity(pixel.z, vibrance_params.amount < 0.0),
+            pixel.w,
+        );
+        return;
+    }
+    let sw = opencl_default_hypot(pixel.y, pixel.z) / 256.0;
+    let lightness_scale = 1.0 - (vibrance_params.amount * sw) * 0.25;
+    let saturation_scale = 1.0 + vibrance_params.amount * sw;
+    output_pixels[id.x] = vec4<f32>(
+        pixel.x * lightness_scale,
+        pixel.y * saturation_scale,
+        pixel.z * saturation_scale,
+        pixel.w,
+    );
+}
+
 // Direct scalar port of data/kernels/extended.cl::velvia. Keep the authored
 // association and comparison clamp: finite inputs can still produce NaN in
 // intermediate overflow, which Darktable's CLAMPS routes to the lower bound.

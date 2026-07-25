@@ -9,13 +9,20 @@ use rusttable_processing::{DefinitionAvailability, builtin_registry};
 use crate::iop::colorcontrast::{
     COLORCONTRAST_MODULE_ID, COLORCONTRAST_SOURCE_MAP, ColorContrastSourceMap,
 };
+use crate::iop::colorcorrection::{
+    COLORCORRECTION_MODULE_ID, COLORCORRECTION_SOURCE_MAP, ColorCorrectionGridState,
+    ColorCorrectionSourceMap,
+};
 use crate::iop::velvia::{VELVIA_MODULE_ID, VELVIA_SOURCE_MAP, VelviaSourceMap};
+use crate::iop::vibrance::{VIBRANCE_MODULE_ID, VIBRANCE_SOURCE_MAP, VibranceSourceMap};
 use crate::presentation::darkroom_controls::{DarkroomControlValue, DarkroomControlViewModel};
 
 use super::super::{
     DarkroomModuleAvailability, DarkroomModuleError, DarkroomModulePreset, DarkroomModuleSide,
     DarkroomModuleViewModel, DarkroomModulesViewModel,
 };
+
+const COLORCORRECTION_PRESETS_UNAVAILABLE_REASON: &str = "Color Correction presets require RGB-display blend state, which the current edit model cannot persist";
 
 pub(super) fn modules_from_registry() -> Result<DarkroomModulesViewModel, DarkroomModuleError> {
     let registry = builtin_registry();
@@ -31,12 +38,16 @@ fn module_from_definition(
     definition: &rusttable_processing::OperationDefinition,
 ) -> DarkroomModuleViewModel {
     let descriptor = definition.descriptor();
+    let vibrance_deprecated_message = (descriptor.id.compatibility_name == VIBRANCE_MODULE_ID)
+        .then_some(VIBRANCE_SOURCE_MAP.deprecated_message());
     let availability = match definition.availability() {
         DefinitionAvailability::Available
             if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
         {
             DarkroomModuleAvailability::Deprecated {
-                reason: "compatibility operation; shown only by the deprecated filter".to_owned(),
+                reason: vibrance_deprecated_message
+                    .unwrap_or("compatibility operation; shown only by the deprecated filter")
+                    .to_owned(),
             }
         }
         DefinitionAvailability::Available => DarkroomModuleAvailability::Supported,
@@ -59,21 +70,30 @@ fn module_from_descriptor(
     availability: DarkroomModuleAvailability,
 ) -> DarkroomModuleViewModel {
     let id = descriptor.id.compatibility_name.as_str();
+    let colorcorrection_source_map =
+        (id == COLORCORRECTION_MODULE_ID).then_some(COLORCORRECTION_SOURCE_MAP);
     let colorcontrast_source_map =
         (id == COLORCONTRAST_MODULE_ID).then_some(COLORCONTRAST_SOURCE_MAP);
     let velvia_source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
+    let vibrance_source_map = (id == VIBRANCE_MODULE_ID).then_some(VIBRANCE_SOURCE_MAP);
     let mut controls = Vec::new();
     for parameter in &descriptor.parameters {
-        if colorcontrast_source_map
-            .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
+        if colorcorrection_source_map
+            .is_some_and(|source_map| source_map.saturation(&parameter.id).is_none())
+            || colorcontrast_source_map
+                .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
+            || vibrance_source_map
+                .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
         {
             continue;
         }
         controls.extend(control_from_parameter(id, parameter));
     }
-    let title = colorcontrast_source_map
+    let title = colorcorrection_source_map
         .map(|source_map| source_map.title().to_owned())
+        .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| velvia_source_map.map(|source_map| source_map.title().to_owned()))
+        .or_else(|| vibrance_source_map.map(|source_map| source_map.title().to_owned()))
         .unwrap_or_else(|| operation_title(descriptor));
     let group_key = descriptor
         .ui
@@ -81,12 +101,16 @@ fn module_from_descriptor(
         .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
     let style_eligible = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
     let hidden = descriptor.flags.contains(OperationFlags::HIDDEN);
-    let default_enabled = colorcontrast_source_map
-        .is_none_or(ColorContrastSourceMap::default_enabled)
-        && velvia_source_map.is_none_or(VelviaSourceMap::default_enabled);
-    let default_expanded = colorcontrast_source_map
-        .is_some_and(ColorContrastSourceMap::default_expanded)
-        || velvia_source_map.is_some_and(VelviaSourceMap::default_expanded);
+    let default_enabled = colorcorrection_source_map
+        .is_none_or(ColorCorrectionSourceMap::default_enabled)
+        && colorcontrast_source_map.is_none_or(ColorContrastSourceMap::default_enabled)
+        && velvia_source_map.is_none_or(VelviaSourceMap::default_enabled)
+        && vibrance_source_map.is_none_or(VibranceSourceMap::default_enabled);
+    let default_expanded = colorcorrection_source_map
+        .is_some_and(ColorCorrectionSourceMap::default_expanded)
+        || colorcontrast_source_map.is_some_and(ColorContrastSourceMap::default_expanded)
+        || velvia_source_map.is_some_and(VelviaSourceMap::default_expanded)
+        || vibrance_source_map.is_some_and(VibranceSourceMap::default_expanded);
     let mut module = DarkroomModuleViewModel::new(
         id,
         title,
@@ -100,7 +124,11 @@ fn module_from_descriptor(
     .expect("registry descriptor projects to a valid darkroom module")
     .with_availability(availability)
     .with_registry_metadata(group_key, style_eligible, hidden);
-    if let Some(source_map) = colorcontrast_source_map {
+    if let Some(source_map) = colorcorrection_source_map {
+        module = module
+            .with_color_correction_grid(ColorCorrectionGridState::DEFAULT)
+            .with_group_keys(source_map.group_keys().iter().copied());
+    } else if let Some(source_map) = colorcontrast_source_map {
         module = module
             .with_group_keys(source_map.group_keys().iter().copied())
             .with_aliases(source_map.aliases().iter().copied());
@@ -108,8 +136,15 @@ fn module_from_descriptor(
         module = module
             .with_group_keys(source_map.group_keys().iter().copied())
             .with_aliases(source_map.aliases().iter().copied());
+    } else if let Some(source_map) = vibrance_source_map {
+        module = module
+            .with_group_keys(source_map.group_keys().iter().copied())
+            .with_aliases(source_map.aliases().iter().copied());
     }
     match id {
+        COLORCORRECTION_MODULE_ID => {
+            module.with_presets_unavailable(COLORCORRECTION_PRESETS_UNAVAILABLE_REASON)
+        }
         "graduatednd" => module.with_presets(graduatednd_presets()),
         "relight" => module.with_presets(relight_presets()),
         "vignette" => module.with_presets(vignette_presets()),
@@ -123,7 +158,17 @@ fn control_from_parameter(
     parameter: &rusttable_processing::descriptor::ParameterDescriptor,
 ) -> Vec<DarkroomControlViewModel> {
     let control_id = format!("{module_id}-{}", ui_parameter_id(&parameter.id));
-    let (source_label, source_slider, source_step) = if module_id == COLORCONTRAST_MODULE_ID {
+    let (source_label, source_slider, source_step) = if module_id == COLORCORRECTION_MODULE_ID {
+        COLORCORRECTION_SOURCE_MAP
+            .saturation(&parameter.id)
+            .map_or((None, None, None), |source| {
+                (
+                    Some(source.label().to_owned()),
+                    Some(source.slider_presentation()),
+                    Some(source.step()),
+                )
+            })
+    } else if module_id == COLORCONTRAST_MODULE_ID {
         COLORCONTRAST_SOURCE_MAP
             .slider(&parameter.id)
             .map_or((None, None, None), |source| {
@@ -135,6 +180,16 @@ fn control_from_parameter(
             })
     } else if module_id == VELVIA_MODULE_ID {
         VELVIA_SOURCE_MAP
+            .slider(&parameter.id)
+            .map_or((None, None, None), |source| {
+                (
+                    Some(source.label().to_owned()),
+                    Some(source.slider_presentation()),
+                    Some(source.step()),
+                )
+            })
+    } else if module_id == VIBRANCE_MODULE_ID {
+        VIBRANCE_SOURCE_MAP
             .slider(&parameter.id)
             .map_or((None, None, None), |source| {
                 (
