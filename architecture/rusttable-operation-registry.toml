@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "7e1c3c9b8b57847c7757cfb57c61bf7d1be616f777f99f2d902a87ecd9382ba1"
+snapshot_hash = "62bb9cd88a94fb67b8b54c2228d4e19288abc66019d58ed2ac69222d977f4f97"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -303,6 +303,14 @@ rust_id = "rusttable.temperature"
 compatibility_name = "temperature"
 descriptor_version = 1
 parameter_version = 4
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.velvia"
+compatibility_name = "velvia"
+descriptor_version = 2
+parameter_version = 2
 implementation_version = 1
 status = "available"
 

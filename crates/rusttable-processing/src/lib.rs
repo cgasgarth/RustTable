@@ -52,7 +52,7 @@ pub use descriptor::{
     highlights_descriptor, invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
     liquify_descriptor, mask_manager_descriptor, perspective_descriptor, primaries_descriptor,
     retouch_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
-    soften_descriptor, temperature_descriptor, vignette_descriptor,
+    soften_descriptor, temperature_descriptor, velvia_descriptor, vignette_descriptor,
 };
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, DistortionBorderMode, DistortionInterpolation,
@@ -150,6 +150,12 @@ pub use operations::spots::{
     SpotsCodecError, SpotsConfig, SpotsEntry, SpotsExecutionError, SpotsForm, SpotsFormKind,
     SpotsHistory, SpotsLegacySpot, SpotsMode, SpotsParametersV1, SpotsParametersV2, SpotsPlan,
     SpotsReceipt,
+};
+pub use operations::velvia::{
+    VELVIA_COMPATIBILITY_ID, VELVIA_DEFAULT_BIAS, VELVIA_DEFAULT_STRENGTH, VELVIA_RUST_ID,
+    VELVIA_SCHEMA_VERSION, VELVIA_V1_PARAMETER_BYTES, VELVIA_V2_PARAMETER_BYTES, VelviaCodecError,
+    VelviaConfig, VelviaHistory, VelviaParameterError, VelviaParametersV1, VelviaParametersV2,
+    VelviaPixel, VelviaPlan, migrate_v1_to_v2 as migrate_velvia_v1_to_v2,
 };
 pub use operations::watermark::{
     ExpandedWatermark, WATERMARK_ALLOWED_FONT_SET_HASH, WATERMARK_COMPATIBILITY_ID,

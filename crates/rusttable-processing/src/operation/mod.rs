@@ -25,6 +25,7 @@ use crate::operations::{
     soften::SoftenConfig,
     spots::SpotsParametersV2,
     temperature::{TemperatureConfig, WhiteBalanceSource},
+    velvia::VelviaConfig,
     vignette::VignetteConfig,
 };
 use crate::{FiniteF32, ScalarNarrowingError};
@@ -52,6 +53,7 @@ mod retouch;
 mod spatial;
 mod spots;
 mod text;
+mod velvia;
 pub(crate) use basicadj::compile_basicadj;
 pub(crate) use censorize::compile_censorize;
 pub(crate) use clahe::compile_clahe;
@@ -66,6 +68,7 @@ pub(crate) use parameters::{
 };
 pub(crate) use spatial::{compile_graduatednd, compile_vignette};
 use text::{invalid_parameters, optional_parameter_text, parameter_bool, parameter_text};
+pub(crate) use velvia::compile_velvia;
 const EXPOSURE_PARAMETER: &str = "stops";
 const EXPOSURE_BLACK_PARAMETER: &str = "black";
 const LINEAR_OFFSET_PARAMETER: &str = "value";
@@ -166,6 +169,9 @@ pub enum ProcessingOperationKind {
     },
     Relight {
         config: RelightConfig,
+    },
+    Velvia {
+        config: VelviaConfig,
     },
     Shadhi {
         config: ShadhiConfig,
@@ -384,6 +390,9 @@ impl ProcessingOperation {
     }
     pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_relight(operation)
+    }
+    pub(crate) fn compile_velvia(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_velvia(operation)
     }
     pub(crate) fn compile_shadhi(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_shadhi(operation)

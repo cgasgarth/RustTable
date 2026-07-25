@@ -19,11 +19,20 @@ use rusttable_pixelpipe::{
 use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
+    operation_with_opacity(id, key, OperationOpacity::ONE, parameters)
+}
+
+fn operation_with_opacity(
+    id: u128,
+    key: &str,
+    opacity: OperationOpacity,
+    parameters: &[(&str, f64)],
+) -> Operation {
     Operation::new_with_opacity(
         OperationId::new(id).expect("nonzero ID"),
         OperationKey::new(key).expect("valid key"),
         true,
-        OperationOpacity::ONE,
+        opacity,
         parameters.iter().map(|(name, value)| {
             (
                 ParameterName::new(*name).expect("valid parameter"),
@@ -343,6 +352,237 @@ async fn qualified_wgpu_basic_service_matches_cpu_reference_when_gpu_is_availabl
         assert!((actual.green() - expected.green()).abs() < 0.00001);
         assert!((actual.blue() - expected.blue()).abs() < 0.00001);
         assert_eq!(actual.alpha().to_bits(), expected.alpha().to_bits());
+    }
+}
+
+fn velvia_snapshot(
+    opacity: OperationOpacity,
+    include_surrounding_operations: bool,
+) -> CpuPixelpipeSnapshot {
+    velvia_snapshot_with_strength(opacity, include_surrounding_operations, 85.0)
+}
+
+fn velvia_snapshot_with_strength(
+    opacity: OperationOpacity,
+    include_surrounding_operations: bool,
+    strength: f64,
+) -> CpuPixelpipeSnapshot {
+    velvia_snapshot_with_parameters(opacity, include_surrounding_operations, strength, 0.2)
+}
+
+fn velvia_snapshot_with_parameters(
+    opacity: OperationOpacity,
+    include_surrounding_operations: bool,
+    strength: f64,
+    bias: f64,
+) -> CpuPixelpipeSnapshot {
+    let dimensions = RasterDimensions::new(4, 2).expect("dimensions");
+    let image = RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LinearSrgbD65),
+        vec![
+            RgbaF32Pixel::new(0.10, 0.20, 0.30, 0.0),
+            RgbaF32Pixel::new(0.99, 0.90, 0.90, 0.37),
+            RgbaF32Pixel::new(2.00, 2.00, 2.00, 1.0),
+            RgbaF32Pixel::new(-0.25, 0.50, 1.25, f32::from_bits(1)),
+            RgbaF32Pixel::new(0.30, 0.30, 0.30, 0.25),
+            RgbaF32Pixel::new(0.75, 0.20, 0.45, 0.50),
+            RgbaF32Pixel::new(0.01, 0.02, 0.01, 0.75),
+            RgbaF32Pixel::new(1.20, 0.95, 0.90, f32::from_bits(0x3eaa_aaab)),
+        ],
+    )
+    .expect("Velvia input");
+    let mut operations = Vec::new();
+    if include_surrounding_operations {
+        operations.push(operation(
+            0x3001,
+            "rusttable.exposure",
+            &[("stops", 0.25), ("black", 0.01)],
+        ));
+    }
+    operations.push(operation_with_opacity(
+        0x3002,
+        "rusttable.velvia",
+        opacity,
+        &[("strength", strength), ("bias", bias)],
+    ));
+    if include_surrounding_operations {
+        operations.push(operation(
+            0x3003,
+            "rusttable.linear_offset",
+            &[("value", -0.025)],
+        ));
+    }
+    let edit = Edit::from_parts(
+        EditId::new(0x3000).expect("edit ID"),
+        PhotoId::new(0x3010).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        operations,
+    )
+    .expect("Velvia edit");
+    CpuPixelpipeSnapshot::new(
+        image,
+        CompiledOperationGraph::compile(&edit).expect("Velvia graph"),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+}
+
+#[test]
+fn velvia_snapshot_identity_includes_strength_and_bias_bits() {
+    let baseline =
+        velvia_snapshot_with_parameters(OperationOpacity::ONE, false, 25.0, 0.75).identity();
+    let changed_strength =
+        velvia_snapshot_with_parameters(OperationOpacity::ONE, false, 25.5, 0.75).identity();
+    let changed_bias =
+        velvia_snapshot_with_parameters(OperationOpacity::ONE, false, 25.0, 0.5).identity();
+
+    assert_ne!(baseline, changed_strength);
+    assert_ne!(baseline, changed_bias);
+    assert_ne!(changed_strength, changed_bias);
+}
+
+#[tokio::test]
+async fn wgpu_velvia_matches_cpu_corpus_full_frame_and_tiled() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let snapshot = velvia_snapshot(OperationOpacity::ONE, false);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU Velvia result");
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let full = service
+        .execute(&snapshot)
+        .expect("full-frame GPU Velvia result");
+    let tiled = service
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled GPU Velvia result");
+
+    assert_eq!(full.receipt().backend(), PixelpipeBackend::WgpuBasic);
+    assert_eq!(full.receipt().dispatches(), 1);
+    assert_eq!(tiled.receipt().backend(), PixelpipeBackend::WgpuTiled);
+    assert_eq!(tiled.receipt().dispatches(), 4);
+    assert_gpu_image_matches_cpu(
+        "Velvia full frame",
+        full.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.00001,
+    );
+    assert_gpu_image_matches_cpu(
+        "Velvia tiled",
+        tiled.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.00001,
+    );
+    assert_eq!(
+        canonical.image().pixels()[2].red().to_bits(),
+        1.0_f32.to_bits(),
+        "positive-strength Velvia clips output RGB"
+    );
+}
+
+#[tokio::test]
+async fn zero_strength_velvia_is_cpu_and_wgpu_bit_exact_identity() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let snapshot = velvia_snapshot_with_strength(OperationOpacity::ONE, false, 0.0);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("zero-strength CPU Velvia result");
+    let selected = PixelpipeExecutionService::with_gpu(runtime)
+        .execute(&snapshot)
+        .expect("zero-strength GPU Velvia result");
+
+    assert_eq!(selected.receipt().backend(), PixelpipeBackend::WgpuBasic);
+    assert_eq!(selected.receipt().dispatches(), 1);
+    for (index, ((source, cpu), gpu)) in snapshot
+        .input()
+        .pixels()
+        .iter()
+        .zip(canonical.image().pixels())
+        .zip(selected.image().pixels())
+        .enumerate()
+    {
+        let bits = |pixel: &RgbaF32Pixel| {
+            [
+                pixel.red().to_bits(),
+                pixel.green().to_bits(),
+                pixel.blue().to_bits(),
+                pixel.alpha().to_bits(),
+            ]
+        };
+        assert_eq!(bits(cpu), bits(source), "CPU pixel {index}");
+        assert_eq!(bits(gpu), bits(source), "WGPU pixel {index}");
+    }
+}
+
+#[tokio::test]
+async fn wgpu_velvia_preserves_authored_multi_operation_order() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let snapshot = velvia_snapshot(OperationOpacity::ONE, true);
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("ordered CPU result");
+    let selected = PixelpipeExecutionService::with_gpu(runtime)
+        .execute(&snapshot)
+        .expect("ordered GPU result");
+
+    assert_eq!(selected.receipt().backend(), PixelpipeBackend::WgpuBasic);
+    assert_eq!(selected.receipt().dispatches(), 3);
+    assert_gpu_image_matches_cpu(
+        "Velvia point-chain order",
+        selected.image(),
+        canonical.image(),
+        snapshot.input().descriptor(),
+        0.00001,
+    );
+}
+
+#[tokio::test]
+async fn masked_and_partial_opacity_velvia_remain_truthful_cpu_fallbacks() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let cases = [
+        (
+            "masked",
+            with_uniform_mask(velvia_snapshot(OperationOpacity::ONE, false), 0x3002),
+        ),
+        (
+            "partial opacity",
+            velvia_snapshot(OperationOpacity::new(0.5).expect("partial opacity"), false),
+        ),
+    ];
+
+    for (label, snapshot) in cases {
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} CPU result: {error}"));
+        let full = service
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} selected result: {error}"));
+        let tiled = service
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .unwrap_or_else(|error| panic!("{label} tiled result: {error}"));
+
+        assert_eq!(
+            full.receipt().backend(),
+            PixelpipeBackend::CpuCanonical,
+            "{label} full-frame qualification"
+        );
+        assert_eq!(
+            tiled.receipt().backend(),
+            PixelpipeBackend::CpuTiledFallback,
+            "{label} tiled qualification"
+        );
+        assert_eq!(full.image(), canonical.image(), "{label} full frame");
+        assert_eq!(tiled.image(), canonical.image(), "{label} tiled");
     }
 }
 

@@ -54,24 +54,27 @@ pub(crate) fn install(
                     outcome.modules(),
                     slot_for_handler.borrow().clone(),
                 );
-                action_shell.set_darkroom_status(&format!(
-                    "Edit persisted · revision {}",
-                    outcome.revision()
-                ));
-                if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
-                    // Invalidate the shared filmstrip before the new preview request starts. This
-                    // prevents an old thumbnail worker from briefly publishing after persistence
-                    // has advanced the edit identity but before the new preview is ready.
-                    after_commit();
+                if outcome.processing_changed() {
+                    action_shell.set_darkroom_status(&format!(
+                        "Edit persisted · revision {}",
+                        outcome.revision()
+                    ));
+                    if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
+                        // Invalidate the shared filmstrip before the new preview request starts.
+                        // This prevents an old thumbnail worker from briefly publishing after
+                        // persistence has advanced the edit identity but before the new preview
+                        // is ready.
+                        after_commit();
+                    }
+                    crate::composition::selected_preview::start_selected_preview(
+                        &action_shell,
+                        action_catalog.borrow().clone(),
+                        Rc::clone(&action_lifecycle),
+                        &thumbnail_lifecycle,
+                        diagnostics.clone(),
+                        action_display_profile.borrow().as_ref(),
+                    );
                 }
-                crate::composition::selected_preview::start_selected_preview(
-                    &action_shell,
-                    action_catalog.borrow().clone(),
-                    Rc::clone(&action_lifecycle),
-                    &thumbnail_lifecycle,
-                    diagnostics.clone(),
-                    action_display_profile.borrow().as_ref(),
-                );
                 Ok(outcome.revision())
             }
             Err(error) => {

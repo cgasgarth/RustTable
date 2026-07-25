@@ -65,56 +65,72 @@ fn app_shell_transition_paints_darkroom_titles() {
     shell.window().set_default_size(1_228, 768);
     let root: gtk4::Widget = shell.window().clone().upcast();
     let rail = find_widget(&root, "darkroom-left-panel").expect("darkroom left rail");
-    let left_stack = find_widget(&root, "left-panel-stack").expect("left panel stack");
+    let workspace_stack = find_widget(&root, "center-workspace")
+        .expect("center workspace")
+        .downcast::<gtk4::Stack>()
+        .expect("center workspace is a stack");
+    let left_stack = find_widget(&root, "left-panel-stack")
+        .expect("left panel stack")
+        .downcast::<gtk4::Stack>()
+        .expect("left panel stack is a stack");
     let left_split = find_widget(&root, "desktop-left-split")
         .expect("desktop left split")
         .downcast::<gtk4::Paned>()
         .expect("desktop left split is a paned");
+    let lighttable_page = find_widget(&root, "lighttable-page").expect("lighttable page");
     let photo_id = PhotoId::new(949).expect("test photo id");
     let workspace = test_workspace(photo_id);
 
+    shell.show_workspace(WorkspaceRole::Lighttable);
     map_inert_test_window(shell.window());
-    let transitioned = Rc::new(Cell::new(false));
-    gtk4::glib::idle_add_local_once({
-        let shell = shell.clone();
-        let transitioned = Rc::clone(&transitioned);
-        move || {
-            shell.set_photo_workspace(&workspace);
-            shell.set_collection_filter_state(&test_collection(photo_id));
-            assert!(shell.open_photo(photo_id), "selected photo opens darkroom");
-            shell.begin_darkroom_selection(photo_id, ViewportGeneration::new(1));
-            let metadata = thumbnail_metadata();
-            shell
-                .set_photo_thumbnail(photo_id, &metadata)
-                .expect("bounded navigation and filmstrip thumbnail");
-            let histogram = HistogramData::from_rgba8(metadata.dimensions(), metadata.pixels())
-                .expect("test histogram");
-            shell
-                .set_darkroom_preview_result(ViewportGeneration::new(1), &metadata, Ok(histogram))
-                .expect("darkroom preview publishes");
-            shell.show_workspace(WorkspaceRole::Lighttable);
-            gtk4::glib::idle_add_local_once(move || {
-                shell.show_workspace(WorkspaceRole::Darkroom);
-                left_split.set_position(i32::from(DARKROOM_PANEL_WIDTHS.left_px));
-                transitioned.set(true);
-            });
-        }
-    });
     settle_gtk_until(
         || {
-            transitioned.get()
-                && rail.is_mapped()
+            lighttable_page.is_mapped()
+                && lighttable_page.allocated_width() > 1
+                && lighttable_page.allocated_height() > 0
+        },
+        || {
+            format!(
+                "initial lighttable={}x{}, mapped={}",
+                lighttable_page.allocated_width(),
+                lighttable_page.allocated_height(),
+                lighttable_page.is_mapped()
+            )
+        },
+    );
+    shell.set_photo_workspace(&workspace);
+    shell.set_collection_filter_state(&test_collection(photo_id));
+    assert!(shell.open_photo(photo_id), "selected photo opens darkroom");
+    shell.begin_darkroom_selection(photo_id, ViewportGeneration::new(1));
+    let metadata = thumbnail_metadata();
+    shell
+        .set_photo_thumbnail(photo_id, &metadata)
+        .expect("bounded navigation and filmstrip thumbnail");
+    let histogram = HistogramData::from_rgba8(metadata.dimensions(), metadata.pixels())
+        .expect("test histogram");
+    shell
+        .set_darkroom_preview_result(ViewportGeneration::new(1), &metadata, Ok(histogram))
+        .expect("darkroom preview publishes");
+    shell.show_workspace(WorkspaceRole::Lighttable);
+    shell.show_workspace(WorkspaceRole::Darkroom);
+    left_split.set_position(i32::from(DARKROOM_PANEL_WIDTHS.left_px));
+    settle_gtk_until(
+        || {
+            rail.is_mapped()
                 && rail.allocated_width() > 1
                 && left_stack.allocated_width() > 0
                 && left_stack.allocated_height() > 0
         },
         || {
             format!(
-                "stack={}x{}, rail={}x{}",
+                "workspace={:?}, left={:?}, stack={}x{}, rail={}x{}, mapped={}",
+                workspace_stack.visible_child_name(),
+                left_stack.visible_child_name(),
                 left_stack.allocated_width(),
                 left_stack.allocated_height(),
                 rail.allocated_width(),
-                rail.allocated_height()
+                rail.allocated_height(),
+                rail.is_mapped()
             )
         },
     );

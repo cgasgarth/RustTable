@@ -39,6 +39,7 @@ pub use crate::operations::rotatepixels::rotatepixels_descriptor;
 pub use crate::operations::scalepixels::scalepixels_descriptor;
 pub use crate::operations::shadhi::shadhi_descriptor;
 pub use crate::operations::spots::spots_descriptor;
+pub use crate::operations::velvia::velvia_descriptor;
 pub use crate::operations::vignette::vignette_descriptor;
 pub use crate::operations::watermark::watermark_descriptor;
 pub use censorize::censorize_descriptor;

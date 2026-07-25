@@ -63,6 +63,7 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::Relight { .. } => {
             crate::descriptor::relight_descriptor().id
         }
+        crate::ProcessingOperationKind::Velvia { .. } => crate::descriptor::velvia_descriptor().id,
         crate::ProcessingOperationKind::Shadhi { .. } => crate::descriptor::shadhi_descriptor().id,
         crate::ProcessingOperationKind::Vignette { .. } => {
             crate::descriptor::vignette_descriptor().id

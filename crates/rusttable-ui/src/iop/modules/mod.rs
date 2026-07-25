@@ -76,16 +76,17 @@ impl DarkroomModuleGroup {
                     && !module.availability().is_deprecated()
             }
             Self::Deprecated => module.availability().is_deprecated(),
-            Self::Basic => !module.is_hidden() && module.group_key() == "group.basic",
-            Self::Tone => !module.is_hidden() && module.group_key() == "group.tone",
-            Self::Color => !module.is_hidden() && module.group_key() == "group.color",
+            Self::Basic => !module.is_hidden() && module.belongs_to_group("group.basic"),
+            Self::Tone => !module.is_hidden() && module.belongs_to_group("group.tone"),
+            Self::Color => !module.is_hidden() && module.belongs_to_group("group.color"),
             Self::Correct => {
                 !module.is_hidden()
-                    && matches!(module.group_key(), "group.correct" | "group.corrective")
+                    && (module.belongs_to_group("group.correct")
+                        || module.belongs_to_group("group.corrective"))
             }
-            Self::Effects => !module.is_hidden() && module.group_key() == "group.effects",
-            Self::Grading => !module.is_hidden() && module.group_key() == "group.grading",
-            Self::Technical => !module.is_hidden() && module.group_key() == "group.technical",
+            Self::Effects => !module.is_hidden() && module.belongs_to_group("group.effects"),
+            Self::Grading => !module.is_hidden() && module.belongs_to_group("group.grading"),
+            Self::Technical => !module.is_hidden() && module.belongs_to_group("group.technical"),
         }
     }
 }
@@ -105,7 +106,9 @@ pub struct DarkroomModuleViewModel {
     presets: Vec<DarkroomModulePreset>,
     availability: DarkroomModuleAvailability,
     status: DarkroomModuleStatus,
-    group_key: String,
+    group_keys: Vec<String>,
+    aliases: Vec<String>,
+    style_eligible: bool,
     favorite: bool,
     hidden: bool,
 }
@@ -150,7 +153,9 @@ impl DarkroomModuleViewModel {
             presets: Vec::new(),
             availability: DarkroomModuleAvailability::Supported,
             status: DarkroomModuleStatus::Ready,
-            group_key: "group.basic".to_owned(),
+            group_keys: vec!["group.basic".to_owned()],
+            aliases: Vec::new(),
+            style_eligible: false,
             favorite: false,
             hidden: false,
         })
@@ -201,18 +206,69 @@ impl DarkroomModuleViewModel {
     pub fn with_registry_metadata(
         mut self,
         group_key: impl Into<String>,
-        favorite: bool,
+        style_eligible: bool,
         hidden: bool,
     ) -> Self {
-        self.group_key = group_key.into();
-        self.favorite = favorite;
+        self.group_keys = vec![group_key.into()];
+        self.style_eligible = style_eligible;
         self.hidden = hidden;
         self
     }
 
     #[must_use]
+    pub fn with_group_keys<I, S>(mut self, group_keys: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let group_keys = group_keys.into_iter().map(Into::into).collect::<Vec<_>>();
+        if !group_keys.is_empty() {
+            self.group_keys = group_keys;
+        }
+        self
+    }
+
+    #[must_use]
+    pub fn with_aliases<I, S>(mut self, aliases: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.aliases = aliases.into_iter().map(Into::into).collect();
+        self
+    }
+
+    #[must_use]
     pub fn group_key(&self) -> &str {
-        &self.group_key
+        self.group_keys
+            .first()
+            .map_or("group.basic", String::as_str)
+    }
+
+    #[must_use = "iterate over every source group in declaration order"]
+    pub fn group_keys(&self) -> impl ExactSizeIterator<Item = &str> {
+        self.group_keys.iter().map(String::as_str)
+    }
+
+    #[must_use]
+    pub fn belongs_to_group(&self, group_key: &str) -> bool {
+        self.group_keys.iter().any(|group| group == group_key)
+    }
+
+    #[must_use = "iterate over module search aliases"]
+    pub fn aliases(&self) -> impl ExactSizeIterator<Item = &str> {
+        self.aliases.iter().map(String::as_str)
+    }
+
+    #[must_use]
+    pub const fn is_style_eligible(&self) -> bool {
+        self.style_eligible
+    }
+
+    #[must_use]
+    pub const fn with_favorite(mut self, favorite: bool) -> Self {
+        self.favorite = favorite;
+        self
     }
 
     #[must_use]
@@ -399,7 +455,7 @@ impl DarkroomModuleViewModel {
                     self.record_control_error(DarkroomControlError::UnknownControl(control_id))
                 );
             };
-            control.set_value(value).map_err(|error| {
+            control.set_persisted_value(value).map_err(|error| {
                 self.record_control_error(DarkroomControlError::Validation(error))
             })?;
         }
@@ -456,7 +512,10 @@ impl DarkroomModuleViewModel {
     ///
     /// # Errors
     ///
-    /// Returns an error when the caller's revision is stale or cannot advance.
+    /// Returns an error when the caller's processing revision is stale.
+    ///
+    /// Disclosure is presentation-only, so it deliberately does not advance
+    /// the edit revision shared with persistence callbacks.
     pub fn set_expanded(
         &mut self,
         expected_revision: Revision,
@@ -464,7 +523,15 @@ impl DarkroomModuleViewModel {
     ) -> Result<Revision, DarkroomModuleError> {
         self.check_revision(expected_revision)?;
         self.expanded = expanded;
-        self.advance_revision()
+        self.status = DarkroomModuleStatus::Ready;
+        Ok(self.revision)
+    }
+
+    /// Restores controller-owned disclosure state after processing state is
+    /// reprojected. This is presentation-only and never changes the edit
+    /// revision.
+    pub fn restore_expanded_presentation(&mut self, expanded: bool) {
+        self.expanded = expanded;
     }
 
     /// Enables/disables the module and leaves its typed controls intact.
@@ -750,7 +817,12 @@ pub fn build_module_panel_with_actions(
         module.expanded(),
         Some(&content),
     );
-    expander.set_label_widget(Some(&module_title(module.id(), module.title())));
+    let title = if module.id() == crate::iop::velvia::VELVIA_MODULE_ID {
+        crate::iop::velvia::module_title_widget()
+    } else {
+        module_title(module.id(), module.title())
+    };
+    expander.set_label_widget(Some(&title));
     expander.set_accessible_role(gtk4::AccessibleRole::Group);
     expander.update_property(&[Property::Label(module.title())]);
     apply_theme_role(&expander, ThemeRole::Module);
@@ -762,6 +834,7 @@ pub fn build_module_panel_with_actions(
         let handler_for_expander = handler.clone();
         let module_id_for_expander = module_id.clone();
         expander.connect_notify_local(Some("expanded"), move |expander, _| {
+            let expected_revision = *current_revision_for_expander.borrow();
             dispatch_module_action(
                 &handler_for_expander,
                 &status_for_expander,
@@ -769,7 +842,7 @@ pub fn build_module_panel_with_actions(
                 &current_revision_for_expander,
                 DarkroomModuleAction::Disclosure {
                     module_id: module_id_for_expander.clone(),
-                    expected_revision: *current_revision_for_expander.borrow(),
+                    expected_revision,
                     expanded: expander.is_expanded(),
                 },
             );
@@ -792,6 +865,7 @@ pub fn build_module_panel_with_actions(
             for row in &control_rows {
                 row.set_sensitive(module_available && enabled.is_active());
             }
+            let expected_revision = *current_revision_for_enabled.borrow();
             dispatch_module_action(
                 &handler_for_enabled,
                 &status_for_enabled,
@@ -799,7 +873,7 @@ pub fn build_module_panel_with_actions(
                 &current_revision_for_enabled,
                 DarkroomModuleAction::Enable {
                     module_id: module_id_for_enabled.clone(),
-                    expected_revision: *current_revision_for_enabled.borrow(),
+                    expected_revision,
                     enabled: enabled.is_active(),
                 },
             );
@@ -812,6 +886,7 @@ pub fn build_module_panel_with_actions(
             let current_revision_for_reset = current_revision.clone();
             let module_id_for_reset = module_id.clone();
             reset.connect_clicked(move |_| {
+                let expected_revision = *current_revision_for_reset.borrow();
                 dispatch_module_action(
                     &handler_for_reset,
                     &status_for_reset,
@@ -819,7 +894,7 @@ pub fn build_module_panel_with_actions(
                     &current_revision_for_reset,
                     DarkroomModuleAction::Reset {
                         module_id: module_id_for_reset.clone(),
-                        expected_revision: *current_revision_for_reset.borrow(),
+                        expected_revision,
                     },
                 );
             });
@@ -842,6 +917,7 @@ pub fn build_module_panel_with_actions(
                 let Some(preset_id) = preset_ids.get(index) else {
                     return;
                 };
+                let expected_revision = *current_revision_for_presets.borrow();
                 dispatch_module_action(
                     &handler_for_presets,
                     &status_for_presets,
@@ -849,7 +925,7 @@ pub fn build_module_panel_with_actions(
                     &current_revision_for_presets,
                     DarkroomModuleAction::Preset {
                         module_id: module_id_for_presets.clone(),
-                        expected_revision: *current_revision_for_presets.borrow(),
+                        expected_revision,
                         preset_id: preset_id.clone(),
                     },
                 );
@@ -862,6 +938,7 @@ pub fn build_module_panel_with_actions(
         let recover_for_recovery = recover.clone();
         let module_id_for_recovery = module_id.clone();
         recover.connect_clicked(move |_| {
+            let expected_revision = *current_revision_for_recovery.borrow();
             dispatch_module_action(
                 &handler_for_recovery,
                 &status_for_recovery,
@@ -869,7 +946,7 @@ pub fn build_module_panel_with_actions(
                 &current_revision_for_recovery,
                 DarkroomModuleAction::Recover {
                     module_id: module_id_for_recovery.clone(),
-                    expected_revision: *current_revision_for_recovery.borrow(),
+                    expected_revision,
                 },
             );
         });
@@ -956,7 +1033,8 @@ pub(crate) fn module_matches_search(module: &DarkroomModuleViewModel, query: &st
 }
 
 fn module_matches_query(module: &DarkroomModuleViewModel, query: &str) -> bool {
-    search_matches(query, module.title(), module.id(), &[])
+    let aliases = module.aliases().collect::<Vec<_>>();
+    search_matches(query, module.title(), module.id(), &aliases)
 }
 
 pub(crate) fn search_matches(query: &str, title: &str, id: &str, aliases: &[&str]) -> bool {

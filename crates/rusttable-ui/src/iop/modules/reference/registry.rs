@@ -6,6 +6,7 @@ use rusttable_processing::descriptor::{
 };
 use rusttable_processing::{DefinitionAvailability, builtin_registry};
 
+use crate::iop::velvia::{VELVIA_MODULE_ID, VELVIA_SOURCE_MAP, VelviaSourceMap};
 use crate::presentation::darkroom_controls::{DarkroomControlValue, DarkroomControlViewModel};
 
 use super::super::{
@@ -55,30 +56,41 @@ fn module_from_descriptor(
     availability: DarkroomModuleAvailability,
 ) -> DarkroomModuleViewModel {
     let id = descriptor.id.compatibility_name.as_str();
+    let source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
     let mut controls = Vec::new();
     for parameter in &descriptor.parameters {
         controls.extend(control_from_parameter(id, parameter));
     }
-    let title = operation_title(descriptor);
+    let title = source_map.map_or_else(
+        || operation_title(descriptor),
+        |source_map| source_map.title().to_owned(),
+    );
     let group_key = descriptor
         .ui
         .as_ref()
         .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
-    let favorite = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
+    let style_eligible = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
     let hidden = descriptor.flags.contains(OperationFlags::HIDDEN);
-    let module = DarkroomModuleViewModel::new(
+    let default_enabled = source_map.is_none_or(VelviaSourceMap::default_enabled);
+    let default_expanded = source_map.is_some_and(VelviaSourceMap::default_expanded);
+    let mut module = DarkroomModuleViewModel::new(
         id,
         title,
         DarkroomModuleSide::Right,
-        false,
-        availability.is_supported(),
+        default_expanded,
+        availability.is_supported() && default_enabled,
         !controls.is_empty(),
         Revision::from_u64(0),
         controls,
     )
     .expect("registry descriptor projects to a valid darkroom module")
     .with_availability(availability)
-    .with_registry_metadata(group_key, favorite, hidden);
+    .with_registry_metadata(group_key, style_eligible, hidden);
+    if let Some(source_map) = source_map {
+        module = module
+            .with_group_keys(source_map.group_keys().iter().copied())
+            .with_aliases(source_map.aliases().iter().copied());
+    }
     match id {
         "graduatednd" => module.with_presets(graduatednd_presets()),
         "relight" => module.with_presets(relight_presets()),
@@ -93,7 +105,13 @@ fn control_from_parameter(
     parameter: &rusttable_processing::descriptor::ParameterDescriptor,
 ) -> Vec<DarkroomControlViewModel> {
     let control_id = format!("{module_id}-{}", ui_parameter_id(&parameter.id));
-    let label = parameter_label(&parameter.id);
+    let source_slider = (module_id == VELVIA_MODULE_ID)
+        .then(|| VELVIA_SOURCE_MAP.slider(&parameter.id))
+        .flatten();
+    let label = source_slider.map_or_else(
+        || parameter_label(&parameter.id),
+        |source_slider| source_slider.label().to_owned(),
+    );
     let result = match (&parameter.kind, &parameter.default) {
         (ParameterKind::Scalar { minimum, maximum }, ParameterDefault::Scalar(default)) => {
             vec![DarkroomControlViewModel::slider(
@@ -172,7 +190,16 @@ fn control_from_parameter(
         }
         _ => Vec::new(),
     };
-    result.into_iter().filter_map(Result::ok).collect()
+    result
+        .into_iter()
+        .filter_map(Result::ok)
+        .map(|control| match source_slider {
+            Some(source_slider) => {
+                control.with_source_mapped_slider(source_slider.slider_presentation())
+            }
+            None => control,
+        })
+        .collect()
 }
 
 fn ui_parameter_id(parameter_id: &str) -> String {
@@ -369,7 +396,9 @@ mod tests {
         );
         assert!(modules.module("graduatednd").is_some());
         assert!(modules.module("vignette").is_some());
-        assert!(modules.module("grain").expect("grain").is_favorite());
+        let grain = modules.module("grain").expect("grain");
+        assert!(grain.is_style_eligible());
+        assert!(!grain.is_favorite());
         assert!(
             modules
                 .module("finalscale")

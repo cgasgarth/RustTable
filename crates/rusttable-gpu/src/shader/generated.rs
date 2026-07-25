@@ -17,3 +17,4 @@ pub const ENTRY_PROBE_ID: &str = "rusttable.point.probe";
 pub const ENTRY_RGB_GAIN_ID: &str = "rusttable.point.rgb_gain";
 pub const ENTRY_TRANSFER_DECODE_ID: &str = "rusttable.point.transfer_decode";
 pub const ENTRY_TRANSFER_ENCODE_ID: &str = "rusttable.point.transfer_encode";
+pub const ENTRY_VELVIA_ID: &str = "rusttable.point.velvia";

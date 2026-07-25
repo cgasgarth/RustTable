@@ -4277,11 +4277,13 @@ version = "0.1.0"
 dependencies = [
  "rusttable-catalog",
  "rusttable-catalog-store",
+ "rusttable-compat",
  "rusttable-core",
  "rusttable-image",
  "rusttable-image-io",
  "rusttable-metadata",
  "rusttable-processing",
+ "rusttable-sqlite-native",
  "sha2",
  "tracing",
 ]

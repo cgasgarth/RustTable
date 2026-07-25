@@ -1,3 +1,6 @@
+//! WGPU point-operation execution, including the direct Velvia port from
+//! `data/kernels/extended.cl::velvia` and `src/iop/velvia.c`.
+
 use std::fmt;
 use std::num::NonZeroU64;
 
@@ -7,6 +10,8 @@ use crate::{FaultState, GpuRuntime};
 const WORKGROUP_SIZE: u32 = 256;
 const POINT_PARAMS_SIZE: u64 = 64;
 const POINT_PARAMS_BYTES: usize = 64;
+const VELVIA_STRENGTH_OFFSET: usize = 56;
+const VELVIA_BIAS_OFFSET: usize = 60;
 const BASICADJ_PARAMS_SIZE: u64 = 48;
 const BASICADJ_PARAMS_BYTES: usize = 48;
 
@@ -45,6 +50,7 @@ pub enum BasicPointOperation {
     Exposure { stops: f32, black: f32 },
     LinearOffset { value: f32 },
     RgbGain { red: f32, green: f32, blue: f32 },
+    Velvia { strength: f32, bias: f32 },
 }
 
 impl BasicPointOperation {
@@ -54,6 +60,7 @@ impl BasicPointOperation {
             Self::Exposure { .. } => "exposure",
             Self::LinearOffset { .. } => "linear_offset",
             Self::RgbGain { .. } => "rgb_gain",
+            Self::Velvia { .. } => "velvia",
         }
     }
 
@@ -61,7 +68,7 @@ impl BasicPointOperation {
         let mut bytes = [0_u8; POINT_PARAMS_BYTES];
         bytes[0..4].copy_from_slice(&pixel_count.to_le_bytes());
         let values = match self {
-            Self::BasicAdj(_) => [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0],
+            Self::BasicAdj(_) | Self::Velvia { .. } => [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::Exposure { stops, black } => [stops, 0.0, 1.0, 1.0, 1.0, 2.2, black],
             Self::LinearOffset { value } => [0.0, value, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::RgbGain { red, green, blue } => [0.0, 0.0, red, green, blue, 2.2, 0.0],
@@ -69,6 +76,11 @@ impl BasicPointOperation {
         for (index, value) in values.into_iter().enumerate() {
             let offset = 28 + index * 4;
             bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        if let Self::Velvia { strength, bias } = self {
+            bytes[VELVIA_STRENGTH_OFFSET..VELVIA_BIAS_OFFSET]
+                .copy_from_slice(&strength.to_le_bytes());
+            bytes[VELVIA_BIAS_OFFSET..POINT_PARAMS_BYTES].copy_from_slice(&bias.to_le_bytes());
         }
         bytes
     }
@@ -97,6 +109,30 @@ impl BasicPointOperation {
         }
         bytes[36..40].copy_from_slice(&parameters.preserve_colors.to_le_bytes());
         bytes
+    }
+
+    fn parameters_are_finite(self) -> bool {
+        match self {
+            Self::BasicAdj(parameters) => [
+                parameters.black_point,
+                parameters.scale,
+                parameters.gamma,
+                parameters.middle_grey,
+                parameters.contrast,
+                parameters.hlcomp,
+                parameters.hlrange,
+                parameters.saturation,
+                parameters.vibrance,
+            ]
+            .iter()
+            .all(|value| value.is_finite()),
+            Self::Exposure { stops, black } => stops.is_finite() && black.is_finite(),
+            Self::LinearOffset { value } => value.is_finite(),
+            Self::RgbGain { red, green, blue } => {
+                red.is_finite() && green.is_finite() && blue.is_finite()
+            }
+            Self::Velvia { strength, bias } => strength.is_finite() && bias.is_finite(),
+        }
     }
 }
 
@@ -482,26 +518,11 @@ fn validate_request(
     if let Some(component) = request.pixels.iter().position(|value| !value.is_finite()) {
         return Err(BasicPointError::NonFiniteInput { component });
     }
-    if request.operations.iter().any(|operation| match operation {
-        BasicPointOperation::BasicAdj(parameters) => [
-            parameters.black_point,
-            parameters.scale,
-            parameters.gamma,
-            parameters.middle_grey,
-            parameters.contrast,
-            parameters.hlcomp,
-            parameters.hlrange,
-            parameters.saturation,
-            parameters.vibrance,
-        ]
+    if request
+        .operations
         .iter()
-        .any(|value| !value.is_finite()),
-        BasicPointOperation::Exposure { stops, black } => !stops.is_finite() || !black.is_finite(),
-        BasicPointOperation::LinearOffset { value } => !value.is_finite(),
-        BasicPointOperation::RgbGain { red, green, blue } => {
-            !red.is_finite() || !green.is_finite() || !blue.is_finite()
-        }
-    }) {
+        .any(|operation| !operation.parameters_are_finite())
+    {
         return Err(BasicPointError::NonFiniteParameter);
     }
     let workgroups = request.pixels.len().div_ceil(4 * WORKGROUP_SIZE as usize) as u64;
@@ -540,12 +561,61 @@ mod tests {
     }
 
     #[test]
+    fn velvia_parameters_use_the_final_reserved_uniform_words() {
+        let bytes = BasicPointOperation::Velvia {
+            strength: 0.25,
+            bias: 0.75,
+        }
+        .params(11);
+        let established = BasicPointOperation::LinearOffset { value: 0.0 }.params(11);
+        assert_eq!(&bytes[0..4], &11_u32.to_le_bytes());
+        assert_eq!(
+            &bytes[..VELVIA_STRENGTH_OFFSET],
+            &established[..VELVIA_STRENGTH_OFFSET],
+            "Velvia must not disturb the established point uniform fields"
+        );
+        assert_eq!(
+            &bytes[VELVIA_STRENGTH_OFFSET..VELVIA_BIAS_OFFSET],
+            &0.25_f32.to_le_bytes()
+        );
+        assert_eq!(
+            &bytes[VELVIA_BIAS_OFFSET..POINT_PARAMS_BYTES],
+            &0.75_f32.to_le_bytes()
+        );
+        assert_eq!(bytes.len(), POINT_PARAMS_BYTES);
+    }
+
+    #[test]
+    fn velvia_parameter_validation_rejects_each_non_finite_scalar() {
+        for operation in [
+            BasicPointOperation::Velvia {
+                strength: f32::NAN,
+                bias: 1.0,
+            },
+            BasicPointOperation::Velvia {
+                strength: 0.25,
+                bias: f32::INFINITY,
+            },
+        ] {
+            assert!(!operation.parameters_are_finite());
+        }
+        assert!(
+            BasicPointOperation::Velvia {
+                strength: 0.25,
+                bias: 1.0,
+            }
+            .parameters_are_finite()
+        );
+    }
+
+    #[test]
     fn entry_scoped_runtime_layouts_match_checked_reflection() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
         for (entry_point, expected_bindings, expects_basic_params) in [
             ("exposure", &[0, 1, 2][..], false),
             ("linear_offset", &[0, 1, 2][..], false),
             ("rgb_gain", &[0, 1, 2][..], false),
+            ("velvia", &[0, 1, 2][..], false),
             ("basicadj", &[0, 1, 2, 3][..], true),
         ] {
             let entry = registry
@@ -706,6 +776,154 @@ mod tests {
         for (actual, expected) in result.pixels().iter().zip(expected) {
             assert!((actual - expected).abs() < 0.0001, "{actual} != {expected}");
         }
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    fn comparison_clamps(value: f32, low: f32, high: f32) -> f32 {
+        if value > low {
+            if value < high { value } else { high }
+        } else {
+            low
+        }
+    }
+
+    #[test]
+    fn velvia_comparison_clamp_routes_nan_to_the_lower_bound() {
+        assert_eq!(comparison_clamps(f32::NAN, 0.0, 1.0).to_bits(), 0);
+        assert_eq!(
+            comparison_clamps(f32::INFINITY, 0.0, 1.0).to_bits(),
+            1.0_f32.to_bits()
+        );
+    }
+
+    #[allow(
+        clippy::manual_midpoint,
+        reason = "the parity reference preserves Darktable's overflow-sensitive expression order"
+    )]
+    fn velvia_cpu(pixel: [f32; 4], strength: f32, bias: f32) -> [f32; 4] {
+        if strength <= 0.0 {
+            return pixel;
+        }
+        let pmax = pixel[0].max(pixel[1].max(pixel[2]));
+        let pmin = pixel[0].min(pixel[1].min(pixel[2]));
+        let plum = (pmax + pmin) / 2.0;
+        let psat = if plum <= 0.5 {
+            (pmax - pmin) / ((0.00001 + pmax) + pmin)
+        } else {
+            (pmax - pmin) / (0.00001 + 0.0_f32.max((2.0 - pmax) - pmin))
+        };
+        let pweight = comparison_clamps(
+            ((1.0 - (1.5 * psat)) + ((1.0 + (plum - 0.5).abs() * 2.0) * (1.0 - bias)))
+                / (1.0 + (1.0 - bias)),
+            0.0,
+            1.0,
+        );
+        let saturation = strength * pweight;
+        [
+            comparison_clamps(
+                pixel[0] + saturation * (pixel[0] - 0.5 * (pixel[1] + pixel[2])),
+                0.0,
+                1.0,
+            ),
+            comparison_clamps(
+                pixel[1] + saturation * (pixel[1] - 0.5 * (pixel[2] + pixel[0])),
+                0.0,
+                1.0,
+            ),
+            comparison_clamps(
+                pixel[2] + saturation * (pixel[2] - 0.5 * (pixel[0] + pixel[1])),
+                0.0,
+                1.0,
+            ),
+            pixel[3],
+        ]
+    }
+
+    #[tokio::test]
+    async fn velvia_dispatch_matches_scalar_cpu_corpus_with_clipping_and_exact_alpha() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let corpus = [
+            [0.1, 0.2, 0.3, 0.0],
+            [0.99, 0.90, 0.90, 0.37],
+            [2.0, 2.0, 2.0, 1.0],
+            [f32::MAX, f32::MAX, f32::MAX, f32::from_bits(0x3eaa_aaab)],
+            [-0.25, 0.5, 1.25, f32::from_bits(1)],
+        ];
+        let input = corpus.into_iter().flatten().collect::<Vec<_>>();
+        let operation = BasicPointOperation::Velvia {
+            strength: 0.85,
+            bias: 0.2,
+        };
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[operation],
+            })
+            .expect("Velvia point dispatch");
+        let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
+        assert!(remainder.is_empty());
+        for (index, (actual, source)) in actual_pixels.iter().zip(corpus).enumerate() {
+            let expected = velvia_cpu(source, 0.85, 0.2);
+            for channel in 0..3 {
+                assert!(
+                    (actual[channel] - expected[channel]).abs() <= 0.00001,
+                    "pixel {index} channel {channel}: {} != {}",
+                    actual[channel],
+                    expected[channel]
+                );
+            }
+            assert_eq!(
+                actual[3].to_bits(),
+                expected[3].to_bits(),
+                "pixel {index} alpha"
+            );
+        }
+        assert_eq!(result.dispatches(), 1);
+    }
+
+    #[tokio::test]
+    async fn zero_strength_velvia_is_bit_exact_identity() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let input = [
+            -0.25,
+            0.5,
+            1.25,
+            f32::from_bits(1),
+            f32::MAX,
+            -f32::MAX,
+            0.0,
+            f32::from_bits(0x3eaa_aaab),
+        ];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &[BasicPointOperation::Velvia {
+                    strength: 0.0,
+                    bias: 0.5,
+                }],
+            })
+            .expect("zero-strength Velvia point dispatch");
+        assert_eq!(
+            result
+                .pixels()
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            input
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>()
+        );
         assert_eq!(result.dispatches(), 1);
     }
 }

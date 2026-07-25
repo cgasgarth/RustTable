@@ -960,6 +960,12 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                     blue: blue.get(),
                 })
             }
+            rusttable_processing::ProcessingOperationKind::Velvia { config } => {
+                if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
+                    return None;
+                }
+                BasicPointCandidate::Ready(velvia_point_operation(*config))
+            }
             rusttable_processing::ProcessingOperationKind::Grain { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits()
                     || grain.is_some()
@@ -1052,6 +1058,15 @@ fn basicadj_point_operation(plan: &BasicAdjPlan) -> BasicPointOperation {
         saturation: parameters.saturation,
         vibrance: parameters.vibrance,
     })
+}
+
+fn velvia_point_operation(
+    config: rusttable_processing::operations::velvia::VelviaConfig,
+) -> BasicPointOperation {
+    BasicPointOperation::Velvia {
+        strength: config.normalized_strength(),
+        bias: config.bias(),
+    }
 }
 
 fn execute_gpu(
@@ -1512,6 +1527,19 @@ mod tests {
                 stops: 1.0,
                 black: 0.0,
             }])
+        );
+    }
+
+    #[test]
+    fn velvia_qualification_normalizes_native_percent_strength_once() {
+        let config = rusttable_processing::operations::velvia::VelviaConfig::new(25.0, 0.75)
+            .expect("Velvia config");
+        assert_eq!(
+            velvia_point_operation(config),
+            BasicPointOperation::Velvia {
+                strength: 0.25,
+                bias: 0.75,
+            }
         );
     }
 

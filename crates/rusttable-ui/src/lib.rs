@@ -116,7 +116,8 @@ pub use presentation::{
     PhotoCardViewModel, PhotoDetailViewModel, PhotoFactViewModel, PhotoWorkspaceViewModel,
     PhotoWorkspaceViewModelError, PresentationText, PresentationTextError, PreviewDimensions,
     PreviewDimensionsError, Rgba8PreviewMetadata, Rgba8PreviewMetadataError,
-    SelectedPreviewFailure, SelectedPreviewState, SliderSpec, ThumbnailIndicators,
+    SelectedPreviewFailure, SelectedPreviewState, SliderSpec, SourceMappedSliderSpec,
+    ThumbnailIndicators,
 };
 pub use raw_denoise::{
     RAW_DENOISE_FOCUS_ORDER, RAW_DENOISE_MAX_STRENGTH, RAW_DENOISE_TILES, RawDenoiseAction,

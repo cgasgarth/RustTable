@@ -30,7 +30,7 @@ pub use basic_edit::{
 pub use darkroom_controls::{
     ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlKind,
     DarkroomControlValue, DarkroomControlViewModel, DarkroomControlsStatus,
-    DarkroomControlsViewModel, SliderSpec,
+    DarkroomControlsViewModel, SliderSpec, SourceMappedSliderSpec,
 };
 pub use darkroom_edit_routing::{
     DarkroomEditCommand, DarkroomEditRouteError, DarkroomEditRouter, DarkroomEditTarget,

@@ -111,6 +111,63 @@ fn rgb_gain(@builtin(global_invocation_id) id: vec3<u32>) {
     output_pixels[id.x] = preserve_alpha(pixel.rgb * gain, pixel.a);
 }
 
+fn comparison_clamps(value: f32, low: f32, high: f32) -> f32 {
+    if (value > low) {
+        if (value < high) {
+            return value;
+        }
+        return high;
+    }
+    return low;
+}
+
+// Direct scalar port of data/kernels/extended.cl::velvia. Keep the authored
+// association and comparison clamp: finite inputs can still produce NaN in
+// intermediate overflow, which Darktable's CLAMPS routes to the lower bound.
+@compute @workgroup_size(${WORKGROUP_SIZE}, 1, 1)
+fn velvia(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (!in_bounds(id.x)) { return; }
+    let pixel = input_pixels[id.x];
+    if (params.velvia_strength <= 0.0) {
+        output_pixels[id.x] = pixel;
+        return;
+    }
+
+    let pmax = max(pixel.r, max(pixel.g, pixel.b));
+    let pmin = min(pixel.r, min(pixel.g, pixel.b));
+    let plum = (pmax + pmin) / 2.0;
+    var psat: f32;
+    if (plum <= 0.5) {
+        psat = (pmax - pmin) / ((0.00001 + pmax) + pmin);
+    } else {
+        psat = (pmax - pmin) / (0.00001 + max(0.0, (2.0 - pmax) - pmin));
+    }
+    let pweight = comparison_clamps(
+        ((1.0 - (1.5 * psat))
+            + ((1.0 + (abs(plum - 0.5) * 2.0)) * (1.0 - params.velvia_bias)))
+            / (1.0 + (1.0 - params.velvia_bias)),
+        0.0,
+        1.0,
+    );
+    let saturation = params.velvia_strength * pweight;
+    let red = comparison_clamps(
+        pixel.r + saturation * (pixel.r - 0.5 * (pixel.g + pixel.b)),
+        0.0,
+        1.0,
+    );
+    let green = comparison_clamps(
+        pixel.g + saturation * (pixel.g - 0.5 * (pixel.b + pixel.r)),
+        0.0,
+        1.0,
+    );
+    let blue = comparison_clamps(
+        pixel.b + saturation * (pixel.b - 0.5 * (pixel.r + pixel.g)),
+        0.0,
+        1.0,
+    );
+    output_pixels[id.x] = vec4<f32>(red, green, blue, pixel.a);
+}
+
 @compute @workgroup_size(${WORKGROUP_SIZE}, 1, 1)
 fn copy(@builtin(global_invocation_id) id: vec3<u32>) {
     if (!in_bounds(id.x)) { return; }

@@ -97,7 +97,7 @@ fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
             expected_revision: revision,
         })
         .expect("reset action");
-    assert_eq!(revision, Revision::from_u64(13));
+    assert_eq!(revision, Revision::from_u64(12));
     assert_eq!(
         model.focus_order(),
         [
@@ -175,6 +175,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "dither",
             "grain",
             "relight",
+            "velvia",
             "shadhi",
             "temperature",
             "bloom",
@@ -354,6 +355,203 @@ fn clahe_descriptor_projects_exact_v1_controls_and_cpu_state() {
     }
     assert!(!DarkroomModuleGroup::Active.matches(clahe));
     assert!(DarkroomModuleGroup::Deprecated.matches(clahe));
+}
+
+#[test]
+fn velvia_projects_the_source_module_and_slider_presentation() {
+    let modules = reference_modules().expect("reference modules");
+    let velvia = modules.module("velvia").expect("Velvia module");
+
+    assert_eq!(velvia.title(), "velvia");
+    assert_eq!(velvia.aliases().collect::<Vec<_>>(), ["saturation"]);
+    assert_eq!(
+        velvia.group_keys().collect::<Vec<_>>(),
+        ["group.color", "group.grading"]
+    );
+    assert!(!velvia.enabled());
+    assert!(!velvia.expanded());
+    assert!(velvia.is_style_eligible());
+    assert!(!velvia.is_favorite());
+    assert_eq!(velvia.presets().len(), 0);
+    assert!(DarkroomModuleGroup::Color.matches(velvia));
+    assert!(DarkroomModuleGroup::Grading.matches(velvia));
+    assert!(!DarkroomModuleGroup::Active.matches(velvia));
+    assert!(module_matches_query(velvia, "saturation"));
+
+    let expected = [
+        (
+            "velvia-strength",
+            "strength",
+            (0.0, 100.0),
+            25.0,
+            1.0,
+            2,
+            "%",
+            "the strength of saturation boost",
+        ),
+        (
+            "velvia-bias",
+            "mid-tones bias",
+            (0.0, 1.0),
+            1.0,
+            0.01,
+            2,
+            "",
+            "how much to spare highlights and shadows",
+        ),
+    ];
+    for (id, label, range, default, step, digits, suffix, tooltip) in expected {
+        let control = velvia.controls().control(id).expect("Velvia control");
+        assert_eq!(control.label().as_str(), label);
+        let slider = control.slider_spec().expect("Velvia slider");
+        assert_eq!((slider.minimum(), slider.maximum()), range);
+        assert_float_eq(slider.default_value(), default);
+        assert_float_eq(slider.value(), default);
+        assert_float_eq(slider.step(), step);
+        let source = control
+            .source_mapped_slider_spec()
+            .expect("source-qualified Bauhaus slider");
+        assert_eq!(source.digits(), digits);
+        assert!(source.automatic_step());
+        assert_eq!(source.suffix(), suffix);
+        assert_eq!(source.tooltip(), tooltip);
+    }
+}
+
+#[test]
+fn velvia_actions_and_persisted_state_projection_preserve_source_metadata() {
+    let mut velvia = reference_modules()
+        .expect("reference modules")
+        .module("velvia")
+        .expect("Velvia module")
+        .clone();
+
+    let mut revision = velvia
+        .apply(DarkroomModuleAction::Enable {
+            module_id: "velvia".to_owned(),
+            expected_revision: Revision::ZERO,
+            enabled: true,
+        })
+        .expect("enable Velvia");
+    revision = velvia
+        .apply(DarkroomModuleAction::Disclosure {
+            module_id: "velvia".to_owned(),
+            expected_revision: revision,
+            expanded: true,
+        })
+        .expect("expand Velvia");
+    for (id, value) in [("velvia-strength", 60.0), ("velvia-bias", 0.4)] {
+        revision = velvia
+            .apply(DarkroomModuleAction::Control {
+                module_id: "velvia".to_owned(),
+                expected_revision: revision,
+                id: id.to_owned(),
+                value: DarkroomControlValue::Slider(value),
+            })
+            .expect("apply Velvia slider action");
+    }
+    assert!(velvia.enabled());
+    assert!(velvia.expanded());
+    assert!(DarkroomModuleGroup::Active.matches(&velvia));
+    assert_eq!(
+        velvia
+            .controls()
+            .control("velvia-strength")
+            .expect("strength")
+            .value(),
+        DarkroomControlValue::Slider(60.0)
+    );
+    assert_eq!(
+        velvia
+            .controls()
+            .control("velvia-bias")
+            .expect("bias")
+            .value(),
+        DarkroomControlValue::Slider(0.4)
+    );
+
+    velvia
+        .reconcile_operation(
+            Revision::from_u64(20),
+            false,
+            [
+                (
+                    "velvia-strength".to_owned(),
+                    DarkroomControlValue::Slider(35.0),
+                ),
+                ("velvia-bias".to_owned(), DarkroomControlValue::Slider(0.8)),
+            ],
+        )
+        .expect("persisted Velvia projection");
+    assert_eq!(velvia.revision(), Revision::from_u64(20));
+    assert!(!velvia.enabled());
+    for id in ["velvia-strength", "velvia-bias"] {
+        assert!(
+            velvia
+                .controls()
+                .control(id)
+                .expect("projected control")
+                .source_mapped_slider_spec()
+                .is_some(),
+            "state projection must preserve {id} Bauhaus qualification"
+        );
+    }
+}
+
+#[test]
+fn velvia_persisted_values_can_exceed_ui_bounds_but_new_input_cannot() {
+    let mut velvia = reference_modules()
+        .expect("reference modules")
+        .module("velvia")
+        .expect("Velvia module")
+        .clone();
+    velvia
+        .reconcile_operation(
+            Revision::from_u64(5),
+            true,
+            [
+                (
+                    "velvia-strength".to_owned(),
+                    DarkroomControlValue::Slider(101.0),
+                ),
+                (
+                    "velvia-bias".to_owned(),
+                    DarkroomControlValue::Slider(-0.01),
+                ),
+            ],
+        )
+        .expect("finite native values remain projectable");
+    assert_eq!(
+        velvia
+            .controls()
+            .control("velvia-strength")
+            .expect("strength")
+            .value(),
+        DarkroomControlValue::Slider(101.0)
+    );
+    assert_eq!(
+        velvia
+            .controls()
+            .control("velvia-bias")
+            .expect("bias")
+            .value(),
+        DarkroomControlValue::Slider(-0.01)
+    );
+
+    let error = velvia
+        .apply(DarkroomModuleAction::Control {
+            module_id: "velvia".to_owned(),
+            expected_revision: Revision::from_u64(5),
+            id: "velvia-strength".to_owned(),
+            value: DarkroomControlValue::Slider(101.0),
+        })
+        .expect_err("new GTK input remains constrained to the source UI range");
+    assert!(matches!(
+        error,
+        DarkroomModuleError::Control(DarkroomControlError::Validation(
+            ControlValidationError::SliderValueOutOfRange { .. }
+        ))
+    ));
 }
 
 fn assert_float_eq(actual: f64, expected: f64) {

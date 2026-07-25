@@ -982,7 +982,7 @@ pub use operations::{
     invert_definition, lenscorrection_definition, linear_offset_definition, liquify_definition,
     perspective_definition, rasterfile_definition, relight_definition, rgb_gain_definition,
     rotatepixels_definition, scalepixels_definition, shadhi_definition, soften_definition,
-    temperature_definition, vignette_definition,
+    temperature_definition, velvia_definition, vignette_definition,
 };
 use operations::{hex, snapshot_hash, unavailable, validate_definition};
 pub use spots::spots_definition;
