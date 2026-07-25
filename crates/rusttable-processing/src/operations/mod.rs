@@ -11,6 +11,7 @@ pub mod borders;
 pub mod censorize;
 pub mod clahe;
 pub mod clipping;
+pub mod colorcontrast;
 pub mod colorcorrection;
 pub mod colorin;
 pub mod colorout;

@@ -7,6 +7,108 @@ use super::{
     ModuleOrderRule, ModuleOrderVersion, OpaquePayload, Severity, SourceRowKey, finding,
 };
 
+// Migration oracle from pinned darktable
+// `cfe57f3bbf5269bfacf31e832267279caa6938ad:src/common/iop_order.c::v30_order`.
+//
+// Keep this separate from `Operation::default_order`: the operation scanner
+// records CMake registration ordinals there, while a built-in `module_order`
+// row names one of Darktable's versioned pixel-pipeline tables.
+const V30_BUILT_IN_ORDER: &[&str] = &[
+    "rawprepare",
+    "invert",
+    "temperature",
+    "rasterfile",
+    "highlights",
+    "cacorrect",
+    "hotpixels",
+    "rawdenoise",
+    "demosaic",
+    "denoiseprofile",
+    "bilateral",
+    "rotatepixels",
+    "scalepixels",
+    "lens",
+    "cacorrectrgb",
+    "hazeremoval",
+    "ashift",
+    "flip",
+    "enlargecanvas",
+    "overlay",
+    "clipping",
+    "liquify",
+    "spots",
+    "retouch",
+    "exposure",
+    "mask_manager",
+    "tonemap",
+    "toneequal",
+    "crop",
+    "graduatednd",
+    "profile_gamma",
+    "equalizer",
+    "colorin",
+    "channelmixerrgb",
+    "diffuse",
+    "censorize",
+    "negadoctor",
+    "blurs",
+    "primaries",
+    "nlmeans",
+    "colorchecker",
+    "defringe",
+    "atrous",
+    "lowpass",
+    "highpass",
+    "sharpen",
+    "colortransfer",
+    "colormapping",
+    "channelmixer",
+    "basicadj",
+    "colorharmonizer",
+    "colorbalance",
+    "colorequal",
+    "colorbalancergb",
+    "rgbcurve",
+    "rgblevels",
+    "basecurve",
+    "filmic",
+    "sigmoid",
+    "agx",
+    "filmicrgb",
+    "lut3d",
+    "colisa",
+    "tonecurve",
+    "levels",
+    "shadhi",
+    "zonesystem",
+    "globaltonemap",
+    "relight",
+    "bilat",
+    "colorcorrection",
+    "colorcontrast",
+    "velvia",
+    "vibrance",
+    "colorzones",
+    "bloom",
+    "colorize",
+    "lowlight",
+    "monochrome",
+    "grain",
+    "soften",
+    "splittoning",
+    "vignette",
+    "colorreconstruct",
+    "colorout",
+    "clahe",
+    "finalscale",
+    "overexposed",
+    "rawoverexposed",
+    "dither",
+    "borders",
+    "watermark",
+    "gamma",
+];
+
 pub(super) fn decode_module_order(
     image_id: i64,
     rows: &HistoryRows,
@@ -229,14 +331,14 @@ pub(super) fn order_instances(
                 .any(|finding| finding.code == FindingCode::MissingModuleOrderEntry),
         );
     }
-    let (result, proven) = built_in_order(instances, manifest);
+    let (result, proven) = built_in_order(instances, manifest, order.version);
     if !proven {
         finding(
             findings,
             FindingCode::ModuleOrderConflict,
             Severity::Blocking,
             order.source.row(),
-            "built-in module_order version has no complete manifest order proof",
+            "built-in module_order version has no complete source-derived order proof",
         );
     }
     check_order_rules(
@@ -252,26 +354,37 @@ pub(super) fn order_instances(
 fn built_in_order(
     instances: &[CompatModuleInstance],
     manifest: &DarktableOperationManifest,
+    version: ModuleOrderVersion,
 ) -> (Vec<ModuleInstanceId>, bool) {
+    let native_order = match version {
+        ModuleOrderVersion::V30 => Some(V30_BUILT_IN_ORDER),
+        _ => None,
+    };
     let mut ordered = instances.to_vec();
     ordered.sort_by_key(|instance| {
+        let name = instance.operation.name.as_deref();
         (
-            instance
-                .operation
-                .name
-                .as_deref()
-                .and_then(|name| manifest.get(name))
+            native_order
+                .and_then(|order| {
+                    name.and_then(|name| order.iter().position(|candidate| *candidate == name))
+                })
+                .unwrap_or(usize::MAX),
+            name.and_then(|name| manifest.get(name))
                 .and_then(|entry| entry.default_order)
                 .unwrap_or(i64::MAX),
             instance.multi_priority.unwrap_or(i64::MAX),
             instance.first_source.row(),
         )
     });
-    let proven = ordered.iter().all(|instance| {
-        instance.operation.name.as_deref().is_some_and(|name| {
-            manifest
-                .get(name)
-                .is_some_and(|entry| entry.default_order.is_some())
+    let mut seen_operations = BTreeSet::new();
+    let proven = native_order.is_some_and(|order| {
+        ordered.iter().all(|instance| {
+            instance.multi_priority.unwrap_or(0) == 0
+                && instance.operation.name.as_deref().is_some_and(|name| {
+                    manifest.get(name).is_some()
+                        && order.contains(&name)
+                        && seen_operations.insert(name)
+                })
         })
     });
     (

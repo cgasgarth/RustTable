@@ -15,12 +15,12 @@ use super::{
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, crop_descriptor,
-    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
-    flip_descriptor, graduatednd_descriptor, grain_descriptor, invert_descriptor,
-    linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
-    scalepixels_descriptor, shadhi_descriptor, soften_descriptor, temperature_descriptor,
-    velvia_descriptor, vignette_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, colorcontrast_descriptor,
+    crop_descriptor, dither_descriptor, enlargecanvas_descriptor, exposure_descriptor,
+    finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
+    invert_descriptor, linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor,
+    rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor, soften_descriptor,
+    temperature_descriptor, velvia_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -245,6 +245,17 @@ fn prepare_velvia(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_velvia(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_colorcontrast(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_colorcontrast(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -600,6 +611,33 @@ pub fn velvia_definition() -> OperationDefinition {
         ],
         RoiKind::Identity,
         [MigrationBinding::new(1, 2, "velvia.migration.v1-v2")],
+        Some(gpu),
+    )
+}
+
+pub fn colorcontrast_definition() -> OperationDefinition {
+    let descriptor = colorcontrast_descriptor();
+    let gpu = GpuBinding::new(
+        crate::operations::colorcontrast::COLOR_CONTRAST_WGPU_PASS_ID,
+        crate::operations::colorcontrast::COLOR_CONTRAST_GPU_TIER,
+        descriptor.capability.required_features.clone(),
+        descriptor.capability.required_formats.clone(),
+    );
+    geometry_definition_with_gpu(
+        descriptor,
+        prepare_colorcontrast,
+        &[
+            "iop.colorcontrast.params.v1-v2",
+            "iop.colorcontrast.cpu.lab-d50-slope-offset",
+            "iop.colorcontrast.cpu.native-clamps",
+            "iop.colorcontrast.wgpu.point.unmasked-full-opacity",
+            "iop.colorcontrast.wgpu.lab-d50-snapshot",
+            "iop.colorcontrast.opacity-mask-reconstruction",
+            "iop.colorcontrast.alpha-preserve",
+            "iop.colorcontrast.order.v30-56",
+        ],
+        RoiKind::Identity,
+        [MigrationBinding::new(1, 2, "colorcontrast.migration.v1-v2")],
         Some(gpu),
     )
 }
@@ -996,6 +1034,8 @@ macro_rules! builtin_operations {
             $crate::registry::dither_definition,
             $crate::registry::grain_definition,
             $crate::registry::relight_definition,
+            $crate::registry::color::colorcorrection_definition,
+            $crate::registry::colorcontrast_definition,
             $crate::registry::velvia_definition,
             $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,
@@ -1026,7 +1066,6 @@ macro_rules! builtin_operations {
             $crate::registry::color::colorin_definition,
             $crate::registry::color::primaries_definition,
             $crate::registry::color::colorout_definition,
-            $crate::registry::color::colorcorrection_definition,
         ]
     };
     ($($factory:path),+ $(,)?) => {

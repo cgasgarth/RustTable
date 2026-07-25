@@ -8519,12 +8519,12 @@ tags = [
     "IOP_GROUP_COLOR",
     "IOP_GROUP_GRADING",
 ]
-multi_instance = false
-supports_blend_masks = false
-input_color_space = "scene-linear"
-output_color_space = "scene-linear"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
 roi_behavior = "identity"
-tiling_requirement = "full-frame"
+tiling_requirement = "tiled"
 cpu_implementation = "process"
 opencl_programs = ["extended"]
 opencl_kernels = ["colorcontrast"]
@@ -8534,8 +8534,8 @@ presets = []
 
 [[operations.parameter_versions]]
 version = 1
-byte_size = 136
-layout_hash = "b6c1f4a1e2cc256f03e89d3db89e6bd29144e7268ad53a0b88ed410b5ccc205c"
+byte_size = 16
+layout_hash = "80865022a8d2899440cb76b62f75d8dc4a51d433f835a14d0f93f0d6423b9f93"
 decoder = "opaque"
 opaque_blocking = true
 fixture_id = "operation.colorcontrast.params.v1"
@@ -8772,7 +8772,7 @@ enum_values = []
 
 [operations.color_contract.input]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.input.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -8785,7 +8785,7 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.color_contract.output]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.output.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -8798,9 +8798,9 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.capability_contract]
 supports_shared_blending = true
-supports_drawn_masks = false
+supports_drawn_masks = true
 publishes_raster_mask = false
-consumes_raster_mask = false
+consumes_raster_mask = true
 flags = [
     "IOP_FLAGS_ALLOW_TILING",
     "IOP_FLAGS_INCLUDE_IN_STYLES",
@@ -8818,7 +8818,7 @@ fast_pipe = "not-supported"
 scale = "preserve"
 
 [operations.tiling_contract]
-class = "full-frame"
+class = "tiled"
 overlap = 0
 
 [[operations.opencl_resolution]]

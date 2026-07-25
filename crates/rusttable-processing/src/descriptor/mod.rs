@@ -20,6 +20,7 @@ mod retouch;
 pub use crate::operations::borders::borders_descriptor;
 pub use crate::operations::clahe::clahe_descriptor;
 pub use crate::operations::clipping::clipping_descriptor;
+pub use crate::operations::colorcontrast::colorcontrast_descriptor;
 pub use crate::operations::crop::crop_descriptor;
 pub use crate::operations::defringe::defringe_descriptor;
 pub use crate::operations::dither::dither_descriptor;

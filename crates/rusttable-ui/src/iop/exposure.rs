@@ -781,28 +781,33 @@ fn exposure_module_action(
     let action = match action {
         ExposureAction::SetExpanded(expanded) => DarkroomModuleAction::Disclosure {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision,
             expanded,
         },
         ExposureAction::SetEnabled(enabled) => DarkroomModuleAction::Enable {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision,
             enabled,
         },
         ExposureAction::SetExposureEv(value) => DarkroomModuleAction::Control {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision,
             id: "exposure-stops".to_owned(),
             value: crate::presentation::DarkroomControlValue::Slider(value),
         },
         ExposureAction::SetBlackLevel(value) => DarkroomModuleAction::Control {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision,
             id: "exposure-black".to_owned(),
             value: crate::presentation::DarkroomControlValue::Slider(value),
         },
         ExposureAction::Reset => DarkroomModuleAction::Reset {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision,
         },
         ExposureAction::SetMode(_)

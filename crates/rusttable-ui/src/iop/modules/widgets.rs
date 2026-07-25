@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
-use rusttable_core::Revision;
+use rusttable_core::{OperationId, Revision};
 
 use crate::bauhaus::slider_input::SliderInputSpec;
 use crate::gui::darktable_components::{
@@ -15,24 +15,41 @@ use crate::presentation::darkroom_controls::{DarkroomControlKind, DarkroomContro
 
 use super::{
     DarkroomControlViewModel, DarkroomModuleAction, DarkroomModuleActionHandler,
-    DarkroomModuleError,
+    DarkroomModuleError, presentation_control_id,
 };
+
+/// Owned action-routing state captured by one control row.
+pub(super) struct ControlRowActionContext {
+    pub(super) action_handler: Option<DarkroomModuleActionHandler>,
+    pub(super) status: gtk4::Label,
+    pub(super) recover: gtk4::Button,
+    pub(super) current_revision: Rc<RefCell<Revision>>,
+    pub(super) module_id: String,
+    pub(super) operation_id: Option<OperationId>,
+}
 
 /// Builds one ordered control row from the typed presentation snapshot.
 #[allow(clippy::too_many_lines)]
 pub(super) fn build_control_row(
     control: &DarkroomControlViewModel,
+    panel_widget_id: &str,
     module_enabled: bool,
-    action_handler: Option<DarkroomModuleActionHandler>,
-    status: gtk4::Label,
-    recover: gtk4::Button,
-    current_revision: Rc<RefCell<Revision>>,
-    module_id: String,
+    action_context: ControlRowActionContext,
 ) -> gtk4::Box {
+    let ControlRowActionContext {
+        action_handler,
+        status,
+        recover,
+        current_revision,
+        module_id,
+        operation_id,
+    } = action_context;
+    let control_widget_id =
+        presentation_control_id(module_id.as_str(), panel_widget_id, control.id().as_str());
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
     row.set_width_request(0);
     row.set_hexpand(true);
-    row.set_widget_name(control.id().as_str());
+    row.set_widget_name(&control_widget_id);
     row.add_css_class("dt_module_row");
     let label = gtk4::Label::new(Some(control.label().as_str()));
     label.set_halign(gtk4::Align::Start);
@@ -52,7 +69,7 @@ pub(super) fn build_control_row(
                     input_spec = input_spec.with_automatic_step();
                 }
                 let slider = slider_with_input_spec(
-                    &format!("{}-widget", control.id()),
+                    &format!("{control_widget_id}-widget"),
                     spec.minimum(),
                     spec.maximum(),
                     spec.step(),
@@ -63,7 +80,7 @@ pub(super) fn build_control_row(
                 slider.scale().set_draw_value(true);
                 slider.scale().set_value_pos(gtk4::PositionType::Right);
                 slider.scale().set_tooltip_text(Some(source.tooltip()));
-                identify_control(slider.scale(), control, "Adjust slider");
+                identify_control(slider.scale(), control, &control_widget_id, "Adjust slider");
                 if let Some(handler) = action_handler {
                     let id = control.id().to_string();
                     slider.scale().connect_value_changed(move |slider| {
@@ -75,6 +92,7 @@ pub(super) fn build_control_row(
                             &current_revision,
                             DarkroomModuleAction::Control {
                                 module_id: module_id.clone(),
+                                operation_id,
                                 expected_revision,
                                 id: id.clone(),
                                 value: DarkroomControlValue::Slider(slider.value()),
@@ -85,7 +103,7 @@ pub(super) fn build_control_row(
                 row.append(slider.widget());
             } else {
                 let slider = provisional_scale(
-                    &format!("{}-widget", control.id()),
+                    &format!("{control_widget_id}-widget"),
                     spec.minimum(),
                     spec.maximum(),
                     spec.step(),
@@ -101,7 +119,7 @@ pub(super) fn build_control_row(
                     spec.minimum(),
                     spec.maximum()
                 )));
-                identify_control(&slider, control, "Adjust slider");
+                identify_control(&slider, control, &control_widget_id, "Adjust slider");
                 if let Some(handler) = action_handler {
                     let id = control.id().to_string();
                     slider.connect_value_changed(move |slider| {
@@ -113,6 +131,7 @@ pub(super) fn build_control_row(
                             &current_revision,
                             DarkroomModuleAction::Control {
                                 module_id: module_id.clone(),
+                                operation_id,
                                 expected_revision,
                                 id: id.clone(),
                                 value: DarkroomControlValue::Slider(slider.value()),
@@ -128,12 +147,12 @@ pub(super) fn build_control_row(
                 .choices()
                 .map(PresentationText::as_str)
                 .collect::<Vec<_>>();
-            let choice = dropdown(&format!("{}-widget", control.id()), &choices);
+            let choice = dropdown(&format!("{control_widget_id}-widget"), &choices);
             if let DarkroomControlValue::Choice(selected) = control.value() {
                 choice.set_selected(u32::try_from(selected).unwrap_or(u32::MAX));
             }
             choice.set_tooltip_text(Some(control.label().as_str()));
-            identify_control(&choice, control, "Select option");
+            identify_control(&choice, control, &control_widget_id, "Select option");
             if let Some(handler) = action_handler {
                 let id = control.id().to_string();
                 choice.connect_selected_notify(move |choice| {
@@ -148,6 +167,7 @@ pub(super) fn build_control_row(
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
+                            operation_id,
                             expected_revision,
                             id: id.clone(),
                             value: DarkroomControlValue::Choice(selected),
@@ -158,12 +178,12 @@ pub(super) fn build_control_row(
             row.append(&choice);
         }
         DarkroomControlKind::Toggle => {
-            let toggle = switch(&format!("{}-widget", control.id()));
+            let toggle = switch(&format!("{control_widget_id}-widget"));
             if let DarkroomControlValue::Toggle(active) = control.value() {
                 toggle.set_active(active);
             }
             toggle.set_tooltip_text(Some(control.label().as_str()));
-            identify_control(&toggle, control, "Toggle option");
+            identify_control(&toggle, control, &control_widget_id, "Toggle option");
             if let Some(handler) = action_handler {
                 let id = control.id().to_string();
                 toggle.connect_active_notify(move |toggle| {
@@ -175,6 +195,7 @@ pub(super) fn build_control_row(
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
+                            operation_id,
                             expected_revision,
                             id: id.clone(),
                             value: DarkroomControlValue::Toggle(toggle.is_active()),
@@ -191,7 +212,7 @@ pub(super) fn build_control_row(
             }
             entry.set_hexpand(true);
             entry.set_tooltip_text(Some(control.label().as_str()));
-            identify_control(&entry, control, "Edit text");
+            identify_control(&entry, control, &control_widget_id, "Edit text");
             if let Some(handler) = action_handler {
                 let id = control.id().to_string();
                 entry.connect_changed(move |entry| {
@@ -203,6 +224,7 @@ pub(super) fn build_control_row(
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
+                            operation_id,
                             expected_revision,
                             id: id.clone(),
                             value: DarkroomControlValue::Text(entry.text().to_string()),
@@ -217,11 +239,15 @@ pub(super) fn build_control_row(
     row
 }
 
-fn identify_control<W>(widget: &W, control: &DarkroomControlViewModel, role: &str)
-where
+fn identify_control<W>(
+    widget: &W,
+    control: &DarkroomControlViewModel,
+    control_widget_id: &str,
+    role: &str,
+) where
     W: IsA<gtk4::Widget> + IsA<gtk4::Accessible>,
 {
-    widget.set_widget_name(&format!("{}-widget", control.id()));
+    widget.set_widget_name(&format!("{control_widget_id}-widget"));
     widget.update_property(&[Property::Label(&format!(
         "{}: {}",
         control.label().as_str(),

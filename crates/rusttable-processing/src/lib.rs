@@ -106,6 +106,16 @@ pub use operations::clahe::{
     ClaheBlend, ClaheCodecError, ClaheConfig, ClaheExecutionError, ClaheHistory, ClaheMask,
     ClaheOutcome, ClaheParameterError, ClaheParametersV1, ClahePixel, ClahePlan, ClaheReceipt,
 };
+pub use operations::colorcontrast::{
+    COLOR_CONTRAST_COMPATIBILITY_ID, COLOR_CONTRAST_DEFAULT_A_OFFSET,
+    COLOR_CONTRAST_DEFAULT_A_STEEPNESS, COLOR_CONTRAST_DEFAULT_B_OFFSET,
+    COLOR_CONTRAST_DEFAULT_B_STEEPNESS, COLOR_CONTRAST_DEFAULT_UNBOUND, COLOR_CONTRAST_RUST_ID,
+    COLOR_CONTRAST_SCHEMA_VERSION, COLOR_CONTRAST_V1_PARAMETER_BYTES,
+    COLOR_CONTRAST_V2_PARAMETER_BYTES, ColorContrastCodecError, ColorContrastConfig,
+    ColorContrastHistory, ColorContrastParameterError, ColorContrastParametersV1,
+    ColorContrastParametersV2, ColorContrastPixel, ColorContrastPlan,
+    migrate_v1_to_v2 as migrate_colorcontrast_v1_to_v2,
+};
 pub use operations::colorout::{TerminalOutputDescriptor, TerminalOutputFrame};
 pub use operations::defringe::{
     DEFRINGE_ALIAS, DEFRINGE_COMPATIBILITY_ID, DEFRINGE_GAUSSIAN_ORDER,

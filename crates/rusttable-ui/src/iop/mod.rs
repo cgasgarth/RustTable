@@ -1,4 +1,5 @@
 pub(crate) mod actions;
+pub mod colorcontrast;
 pub(crate) mod controls;
 pub(crate) mod exposure;
 pub(crate) mod modules;

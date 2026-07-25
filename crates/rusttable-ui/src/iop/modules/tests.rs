@@ -1,5 +1,6 @@
 use super::*;
 use crate::presentation::darkroom_controls::DarkroomControlKind;
+use rusttable_core::OperationId;
 
 fn module(id: &str, side: DarkroomModuleSide) -> DarkroomModuleViewModel {
     let slider = DarkroomControlViewModel::slider(
@@ -23,6 +24,122 @@ fn module(id: &str, side: DarkroomModuleSide) -> DarkroomModuleViewModel {
         vec![slider],
     )
     .expect("valid module")
+}
+
+#[test]
+fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_targets() {
+    let first_id = OperationId::new(41).expect("first operation id");
+    let second_id = OperationId::new(73).expect("second operation id");
+    let templates = reference_modules().expect("source-derived reference modules");
+    let template = templates
+        .module("colorcontrast")
+        .expect("Color Contrast template")
+        .clone();
+    assert_eq!(
+        template.focus_order(),
+        [
+            "colorcontrast-disclosure",
+            "colorcontrast-enabled",
+            "colorcontrast-reset",
+            "colorcontrast-a-steepness-widget",
+            "colorcontrast-b-steepness-widget",
+        ],
+        "a sole instance retains the established GTK names"
+    );
+    let first = template.clone().with_operation_instance(first_id, 0, 2);
+    let second = template.with_operation_instance(second_id, 1, 2);
+    let mut modules =
+        DarkroomModulesViewModel::new(vec![first, second]).expect("distinct operation instances");
+
+    assert!(
+        modules.module("colorcontrast").is_none(),
+        "compatibility-only lookup must not select an arbitrary instance"
+    );
+    assert_eq!(
+        modules
+            .instances("colorcontrast")
+            .map(DarkroomModuleViewModel::operation_id)
+            .collect::<Vec<_>>(),
+        [Some(first_id), Some(second_id)]
+    );
+    let first_widget_id = modules
+        .module_target("colorcontrast", Some(first_id))
+        .expect("first exact target")
+        .widget_id();
+    let second_widget_id = modules
+        .module_target("colorcontrast", Some(second_id))
+        .expect("second exact target")
+        .widget_id();
+    assert_eq!(
+        first_widget_id,
+        format!("colorcontrast-instance-{first_id}")
+    );
+    assert_eq!(
+        second_widget_id,
+        format!("colorcontrast-instance-{second_id}")
+    );
+    assert_eq!(
+        modules
+            .module_target("colorcontrast", Some(first_id))
+            .expect("first exact target")
+            .focus_order(),
+        [
+            format!("{first_widget_id}-disclosure"),
+            format!("{first_widget_id}-enabled"),
+            format!("{first_widget_id}-reset"),
+            format!("{first_widget_id}-a-steepness-widget"),
+            format!("{first_widget_id}-b-steepness-widget"),
+        ]
+    );
+    assert_eq!(
+        modules
+            .module_target("colorcontrast", Some(second_id))
+            .expect("second exact target")
+            .focus_order(),
+        [
+            format!("{second_widget_id}-disclosure"),
+            format!("{second_widget_id}-enabled"),
+            format!("{second_widget_id}-reset"),
+            format!("{second_widget_id}-a-steepness-widget"),
+            format!("{second_widget_id}-b-steepness-widget"),
+        ]
+    );
+    for operation_id in [first_id, second_id] {
+        assert_eq!(
+            modules
+                .module_target("colorcontrast", Some(operation_id))
+                .expect("exact operation target")
+                .controls()
+                .controls()
+                .map(|control| control.id().as_str())
+                .collect::<Vec<_>>(),
+            ["colorcontrast-a-steepness", "colorcontrast-b-steepness"],
+            "GTK identity must not leak into persisted control mapping"
+        );
+    }
+
+    let second = modules
+        .module_target_mut("colorcontrast", Some(second_id))
+        .expect("second exact target");
+    let error = second
+        .apply(DarkroomModuleAction::Enable {
+            module_id: "colorcontrast".to_owned(),
+            operation_id: None,
+            expected_revision: Revision::ZERO,
+            enabled: false,
+        })
+        .expect_err("bound panels reject compatibility-only actions");
+    assert!(matches!(error, DarkroomModuleError::WrongOperation { .. }));
+
+    let error = second
+        .apply(DarkroomModuleAction::Enable {
+            module_id: "colorcontrast".to_owned(),
+            operation_id: Some(first_id),
+            expected_revision: Revision::ZERO,
+            enabled: false,
+        })
+        .expect_err("forged operation target");
+    assert!(matches!(error, DarkroomModuleError::WrongOperation { .. }));
 }
 
 #[test]
@@ -66,6 +183,7 @@ fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
     revision = model
         .apply(DarkroomModuleAction::Disclosure {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision: revision,
             expanded: false,
         })
@@ -73,6 +191,7 @@ fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
     revision = model
         .apply(DarkroomModuleAction::Enable {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision: revision,
             enabled: false,
         })
@@ -85,6 +204,7 @@ fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
         revision = model
             .apply(DarkroomModuleAction::Control {
                 module_id: "exposure".to_owned(),
+                operation_id: None,
                 expected_revision: revision,
                 id: id.to_owned(),
                 value,
@@ -94,10 +214,15 @@ fn action_routing_covers_controls_and_keeps_focus_order_deterministic() {
     revision = model
         .apply(DarkroomModuleAction::Reset {
             module_id: "exposure".to_owned(),
+            operation_id: None,
             expected_revision: revision,
         })
         .expect("reset action");
     assert_eq!(revision, Revision::from_u64(12));
+    assert!(
+        model.enabled(),
+        "native module reset enables the reset module"
+    );
     assert_eq!(
         model.focus_order(),
         [
@@ -175,6 +300,8 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "dither",
             "grain",
             "relight",
+            "colorcorrection",
+            "colorcontrast",
             "velvia",
             "shadhi",
             "temperature",
@@ -205,7 +332,6 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "colorin",
             "primaries",
             "colorout",
-            "colorcorrection",
         ]
     );
     assert!(modules.module("bloom").is_some());
@@ -419,6 +545,207 @@ fn velvia_projects_the_source_module_and_slider_presentation() {
 }
 
 #[test]
+fn colorcontrast_projects_only_the_two_source_gui_sliders() {
+    let modules = reference_modules().expect("reference modules");
+    let colorcontrast = modules
+        .module("colorcontrast")
+        .expect("Color Contrast module");
+    let descriptor = rusttable_processing::builtin_registry()
+        .definition("rusttable.colorcontrast")
+        .expect("Color Contrast definition")
+        .descriptor();
+
+    assert_eq!(colorcontrast.title(), "color contrast");
+    assert_eq!(colorcontrast.aliases().collect::<Vec<_>>(), ["saturation"]);
+    assert_eq!(
+        colorcontrast.group_keys().collect::<Vec<_>>(),
+        ["group.color", "group.grading"]
+    );
+    assert!(!colorcontrast.enabled());
+    assert!(!colorcontrast.expanded());
+    assert!(colorcontrast.is_style_eligible());
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::MULTI_INSTANCE)
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::BLENDING)
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::MASKS)
+    );
+    assert!(!colorcontrast.is_favorite());
+    assert_eq!(colorcontrast.presets().len(), 0);
+    assert!(DarkroomModuleGroup::Color.matches(colorcontrast));
+    assert!(DarkroomModuleGroup::Grading.matches(colorcontrast));
+    assert!(!DarkroomModuleGroup::Active.matches(colorcontrast));
+    assert!(module_matches_query(colorcontrast, "saturation"));
+    assert_eq!(
+        colorcontrast
+            .controls()
+            .controls()
+            .map(|control| control.id().as_str())
+            .collect::<Vec<_>>(),
+        ["colorcontrast-a-steepness", "colorcontrast-b-steepness"],
+        "native gui_init does not expose offsets or unbound"
+    );
+
+    let expected = [
+        (
+            "colorcontrast-a-steepness",
+            "green-magenta contrast",
+            "steepness of the a* curve in Lab\nlower values desaturate greens and magenta while higher saturate them",
+        ),
+        (
+            "colorcontrast-b-steepness",
+            "blue-yellow contrast",
+            "steepness of the b* curve in Lab\nlower values desaturate blues and yellows while higher saturate them",
+        ),
+    ];
+    for (id, label, tooltip) in expected {
+        let control = colorcontrast
+            .controls()
+            .control(id)
+            .expect("Color Contrast control");
+        assert_eq!(control.label().as_str(), label);
+        let slider = control.slider_spec().expect("Color Contrast slider");
+        assert_eq!((slider.minimum(), slider.maximum()), (0.0, 5.0));
+        assert_float_eq(slider.default_value(), 1.0);
+        assert_float_eq(slider.value(), 1.0);
+        assert_float_eq(slider.step(), 0.05);
+        let source = control
+            .source_mapped_slider_spec()
+            .expect("source-qualified Bauhaus slider");
+        assert_eq!(source.digits(), 2);
+        assert!(source.automatic_step());
+        assert_eq!(source.suffix(), "");
+        assert_eq!(source.tooltip(), tooltip);
+    }
+    for hidden in [
+        "colorcontrast-a-offset",
+        "colorcontrast-b-offset",
+        "colorcontrast-unbound",
+    ] {
+        assert!(colorcontrast.controls().control(hidden).is_none());
+    }
+}
+
+#[test]
+fn colorcontrast_actions_preserve_source_metadata_and_persisted_outliers() {
+    let mut colorcontrast = reference_modules()
+        .expect("reference modules")
+        .module("colorcontrast")
+        .expect("Color Contrast module")
+        .clone();
+
+    colorcontrast
+        .reconcile_operation(
+            Revision::from_u64(5),
+            true,
+            [
+                (
+                    "colorcontrast-a-steepness".to_owned(),
+                    DarkroomControlValue::Slider(5.5),
+                ),
+                (
+                    "colorcontrast-b-steepness".to_owned(),
+                    DarkroomControlValue::Slider(-0.5),
+                ),
+            ],
+        )
+        .expect("finite persisted source values remain projectable");
+    assert_eq!(
+        colorcontrast
+            .controls()
+            .control("colorcontrast-a-steepness")
+            .expect("a* steepness")
+            .value(),
+        DarkroomControlValue::Slider(5.5)
+    );
+    assert_eq!(
+        colorcontrast
+            .controls()
+            .control("colorcontrast-b-steepness")
+            .expect("b* steepness")
+            .value(),
+        DarkroomControlValue::Slider(-0.5)
+    );
+    for id in ["colorcontrast-a-steepness", "colorcontrast-b-steepness"] {
+        assert!(
+            colorcontrast
+                .controls()
+                .control(id)
+                .expect("projected control")
+                .source_mapped_slider_spec()
+                .is_some()
+        );
+    }
+
+    let error = colorcontrast
+        .apply(DarkroomModuleAction::Control {
+            module_id: "colorcontrast".to_owned(),
+            operation_id: None,
+            expected_revision: Revision::from_u64(5),
+            id: "colorcontrast-a-steepness".to_owned(),
+            value: DarkroomControlValue::Slider(5.5),
+        })
+        .expect_err("new GTK input remains constrained to the source UI range");
+    assert!(matches!(
+        error,
+        DarkroomModuleError::Control(DarkroomControlError::Validation(
+            ControlValidationError::SliderValueOutOfRange { .. }
+        ))
+    ));
+
+    let mut revision = colorcontrast.revision();
+    revision = colorcontrast
+        .apply(DarkroomModuleAction::Enable {
+            module_id: "colorcontrast".to_owned(),
+            operation_id: None,
+            expected_revision: revision,
+            enabled: false,
+        })
+        .expect("disable Color Contrast");
+    colorcontrast
+        .apply(DarkroomModuleAction::Disclosure {
+            module_id: "colorcontrast".to_owned(),
+            operation_id: None,
+            expected_revision: revision,
+            expanded: true,
+        })
+        .expect("expand Color Contrast");
+    assert!(!colorcontrast.enabled());
+    assert!(colorcontrast.expanded());
+
+    colorcontrast
+        .apply(DarkroomModuleAction::Reset {
+            module_id: "colorcontrast".to_owned(),
+            operation_id: None,
+            expected_revision: revision,
+        })
+        .expect("reset disabled Color Contrast");
+    assert!(
+        colorcontrast.enabled(),
+        "native reset enables disabled Color Contrast"
+    );
+    for id in ["colorcontrast-a-steepness", "colorcontrast-b-steepness"] {
+        assert_eq!(
+            colorcontrast
+                .controls()
+                .control(id)
+                .expect("reset Color Contrast control")
+                .value(),
+            DarkroomControlValue::Slider(1.0)
+        );
+    }
+}
+
+#[test]
 fn velvia_actions_and_persisted_state_projection_preserve_source_metadata() {
     let mut velvia = reference_modules()
         .expect("reference modules")
@@ -429,6 +756,7 @@ fn velvia_actions_and_persisted_state_projection_preserve_source_metadata() {
     let mut revision = velvia
         .apply(DarkroomModuleAction::Enable {
             module_id: "velvia".to_owned(),
+            operation_id: None,
             expected_revision: Revision::ZERO,
             enabled: true,
         })
@@ -436,6 +764,7 @@ fn velvia_actions_and_persisted_state_projection_preserve_source_metadata() {
     revision = velvia
         .apply(DarkroomModuleAction::Disclosure {
             module_id: "velvia".to_owned(),
+            operation_id: None,
             expected_revision: revision,
             expanded: true,
         })
@@ -444,6 +773,7 @@ fn velvia_actions_and_persisted_state_projection_preserve_source_metadata() {
         revision = velvia
             .apply(DarkroomModuleAction::Control {
                 module_id: "velvia".to_owned(),
+                operation_id: None,
                 expected_revision: revision,
                 id: id.to_owned(),
                 value: DarkroomControlValue::Slider(value),
@@ -541,6 +871,7 @@ fn velvia_persisted_values_can_exceed_ui_bounds_but_new_input_cannot() {
     let error = velvia
         .apply(DarkroomModuleAction::Control {
             module_id: "velvia".to_owned(),
+            operation_id: None,
             expected_revision: Revision::from_u64(5),
             id: "velvia-strength".to_owned(),
             value: DarkroomControlValue::Slider(101.0),
@@ -563,15 +894,18 @@ fn cpu_qualified_censorize_accepts_enable_reset_and_control_actions() {
     for action in [
         DarkroomModuleAction::Enable {
             module_id: "censorize".to_owned(),
+            operation_id: None,
             expected_revision: Revision::ZERO,
             enabled: true,
         },
         DarkroomModuleAction::Reset {
             module_id: "censorize".to_owned(),
+            operation_id: None,
             expected_revision: Revision::ZERO,
         },
         DarkroomModuleAction::Control {
             module_id: "censorize".to_owned(),
+            operation_id: None,
             expected_revision: Revision::ZERO,
             id: "censorize-noise".to_owned(),
             value: DarkroomControlValue::Slider(0.5),
@@ -646,6 +980,35 @@ fn clahe_gtk_panel_exposes_imported_controls_as_unavailable() {
         .expect("status label");
     assert!(status.text().contains("Unavailable"));
     assert!(status.text().contains("#473"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn unavailable_resettable_module_keeps_reset_insensitive() {
+    if gtk4::init().is_err() {
+        return;
+    }
+    let module = reference_modules()
+        .expect("reference modules")
+        .module("colorcontrast")
+        .expect("Color Contrast")
+        .clone()
+        .with_availability(DarkroomModuleAvailability::Unsupported {
+            reason: "test backend unavailable".to_owned(),
+        });
+    let panel = build_module_panel(&module);
+    let root: gtk4::Widget = panel.upcast();
+    for id in [
+        "colorcontrast-enabled",
+        "colorcontrast-reset",
+        "colorcontrast-a-steepness-widget",
+        "colorcontrast-b-steepness-widget",
+    ] {
+        assert!(
+            find_widget(&root, id).is_some_and(|widget| !widget.is_sensitive()),
+            "unavailable control {id} must remain insensitive"
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]

@@ -9,10 +9,14 @@
 use std::fmt;
 
 use rusttable_compat::{CompatHistoryStep, EnabledState};
+use rusttable_processing::operations::colorcontrast::{
+    COLOR_CONTRAST_V2_PARAMETER_BYTES, ColorContrastConfig, ColorContrastHistory,
+};
 use rusttable_processing::operations::velvia::{
     VELVIA_V2_PARAMETER_BYTES, VelviaConfig, VelviaHistory,
 };
 
+const COLOR_CONTRAST_COMPATIBILITY_NAME: &str = "colorcontrast";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
 
 /// Stable reason an imported history row remains opaque.
@@ -62,9 +66,31 @@ pub struct DecodedVelviaHistoryStep {
     pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
+/// One decoded Color Contrast core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedColorContrastHistoryStep {
+    /// The original row, including opaque blend and multi-instance metadata.
+    pub source: CompatHistoryStep,
+    /// Checked current core parameters, including hidden offsets and unbound mode.
+    pub config: ColorContrastConfig,
+    /// Native enabled state retained without creating an executable operation.
+    pub enabled: bool,
+    /// Original Darktable parameter version.
+    pub source_version: u16,
+    /// Canonical current-version parameter bytes.
+    pub canonical_parameters: [u8; COLOR_CONTRAST_V2_PARAMETER_BYTES],
+    /// Whether the source payload required the pinned v1-to-v2 migration.
+    pub migrated: bool,
+    /// Explicit reason no executable imported operation was emitted.
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
 /// Typed-but-pending result or a byte-preserving unsupported row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarktableHistoryStepDecode {
+    /// Color Contrast core parameters are decoded, while blend/mask semantics
+    /// remain explicitly non-executable.
+    ColorContrastPendingBlend(DecodedColorContrastHistoryStep),
     /// Velvia core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     VelviaPendingBlend(DecodedVelviaHistoryStep),
@@ -85,41 +111,84 @@ pub enum DarktableHistoryStepDecode {
 /// remain authoritative. Unsupported and invalid inputs are returned verbatim.
 #[must_use]
 pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
-    if step.operation.name.as_deref() != Some(VELVIA_COMPATIBILITY_NAME) {
-        return preserved(
+    match step.operation.name.as_deref() {
+        Some(COLOR_CONTRAST_COMPATIBILITY_NAME) => decode_colorcontrast_history_step(step),
+        Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
+        _ => preserved(
             step,
             DarktableHistoryDecodeFindingCode::UnsupportedOperation,
             format!(
                 "Darktable operation {:?} has no typed import materializer",
                 step.operation.raw_name
             ),
-        );
+        ),
     }
+}
 
-    let Some(raw_version) = step.module else {
-        return preserved(
-            step,
-            DarktableHistoryDecodeFindingCode::MissingModuleVersion,
-            "Darktable Velvia history row has no module parameter version".to_owned(),
-        );
+fn decode_colorcontrast_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Color Contrast") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
     };
-    let Ok(source_version) = u16::try_from(raw_version) else {
-        return preserved(
-            step,
-            DarktableHistoryDecodeFindingCode::InvalidModuleVersion,
-            format!("Darktable Velvia module version {raw_version} is outside 0..=65535"),
-        );
-    };
-    let enabled = match step.enabled {
-        EnabledState::Enabled => true,
-        EnabledState::Disabled => false,
-        state => {
+    let history = match ColorContrastHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
             return preserved(
                 step,
-                DarktableHistoryDecodeFindingCode::InvalidEnabledState,
-                format!("Darktable Velvia enabled state {state:?} is not executable"),
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Contrast v{source_version} parameters could not be decoded: {error}"
+                ),
             );
         }
+    };
+    let current = match history.current() {
+        Ok(current) => current,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Color Contrast v{source_version} parameters remain opaque: {error}"
+                ),
+            );
+        }
+    };
+    let canonical_parameters = current.to_bytes();
+    let config = match ColorContrastConfig::try_from(current) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Contrast v{source_version} parameters are not executable: {error}"
+                ),
+            );
+        }
+    };
+
+    DarktableHistoryStepDecode::ColorContrastPendingBlend(DecodedColorContrastHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters,
+        migrated: source_version != 2,
+        execution_blocker: DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+            detail: format!(
+                "Darktable Color Contrast core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+                step.blend_version
+            ),
+        },
+    })
+}
+
+fn decode_velvia_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Velvia") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
     };
 
     let history = match VelviaHistory::decode(source_version, &step.operation_params.bytes) {
@@ -173,6 +242,37 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
             ),
         },
     })
+}
+
+fn decoded_row_header(
+    step: &CompatHistoryStep,
+    operation: &str,
+) -> Result<(u16, bool), DarktableHistoryDecodeFinding> {
+    let Some(raw_version) = step.module else {
+        return Err(DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::MissingModuleVersion,
+            detail: format!("Darktable {operation} history row has no module parameter version"),
+        });
+    };
+    let Ok(source_version) = u16::try_from(raw_version) else {
+        return Err(DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::InvalidModuleVersion,
+            detail: format!(
+                "Darktable {operation} module version {raw_version} is outside 0..=65535"
+            ),
+        });
+    };
+    let enabled = match step.enabled {
+        EnabledState::Enabled => true,
+        EnabledState::Disabled => false,
+        state => {
+            return Err(DarktableHistoryDecodeFinding {
+                code: DarktableHistoryDecodeFindingCode::InvalidEnabledState,
+                detail: format!("Darktable {operation} enabled state {state:?} is not executable"),
+            });
+        }
+    };
+    Ok((source_version, enabled))
 }
 
 fn preserved(

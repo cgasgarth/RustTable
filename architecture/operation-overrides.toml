@@ -2325,6 +2325,11 @@ name = "colorcontrast"
 module_version = 2
 parameter_size = 20
 parameter_layout_hash = "efcfc84077a8c7d10001872b1a8ded1f1042e808eb74767d75e536690e73d00d"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -2373,8 +2378,8 @@ line_end = 255
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 136
-layout_hash = "b6c1f4a1e2cc256f03e89d3db89e6bd29144e7268ad53a0b88ed410b5ccc205c"
+byte_size = 16
+layout_hash = "80865022a8d2899440cb76b62f75d8dc4a51d433f835a14d0f93f0d6423b9f93"
 decoder = "opaque"
 opaque_blocking = true
 fixture_id = "operation.colorcontrast.params.v1"

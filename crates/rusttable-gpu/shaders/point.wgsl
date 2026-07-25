@@ -121,6 +121,22 @@ fn comparison_clamps(value: f32, low: f32, high: f32) -> f32 {
     return low;
 }
 
+// Direct scalar port of data/kernels/extended.cl::colorcontrast. The caller
+// must prove that these four channels are Darktable-scale D50 Lab plus alpha;
+// applying this operation to RGB would be a different, incorrect transform.
+@compute @workgroup_size(${WORKGROUP_SIZE}, 1, 1)
+fn colorcontrast(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (!in_bounds(id.x)) { return; }
+    let pixel = input_pixels[id.x];
+    var a = pixel.y * colorcontrast_params.a_steepness + colorcontrast_params.a_offset;
+    var b = pixel.z * colorcontrast_params.b_steepness + colorcontrast_params.b_offset;
+    if (colorcontrast_params.unbound == 0u) {
+        a = comparison_clamps(a, -128.0, 128.0);
+        b = comparison_clamps(b, -128.0, 128.0);
+    }
+    output_pixels[id.x] = vec4<f32>(pixel.x, a, b, pixel.w);
+}
+
 // Direct scalar port of data/kernels/extended.cl::velvia. Keep the authored
 // association and comparison clamp: finite inputs can still produce NaN in
 // intermediate overflow, which Darktable's CLAMPS routes to the lower bound.

@@ -74,6 +74,31 @@ fn decoder() -> HistoryDecoder {
     })
 }
 
+fn v30_rows(priorities: &[i64]) -> HistoryRows {
+    let mut rows = fixture_rows();
+    let template = rows.history[1].clone();
+    rows.history = priorities
+        .iter()
+        .enumerate()
+        .map(|(ordinal, priority)| {
+            let source_ordinal = u64::try_from(ordinal).expect("fixture ordinal fits u64");
+            let history_ordinal = i64::try_from(ordinal).expect("fixture ordinal fits i64");
+            RawHistoryRow {
+                source_row: 100 + source_ordinal,
+                num: history_ordinal,
+                multi_priority: Some(*priority),
+                multi_name: Some(format!("temperature-{priority}").into_bytes()),
+                ..template.clone()
+            }
+        })
+        .collect();
+    rows.images[0].history_end =
+        Some(i64::try_from(priorities.len()).expect("fixture length fits i64"));
+    rows.module_orders[0].version = Some(2);
+    rows.module_orders[0].operation_list = None;
+    rows
+}
+
 #[test]
 fn history_rows_preserve_opaque_payloads_instances_and_redo_tail() {
     let image = decoder()
@@ -161,4 +186,67 @@ fn limits_stop_executable_projection() {
             .iter()
             .any(|finding| finding.code == FindingCode::HistoryPayloadLimit)
     );
+}
+
+#[test]
+fn v30_without_list_proves_a_single_default_instance() {
+    let image = decoder()
+        .decode(DarktableSchema::new(57, 13), v30_rows(&[0]))
+        .pop()
+        .expect("fixture has one image");
+
+    assert_eq!(
+        image.order_source,
+        Some(HistoryOrderSource::BuiltInModuleOrder)
+    );
+    assert!(image.order_proven);
+    assert!(image.executable);
+    assert!(
+        !image
+            .findings
+            .iter()
+            .any(|finding| finding.code == FindingCode::ModuleOrderConflict)
+    );
+}
+
+#[test]
+fn v30_without_list_rejects_multiple_instances_but_orders_them_deterministically() {
+    let image = decoder()
+        .decode(DarktableSchema::new(57, 13), v30_rows(&[1, 0]))
+        .pop()
+        .expect("fixture has one image");
+    let ordered_priorities = image
+        .operation_order
+        .iter()
+        .map(|id| {
+            image
+                .instances
+                .iter()
+                .find(|instance| instance.id == *id)
+                .expect("order references a decoded instance")
+                .multi_priority
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(ordered_priorities, [Some(0), Some(1)]);
+    assert!(!image.order_proven);
+    assert!(!image.executable);
+    assert!(image.findings.iter().any(|finding| {
+        finding.code == FindingCode::ModuleOrderConflict && finding.severity == Severity::Blocking
+    }));
+}
+
+#[test]
+fn v30_without_list_rejects_a_lone_nonzero_instance() {
+    let image = decoder()
+        .decode(DarktableSchema::new(57, 13), v30_rows(&[1]))
+        .pop()
+        .expect("fixture has one image");
+
+    assert_eq!(image.operation_order.len(), 1);
+    assert!(!image.order_proven);
+    assert!(!image.executable);
+    assert!(image.findings.iter().any(|finding| {
+        finding.code == FindingCode::ModuleOrderConflict && finding.severity == Severity::Blocking
+    }));
 }

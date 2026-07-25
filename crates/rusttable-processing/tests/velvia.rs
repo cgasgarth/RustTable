@@ -403,8 +403,18 @@ fn descriptor_registry_order_and_migration_evidence_are_explicit() {
         .iter()
         .position(|id| *id == "relight")
         .expect("relight");
+    let colorcorrection = order
+        .iter()
+        .position(|id| *id == "colorcorrection")
+        .expect("colorcorrection");
+    let colorcontrast = order
+        .iter()
+        .position(|id| *id == "colorcontrast")
+        .expect("colorcontrast");
     let velvia = order.iter().position(|id| *id == "velvia").expect("velvia");
-    assert_eq!(velvia, relight + 1);
+    assert_eq!(colorcorrection, relight + 1);
+    assert_eq!(colorcontrast, colorcorrection + 1);
+    assert_eq!(velvia, colorcontrast + 1);
 }
 
 #[test]
