@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "62bb9cd88a94fb67b8b54c2228d4e19288abc66019d58ed2ac69222d977f4f97"
+snapshot_hash = "7faff639a352215d0128b1b8c78ac7929ea509471cb24a064a994618409ebea9"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -55,6 +55,14 @@ rust_id = "rusttable.clipping"
 compatibility_name = "clipping"
 descriptor_version = 5
 parameter_version = 5
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.colorcontrast"
+compatibility_name = "colorcontrast"
+descriptor_version = 2
+parameter_version = 2
 implementation_version = 1
 status = "available"
 

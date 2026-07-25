@@ -1,11 +1,16 @@
 use rusttable_color::{
-    Pcs, Primaries, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion, TransferFunction,
+    AdaptationMethod, AlphaTransform, BlackPointCompensation, BuiltinColorTransformPlanner,
+    ColorEncoding, ColorRole, ColorTransformPlanner, ColorTransformRequest, ExtendedRange, Pcs,
+    Precision, Primaries, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion,
+    RenderingIntent, TransferFunction, TransformPlan,
 };
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
     ParameterValue, PhotoId, Revision,
 };
-use rusttable_gpu::{GpuInitError, GpuRuntime, GpuRuntimeConfig};
+use rusttable_gpu::{
+    BasicPointColorSpace, BasicPointError, GpuInitError, GpuRuntime, GpuRuntimeConfig,
+};
 use rusttable_image::{Orientation, SourceColor, SourceColorEvidence};
 use rusttable_masks::{
     GeometryAncestry, MaskGeometry, MaskGraphBuilder, MaskIdentity, MaskNode, MaskRaster, MaskRoi,
@@ -13,10 +18,13 @@ use rusttable_masks::{
 };
 use rusttable_pixelpipe::{
     CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, CpuTilePlan,
-    PixelpipeBackend, PixelpipeExecutionService, RgbaF32ColorEncoding, RgbaF32Descriptor,
-    RgbaF32Image, RgbaF32Pixel, RgbaF32SourceRepresentation,
+    PixelpipeBackend, PixelpipeExecutionService, PixelpipeGpuFallback, RgbaF32ColorEncoding,
+    RgbaF32Descriptor, RgbaF32Image, RgbaF32Pixel, RgbaF32SourceRepresentation,
 };
-use rusttable_processing::{CompiledOperationGraph, RasterDimensions};
+use rusttable_processing::{
+    ColorContrastConfig, ColorContrastPixel, ColorContrastPlan, CompiledOperationGraph,
+    RasterDimensions,
+};
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
     operation_with_opacity(id, key, OperationOpacity::ONE, parameters)
@@ -583,6 +591,555 @@ async fn masked_and_partial_opacity_velvia_remain_truthful_cpu_fallbacks() {
         );
         assert_eq!(full.image(), canonical.image(), "{label} full frame");
         assert_eq!(tiled.image(), canonical.image(), "{label} tiled");
+    }
+}
+
+fn colorcontrast_operation(
+    id: u128,
+    opacity: OperationOpacity,
+    parameters: [f64; 4],
+    unbound: i64,
+) -> Operation {
+    Operation::new_with_opacity(
+        OperationId::new(id).expect("nonzero ID"),
+        OperationKey::new("rusttable.colorcontrast").expect("valid key"),
+        true,
+        opacity,
+        [
+            (
+                ParameterName::new("a_steepness").expect("valid parameter"),
+                ParameterValue::Scalar(FiniteF64::new(parameters[0]).expect("finite parameter")),
+            ),
+            (
+                ParameterName::new("a_offset").expect("valid parameter"),
+                ParameterValue::Scalar(FiniteF64::new(parameters[1]).expect("finite parameter")),
+            ),
+            (
+                ParameterName::new("b_steepness").expect("valid parameter"),
+                ParameterValue::Scalar(FiniteF64::new(parameters[2]).expect("finite parameter")),
+            ),
+            (
+                ParameterName::new("b_offset").expect("valid parameter"),
+                ParameterValue::Scalar(FiniteF64::new(parameters[3]).expect("finite parameter")),
+            ),
+            (
+                ParameterName::new("unbound").expect("valid parameter"),
+                ParameterValue::Integer(unbound),
+            ),
+        ],
+    )
+    .expect("valid Color Contrast operation")
+}
+
+fn colorcontrast_snapshot(
+    encoding: RgbaF32ColorEncoding,
+    opacity: OperationOpacity,
+    include_surrounding_operation: bool,
+    parameters: [f64; 4],
+    unbound: i64,
+) -> CpuPixelpipeSnapshot {
+    let dimensions = RasterDimensions::new(4, 2).expect("dimensions");
+    let pixels = if encoding == RgbaF32ColorEncoding::LabD50 {
+        vec![
+            RgbaF32Pixel::new(50.0, 10.0, -20.0, 0.0),
+            RgbaF32Pixel::new(80.0, 100.0, -100.0, 0.37),
+            RgbaF32Pixel::new(0.0, -128.0, 128.0, 1.0),
+            RgbaF32Pixel::new(100.0, 0.0, 0.0, f32::from_bits(1)),
+            RgbaF32Pixel::new(25.0, -30.0, 40.0, 0.25),
+            RgbaF32Pixel::new(65.0, 75.0, -85.0, 0.50),
+            RgbaF32Pixel::new(42.0, -4.0, 7.0, 0.75),
+            RgbaF32Pixel::new(91.0, 3.0, -2.0, f32::from_bits(0x3eaa_aaab)),
+        ]
+    } else {
+        vec![
+            RgbaF32Pixel::new(0.10, 0.20, 0.30, 0.0),
+            RgbaF32Pixel::new(0.99, 0.90, 0.90, 0.37),
+            RgbaF32Pixel::new(2.00, 2.00, 2.00, 1.0),
+            RgbaF32Pixel::new(-0.25, 0.50, 1.25, f32::from_bits(1)),
+            RgbaF32Pixel::new(0.30, 0.30, 0.30, 0.25),
+            RgbaF32Pixel::new(0.75, 0.20, 0.45, 0.50),
+            RgbaF32Pixel::new(0.01, 0.02, 0.01, 0.75),
+            RgbaF32Pixel::new(1.20, 0.95, 0.90, f32::from_bits(0x3eaa_aaab)),
+        ]
+    };
+    let image = RgbaF32Image::new(RgbaF32Descriptor::new(dimensions, encoding), pixels)
+        .expect("Color Contrast input");
+    let mut operations = Vec::new();
+    if include_surrounding_operation {
+        operations.push(operation(
+            0x4001,
+            "rusttable.exposure",
+            &[("stops", 0.25), ("black", 0.01)],
+        ));
+    }
+    operations.push(colorcontrast_operation(
+        0x4002, opacity, parameters, unbound,
+    ));
+    let edit = Edit::from_parts(
+        EditId::new(0x4000).expect("edit ID"),
+        PhotoId::new(0x4010).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        operations,
+    )
+    .expect("Color Contrast edit");
+    CpuPixelpipeSnapshot::new(
+        image,
+        CompiledOperationGraph::compile(&edit).expect("Color Contrast graph"),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+}
+
+#[test]
+fn colorcontrast_snapshot_identity_includes_every_native_parameter() {
+    let baseline = colorcontrast_snapshot(
+        RgbaF32ColorEncoding::LabD50,
+        OperationOpacity::ONE,
+        false,
+        [1.0, 0.0, 1.0, 0.0],
+        1,
+    )
+    .identity();
+    for (changed, unbound) in [
+        ([1.25, 0.0, 1.0, 0.0], 1),
+        ([1.0, 0.25, 1.0, 0.0], 1),
+        ([1.0, 0.0, 1.25, 0.0], 1),
+        ([1.0, 0.0, 1.0, 0.25], 1),
+        ([1.0, 0.0, 1.0, 0.0], -1),
+    ] {
+        assert_ne!(
+            baseline,
+            colorcontrast_snapshot(
+                RgbaF32ColorEncoding::LabD50,
+                OperationOpacity::ONE,
+                false,
+                changed,
+                unbound,
+            )
+            .identity()
+        );
+    }
+}
+
+fn native_colorcontrast_channel(value: f32, steepness: f32, offset: f32, unbound: bool) -> f32 {
+    let scaled = value * steepness + offset;
+    if unbound {
+        scaled
+    } else if scaled > -128.0 {
+        if scaled < 128.0 { scaled } else { 128.0 }
+    } else {
+        -128.0
+    }
+}
+
+fn working_color_transform(source: ColorEncoding, target: ColorEncoding) -> TransformPlan {
+    let request = ColorTransformRequest::new(
+        source,
+        target,
+        ColorRole::Working,
+        RenderingIntent::Relative,
+        BlackPointCompensation::Disabled,
+        AdaptationMethod::Bradford,
+        Precision::F32,
+        AlphaTransform::Preserve,
+        ExtendedRange::Extended,
+        1,
+    )
+    .expect("working color-transform request");
+    BuiltinColorTransformPlanner
+        .plan(&request)
+        .expect("built-in working color transform")
+}
+
+#[test]
+fn cpu_colorcontrast_executes_explicit_lab_without_an_rgb_round_trip() {
+    for unbound in [false, true] {
+        let snapshot = colorcontrast_snapshot(
+            RgbaF32ColorEncoding::LabD50,
+            OperationOpacity::ONE,
+            false,
+            [2.0, 3.0, 1.5, -4.0],
+            i64::from(u8::from(unbound)),
+        );
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect("CPU Color Contrast result");
+        let tiled = CpuPixelpipeExecutor
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .expect("tiled CPU Color Contrast result");
+
+        for (index, (source, actual)) in snapshot
+            .input()
+            .pixels()
+            .iter()
+            .zip(canonical.image().pixels())
+            .enumerate()
+        {
+            assert_eq!(
+                actual.red().to_bits(),
+                source.red().to_bits(),
+                "pixel {index} L"
+            );
+            assert_eq!(
+                actual.green().to_bits(),
+                native_colorcontrast_channel(source.green(), 2.0, 3.0, unbound).to_bits(),
+                "pixel {index} a"
+            );
+            assert_eq!(
+                actual.blue().to_bits(),
+                native_colorcontrast_channel(source.blue(), 1.5, -4.0, unbound).to_bits(),
+                "pixel {index} b"
+            );
+            assert_eq!(
+                actual.alpha().to_bits(),
+                source.alpha().to_bits(),
+                "pixel {index} separately carried alpha"
+            );
+        }
+        assert_eq!(tiled.image(), canonical.image());
+    }
+}
+
+#[test]
+fn cpu_colorcontrast_keeps_multiple_instances_in_native_lab_order() {
+    let input = colorcontrast_snapshot(
+        RgbaF32ColorEncoding::LabD50,
+        OperationOpacity::ONE,
+        false,
+        [1.0, 0.0, 1.0, 0.0],
+        1,
+    )
+    .input()
+    .clone();
+    let edit = Edit::from_parts(
+        EditId::new(0x4100).expect("edit ID"),
+        PhotoId::new(0x4110).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [
+            colorcontrast_operation(0x4101, OperationOpacity::ONE, [2.0, 3.0, 1.5, -4.0], 1),
+            colorcontrast_operation(0x4102, OperationOpacity::ONE, [0.5, -2.0, 2.0, 5.0], 0),
+        ],
+    )
+    .expect("two-instance Color Contrast edit");
+    let snapshot = CpuPixelpipeSnapshot::new(
+        input,
+        CompiledOperationGraph::compile(&edit).expect("two-instance graph"),
+        CpuPixelpipeOutputMode::FullExport,
+    );
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU two-instance Color Contrast result");
+    let tiled = CpuPixelpipeExecutor
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled CPU two-instance Color Contrast result");
+
+    for (index, (source, actual)) in snapshot
+        .input()
+        .pixels()
+        .iter()
+        .zip(canonical.image().pixels())
+        .enumerate()
+    {
+        let first_a = native_colorcontrast_channel(source.green(), 2.0, 3.0, true);
+        let first_b = native_colorcontrast_channel(source.blue(), 1.5, -4.0, true);
+        let expected_a = native_colorcontrast_channel(first_a, 0.5, -2.0, false);
+        let expected_b = native_colorcontrast_channel(first_b, 2.0, 5.0, false);
+        assert_eq!(
+            actual.red().to_bits(),
+            source.red().to_bits(),
+            "pixel {index} L"
+        );
+        assert_eq!(
+            actual.green().to_bits(),
+            expected_a.to_bits(),
+            "pixel {index} a"
+        );
+        assert_eq!(
+            actual.blue().to_bits(),
+            expected_b.to_bits(),
+            "pixel {index} b"
+        );
+        assert_eq!(
+            actual.alpha().to_bits(),
+            source.alpha().to_bits(),
+            "pixel {index} separately carried alpha"
+        );
+    }
+    assert_eq!(tiled.image(), canonical.image());
+}
+
+#[test]
+fn cpu_linear_srgb_colorcontrast_instances_share_one_exact_lab_boundary() {
+    let input = colorcontrast_snapshot(
+        RgbaF32ColorEncoding::LinearSrgbD65,
+        OperationOpacity::ONE,
+        false,
+        [1.0, 0.0, 1.0, 0.0],
+        1,
+    )
+    .input()
+    .clone();
+    let edit = Edit::from_parts(
+        EditId::new(0x4200).expect("edit ID"),
+        PhotoId::new(0x4210).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [
+            colorcontrast_operation(0x4201, OperationOpacity::ONE, [1.5, 2.0, 0.75, -4.0], 1),
+            colorcontrast_operation(
+                0x4202,
+                OperationOpacity::new(0.5).expect("half opacity"),
+                [0.5, -2.0, 1.25, 3.0],
+                0,
+            ),
+        ],
+    )
+    .expect("two-instance RGB Color Contrast edit");
+    let snapshot = with_uniform_mask(
+        CpuPixelpipeSnapshot::new(
+            input,
+            CompiledOperationGraph::compile(&edit).expect("two-instance RGB graph"),
+            CpuPixelpipeOutputMode::FullExport,
+        ),
+        0x4202,
+    );
+
+    let to_lab = working_color_transform(ColorEncoding::LinearSrgbD65, ColorEncoding::LabD50);
+    let from_lab = working_color_transform(ColorEncoding::LabD50, ColorEncoding::LinearSrgbD65);
+    let mut reference = snapshot
+        .input()
+        .pixels()
+        .iter()
+        .enumerate()
+        .map(|(pixel_index, source)| {
+            let lab = to_lab
+                .apply_rgb([source.red(), source.green(), source.blue()], || false)
+                .unwrap_or_else(|error| panic!("reference ingress pixel {pixel_index}: {error}"));
+            ColorContrastPixel::new(lab[0], lab[1], lab[2], source.alpha())
+        })
+        .collect::<Vec<_>>();
+    reference = ColorContrastPlan::new(
+        ColorContrastConfig::new(1.5, 2.0, 0.75, -4.0, 1).expect("first config"),
+    )
+    .execute_lab(&reference);
+    let mask = vec![0.25; reference.len()];
+    reference = ColorContrastPlan::new(
+        ColorContrastConfig::new(0.5, -2.0, 1.25, 3.0, 0).expect("second config"),
+    )
+    .execute_lab_normal_blend(&reference, Some(&mask), 0.5);
+    let reference = reference
+        .iter()
+        .zip(snapshot.input().pixels())
+        .enumerate()
+        .map(|(pixel_index, (lab, source))| {
+            let lab = lab.channels();
+            let rgb = from_lab
+                .apply_rgb([lab[0], lab[1], lab[2]], || false)
+                .unwrap_or_else(|error| panic!("reference egress pixel {pixel_index}: {error}"));
+            RgbaF32Pixel::new(rgb[0], rgb[1], rgb[2], source.alpha())
+        })
+        .collect::<Vec<_>>();
+    let reference = RgbaF32Image::new(
+        RgbaF32Descriptor::new(
+            snapshot.input().descriptor().dimensions(),
+            RgbaF32ColorEncoding::LinearSrgbD65,
+        ),
+        reference,
+    )
+    .expect("single-boundary reference image");
+
+    let canonical = CpuPixelpipeExecutor
+        .execute(&snapshot)
+        .expect("CPU two-instance RGB Color Contrast result");
+    let tiled = CpuPixelpipeExecutor
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+        .expect("tiled two-instance RGB Color Contrast result");
+
+    assert_eq!(canonical.image(), &reference);
+    assert_eq!(tiled.image(), &reference);
+}
+
+#[tokio::test]
+async fn wgpu_colorcontrast_matches_native_lab_formula_full_frame_and_tiled() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    for unbound in [false, true] {
+        let snapshot = colorcontrast_snapshot(
+            RgbaF32ColorEncoding::LabD50,
+            OperationOpacity::ONE,
+            false,
+            [2.0, 3.0, 1.5, -4.0],
+            i64::from(u8::from(unbound)),
+        );
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect("CPU Color Contrast result");
+        let full = service
+            .execute(&snapshot)
+            .expect("full-frame GPU Color Contrast result");
+        let tiled = service
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .expect("tiled GPU Color Contrast result");
+
+        assert_eq!(full.receipt().backend(), PixelpipeBackend::WgpuBasic);
+        assert_eq!(full.receipt().dispatches(), 1);
+        assert_eq!(tiled.receipt().backend(), PixelpipeBackend::WgpuTiled);
+        assert_eq!(tiled.receipt().dispatches(), 4);
+        assert_gpu_image_matches_cpu(
+            "Color Contrast full frame",
+            full.image(),
+            canonical.image(),
+            snapshot.input().descriptor(),
+            0.000_001,
+        );
+        assert_gpu_image_matches_cpu(
+            "Color Contrast tiled",
+            tiled.image(),
+            canonical.image(),
+            snapshot.input().descriptor(),
+            0.000_001,
+        );
+        for (index, ((source, full), tiled)) in snapshot
+            .input()
+            .pixels()
+            .iter()
+            .zip(full.image().pixels())
+            .zip(tiled.image().pixels())
+            .enumerate()
+        {
+            let expected_a = native_colorcontrast_channel(source.green(), 2.0, 3.0, unbound);
+            let expected_b = native_colorcontrast_channel(source.blue(), 1.5, -4.0, unbound);
+            for (label, actual) in [("full", full), ("tiled", tiled)] {
+                assert_eq!(
+                    actual.red().to_bits(),
+                    source.red().to_bits(),
+                    "{label} pixel {index} L"
+                );
+                assert_eq!(
+                    actual.green().to_bits(),
+                    expected_a.to_bits(),
+                    "{label} pixel {index} a"
+                );
+                assert_eq!(
+                    actual.blue().to_bits(),
+                    expected_b.to_bits(),
+                    "{label} pixel {index} b"
+                );
+                assert_eq!(
+                    actual.alpha().to_bits(),
+                    source.alpha().to_bits(),
+                    "{label} pixel {index} alpha"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn colorcontrast_without_a_proven_lab_chain_reports_cpu_fallback() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let fallback = PixelpipeGpuFallback::Basic(BasicPointError::ColorSpaceBoundaryUnavailable {
+        required: BasicPointColorSpace::LabD50,
+    });
+    for (label, snapshot) in [
+        (
+            "RGB source",
+            colorcontrast_snapshot(
+                RgbaF32ColorEncoding::LinearSrgbD65,
+                OperationOpacity::ONE,
+                false,
+                [2.0, 3.0, 1.5, -4.0],
+                0,
+            ),
+        ),
+        (
+            "mixed Lab chain",
+            colorcontrast_snapshot(
+                RgbaF32ColorEncoding::LabD50,
+                OperationOpacity::ONE,
+                true,
+                [2.0, 3.0, 1.5, -4.0],
+                0,
+            ),
+        ),
+    ] {
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} CPU result: {error}"));
+        let full = service
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} selected result: {error}"));
+        let tiled = service
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .unwrap_or_else(|error| panic!("{label} tiled result: {error}"));
+        assert_eq!(full.receipt().backend(), PixelpipeBackend::CpuCanonical);
+        assert_eq!(full.receipt().gpu_fallback(), Some(&fallback));
+        assert_eq!(
+            tiled.receipt().backend(),
+            PixelpipeBackend::CpuTiledFallback
+        );
+        assert_eq!(tiled.receipt().gpu_fallback(), Some(&fallback));
+        assert_eq!(full.image(), canonical.image());
+        assert_eq!(tiled.image(), canonical.image());
+    }
+}
+
+#[tokio::test]
+async fn masked_and_partial_opacity_colorcontrast_remain_cpu_only() {
+    let Some(runtime) = gpu_runtime().await else {
+        return;
+    };
+    let service = PixelpipeExecutionService::with_gpu(runtime);
+    let cases = [
+        (
+            "masked",
+            with_uniform_mask(
+                colorcontrast_snapshot(
+                    RgbaF32ColorEncoding::LabD50,
+                    OperationOpacity::ONE,
+                    false,
+                    [2.0, 3.0, 1.5, -4.0],
+                    0,
+                ),
+                0x4002,
+            ),
+        ),
+        (
+            "partial opacity",
+            colorcontrast_snapshot(
+                RgbaF32ColorEncoding::LabD50,
+                OperationOpacity::new(0.5).expect("partial opacity"),
+                false,
+                [2.0, 3.0, 1.5, -4.0],
+                0,
+            ),
+        ),
+    ];
+    for (label, snapshot) in cases {
+        let canonical = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} CPU result: {error}"));
+        let full = service
+            .execute(&snapshot)
+            .unwrap_or_else(|error| panic!("{label} selected result: {error}"));
+        let tiled = service
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
+            .unwrap_or_else(|error| panic!("{label} tiled result: {error}"));
+        assert_eq!(full.receipt().backend(), PixelpipeBackend::CpuCanonical);
+        assert_eq!(
+            tiled.receipt().backend(),
+            PixelpipeBackend::CpuTiledFallback
+        );
+        assert_eq!(full.receipt().gpu_fallback(), None);
+        assert_eq!(tiled.receipt().gpu_fallback(), None);
+        assert_eq!(full.image(), canonical.image());
+        assert_eq!(tiled.image(), canonical.image());
     }
 }
 

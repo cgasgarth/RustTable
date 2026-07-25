@@ -1,5 +1,6 @@
-//! WGPU point-operation execution, including the direct Velvia port from
-//! `data/kernels/extended.cl::velvia` and `src/iop/velvia.c`.
+//! WGPU point-operation execution, including direct ports from
+//! `data/kernels/extended.cl::{colorcontrast,velvia}` and their matching
+//! `src/iop/*.c` modules.
 
 use std::fmt;
 use std::num::NonZeroU64;
@@ -14,6 +15,8 @@ const VELVIA_STRENGTH_OFFSET: usize = 56;
 const VELVIA_BIAS_OFFSET: usize = 60;
 const BASICADJ_PARAMS_SIZE: u64 = 48;
 const BASICADJ_PARAMS_BYTES: usize = 48;
+const COLORCONTRAST_PARAMS_SIZE: u64 = 32;
+const COLORCONTRAST_PARAMS_BYTES: usize = 32;
 
 #[derive(Debug)]
 struct PointEntryContract<'a> {
@@ -21,11 +24,22 @@ struct PointEntryContract<'a> {
     layout_entries: Vec<wgpu::BindGroupLayoutEntry>,
     params_size: u64,
     basic_params_size: Option<u64>,
+    colorcontrast_params_size: Option<u64>,
 }
 
 struct PointParameterBuffers {
     params: wgpu::Buffer,
     basic_params: Option<wgpu::Buffer>,
+    colorcontrast_params: Option<wgpu::Buffer>,
+}
+
+/// Explicit channel domain for one shared point-dispatch chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BasicPointColorSpace {
+    /// Linear-light RGB plus alpha.
+    LinearRgb,
+    /// Darktable-scale D50 Lab plus alpha: L in 0..100 and a/b centered on zero.
+    LabD50,
 }
 
 /// Frozen scalar coefficients for one atomic basicadj stage.
@@ -43,14 +57,33 @@ pub struct BasicAdjPointParameters {
     pub vibrance: f32,
 }
 
-/// One operation in the basic linear-light point pipeline.
+/// One operation in the shared point pipeline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BasicPointOperation {
     BasicAdj(BasicAdjPointParameters),
-    Exposure { stops: f32, black: f32 },
-    LinearOffset { value: f32 },
-    RgbGain { red: f32, green: f32, blue: f32 },
-    Velvia { strength: f32, bias: f32 },
+    Exposure {
+        stops: f32,
+        black: f32,
+    },
+    LinearOffset {
+        value: f32,
+    },
+    RgbGain {
+        red: f32,
+        green: f32,
+        blue: f32,
+    },
+    ColorContrast {
+        a_steepness: f32,
+        a_offset: f32,
+        b_steepness: f32,
+        b_offset: f32,
+        unbound: bool,
+    },
+    Velvia {
+        strength: f32,
+        bias: f32,
+    },
 }
 
 impl BasicPointOperation {
@@ -60,7 +93,21 @@ impl BasicPointOperation {
             Self::Exposure { .. } => "exposure",
             Self::LinearOffset { .. } => "linear_offset",
             Self::RgbGain { .. } => "rgb_gain",
+            Self::ColorContrast { .. } => "colorcontrast",
             Self::Velvia { .. } => "velvia",
+        }
+    }
+
+    /// Returns the channel domain required by this operation.
+    #[must_use]
+    pub const fn required_color_space(self) -> BasicPointColorSpace {
+        match self {
+            Self::ColorContrast { .. } => BasicPointColorSpace::LabD50,
+            Self::BasicAdj(_)
+            | Self::Exposure { .. }
+            | Self::LinearOffset { .. }
+            | Self::RgbGain { .. }
+            | Self::Velvia { .. } => BasicPointColorSpace::LinearRgb,
         }
     }
 
@@ -68,7 +115,9 @@ impl BasicPointOperation {
         let mut bytes = [0_u8; POINT_PARAMS_BYTES];
         bytes[0..4].copy_from_slice(&pixel_count.to_le_bytes());
         let values = match self {
-            Self::BasicAdj(_) | Self::Velvia { .. } => [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0],
+            Self::BasicAdj(_) | Self::ColorContrast { .. } | Self::Velvia { .. } => {
+                [0.0, 0.0, 1.0, 1.0, 1.0, 2.2, 0.0]
+            }
             Self::Exposure { stops, black } => [stops, 0.0, 1.0, 1.0, 1.0, 2.2, black],
             Self::LinearOffset { value } => [0.0, value, 1.0, 1.0, 1.0, 2.2, 0.0],
             Self::RgbGain { red, green, blue } => [0.0, 0.0, red, green, blue, 2.2, 0.0],
@@ -82,6 +131,29 @@ impl BasicPointOperation {
                 .copy_from_slice(&strength.to_le_bytes());
             bytes[VELVIA_BIAS_OFFSET..POINT_PARAMS_BYTES].copy_from_slice(&bias.to_le_bytes());
         }
+        bytes
+    }
+
+    fn colorcontrast_params(self) -> [u8; COLORCONTRAST_PARAMS_BYTES] {
+        let mut bytes = [0_u8; COLORCONTRAST_PARAMS_BYTES];
+        let Self::ColorContrast {
+            a_steepness,
+            a_offset,
+            b_steepness,
+            b_offset,
+            unbound,
+        } = self
+        else {
+            return bytes;
+        };
+        for (index, value) in [a_steepness, a_offset, b_steepness, b_offset]
+            .into_iter()
+            .enumerate()
+        {
+            let offset = index * 4;
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[16..20].copy_from_slice(&u32::from(unbound).to_le_bytes());
         bytes
     }
 
@@ -131,6 +203,15 @@ impl BasicPointOperation {
             Self::RgbGain { red, green, blue } => {
                 red.is_finite() && green.is_finite() && blue.is_finite()
             }
+            Self::ColorContrast {
+                a_steepness,
+                a_offset,
+                b_steepness,
+                b_offset,
+                ..
+            } => [a_steepness, a_offset, b_steepness, b_offset]
+                .iter()
+                .all(|value| value.is_finite()),
             Self::Velvia { strength, bias } => strength.is_finite() && bias.is_finite(),
         }
     }
@@ -139,9 +220,11 @@ impl BasicPointOperation {
 /// A checked request for the WGPU point-operation executor.
 #[derive(Debug, Clone, Copy)]
 pub struct BasicPointRequest<'a> {
-    /// Packed linear-light RGBA f32 pixels. Alpha is copied unchanged.
+    /// Packed four-channel f32 pixels. Alpha is copied unchanged.
     pub pixels: &'a [f32],
     pub operations: &'a [BasicPointOperation],
+    /// Proven channel domain for every operation in this dispatch chain.
+    pub color_space: BasicPointColorSpace,
 }
 
 /// Read-back from one WGPU point-operation dispatch chain.
@@ -170,8 +253,17 @@ pub enum BasicPointError {
     EmptyInput,
     InvalidPixelPacking,
     TooManyPixels,
-    NonFiniteInput { component: usize },
+    NonFiniteInput {
+        component: usize,
+    },
     NonFiniteParameter,
+    ColorSpaceMismatch {
+        requested: BasicPointColorSpace,
+        required: BasicPointColorSpace,
+    },
+    ColorSpaceBoundaryUnavailable {
+        required: BasicPointColorSpace,
+    },
     TooManyWorkgroups,
     ShaderUnavailable,
     Poll(String),
@@ -197,6 +289,17 @@ impl fmt::Display for BasicPointError {
             Self::NonFiniteParameter => {
                 formatter.write_str("basic WGPU point operation parameter is non-finite")
             }
+            Self::ColorSpaceMismatch {
+                requested,
+                required,
+            } => write!(
+                formatter,
+                "basic WGPU point operation requires {required:?}, not requested {requested:?}"
+            ),
+            Self::ColorSpaceBoundaryUnavailable { required } => write!(
+                formatter,
+                "basic WGPU point chain does not expose the isolated {required:?} boundary required by the operation"
+            ),
             Self::TooManyWorkgroups => {
                 formatter.write_str("basic WGPU point input exceeds the device workgroup limit")
             }
@@ -214,11 +317,11 @@ impl std::error::Error for BasicPointError {}
 impl GpuRuntime {
     /// Executes the registered point-operation shaders in authored order.
     ///
-    /// Transfer conversion remains at the typed pixelpipe boundary for this
-    /// first slice. The executor therefore receives linear-light RGBA f32
-    /// values and returns the same representation, preserving alpha exactly.
-    /// Unsupported transfer, opacity, and non-point stages are rejected by the
-    /// pixelpipe adapter before this method is called.
+    /// Transfer and Lab conversion remain at the typed pixelpipe boundary. The
+    /// executor receives a chain whose explicit channel domain matches every
+    /// operation and returns that same representation, preserving alpha.
+    /// Unsupported transfer, opacity, masks, mixed-domain chains, and non-point
+    /// stages are rejected by the pixelpipe adapter before this method is called.
     #[allow(clippy::too_many_lines)]
     pub fn execute_basic_point(
         &self,
@@ -305,9 +408,20 @@ impl GpuRuntime {
                     queue.write_buffer(&buffer, 0, &operation.basic_params());
                     buffer
                 });
+                let colorcontrast_params = contract.colorcontrast_params_size.map(|size| {
+                    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("RustTable color contrast parameters"),
+                        size,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    });
+                    queue.write_buffer(&buffer, 0, &operation.colorcontrast_params());
+                    buffer
+                });
                 PointParameterBuffers {
                     params,
                     basic_params,
+                    colorcontrast_params,
                 }
             })
             .collect::<Vec<_>>();
@@ -354,6 +468,12 @@ impl GpuRuntime {
                 bind_group_entries.push(wgpu::BindGroupEntry {
                     binding: 3,
                     resource: basic_params.as_entire_binding(),
+                });
+            }
+            if let Some(colorcontrast_params) = &parameter_buffers.colorcontrast_params {
+                bind_group_entries.push(wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: colorcontrast_params.as_entire_binding(),
                 });
             }
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -413,10 +533,10 @@ fn point_entry_contract<'a>(
         .find("rusttable.point", entry_point)
         .ok_or(BasicPointError::ShaderUnavailable)?;
     let reflection = &entry.reflection;
-    let expected_bindings: &[u32] = if entry_point == "basicadj" {
-        &[0, 1, 2, 3]
-    } else {
-        &[0, 1, 2]
+    let expected_bindings: &[u32] = match entry_point {
+        "basicadj" => &[0, 1, 2, 3],
+        "colorcontrast" => &[0, 1, 2, 4],
+        _ => &[0, 1, 2],
     };
     if entry.expanded_source.is_empty()
         || reflection.entry_point != entry_point
@@ -445,11 +565,18 @@ fn point_entry_contract<'a>(
     {
         return Err(BasicPointError::ShaderUnavailable);
     }
+    let colorcontrast_params_size = reflected_uniform_size(&reflection.bindings, 4);
+    if colorcontrast_params_size.is_some() != (entry_point == "colorcontrast")
+        || colorcontrast_params_size.is_some_and(|size| size != COLORCONTRAST_PARAMS_SIZE)
+    {
+        return Err(BasicPointError::ShaderUnavailable);
+    }
     Ok(PointEntryContract {
         source: &entry.expanded_source,
         layout_entries,
         params_size,
         basic_params_size,
+        colorcontrast_params_size,
     })
 }
 
@@ -525,9 +652,25 @@ fn validate_request(
     {
         return Err(BasicPointError::NonFiniteParameter);
     }
+    validate_operation_color_space(request)?;
     let workgroups = request.pixels.len().div_ceil(4 * WORKGROUP_SIZE as usize) as u64;
     if workgroups > u64::from(runtime.snapshot().limits.max_workgroups_per_dimension) {
         return Err(BasicPointError::TooManyWorkgroups);
+    }
+    Ok(())
+}
+
+fn validate_operation_color_space(request: BasicPointRequest<'_>) -> Result<(), BasicPointError> {
+    if let Some(required) = request
+        .operations
+        .iter()
+        .map(|operation| operation.required_color_space())
+        .find(|required| *required != request.color_space)
+    {
+        return Err(BasicPointError::ColorSpaceMismatch {
+            requested: request.color_space,
+            required,
+        });
     }
     Ok(())
 }
@@ -609,14 +752,79 @@ mod tests {
     }
 
     #[test]
+    fn colorcontrast_parameters_follow_the_dedicated_uniform_layout() {
+        let operation = BasicPointOperation::ColorContrast {
+            a_steepness: 1.25,
+            a_offset: -2.5,
+            b_steepness: 0.75,
+            b_offset: 3.5,
+            unbound: true,
+        };
+        let bytes = operation.colorcontrast_params();
+        for (index, expected) in [1.25_f32, -2.5, 0.75, 3.5].into_iter().enumerate() {
+            let offset = index * 4;
+            assert_eq!(&bytes[offset..offset + 4], &expected.to_le_bytes());
+        }
+        assert_eq!(&bytes[16..20], &1_u32.to_le_bytes());
+        assert!(bytes[20..].iter().all(|byte| *byte == 0));
+        assert_eq!(bytes.len(), COLORCONTRAST_PARAMS_BYTES);
+    }
+
+    #[test]
+    fn colorcontrast_rejects_non_finite_parameters_and_requires_lab_d50() {
+        for operation in [
+            BasicPointOperation::ColorContrast {
+                a_steepness: f32::NAN,
+                a_offset: 0.0,
+                b_steepness: 1.0,
+                b_offset: 0.0,
+                unbound: true,
+            },
+            BasicPointOperation::ColorContrast {
+                a_steepness: 1.0,
+                a_offset: 0.0,
+                b_steepness: f32::INFINITY,
+                b_offset: 0.0,
+                unbound: false,
+            },
+        ] {
+            assert!(!operation.parameters_are_finite());
+        }
+        let operation = BasicPointOperation::ColorContrast {
+            a_steepness: 1.0,
+            a_offset: 0.0,
+            b_steepness: 1.0,
+            b_offset: 0.0,
+            unbound: true,
+        };
+        assert!(operation.parameters_are_finite());
+        assert_eq!(
+            operation.required_color_space(),
+            BasicPointColorSpace::LabD50
+        );
+        assert_eq!(
+            validate_operation_color_space(BasicPointRequest {
+                pixels: &[50.0, 0.0, 0.0, 1.0],
+                operations: &[operation],
+                color_space: BasicPointColorSpace::LinearRgb,
+            }),
+            Err(BasicPointError::ColorSpaceMismatch {
+                requested: BasicPointColorSpace::LinearRgb,
+                required: BasicPointColorSpace::LabD50,
+            })
+        );
+    }
+
+    #[test]
     fn entry_scoped_runtime_layouts_match_checked_reflection() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        for (entry_point, expected_bindings, expects_basic_params) in [
-            ("exposure", &[0, 1, 2][..], false),
-            ("linear_offset", &[0, 1, 2][..], false),
-            ("rgb_gain", &[0, 1, 2][..], false),
-            ("velvia", &[0, 1, 2][..], false),
-            ("basicadj", &[0, 1, 2, 3][..], true),
+        for (entry_point, expected_bindings, expects_basic_params, expects_colorcontrast_params) in [
+            ("exposure", &[0, 1, 2][..], false, false),
+            ("linear_offset", &[0, 1, 2][..], false, false),
+            ("rgb_gain", &[0, 1, 2][..], false, false),
+            ("velvia", &[0, 1, 2][..], false, false),
+            ("basicadj", &[0, 1, 2, 3][..], true, false),
+            ("colorcontrast", &[0, 1, 2, 4][..], false, true),
         ] {
             let entry = registry
                 .find("rusttable.point", entry_point)
@@ -640,6 +848,11 @@ mod tests {
                 contract.basic_params_size.is_some(),
                 expects_basic_params,
                 "{entry_point} basicadj parameter allocation"
+            );
+            assert_eq!(
+                contract.colorcontrast_params_size.is_some(),
+                expects_colorcontrast_params,
+                "{entry_point} color contrast parameter allocation"
             );
             for (runtime, reflected) in contract
                 .layout_entries
@@ -699,6 +912,7 @@ mod tests {
             .execute_basic_point(BasicPointRequest {
                 pixels: &input,
                 operations: &operations,
+                color_space: BasicPointColorSpace::LinearRgb,
             })
             .expect("basic point dispatch");
         let expected = [0.15, 0.75, 1.4, 0.4, 0.55, 1.95, 3.0, 0.8];
@@ -728,6 +942,7 @@ mod tests {
             .execute_basic_point(BasicPointRequest {
                 pixels: &input,
                 operations: &operations,
+                color_space: BasicPointColorSpace::LinearRgb,
             })
             .expect("black-level point dispatch");
         let expected = [1.0, 1.0 / 3.0, 5.0 / 3.0, 0.4];
@@ -765,6 +980,7 @@ mod tests {
             .execute_basic_point(BasicPointRequest {
                 pixels: &input,
                 operations: &[BasicPointOperation::BasicAdj(parameters)],
+                color_space: BasicPointColorSpace::LinearRgb,
             })
             .expect("basicadj dispatch");
         let expected = [
@@ -839,6 +1055,211 @@ mod tests {
         ]
     }
 
+    fn colorcontrast_cpu(
+        pixel: [f32; 4],
+        a_steepness: f32,
+        a_offset: f32,
+        b_steepness: f32,
+        b_offset: f32,
+        unbound: bool,
+    ) -> [f32; 4] {
+        let a = pixel[1] * a_steepness + a_offset;
+        let b = pixel[2] * b_steepness + b_offset;
+        [
+            pixel[0],
+            if unbound {
+                a
+            } else {
+                comparison_clamps(a, -128.0, 128.0)
+            },
+            if unbound {
+                b
+            } else {
+                comparison_clamps(b, -128.0, 128.0)
+            },
+            pixel[3],
+        ]
+    }
+
+    #[tokio::test]
+    async fn colorcontrast_dispatch_matches_native_lab_formula_bound_and_unbound() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let corpus = [
+            [50.0, 10.0, -20.0, 0.0],
+            [80.0, 100.0, -100.0, 0.37],
+            [0.0, -128.0, 128.0, 1.0],
+            [100.0, 0.0, 0.0, f32::from_bits(1)],
+        ];
+        let input = corpus.into_iter().flatten().collect::<Vec<_>>();
+        for unbound in [false, true] {
+            let operation = BasicPointOperation::ColorContrast {
+                a_steepness: 2.0,
+                a_offset: 3.0,
+                b_steepness: 1.5,
+                b_offset: -4.0,
+                unbound,
+            };
+            let result = runtime
+                .execute_basic_point(BasicPointRequest {
+                    pixels: &input,
+                    operations: &[operation],
+                    color_space: BasicPointColorSpace::LabD50,
+                })
+                .expect("Color Contrast point dispatch");
+            let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
+            assert!(remainder.is_empty());
+            for (index, (actual, source)) in actual_pixels.iter().zip(corpus).enumerate() {
+                let expected = colorcontrast_cpu(source, 2.0, 3.0, 1.5, -4.0, unbound);
+                for channel in 0..3 {
+                    assert!(
+                        (actual[channel] - expected[channel]).abs() <= 0.00001,
+                        "pixel {index} channel {channel}: {} != {}",
+                        actual[channel],
+                        expected[channel]
+                    );
+                }
+                assert_eq!(
+                    actual[3].to_bits(),
+                    expected[3].to_bits(),
+                    "pixel {index} alpha"
+                );
+            }
+            assert_eq!(result.dispatches(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn colorcontrast_dispatch_applies_multiple_instances_in_authored_order() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let corpus = [
+            [50.0, 10.0, -20.0, 0.37],
+            [80.0, 100.0, -100.0, f32::from_bits(1)],
+        ];
+        let input = corpus.into_iter().flatten().collect::<Vec<_>>();
+        let operations = [
+            BasicPointOperation::ColorContrast {
+                a_steepness: 2.0,
+                a_offset: 3.0,
+                b_steepness: 1.5,
+                b_offset: -4.0,
+                unbound: true,
+            },
+            BasicPointOperation::ColorContrast {
+                a_steepness: 0.5,
+                a_offset: -2.0,
+                b_steepness: 2.0,
+                b_offset: 5.0,
+                unbound: false,
+            },
+        ];
+        let result = runtime
+            .execute_basic_point(BasicPointRequest {
+                pixels: &input,
+                operations: &operations,
+                color_space: BasicPointColorSpace::LabD50,
+            })
+            .expect("ordered Color Contrast point dispatches");
+        let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
+        assert!(remainder.is_empty());
+        for (index, (actual, source)) in actual_pixels.iter().zip(corpus).enumerate() {
+            let first = colorcontrast_cpu(source, 2.0, 3.0, 1.5, -4.0, true);
+            let expected = colorcontrast_cpu(first, 0.5, -2.0, 2.0, 5.0, false);
+            for channel in 0..3 {
+                assert!(
+                    (actual[channel] - expected[channel]).abs() <= 0.00001,
+                    "pixel {index} channel {channel}: {} != {}",
+                    actual[channel],
+                    expected[channel]
+                );
+            }
+            assert_eq!(
+                actual[3].to_bits(),
+                expected[3].to_bits(),
+                "pixel {index} alpha"
+            );
+        }
+        assert_eq!(result.dispatches(), 2);
+    }
+
+    #[tokio::test]
+    async fn colorcontrast_dispatch_preserves_native_finite_overflow_semantics() {
+        let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
+            return;
+        };
+        if runtime.is_cpu_only() {
+            return;
+        }
+        let corpus = [
+            [50.0, f32::MAX, -f32::MAX, 0.37],
+            [80.0, -f32::MAX, f32::MAX, f32::from_bits(1)],
+        ];
+        let input = corpus.into_iter().flatten().collect::<Vec<_>>();
+        assert!(input.iter().all(|component| component.is_finite()));
+
+        for unbound in [false, true] {
+            let operation = BasicPointOperation::ColorContrast {
+                a_steepness: 2.0,
+                a_offset: 0.0,
+                b_steepness: 2.0,
+                b_offset: 0.0,
+                unbound,
+            };
+            assert!(operation.parameters_are_finite());
+            let result = runtime
+                .execute_basic_point(BasicPointRequest {
+                    pixels: &input,
+                    operations: &[operation],
+                    color_space: BasicPointColorSpace::LabD50,
+                })
+                .expect("overflow-derived Color Contrast point dispatch");
+            let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
+            assert!(remainder.is_empty());
+            for (index, (actual, source)) in actual_pixels.iter().zip(corpus).enumerate() {
+                assert_eq!(actual[0].to_bits(), source[0].to_bits(), "pixel {index} L");
+                assert_eq!(
+                    actual[3].to_bits(),
+                    source[3].to_bits(),
+                    "pixel {index} alpha"
+                );
+                for (channel, source_component) in [(1, source[1]), (2, source[2])] {
+                    if unbound {
+                        assert!(
+                            actual[channel].is_infinite(),
+                            "pixel {index} channel {channel} must preserve overflow as infinity"
+                        );
+                        assert_eq!(
+                            actual[channel].is_sign_negative(),
+                            source_component.is_sign_negative(),
+                            "pixel {index} channel {channel} infinity sign"
+                        );
+                    } else {
+                        let expected = if source_component.is_sign_negative() {
+                            -128.0_f32
+                        } else {
+                            128.0_f32
+                        };
+                        assert_eq!(
+                            actual[channel].to_bits(),
+                            expected.to_bits(),
+                            "pixel {index} channel {channel} exact bounded clamp"
+                        );
+                    }
+                }
+            }
+            assert_eq!(result.dispatches(), 1);
+        }
+    }
+
     #[tokio::test]
     async fn velvia_dispatch_matches_scalar_cpu_corpus_with_clipping_and_exact_alpha() {
         let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
@@ -863,6 +1284,7 @@ mod tests {
             .execute_basic_point(BasicPointRequest {
                 pixels: &input,
                 operations: &[operation],
+                color_space: BasicPointColorSpace::LinearRgb,
             })
             .expect("Velvia point dispatch");
         let (actual_pixels, remainder) = result.pixels().as_chunks::<4>();
@@ -911,6 +1333,7 @@ mod tests {
                     strength: 0.0,
                     bias: 0.5,
                 }],
+                color_space: BasicPointColorSpace::LinearRgb,
             })
             .expect("zero-strength Velvia point dispatch");
         assert_eq!(

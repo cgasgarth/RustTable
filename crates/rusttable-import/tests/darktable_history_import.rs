@@ -1,14 +1,111 @@
 use rusttable_compat::{
-    CompatHistoryStep, DarktableOperationManifest, HistoryDecodeOptions, HistoryDecoder,
-    HistoryLimits,
+    CompatHistory, CompatHistoryStep, DarktableOperationManifest, HistoryDecodeOptions,
+    HistoryDecoder, HistoryLimits, HistoryOrderSource,
 };
 use rusttable_import::darktable::{
     DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode, decode_history_step,
 };
+use rusttable_processing::operations::colorcontrast::{
+    ColorContrastConfig, ColorContrastParametersV2,
+};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
-use rusttable_sqlite_native::{DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow};
+use rusttable_sqlite_native::{
+    DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow, RawModuleOrderRow,
+};
+
+const COLORCONTRAST_V1_NATIVE_LE: [u8; 16] = [
+    0x00, 0x00, 0xc0, 0x3f, // a_steepness = 1.5
+    0x00, 0x00, 0x00, 0xc0, // a_offset = -2.0
+    0x00, 0x00, 0x40, 0x3f, // b_steepness = 0.75
+    0x00, 0x00, 0x80, 0x40, // b_offset = 4.0
+];
+const COLORCONTRAST_V2_NATIVE_LE: [u8; 20] = [
+    0x00, 0x00, 0x00, 0x41, // a_steepness = 8.0
+    0x00, 0x00, 0x96, 0xc3, // a_offset = -300.0
+    0x00, 0x00, 0x00, 0xc0, // b_steepness = -2.0
+    0x00, 0x00, 0xc8, 0x43, // b_offset = 400.0
+    0xf9, 0xff, 0xff, 0xff, // unbound = -7
+];
+
+#[test]
+fn colorcontrast_v1_decodes_exact_bounded_migration_but_remains_pending_blend() {
+    let payload = COLORCONTRAST_V1_NATIVE_LE.to_vec();
+    let source = history_step(b"colorcontrast", Some(1), Some(1), payload.clone());
+
+    let DarktableHistoryStepDecode::ColorContrastPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("known Color Contrast v1 row must decode");
+    };
+
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.source_version, 1);
+    assert!(imported.migrated);
+    assert_eq!(
+        imported.canonical_parameters,
+        [
+            0x00, 0x00, 0xc0, 0x3f, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x40, 0x3f, 0x00, 0x00,
+            0x80, 0x40, 0x00, 0x00, 0x00, 0x00,
+        ]
+    );
+    assert!(imported.enabled);
+    assert_eq!(
+        imported.config,
+        ColorContrastConfig::new(1.5, -2.0, 0.75, 4.0, 0).expect("migrated config")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+}
+
+#[test]
+fn colorcontrast_v2_retains_hidden_offsets_raw_unbound_and_disabled_state() {
+    let payload = COLORCONTRAST_V2_NATIVE_LE.to_vec();
+    let source = history_step(b"colorcontrast", Some(2), Some(0), payload.clone());
+
+    let DarktableHistoryStepDecode::ColorContrastPendingBlend(decoded) =
+        decode_history_step(&source)
+    else {
+        panic!("known Color Contrast v2 row must decode");
+    };
+    assert_eq!(decoded.source.operation_params.bytes, payload);
+    assert_eq!(decoded.source_version, 2);
+    assert!(!decoded.migrated);
+    assert!(!decoded.enabled);
+    assert_eq!(decoded.canonical_parameters.as_slice(), payload.as_slice());
+    assert_eq!(
+        decoded.config,
+        ColorContrastConfig::new(8.0, -300.0, -2.0, 400.0, -7).expect("finite native parameters")
+    );
+    assert_eq!(decoded.config.unbound(), -7);
+}
+
+#[test]
+fn colorcontrast_unknown_malformed_and_nonfinite_payloads_remain_exact() {
+    assert_preserved(
+        &history_step(b"colorcontrast", Some(9), Some(1), vec![9, 8, 7]),
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+        &[9, 8, 7],
+    );
+    assert_preserved(
+        &history_step(b"colorcontrast", Some(2), Some(1), vec![1, 2, 3]),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        &[1, 2, 3],
+    );
+
+    let nonfinite = ColorContrastParametersV2::new(f32::NAN, 0.0, 1.0, 0.0, 1)
+        .to_bytes()
+        .to_vec();
+    assert_preserved(
+        &history_step(b"colorcontrast", Some(2), Some(1), nonfinite.clone()),
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        &nonfinite,
+    );
+}
 
 #[test]
 fn velvia_v1_decodes_exact_migration_but_remains_pending_blend() {
@@ -166,6 +263,88 @@ fn redo_step_decoding_retains_nonselected_source_state() {
     assert_eq!(redo.operation_params.bytes, [9, 8, 7]);
 }
 
+#[test]
+fn production_manifest_uses_v30_native_order_across_colorcontrast_neighbors() {
+    let history = built_in_history(vec![
+        raw_history_row(41, 0, b"bloom", Some(1), Some(1), vec![]),
+        raw_history_row(42, 1, b"colorcontrast", Some(2), Some(1), vec![]),
+        raw_history_row(43, 2, b"globaltonemap", Some(3), Some(1), vec![]),
+        raw_history_row(44, 3, b"vibrance", Some(2), Some(1), vec![]),
+        raw_history_row(45, 4, b"colorcorrection", Some(1), Some(1), vec![]),
+        raw_history_row(46, 5, b"bilat", Some(3), Some(1), vec![]),
+        raw_history_row(47, 6, b"colorzones", Some(5), Some(1), vec![]),
+        raw_history_row(48, 7, b"velvia", Some(2), Some(1), vec![]),
+        raw_history_row(49, 8, b"relight", Some(1), Some(1), vec![]),
+    ]);
+
+    assert_eq!(
+        history.order_source,
+        Some(HistoryOrderSource::BuiltInModuleOrder)
+    );
+    assert!(history.order_proven);
+    assert_eq!(
+        ordered_operation_names(&history),
+        [
+            "globaltonemap",
+            "relight",
+            "bilat",
+            "colorcorrection",
+            "colorcontrast",
+            "velvia",
+            "vibrance",
+            "colorzones",
+            "bloom",
+        ]
+    );
+}
+
+#[test]
+fn production_manifest_decodes_colorcontrast_before_velvia() {
+    let history = built_in_history(vec![
+        raw_history_row(
+            41,
+            0,
+            b"velvia",
+            Some(2),
+            Some(1),
+            VelviaParametersV2::defaults().to_bytes().to_vec(),
+        ),
+        raw_history_row(
+            42,
+            1,
+            b"colorcontrast",
+            Some(2),
+            Some(1),
+            COLORCONTRAST_V2_NATIVE_LE.to_vec(),
+        ),
+    ]);
+
+    assert!(history.order_proven);
+    assert_eq!(
+        ordered_operation_names(&history),
+        ["colorcontrast", "velvia"]
+    );
+    let ordered_steps = history
+        .operation_order
+        .iter()
+        .map(|id| {
+            history
+                .steps
+                .iter()
+                .find(|step| step.instance_id == *id)
+                .expect("ordered instance has a history step")
+        })
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        decode_history_step(ordered_steps[0]),
+        DarktableHistoryStepDecode::ColorContrastPendingBlend(_)
+    ));
+    assert!(matches!(
+        decode_history_step(ordered_steps[1]),
+        DarktableHistoryStepDecode::VelviaPendingBlend(_)
+    ));
+}
+
 fn history_step(
     operation: &[u8],
     module: Option<i64>,
@@ -200,8 +379,51 @@ fn history_step(
 
 fn manifest() -> DarktableOperationManifest {
     let mut manifest = DarktableOperationManifest::new();
-    manifest.insert("velvia", 2, [1, 2], Some(57));
+    manifest.insert("colorcontrast", 2, [1, 2], None);
+    manifest.insert("velvia", 2, [1, 2], None);
     manifest
+}
+
+fn built_in_history(history: Vec<RawHistoryRow>) -> CompatHistory {
+    let history_end = i64::try_from(history.len()).expect("fixture row count fits i64");
+    HistoryDecoder::new(HistoryDecodeOptions {
+        limits: HistoryLimits::default(),
+        manifest: DarktableOperationManifest::reference(),
+    })
+    .decode(
+        DarktableSchema::new(57, 13),
+        HistoryRows {
+            history,
+            images: vec![RawImageHistoryRow {
+                source_row: 11,
+                image_id: 7,
+                history_end: Some(history_end),
+            }],
+            module_orders: vec![RawModuleOrderRow {
+                source_row: 12,
+                image_id: 7,
+                version: Some(2),
+                operation_list: None,
+            }],
+            ..HistoryRows::default()
+        },
+    )
+    .remove(0)
+}
+
+fn ordered_operation_names(history: &CompatHistory) -> Vec<&str> {
+    history
+        .operation_order
+        .iter()
+        .map(|id| {
+            history
+                .instances
+                .iter()
+                .find(|instance| instance.id == *id)
+                .and_then(|instance| instance.operation.name.as_deref())
+                .expect("ordered instance has a known operation")
+        })
+        .collect()
 }
 
 fn raw_history_row(

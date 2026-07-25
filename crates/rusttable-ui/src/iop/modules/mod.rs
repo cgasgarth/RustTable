@@ -1,10 +1,13 @@
 //! Darktable-style darkroom module columns and their GTK4 projection.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use gtk4::accessible::Property;
 use gtk4::prelude::*;
-use rusttable_core::Revision;
+use rusttable_core::{OperationId, Revision};
 
 use crate::gui::darktable_components::{
     button as shared_button, dropdown as shared_dropdown,
@@ -19,7 +22,7 @@ use crate::presentation::darkroom_controls::{
 use super::{ThemeRole, apply_theme_role};
 
 mod widgets;
-use widgets::{build_control_row, dispatch_module_action};
+use widgets::{ControlRowActionContext, build_control_row, dispatch_module_action};
 mod reference;
 pub use reference::{DarkroomModuleAvailability, reference_modules};
 
@@ -96,6 +99,9 @@ impl DarkroomModuleGroup {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DarkroomModuleViewModel {
     id: String,
+    operation_id: Option<OperationId>,
+    instance_sequence: usize,
+    instance_count: usize,
     title: String,
     side: DarkroomModuleSide,
     expanded: bool,
@@ -143,6 +149,9 @@ impl DarkroomModuleViewModel {
         let controls = DarkroomControlsViewModel::new(revision, controls)?;
         Ok(Self {
             id,
+            operation_id: None,
+            instance_sequence: 0,
+            instance_count: 1,
             title,
             side,
             expanded,
@@ -164,6 +173,45 @@ impl DarkroomModuleViewModel {
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    /// Persisted operation instance represented by this panel.
+    #[must_use]
+    pub const fn operation_id(&self) -> Option<OperationId> {
+        self.operation_id
+    }
+
+    /// Zero-based order among instances of the same compatibility operation.
+    #[must_use]
+    pub const fn instance_sequence(&self) -> usize {
+        self.instance_sequence
+    }
+
+    /// Binds a registry template to one persisted operation instance.
+    #[must_use]
+    pub const fn with_operation_instance(
+        mut self,
+        operation_id: OperationId,
+        instance_sequence: usize,
+        instance_count: usize,
+    ) -> Self {
+        self.operation_id = Some(operation_id);
+        self.instance_sequence = instance_sequence;
+        self.instance_count = instance_count;
+        self
+    }
+
+    /// Stable GTK identity derived from compatibility identity and persisted
+    /// operation identity. A sole instance retains legacy widget names.
+    #[must_use]
+    pub fn widget_id(&self) -> String {
+        if self.instance_count <= 1 {
+            return self.id.clone();
+        }
+        self.operation_id.map_or_else(
+            || format!("{}-instance-{}", self.id, self.instance_sequence + 1),
+            |operation_id| format!("{}-instance-{operation_id}", self.id),
+        )
     }
 
     #[must_use]
@@ -310,21 +358,27 @@ impl DarkroomModuleViewModel {
     /// Returns stable widget names in GTK keyboard traversal order.
     #[must_use]
     pub fn focus_order(&self) -> Vec<String> {
+        let widget_id = self.widget_id();
         let mut order = vec![
-            format!("{}-disclosure", self.id),
-            format!("{}-enabled", self.id),
+            format!("{widget_id}-disclosure"),
+            format!("{widget_id}-enabled"),
         ];
         if self.resettable {
-            order.push(format!("{}-reset", self.id));
+            order.push(format!("{widget_id}-reset"));
         }
         if !self.presets.is_empty() {
-            order.insert(2, format!("{}-presets", self.id));
+            order.insert(2, format!("{widget_id}-presets"));
         }
-        order.extend(
-            self.controls
-                .controls()
-                .map(|control| format!("{}-widget", control.id())),
-        );
+        order.extend(self.controls.controls().map(|control| {
+            format!(
+                "{}-widget",
+                presentation_control_id(
+                    self.id.as_str(),
+                    widget_id.as_str(),
+                    control.id().as_str(),
+                )
+            )
+        }));
         order
     }
 
@@ -339,6 +393,13 @@ impl DarkroomModuleViewModel {
             return Err(self.record_error(DarkroomModuleError::WrongModule {
                 expected: self.id.clone(),
                 actual: action.module_id().to_owned(),
+            }));
+        }
+        if action.operation_id() != self.operation_id {
+            return Err(self.record_error(DarkroomModuleError::WrongOperation {
+                module_id: self.id.clone(),
+                expected: self.operation_id,
+                actual: action.operation_id(),
             }));
         }
         if !self.availability.is_supported()
@@ -570,7 +631,8 @@ impl DarkroomModuleViewModel {
         Ok(revision)
     }
 
-    /// Resets all controls when the module exposes the Darktable reset affordance.
+    /// Resets all controls and enables the module when it exposes the Darktable
+    /// reset affordance.
     ///
     /// # Errors
     ///
@@ -586,6 +648,7 @@ impl DarkroomModuleViewModel {
             .reset_all(expected_revision)
             .map_err(|error| self.record_control_error(error))?;
         self.revision = revision;
+        self.enabled = true;
         self.status = DarkroomModuleStatus::Ready;
         Ok(revision)
     }
@@ -672,11 +735,9 @@ impl DarkroomModulesViewModel {
         let mut left: Vec<DarkroomModuleViewModel> = Vec::new();
         let mut right: Vec<DarkroomModuleViewModel> = Vec::new();
         for module in modules {
-            if left
-                .iter()
-                .chain(right.iter())
-                .any(|item| item.id() == module.id())
-            {
+            if left.iter().chain(right.iter()).any(|item| {
+                item.id() == module.id() && item.operation_id() == module.operation_id()
+            }) {
                 return Err(DarkroomModuleError::DuplicateModule {
                     id: module.id().to_owned(),
                 });
@@ -701,18 +762,73 @@ impl DarkroomModulesViewModel {
 
     #[must_use]
     pub fn module(&self, id: &str) -> Option<&DarkroomModuleViewModel> {
-        self.left
+        let mut matches = self
+            .left
             .iter()
             .chain(self.right.iter())
-            .find(|module| module.id() == id)
+            .filter(|module| module.id() == id);
+        let module = matches.next()?;
+        matches.next().is_none().then_some(module)
     }
 
     #[must_use]
     pub fn module_mut(&mut self, id: &str) -> Option<&mut DarkroomModuleViewModel> {
+        let matches = self
+            .left
+            .iter()
+            .chain(self.right.iter())
+            .filter(|module| module.id() == id)
+            .count();
+        if matches != 1 {
+            return None;
+        }
         self.left
             .iter_mut()
             .chain(self.right.iter_mut())
             .find(|module| module.id() == id)
+    }
+
+    #[must_use]
+    pub fn module_target(
+        &self,
+        id: &str,
+        operation_id: Option<OperationId>,
+    ) -> Option<&DarkroomModuleViewModel> {
+        match operation_id {
+            Some(operation_id) => self
+                .left
+                .iter()
+                .chain(self.right.iter())
+                .find(|module| module.id() == id && module.operation_id() == Some(operation_id)),
+            None => self.module(id),
+        }
+    }
+
+    #[must_use]
+    pub fn module_target_mut(
+        &mut self,
+        id: &str,
+        operation_id: Option<OperationId>,
+    ) -> Option<&mut DarkroomModuleViewModel> {
+        match operation_id {
+            Some(operation_id) => self
+                .left
+                .iter_mut()
+                .chain(self.right.iter_mut())
+                .find(|module| module.id() == id && module.operation_id() == Some(operation_id)),
+            None => self.module_mut(id),
+        }
+    }
+
+    #[must_use = "iterate over every persisted instance in stack order"]
+    pub fn instances<'a>(
+        &'a self,
+        id: &'a str,
+    ) -> impl Iterator<Item = &'a DarkroomModuleViewModel> + 'a {
+        self.left
+            .iter()
+            .chain(self.right.iter())
+            .filter(move |module| module.id() == id)
     }
 }
 
@@ -733,30 +849,33 @@ pub fn build_module_panel_with_actions(
     let expected_revision = module.revision();
     let current_revision = Rc::new(RefCell::new(expected_revision));
     let module_id = module.id().to_owned();
+    let operation_id = module.operation_id();
+    let widget_id = module.widget_id();
     let module_available = module.availability().is_supported();
+    let module_resettable = module_available && module.resettable();
     let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    content.set_widget_name(&format!("{}-content", module.id()));
+    content.set_widget_name(&format!("{widget_id}-content"));
     apply_theme_role(&content, ThemeRole::Module);
 
     let status_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    status_row.set_widget_name(&format!("{}-status-row", module.id()));
+    status_row.set_widget_name(&format!("{widget_id}-status-row"));
     let status = gtk4::Label::new(Some(&module.status_text()));
-    status.set_widget_name(&format!("{}-status", module.id()));
+    status.set_widget_name(&format!("{widget_id}-status"));
     status.set_halign(gtk4::Align::Start);
     status.set_hexpand(true);
     status.set_accessible_role(gtk4::AccessibleRole::Status);
     status.update_property(&[Property::Label("Module status")]);
-    let recover = shared_button(&format!("{}-recover", module.id()), "Refresh");
+    let recover = shared_button(&format!("{widget_id}-recover"), "Refresh");
     recover.set_sensitive(false);
     recover.set_focus_on_click(false);
     recover.update_property(&[Property::Label("Refresh module snapshot")]);
     status_row.append(&status);
     status_row.append(&recover);
     let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    header.set_widget_name(&format!("{}-header", module.id()));
+    header.set_widget_name(&format!("{widget_id}-header"));
     header.add_css_class("dt_module_header");
     let enabled = gtk4::CheckButton::new();
-    enabled.set_widget_name(&format!("{}-enabled", module.id()));
+    enabled.set_widget_name(&format!("{widget_id}-enabled"));
     enabled.set_label(Some("Enabled"));
     enabled.set_active(module.enabled());
     enabled.set_sensitive(module_available);
@@ -764,7 +883,7 @@ pub fn build_module_panel_with_actions(
     enabled.update_property(&[Property::Label("Enable module")]);
     header.append(&enabled);
     let presets = if module.presets().len() == 0 {
-        let button = shared_button(&format!("{}-presets", module.id()), "Presets");
+        let button = shared_button(&format!("{widget_id}-presets"), "Presets");
         button.set_tooltip_text(Some("Presets are unavailable for this module"));
         button.set_sensitive(false);
         button.set_focusable(false);
@@ -776,7 +895,7 @@ pub fn build_module_panel_with_actions(
             .presets()
             .map(DarkroomModulePreset::label)
             .collect::<Vec<_>>();
-        let dropdown = shared_dropdown(&format!("{}-presets", module.id()), &labels);
+        let dropdown = shared_dropdown(&format!("{widget_id}-presets"), &labels);
         dropdown.set_sensitive(module_available && module.enabled());
         dropdown.set_focusable(true);
         dropdown.update_property(&[Property::Label("Choose module preset")]);
@@ -784,8 +903,8 @@ pub fn build_module_panel_with_actions(
         Some(dropdown)
     };
     let reset = module.resettable().then(|| {
-        let reset = shared_button(&format!("{}-reset", module.id()), "Reset");
-        reset.set_sensitive(module_available && module.enabled());
+        let reset = shared_button(&format!("{widget_id}-reset"), "Reset");
+        reset.set_sensitive(module_resettable);
         reset.set_focus_on_click(false);
         reset.set_halign(gtk4::Align::End);
         reset.update_property(&[Property::Label("Reset module to defaults")]);
@@ -800,19 +919,23 @@ pub fn build_module_panel_with_actions(
     for control in module.controls().controls() {
         let row = build_control_row(
             control,
+            &widget_id,
             module_available && module.enabled(),
-            action_handler.clone(),
-            status.clone(),
-            recover.clone(),
-            current_revision.clone(),
-            module_id.clone(),
+            ControlRowActionContext {
+                action_handler: action_handler.clone(),
+                status: status.clone(),
+                recover: recover.clone(),
+                current_revision: current_revision.clone(),
+                module_id: module_id.clone(),
+                operation_id,
+            },
         );
         content.append(&row);
         control_rows.push(row);
     }
 
     let expander = shared_module_expander(
-        module.id(),
+        &widget_id,
         module.title(),
         module.expanded(),
         Some(&content),
@@ -820,7 +943,7 @@ pub fn build_module_panel_with_actions(
     let title = if module.id() == crate::iop::velvia::VELVIA_MODULE_ID {
         crate::iop::velvia::module_title_widget()
     } else {
-        module_title(module.id(), module.title())
+        module_title(&widget_id, module.title())
     };
     expander.set_label_widget(Some(&title));
     expander.set_accessible_role(gtk4::AccessibleRole::Group);
@@ -842,6 +965,7 @@ pub fn build_module_panel_with_actions(
                 &current_revision_for_expander,
                 DarkroomModuleAction::Disclosure {
                     module_id: module_id_for_expander.clone(),
+                    operation_id,
                     expected_revision,
                     expanded: expander.is_expanded(),
                 },
@@ -855,15 +979,20 @@ pub fn build_module_panel_with_actions(
         let presets_for_enabled = presets.clone();
         let current_revision_for_enabled = current_revision.clone();
         let module_id_for_enabled = module_id.clone();
+        let synchronizing_enabled = Rc::new(Cell::new(false));
+        let synchronizing_enabled_for_toggle = Rc::clone(&synchronizing_enabled);
         enabled.connect_toggled(move |enabled| {
             if let Some(reset) = reset_for_enabled.as_ref() {
-                reset.set_sensitive(enabled.is_active());
+                reset.set_sensitive(module_resettable);
             }
             if let Some(presets) = presets_for_enabled.as_ref() {
                 presets.set_sensitive(module_available && enabled.is_active());
             }
             for row in &control_rows {
                 row.set_sensitive(module_available && enabled.is_active());
+            }
+            if synchronizing_enabled_for_toggle.get() {
+                return;
             }
             let expected_revision = *current_revision_for_enabled.borrow();
             dispatch_module_action(
@@ -873,6 +1002,7 @@ pub fn build_module_panel_with_actions(
                 &current_revision_for_enabled,
                 DarkroomModuleAction::Enable {
                     module_id: module_id_for_enabled.clone(),
+                    operation_id,
                     expected_revision,
                     enabled: enabled.is_active(),
                 },
@@ -882,10 +1012,20 @@ pub fn build_module_panel_with_actions(
         if let Some(reset) = reset {
             let status_for_reset = status.clone();
             let recover_for_reset = recover.clone();
-            let handler_for_reset = handler.clone();
+            let routed_handler_for_reset = handler.clone();
+            let reset_succeeded = Rc::new(Cell::new(false));
+            let reset_succeeded_for_handler = Rc::clone(&reset_succeeded);
+            let handler_for_reset: DarkroomModuleActionHandler = Rc::new(move |action| {
+                let result = routed_handler_for_reset(action);
+                reset_succeeded_for_handler.set(result.is_ok());
+                result
+            });
             let current_revision_for_reset = current_revision.clone();
             let module_id_for_reset = module_id.clone();
+            let enabled_for_reset = enabled.clone();
+            let synchronizing_enabled_for_reset = Rc::clone(&synchronizing_enabled);
             reset.connect_clicked(move |_| {
+                reset_succeeded.set(false);
                 let expected_revision = *current_revision_for_reset.borrow();
                 dispatch_module_action(
                     &handler_for_reset,
@@ -894,9 +1034,15 @@ pub fn build_module_panel_with_actions(
                     &current_revision_for_reset,
                     DarkroomModuleAction::Reset {
                         module_id: module_id_for_reset.clone(),
+                        operation_id,
                         expected_revision,
                     },
                 );
+                if reset_succeeded.get() {
+                    synchronizing_enabled_for_reset.set(true);
+                    enabled_for_reset.set_active(true);
+                    synchronizing_enabled_for_reset.set(false);
+                }
             });
         }
 
@@ -925,6 +1071,7 @@ pub fn build_module_panel_with_actions(
                     &current_revision_for_presets,
                     DarkroomModuleAction::Preset {
                         module_id: module_id_for_presets.clone(),
+                        operation_id,
                         expected_revision,
                         preset_id: preset_id.clone(),
                     },
@@ -946,12 +1093,28 @@ pub fn build_module_panel_with_actions(
                 &current_revision_for_recovery,
                 DarkroomModuleAction::Recover {
                     module_id: module_id_for_recovery.clone(),
+                    operation_id,
                     expected_revision,
                 },
             );
         });
     }
     expander
+}
+
+// Substitute only the presentation prefix. The logical control ID remains the
+// registry/persistence key captured by `DarkroomModuleAction::Control`.
+fn presentation_control_id(module_id: &str, panel_widget_id: &str, control_id: &str) -> String {
+    if panel_widget_id == module_id {
+        return control_id.to_owned();
+    }
+    control_id
+        .strip_prefix(module_id)
+        .filter(|suffix| suffix.is_empty() || suffix.starts_with('-'))
+        .map_or_else(
+            || format!("{panel_widget_id}-{control_id}"),
+            |suffix| format!("{panel_widget_id}{suffix}"),
+        )
 }
 
 /// Builds a native GTK4 vertical module column in model order.

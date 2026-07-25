@@ -11,11 +11,11 @@ use rusttable_processing::operations::colorin::{
     ColorInConfig, ColorInNormalization, ColorInPlan, ColorInProfile,
 };
 use rusttable_processing::{
-    BasicAdjPlanSet, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
-    OperationMaskSetError, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
-    WorkingRgbImage, convert_working_to_linear_srgb, encode_working_to_srgb,
-    evaluate_graph_with_basicadj_plans_and_masks_with_cancellation, prepare_basicadj_plans,
-    prepare_basicadj_plans_with_cancellation, to_linear_srgb,
+    BasicAdjPlanSet, ColorContrastPixel, ColorContrastPlan, EvaluationError, FiniteF32, LinearRgb,
+    OperationMaskSet, OperationMaskSetError, ProcessingOperation, RasterDimensions, SourceRgb,
+    SourceRgbImage, SrgbChannel, WorkingRgbImage, convert_working_to_linear_srgb,
+    encode_working_to_srgb, evaluate_graph_with_basicadj_plans_and_masks_with_cancellation,
+    prepare_basicadj_plans, prepare_basicadj_plans_with_cancellation, to_linear_srgb,
 };
 
 use crate::frame::{execute_frame_image, has_frame_geometry};
@@ -132,8 +132,19 @@ impl CpuPixelpipeExecutor {
                 frame_plan_identity,
             ));
         }
-        let plans = Self::prepare_plans(request)?;
-        let image = Self::execute_image(request, request.input(), &plans, masks.as_ref())?;
+        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
+        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+            BasicAdjPlanSet::default()
+        } else {
+            Self::prepare_plans(request)?
+        };
+        let image = Self::execute_image(
+            request,
+            request.input(),
+            preserve_inert_lab,
+            &plans,
+            masks.as_ref(),
+        )?;
         Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
     }
 
@@ -164,10 +175,16 @@ impl CpuPixelpipeExecutor {
                 frame_plan_identity,
             ));
         }
-        let plans = Self::prepare_plans_with_cancellation(request, scope)?;
+        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
+        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+            BasicAdjPlanSet::default()
+        } else {
+            Self::prepare_plans_with_cancellation(request, scope)?
+        };
         let image = Self::execute_image_with_cancellation(
             request,
             request.input(),
+            preserve_inert_lab,
             &plans,
             masks.as_ref(),
             Some(scope),
@@ -198,7 +215,12 @@ impl CpuPixelpipeExecutor {
             // followed by one publication.
             return self.execute(request);
         }
-        let plans = Self::prepare_plans(request)?;
+        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
+        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+            BasicAdjPlanSet::default()
+        } else {
+            Self::prepare_plans(request)?
+        };
         let masks = resolve_masks(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
@@ -217,8 +239,13 @@ impl CpuPixelpipeExecutor {
                 .as_ref()
                 .map(|set| crop_masks(set, tile))
                 .transpose()?;
-            let tile_output =
-                Self::execute_image(request, &tile_input, &plans, tile_masks.as_ref())?;
+            let tile_output = Self::execute_image(
+                request,
+                &tile_input,
+                preserve_inert_lab,
+                &plans,
+                tile_masks.as_ref(),
+            )?;
             assemble_tile(
                 &mut assembled,
                 request.input().descriptor(),
@@ -262,7 +289,12 @@ impl CpuPixelpipeExecutor {
                 .map_err(CpuPixelpipeError::Cancelled)?;
             return Ok(result);
         }
-        let plans = Self::prepare_plans_with_cancellation(request, scope)?;
+        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
+        let plans = if preserve_inert_lab || is_colorcontrast_chain(request, request.input()) {
+            BasicAdjPlanSet::default()
+        } else {
+            Self::prepare_plans_with_cancellation(request, scope)?
+        };
         let masks = resolve_masks(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
@@ -288,6 +320,7 @@ impl CpuPixelpipeExecutor {
             let tile_output = Self::execute_image_with_cancellation(
                 request,
                 &tile_input,
+                preserve_inert_lab,
                 &plans,
                 tile_masks.as_ref(),
                 Some(scope),
@@ -316,15 +349,24 @@ impl CpuPixelpipeExecutor {
     fn execute_image(
         request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
+        preserve_inert_lab: bool,
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
     ) -> Result<RgbaF32Image, CpuPixelpipeError> {
-        Self::execute_image_with_cancellation(request, input, plans, masks, None)
+        Self::execute_image_with_cancellation(
+            request,
+            input,
+            preserve_inert_lab,
+            plans,
+            masks,
+            None,
+        )
     }
 
     fn execute_image_with_cancellation(
         request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
+        preserve_inert_lab: bool,
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
         scope: Option<&CancellationScope>,
@@ -333,6 +375,14 @@ impl CpuPixelpipeExecutor {
         let node_scope = scope.map(|scope| scope.child(CancellationStage::Node));
         if let Some(scope) = &node_scope {
             scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+
+        if preserve_inert_lab {
+            return Ok(input.clone());
+        }
+
+        if is_colorcontrast_chain(request, input) {
+            return execute_colorcontrast_chain(request, input, masks, node_scope.as_ref());
         }
 
         if let Some(node) = request.graph().nodes().find(|node| {
@@ -445,6 +495,223 @@ fn working_profile(request: &CpuPixelpipeSnapshot) -> rusttable_processing::Work
         })
         .fold(None, |_, value| Some(value))
         .unwrap_or_else(rusttable_processing::WorkingFrameDescriptor::srgb)
+}
+
+pub(crate) fn operation_is_semantically_active(operation: &ProcessingOperation) -> bool {
+    operation.is_enabled() && operation.opacity().get().to_bits() != 0.0_f32.to_bits()
+}
+
+fn preserves_inert_lab_input(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
+    let input_encoding = input.descriptor().color_encoding();
+    input_encoding == RgbaF32ColorEncoding::LabD50
+        && output_encoding(request.output_mode(), input.descriptor()) == input_encoding
+        && request
+            .graph()
+            .nodes()
+            .all(|node| !operation_is_semantically_active(node.operation()))
+}
+
+fn is_colorcontrast_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
+    let input_supported = match input.descriptor().color_encoding() {
+        RgbaF32ColorEncoding::SrgbD65
+        | RgbaF32ColorEncoding::LinearSrgbD65
+        | RgbaF32ColorEncoding::DisplayP3D65
+        | RgbaF32ColorEncoding::LinearDisplayP3D65
+        | RgbaF32ColorEncoding::LabD50 => true,
+        RgbaF32ColorEncoding::External(_) => input
+            .descriptor()
+            .source_color()
+            .is_some_and(|source_color| source_color.matrix().is_some()),
+        _ => false,
+    };
+    if !input_supported {
+        return false;
+    }
+    let mut has_active_colorcontrast = false;
+    for node in request.graph().nodes() {
+        let operation = node.operation();
+        if !operation_is_semantically_active(operation) {
+            continue;
+        }
+        if !matches!(
+            operation.kind(),
+            rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+        ) {
+            return false;
+        }
+        has_active_colorcontrast = true;
+    }
+    has_active_colorcontrast
+}
+
+fn execute_colorcontrast_chain(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    let rgb_boundary;
+    let mut output = if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+        rgb_boundary = None;
+        input
+            .pixels()
+            .iter()
+            .map(|pixel| {
+                ColorContrastPixel::new(pixel.red(), pixel.green(), pixel.blue(), pixel.alpha())
+            })
+            .collect::<Vec<_>>()
+    } else {
+        let working = to_linear_working(input)?;
+        let to_lab = color_transform(
+            working.frame().encoding(),
+            rusttable_color::ColorEncoding::LabD50,
+        )?;
+        let from_lab = color_transform(
+            rusttable_color::ColorEncoding::LabD50,
+            working.frame().encoding(),
+        )?;
+        let lab = working
+            .pixels()
+            .zip(input.pixels())
+            .enumerate()
+            .map(|(pixel_index, (rgb, source))| {
+                let channels = to_lab
+                    .apply_rgb(
+                        [rgb.red().get(), rgb.green().get(), rgb.blue().get()],
+                        || scope.is_some_and(|scope| scope.check().is_err()),
+                    )
+                    .map_err(|error| {
+                        colorcontrast_transform_error(
+                            "RGB-to-Lab ingress",
+                            pixel_index,
+                            error,
+                            scope,
+                        )
+                    })?;
+                Ok(ColorContrastPixel::new(
+                    channels[0],
+                    channels[1],
+                    channels[2],
+                    source.alpha(),
+                ))
+            })
+            .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
+        rgb_boundary = Some((from_lab, working.frame()));
+        lab
+    };
+    for node in request.graph().nodes() {
+        if let Some(scope) = scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let operation = node.operation();
+        let opacity = operation.opacity().get();
+        if !operation_is_semantically_active(operation) {
+            continue;
+        }
+        let config = match operation.kind() {
+            rusttable_processing::ProcessingOperationKind::ColorContrast { config } => *config,
+            _ => unreachable!("active nodes in a Lab Color Contrast chain are Color Contrast"),
+        };
+        let mask = masks.and_then(|set| set.mask_for(operation.operation_id()));
+        let dimensions = input.descriptor().dimensions();
+        if mask.is_some_and(|raster| {
+            raster.width() != dimensions.width()
+                || raster.height() != dimensions.height()
+                || raster.values().len() != input.pixels().len()
+        }) {
+            return Err(CpuPixelpipeError::Evaluation {
+                source: EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: operation.operation_id(),
+                    reason: "Color Contrast mask sample count does not match the Lab raster"
+                        .to_owned(),
+                },
+            });
+        }
+        let mask = mask.map(rusttable_masks::MaskRaster::values);
+        let plan = ColorContrastPlan::new(config);
+        output = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+            plan.execute_lab(&output)
+        } else {
+            plan.execute_lab_normal_blend(&output, mask, opacity)
+        };
+    }
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    if let Some((from_lab, frame)) = rgb_boundary {
+        let pixels = output
+            .iter()
+            .enumerate()
+            .map(|(pixel_index, lab)| {
+                let channels = lab.channels();
+                let rgb = from_lab
+                    .apply_rgb([channels[0], channels[1], channels[2]], || {
+                        scope.is_some_and(|scope| scope.check().is_err())
+                    })
+                    .map_err(|error| {
+                        colorcontrast_transform_error(
+                            "Lab-to-RGB egress",
+                            pixel_index,
+                            error,
+                            scope,
+                        )
+                    })?;
+                Ok(LinearRgb::new(
+                    FiniteF32::new(rgb[0]).map_err(|_| {
+                        CpuPixelpipeError::SourceColorPlan(format!(
+                            "Color Contrast Lab-to-RGB egress produced non-finite red at pixel {pixel_index}"
+                        ))
+                    })?,
+                    FiniteF32::new(rgb[1]).map_err(|_| {
+                        CpuPixelpipeError::SourceColorPlan(format!(
+                            "Color Contrast Lab-to-RGB egress produced non-finite green at pixel {pixel_index}"
+                        ))
+                    })?,
+                    FiniteF32::new(rgb[2]).map_err(|_| {
+                        CpuPixelpipeError::SourceColorPlan(format!(
+                            "Color Contrast Lab-to-RGB egress produced non-finite blue at pixel {pixel_index}"
+                        ))
+                    })?,
+                ))
+            })
+            .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
+        let evaluated =
+            WorkingRgbImage::new_with_frame(input.descriptor().dimensions(), pixels, frame)
+                .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+        return output_from_working(request.output_mode(), input, &evaluated);
+    }
+    let pixels = output
+        .iter()
+        .zip(input.pixels())
+        .map(|(lab, source)| {
+            let channels = lab.channels();
+            RgbaF32Pixel::new(channels[0], channels[1], channels[2], source.alpha())
+        })
+        .collect();
+    let descriptor = output_descriptor(
+        request.output_mode(),
+        input.descriptor(),
+        input.descriptor().dimensions(),
+    );
+    RgbaF32Image::new(descriptor, pixels)
+        .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+fn colorcontrast_transform_error(
+    boundary: &str,
+    pixel_index: usize,
+    source: rusttable_color::TransformExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if matches!(source, rusttable_color::TransformExecutionError::Cancelled)
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::SourceColorPlan(format!(
+        "Color Contrast {boundary} failed at pixel {pixel_index}: {source}"
+    ))
 }
 
 fn execute_censorize_image(
@@ -1073,14 +1340,210 @@ fn pixel_identity(image: &RgbaF32Image) -> PixelIdentity {
 
 #[cfg(test)]
 mod tests {
+    use rusttable_color::{Primaries, TransferFunction};
     use rusttable_core::{
-        Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName,
-        ParameterValue, PhotoId, Revision,
+        Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity,
+        ParameterName, ParameterValue, PhotoId, Revision,
     };
+    use rusttable_image::{SourceColor, SourceColorEvidence};
     use rusttable_processing::PipelineStepIndex;
+    use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
 
     use super::*;
     use crate::{CancellationReason, PipelineGeneration};
+
+    #[test]
+    fn inert_colorcontrast_nodes_do_not_add_a_lab_round_trip() {
+        let input = linear_colorcontrast_input();
+        let baseline = CpuPixelpipeExecutor
+            .execute(&CpuPixelpipeSnapshot::new(
+                input.clone(),
+                operation_graph(Vec::new()),
+                CpuPixelpipeOutputMode::FullExport,
+            ))
+            .expect("empty graph")
+            .image()
+            .clone();
+
+        for operation in [
+            colorcontrast_operation(
+                0xcc01,
+                false,
+                OperationOpacity::ONE,
+                [1.75, 12.0, 0.45, -9.0],
+                1,
+            ),
+            colorcontrast_operation(
+                0xcc02,
+                true,
+                OperationOpacity::ZERO,
+                [0.4, -11.0, 1.8, 8.0],
+                0,
+            ),
+        ] {
+            let snapshot = CpuPixelpipeSnapshot::new(
+                input.clone(),
+                operation_graph(vec![operation]),
+                CpuPixelpipeOutputMode::FullExport,
+            );
+
+            assert!(!is_colorcontrast_chain(&snapshot, snapshot.input()));
+            assert_eq!(
+                CpuPixelpipeExecutor
+                    .execute(&snapshot)
+                    .expect("inert Color Contrast graph")
+                    .image(),
+                &baseline
+            );
+        }
+    }
+
+    #[test]
+    fn disabled_only_extreme_finite_lab_graph_preserves_exact_input_bits() {
+        assert_inert_lab_identity(&colorcontrast_operation(
+            0xcc03,
+            false,
+            OperationOpacity::ONE,
+            [1.75, 12.0, 0.45, -9.0],
+            1,
+        ));
+    }
+
+    #[test]
+    fn opacity_zero_only_extreme_finite_lab_graph_preserves_exact_input_bits() {
+        assert_inert_lab_identity(&colorcontrast_operation(
+            0xcc04,
+            true,
+            OperationOpacity::ZERO,
+            [0.4, -11.0, 1.8, 8.0],
+            0,
+        ));
+    }
+
+    #[test]
+    fn inert_non_colorcontrast_nodes_do_not_break_the_active_lab_chain() {
+        let input = linear_colorcontrast_input();
+        let first = colorcontrast_operation(
+            0xcc11,
+            true,
+            OperationOpacity::ONE,
+            [1.25, 3.0, 0.8, -2.0],
+            1,
+        );
+        let second = colorcontrast_operation(
+            0xcc12,
+            true,
+            OperationOpacity::ONE,
+            [0.7, -4.0, 1.4, 5.0],
+            0,
+        );
+        let routed = CpuPixelpipeSnapshot::new(
+            input.clone(),
+            operation_graph(vec![
+                first.clone(),
+                scalar_operation(
+                    0xe001,
+                    "rusttable.exposure",
+                    false,
+                    OperationOpacity::ONE,
+                    &[("stops", 3.0)],
+                ),
+                scalar_operation(
+                    0xe002,
+                    "rusttable.linear_offset",
+                    true,
+                    OperationOpacity::ZERO,
+                    &[("value", 0.25)],
+                ),
+                second.clone(),
+            ]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        let direct = CpuPixelpipeSnapshot::new(
+            input,
+            operation_graph(vec![first, second]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+
+        assert!(is_colorcontrast_chain(&routed, routed.input()));
+        assert_eq!(
+            CpuPixelpipeExecutor
+                .execute(&routed)
+                .expect("active chain with inert RGB nodes")
+                .image(),
+            CpuPixelpipeExecutor
+                .execute(&direct)
+                .expect("direct active chain")
+                .image()
+        );
+    }
+
+    #[test]
+    fn external_matrix_colorcontrast_chain_matches_one_lab_boundary() {
+        let profile = ProfileId::from_content(
+            b"CPU Color Contrast continuous Lab matrix profile",
+            ProfileClass::Input,
+            ProfileModel::Matrix,
+            Pcs::XyzD50,
+            ProfileParserVersion::new(1).expect("parser version"),
+        )
+        .expect("profile identity");
+        let source_color = SourceColor::external(
+            profile,
+            Primaries::display_p3(),
+            TransferFunction::Srgb,
+            SourceColorEvidence::EmbeddedChromaticities,
+        )
+        .expect("external matrix source");
+        let dimensions = RasterDimensions::new(3, 1).expect("dimensions");
+        let input = RgbaF32Image::new(
+            RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::External(profile))
+                .with_source_color(source_color),
+            vec![
+                RgbaF32Pixel::new(0.82, 0.15, 0.07, 0.2),
+                RgbaF32Pixel::new(0.12, 0.68, 0.31, 0.6),
+                RgbaF32Pixel::new(0.21, 0.24, 0.91, 0.9),
+            ],
+        )
+        .expect("external matrix input");
+        let configs = [
+            ColorContrastConfig::new(1.35, 4.0, 0.75, -3.0, 1).expect("first config"),
+            ColorContrastConfig::new(0.65, -2.0, 1.45, 5.0, 1).expect("second config"),
+        ];
+        let snapshot = CpuPixelpipeSnapshot::new(
+            input.clone(),
+            operation_graph(vec![
+                colorcontrast_operation(
+                    0xcc21,
+                    true,
+                    OperationOpacity::ONE,
+                    [1.35, 4.0, 0.75, -3.0],
+                    1,
+                ),
+                colorcontrast_operation(
+                    0xcc22,
+                    true,
+                    OperationOpacity::ONE,
+                    [0.65, -2.0, 1.45, 5.0],
+                    1,
+                ),
+            ]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+
+        assert!(is_colorcontrast_chain(&snapshot, snapshot.input()));
+        assert_eq!(
+            CpuPixelpipeExecutor
+                .execute(&snapshot)
+                .expect("external matrix Color Contrast chain")
+                .image(),
+            &one_boundary_colorcontrast_reference(
+                &input,
+                &configs,
+                CpuPixelpipeOutputMode::FullExport,
+            )
+        );
+    }
 
     #[test]
     fn typed_graph_cancellation_maps_to_the_node_scope() {
@@ -1169,10 +1632,35 @@ mod tests {
         key: &str,
         parameters: &[(&str, f64)],
     ) -> rusttable_processing::CompiledOperationGraph {
-        let operation = Operation::new(
+        let operation =
+            scalar_operation(operation_id, key, true, OperationOpacity::ONE, parameters);
+        operation_graph(vec![operation])
+    }
+
+    fn operation_graph(operations: Vec<Operation>) -> rusttable_processing::CompiledOperationGraph {
+        let edit = Edit::from_parts(
+            EditId::new(1).expect("edit ID"),
+            PhotoId::new(2).expect("photo ID"),
+            Revision::ZERO,
+            Revision::from_u64(1),
+            operations,
+        )
+        .expect("edit");
+        rusttable_processing::CompiledOperationGraph::compile(&edit).expect("compiled graph")
+    }
+
+    fn scalar_operation(
+        operation_id: u128,
+        key: &str,
+        enabled: bool,
+        opacity: OperationOpacity,
+        parameters: &[(&str, f64)],
+    ) -> Operation {
+        Operation::new_with_opacity(
             OperationId::new(operation_id).expect("operation ID"),
             OperationKey::new(key).expect("operation key"),
-            true,
+            enabled,
+            opacity,
             parameters.iter().map(|(name, value)| {
                 (
                     ParameterName::new(*name).expect("parameter name"),
@@ -1180,15 +1668,157 @@ mod tests {
                 )
             }),
         )
-        .expect("operation");
-        let edit = Edit::from_parts(
-            EditId::new(1).expect("edit ID"),
-            PhotoId::new(2).expect("photo ID"),
-            Revision::ZERO,
-            Revision::from_u64(1),
-            [operation],
+        .expect("operation")
+    }
+
+    fn colorcontrast_operation(
+        operation_id: u128,
+        enabled: bool,
+        opacity: OperationOpacity,
+        parameters: [f64; 4],
+        unbound: i64,
+    ) -> Operation {
+        let [a_steepness, a_offset, b_steepness, b_offset] = parameters;
+        let scalar = |value| {
+            ParameterValue::Scalar(FiniteF64::new(value).expect("finite Color Contrast parameter"))
+        };
+        Operation::new_with_opacity(
+            OperationId::new(operation_id).expect("operation ID"),
+            OperationKey::new("rusttable.colorcontrast").expect("operation key"),
+            enabled,
+            opacity,
+            [
+                ("a_steepness", scalar(a_steepness)),
+                ("a_offset", scalar(a_offset)),
+                ("b_steepness", scalar(b_steepness)),
+                ("b_offset", scalar(b_offset)),
+                ("unbound", ParameterValue::Integer(unbound)),
+            ]
+            .into_iter()
+            .map(|(name, value)| (ParameterName::new(name).expect("parameter name"), value)),
         )
-        .expect("edit");
-        rusttable_processing::CompiledOperationGraph::compile(&edit).expect("compiled graph")
+        .expect("Color Contrast operation")
+    }
+
+    fn linear_colorcontrast_input() -> RgbaF32Image {
+        RgbaF32Image::new(
+            RgbaF32Descriptor::new(
+                RasterDimensions::new(3, 1).expect("dimensions"),
+                RgbaF32ColorEncoding::LinearSrgbD65,
+            ),
+            vec![
+                RgbaF32Pixel::new(0.62, 0.17, 0.08, 0.25),
+                RgbaF32Pixel::new(0.09, 0.54, 0.23, 0.5),
+                RgbaF32Pixel::new(0.14, 0.19, 0.73, 0.75),
+            ],
+        )
+        .expect("linear Color Contrast input")
+    }
+
+    fn assert_inert_lab_identity(operation: &Operation) {
+        let input = extreme_lab_colorcontrast_input();
+        let expected_bits = rgba_bits(&input);
+        for mode in [
+            CpuPixelpipeOutputMode::Preview,
+            CpuPixelpipeOutputMode::FullExport,
+        ] {
+            let snapshot = CpuPixelpipeSnapshot::new(
+                input.clone(),
+                operation_graph(vec![operation.clone()]),
+                mode,
+            );
+            let output = CpuPixelpipeExecutor
+                .execute(&snapshot)
+                .expect("inert Lab graph")
+                .image()
+                .clone();
+
+            assert_eq!(output.descriptor(), input.descriptor());
+            assert_eq!(rgba_bits(&output), expected_bits);
+        }
+    }
+
+    fn extreme_lab_colorcontrast_input() -> RgbaF32Image {
+        RgbaF32Image::new(
+            RgbaF32Descriptor::new(
+                RasterDimensions::new(2, 1).expect("dimensions"),
+                RgbaF32ColorEncoding::LabD50,
+            ),
+            vec![
+                RgbaF32Pixel::new(f32::MAX, f32::MAX, -f32::MAX, 0.333_333_34),
+                RgbaF32Pixel::new(72.765_43, 31.234_56, -42.345_67, 0.777_777_8),
+            ],
+        )
+        .expect("extreme finite Lab Color Contrast input")
+    }
+
+    fn rgba_bits(image: &RgbaF32Image) -> Vec<[u32; 4]> {
+        image
+            .pixels()
+            .iter()
+            .map(|pixel| {
+                [
+                    pixel.red().to_bits(),
+                    pixel.green().to_bits(),
+                    pixel.blue().to_bits(),
+                    pixel.alpha().to_bits(),
+                ]
+            })
+            .collect()
+    }
+
+    fn one_boundary_colorcontrast_reference(
+        input: &RgbaF32Image,
+        configs: &[ColorContrastConfig],
+        mode: CpuPixelpipeOutputMode,
+    ) -> RgbaF32Image {
+        let working = to_linear_working(input).expect("matrix source ingress");
+        let to_lab = color_transform(
+            working.frame().encoding(),
+            rusttable_color::ColorEncoding::LabD50,
+        )
+        .expect("RGB-to-Lab plan");
+        let from_lab = color_transform(
+            rusttable_color::ColorEncoding::LabD50,
+            working.frame().encoding(),
+        )
+        .expect("Lab-to-RGB plan");
+        let mut lab = working
+            .pixels()
+            .zip(input.pixels())
+            .map(|(pixel, source)| {
+                let channels = to_lab
+                    .apply_rgb(
+                        [pixel.red().get(), pixel.green().get(), pixel.blue().get()],
+                        || false,
+                    )
+                    .expect("RGB-to-Lab reference");
+                ColorContrastPixel::new(channels[0], channels[1], channels[2], source.alpha())
+            })
+            .collect::<Vec<_>>();
+        for config in configs {
+            lab = ColorContrastPlan::new(*config).execute_lab(&lab);
+        }
+        let pixels = lab
+            .iter()
+            .map(|pixel| {
+                let channels = pixel.channels();
+                let rgb = from_lab
+                    .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                    .expect("Lab-to-RGB reference");
+                LinearRgb::new(
+                    FiniteF32::new(rgb[0]).expect("finite reference red"),
+                    FiniteF32::new(rgb[1]).expect("finite reference green"),
+                    FiniteF32::new(rgb[2]).expect("finite reference blue"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let evaluated = WorkingRgbImage::new_with_frame(
+            input.descriptor().dimensions(),
+            pixels,
+            working.frame(),
+        )
+        .expect("reference working image");
+        output_from_working(mode, input, &evaluated).expect("reference output")
     }
 }

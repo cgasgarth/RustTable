@@ -36,8 +36,8 @@ pub use dispatch::{
 };
 pub use grain::{GrainPointError, GrainPointRequest, GrainPointResult};
 pub use point::{
-    BasicAdjPointParameters, BasicPointError, BasicPointOperation, BasicPointRequest,
-    BasicPointResult,
+    BasicAdjPointParameters, BasicPointColorSpace, BasicPointError, BasicPointOperation,
+    BasicPointRequest, BasicPointResult,
 };
 pub use recovery::{
     AssemblyPlan, AssemblyReceipt, AssemblyTile, AttemptFailure, AttemptFailureKind, AttemptId,

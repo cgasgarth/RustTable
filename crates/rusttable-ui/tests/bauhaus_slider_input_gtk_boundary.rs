@@ -552,6 +552,7 @@ fn generic_descriptor_slider_defers_source_popup() {
         dispatched,
         DarkroomModuleAction::Control {
             module_id,
+            operation_id: None,
             expected_revision: Revision::ZERO,
             id,
             value: DarkroomControlValue::Slider(value),

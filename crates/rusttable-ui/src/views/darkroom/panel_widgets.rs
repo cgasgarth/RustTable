@@ -20,8 +20,8 @@ use crate::gui::darktable_components::{
 };
 use crate::gui::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS};
 use crate::iop::modules::{
-    DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModulesViewModel,
-    build_module_column_with_filter, build_module_column_without_empty,
+    DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModuleViewModel,
+    DarkroomModulesViewModel, build_module_column_with_filter, build_module_column_without_empty,
 };
 use crate::presentation::{
     DarkroomHistoryViewModel, DarkroomImageInformationViewModel, DarkroomPanelProjection,
@@ -339,22 +339,13 @@ pub(super) fn render_typed_modules_into(
             rendered += 1;
         }
     }
-    // The active tab is the live controller-owned stack above. Registry descriptors describe
-    // available operations, not active pipeline instances, and therefore belong only to their
-    // truthful category tabs.
-    let searching = !query.trim().is_empty();
-    let typed = if group == DarkroomModuleGroup::Active && !searching {
-        Vec::new()
-    } else {
-        modules
-            .right_modules()
-            .filter(|module| module.id() != "exposure")
-            .filter(|module| searching || group.matches(module))
-            .filter(|module| {
-                crate::gtk_shell::darkroom_modules::module_matches_search(module, query)
-            })
-            .collect::<Vec<_>>()
-    };
+    // The controller-owned snapshot carries both live operation instances and
+    // disabled templates. Empty queries honor the selected group; searches
+    // continue to span groups.
+    let typed = modules
+        .right_modules()
+        .filter(|module| typed_module_matches(module, group, query))
+        .collect::<Vec<_>>();
     rendered += typed.len();
     right_modules.append(&build_module_column_without_empty(
         typed.into_iter(),
@@ -374,6 +365,17 @@ pub(super) fn render_typed_modules_into(
         empty.set_accessible_role(gtk4::AccessibleRole::Status);
         right_modules.append(&empty);
     }
+}
+
+fn typed_module_matches(
+    module: &DarkroomModuleViewModel,
+    group: DarkroomModuleGroup,
+    query: &str,
+) -> bool {
+    let searching = !query.trim().is_empty();
+    module.id() != "exposure"
+        && (searching || group.matches(module))
+        && crate::gtk_shell::darkroom_modules::module_matches_search(module, query)
 }
 
 fn clear_children(container: &impl IsA<gtk4::Widget>) {
@@ -506,8 +508,9 @@ pub(super) fn add_group_buttons(
 mod parity_tests {
     use super::{
         DENOISE_MODULE_GROUPS, DarkroomModuleGroup, RETOUCH_MODULE_GROUPS,
-        histogram_height_request, implemented_module_matches,
+        histogram_height_request, implemented_module_matches, typed_module_matches,
     };
+    use crate::iop::modules::reference_modules;
 
     #[test]
     fn implemented_module_groups_match_darktable_defaults() {
@@ -553,6 +556,32 @@ mod parity_tests {
             "exposure",
             false
         ));
+    }
+
+    #[test]
+    fn active_filter_tracks_controller_owned_colorcontrast_enabled_state() {
+        let mut colorcontrast = reference_modules()
+            .expect("registry-derived darkroom modules")
+            .module("colorcontrast")
+            .expect("Color Contrast module")
+            .clone();
+        assert!(
+            !typed_module_matches(&colorcontrast, DarkroomModuleGroup::Active, ""),
+            "disabled Color Contrast must stay out of the default Active group"
+        );
+        assert!(
+            typed_module_matches(&colorcontrast, DarkroomModuleGroup::Active, "saturation"),
+            "search must continue to span groups and include disabled modules"
+        );
+
+        let revision = colorcontrast.revision();
+        colorcontrast
+            .set_enabled(revision, true)
+            .expect("controller enables Color Contrast");
+        assert!(
+            typed_module_matches(&colorcontrast, DarkroomModuleGroup::Active, ""),
+            "enabled Color Contrast must appear in the default Active group"
+        );
     }
 
     #[test]

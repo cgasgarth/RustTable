@@ -3,14 +3,17 @@
 use std::fmt;
 
 use rusttable_color::{
-    AdaptationMethod, AlphaTransform, BlackPointCompensation, BuiltinColorTransformPlanner,
-    ColorEncoding, ColorRole, ColorTransformPlanner, ColorTransformRequest,
-    ColorTransformRequestError, ExtendedRange, Precision, RenderingIntent, TransformExecutionError,
-    TransformPlan,
+    Adaptation, AdaptationMethod, AlphaTransform, BlackPointCompensation,
+    BuiltinColorTransformPlanner, ColorEncoding, ColorRole, ColorTransformPlanner,
+    ColorTransformRequest, ColorTransformRequestError, ExtendedRange, Precision, RenderingIntent,
+    TransformExecutionError, TransformPlan, TransformStep, WhitePoint, rgb_to_xyz_matrix,
 };
 
 use crate::operations::OperationExecutionError;
 use crate::operations::bloom::{BloomConfig, BloomPixel, BloomPlan};
+use crate::operations::colorcontrast::{
+    ColorContrastConfig, ColorContrastPixel, ColorContrastPlan,
+};
 use crate::operations::defringe::{
     DefringeConfig, DefringeExecutionError, DefringePixel, DefringePlan,
 };
@@ -18,7 +21,9 @@ use crate::operations::relight::{RelightConfig, RelightPixel, RelightPlan};
 use crate::operations::shadhi::{
     ShadhiAlgorithm, ShadhiBilateralRequest, ShadhiConfig, ShadhiPixel, ShadhiPlan,
 };
-use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel, WorkingRgbImage};
+use crate::{
+    FiniteF32, LinearRgb, RasterDimensions, RgbChannel, WorkingFrameDescriptor, WorkingRgbImage,
+};
 
 const COLOR_PLANNER_VERSION: u16 = 1;
 
@@ -31,6 +36,11 @@ pub(crate) enum LabBoundaryError {
     Defringe(DefringeExecutionError),
     Shadhi(crate::operations::OperationExecutionError),
     Relight(crate::operations::OperationExecutionError),
+    ColorContrastRgbContainerCannotCarryLab,
+    Chromaticity(rusttable_color::ChromaticityMatrixError),
+    Matrix(rusttable_color::MatrixError),
+    Adaptation(rusttable_color::MatrixErrorAdapter),
+    Plan(rusttable_color::TransformPlanError),
     NonFinite { pixel: usize, channel: RgbChannel },
 }
 
@@ -44,6 +54,21 @@ impl fmt::Display for LabBoundaryError {
             Self::Defringe(error) => write!(formatter, "Lab operation failed: {error}"),
             Self::Shadhi(error) => write!(formatter, "Lab shadhi operation failed: {error}"),
             Self::Relight(error) => write!(formatter, "Lab relight operation failed: {error}"),
+            Self::ColorContrastRgbContainerCannotCarryLab => write!(
+                formatter,
+                "Color Contrast cannot consume Lab channels through the linear-RGB evaluator"
+            ),
+            Self::Chromaticity(error) => {
+                write!(formatter, "Lab boundary profile matrix failed: {error}")
+            }
+            Self::Matrix(error) => write!(formatter, "Lab boundary matrix failed: {error}"),
+            Self::Adaptation(error) => {
+                write!(
+                    formatter,
+                    "Lab boundary chromatic adaptation failed: {error}"
+                )
+            }
+            Self::Plan(error) => write!(formatter, "Lab boundary plan failed: {error}"),
             Self::NonFinite { pixel, channel } => write!(
                 formatter,
                 "Lab boundary produced a non-finite {channel:?} at pixel {pixel}"
@@ -458,8 +483,144 @@ pub(crate) fn apply_relight(
         .collect()
 }
 
+pub(crate) fn apply_colorcontrast(
+    config: ColorContrastConfig,
+    pixels: &[LinearRgb],
+    source_frame: WorkingFrameDescriptor,
+    mask: Option<&[f32]>,
+    opacity: f32,
+) -> Result<Vec<LinearRgb>, LabBoundaryError> {
+    if source_frame.encoding() == ColorEncoding::LabD50 {
+        return Err(LabBoundaryError::ColorContrastRgbContainerCannotCarryLab);
+    }
+    let to_lab = plan_working_to_lab(source_frame)?;
+    let from_lab = plan_lab_to_working(source_frame)?;
+    let lab_pixels = pixels
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let lab = to_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    || false,
+                )
+                .map_err(LabBoundaryError::Transform)?;
+            if lab.iter().any(|channel| !channel.is_finite()) {
+                return Err(LabBoundaryError::NonFinite {
+                    pixel,
+                    channel: RgbChannel::Red,
+                });
+            }
+            Ok(ColorContrastPixel::new(lab[0], lab[1], lab[2], 1.0))
+        })
+        .collect::<Result<Vec<_>, LabBoundaryError>>()?;
+    let plan = ColorContrastPlan::new(config);
+    let lab_output = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+        plan.execute_lab(&lab_pixels)
+    } else {
+        plan.execute_lab_normal_blend(&lab_pixels, mask, opacity)
+    };
+    lab_output
+        .into_iter()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let channels = value.channels();
+            let rgb = from_lab
+                .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                .map_err(LabBoundaryError::Transform)?;
+            let red = finite(rgb[0], pixel, RgbChannel::Red)?;
+            let green = finite(rgb[1], pixel, RgbChannel::Green)?;
+            let blue = finite(rgb[2], pixel, RgbChannel::Blue)?;
+            Ok(LinearRgb::new(red, green, blue))
+        })
+        .collect()
+}
+
+fn plan_working_to_lab(
+    source_frame: WorkingFrameDescriptor,
+) -> Result<TransformPlan, LabBoundaryError> {
+    if source_frame.encoding().builtin().is_some() {
+        return plan(source_frame.encoding(), ColorEncoding::LabD50);
+    }
+    let rgb_to_xyz = working_rgb_to_xyz(source_frame)?;
+    let mut steps = vec![TransformStep::Matrix(rgb_to_xyz)];
+    if source_frame.white_point() != WhitePoint::D50 {
+        steps.push(TransformStep::Adaptation(
+            Adaptation::between(
+                source_frame.white_point(),
+                WhitePoint::D50,
+                AdaptationMethod::Bradford,
+            )
+            .map_err(LabBoundaryError::Adaptation)?,
+        ));
+    }
+    steps.push(TransformStep::XyzToLab {
+        white_point: WhitePoint::D50,
+    });
+    TransformPlan::new(
+        request(source_frame.encoding(), ColorEncoding::LabD50)?,
+        steps,
+    )
+    .map_err(LabBoundaryError::Plan)
+}
+
+fn plan_lab_to_working(
+    target_frame: WorkingFrameDescriptor,
+) -> Result<TransformPlan, LabBoundaryError> {
+    if target_frame.encoding().builtin().is_some() {
+        return plan(ColorEncoding::LabD50, target_frame.encoding());
+    }
+    let rgb_to_xyz = working_rgb_to_xyz(target_frame)?;
+    let mut steps = vec![TransformStep::LabToXyz {
+        white_point: WhitePoint::D50,
+    }];
+    if target_frame.white_point() != WhitePoint::D50 {
+        steps.push(TransformStep::Adaptation(
+            Adaptation::between(
+                WhitePoint::D50,
+                target_frame.white_point(),
+                AdaptationMethod::Bradford,
+            )
+            .map_err(LabBoundaryError::Adaptation)?,
+        ));
+    }
+    steps.push(TransformStep::Matrix(
+        rgb_to_xyz.inverse().map_err(LabBoundaryError::Matrix)?,
+    ));
+    TransformPlan::new(
+        request(ColorEncoding::LabD50, target_frame.encoding())?,
+        steps,
+    )
+    .map_err(LabBoundaryError::Plan)
+}
+
+fn working_rgb_to_xyz(
+    frame: WorkingFrameDescriptor,
+) -> Result<rusttable_color::Matrix3, LabBoundaryError> {
+    let primaries = frame.primaries();
+    rgb_to_xyz_matrix(
+        [
+            (primaries.red().0.get(), primaries.red().1.get()),
+            (primaries.green().0.get(), primaries.green().1.get()),
+            (primaries.blue().0.get(), primaries.blue().1.get()),
+        ],
+        frame.white_point(),
+    )
+    .map_err(LabBoundaryError::Chromaticity)
+}
+
 fn plan(source: ColorEncoding, target: ColorEncoding) -> Result<TransformPlan, LabBoundaryError> {
-    let request = ColorTransformRequest::new(
+    BuiltinColorTransformPlanner
+        .plan(&request(source, target)?)
+        .map_err(LabBoundaryError::Planner)
+}
+
+fn request(
+    source: ColorEncoding,
+    target: ColorEncoding,
+) -> Result<ColorTransformRequest, LabBoundaryError> {
+    ColorTransformRequest::new(
         source,
         target,
         ColorRole::Working,
@@ -471,10 +632,7 @@ fn plan(source: ColorEncoding, target: ColorEncoding) -> Result<TransformPlan, L
         ExtendedRange::Extended,
         COLOR_PLANNER_VERSION,
     )
-    .map_err(LabBoundaryError::Request)?;
-    BuiltinColorTransformPlanner
-        .plan(&request)
-        .map_err(LabBoundaryError::Planner)
+    .map_err(LabBoundaryError::Request)
 }
 
 fn finite(value: f32, pixel: usize, channel: RgbChannel) -> Result<FiniteF32, LabBoundaryError> {
@@ -486,6 +644,33 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
+
+    #[test]
+    fn colorcontrast_refuses_to_treat_linear_rgb_storage_as_lab_channels() {
+        let source = LinearRgb::new(
+            FiniteF32::new(50.0).expect("L-shaped value"),
+            FiniteF32::new(16.0).expect("a-shaped value"),
+            FiniteF32::new(-32.0).expect("b-shaped value"),
+        );
+
+        assert!(matches!(
+            apply_colorcontrast(
+                ColorContrastConfig::defaults(),
+                &[source],
+                WorkingFrameDescriptor::new(
+                    ColorEncoding::LabD50,
+                    rusttable_color::Primaries::srgb(),
+                    WhitePoint::D50,
+                    rusttable_color::TransferFunction::Linear,
+                    None,
+                    crate::WorkingProfileProvenance::Selected,
+                ),
+                None,
+                1.0,
+            ),
+            Err(LabBoundaryError::ColorContrastRgbContainerCannotCarryLab)
+        ));
+    }
 
     #[test]
     fn canonical_shadhi_cancels_mid_bilateral_filter_without_output() {

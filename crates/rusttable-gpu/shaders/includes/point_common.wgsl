@@ -26,10 +26,22 @@ struct BasicAdjParams {
     _reserved: vec2<u32>,
 }
 
+struct ColorContrastParams {
+    a_steepness: f32,
+    a_offset: f32,
+    b_steepness: f32,
+    b_offset: f32,
+    unbound: u32,
+    _reserved0: u32,
+    _reserved1: u32,
+    _reserved2: u32,
+}
+
 @group(0) @binding(0) var<storage, read> input_pixels: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> output_pixels: array<vec4<f32>>;
 @group(0) @binding(2) var<uniform> params: PointParams;
 @group(0) @binding(3) var<uniform> basic_params: BasicAdjParams;
+@group(0) @binding(4) var<uniform> colorcontrast_params: ColorContrastParams;
 
 fn in_bounds(index: u32) -> bool {
     return index < params.pixel_count;

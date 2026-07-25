@@ -2,6 +2,7 @@ use crate::operations::{
     basicadj::BasicAdjConfig,
     bloom::BloomConfig,
     clipping::ClippingConfig,
+    colorcontrast::ColorContrastConfig,
     colorcorrection::ColorCorrectionConfig,
     colorin::ColorInConfig,
     colorout::ColorOutConfig,
@@ -44,6 +45,7 @@ pub(crate) use geometry::{
 };
 mod censorize;
 mod clahe;
+mod colorcontrast;
 mod defringe;
 mod effects;
 mod grain;
@@ -57,6 +59,7 @@ mod velvia;
 pub(crate) use basicadj::compile_basicadj;
 pub(crate) use censorize::compile_censorize;
 pub(crate) use clahe::compile_clahe;
+pub(crate) use colorcontrast::compile_colorcontrast;
 pub(crate) use compat::{compile_dither, compile_invert};
 pub(crate) use defringe::compile_defringe;
 pub(crate) use effects::{compile_bloom, compile_soften};
@@ -157,6 +160,9 @@ pub enum ProcessingOperationKind {
     },
     ColorCorrection {
         config: ColorCorrectionConfig,
+    },
+    ColorContrast {
+        config: ColorContrastConfig,
     },
     Temperature {
         config: TemperatureConfig,
@@ -421,6 +427,11 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_colorcorrection(operation)
+    }
+    pub(crate) fn compile_colorcontrast(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_colorcontrast(operation)
     }
     pub(crate) fn compile_temperature(
         operation: &Operation,

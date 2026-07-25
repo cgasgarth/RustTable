@@ -515,6 +515,14 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update(config.strength().to_bits().to_le_bytes());
             hasher.update(config.bias().to_bits().to_le_bytes());
         }
+        ProcessingOperationKind::ColorContrast { config } => {
+            hasher.update([27]);
+            hasher.update(config.a_steepness().to_bits().to_le_bytes());
+            hasher.update(config.a_offset().to_bits().to_le_bytes());
+            hasher.update(config.b_steepness().to_bits().to_le_bytes());
+            hasher.update(config.b_offset().to_bits().to_le_bytes());
+            hasher.update(config.unbound().to_le_bytes());
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

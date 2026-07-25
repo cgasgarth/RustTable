@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use rusttable_core::OperationId;
 use rusttable_gpu::{
-    BasicAdjPointParameters, BasicPointError, BasicPointOperation, BasicPointRequest,
-    BilateralGridError, BilateralGridRequest, CancellationToken as GpuCancellationToken,
-    GpuRuntime, GrainPointError, GrainPointRequest,
+    BasicAdjPointParameters, BasicPointColorSpace, BasicPointError, BasicPointOperation,
+    BasicPointRequest, BilateralGridError, BilateralGridRequest,
+    CancellationToken as GpuCancellationToken, GpuRuntime, GrainPointError, GrainPointRequest,
 };
 use rusttable_processing::operations::shadhi::{ShadhiAlgorithm, ShadhiConfig};
 use rusttable_processing::{
@@ -19,13 +19,14 @@ use rusttable_processing::{
 use sha2::{Digest, Sha256};
 
 use crate::cpu::{
-    output_descriptor, output_from_working, requires_full_frame_execution, to_linear_working,
-    validate_input_encoding,
+    operation_is_semantically_active, output_descriptor, output_from_working,
+    requires_full_frame_execution, to_linear_working, validate_input_encoding,
 };
 use crate::{
     Cache, CacheConfig, CacheError, CacheKey, CancellationError, CancellationReason,
     CancellationScope, CancellationStage, CpuPixelpipeError, CpuPixelpipeExecutor,
-    CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, PipelineGeneration, RgbaF32Image, RgbaF32Pixel,
+    CpuPixelpipeOutputMode, CpuPixelpipeSnapshot, PipelineGeneration, RgbaF32ColorEncoding,
+    RgbaF32Image, RgbaF32Pixel,
 };
 
 /// The backend that published one pixelpipe result.
@@ -920,11 +921,15 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
     let mut operations = Vec::new();
     let mut grain = None;
     let mut shadhi = None;
+    let mut has_nodes = false;
+    let mut has_active_nodes = false;
     for node in snapshot.graph().nodes() {
+        has_nodes = true;
         let operation = node.operation();
-        if !operation.is_enabled() {
+        if !operation_is_semantically_active(operation) {
             continue;
         }
+        has_active_nodes = true;
         let gpu_operation = match operation.kind() {
             rusttable_processing::ProcessingOperationKind::BasicAdj { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
@@ -966,6 +971,12 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                 }
                 BasicPointCandidate::Ready(velvia_point_operation(*config))
             }
+            rusttable_processing::ProcessingOperationKind::ColorContrast { config } => {
+                if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
+                    return None;
+                }
+                BasicPointCandidate::Ready(colorcontrast_point_operation(*config))
+            }
             rusttable_processing::ProcessingOperationKind::Grain { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits()
                     || grain.is_some()
@@ -1000,6 +1011,8 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
         Some(GpuPlanCandidate::Grain(config))
     } else if let Some((config, opacity)) = shadhi {
         Some(GpuPlanCandidate::ShadhiBilateral { config, opacity })
+    } else if has_nodes && !has_active_nodes {
+        None
     } else {
         Some(GpuPlanCandidate::Basic(operations))
     }
@@ -1066,6 +1079,18 @@ fn velvia_point_operation(
     BasicPointOperation::Velvia {
         strength: config.normalized_strength(),
         bias: config.bias(),
+    }
+}
+
+fn colorcontrast_point_operation(
+    config: rusttable_processing::operations::colorcontrast::ColorContrastConfig,
+) -> BasicPointOperation {
+    BasicPointOperation::ColorContrast {
+        a_steepness: config.a_steepness(),
+        a_offset: config.a_offset(),
+        b_steepness: config.b_steepness(),
+        b_offset: config.b_offset(),
+        unbound: config.is_unbound(),
     }
 }
 
@@ -1160,10 +1185,22 @@ fn execute_gpu_image(
     output_mode: CpuPixelpipeOutputMode,
     operations: &[BasicPointOperation],
 ) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
+    let color_space =
+        basic_point_chain_color_space(input.descriptor().color_encoding(), operations)?;
+    if color_space == BasicPointColorSpace::LabD50 {
+        let packed = packed_lab_d50(input);
+        let result = gpu.execute_basic_point(BasicPointRequest {
+            pixels: &packed,
+            operations,
+            color_space,
+        })?;
+        return lab_image_from_packed(input, result.pixels(), result.dispatches());
+    }
     let (frame, packed) = packed_linear_working(input)?;
     let result = gpu.execute_basic_point(BasicPointRequest {
         pixels: &packed,
         operations,
+        color_space,
     })?;
     image_from_packed(
         input,
@@ -1172,6 +1209,61 @@ fn execute_gpu_image(
         result.pixels(),
         result.dispatches(),
     )
+}
+
+fn basic_point_chain_color_space(
+    input_encoding: RgbaF32ColorEncoding,
+    operations: &[BasicPointOperation],
+) -> Result<BasicPointColorSpace, BasicPointError> {
+    if operations.is_empty() {
+        return Ok(if input_encoding == RgbaF32ColorEncoding::LabD50 {
+            BasicPointColorSpace::LabD50
+        } else {
+            BasicPointColorSpace::LinearRgb
+        });
+    }
+    let contains_colorcontrast = operations
+        .iter()
+        .any(|operation| matches!(operation, BasicPointOperation::ColorContrast { .. }));
+    if !contains_colorcontrast {
+        return Ok(BasicPointColorSpace::LinearRgb);
+    }
+    if input_encoding == RgbaF32ColorEncoding::LabD50
+        && operations
+            .iter()
+            .all(|operation| matches!(operation, BasicPointOperation::ColorContrast { .. }))
+    {
+        return Ok(BasicPointColorSpace::LabD50);
+    }
+    Err(BasicPointError::ColorSpaceBoundaryUnavailable {
+        required: BasicPointColorSpace::LabD50,
+    })
+}
+
+fn packed_lab_d50(input: &RgbaF32Image) -> Vec<f32> {
+    let mut packed = Vec::with_capacity(input.pixels().len() * 4);
+    for pixel in input.pixels() {
+        packed.extend([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
+    }
+    packed
+}
+
+fn lab_image_from_packed(
+    input: &RgbaF32Image,
+    packed: &[f32],
+    dispatches: u32,
+) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
+    let (packed_pixels, remainder) = packed.as_chunks::<4>();
+    if !remainder.is_empty() || packed_pixels.len() != input.pixels().len() {
+        return Err(BasicPointError::InvalidPixelPacking.into());
+    }
+    let pixels = packed_pixels
+        .iter()
+        .map(|pixel| RgbaF32Pixel::new(pixel[0], pixel[1], pixel[2], pixel[3]))
+        .collect::<Vec<_>>();
+    let image = RgbaF32Image::new(input.descriptor(), pixels)
+        .map_err(|error| BasicPointError::Readback(error.to_string()))?;
+    Ok((image, dispatches))
 }
 
 fn execute_gpu_grain_image(
@@ -1428,7 +1520,10 @@ mod tests {
     use std::sync::Barrier;
     use std::time::Instant;
 
-    use rusttable_core::{Edit, EditId, PhotoId, Revision};
+    use rusttable_core::{
+        Edit, EditId, FiniteF64, Operation, OperationKey, OperationOpacity, ParameterName,
+        ParameterValue, PhotoId, Revision,
+    };
 
     use super::*;
     use crate::{RgbaF32ColorEncoding, RgbaF32Descriptor};
@@ -1543,17 +1638,286 @@ mod tests {
         );
     }
 
+    #[test]
+    fn colorcontrast_gpu_plan_preserves_an_opaque_unmasked_lab_chain_in_authored_order() {
+        use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
+
+        let first = ColorContrastConfig::new(2.0, 3.0, 1.5, -4.0, 1).expect("first config");
+        let second = ColorContrastConfig::new(0.5, -2.0, 2.0, 5.0, 0).expect("second config");
+        let snapshot = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [
+                colorcontrast_edit_operation(
+                    0xcc01,
+                    OperationOpacity::ONE,
+                    [2.0, 3.0, 1.5, -4.0],
+                    1,
+                ),
+                colorcontrast_edit_operation(
+                    0xcc02,
+                    OperationOpacity::ONE,
+                    [0.5, -2.0, 2.0, 5.0],
+                    0,
+                ),
+            ],
+        );
+        let candidate = gpu_plan_candidate(&snapshot).expect("opaque unmasked GPU candidate");
+        let qualified = resolve_gpu_plan_candidate(candidate, || {
+            panic!("Color Contrast does not require BasicAdj analysis")
+        })
+        .expect("qualification")
+        .expect("qualified plan");
+        let expected = vec![
+            colorcontrast_point_operation(first),
+            colorcontrast_point_operation(second),
+        ];
+
+        assert_eq!(qualified.plan, GpuPlan::Basic(expected.clone()));
+        assert_eq!(
+            basic_point_chain_color_space(
+                snapshot.input().descriptor().color_encoding(),
+                &expected,
+            ),
+            Ok(BasicPointColorSpace::LabD50)
+        );
+    }
+
+    #[test]
+    fn disabled_only_colorcontrast_graph_routes_directly_to_canonical_cpu() {
+        let snapshot = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [colorcontrast_edit_operation_with_enabled(
+                0xcc05,
+                false,
+                OperationOpacity::ONE,
+                [2.0, 3.0, 1.5, -4.0],
+                1,
+            )],
+        );
+
+        assert!(gpu_plan_candidate(&snapshot).is_none());
+    }
+
+    #[test]
+    fn zero_opacity_only_colorcontrast_graph_routes_directly_to_canonical_cpu() {
+        let snapshot = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [colorcontrast_edit_operation(
+                0xcc06,
+                OperationOpacity::ZERO,
+                [2.0, 3.0, 1.5, -4.0],
+                1,
+            )],
+        );
+
+        assert!(gpu_plan_candidate(&snapshot).is_none());
+    }
+
+    #[test]
+    fn truly_empty_graph_retains_an_empty_gpu_plan() {
+        let snapshot = snapshot_with_operations(RgbaF32ColorEncoding::LabD50, std::iter::empty());
+        let candidate = gpu_plan_candidate(&snapshot).expect("empty graph GPU candidate");
+        let qualified = resolve_gpu_plan_candidate(candidate, || {
+            panic!("an empty point chain does not require BasicAdj analysis")
+        })
+        .expect("qualification")
+        .expect("qualified plan");
+
+        assert_eq!(qualified.plan, GpuPlan::Basic(Vec::new()));
+    }
+
+    #[test]
+    fn zero_opacity_non_colorcontrast_preserves_an_active_lab_colorcontrast_chain() {
+        use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
+
+        let first = ColorContrastConfig::new(1.25, 3.0, 0.8, -2.0, 1).expect("first config");
+        let second = ColorContrastConfig::new(0.7, -4.0, 1.4, 5.0, 0).expect("second config");
+        let snapshot = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [
+                colorcontrast_edit_operation(
+                    0xcc07,
+                    OperationOpacity::ONE,
+                    [1.25, 3.0, 0.8, -2.0],
+                    1,
+                ),
+                scalar_edit_operation(
+                    0xe001,
+                    "rusttable.exposure",
+                    true,
+                    OperationOpacity::ZERO,
+                    &[("stops", 3.0)],
+                ),
+                colorcontrast_edit_operation(
+                    0xcc08,
+                    OperationOpacity::ONE,
+                    [0.7, -4.0, 1.4, 5.0],
+                    0,
+                ),
+            ],
+        );
+        let candidate =
+            gpu_plan_candidate(&snapshot).expect("continuous Color Contrast GPU candidate");
+        let qualified = resolve_gpu_plan_candidate(candidate, || {
+            panic!("Color Contrast does not require BasicAdj analysis")
+        })
+        .expect("qualification")
+        .expect("qualified plan");
+        let expected = vec![
+            colorcontrast_point_operation(first),
+            colorcontrast_point_operation(second),
+        ];
+
+        assert_eq!(qualified.plan, GpuPlan::Basic(expected.clone()));
+        assert_eq!(
+            basic_point_chain_color_space(
+                snapshot.input().descriptor().color_encoding(),
+                &expected,
+            ),
+            Ok(BasicPointColorSpace::LabD50)
+        );
+    }
+
+    #[test]
+    fn colorcontrast_gpu_routing_keeps_rgb_and_mixed_domain_chains_on_cpu() {
+        let colorcontrast = BasicPointOperation::ColorContrast {
+            a_steepness: 2.0,
+            a_offset: 3.0,
+            b_steepness: 1.5,
+            b_offset: -4.0,
+            unbound: true,
+        };
+        let exposure = BasicPointOperation::Exposure {
+            stops: 1.0,
+            black: 0.0,
+        };
+        let fallback = Err(BasicPointError::ColorSpaceBoundaryUnavailable {
+            required: BasicPointColorSpace::LabD50,
+        });
+
+        assert_eq!(
+            basic_point_chain_color_space(
+                RgbaF32ColorEncoding::LinearSrgbD65,
+                &[colorcontrast, colorcontrast],
+            ),
+            fallback
+        );
+        for operations in [[colorcontrast, exposure], [exposure, colorcontrast]] {
+            assert_eq!(
+                basic_point_chain_color_space(RgbaF32ColorEncoding::LabD50, &operations),
+                fallback
+            );
+        }
+    }
+
+    #[test]
+    fn colorcontrast_gpu_plan_rejects_partial_opacity_and_mask_state() {
+        let partial = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [colorcontrast_edit_operation(
+                0xcc03,
+                OperationOpacity::new(0.5).expect("partial opacity"),
+                [1.0, 0.0, 1.0, 0.0],
+                1,
+            )],
+        );
+        let masked = snapshot_with_operations(
+            RgbaF32ColorEncoding::LabD50,
+            [colorcontrast_edit_operation(
+                0xcc04,
+                OperationOpacity::ONE,
+                [1.0, 0.0, 1.0, 0.0],
+                1,
+            )],
+        )
+        .with_mask_graph(
+            rusttable_masks::MaskGraphBuilder::new()
+                .build()
+                .expect("empty mask graph"),
+        );
+
+        assert!(gpu_plan_candidate(&partial).is_none());
+        assert!(gpu_plan_candidate(&masked).is_none());
+    }
+
+    fn colorcontrast_edit_operation(
+        id: u128,
+        opacity: OperationOpacity,
+        parameters: [f64; 4],
+        unbound: i64,
+    ) -> Operation {
+        colorcontrast_edit_operation_with_enabled(id, true, opacity, parameters, unbound)
+    }
+
+    fn colorcontrast_edit_operation_with_enabled(
+        id: u128,
+        enabled: bool,
+        opacity: OperationOpacity,
+        parameters: [f64; 4],
+        unbound: i64,
+    ) -> Operation {
+        let [a_steepness, a_offset, b_steepness, b_offset] = parameters;
+        let scalar = |value| {
+            ParameterValue::Scalar(FiniteF64::new(value).expect("finite Color Contrast parameter"))
+        };
+        Operation::new_with_opacity(
+            OperationId::new(id).expect("operation ID"),
+            OperationKey::new("rusttable.colorcontrast").expect("operation key"),
+            enabled,
+            opacity,
+            [
+                ("a_steepness", scalar(a_steepness)),
+                ("a_offset", scalar(a_offset)),
+                ("b_steepness", scalar(b_steepness)),
+                ("b_offset", scalar(b_offset)),
+                ("unbound", ParameterValue::Integer(unbound)),
+            ]
+            .into_iter()
+            .map(|(name, value)| (ParameterName::new(name).expect("parameter name"), value)),
+        )
+        .expect("Color Contrast operation")
+    }
+
+    fn scalar_edit_operation(
+        id: u128,
+        key: &str,
+        enabled: bool,
+        opacity: OperationOpacity,
+        parameters: &[(&str, f64)],
+    ) -> Operation {
+        Operation::new_with_opacity(
+            OperationId::new(id).expect("operation ID"),
+            OperationKey::new(key).expect("operation key"),
+            enabled,
+            opacity,
+            parameters.iter().map(|(name, value)| {
+                (
+                    ParameterName::new(*name).expect("parameter name"),
+                    ParameterValue::Scalar(FiniteF64::new(*value).expect("finite parameter")),
+                )
+            }),
+        )
+        .expect("scalar operation")
+    }
+
     fn empty_snapshot() -> CpuPixelpipeSnapshot {
         snapshot_with_encoding(RgbaF32ColorEncoding::SrgbD65)
     }
 
     fn snapshot_with_encoding(encoding: RgbaF32ColorEncoding) -> CpuPixelpipeSnapshot {
+        snapshot_with_operations(encoding, std::iter::empty())
+    }
+
+    fn snapshot_with_operations(
+        encoding: RgbaF32ColorEncoding,
+        operations: impl IntoIterator<Item = Operation>,
+    ) -> CpuPixelpipeSnapshot {
         let edit = Edit::from_parts(
             EditId::new(1).expect("edit ID"),
             PhotoId::new(2).expect("photo ID"),
             Revision::ZERO,
             Revision::from_u64(1),
-            [],
+            operations,
         )
         .expect("edit");
         let dimensions = RasterDimensions::new(1, 1).expect("dimensions");

@@ -172,7 +172,7 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
             "dither"
         ]
     );
-    assert_eq!(ids.last(), Some(&"colorcorrection"));
+    assert_eq!(ids.last(), Some(&"colorout"));
 }
 
 #[test]

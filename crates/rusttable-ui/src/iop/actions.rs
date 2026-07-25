@@ -2,7 +2,7 @@
 
 use std::{fmt, rc::Rc};
 
-use rusttable_core::Revision;
+use rusttable_core::{OperationId, Revision};
 
 use crate::presentation::darkroom_controls::{DarkroomControlError, DarkroomControlValue};
 
@@ -36,6 +36,11 @@ pub enum DarkroomModuleError {
     WrongModule {
         expected: String,
         actual: String,
+    },
+    WrongOperation {
+        module_id: String,
+        expected: Option<OperationId>,
+        actual: Option<OperationId>,
     },
     UnknownPreset {
         module_id: String,
@@ -85,6 +90,16 @@ impl fmt::Display for DarkroomModuleError {
                     "action targets module {expected}, received {actual}"
                 )
             }
+            Self::WrongOperation {
+                module_id,
+                expected,
+                actual,
+            } => {
+                write!(
+                    formatter,
+                    "action targets {module_id} operation {expected:?}, received {actual:?}"
+                )
+            }
             Self::UnknownPreset {
                 module_id,
                 preset_id,
@@ -118,31 +133,37 @@ pub enum DarkroomModuleStatus {
 pub enum DarkroomModuleAction {
     Disclosure {
         module_id: String,
+        operation_id: Option<OperationId>,
         expected_revision: Revision,
         expanded: bool,
     },
     Enable {
         module_id: String,
+        operation_id: Option<OperationId>,
         expected_revision: Revision,
         enabled: bool,
     },
     Reset {
         module_id: String,
+        operation_id: Option<OperationId>,
         expected_revision: Revision,
     },
     Preset {
         module_id: String,
+        operation_id: Option<OperationId>,
         expected_revision: Revision,
         preset_id: String,
     },
     Control {
         module_id: String,
+        operation_id: Option<OperationId>,
         expected_revision: Revision,
         id: String,
         value: DarkroomControlValue,
     },
     Recover {
         module_id: String,
+        operation_id: Option<OperationId>,
         expected_revision: Revision,
     },
 }
@@ -158,6 +179,58 @@ impl DarkroomModuleAction {
             | Self::Control { module_id, .. }
             | Self::Recover { module_id, .. } => module_id,
         }
+    }
+
+    /// Persisted operation instance targeted by this action.
+    ///
+    /// `None` retains the compatibility path for presentation models that have
+    /// not yet been projected from an edit. Persisted multi-instance panels
+    /// always emit `Some`.
+    #[must_use]
+    pub const fn operation_id(&self) -> Option<OperationId> {
+        match self {
+            Self::Disclosure { operation_id, .. }
+            | Self::Enable { operation_id, .. }
+            | Self::Reset { operation_id, .. }
+            | Self::Preset { operation_id, .. }
+            | Self::Control { operation_id, .. }
+            | Self::Recover { operation_id, .. } => *operation_id,
+        }
+    }
+
+    /// Returns this action with an application-resolved operation target.
+    ///
+    /// Compatibility-only actions may be resolved only when the application
+    /// has already proven that exactly one matching operation exists.
+    #[must_use]
+    pub fn with_operation_id(mut self, operation_id: Option<OperationId>) -> Self {
+        match &mut self {
+            Self::Disclosure {
+                operation_id: target,
+                ..
+            }
+            | Self::Enable {
+                operation_id: target,
+                ..
+            }
+            | Self::Reset {
+                operation_id: target,
+                ..
+            }
+            | Self::Preset {
+                operation_id: target,
+                ..
+            }
+            | Self::Control {
+                operation_id: target,
+                ..
+            }
+            | Self::Recover {
+                operation_id: target,
+                ..
+            } => *target = operation_id,
+        }
+        self
     }
 
     #[must_use]
