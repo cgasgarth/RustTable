@@ -42,6 +42,7 @@ pub mod shadhi;
 pub mod soften;
 pub mod spots;
 pub mod temperature;
+pub mod velvia;
 pub mod vignette;
 pub mod watermark;
 

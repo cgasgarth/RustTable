@@ -962,7 +962,9 @@ mod tests {
         assert!(DarkroomModuleGroup::Active.matches(exposure));
         assert!(DarkroomModuleGroup::Technical.matches(lens));
         assert!(DarkroomModuleGroup::Grading.matches(grading));
-        assert!(DarkroomModuleGroup::Favorites.matches(grain));
+        assert!(grain.is_style_eligible());
+        assert!(!DarkroomModuleGroup::Favorites.matches(grain));
+        assert!(DarkroomModuleGroup::Favorites.matches(&grain.clone().with_favorite(true)));
         assert!(!DarkroomModuleGroup::Technical.matches(exposure));
         assert!(!DarkroomModuleGroup::Correct.matches(hidden));
     }

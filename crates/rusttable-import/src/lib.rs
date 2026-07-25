@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "Bounded one-read source inspection and registration for `RustTable`."]
 
+pub mod darktable;
 mod raster;
 mod request;
 mod service;

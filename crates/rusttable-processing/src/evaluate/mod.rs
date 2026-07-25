@@ -696,6 +696,20 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             pixels.copy_from_slice(&candidate);
             Ok(())
         }
+        ProcessingOperationKind::Velvia { config } => {
+            if config.normalized_strength() <= 0.0 {
+                return Ok(());
+            }
+            let candidate = crate::operations::velvia::VelviaPlan::new(*config).execute(pixels);
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::Shadhi { config } => {
             let candidate = apply_shadhi_with_cancellation(
                 *config,

@@ -8,7 +8,8 @@ struct PointParams {
     gain_blue: f32,
     transfer_gamma: f32,
     black_level: f32,
-    _reserved1: f32,
+    velvia_strength: f32,
+    velvia_bias: f32,
 }
 
 struct BasicAdjParams {

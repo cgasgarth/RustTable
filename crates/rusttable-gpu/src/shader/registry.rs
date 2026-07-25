@@ -72,6 +72,13 @@ const ENTRY_SPECS: &[EntrySpec] = &[
         transcendental: &[],
     },
     EntrySpec {
+        id: "velvia",
+        owner_operation: Some("rusttable.velvia"),
+        owner_kernel: "extended.cl::velvia",
+        cpu_reference: "rusttable.cpu.velvia",
+        transcendental: &[],
+    },
+    EntrySpec {
         id: "copy",
         owner_operation: None,
         owner_kernel: "rusttable.kernel.copy",
@@ -850,7 +857,7 @@ mod tests {
     #[test]
     fn checked_in_registry_has_stable_initial_entries() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        assert_eq!(registry.entries().len(), 14);
+        assert_eq!(registry.entries().len(), 15);
         let exposure = registry
             .find("rusttable.point", "exposure")
             .expect("point exposure");
@@ -879,6 +886,15 @@ mod tests {
                 .entries()
                 .iter()
                 .any(|entry| entry.id().stable_name() == "rusttable.point.exposure")
+        );
+        let velvia = registry
+            .find("rusttable.point", "velvia")
+            .expect("point Velvia");
+        assert_eq!(velvia.identity.owner_operation_ids, ["rusttable.velvia"]);
+        assert_eq!(velvia.identity.owner_kernel_ids, ["extended.cl::velvia"]);
+        assert_eq!(
+            velvia.identity.canonical_cpu_reference,
+            "rusttable.cpu.velvia"
         );
         for entry in registry
             .entries()
@@ -980,6 +996,9 @@ mod tests {
         ));
         assert!(
             generated.contains("pub const ENTRY_EXPOSURE_ID: &str = \"rusttable.point.exposure\";")
+        );
+        assert!(
+            generated.contains("pub const ENTRY_VELVIA_ID: &str = \"rusttable.point.velvia\";")
         );
         assert!(
             registry.point_source().contains("fn exposure"),

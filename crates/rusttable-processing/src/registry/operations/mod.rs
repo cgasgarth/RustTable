@@ -20,7 +20,7 @@ use crate::descriptor::{
     flip_descriptor, graduatednd_descriptor, grain_descriptor, invert_descriptor,
     linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor,
     scalepixels_descriptor, shadhi_descriptor, soften_descriptor, temperature_descriptor,
-    vignette_descriptor,
+    velvia_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -234,6 +234,17 @@ fn prepare_relight(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_relight(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_velvia(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_velvia(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -565,6 +576,31 @@ pub fn relight_definition() -> OperationDefinition {
         ],
         false,
         std::iter::empty(),
+    )
+}
+
+pub fn velvia_definition() -> OperationDefinition {
+    let descriptor = velvia_descriptor();
+    let gpu = GpuBinding::new(
+        crate::operations::velvia::VELVIA_WGPU_PASS_ID,
+        crate::operations::velvia::VELVIA_GPU_TIER,
+        descriptor.capability.required_features.clone(),
+        descriptor.capability.required_formats.clone(),
+    );
+    geometry_definition_with_gpu(
+        descriptor,
+        prepare_velvia,
+        &[
+            "iop.velvia.params.v1-v2",
+            "iop.velvia.cpu.native-clamps",
+            "iop.velvia.wgpu.point.unmasked-full-opacity",
+            "iop.velvia.opacity-mask-reconstruction",
+            "iop.velvia.alpha-preserve",
+            "iop.velvia.order.v30-57",
+        ],
+        RoiKind::Identity,
+        [MigrationBinding::new(1, 2, "velvia.migration.v1-v2")],
+        Some(gpu),
     )
 }
 
@@ -960,6 +996,7 @@ macro_rules! builtin_operations {
             $crate::registry::dither_definition,
             $crate::registry::grain_definition,
             $crate::registry::relight_definition,
+            $crate::registry::velvia_definition,
             $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,

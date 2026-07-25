@@ -510,6 +510,11 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
                 .to_bytes(),
             );
         }
+        ProcessingOperationKind::Velvia { config } => {
+            hasher.update([26]);
+            hasher.update(config.strength().to_bits().to_le_bytes());
+            hasher.update(config.bias().to_bits().to_le_bytes());
+        }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }
 }

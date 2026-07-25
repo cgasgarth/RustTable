@@ -109,7 +109,10 @@ impl DarkroomControlValue {
     }
 }
 
-/// A validated value and range for a Darktable-style slider.
+/// A validated UI range and finite current value for a Darktable-style slider.
+///
+/// A decoded native value may sit outside the interactive range until the user
+/// changes or resets it; GTK clamps only its visual thumb.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SliderSpec {
     minimum: f64,
@@ -146,6 +149,57 @@ impl SliderSpec {
     }
 }
 
+/// Source-qualified presentation needed to route a descriptor slider through
+/// Darktable's Bauhaus input boundary.
+///
+/// Generic descriptors intentionally omit this metadata and remain plain GTK
+/// scales. A source-mapped operation opts in only after its suffix, digits,
+/// automatic-step behavior, and tooltip have been verified against Darktable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceMappedSliderSpec {
+    suffix: &'static str,
+    digits: i32,
+    automatic_step: bool,
+    tooltip: &'static str,
+}
+
+impl SourceMappedSliderSpec {
+    #[must_use]
+    pub const fn new(
+        suffix: &'static str,
+        digits: i32,
+        automatic_step: bool,
+        tooltip: &'static str,
+    ) -> Self {
+        Self {
+            suffix,
+            digits,
+            automatic_step,
+            tooltip,
+        }
+    }
+
+    #[must_use]
+    pub const fn suffix(self) -> &'static str {
+        self.suffix
+    }
+
+    #[must_use]
+    pub const fn digits(self) -> i32 {
+        self.digits
+    }
+
+    #[must_use]
+    pub const fn automatic_step(self) -> bool {
+        self.automatic_step
+    }
+
+    #[must_use]
+    pub const fn tooltip(self) -> &'static str {
+        self.tooltip
+    }
+}
+
 /// A typed control with a stable id and a display-safe label.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DarkroomControlViewModel {
@@ -155,6 +209,7 @@ pub struct DarkroomControlViewModel {
     value: DarkroomControlValue,
     default: DarkroomControlValue,
     slider: Option<SliderSpec>,
+    source_mapped_slider: Option<SourceMappedSliderSpec>,
     choices: Vec<PresentationText>,
     text_max_bytes: Option<usize>,
 }
@@ -264,6 +319,7 @@ impl DarkroomControlViewModel {
                 value,
                 default,
             }),
+            source_mapped_slider: None,
             choices: Vec::new(),
             text_max_bytes: None,
         })
@@ -308,6 +364,7 @@ impl DarkroomControlViewModel {
             value: DarkroomControlValue::Choice(selected),
             default: DarkroomControlValue::Choice(selected),
             slider: None,
+            source_mapped_slider: None,
             choices,
             text_max_bytes: None,
         })
@@ -333,6 +390,7 @@ impl DarkroomControlViewModel {
             value: DarkroomControlValue::Toggle(active),
             default: DarkroomControlValue::Toggle(default),
             slider: None,
+            source_mapped_slider: None,
             choices: Vec::new(),
             text_max_bytes: None,
         })
@@ -363,6 +421,7 @@ impl DarkroomControlViewModel {
             value: DarkroomControlValue::Text(value),
             default: DarkroomControlValue::Text(default),
             slider: None,
+            source_mapped_slider: None,
             choices: Vec::new(),
             text_max_bytes: Some(maximum_bytes),
         })
@@ -399,6 +458,24 @@ impl DarkroomControlViewModel {
     }
 
     #[must_use]
+    pub const fn source_mapped_slider_spec(&self) -> Option<SourceMappedSliderSpec> {
+        self.source_mapped_slider
+    }
+
+    #[must_use]
+    pub(crate) fn with_source_mapped_slider(
+        mut self,
+        source_mapped_slider: SourceMappedSliderSpec,
+    ) -> Self {
+        debug_assert!(
+            self.slider.is_some(),
+            "only a slider can opt into source-mapped Bauhaus presentation"
+        );
+        self.source_mapped_slider = Some(source_mapped_slider);
+        self
+    }
+
+    #[must_use]
     pub fn choices(&self) -> impl ExactSizeIterator<Item = &PresentationText> {
         self.choices.iter()
     }
@@ -417,6 +494,26 @@ impl DarkroomControlViewModel {
         &mut self,
         value: DarkroomControlValue,
     ) -> Result<bool, ControlValidationError> {
+        self.set_value_with_slider_policy(value, true)
+    }
+
+    /// Reconciles a persisted value while retaining finite native slider
+    /// values outside the interactive UI range.
+    ///
+    /// Choice and text validation remains identical to user input. New slider
+    /// edits still pass through [`Self::set_value`] and its hard range check.
+    pub(crate) fn set_persisted_value(
+        &mut self,
+        value: DarkroomControlValue,
+    ) -> Result<bool, ControlValidationError> {
+        self.set_value_with_slider_policy(value, false)
+    }
+
+    fn set_value_with_slider_policy(
+        &mut self,
+        value: DarkroomControlValue,
+        enforce_slider_range: bool,
+    ) -> Result<bool, ControlValidationError> {
         if value.kind() != self.kind {
             return Err(ControlValidationError::ControlValueTypeMismatch {
                 expected: self.kind,
@@ -425,7 +522,11 @@ impl DarkroomControlViewModel {
         }
         if let DarkroomControlValue::Slider(value) = &value {
             let slider = self.slider.expect("slider controls carry slider metadata");
-            validate_slider(slider.minimum, slider.maximum, slider.step, *value)?;
+            if enforce_slider_range {
+                validate_slider(slider.minimum, slider.maximum, slider.step, *value)?;
+            } else if !value.is_finite() {
+                return Err(ControlValidationError::SliderNonFinite);
+            }
         }
         if let DarkroomControlValue::Choice(index) = &value
             && *index >= self.choices.len()

@@ -16,11 +16,12 @@ use rusttable_ui::{
 use rusttable_core::{PhotoId, Revision};
 use sha2::{Digest, Sha256};
 
-/// Result published after one durable darkroom action.
+/// Result published after one darkroom action.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DarkroomEditOutcome {
     revision: Revision,
     modules: DarkroomModulesViewModel,
+    processing_changed: bool,
 }
 
 impl DarkroomEditOutcome {
@@ -32,6 +33,11 @@ impl DarkroomEditOutcome {
     #[must_use]
     pub fn modules(&self) -> &DarkroomModulesViewModel {
         &self.modules
+    }
+
+    #[must_use]
+    pub const fn processing_changed(&self) -> bool {
+        self.processing_changed
     }
 }
 
@@ -102,6 +108,25 @@ impl GtkDarkroomEditController {
         let photo_id = self
             .selected_photo
             .ok_or(DarkroomModuleError::NoSelection)?;
+        if matches!(action, DarkroomModuleAction::Disclosure { .. }) {
+            let mut modules = self
+                .modules
+                .clone()
+                .ok_or_else(|| persistence_error("darkroom modules were not installed"))?;
+            let module = modules.module_mut(action.module_id()).ok_or_else(|| {
+                DarkroomModuleError::WrongModule {
+                    expected: action.module_id().to_owned(),
+                    actual: "unknown".to_owned(),
+                }
+            })?;
+            let revision = module.apply(action.clone())?;
+            self.modules = Some(modules.clone());
+            return Ok(DarkroomEditOutcome {
+                revision,
+                modules,
+                processing_changed: false,
+            });
+        }
         if let Some(module) = self
             .modules
             .as_ref()
@@ -121,7 +146,8 @@ impl GtkDarkroomEditController {
         let expected = action.expected_revision();
         if current.revision() != expected {
             let actual = current.revision();
-            self.modules = Some(project_edit(&current)?);
+            let projected = project_edit_preserving_disclosure(&current, self.modules.as_ref())?;
+            self.modules = Some(projected);
             return Err(DarkroomModuleError::StaleRevision { expected, actual });
         }
 
@@ -137,12 +163,19 @@ impl GtkDarkroomEditController {
         })?;
         let revision = module.apply(action.clone())?;
         if matches!(action, DarkroomModuleAction::Recover { .. }) {
-            self.modules = Some(project_edit(&current)?);
+            self.modules = Some(project_edit_preserving_disclosure(
+                &current,
+                Some(&modules),
+            )?);
             let modules = self
                 .modules
                 .clone()
                 .ok_or_else(|| persistence_error("darkroom modules were not installed"))?;
-            return Ok(DarkroomEditOutcome { revision, modules });
+            return Ok(DarkroomEditOutcome {
+                revision,
+                modules,
+                processing_changed: false,
+            });
         }
 
         let operations = rewrite_operations(&current, module, action)?;
@@ -163,11 +196,12 @@ impl GtkDarkroomEditController {
             );
             return Err(persistence_error(error.to_string()));
         }
-        let projected = project_edit(&replacement)?;
+        let projected = project_edit_preserving_disclosure(&replacement, Some(&modules))?;
         self.modules = Some(projected.clone());
         Ok(DarkroomEditOutcome {
             revision: replacement.revision(),
             modules: projected,
+            processing_changed: true,
         })
     }
 
@@ -224,6 +258,38 @@ fn project_edit(edit: &Edit) -> Result<DarkroomModulesViewModel, DarkroomModuleE
         )?;
     }
     Ok(modules)
+}
+
+fn project_edit_preserving_disclosure(
+    edit: &Edit,
+    previous: Option<&DarkroomModulesViewModel>,
+) -> Result<DarkroomModulesViewModel, DarkroomModuleError> {
+    let mut projected = project_edit(edit)?;
+    let Some(previous) = previous else {
+        return Ok(projected);
+    };
+    let module_ids = projected
+        .left_modules()
+        .map(|module| module.id().to_owned())
+        .chain(
+            projected
+                .right_modules()
+                .map(|module| module.id().to_owned()),
+        )
+        .collect::<Vec<_>>();
+    for module_id in module_ids {
+        let Some(expanded) = previous
+            .module(&module_id)
+            .map(DarkroomModuleViewModel::expanded)
+        else {
+            continue;
+        };
+        projected
+            .module_mut(&module_id)
+            .expect("projected module ID came from the same stack")
+            .restore_expanded_presentation(expanded);
+    }
+    Ok(projected)
 }
 
 fn control_values(
@@ -454,10 +520,14 @@ fn canonical_rank(operation: &Operation) -> usize {
         "rgbgain",
         "defringe",
         "basicadj",
+        "shadhi",
         "relight",
         "colorcorrection",
+        // Native order 57 sits after colorcontrast and before vibrance; those
+        // neighbors are not registered yet, so colorcorrection is the nearest
+        // retained predecessor.
+        "velvia",
         "bloom",
-        "shadhi",
         "grain",
         "soften",
         "vignette",
@@ -633,6 +703,79 @@ mod tests {
         );
     }
 
+    #[test]
+    fn enabling_velvia_materializes_defaults_in_source_relative_order() {
+        let registry = builtin_registry();
+        let original = Edit::from_parts(
+            EditId::new(301).expect("edit id"),
+            PhotoId::new(302).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(7),
+            [
+                registry
+                    .materialize_operation(
+                        "rusttable.shadhi",
+                        OperationId::new(70).expect("shadhi id"),
+                    )
+                    .expect("shadhi defaults"),
+                registry
+                    .materialize_operation(
+                        "rusttable.relight",
+                        OperationId::new(71).expect("relight id"),
+                    )
+                    .expect("relight defaults"),
+                registry
+                    .materialize_operation(
+                        "rusttable.colorcorrection",
+                        OperationId::new(72).expect("color correction id"),
+                    )
+                    .expect("color correction defaults"),
+                registry
+                    .materialize_operation(
+                        "rusttable.bloom",
+                        OperationId::new(73).expect("bloom id"),
+                    )
+                    .expect("bloom defaults"),
+            ],
+        )
+        .expect("source-relative edit");
+        let mut modules = project_edit(&original).expect("projection");
+        let velvia = modules.module_mut("velvia").expect("Velvia module");
+        let action = DarkroomModuleAction::Enable {
+            module_id: "velvia".to_owned(),
+            expected_revision: original.revision(),
+            enabled: true,
+        };
+        velvia.apply(action.clone()).expect("enable Velvia");
+
+        let operations =
+            rewrite_operations(&original, velvia, &action).expect("materialize Velvia");
+        let keys = operations
+            .iter()
+            .map(|operation| operation.key().as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            [
+                "rusttable.shadhi",
+                "rusttable.relight",
+                "rusttable.colorcorrection",
+                "rusttable.velvia",
+                "rusttable.bloom"
+            ]
+        );
+        let velvia = &operations[3];
+        assert!(velvia.is_enabled());
+        assert_eq!(
+            velvia.parameter(&ParameterName::new("strength").expect("strength")),
+            Some(&scalar(25.0))
+        );
+        assert_eq!(
+            velvia.parameter(&ParameterName::new("bias").expect("bias")),
+            Some(&scalar(1.0))
+        );
+    }
+
     fn scalar(value: f64) -> ParameterValue {
         ParameterValue::Scalar(FiniteF64::new(value).expect("finite"))
     }
@@ -650,6 +793,117 @@ mod tests {
                 .expect("stops")
                 .value(),
             DarkroomControlValue::Slider(1.25)
+        );
+    }
+
+    #[test]
+    fn disclosure_of_absent_velvia_is_presentation_only() {
+        let modules = project_edit(&edit(4, 0.0, true)).expect("projection");
+        let mut controller = GtkDarkroomEditController {
+            catalog_path: None,
+            selected_photo: Some(PhotoId::new(2).expect("photo id")),
+            modules: Some(modules),
+        };
+
+        let outcome = controller
+            .apply(&DarkroomModuleAction::Disclosure {
+                module_id: "velvia".to_owned(),
+                expected_revision: Revision::from_u64(4),
+                expanded: true,
+            })
+            .expect("presentation-only disclosure needs no catalog write");
+
+        assert_eq!(outcome.revision(), Revision::from_u64(4));
+        assert!(!outcome.processing_changed());
+        let velvia = outcome.modules().module("velvia").expect("Velvia module");
+        assert!(velvia.expanded());
+        assert!(!velvia.enabled());
+    }
+
+    #[test]
+    fn replacement_projection_preserves_velvia_disclosure_state() {
+        let original = edit(4, 0.0, true);
+        let mut modules = project_edit(&original).expect("projection");
+        modules
+            .module_mut("velvia")
+            .expect("Velvia module")
+            .apply(DarkroomModuleAction::Disclosure {
+                module_id: "velvia".to_owned(),
+                expected_revision: original.revision(),
+                expanded: true,
+            })
+            .expect("expand Velvia");
+        let replacement = original
+            .revised(original.operations().cloned().collect::<Vec<_>>())
+            .expect("processing replacement");
+
+        let projected =
+            project_edit_preserving_disclosure(&replacement, Some(&modules)).expect("reprojection");
+        let velvia = projected.module("velvia").expect("Velvia module");
+        assert!(velvia.expanded());
+        assert!(!velvia.enabled());
+        assert_eq!(velvia.revision(), replacement.revision());
+    }
+
+    #[test]
+    fn persisted_velvia_outside_ui_bounds_projects_and_survives_enable_action() {
+        let original = Edit::from_parts(
+            EditId::new(401).expect("edit id"),
+            PhotoId::new(402).expect("photo id"),
+            Revision::ZERO,
+            Revision::from_u64(9),
+            [Operation::new_with_opacity(
+                OperationId::new(403).expect("Velvia id"),
+                OperationKey::new("rusttable.velvia").expect("Velvia key"),
+                true,
+                OperationOpacity::ONE,
+                [
+                    (
+                        ParameterName::new("strength").expect("strength"),
+                        scalar(101.0),
+                    ),
+                    (ParameterName::new("bias").expect("bias"), scalar(-0.01)),
+                ],
+            )
+            .expect("Velvia operation")],
+        )
+        .expect("persisted Velvia edit");
+        let mut modules = project_edit(&original).expect("finite native values project");
+        let velvia = modules.module_mut("velvia").expect("Velvia module");
+        assert_eq!(
+            velvia
+                .controls()
+                .control("velvia-strength")
+                .expect("strength")
+                .value(),
+            DarkroomControlValue::Slider(101.0)
+        );
+        assert_eq!(
+            velvia
+                .controls()
+                .control("velvia-bias")
+                .expect("bias")
+                .value(),
+            DarkroomControlValue::Slider(-0.01)
+        );
+        let action = DarkroomModuleAction::Enable {
+            module_id: "velvia".to_owned(),
+            expected_revision: original.revision(),
+            enabled: false,
+        };
+        velvia.apply(action.clone()).expect("disable Velvia");
+
+        let rewritten =
+            rewrite_operations(&original, velvia, &action).expect("preserve native values");
+        let velvia = rewritten.first().expect("Velvia operation");
+        assert!(!velvia.is_enabled());
+        assert_eq!(
+            velvia.parameter(&ParameterName::new("strength").expect("strength")),
+            Some(&scalar(101.0))
+        );
+        assert_eq!(
+            velvia.parameter(&ParameterName::new("bias").expect("bias")),
+            Some(&scalar(-0.01))
         );
     }
 
