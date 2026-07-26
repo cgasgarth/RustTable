@@ -293,13 +293,13 @@ struct SourceFileState {
 ///
 /// The portable fallback deliberately carries no guessed identity. The open
 /// handle and content digest remain authoritative there; platform adapters
-/// add stronger file identity whenever the standard library exposes it.
+/// add stronger file identity through stable, safe platform APIs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum SourceIdentity {
     #[cfg(unix)]
     Unix { device: u64, inode: u64 },
     #[cfg(windows)]
-    Windows { volume: u32, file_index: u64 },
+    Windows(Arc<same_file::Handle>),
     #[cfg(not(any(unix, windows)))]
     Portable,
 }
@@ -324,7 +324,7 @@ impl SourceIdentity {
             #[cfg(unix)]
             Self::Unix { .. } => SourceIdentityClass::FileId,
             #[cfg(windows)]
-            Self::Windows { .. } => SourceIdentityClass::FileId,
+            Self::Windows(_) => SourceIdentityClass::FileId,
             #[cfg(not(any(unix, windows)))]
             Self::Portable => SourceIdentityClass::Portable,
         }
@@ -636,39 +636,44 @@ fn source_file_state(file: &File, path: &Path) -> Result<SourceFileState, Source
         stage: SourceReadStage::Metadata,
         path: path.to_owned(),
     })?;
+    #[cfg(windows)]
+    let identity = source_identity(file, path)?;
+    #[cfg(not(windows))]
+    let identity = source_identity(&metadata);
     Ok(SourceFileState {
         length: metadata.len(),
         modified: metadata.modified().ok(),
-        identity: source_identity(&metadata),
+        identity,
     })
 }
 
+#[cfg(unix)]
 fn source_identity(metadata: &std::fs::Metadata) -> SourceIdentity {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt;
 
-        SourceIdentity::Unix {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-        }
+    SourceIdentity::Unix {
+        device: metadata.dev(),
+        inode: metadata.ino(),
     }
+}
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+fn source_identity(file: &File, path: &Path) -> Result<SourceIdentity, SourceSnapshotError> {
+    let identity_file = file.try_clone().map_err(|_| SourceSnapshotError::Io {
+        stage: SourceReadStage::Metadata,
+        path: path.to_owned(),
+    })?;
+    let identity =
+        same_file::Handle::from_file(identity_file).map_err(|_| SourceSnapshotError::Io {
+            stage: SourceReadStage::Metadata,
+            path: path.to_owned(),
+        })?;
+    Ok(SourceIdentity::Windows(Arc::new(identity)))
+}
 
-        SourceIdentity::Windows {
-            volume: metadata.volume_serial_number(),
-            file_index: metadata.file_index(),
-        }
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = metadata;
-        SourceIdentity::Portable
-    }
+#[cfg(not(any(unix, windows)))]
+fn source_identity(_metadata: &std::fs::Metadata) -> SourceIdentity {
+    SourceIdentity::Portable
 }
 
 fn source_content_hash(

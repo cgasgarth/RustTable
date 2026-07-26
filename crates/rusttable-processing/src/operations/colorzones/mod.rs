@@ -1,8 +1,9 @@
-//! Darktable-compatible Color Zones v1-v5 history and checked parameters.
+//! Darktable-compatible Color Zones history, curve compilation, and scalar execution.
 //!
 //! The byte layouts, direct legacy migrations, enum tags, defaults, and active
-//! curve-node contract are derived from `src/iop/colorzones.c`. This slice does
-//! not claim the native curve evaluator or pixel-processing implementation.
+//! curve-node contract are derived from `src/iop/colorzones.c`; curve sampling
+//! maps the retained `src/common/curve_tools.c` and `src/common/splines.cpp`
+//! implementations.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -13,6 +14,8 @@
 )]
 
 mod codec;
+mod curve;
+mod execution;
 
 use std::fmt;
 
@@ -27,6 +30,8 @@ pub use codec::{
     ColorZonesParametersV3, ColorZonesParametersV4, ColorZonesParametersV5, migrate_v1_to_v5,
     migrate_v2_to_v5, migrate_v3_to_v5, migrate_v4_to_v5,
 };
+pub use curve::{COLORZONES_LUT_RESOLUTION, ColorZonesCompileError};
+pub use execution::{ColorZonesPixel, ColorZonesPlan};
 
 /// Native selection channel stored in Color Zones history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
