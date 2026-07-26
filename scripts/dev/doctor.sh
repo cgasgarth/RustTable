@@ -49,7 +49,7 @@ for hook in pre-commit pre-push; do
   fi
 done
 
-for tool in git rustup cargo rustc rustfmt cargo-clippy cargo-deny bun rg; do
+for tool in git rustup cargo rustc rustfmt cargo-clippy cargo-deny cargo-nextest bun rg; do
   if command -v "$tool" >/dev/null 2>&1; then
     pass "tool available: $tool"
   else
@@ -63,13 +63,18 @@ if [[ -z "$toolchain_channel" ]]; then
 else
   active_toolchain="$(rustup show active-toolchain 2>/dev/null || true)"
   case "$active_toolchain" in
-    "$toolchain_channel"\ *) pass 'active Rust toolchain matches rust-toolchain.toml' ;;
-    "$toolchain_channel") pass 'active Rust toolchain matches rust-toolchain.toml' ;;
+    "$toolchain_channel" | "$toolchain_channel"-* | "$toolchain_channel"\ *)
+      pass 'active Rust toolchain matches rust-toolchain.toml'
+      ;;
     *) fail 'active Rust toolchain does not match rust-toolchain.toml' ;;
   esac
   components="$(sed -n 's/^components = \[\(.*\)\]/\1/p' "$root/rust-toolchain.toml" 2>/dev/null | tr -d '" ' | tr ',' '\n')"
   for component in $components; do
-    if rustup component list --installed 2>/dev/null | grep -q "^$component.*(installed)"; then
+    installed_component="$component"
+    if [[ "$component" == 'llvm-tools-preview' ]]; then
+      installed_component='llvm-tools'
+    fi
+    if rustup component list --installed 2>/dev/null | grep -Eq "^${installed_component}(-.*)?( \(installed\))?$"; then
       pass "Rust component installed: $component"
     else
       fail "Rust component missing: $component"

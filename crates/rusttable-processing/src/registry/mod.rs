@@ -231,6 +231,7 @@ pub struct OperationDefinition {
     identity: ImplementationIdentity,
     evidence_ids: Vec<String>,
     availability: DefinitionAvailability,
+    ui_availability: DefinitionAvailability,
 }
 
 impl fmt::Debug for OperationDefinition {
@@ -244,6 +245,7 @@ impl fmt::Debug for OperationDefinition {
             .field("identity", &self.identity)
             .field("evidence_ids", &self.evidence_ids)
             .field("availability", &self.availability)
+            .field("ui_availability", &self.ui_availability)
             .finish()
     }
 }
@@ -266,12 +268,19 @@ impl OperationDefinition {
             identity,
             evidence_ids,
             availability: DefinitionAvailability::Available,
+            ui_availability: DefinitionAvailability::Available,
         }
     }
 
     #[must_use]
     pub fn with_availability(mut self, availability: DefinitionAvailability) -> Self {
         self.availability = availability;
+        self
+    }
+
+    #[must_use]
+    pub fn with_ui_availability(mut self, availability: DefinitionAvailability) -> Self {
+        self.ui_availability = availability;
         self
     }
 
@@ -308,6 +317,11 @@ impl OperationDefinition {
     #[must_use]
     pub const fn availability(&self) -> &DefinitionAvailability {
         &self.availability
+    }
+
+    #[must_use]
+    pub const fn ui_availability(&self) -> &DefinitionAvailability {
+        &self.ui_availability
     }
 }
 
@@ -977,13 +991,13 @@ pub use basicadj::basicadj_definition;
 pub use masks::{mask_manager_definition, retouch_definition};
 pub use operations::{
     bloom_definition, censorize_definition, clahe_definition, clipping_definition,
-    colorcontrast_definition, crop_definition, defringe_definition, dither_definition,
-    enlargecanvas_definition, exposure_definition, finalscale_definition, flip_definition,
-    graduatednd_definition, grain_definition, invert_definition, lenscorrection_definition,
-    linear_offset_definition, liquify_definition, perspective_definition, rasterfile_definition,
-    relight_definition, rgb_gain_definition, rotatepixels_definition, scalepixels_definition,
-    shadhi_definition, soften_definition, temperature_definition, velvia_definition,
-    vibrance_definition, vignette_definition,
+    colorcontrast_definition, colorzones_definition, crop_definition, defringe_definition,
+    dither_definition, enlargecanvas_definition, exposure_definition, finalscale_definition,
+    flip_definition, graduatednd_definition, grain_definition, invert_definition,
+    lenscorrection_definition, linear_offset_definition, liquify_definition,
+    perspective_definition, rasterfile_definition, relight_definition, rgb_gain_definition,
+    rotatepixels_definition, scalepixels_definition, shadhi_definition, soften_definition,
+    temperature_definition, velvia_definition, vibrance_definition, vignette_definition,
 };
 use operations::{hex, snapshot_hash, unavailable, validate_definition};
 pub use spots::spots_definition;

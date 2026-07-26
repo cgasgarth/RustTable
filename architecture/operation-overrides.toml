@@ -3419,8 +3419,12 @@ evidence_hash = "b5a4462c5d222c92c9607fbc32dd750dea3052d7e358017e069ea6313295ca1
 [[operation]]
 name = "colorzones"
 module_version = 5
-parameter_size = 112
-parameter_layout_hash = "17d8a0c2b96ff75e82bfc7574df348f1e2a962504c315ca07018a45d63fdaac8"
+parameter_size = 520
+parameter_layout_hash = "6cfbf9771cfafa954a0e598005128c1185b2863487351577e5dcfc0882eddead"
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -3480,10 +3484,10 @@ line_end = 668
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 3672
-layout_hash = "61f81011f2dc2bae730a523f830269bd8b7d61f52e46ab357a746feed8f03250"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 148
+layout_hash = "4aad0d4b8de355275e5dafdd3d8f7d5c8627625b7bf10304bbfbafa5ebca331e"
+decoder = "rusttable.colorzones.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.colorzones.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -3497,10 +3501,10 @@ evidence_hash = "cb87e0b81a006ac4d1f8181d88411c02be707f2e19bd67f4794c4f6ef75fd9f
 
 [[operation.parameter_versions]]
 version = 2
-byte_size = 4296
-layout_hash = "c2dce57ff4f862351ad250cd202120235b8accc1cf89358ed96197c7b6f61464"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 196
+layout_hash = "6db006a7fe3b1affed7aa2d446c4f0930e364156d5b90e1ebb8dbd3ca3a2755d"
+decoder = "rusttable.colorzones.decode.v2"
+opaque_blocking = false
 fixture_id = "operation.colorzones.params.v2"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -3514,10 +3518,10 @@ evidence_hash = "ae921e1d6c9c6e3e61f53ba965dfa3a2a80db7b4dd34dd830fd287b5cda433e
 
 [[operation.parameter_versions]]
 version = 3
-byte_size = 4608
-layout_hash = "b1bf32b3b8ea9c9a13d1c936ae8e073821fa66b7ff03b3f5a1c4b01f424ee7c3"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 200
+layout_hash = "c89fbcba828e6a86d2f0acb7e5377377a5a8116c90832c9f88ee1b6f84e742de"
+decoder = "rusttable.colorzones.decode.v3"
+opaque_blocking = false
 fixture_id = "operation.colorzones.params.v3"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -3531,10 +3535,10 @@ evidence_hash = "36e5ee33f4b9fe19a5db24228be745b4d950a295787556b3e878c7393f73fae
 
 [[operation.parameter_versions]]
 version = 4
-byte_size = 4808
-layout_hash = "4b6b3432ae4e85c925aee2ba0925aecf0f745ecc1b2cd8ddc7457cd95fc7f3bc"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 516
+layout_hash = "bf883718fb270969f0efbdea2ea70faf9ee1fe2a10584e27b036027185b30ede"
+decoder = "rusttable.colorzones.decode.v4"
+opaque_blocking = false
 fixture_id = "operation.colorzones.params.v4"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -3548,10 +3552,10 @@ evidence_hash = "72414e3aeb90e3c99b398cd5e50a62acd219b3bd44ce024013f78f4f5887f36
 
 [[operation.parameter_versions]]
 version = 5
-byte_size = 112
-layout_hash = "a274751c340e7c55186d55675f4493c9b370c8e7a6ed0b695cbcaa03789f902e"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 520
+layout_hash = "6cfbf9771cfafa954a0e598005128c1185b2863487351577e5dcfc0882eddead"
+decoder = "rusttable.colorzones.decode.v5"
+opaque_blocking = false
 fixture_id = "operation.colorzones.params.v5"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -3562,12 +3566,254 @@ reason = "explicit parameter layout declaration"
 reviewer = "cgasgarth"
 evidence_hash = "d1959c4b9e0e1b0b8bb89277f9b5b4d6ee2ba3dcc8cb0c2db40277dba71c031a"
 
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "6cfbf9771cfafa954a0e598005128c1185b2863487351577e5dcfc0882eddead"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "channel"
+type_name = "dt_iop_colorzones_channel_t"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve"
+type_name = "dt_iop_colorzones_node_t[3][20]"
+array_extent = 60
+offset = 4
+size = 480
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve_num_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 484
+size = 12
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 496
+size = 12
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "strength"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "mode"
+type_name = "dt_iop_colorzones_modes_t"
+offset = 512
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "splines_version"
+type_name = "int"
+offset = 516
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "5c75802578ffa49796ce52ba4ff30d4bc05ee35b0df4996b82b97e94e6614a28"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "channel"
+type_name = "dt_iop_colorzones_channel_t"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve"
+type_name = "dt_iop_colorzones_node_t[3][20]"
+array_extent = 60
+offset = 4
+size = 480
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve_num_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 484
+size = 12
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 496
+size = 12
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "strength"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "mode"
+type_name = "dt_iop_colorzones_modes_t"
+offset = 512
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "splines_version"
+type_name = "int"
+offset = 516
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 520
+alignment = 4
+layout_hash = "002aad1f791687ebe6575f4c62c35acebfb7236b57418d0c3fcd42294c2da782"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "channel"
+type_name = "dt_iop_colorzones_channel_t"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve"
+type_name = "dt_iop_colorzones_node_t[3][20]"
+array_extent = 60
+offset = 4
+size = 480
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve_num_nodes"
+type_name = "int[3]"
+array_extent = 3
+offset = 484
+size = 12
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "curve_type"
+type_name = "int[3]"
+array_extent = 3
+offset = 496
+size = 12
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "strength"
+type_name = "float"
+offset = 508
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "mode"
+type_name = "dt_iop_colorzones_modes_t"
+offset = 512
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "splines_version"
+type_name = "int"
+offset = 516
+size = 4
+alignment = 4
+
+[operation.parameter_versions.codec]
+byte_size = 520
+decoder = "rusttable.colorzones.decode.v5"
+encoder = "rusttable.colorzones.encode.v5"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.colorzones.v5"
+
+[[operation.parameter_versions.codec.fields]]
+name = "channel"
+kind = "enum_i32"
+offset = 0
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "curve"
+kind = "f32"
+offset = 4
+size = 480
+array_extent = 120
+
+[[operation.parameter_versions.codec.fields]]
+name = "curve_num_nodes"
+kind = "i32"
+offset = 484
+size = 12
+array_extent = 3
+
+[[operation.parameter_versions.codec.fields]]
+name = "curve_type"
+kind = "enum_i32"
+offset = 496
+size = 12
+array_extent = 3
+
+[[operation.parameter_versions.codec.fields]]
+name = "strength"
+kind = "f32"
+offset = 508
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "mode"
+kind = "enum_i32"
+offset = 512
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "splines_version"
+kind = "enum_i32"
+offset = 516
+size = 4
+
 
 [[operation.migrations]]
 from_version = 1
-to_version = 2
+to_version = 5
 strategy = "reference-legacy-params"
-fixture_id = "operation.colorzones.migration.v1-v2"
+fixture_id = "operation.colorzones.migration.v1-v5"
 [operation.migrations.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorzones.c"
@@ -3580,9 +3826,9 @@ evidence_hash = "2f02fc51c3a71c4109315a36507a889cf75e000e1589f403b864a463352b9f4
 
 [[operation.migrations]]
 from_version = 2
-to_version = 3
+to_version = 5
 strategy = "reference-legacy-params"
-fixture_id = "operation.colorzones.migration.v2-v3"
+fixture_id = "operation.colorzones.migration.v2-v5"
 [operation.migrations.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorzones.c"
@@ -3595,9 +3841,9 @@ evidence_hash = "8007245bb18c215307854c9a2521886844a8ac6906125f81a0fe25133add19e
 
 [[operation.migrations]]
 from_version = 3
-to_version = 4
+to_version = 5
 strategy = "reference-legacy-params"
-fixture_id = "operation.colorzones.migration.v3-v4"
+fixture_id = "operation.colorzones.migration.v3-v5"
 [operation.migrations.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorzones.c"

@@ -25,7 +25,7 @@ bash scripts/dev/doctor.sh
 Run the complete local commit gate:
 
 ```sh
-cargo xtask check
+cargo xtask check --parallel
 ```
 
 The commit gate must not activate, raise, or switch desktop applications. Foreground visual review

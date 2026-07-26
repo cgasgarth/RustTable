@@ -6,16 +6,28 @@
 
 use std::fmt::Write as _;
 
+use rusttable_color::ColorEncoding;
+use rusttable_core::{
+    Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
+    PhotoId, Revision,
+};
 use rusttable_processing::operations::colorzones::{
-    COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_LEGACY_BANDS,
-    COLORZONES_MAX_NODES, COLORZONES_RUST_ID, COLORZONES_SCHEMA_VERSION, COLORZONES_V1_BANDS,
-    COLORZONES_V1_PARAMETER_BYTES, COLORZONES_V2_PARAMETER_BYTES, COLORZONES_V3_PARAMETER_BYTES,
-    COLORZONES_V4_PARAMETER_BYTES, COLORZONES_V5_PARAMETER_BYTES, ColorZonesChannel,
-    ColorZonesCodecError, ColorZonesConfig, ColorZonesCurveType, ColorZonesHistory, ColorZonesMode,
-    ColorZonesNode, ColorZonesParameterError, ColorZonesParametersV1, ColorZonesParametersV2,
-    ColorZonesParametersV3, ColorZonesParametersV4, ColorZonesParametersV5,
-    ColorZonesSplinesVersion, migrate_v1_to_v5, migrate_v2_to_v5, migrate_v3_to_v5,
-    migrate_v4_to_v5,
+    COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_DEFAULT_ENABLED,
+    COLORZONES_LEGACY_BANDS, COLORZONES_MAX_NODES, COLORZONES_RUST_ID, COLORZONES_SCHEMA_VERSION,
+    COLORZONES_V1_BANDS, COLORZONES_V1_PARAMETER_BYTES, COLORZONES_V2_PARAMETER_BYTES,
+    COLORZONES_V3_PARAMETER_BYTES, COLORZONES_V4_PARAMETER_BYTES, COLORZONES_V5_PARAMETER_BYTES,
+    ColorZonesChannel, ColorZonesCodecError, ColorZonesConfig, ColorZonesCurveType,
+    ColorZonesHistory, ColorZonesMode, ColorZonesNode, ColorZonesParameterError,
+    ColorZonesParametersV1, ColorZonesParametersV2, ColorZonesParametersV3, ColorZonesParametersV4,
+    ColorZonesParametersV5, ColorZonesPlan, ColorZonesSplinesVersion, migrate_v1_to_v5,
+    migrate_v2_to_v5, migrate_v3_to_v5, migrate_v4_to_v5,
+};
+use rusttable_processing::{
+    CompiledPipeline, FiniteF32, LinearRgb, OperationCompileError, PipelineStepIndex,
+    ProcessingOperation, ProcessingOperationKind, RasterDimensions, WorkingRgbImage,
+    builtin_registry, colorzones_descriptor,
+    descriptor::{OperationFlags, ParameterDefault, ParameterKind, RoiKind},
+    evaluate,
 };
 use sha2::{Digest, Sha256};
 
@@ -649,4 +661,336 @@ fn audited_benchmark_v5_fixtures_retain_exact_native_payloads() {
             parameters.to_bytes()
         );
     }
+}
+
+fn editable_operation(
+    id: u128,
+    enabled: bool,
+    parameters: impl IntoIterator<Item = (ParameterName, ParameterValue)>,
+) -> Operation {
+    Operation::new(
+        OperationId::new(id).expect("operation ID"),
+        OperationKey::new(COLORZONES_RUST_ID).expect("Color Zones operation key"),
+        enabled,
+        parameters,
+    )
+    .expect("canonical Color Zones operation")
+}
+
+fn replacing_parameter(operation: &Operation, name: &str, value: ParameterValue) -> Operation {
+    let name = ParameterName::new(name).expect("test parameter name");
+    let mut replacement = Some(value);
+    editable_operation(
+        operation.id().get(),
+        operation.is_enabled(),
+        operation.parameters().map(|(candidate, current)| {
+            if *candidate == name {
+                (
+                    candidate.clone(),
+                    replacement.take().expect("parameter is replaced once"),
+                )
+            } else {
+                (candidate.clone(), current.clone())
+            }
+        }),
+    )
+}
+
+#[test]
+fn descriptor_parameter_ids_follow_native_v5_declaration_order_exactly() {
+    let mut expected = vec!["channel".to_owned()];
+    for curve in 0..COLORZONES_CHANNELS {
+        for node in 0..COLORZONES_MAX_NODES {
+            expected.push(format!("curve_{curve}_node_{node}_x"));
+            expected.push(format!("curve_{curve}_node_{node}_y"));
+        }
+    }
+    expected.extend((0..COLORZONES_CHANNELS).map(|curve| format!("curve_{curve}_num_nodes")));
+    expected.extend((0..COLORZONES_CHANNELS).map(|curve| format!("curve_{curve}_type")));
+    expected.extend([
+        "strength".to_owned(),
+        "mode".to_owned(),
+        "splines_version".to_owned(),
+    ]);
+
+    assert_eq!(
+        colorzones_descriptor()
+            .parameters
+            .into_iter()
+            .map(|parameter| parameter.id)
+            .collect::<Vec<_>>(),
+        expected
+    );
+}
+
+#[test]
+fn canonical_descriptor_and_cpu_registry_binding_match_native_v5_contract() {
+    let descriptor = colorzones_descriptor();
+    assert_eq!(
+        descriptor.id.compatibility_name,
+        COLORZONES_COMPATIBILITY_ID
+    );
+    assert_eq!(descriptor.id.rust_id, COLORZONES_RUST_ID);
+    assert_eq!(descriptor.id.schema_version, COLORZONES_SCHEMA_VERSION);
+    assert_eq!(descriptor.id.parameter_version, COLORZONES_SCHEMA_VERSION);
+    const { assert!(!COLORZONES_DEFAULT_ENABLED) };
+    assert_eq!(descriptor.roi, RoiKind::Identity);
+    assert_eq!(descriptor.parameters.len(), 130);
+    assert!(descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE));
+    assert!(descriptor.flags.contains(OperationFlags::BLENDING));
+    assert!(descriptor.flags.contains(OperationFlags::TILEABLE));
+    assert!(descriptor.flags.contains(OperationFlags::DETERMINISTIC_CPU));
+    assert!(!descriptor.flags.contains(OperationFlags::DETERMINISTIC_GPU));
+    assert!(!descriptor.flags.contains(OperationFlags::MANDATORY));
+    assert_eq!(descriptor.migration.source_versions, [1, 2, 3, 4, 5]);
+    assert_eq!(descriptor.migration.target_version, 5);
+    assert_eq!(descriptor.io.input.encodings, [ColorEncoding::LabD50]);
+
+    let channel = descriptor
+        .parameters
+        .iter()
+        .find(|parameter| parameter.id == "channel")
+        .expect("selection channel descriptor");
+    assert_eq!(
+        channel.kind,
+        ParameterKind::Enum {
+            tags: vec![
+                "lightness".to_owned(),
+                "chroma".to_owned(),
+                "hue".to_owned()
+            ]
+        }
+    );
+    assert_eq!(channel.default, ParameterDefault::Enum("hue".to_owned()));
+    let first_x = descriptor
+        .parameters
+        .iter()
+        .find(|parameter| parameter.id == "curve_0_node_0_x")
+        .expect("first curve point descriptor");
+    assert_eq!(first_x.default, ParameterDefault::Scalar(0.25));
+    let inactive_x = descriptor
+        .parameters
+        .iter()
+        .find(|parameter| parameter.id == "curve_2_node_19_x")
+        .expect("inactive curve tail descriptor");
+    assert_eq!(inactive_x.default, ParameterDefault::Scalar(0.0));
+
+    let registry = builtin_registry();
+    let definition = registry
+        .definition(COLORZONES_RUST_ID)
+        .expect("Color Zones registry definition");
+    assert!(definition.availability().is_available());
+    assert!(!definition.ui_availability().is_available());
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_none());
+    assert_eq!(
+        definition
+            .migrations()
+            .iter()
+            .map(|migration| (migration.from_version(), migration.to_version()))
+            .collect::<Vec<_>>(),
+        [(1, 5), (2, 5), (3, 5), (4, 5)]
+    );
+    assert!(definition.evidence_ids().len() >= 8);
+    assert!(
+        registry
+            .capability(
+                COLORZONES_RUST_ID,
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                ColorEncoding::LabD50,
+                Some("preview"),
+            )
+            .is_some_and(|capability| capability.available)
+    );
+
+    let order = registry
+        .definitions_in_declaration_order()
+        .into_iter()
+        .map(|definition| definition.descriptor().id.compatibility_name.as_str())
+        .collect::<Vec<_>>();
+    let vibrance = order
+        .iter()
+        .position(|name| *name == "vibrance")
+        .expect("Vibrance order entry");
+    let colorzones = order
+        .iter()
+        .position(|name| *name == "colorzones")
+        .expect("Color Zones order entry");
+    let bloom = order
+        .iter()
+        .position(|name| *name == "bloom")
+        .expect("Bloom order entry");
+    assert_eq!(colorzones, vibrance + 1);
+    assert!(colorzones < bloom);
+
+    let materialized = registry
+        .materialize_operation(
+            COLORZONES_RUST_ID,
+            OperationId::new(900).expect("operation ID"),
+        )
+        .expect("editable Color Zones defaults");
+    let prepared = registry
+        .prepare_cpu(&materialized)
+        .expect("canonical Color Zones CPU factory");
+    let ProcessingOperationKind::ColorZones { plan } = prepared.operation().kind() else {
+        panic!("Color Zones factory compiled the wrong operation kind");
+    };
+    assert_eq!(plan.config(), &ColorZonesConfig::defaults());
+
+    let mut pixels = [LinearRgb::new(
+        FiniteF32::new(0.25).expect("finite red"),
+        FiniteF32::new(0.5).expect("finite green"),
+        FiniteF32::new(0.75).expect("finite blue"),
+    )];
+    prepared
+        .execute(
+            PipelineStepIndex::new(0),
+            &mut pixels,
+            RasterDimensions::new(1, 1).expect("dimensions"),
+            0,
+        )
+        .expect("registered Color Zones CPU execution");
+}
+
+#[test]
+fn canonical_evaluator_executes_the_committed_colorzones_plan() {
+    let scalar = |value| {
+        ParameterValue::Scalar(FiniteF64::new(value).expect("finite Color Zones test parameter"))
+    };
+    let operation = editable_operation(
+        904,
+        true,
+        [
+            ("channel", ParameterValue::Integer(0)),
+            ("mode", ParameterValue::Integer(1)),
+            ("curve_0_num_nodes", ParameterValue::Integer(2)),
+            ("curve_0_node_0_x", scalar(0.0)),
+            ("curve_0_node_0_y", scalar(0.6)),
+            ("curve_0_node_1_x", scalar(1.0)),
+            ("curve_0_node_1_y", scalar(0.6)),
+        ]
+        .into_iter()
+        .map(|(name, value)| (ParameterName::new(name).expect("parameter name"), value)),
+    );
+    let edit = Edit::from_parts(
+        EditId::new(31).expect("edit ID"),
+        PhotoId::new(41).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [operation],
+    )
+    .expect("Color Zones edit");
+    let pipeline = CompiledPipeline::compile(&edit).expect("Color Zones pipeline");
+    let dimensions = RasterDimensions::new(2, 1).expect("dimensions");
+    let input = WorkingRgbImage::new(
+        dimensions,
+        vec![
+            LinearRgb::new(
+                FiniteF32::new(0.2).expect("red"),
+                FiniteF32::new(0.4).expect("green"),
+                FiniteF32::new(0.6).expect("blue"),
+            ),
+            LinearRgb::new(
+                FiniteF32::new(0.8).expect("red"),
+                FiniteF32::new(0.3).expect("green"),
+                FiniteF32::new(0.1).expect("blue"),
+            ),
+        ],
+    )
+    .expect("working image");
+
+    let output = evaluate(&pipeline, &input).expect("canonical Color Zones evaluation");
+    assert_eq!(output.dimensions(), dimensions);
+    assert_ne!(output.pixel_slice(), input.pixel_slice());
+}
+
+#[test]
+fn editable_compiler_validates_types_ranges_counts_and_normalizes_inactive_tails() {
+    let registry = builtin_registry();
+    let defaults = registry
+        .materialize_operation(
+            COLORZONES_RUST_ID,
+            OperationId::new(901).expect("operation ID"),
+        )
+        .expect("editable Color Zones defaults");
+    let with_tail = replacing_parameter(
+        &defaults,
+        "curve_1_node_19_x",
+        ParameterValue::Scalar(FiniteF64::new(0.875).expect("finite tail")),
+    );
+    let compiled_defaults = ProcessingOperation::compile(&defaults).expect("default operation");
+    let compiled_tail = ProcessingOperation::compile(&with_tail).expect("normalized tail");
+    let ProcessingOperationKind::ColorZones { plan: default_plan } = compiled_defaults.kind()
+    else {
+        panic!("default operation kind");
+    };
+    let ProcessingOperationKind::ColorZones { plan: tail_plan } = compiled_tail.kind() else {
+        panic!("tail operation kind");
+    };
+    assert_eq!(default_plan, tail_plan);
+    assert!(
+        tail_plan
+            .config()
+            .curves()
+            .iter()
+            .all(|curve| curve.node_count() == 2)
+    );
+
+    let wrong_type = replacing_parameter(&defaults, "curve_0_node_0_x", ParameterValue::Bool(true));
+    assert!(matches!(
+        ProcessingOperation::compile(&wrong_type),
+        Err(OperationCompileError::WrongParameterType { parameter, .. })
+            if parameter.as_str() == "curve_0_node_0_x"
+    ));
+
+    let out_of_range = replacing_parameter(
+        &defaults,
+        "strength",
+        ParameterValue::Scalar(FiniteF64::new(200.001).expect("finite strength")),
+    );
+    assert!(matches!(
+        ProcessingOperation::compile(&out_of_range),
+        Err(OperationCompileError::InvalidParameters { .. })
+    ));
+
+    let zero_count =
+        replacing_parameter(&defaults, "curve_2_num_nodes", ParameterValue::Integer(0));
+    assert!(matches!(
+        ProcessingOperation::compile(&zero_count),
+        Err(OperationCompileError::InvalidParameters { .. })
+    ));
+
+    let missing_new_active_point = editable_operation(
+        902,
+        false,
+        [(
+            ParameterName::new("curve_0_num_nodes").expect("parameter name"),
+            ParameterValue::Integer(3),
+        )],
+    );
+    assert!(matches!(
+        ProcessingOperation::compile(&missing_new_active_point),
+        Err(OperationCompileError::MissingParameter { parameter, .. })
+            if parameter.as_str() == "curve_0_node_2_x"
+    ));
+
+    let v1_capacity = replacing_parameter(
+        &replacing_parameter(&defaults, "splines_version", ParameterValue::Integer(0)),
+        "curve_0_num_nodes",
+        ParameterValue::Integer(20),
+    );
+    assert!(matches!(
+        ProcessingOperation::compile(&v1_capacity),
+        Err(OperationCompileError::InvalidParameters { .. })
+    ));
+
+    let disabled = editable_operation(903, false, std::iter::empty());
+    let compiled = ProcessingOperation::compile(&disabled).expect("default-disabled operation");
+    assert!(!compiled.is_enabled());
+    assert_eq!(
+        compiled.kind(),
+        &ProcessingOperationKind::ColorZones {
+            plan: ColorZonesPlan::new(ColorZonesConfig::defaults()).expect("default plan")
+        }
+    );
 }

@@ -7,6 +7,7 @@ use crate::operations::{
     colorin::ColorInConfig,
     colorout::ColorOutConfig,
     colorreconstruction::ColorReconstructionConfig,
+    colorzones::ColorZonesPlan,
     crop::CropConfig,
     dither::DitherConfig,
     enlargecanvas::EnlargeCanvasConfig,
@@ -48,6 +49,7 @@ mod censorize;
 mod clahe;
 mod colorcontrast;
 mod colorcorrection;
+pub(crate) mod colorzones;
 mod defringe;
 mod effects;
 mod grain;
@@ -64,6 +66,7 @@ pub(crate) use censorize::compile_censorize;
 pub(crate) use clahe::compile_clahe;
 pub(crate) use colorcontrast::compile_colorcontrast;
 pub(crate) use colorcorrection::compile_colorcorrection;
+pub(crate) use colorzones::compile_colorzones;
 pub(crate) use compat::{compile_dither, compile_invert};
 pub(crate) use defringe::compile_defringe;
 pub(crate) use effects::{compile_bloom, compile_soften};
@@ -168,6 +171,9 @@ pub enum ProcessingOperationKind {
     },
     ColorContrast {
         config: ColorContrastConfig,
+    },
+    ColorZones {
+        plan: ColorZonesPlan,
     },
     Temperature {
         config: TemperatureConfig,
@@ -443,6 +449,9 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_colorcontrast(operation)
+    }
+    pub(crate) fn compile_colorzones(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_colorzones(operation)
     }
     pub(crate) fn compile_temperature(
         operation: &Operation,

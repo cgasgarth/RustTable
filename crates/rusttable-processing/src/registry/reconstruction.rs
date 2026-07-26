@@ -58,6 +58,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         crate::ProcessingOperationKind::ColorContrast { .. } => {
             crate::descriptor::colorcontrast_descriptor().id
         }
+        crate::ProcessingOperationKind::ColorZones { .. } => {
+            crate::descriptor::colorzones_descriptor().id
+        }
         crate::ProcessingOperationKind::Temperature { .. } => {
             crate::descriptor::temperature_descriptor().id
         }

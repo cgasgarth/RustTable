@@ -6,7 +6,56 @@ use sha2::{Digest, Sha256};
 
 const BASICADJ_SNAPSHOT_KIND_TAG: u8 = 21;
 const CLIPPING_SNAPSHOT_KIND_TAG: u8 = 29;
-const _: () = assert!(BASICADJ_SNAPSHOT_KIND_TAG != CLIPPING_SNAPSHOT_KIND_TAG);
+const COLORZONES_SNAPSHOT_KIND_TAG: u8 = 30;
+const SNAPSHOT_KIND_TAGS: [u8; 31] = [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    BASICADJ_SNAPSHOT_KIND_TAG,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    CLIPPING_SNAPSHOT_KIND_TAG,
+    COLORZONES_SNAPSHOT_KIND_TAG,
+];
+const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
+
+const fn snapshot_kind_tags_are_unique(tags: &[u8]) -> bool {
+    let mut index = 0;
+    while index < tags.len() {
+        let mut candidate = index + 1;
+        while candidate < tags.len() {
+            if tags[index] == tags[candidate] {
+                return false;
+            }
+            candidate += 1;
+        }
+        index += 1;
+    }
+    true
+}
 
 use crate::{CpuPixelpipeOutputMode, RgbaF32ColorEncoding, RgbaF32Image, SourceRasterIdentity};
 
@@ -523,6 +572,26 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
         ProcessingOperationKind::Vibrance { config } => {
             hasher.update([28]);
             hasher.update(config.amount().to_bits().to_le_bytes());
+        }
+        ProcessingOperationKind::ColorZones { plan } => {
+            let config = plan.config();
+            hasher.update([COLORZONES_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.channel().raw().to_le_bytes());
+            hasher.update(config.strength().to_bits().to_le_bytes());
+            hasher.update(config.mode().raw().to_le_bytes());
+            hasher.update(config.splines_version().raw().to_le_bytes());
+            for curve in config.curves() {
+                hasher.update(curve.curve_type().raw().to_le_bytes());
+                hasher.update(
+                    u64::try_from(curve.node_count())
+                        .expect("Color Zones node count fits u64")
+                        .to_le_bytes(),
+                );
+                for point in curve.points() {
+                    hasher.update(point.x().to_bits().to_le_bytes());
+                    hasher.update(point.y().to_bits().to_le_bytes());
+                }
+            }
         }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }

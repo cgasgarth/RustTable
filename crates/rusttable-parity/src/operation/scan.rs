@@ -220,7 +220,13 @@ fn complete_generated_metadata(operation: &mut Operation, source: &Path) {
         if current.codec.is_none() {
             current.codec = Some(generated_codec(current.byte_size, current.version));
         }
-        current.decoder = format!("generated.bytes.decode.v{}", current.version);
+        current.decoder.clone_from(
+            &current
+                .codec
+                .as_ref()
+                .expect("current codec was generated when absent")
+                .decoder,
+        );
         current.opaque_blocking = false;
         operation.abi_layouts = current.abi_layouts.clone();
         operation.codec = current.codec.clone();

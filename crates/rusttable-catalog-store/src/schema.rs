@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
@@ -84,44 +84,61 @@ pub(crate) const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blob_refs");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
 pub(crate) const ORGANIZATION_REVISION_KEY: &[u8] = b"organization-revision";
-const DATABASE_OPEN_RETRIES: u8 = 8;
+const DATABASE_OPEN_RETRY_TIMEOUT: Duration = Duration::from_secs(1);
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(2);
 
 pub(crate) fn open(path: &Path) -> Result<Arc<Database>, RepositoryError> {
     let existed = path.exists();
-    for attempt in 0..DATABASE_OPEN_RETRIES {
+    retry_database_open(existed, || {
         let mut databases = database_registry()
             .lock()
-            .map_err(|_| RepositoryError::Unavailable)?;
+            .map_err(|_| OpenDatabaseError::Repository(RepositoryError::Unavailable))?;
         if let Some(database) = databases.get(path).and_then(Weak::upgrade) {
             return Ok(database);
         }
-        let database = match Database::create(path) {
-            Ok(database) => Arc::new(database),
-            Err(redb::DatabaseError::DatabaseAlreadyOpen)
-                if attempt + 1 < DATABASE_OPEN_RETRIES =>
-            {
-                drop(databases);
-                std::thread::sleep(DATABASE_OPEN_RETRY_DELAY);
-                continue;
-            }
-            Err(error) => {
-                return Err(match error {
-                    redb::DatabaseError::DatabaseAlreadyOpen => RepositoryError::Unavailable,
-                    _ if existed => RepositoryError::CorruptPersistedData,
-                    _ => RepositoryError::Unavailable,
-                });
-            }
-        };
+        let database = Arc::new(Database::create(path).map_err(OpenDatabaseError::Database)?);
         if existed {
-            validate(&database)?;
+            validate(&database).map_err(OpenDatabaseError::Repository)?;
         } else {
-            initialize(&database)?;
+            initialize(&database).map_err(OpenDatabaseError::Repository)?;
         }
         databases.insert(PathBuf::from(path), Arc::downgrade(&database));
-        return Ok(database);
+        Ok(database)
+    })
+}
+
+fn retry_database_open(
+    existed: bool,
+    mut attempt: impl FnMut() -> Result<Arc<Database>, OpenDatabaseError>,
+) -> Result<Arc<Database>, RepositoryError> {
+    let deadline = Instant::now() + DATABASE_OPEN_RETRY_TIMEOUT;
+    loop {
+        match attempt() {
+            Ok(database) => return Ok(database),
+            Err(OpenDatabaseError::Database(redb::DatabaseError::DatabaseAlreadyOpen))
+                if Instant::now() < deadline =>
+            {
+                std::thread::sleep(DATABASE_OPEN_RETRY_DELAY);
+            }
+            Err(OpenDatabaseError::Database(redb::DatabaseError::DatabaseAlreadyOpen)) => {
+                return Err(RepositoryError::Unavailable);
+            }
+            Err(OpenDatabaseError::Database(_)) if existed => {
+                return Err(RepositoryError::CorruptPersistedData);
+            }
+            Err(
+                OpenDatabaseError::Database(_)
+                | OpenDatabaseError::Repository(RepositoryError::Unavailable),
+            ) => return Err(RepositoryError::Unavailable),
+            Err(OpenDatabaseError::Repository(error)) => return Err(error),
+        }
     }
-    Err(RepositoryError::Unavailable)
+}
+
+#[derive(Debug)]
+enum OpenDatabaseError {
+    Database(redb::DatabaseError),
+    Repository(RepositoryError),
 }
 
 fn database_registry() -> &'static Mutex<BTreeMap<PathBuf, Weak<Database>>> {
@@ -964,27 +981,74 @@ fn open_collection_tables(transaction: &redb::WriteTransaction) -> Result<(), Re
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
     use std::sync::{
-        Arc,
+        Arc, Barrier,
         atomic::{AtomicU64, Ordering},
     };
+    use std::thread;
 
-    use super::open;
+    use super::{Database, OpenDatabaseError, open, retry_database_open};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn concurrent_database_open_reuses_the_live_catalog_handle() {
-        let path = std::env::temp_dir().join(format!(
-            "rusttable-schema-open-{}-{}.redb",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
+        let path = temporary_path("open");
         let first = open(&path).expect("first schema open");
         let second = open(&path).expect("second schema open");
         assert!(Arc::ptr_eq(&first, &second));
         drop(first);
         drop(second);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn database_open_retries_transient_redb_lock_handoff() {
+        let path = temporary_path("retry");
+        let mut attempts = 0;
+        let database = retry_database_open(false, || {
+            attempts += 1;
+            if attempts < 4 {
+                Err(OpenDatabaseError::Database(
+                    redb::DatabaseError::DatabaseAlreadyOpen,
+                ))
+            } else {
+                Database::create(&path)
+                    .map(Arc::new)
+                    .map_err(OpenDatabaseError::Database)
+            }
+        })
+        .expect("transient database lock handoff");
+        assert_eq!(attempts, 4);
+        drop(database);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn final_handle_drop_and_reopen_remain_available_under_contention() {
+        let path = temporary_path("handoff");
+        for _ in 0..64 {
+            let database = open(&path).expect("schema open before handoff");
+            let barrier = Arc::new(Barrier::new(2));
+            let drop_barrier = Arc::clone(&barrier);
+            let dropper = thread::spawn(move || {
+                drop_barrier.wait();
+                drop(database);
+            });
+            barrier.wait();
+            let reopened = open(&path).expect("schema reopen during final-handle drop");
+            dropper.join().expect("database dropper");
+            drop(reopened);
+        }
+        let _ = fs::remove_file(path);
+    }
+
+    fn temporary_path(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "rusttable-schema-{label}-{}-{}.redb",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ))
     }
 }

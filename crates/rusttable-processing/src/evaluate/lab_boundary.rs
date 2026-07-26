@@ -17,6 +17,7 @@ use crate::operations::colorcontrast::{
 use crate::operations::colorcorrection::{
     ColorCorrectionConfig, ColorCorrectionPixel, ColorCorrectionPlan,
 };
+use crate::operations::colorzones::{ColorZonesPixel, ColorZonesPlan};
 use crate::operations::defringe::{
     DefringeConfig, DefringeExecutionError, DefringePixel, DefringePlan,
 };
@@ -42,6 +43,7 @@ pub(crate) enum LabBoundaryError {
     Relight(crate::operations::OperationExecutionError),
     ColorContrastRgbContainerCannotCarryLab,
     ColorCorrectionRgbContainerCannotCarryLab,
+    ColorZonesRgbContainerCannotCarryLab,
     VibranceRgbContainerCannotCarryLab,
     Chromaticity(rusttable_color::ChromaticityMatrixError),
     Matrix(rusttable_color::MatrixError),
@@ -67,6 +69,10 @@ impl fmt::Display for LabBoundaryError {
             Self::ColorCorrectionRgbContainerCannotCarryLab => write!(
                 formatter,
                 "Color Correction cannot consume Lab channels through the linear-RGB evaluator"
+            ),
+            Self::ColorZonesRgbContainerCannotCarryLab => write!(
+                formatter,
+                "Color Zones cannot consume Lab channels through the linear-RGB evaluator"
             ),
             Self::VibranceRgbContainerCannotCarryLab => write!(
                 formatter,
@@ -584,6 +590,59 @@ pub(crate) fn apply_colorcorrection(
         })
         .collect::<Result<Vec<_>, LabBoundaryError>>()?;
     let plan = ColorCorrectionPlan::new(config);
+    let lab_output = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+        plan.execute_lab(&lab_pixels)
+    } else {
+        plan.execute_lab_normal_blend(&lab_pixels, mask, opacity)
+    };
+    lab_output
+        .into_iter()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let channels = value.channels();
+            let rgb = from_lab
+                .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                .map_err(LabBoundaryError::Transform)?;
+            let red = finite(rgb[0], pixel, RgbChannel::Red)?;
+            let green = finite(rgb[1], pixel, RgbChannel::Green)?;
+            let blue = finite(rgb[2], pixel, RgbChannel::Blue)?;
+            Ok(LinearRgb::new(red, green, blue))
+        })
+        .collect()
+}
+
+pub(crate) fn apply_colorzones(
+    plan: &ColorZonesPlan,
+    pixels: &[LinearRgb],
+    source_frame: WorkingFrameDescriptor,
+    mask: Option<&[f32]>,
+    opacity: f32,
+) -> Result<Vec<LinearRgb>, LabBoundaryError> {
+    if source_frame.encoding() == ColorEncoding::LabD50 {
+        return Err(LabBoundaryError::ColorZonesRgbContainerCannotCarryLab);
+    }
+    let to_lab = plan_working_to_lab(source_frame)?;
+    let from_lab = plan_lab_to_working(source_frame)?;
+    let lab_pixels = pixels
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let lab = to_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    || false,
+                )
+                .map_err(LabBoundaryError::Transform)?;
+            if lab.iter().any(|channel| !channel.is_finite()) {
+                return Err(LabBoundaryError::NonFinite {
+                    pixel,
+                    channel: RgbChannel::Red,
+                });
+            }
+            Ok(ColorZonesPixel::new(lab[0], lab[1], lab[2], 1.0))
+        })
+        .collect::<Result<Vec<_>, LabBoundaryError>>()?;
     let lab_output = if mask.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
         plan.execute_lab(&lab_pixels)
     } else {

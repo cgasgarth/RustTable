@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/cgasgarth/rusttable/icons">
+    <file alias="scalable/actions/sidebar-show-symbolic.svg">icons/scalable/actions/sidebar-show-symbolic.svg</file>
+    <file alias="scalable/actions/sidebar-show-right-symbolic.svg">icons/scalable/actions/sidebar-show-right-symbolic.svg</file>
+    <file alias="scalable/actions/system-shutdown-symbolic.svg">icons/scalable/actions/system-shutdown-symbolic.svg</file>
+    <file alias="scalable/status/starred-symbolic.svg">icons/scalable/status/starred-symbolic.svg</file>
+  </gresource>
+</gresources>

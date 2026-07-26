@@ -12,6 +12,7 @@ Install the toolchain selected by `rust-toolchain.toml`. Bun is needed only for 
 git clone https://github.com/cgasgarth/RustTable.git
 cd RustTable
 cargo install cargo-deny --version 0.19.8 --locked
+cargo install cargo-nextest --version 0.9.140 --locked
 git config core.hooksPath .githooks
 ```
 
@@ -58,7 +59,7 @@ bun run smoke:macos-computer-use -- --allow-foreground
 ## Product engineering tasks
 
 ```sh
-cargo xtask check
+cargo xtask check --parallel
 cargo xtask codegen operations --check
 cargo xtask fixtures verify
 cargo xtask reference provision --help
@@ -68,7 +69,7 @@ cargo xtask bench compare --help
 cargo xtask dist
 ```
 
-`cargo xtask check` is the complete local commit gate. It runs formatting, strict all-target/all-feature Clippy and tests, rustdoc, numerical and generated-operation validation, export and fixture checks, and standard dependency checks. Its GTK runtime smokes use non-activating test windows and do not launch the foreground screenshot workflow. Post-merge validation may add platform, coverage, packaging, and distribution checks.
+`cargo xtask check --parallel` is the complete local commit gate. It runs formatting, strict all-target/all-feature Clippy and tests, rustdoc, numerical and generated-operation validation, export and fixture checks, and standard dependency checks. Ordinary libtest targets use the checked-in nextest profile, while `harness = false` GTK/app targets run conventionally through Cargo so they are not dropped. The GTK runtime smokes use non-activating test windows and do not launch the foreground screenshot workflow. Post-merge validation may add platform, coverage, packaging, and distribution checks.
 
 ## Contribution model
 
