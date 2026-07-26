@@ -103,4 +103,6 @@ Use workflows to advance one dependency-ready milestone at a time while keeping 
 - Use Luna at medium effort for targeted adversarial review passes. Review only the changed responsibility and explicit acceptance boundaries; return concise findings rather than broad audits or review panels.
 - Use Sol at high effort for cross-crate problem solving, shared pixelpipe/GPU/state integration, and GTK UI work.
 - Assign one writer at a time to exhaustive-match and integration hubs. Parallelize read-only verification and non-overlapping files, then run a separate integration/review pass.
+- Worker commands have a hard two-minute budget. Workers may run only focused checks expected to finish inside it, must stop commands that cross it, and must report remaining validation to the orchestrator instead of blocking dependent stages.
+- Workers must not run workspace/package-wide gates, the full gate, or `cargo xtask check --changed` when its reverse-dependency closure is broad. The orchestrator batches long validation independently after implementation converges.
 - Agents must never modify retained native sources or the sibling Darktable checkout.

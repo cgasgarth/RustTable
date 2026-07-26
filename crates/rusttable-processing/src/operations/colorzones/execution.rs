@@ -112,6 +112,12 @@ impl ColorZonesPlan {
             .expect("compiled Color Zones LUT storage has three complete channels")
     }
 
+    /// Samples one committed curve with Darktable's native interpolating LUT lookup.
+    #[must_use]
+    pub fn sample_curve(&self, channel: ColorZonesChannel, input: f32) -> f32 {
+        lookup(self.lut(channel), input)
+    }
+
     /// Applies Darktable's native Smooth (`process_v3`) or Strong
     /// (`process_v1`) point kernel to Lab pixels.
     #[must_use]
@@ -142,8 +148,25 @@ impl ColorZonesPlan {
         mask: Option<&[f32]>,
         opacity: f32,
     ) -> Vec<ColorZonesPixel> {
-        debug_assert!(mask.is_none_or(|values| values.len() == input.len()));
         let candidates = self.execute_lab(input);
+        Self::blend_lab_candidates(input, &candidates, mask, opacity)
+    }
+
+    /// Applies Darktable's default Lab normal blend to already evaluated
+    /// candidates.
+    ///
+    /// This keeps opacity, masks, and preserved-channel behavior identical when
+    /// the candidate pixels came from the source OpenCL-compatible WGPU kernel
+    /// rather than the deliberately interpolating CPU kernel.
+    #[must_use]
+    pub fn blend_lab_candidates(
+        input: &[ColorZonesPixel],
+        candidates: &[ColorZonesPixel],
+        mask: Option<&[f32]>,
+        opacity: f32,
+    ) -> Vec<ColorZonesPixel> {
+        debug_assert_eq!(candidates.len(), input.len());
+        debug_assert!(mask.is_none_or(|values| values.len() == input.len()));
         let inverse_scale = [1.0_f32 / 100.0, 1.0_f32 / 128.0, 1.0_f32 / 128.0];
         let scale = [100.0_f32, 128.0_f32, 128.0_f32];
 
@@ -271,7 +294,7 @@ fn clamp_unit_native(value: f32) -> f32 {
 mod tests {
     use std::sync::Arc;
 
-    use super::{ColorZonesPlan, smooth_chroma};
+    use super::{ColorZonesPixel, ColorZonesPlan, smooth_chroma};
     use crate::operations::colorzones::ColorZonesConfig;
 
     #[test]
@@ -281,6 +304,19 @@ mod tests {
 
         assert_eq!(plan.luts.len(), 3 * super::COLORZONES_LUT_RESOLUTION);
         assert!(Arc::ptr_eq(&plan.luts, &clone.luts));
+    }
+
+    #[test]
+    fn external_backend_candidates_use_native_lab_blend_and_preserve_alpha_bits() {
+        let alpha = f32::from_bits(0x3eaa_aaab);
+        let source = [ColorZonesPixel::new(40.0, -64.0, 32.0, alpha)];
+        let candidate = [ColorZonesPixel::new(80.0, 64.0, -32.0, 1.0)];
+        let blended = ColorZonesPlan::blend_lab_candidates(&source, &candidate, Some(&[0.5]), 0.5);
+
+        assert!((blended[0].lightness() - 50.0).abs() <= 0.000_01);
+        assert_eq!(blended[0].a().to_bits(), (-32.0_f32).to_bits());
+        assert_eq!(blended[0].b().to_bits(), 16.0_f32.to_bits());
+        assert_eq!(blended[0].alpha().to_bits(), alpha.to_bits());
     }
 
     #[test]

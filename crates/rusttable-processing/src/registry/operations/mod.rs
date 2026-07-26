@@ -704,14 +704,23 @@ pub fn colorcontrast_definition() -> OperationDefinition {
 }
 
 pub fn colorzones_definition() -> OperationDefinition {
-    geometry_definition(
-        colorzones_descriptor(),
+    let descriptor = colorzones_descriptor();
+    let gpu = GpuBinding::new(
+        crate::operations::colorzones::COLORZONES_WGPU_PASS_ID,
+        crate::operations::colorzones::COLORZONES_GPU_TIER,
+        descriptor.capability.required_features.clone(),
+        descriptor.capability.required_formats.clone(),
+    );
+    geometry_definition_with_gpu(
+        descriptor,
         prepare_colorzones,
         &[
             "iop.colorzones.params.v1-v5",
             "iop.colorzones.migrations.v1-v5",
             "iop.colorzones.cpu.curve-lut",
             "iop.colorzones.cpu.smooth-strong",
+            "iop.colorzones.wgpu.nearest-lut-smooth-strong",
+            "iop.colorzones.wgpu.snapshot-cancellation-tiling",
             "iop.colorzones.opacity-mask-reconstruction",
             "iop.colorzones.alpha-preserve",
             "iop.colorzones.default-disabled",
@@ -728,6 +737,7 @@ pub fn colorzones_definition() -> OperationDefinition {
                 ),
             )
         }),
+        Some(gpu),
     )
     .with_ui_availability(DefinitionAvailability::Unavailable {
         reason: "source-derived Color Zones GTK module is not implemented".to_owned(),

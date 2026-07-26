@@ -13,14 +13,15 @@ use rusttable_core::{
 };
 use rusttable_processing::operations::colorzones::{
     COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_DEFAULT_ENABLED,
-    COLORZONES_LEGACY_BANDS, COLORZONES_MAX_NODES, COLORZONES_RUST_ID, COLORZONES_SCHEMA_VERSION,
-    COLORZONES_V1_BANDS, COLORZONES_V1_PARAMETER_BYTES, COLORZONES_V2_PARAMETER_BYTES,
-    COLORZONES_V3_PARAMETER_BYTES, COLORZONES_V4_PARAMETER_BYTES, COLORZONES_V5_PARAMETER_BYTES,
-    ColorZonesChannel, ColorZonesCodecError, ColorZonesConfig, ColorZonesCurveType,
-    ColorZonesHistory, ColorZonesMode, ColorZonesNode, ColorZonesParameterError,
-    ColorZonesParametersV1, ColorZonesParametersV2, ColorZonesParametersV3, ColorZonesParametersV4,
-    ColorZonesParametersV5, ColorZonesPlan, ColorZonesSplinesVersion, migrate_v1_to_v5,
-    migrate_v2_to_v5, migrate_v3_to_v5, migrate_v4_to_v5,
+    COLORZONES_GPU_TIER, COLORZONES_LEGACY_BANDS, COLORZONES_MAX_NODES, COLORZONES_RUST_ID,
+    COLORZONES_SCHEMA_VERSION, COLORZONES_V1_BANDS, COLORZONES_V1_PARAMETER_BYTES,
+    COLORZONES_V2_PARAMETER_BYTES, COLORZONES_V3_PARAMETER_BYTES, COLORZONES_V4_PARAMETER_BYTES,
+    COLORZONES_V5_PARAMETER_BYTES, COLORZONES_WGPU_PASS_ID, ColorZonesChannel,
+    ColorZonesCodecError, ColorZonesConfig, ColorZonesCurveType, ColorZonesHistory, ColorZonesMode,
+    ColorZonesNode, ColorZonesParameterError, ColorZonesParametersV1, ColorZonesParametersV2,
+    ColorZonesParametersV3, ColorZonesParametersV4, ColorZonesParametersV5, ColorZonesPlan,
+    ColorZonesSplinesVersion, migrate_v1_to_v5, migrate_v2_to_v5, migrate_v3_to_v5,
+    migrate_v4_to_v5,
 };
 use rusttable_processing::{
     CompiledPipeline, FiniteF32, LinearRgb, OperationCompileError, PipelineStepIndex,
@@ -724,7 +725,7 @@ fn descriptor_parameter_ids_follow_native_v5_declaration_order_exactly() {
 }
 
 #[test]
-fn canonical_descriptor_and_cpu_registry_binding_match_native_v5_contract() {
+fn canonical_descriptor_and_backend_registry_bindings_match_native_v5_contract() {
     let descriptor = colorzones_descriptor();
     assert_eq!(
         descriptor.id.compatibility_name,
@@ -742,6 +743,9 @@ fn canonical_descriptor_and_cpu_registry_binding_match_native_v5_contract() {
     assert!(descriptor.flags.contains(OperationFlags::DETERMINISTIC_CPU));
     assert!(!descriptor.flags.contains(OperationFlags::DETERMINISTIC_GPU));
     assert!(!descriptor.flags.contains(OperationFlags::MANDATORY));
+    assert_eq!(descriptor.capability.gpu_tier, Some(COLORZONES_GPU_TIER));
+    assert!(descriptor.capability.fallback_to_cpu);
+    assert!(!descriptor.capability.deterministic_gpu);
     assert_eq!(descriptor.migration.source_versions, [1, 2, 3, 4, 5]);
     assert_eq!(descriptor.migration.target_version, 5);
     assert_eq!(descriptor.io.input.encodings, [ColorEncoding::LabD50]);
@@ -782,7 +786,9 @@ fn canonical_descriptor_and_cpu_registry_binding_match_native_v5_contract() {
     assert!(definition.availability().is_available());
     assert!(!definition.ui_availability().is_available());
     assert!(definition.cpu().is_some());
-    assert!(definition.gpu().is_none());
+    let gpu = definition.gpu().expect("dedicated Color Zones GPU binding");
+    assert_eq!(gpu.binding_id(), COLORZONES_WGPU_PASS_ID);
+    assert_eq!(gpu.tier(), COLORZONES_GPU_TIER);
     assert_eq!(
         definition
             .migrations()

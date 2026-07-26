@@ -281,7 +281,7 @@ fn liquify_registry_exposes_geometry_and_explicit_cpu_fallback() {
 }
 
 #[test]
-fn colorzones_registry_is_cpu_only_and_source_ordered() {
+fn colorzones_registry_exposes_dedicated_gpu_fallback_and_source_order() {
     let registry = builtin_registry();
     let definition = registry
         .definition("rusttable.colorzones")
@@ -289,7 +289,13 @@ fn colorzones_registry_is_cpu_only_and_source_ordered() {
     assert_eq!(definition.descriptor().id.compatibility_name, "colorzones");
     assert_eq!(definition.descriptor().id.schema_version, 5);
     assert!(definition.cpu().is_some());
-    assert!(definition.gpu().is_none());
+    let gpu = definition.gpu().expect("dedicated Color Zones GPU binding");
+    assert_eq!(
+        gpu.binding_id(),
+        rusttable_processing::COLORZONES_WGPU_PASS_ID
+    );
+    assert_eq!(gpu.tier(), rusttable_processing::COLORZONES_GPU_TIER);
+    assert!(definition.descriptor().capability.fallback_to_cpu);
     assert_eq!(
         definition
             .migrations()

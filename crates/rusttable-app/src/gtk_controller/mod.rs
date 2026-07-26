@@ -5,6 +5,7 @@
 //! without a display server.
 
 mod collection;
+pub mod colorzones_edit;
 mod darkroom_edit;
 mod darkroom_panels;
 pub mod export;
