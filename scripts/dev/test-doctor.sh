@@ -14,7 +14,7 @@ cp "$doctor" "$repo/scripts/dev/doctor.sh"
 chmod +x "$repo/scripts/dev/doctor.sh"
 touch "$repo/.githooks/pre-commit" "$repo/.githooks/pre-push"
 chmod +x "$repo/.githooks/pre-commit" "$repo/.githooks/pre-push"
-printf '[toolchain]\nchannel = "fixture-toolchain"\ncomponents = ["clippy", "rustfmt"]\n' >"$repo/rust-toolchain.toml"
+printf '[toolchain]\nchannel = "fixture-toolchain"\ncomponents = ["clippy", "rustfmt", "llvm-tools-preview"]\n' >"$repo/rust-toolchain.toml"
 printf '{"packageManager":"bun@fixture-bun"}\n' >"$repo/package.json"
 touch "$repo/Cargo.toml" "$repo/Cargo.lock" "$repo/TASK.md" "$repo/AGENTS.md"
 
@@ -40,14 +40,14 @@ cat >"$bin/rustup" <<'EOF'
 if [[ "$1 $2" == 'show active-toolchain' ]]; then
   printf '%s\n' "${FAKE_RUSTUP_TOOLCHAIN:-fixture-toolchain} (default)"
 elif [[ "$1 $2 $3" == 'component list --installed' ]]; then
-  printf 'clippy-x86_64-unknown-linux-gnu (installed)\nrustfmt-x86_64-unknown-linux-gnu (installed)\n'
+  printf 'clippy-x86_64-unknown-linux-gnu (installed)\nrustfmt-x86_64-unknown-linux-gnu (installed)\nllvm-tools-x86_64-unknown-linux-gnu (installed)\n'
 fi
 EOF
 cat >"$bin/bun" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "${FAKE_BUN_VERSION:-fixture-bun}"
 EOF
-for tool in cargo rustc rustfmt cargo-clippy cargo-deny rg; do
+for tool in cargo rustc rustfmt cargo-clippy cargo-deny cargo-nextest rg; do
   printf '#!/usr/bin/env bash\nexit 0\n' >"$bin/$tool"
 done
 chmod +x "$bin"/*
@@ -67,6 +67,15 @@ if (cd "$repo" && FAKE_ROOT="$repo" FAKE_BUN_VERSION=wrong-bun env -u GIT_DIR -u
   exit 1
 fi
 grep -q 'Bun version does not match package.json' "$fixture/output"
+
+rm "$bin/cargo-nextest"
+if run_doctor >"$fixture/output" 2>&1; then
+  printf 'expected missing cargo-nextest to fail\n' >&2
+  exit 1
+fi
+grep -q 'missing tool: cargo-nextest' "$fixture/output"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$bin/cargo-nextest"
+chmod +x "$bin/cargo-nextest"
 
 if (cd "$repo" && FAKE_ROOT="$repo" FAKE_BRANCH=main env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE PATH="$fixture_path" bash scripts/dev/doctor.sh >"$fixture/output" 2>&1); then
   printf 'expected protected branch to fail\n' >&2

@@ -9,18 +9,19 @@ mod clipping;
 mod liquify;
 mod rasterfile;
 use super::{
-    CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
-    MigrationBinding, OperationCapability, OperationDefinition, PreparedCpuOperation,
-    REGISTRY_BUILD_ID, REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
+    CpuFactory, CpuPrepare, DefinitionAvailability, ExecutionBackend, FactoryError, GpuBinding,
+    ImplementationIdentity, MigrationBinding, OperationCapability, OperationDefinition,
+    PreparedCpuOperation, REGISTRY_BUILD_ID, REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
     DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, colorcontrast_descriptor,
-    crop_descriptor, dither_descriptor, enlargecanvas_descriptor, exposure_descriptor,
-    finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
-    invert_descriptor, linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor,
-    rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor, soften_descriptor,
-    temperature_descriptor, velvia_descriptor, vibrance_descriptor, vignette_descriptor,
+    colorzones_descriptor, crop_descriptor, dither_descriptor, enlargecanvas_descriptor,
+    exposure_descriptor, finalscale_descriptor, flip_descriptor, graduatednd_descriptor,
+    grain_descriptor, invert_descriptor, linear_offset_descriptor, relight_descriptor,
+    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
+    soften_descriptor, temperature_descriptor, velvia_descriptor, vibrance_descriptor,
+    vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -111,7 +112,7 @@ pub(super) fn validate_definition(
     let mut edges = BTreeSet::new();
     for migration in &definition.migrations {
         if migration.from_version == 0
-            || migration.to_version != migration.from_version.saturating_add(1)
+            || migration.from_version >= migration.to_version
             || !edges.insert((migration.from_version, migration.to_version))
             || migration.evidence_id.is_empty()
             || !sources.contains(&migration.from_version)
@@ -120,10 +121,21 @@ pub(super) fn validate_definition(
             findings.push(RegistryValidationError::MigrationGap(id.rust_id.clone()));
         }
     }
-    for version in sources {
-        if *version < definition.descriptor.migration.target_version
-            && !edges.contains(&(*version, version.saturating_add(1)))
-        {
+    let target = definition.descriptor.migration.target_version;
+    for version in sources.iter().copied().filter(|version| *version < target) {
+        let mut reachable = BTreeSet::from([version]);
+        loop {
+            let previous_len = reachable.len();
+            for (from, to) in &edges {
+                if reachable.contains(from) {
+                    reachable.insert(*to);
+                }
+            }
+            if reachable.len() == previous_len {
+                break;
+            }
+        }
+        if !reachable.contains(&target) {
             findings.push(RegistryValidationError::MigrationGap(id.rust_id.clone()));
         }
     }
@@ -267,6 +279,17 @@ fn prepare_colorcontrast(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_colorcontrast(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_colorzones(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_colorzones(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -680,6 +703,37 @@ pub fn colorcontrast_definition() -> OperationDefinition {
     )
 }
 
+pub fn colorzones_definition() -> OperationDefinition {
+    geometry_definition(
+        colorzones_descriptor(),
+        prepare_colorzones,
+        &[
+            "iop.colorzones.params.v1-v5",
+            "iop.colorzones.migrations.v1-v5",
+            "iop.colorzones.cpu.curve-lut",
+            "iop.colorzones.cpu.smooth-strong",
+            "iop.colorzones.opacity-mask-reconstruction",
+            "iop.colorzones.alpha-preserve",
+            "iop.colorzones.default-disabled",
+            "iop.colorzones.order.v30-93",
+        ],
+        RoiKind::Identity,
+        (1..crate::operations::colorzones::COLORZONES_SCHEMA_VERSION).map(|from| {
+            MigrationBinding::new(
+                from,
+                crate::operations::colorzones::COLORZONES_SCHEMA_VERSION,
+                format!(
+                    "colorzones.migration.v{from}-v{}",
+                    crate::operations::colorzones::COLORZONES_SCHEMA_VERSION
+                ),
+            )
+        }),
+    )
+    .with_ui_availability(DefinitionAvailability::Unavailable {
+        reason: "source-derived Color Zones GTK module is not implemented".to_owned(),
+    })
+}
+
 pub fn shadhi_definition() -> OperationDefinition {
     compatibility_definition_with_migrations(
         shadhi_descriptor(),
@@ -1076,6 +1130,7 @@ macro_rules! builtin_operations {
             $crate::registry::colorcontrast_definition,
             $crate::registry::velvia_definition,
             $crate::registry::vibrance_definition,
+            $crate::registry::colorzones_definition,
             $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,

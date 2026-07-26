@@ -287,3 +287,37 @@ fn execution_is_bitwise_chunk_invariant() {
         .collect();
     assert_eq!(whole, chunked);
 }
+
+#[test]
+fn authored_normal_blend_uses_lab_coverage_and_preserves_source_alpha() {
+    let plan = ColorZonesPlan::new(constant_config(
+        ColorZonesChannel::Lightness,
+        ColorZonesMode::Strong,
+        [0.75, 0.75, 0.5],
+        0.0,
+    ))
+    .expect("compiled blend plan");
+    let source_alpha = f32::from_bits(0x7fc1_2345);
+    let input = [ColorZonesPixel::new(40.0, 8.0, -4.0, source_alpha)];
+    let candidate = plan.execute_lab(&input)[0];
+    let coverage = 0.25_f32 * 0.5_f32;
+    let blended = plan.execute_lab_normal_blend(&input, Some(&[0.5]), 0.25)[0];
+    let source = input[0].channels();
+    let candidate = candidate.channels();
+    let inverse_scale = [1.0_f32 / 100.0, 1.0_f32 / 128.0, 1.0_f32 / 128.0];
+    let scale = [100.0_f32, 128.0_f32, 128.0_f32];
+    let expected = ColorZonesPixel::from_channels([
+        (source[0] * inverse_scale[0] * (1.0 - coverage)
+            + candidate[0] * inverse_scale[0] * coverage)
+            * scale[0],
+        (source[1] * inverse_scale[1] * (1.0 - coverage)
+            + candidate[1] * inverse_scale[1] * coverage)
+            * scale[1],
+        (source[2] * inverse_scale[2] * (1.0 - coverage)
+            + candidate[2] * inverse_scale[2] * coverage)
+            * scale[2],
+        source[3],
+    ]);
+
+    assert_eq!(pixel_bits(blended), pixel_bits(expected));
+}

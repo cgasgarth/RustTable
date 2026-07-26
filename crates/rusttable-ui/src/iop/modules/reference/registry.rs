@@ -40,7 +40,12 @@ fn module_from_definition(
     let descriptor = definition.descriptor();
     let vibrance_deprecated_message = (descriptor.id.compatibility_name == VIBRANCE_MODULE_ID)
         .then_some(VIBRANCE_SOURCE_MAP.deprecated_message());
-    let availability = match definition.availability() {
+    let ui_supported = definition.ui_availability().is_available();
+    let effective_availability = match definition.availability() {
+        DefinitionAvailability::Available => definition.ui_availability(),
+        unavailable @ DefinitionAvailability::Unavailable { .. } => unavailable,
+    };
+    let availability = match effective_availability {
         DefinitionAvailability::Available
             if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
         {
@@ -62,12 +67,13 @@ fn module_from_definition(
             reason: reason.clone(),
         },
     };
-    module_from_descriptor(descriptor, availability)
+    module_from_descriptor(descriptor, availability, ui_supported)
 }
 
 fn module_from_descriptor(
     descriptor: &OperationDescriptor,
     availability: DarkroomModuleAvailability,
+    ui_supported: bool,
 ) -> DarkroomModuleViewModel {
     let id = descriptor.id.compatibility_name.as_str();
     let colorcorrection_source_map =
@@ -77,17 +83,19 @@ fn module_from_descriptor(
     let velvia_source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
     let vibrance_source_map = (id == VIBRANCE_MODULE_ID).then_some(VIBRANCE_SOURCE_MAP);
     let mut controls = Vec::new();
-    for parameter in &descriptor.parameters {
-        if colorcorrection_source_map
-            .is_some_and(|source_map| source_map.saturation(&parameter.id).is_none())
-            || colorcontrast_source_map
-                .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
-            || vibrance_source_map
-                .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
-        {
-            continue;
+    if ui_supported {
+        for parameter in &descriptor.parameters {
+            if colorcorrection_source_map
+                .is_some_and(|source_map| source_map.saturation(&parameter.id).is_none())
+                || colorcontrast_source_map
+                    .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
+                || vibrance_source_map
+                    .is_some_and(|source_map| source_map.slider(&parameter.id).is_none())
+            {
+                continue;
+            }
+            controls.extend(control_from_parameter(id, parameter));
         }
-        controls.extend(control_from_parameter(id, parameter));
     }
     let title = colorcorrection_source_map
         .map(|source_map| source_map.title().to_owned())
@@ -100,7 +108,7 @@ fn module_from_descriptor(
         .as_ref()
         .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
     let style_eligible = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
-    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN);
+    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN) || !ui_supported;
     let default_enabled = colorcorrection_source_map
         .is_none_or(ColorCorrectionSourceMap::default_enabled)
         && colorcontrast_source_map.is_none_or(ColorContrastSourceMap::default_enabled)
@@ -536,6 +544,7 @@ mod tests {
             super::DarkroomModuleAvailability::Unsupported {
                 reason: "CPU backend unavailable".to_owned(),
             },
+            true,
         );
         assert!(!module.enabled());
         assert!(module.availability().is_unsupported());
@@ -543,5 +552,25 @@ mod tests {
             module.status_text(),
             "Unavailable · CPU backend unavailable"
         );
+    }
+
+    #[test]
+    fn colorzones_cpu_definition_does_not_project_generic_gtk_controls() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let colorzones = modules.module("colorzones").expect("Color Zones module");
+
+        assert!(colorzones.is_hidden());
+        assert!(colorzones.availability().is_unsupported());
+        assert!(!colorzones.enabled());
+        assert_eq!(colorzones.controls().controls().len(), 0);
+        assert_eq!(
+            colorzones.status_text(),
+            "Unavailable · source-derived Color Zones GTK module is not implemented"
+        );
+        let definition = builtin_registry()
+            .definition("rusttable.colorzones")
+            .expect("Color Zones CPU definition");
+        assert!(definition.availability().is_available());
+        assert!(definition.cpu().is_some());
     }
 }

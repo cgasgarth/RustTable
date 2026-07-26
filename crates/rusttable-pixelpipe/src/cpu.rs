@@ -12,7 +12,7 @@ use rusttable_processing::operations::colorin::{
 };
 use rusttable_processing::{
     BasicAdjPlanSet, ColorContrastPixel, ColorContrastPlan, ColorCorrectionPixel,
-    ColorCorrectionPlan, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
+    ColorCorrectionPlan, ColorZonesPixel, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
     OperationMaskSetError, ProcessingOperation, RasterDimensions, SourceRgb, SourceRgbImage,
     SrgbChannel, VibrancePixel, VibrancePlan, WorkingRgbImage, convert_working_to_linear_srgb,
     encode_working_to_srgb, evaluate_graph_with_basicadj_plans_and_masks_with_cancellation,
@@ -538,6 +538,7 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
             operation.kind(),
             rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
                 | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
         ) {
             return false;
@@ -616,6 +617,15 @@ fn execute_lab_point_chain(
             });
         }
         let mask = mask.map(rusttable_masks::MaskRaster::values);
+        if let rusttable_processing::ProcessingOperationKind::ColorZones { plan } = operation.kind()
+        {
+            execute_colorzones_chunks(plan, &mut output, mask, opacity, || {
+                scope.map_or(Ok(()), |scope| {
+                    scope.check().map_err(CpuPixelpipeError::Cancelled)
+                })
+            })?;
+            continue;
+        }
         output = match operation.kind() {
             rusttable_processing::ProcessingOperationKind::ColorCorrection { config } => {
                 let input = output
@@ -728,6 +738,40 @@ fn execute_lab_point_chain(
     );
     RgbaF32Image::new(descriptor, pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+const COLORZONES_CANCELLATION_CHUNK_PIXELS: usize = 1_024;
+
+fn execute_colorzones_chunks(
+    plan: &rusttable_processing::operations::colorzones::ColorZonesPlan,
+    output: &mut [[f32; 4]],
+    mask: Option<&[f32]>,
+    opacity: f32,
+    mut poll_cancellation: impl FnMut() -> Result<(), CpuPixelpipeError>,
+) -> Result<(), CpuPixelpipeError> {
+    for (chunk_index, output_chunk) in output
+        .chunks_mut(COLORZONES_CANCELLATION_CHUNK_PIXELS)
+        .enumerate()
+    {
+        poll_cancellation()?;
+        let start = chunk_index * COLORZONES_CANCELLATION_CHUNK_PIXELS;
+        let end = start + output_chunk.len();
+        let input = output_chunk
+            .iter()
+            .copied()
+            .map(ColorZonesPixel::from_channels)
+            .collect::<Vec<_>>();
+        let mask_chunk = mask.map(|values| &values[start..end]);
+        let result = if mask_chunk.is_none() && opacity.to_bits() == 1.0_f32.to_bits() {
+            plan.execute_lab(&input)
+        } else {
+            plan.execute_lab_normal_blend(&input, mask_chunk, opacity)
+        };
+        for (destination, pixel) in output_chunk.iter_mut().zip(result) {
+            *destination = pixel.channels();
+        }
+    }
+    Ok(())
 }
 
 fn lab_point_transform_error(
@@ -1378,6 +1422,10 @@ mod tests {
         ParameterName, ParameterValue, PhotoId, Revision,
     };
     use rusttable_image::{SourceColor, SourceColorEvidence};
+    use rusttable_masks::{
+        GeometryAncestry, MaskGeometry, MaskGraphBuilder, MaskIdentity, MaskNode, MaskRaster,
+        MaskRoi, MaskSource,
+    };
     use rusttable_processing::PipelineStepIndex;
     use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
     use rusttable_processing::operations::vibrance::VibranceConfig;
@@ -1451,6 +1499,226 @@ mod tests {
             [0.4, -11.0, 1.8, 8.0],
             0,
         ));
+    }
+
+    #[test]
+    fn colorzones_executes_as_a_cpu_only_lab_point_operation_and_hashes_active_points() {
+        let input = lab_colorzones_input(2, 1);
+        let snapshot = CpuPixelpipeSnapshot::new(
+            input.clone(),
+            operation_graph(vec![colorzones_operation(
+                0xc201,
+                OperationOpacity::ONE,
+                0,
+                1,
+                0.75,
+            )]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        let changed_snapshot = CpuPixelpipeSnapshot::new(
+            input.clone(),
+            operation_graph(vec![colorzones_operation(
+                0xc201,
+                OperationOpacity::ONE,
+                0,
+                1,
+                0.750_1,
+            )]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+
+        assert!(is_lab_point_chain(&snapshot, snapshot.input()));
+        assert_ne!(snapshot.identity(), changed_snapshot.identity());
+        let output = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect("Color Zones CPU execution")
+            .image()
+            .clone();
+        assert_ne!(rgba_bits(&output), rgba_bits(&input));
+        for (source, result) in input.pixels().iter().zip(output.pixels()) {
+            assert_eq!(result.alpha().to_bits(), source.alpha().to_bits());
+        }
+    }
+
+    #[test]
+    fn colorzones_preserves_alpha_at_zero_partial_and_full_opacity() {
+        let input = lab_colorzones_input(1, 1);
+        let render = |opacity| {
+            CpuPixelpipeExecutor
+                .execute(&CpuPixelpipeSnapshot::new(
+                    input.clone(),
+                    operation_graph(vec![colorzones_operation(0xc202, opacity, 0, 1, 0.75)]),
+                    CpuPixelpipeOutputMode::FullExport,
+                ))
+                .expect("Color Zones opacity execution")
+                .image()
+                .clone()
+        };
+        let zero = render(OperationOpacity::ZERO);
+        let partial = render(OperationOpacity::new(0.5).expect("partial opacity"));
+        let full = render(OperationOpacity::ONE);
+        let source = input.pixels()[0];
+        let candidate = full.pixels()[0];
+        let blended = partial.pixels()[0];
+
+        assert_eq!(rgba_bits(&zero), rgba_bits(&input));
+        assert_eq!(
+            blended.red().to_bits(),
+            ((source.red() / 100.0 * 0.5 + candidate.red() / 100.0 * 0.5) * 100.0).to_bits()
+        );
+        assert_eq!(
+            blended.green().to_bits(),
+            ((source.green() / 128.0 * 0.5 + candidate.green() / 128.0 * 0.5) * 128.0).to_bits()
+        );
+        assert_eq!(
+            blended.blue().to_bits(),
+            ((source.blue() / 128.0 * 0.5 + candidate.blue() / 128.0 * 0.5) * 128.0).to_bits()
+        );
+        for output in [&zero, &partial, &full] {
+            assert_eq!(
+                output.pixels()[0].alpha().to_bits(),
+                source.alpha().to_bits()
+            );
+        }
+    }
+
+    #[test]
+    fn masked_colorzones_is_tile_invariant_and_preserves_spare_data() {
+        let input = lab_colorzones_input(5, 3);
+        let mask_values = (0..15)
+            .map(|index| f32::from(u16::try_from(index % 5).expect("mask step fits")) / 4.0)
+            .collect::<Vec<_>>();
+        let mask = colorzones_mask_graph(0xc203, 5, 3, mask_values);
+        let snapshot = CpuPixelpipeSnapshot::new(
+            input.clone(),
+            operation_graph(vec![colorzones_operation(
+                0xc203,
+                OperationOpacity::new(0.5).expect("partial opacity"),
+                2,
+                0,
+                0.8,
+            )]),
+            CpuPixelpipeOutputMode::FullExport,
+        )
+        .with_mask_graph(mask);
+        let full = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect("full masked Color Zones execution");
+        let tiled = CpuPixelpipeExecutor
+            .execute_tiled(&snapshot, CpuTilePlan::new(2, 2).expect("tile plan"))
+            .expect("tiled masked Color Zones execution");
+
+        assert_eq!(full.image(), tiled.image());
+        assert_eq!(full.receipt(), tiled.receipt());
+        assert_eq!(
+            rgba_bits(full.image())[0],
+            rgba_bits(&input)[0],
+            "zero mask coverage must preserve the complete first pixel"
+        );
+        assert_ne!(
+            rgba_bits(full.image())[4][..3],
+            rgba_bits(&input)[4][..3],
+            "nonzero mask coverage must route Color Zones"
+        );
+        for (source, result) in input.pixels().iter().zip(full.image().pixels()) {
+            assert_eq!(result.alpha().to_bits(), source.alpha().to_bits());
+        }
+    }
+
+    #[test]
+    fn repeated_colorzones_instances_compose_in_the_continuous_lab_chain() {
+        let input = linear_colorcontrast_input();
+        let graph = operation_graph(vec![
+            colorzones_operation(0xc204, OperationOpacity::ONE, 0, 1, 0.75),
+            vibrance_operation(0xc205, true, OperationOpacity::ONE, 30.0),
+            colorzones_operation(0xc206, OperationOpacity::ONE, 1, 0, 0.25),
+        ]);
+        let snapshot =
+            CpuPixelpipeSnapshot::new(input.clone(), graph, CpuPixelpipeOutputMode::FullExport);
+
+        assert!(is_lab_point_chain(&snapshot, snapshot.input()));
+        let actual = CpuPixelpipeExecutor
+            .execute(&snapshot)
+            .expect("composed Color Zones Lab chain")
+            .image()
+            .clone();
+        let expected = one_boundary_colorzones_chain_reference(
+            &input,
+            snapshot.graph(),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        assert_eq!(actual, expected);
+        for (source, result) in input.pixels().iter().zip(actual.pixels()) {
+            assert_eq!(result.alpha().to_bits(), source.alpha().to_bits());
+        }
+    }
+
+    #[test]
+    fn cancelled_colorzones_chain_is_terminal_before_publication() {
+        let snapshot = CpuPixelpipeSnapshot::new(
+            lab_colorzones_input(2, 1),
+            operation_graph(vec![colorzones_operation(
+                0xc207,
+                OperationOpacity::ONE,
+                0,
+                1,
+                0.75,
+            )]),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(11).expect("nonzero generation"));
+        scope.cancel(CancellationReason::EditChanged);
+
+        let error = CpuPixelpipeExecutor
+            .execute_with_cancellation(&snapshot, &scope)
+            .expect_err("cancelled Color Zones chain");
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("Color Zones cancellation must remain terminal at the pixelpipe boundary");
+        };
+        assert_eq!(error.reason(), CancellationReason::EditChanged);
+    }
+
+    #[test]
+    fn mid_execution_colorzones_cancellation_does_not_publish_a_partial_raster() {
+        let operation = ProcessingOperation::compile(&colorzones_operation(
+            0xc208,
+            OperationOpacity::ONE,
+            0,
+            1,
+            0.75,
+        ))
+        .expect("compiled Color Zones operation");
+        let rusttable_processing::ProcessingOperationKind::ColorZones { plan } = operation.kind()
+        else {
+            panic!("compiled Color Zones plan");
+        };
+        let source = [40.0, 8.0, -4.0, f32::from_bits(0x7fc1_2345)];
+        let mut raster = vec![source; 2 * COLORZONES_CANCELLATION_CHUNK_PIXELS];
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(12).expect("nonzero generation"));
+        let mut polls = 0;
+
+        let error = execute_colorzones_chunks(plan, &mut raster, None, 1.0, || {
+            polls += 1;
+            if polls == 2 {
+                scope.cancel(CancellationReason::EditChanged);
+            }
+            scope.check().map_err(CpuPixelpipeError::Cancelled)
+        })
+        .expect_err("second Color Zones chunk must cancel before publication");
+
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("mid-execution cancellation must remain terminal");
+        };
+        assert_eq!(error.reason(), CancellationReason::EditChanged);
+        assert_eq!(polls, 2);
+        assert_ne!(raster[0][..3], source[..3]);
+        assert_eq!(
+            raster[COLORZONES_CANCELLATION_CHUNK_PIXELS].map(f32::to_bits),
+            source.map(f32::to_bits),
+            "the unprocessed chunk must remain private after cancellation"
+        );
     }
 
     #[test]
@@ -1780,6 +2048,68 @@ mod tests {
         .expect("operation")
     }
 
+    fn colorzones_operation(
+        operation_id: u128,
+        opacity: OperationOpacity,
+        channel: i64,
+        mode: i64,
+        first_lightness_y: f64,
+    ) -> Operation {
+        let scalar = |value| {
+            ParameterValue::Scalar(FiniteF64::new(value).expect("finite Color Zones parameter"))
+        };
+        let [first_x, last_x] = if channel == 2 {
+            [0.25, 0.75]
+        } else {
+            [0.0, 1.0]
+        };
+        Operation::new_with_opacity(
+            OperationId::new(operation_id).expect("operation ID"),
+            OperationKey::new("rusttable.colorzones").expect("operation key"),
+            true,
+            opacity,
+            [
+                ("channel", ParameterValue::Integer(channel)),
+                ("mode", ParameterValue::Integer(mode)),
+                ("curve_0_num_nodes", ParameterValue::Integer(2)),
+                ("curve_0_node_0_x", scalar(first_x)),
+                ("curve_0_node_0_y", scalar(first_lightness_y)),
+                ("curve_0_node_1_x", scalar(last_x)),
+                ("curve_0_node_1_y", scalar(0.75)),
+            ]
+            .into_iter()
+            .map(|(name, value)| (ParameterName::new(name).expect("parameter name"), value)),
+        )
+        .expect("Color Zones operation")
+    }
+
+    fn colorzones_mask_graph(
+        operation_id: u128,
+        width: u32,
+        height: u32,
+        values: Vec<f32>,
+    ) -> rusttable_masks::MaskGraph {
+        let identity = MaskIdentity::new(8, 13, 21, 1);
+        let node = MaskNode::new(
+            identity,
+            "Color Zones CPU mask",
+            MaskSource::Raster,
+            MaskGeometry::new(
+                GeometryAncestry::identity(),
+                MaskRoi::full(width, height),
+                true,
+            ),
+            Some(MaskRaster::new(width, height, values).expect("Color Zones mask raster")),
+            [],
+        )
+        .expect("Color Zones mask node");
+        MaskGraphBuilder::new()
+            .add_mask(node)
+            .add_edge(identity, operation_id, 1)
+            .build()
+            .expect("Color Zones mask graph")
+    }
+
     fn colorcontrast_operation(
         operation_id: u128,
         enabled: bool,
@@ -1837,6 +2167,27 @@ mod tests {
             ],
         )
         .expect("linear Color Contrast input")
+    }
+
+    fn lab_colorzones_input(width: u32, height: u32) -> RgbaF32Image {
+        let dimensions = RasterDimensions::new(width, height).expect("dimensions");
+        let pixels = (0..dimensions.pixel_count())
+            .map(|index| {
+                let index = u16::try_from(index).expect("Color Zones test index fits u16");
+                let value = f32::from(index);
+                RgbaF32Pixel::new(
+                    35.0 + f32::from(index % 5) * 10.0,
+                    6.0 + value,
+                    -4.0 + f32::from(index % 7),
+                    0.125 + f32::from(index % 4) * 0.2,
+                )
+            })
+            .collect();
+        RgbaF32Image::new(
+            RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LabD50),
+            pixels,
+        )
+        .expect("Color Zones Lab input")
     }
 
     fn assert_inert_lab_identity(operation: &Operation) {
@@ -1927,6 +2278,84 @@ mod tests {
             .iter()
             .map(|pixel| {
                 let channels = pixel.channels();
+                let rgb = from_lab
+                    .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                    .expect("Lab-to-RGB reference");
+                LinearRgb::new(
+                    FiniteF32::new(rgb[0]).expect("finite reference red"),
+                    FiniteF32::new(rgb[1]).expect("finite reference green"),
+                    FiniteF32::new(rgb[2]).expect("finite reference blue"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let evaluated = WorkingRgbImage::new_with_frame(
+            input.descriptor().dimensions(),
+            pixels,
+            working.frame(),
+        )
+        .expect("reference working image");
+        output_from_working(mode, input, &evaluated).expect("reference output")
+    }
+
+    fn one_boundary_colorzones_chain_reference(
+        input: &RgbaF32Image,
+        graph: &rusttable_processing::CompiledOperationGraph,
+        mode: CpuPixelpipeOutputMode,
+    ) -> RgbaF32Image {
+        let working = to_linear_working(input).expect("Color Zones chain ingress");
+        let to_lab = color_transform(
+            working.frame().encoding(),
+            rusttable_color::ColorEncoding::LabD50,
+        )
+        .expect("RGB-to-Lab plan");
+        let from_lab = color_transform(
+            rusttable_color::ColorEncoding::LabD50,
+            working.frame().encoding(),
+        )
+        .expect("Lab-to-RGB plan");
+        let mut lab = working
+            .pixels()
+            .zip(input.pixels())
+            .map(|(pixel, source)| {
+                let channels = to_lab
+                    .apply_rgb(
+                        [pixel.red().get(), pixel.green().get(), pixel.blue().get()],
+                        || false,
+                    )
+                    .expect("RGB-to-Lab reference");
+                [channels[0], channels[1], channels[2], source.alpha()]
+            })
+            .collect::<Vec<_>>();
+        for node in graph.nodes() {
+            lab = match node.operation().kind() {
+                rusttable_processing::ProcessingOperationKind::ColorZones { plan } => plan
+                    .execute_lab(
+                        &lab.iter()
+                            .copied()
+                            .map(ColorZonesPixel::from_channels)
+                            .collect::<Vec<_>>(),
+                    )
+                    .into_iter()
+                    .map(ColorZonesPixel::channels)
+                    .collect(),
+                rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
+                    VibrancePlan::new(*config)
+                        .execute_lab(
+                            &lab.iter()
+                                .copied()
+                                .map(VibrancePixel::from_channels)
+                                .collect::<Vec<_>>(),
+                        )
+                        .into_iter()
+                        .map(VibrancePixel::channels)
+                        .collect()
+                }
+                _ => panic!("reference graph contains a non-Lab-point operation"),
+            };
+        }
+        let pixels = lab
+            .iter()
+            .map(|channels| {
                 let rgb = from_lab
                     .apply_rgb([channels[0], channels[1], channels[2]], || false)
                     .expect("Lab-to-RGB reference");

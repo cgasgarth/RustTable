@@ -45,8 +45,14 @@ enum Task {
     /// Run the complete local merge-readiness gate.
     Check {
         /// Run independent non-Cargo checks alongside the shared Cargo pipeline.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "changed")]
         parallel: bool,
+        /// Check changed packages and their reverse workspace dependencies.
+        #[arg(long, conflicts_with = "parallel")]
+        changed: bool,
+        /// Compare committed changes with REF (defaults to origin/main).
+        #[arg(long, value_name = "REF", requires = "changed")]
+        base: Option<String>,
     },
     /// Validate color-space and transform contracts.
     Color {
@@ -151,7 +157,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let root = repository_root();
     let result = match cli.command {
-        Task::Check { parallel } => check::run(&root, parallel),
+        Task::Check {
+            parallel,
+            changed,
+            base,
+        } => check::run(&root, parallel, changed, base.as_deref()),
         Task::Color { command } => color::run(&root, &command),
         Task::Codegen { command } => codegen::run(&root, command),
         Task::Fixtures { command } => fixtures::run(&root, command),
@@ -234,17 +244,76 @@ fn process_failure_excerpt(output: &Output) -> String {
     if text.is_empty() {
         return "(no process output)".to_owned();
     }
-    let mut excerpt = text.chars().take(MAX_CHARS).collect::<String>();
-    if text.chars().count() > MAX_CHARS {
-        excerpt.push_str("\n(output truncated)");
+    bounded_failure_excerpt(&text, MAX_CHARS)
+}
+
+fn bounded_failure_excerpt(text: &str, max_chars: usize) -> String {
+    let count = text.chars().count();
+    if count <= max_chars {
+        return text.to_owned();
     }
-    excerpt
+    let head_chars = max_chars / 2;
+    let tail_chars = max_chars - head_chars;
+    let head = text.chars().take(head_chars).collect::<String>();
+    let tail = text
+        .chars()
+        .rev()
+        .take(tail_chars)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<String>();
+    format!("{head}\n... output truncated ...\n{tail}")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use clap::CommandFactory as _;
+
+    #[test]
+    fn bounded_failure_output_keeps_actionable_tail() {
+        let excerpt = bounded_failure_excerpt("0123456789", 6);
+        assert_eq!(excerpt, "012\n... output truncated ...\n789");
+        assert_eq!(bounded_failure_excerpt("short", 6), "short");
+    }
+
+    #[test]
+    fn changed_check_cli_accepts_default_and_explicit_base() {
+        let default = Cli::try_parse_from(["cargo xtask", "check", "--changed"])
+            .expect("changed check should parse");
+        assert!(matches!(
+            default.command,
+            Task::Check {
+                changed: true,
+                base: None,
+                parallel: false
+            }
+        ));
+
+        let explicit = Cli::try_parse_from([
+            "cargo xtask",
+            "check",
+            "--changed",
+            "--base",
+            "upstream/trunk",
+        ])
+        .expect("changed check with base should parse");
+        assert!(matches!(
+            explicit.command,
+            Task::Check {
+                changed: true,
+                base: Some(ref base),
+                parallel: false
+            } if base == "upstream/trunk"
+        ));
+    }
+
+    #[test]
+    fn changed_check_cli_rejects_parallel_and_unscoped_base() {
+        assert!(Cli::try_parse_from(["cargo xtask", "check", "--changed", "--parallel"]).is_err());
+        assert!(Cli::try_parse_from(["cargo xtask", "check", "--base", "main"]).is_err());
+    }
 
     #[test]
     fn public_command_surface_is_small_and_product_focused() {

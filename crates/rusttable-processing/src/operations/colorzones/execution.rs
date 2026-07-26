@@ -1,14 +1,16 @@
 //! Scalar Color Zones pixel execution ported from `src/iop/colorzones.c`.
 //!
 //! This module implements the native CPU `process_v1`, `process_v3`, and
-//! `process` branches. It deliberately makes no GPU, display-mask, blend,
-//! descriptor, registry, or UI claim.
+//! `process` branches and the authored default Lab blend. It deliberately makes
+//! no display-mask, picker, histogram, preset, GPU, or UI claim.
 
 #![allow(
     clippy::many_single_char_names,
     clippy::suboptimal_flops,
     reason = "the source-shaped Lab/LCh equations retain Darktable's names and operation order"
 )]
+
+use std::hash::{Hash, Hasher};
 
 use super::curve::{
     COLORZONES_LUT_RESOLUTION, ColorZonesCompileError, ColorZonesLuts, compile_luts, lookup,
@@ -63,12 +65,26 @@ impl ColorZonesPixel {
 /// Immutable Color Zones CPU plan with committed native lookup tables.
 ///
 /// Construction follows the native rebuild path from checked parameters. The
-/// stateful `piece->data` cache lifecycle remains outside this standalone
-/// execution slice until Color Zones is routed through the operation registry.
-#[derive(Debug, Clone, PartialEq)]
+/// compiled plan is carried unchanged through registry preparation, canonical
+/// evaluation, pixelpipe execution, and snapshot identity.
+#[derive(Debug, Clone)]
 pub struct ColorZonesPlan {
     config: ColorZonesConfig,
     luts: ColorZonesLuts,
+}
+
+impl PartialEq for ColorZonesPlan {
+    fn eq(&self, other: &Self) -> bool {
+        self.config == other.config
+    }
+}
+
+impl Eq for ColorZonesPlan {}
+
+impl Hash for ColorZonesPlan {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.config.hash(state);
+    }
 }
 
 impl ColorZonesPlan {
@@ -111,6 +127,44 @@ impl ColorZonesPlan {
             .map(|pixel| match self.config.mode() {
                 ColorZonesMode::Smooth => process_smooth(pixel, self.config.channel(), &luts),
                 ColorZonesMode::Strong => process_strong(pixel, self.config.channel(), &luts),
+            })
+            .collect()
+    }
+
+    /// Applies Darktable's default unbounded Lab normal blend after Color Zones.
+    ///
+    /// Imported Darktable rows remain outside this authored-operation seam while
+    /// their arbitrary blend modes, blend-if state, and masks are still opaque.
+    #[must_use]
+    pub fn execute_lab_normal_blend(
+        &self,
+        input: &[ColorZonesPixel],
+        mask: Option<&[f32]>,
+        opacity: f32,
+    ) -> Vec<ColorZonesPixel> {
+        debug_assert!(mask.is_none_or(|values| values.len() == input.len()));
+        let candidates = self.execute_lab(input);
+        let inverse_scale = [1.0_f32 / 100.0, 1.0_f32 / 128.0, 1.0_f32 / 128.0];
+        let scale = [100.0_f32, 128.0_f32, 128.0_f32];
+
+        input
+            .iter()
+            .zip(candidates)
+            .enumerate()
+            .map(|(index, (source, candidate))| {
+                let source = source.channels();
+                let candidate = candidate.channels();
+                let coverage = mask.map_or(opacity, |values| values[index] * opacity);
+                let channels = std::array::from_fn(|channel| {
+                    if channel == 3 {
+                        source[channel]
+                    } else {
+                        let source = source[channel] * inverse_scale[channel];
+                        let candidate = candidate[channel] * inverse_scale[channel];
+                        (source * (1.0 - coverage) + candidate * coverage) * scale[channel]
+                    }
+                });
+                ColorZonesPixel::from_channels(channels)
             })
             .collect()
     }

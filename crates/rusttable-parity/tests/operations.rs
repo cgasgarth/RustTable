@@ -109,6 +109,8 @@ fn operation_scan_is_deterministic_and_uses_only_explicit_evidence() {
     assert!(zeta.default_enabled);
     assert_eq!(zeta.module_version, 2);
     assert_eq!(zeta.parameter_versions.len(), 2);
+    assert_eq!(zeta.parameter_versions[1].decoder, "fixture.v2.decode");
+    assert!(!zeta.parameter_versions[1].opaque_blocking);
     assert_eq!(zeta.migrations.len(), 1);
     assert_eq!(zeta.opencl_programs, vec!["basic"]);
     assert_eq!(zeta.opencl_kernels, vec!["basic"]);

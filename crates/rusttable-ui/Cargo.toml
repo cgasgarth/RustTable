@@ -19,6 +19,9 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 
+[build-dependencies]
+glib-build-tools.workspace = true
+
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 objc2.workspace = true
 objc2-app-kit.workspace = true

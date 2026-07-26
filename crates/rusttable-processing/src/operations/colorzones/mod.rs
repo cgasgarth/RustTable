@@ -19,7 +19,15 @@ mod execution;
 
 use std::fmt;
 
+use rusttable_color::ColorEncoding;
+
 use crate::FiniteF32;
+use crate::descriptor::{
+    AlphaPolicy, CapabilityContract, DescriptorId, ImagePredicate, InputOutputContract,
+    MaskBlendContract, MigrationContract, NonFinitePolicy, OperationDescriptor, OperationFlags,
+    ParameterDefault, ParameterDescriptor, ParameterKind, ParameterRole, RoiKind, TilingContract,
+    UiHint,
+};
 
 pub use codec::{
     COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_LEGACY_BANDS,
@@ -32,6 +40,9 @@ pub use codec::{
 };
 pub use curve::{COLORZONES_LUT_RESOLUTION, ColorZonesCompileError};
 pub use execution::{ColorZonesPixel, ColorZonesPlan};
+
+/// `init()` leaves Color Zones disabled in a newly constructed native module.
+pub const COLORZONES_DEFAULT_ENABLED: bool = false;
 
 /// Native selection channel stored in Color Zones history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -394,3 +405,244 @@ impl fmt::Display for ColorZonesParameterError {
 }
 
 impl std::error::Error for ColorZonesParameterError {}
+
+/// Canonical editable Color Zones v5 descriptor.
+///
+/// Native Color Zones is disabled by default. The registry therefore exposes
+/// it as an optional, non-mandatory operation while preserving the source
+/// style, blending, and tiling capabilities.
+///
+/// # Panics
+///
+/// Panics only if the checked-in Color Zones descriptor identity or native
+/// fixed-size limits stop fitting their documented representations.
+#[must_use]
+pub fn colorzones_descriptor() -> OperationDescriptor {
+    let defaults = ColorZonesParametersV5::defaults();
+    let mut parameters = vec![enum_parameter(
+        "channel",
+        &["lightness", "chroma", "hue"],
+        "hue",
+        1,
+        "selection-channel",
+    )];
+    for curve in 0..COLORZONES_CHANNELS {
+        for node in 0..COLORZONES_MAX_NODES {
+            parameters.push(scalar_parameter(
+                &crate::operation::colorzones::point_name(curve, node, 'x'),
+                0.0,
+                1.0,
+                f64::from(defaults.curves[curve][node].x),
+                4,
+                None,
+                "curve-point-x",
+            ));
+            parameters.push(scalar_parameter(
+                &crate::operation::colorzones::point_name(curve, node, 'y'),
+                0.0,
+                1.0,
+                f64::from(defaults.curves[curve][node].y),
+                4,
+                None,
+                "curve-point-y",
+            ));
+        }
+    }
+    for curve in 0..COLORZONES_CHANNELS {
+        parameters.push(integer_parameter(
+            &crate::operation::colorzones::curve_count_name(curve),
+            1,
+            i64::try_from(COLORZONES_MAX_NODES).expect("Color Zones node limit fits i64"),
+            i64::from(defaults.curve_num_nodes[curve]),
+            4,
+            "curve-node-count",
+        ));
+    }
+    for curve in 0..COLORZONES_CHANNELS {
+        parameters.push(enum_parameter(
+            &crate::operation::colorzones::curve_type_name(curve),
+            &["cubic", "catmull-rom", "monotone-hermite"],
+            "catmull-rom",
+            4,
+            "curve-interpolation",
+        ));
+    }
+    parameters.push(scalar_parameter(
+        "strength",
+        -200.0,
+        200.0,
+        f64::from(defaults.strength),
+        3,
+        Some("percent"),
+        "slider",
+    ));
+    parameters.push(enum_parameter(
+        "mode",
+        &["smooth", "strong"],
+        "smooth",
+        4,
+        "processing-mode",
+    ));
+    parameters.push(enum_parameter(
+        "splines_version",
+        &["v1", "v2"],
+        "v2",
+        COLORZONES_SCHEMA_VERSION,
+        "spline-version",
+    ));
+
+    OperationDescriptor {
+        id: DescriptorId::new(
+            COLORZONES_COMPATIBILITY_ID,
+            COLORZONES_RUST_ID,
+            COLORZONES_SCHEMA_VERSION,
+            COLORZONES_SCHEMA_VERSION,
+            1,
+        )
+        .expect("static Color Zones ID"),
+        parameters,
+        flags: OperationFlags::MULTI_INSTANCE
+            .insert(OperationFlags::STYLE_ELIGIBLE)
+            .insert(OperationFlags::HISTORY_VISIBLE)
+            .insert(OperationFlags::TILEABLE)
+            .insert(OperationFlags::DETERMINISTIC_CPU)
+            .insert(OperationFlags::COLOR)
+            .insert(OperationFlags::MASKS)
+            .insert(OperationFlags::BLENDING),
+        stage: "display-referred-lab-d50".to_owned(),
+        roi: RoiKind::Identity,
+        tiling: TilingContract {
+            overlap_pixels: 0,
+            alignment_pixels: 1,
+            minimum_tile_edge: 1,
+            preferred_tile_edge: 256,
+            temporary_multiplier_milli: 1000,
+            input_multiplier_milli: 1000,
+            output_multiplier_milli: 1000,
+        },
+        capability: CapabilityContract {
+            cpu_supported: true,
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: Vec::new(),
+            deterministic_cpu: true,
+            deterministic_gpu: false,
+            fallback_to_cpu: true,
+            precision: "f32 Lab D50 curve LUT with native Smooth/Strong branches".to_owned(),
+            modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
+        },
+        io: lab_io(),
+        mask_blend: MaskBlendContract {
+            consumes_mask: true,
+            publishes_mask: false,
+            blend_if: true,
+            geometry: false,
+            analysis: false,
+        },
+        migration: MigrationContract {
+            source_versions: (1..=COLORZONES_SCHEMA_VERSION).collect(),
+            target_version: COLORZONES_SCHEMA_VERSION,
+            opaque_unknown_allowed: true,
+        },
+        ui: Some(UiHint {
+            label_key: "operation.colorzones".to_owned(),
+            group_key: "group.grading".to_owned(),
+            control: "colorzones".to_owned(),
+        }),
+    }
+}
+
+fn enum_parameter(
+    id: &str,
+    tags: &[&str],
+    default: &str,
+    introduced_version: u16,
+    ui_hint: &str,
+) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Enum {
+            tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
+        },
+        default: ParameterDefault::Enum(default.to_owned()),
+        required: false,
+        introduced_version,
+        removed_version: None,
+        unit: None,
+        step: None,
+        precision: 0,
+        role: ParameterRole::Color,
+        cache_affecting: true,
+        animatable: false,
+        ui_hint: Some(ui_hint.to_owned()),
+        condition: None,
+    }
+}
+
+fn integer_parameter(
+    id: &str,
+    minimum: i64,
+    maximum: i64,
+    default: i64,
+    introduced_version: u16,
+    ui_hint: &str,
+) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Integer { minimum, maximum },
+        default: ParameterDefault::Integer(default),
+        required: false,
+        introduced_version,
+        removed_version: None,
+        unit: None,
+        step: Some(1.0),
+        precision: 0,
+        role: ParameterRole::Color,
+        cache_affecting: true,
+        animatable: false,
+        ui_hint: Some(ui_hint.to_owned()),
+        condition: None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scalar_parameter(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    default: f64,
+    introduced_version: u16,
+    unit: Option<&str>,
+    ui_hint: &str,
+) -> ParameterDescriptor {
+    ParameterDescriptor {
+        id: id.to_owned(),
+        kind: ParameterKind::Scalar { minimum, maximum },
+        default: ParameterDefault::Scalar(default),
+        required: false,
+        introduced_version,
+        removed_version: None,
+        unit: unit.map(str::to_owned),
+        step: Some(0.001),
+        precision: 3,
+        role: ParameterRole::Color,
+        cache_affecting: true,
+        animatable: true,
+        ui_hint: Some(ui_hint.to_owned()),
+        condition: None,
+    }
+}
+
+fn lab_io() -> InputOutputContract {
+    let image = ImagePredicate {
+        channels: 4,
+        alpha: AlphaPolicy::Preserve,
+        encodings: vec![ColorEncoding::LabD50],
+        nonfinite: NonFinitePolicy::Reject,
+    };
+    InputOutputContract {
+        input: image.clone(),
+        output: image,
+        derives_output_encoding: false,
+    }
+}

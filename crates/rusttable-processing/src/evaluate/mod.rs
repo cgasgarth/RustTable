@@ -36,8 +36,8 @@ pub use lab_boundary::{
     evaluate_bilateral_shadhi_with_cancellation,
 };
 use lab_boundary::{
-    apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection, apply_defringe,
-    apply_relight, apply_shadhi_with_cancellation, apply_vibrance,
+    apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection, apply_colorzones,
+    apply_defringe, apply_relight, apply_shadhi_with_cancellation, apply_vibrance,
 };
 use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
@@ -721,6 +721,13 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
         ProcessingOperationKind::Vibrance { config } => {
             let candidate =
                 apply_vibrance(*config, pixels, *frame, mask_route.native_values(), opacity)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
+        ProcessingOperationKind::ColorZones { plan } => {
+            let candidate =
+                apply_colorzones(plan, pixels, *frame, mask_route.native_values(), opacity)
                     .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
             pixels.copy_from_slice(&candidate);
             Ok(())

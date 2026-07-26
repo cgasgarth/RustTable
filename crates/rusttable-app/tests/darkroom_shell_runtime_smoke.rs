@@ -648,6 +648,7 @@ fn assert_right_rail_geometry(root: &gtk4::Widget) {
     assert!(histogram_y < groups_y && groups_y < search_y && search_y < modules_y);
     for id in [
         "darkroom-left-panel-toggle",
+        "darkroom-right-panel-toggle",
         "group-active",
         "group-favorites",
     ] {

@@ -279,3 +279,35 @@ fn liquify_registry_exposes_geometry_and_explicit_cpu_fallback() {
             .is_some_and(|capability| capability.available)
     );
 }
+
+#[test]
+fn colorzones_registry_is_cpu_only_and_source_ordered() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.colorzones")
+        .expect("Color Zones registry seam");
+    assert_eq!(definition.descriptor().id.compatibility_name, "colorzones");
+    assert_eq!(definition.descriptor().id.schema_version, 5);
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_none());
+    assert_eq!(
+        definition
+            .migrations()
+            .iter()
+            .map(|migration| (migration.from_version(), migration.to_version()))
+            .collect::<Vec<_>>(),
+        [(1, 5), (2, 5), (3, 5), (4, 5)]
+    );
+
+    let order = registry
+        .definitions_in_declaration_order()
+        .into_iter()
+        .map(|definition| definition.descriptor().id.compatibility_name.as_str())
+        .collect::<Vec<_>>();
+    let colorzones = order
+        .iter()
+        .position(|name| *name == "colorzones")
+        .expect("Color Zones order entry");
+    assert_eq!(order[colorzones - 1], "vibrance");
+    assert!(order[colorzones + 1..].contains(&"bloom"));
+}

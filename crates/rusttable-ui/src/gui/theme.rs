@@ -3,8 +3,12 @@
 //! The CSS template is deliberately small and local to the shell. Its colors
 //! are substituted from [`super::DARKTABLE_COLORS`] at runtime, keeping the
 //! palette in the display-free specification while allowing GTK to consume
-//! native CSS. The API is usable by an application before constructing or
-//! presenting a [`super::GtkShell`].
+//! native CSS. Source-selected Adwaita symbols are embedded in a `GResource` so
+//! the shell does not depend on the host icon theme providing them. The API is
+//! usable by an application before constructing or presenting a
+//! [`super::GtkShell`].
+
+use std::sync::Once;
 
 use gtk4::prelude::*;
 
@@ -14,6 +18,8 @@ use super::{
 };
 
 const DARKTABLE_THEME_TEMPLATE: &str = include_str!("theme.css");
+const ICON_RESOURCE_PATH: &str = "/com/cgasgarth/rusttable/icons";
+static ICON_RESOURCES: Once = Once::new();
 const BUTTON_BORDER: ColorToken = ColorToken::new("button_border", [0x82, 0x82, 0x82, 0xff]);
 const BUTTON_HOVER_OVERLAY: ColorToken =
     ColorToken::new("button_hover_bg", [0xab, 0xab, 0xab, 0xff]);
@@ -101,6 +107,11 @@ impl DarktableTheme {
 
     /// Installs the theme for a GTK display at application priority.
     pub fn install(display: &gtk4::gdk::Display) {
+        ICON_RESOURCES.call_once(|| {
+            gtk4::gio::resources_register_include!("rusttable-ui.gresource")
+                .expect("embedded RustTable icons must be a valid GResource");
+        });
+        gtk4::IconTheme::for_display(display).add_resource_path(ICON_RESOURCE_PATH);
         let provider = Self::provider();
         gtk4::style_context_add_provider_for_display(
             display,

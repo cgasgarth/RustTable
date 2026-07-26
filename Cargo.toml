@@ -65,6 +65,7 @@ exr = { version = "=1.74.2", default-features = false }
 pdf-writer = "=0.15.0"
 futures = "=0.3.32"
 gtk4 = { version = "=0.11.4", features = ["v4_10"] }
+glib-build-tools = "=0.22.8"
 half = "=2.7.1"
 fluent-bundle = "=0.16.0"
 fluent-syntax = "=0.12.0"
