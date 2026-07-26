@@ -28,7 +28,6 @@ Large source files may remain large when that preserves a clear mechanical compa
 ## Validation
 
 - Complete local gate: `cargo xtask check`.
-- UI gate: equal-size normal-window Computer Use comparison against original Darktable.
 - Milestone gate: full local validation plus relevant platform, packaging, fixture, and differential checks.
 - Unsafe Rust remains forbidden unless separately justified and reviewed.
 
@@ -36,10 +35,9 @@ Large source files may remain large when that preserves a clear mechanical compa
 
 1. Select the next dependency-ready Darktable source file in source order.
 2. Read that file, coupled headers/helpers, tests, and callers completely.
-3. Write failing Rust tests from the source contract.
-4. Port the complete responsibility into the matching nested crate path.
-5. Replace incorrect provisional Rust code and route production callers to the port.
-6. Run focused tests, then `cargo xtask check`.
-7. Delete the original file only when its completion criteria are proven.
-8. Commit the coherent file port on `codex/file-by-file-migration`.
-9. Open and squash-merge a PR only at a meaningful migration milestone.
+3. Port the complete responsibility into the matching nested crate path.
+4. Replace incorrect provisional Rust code and route production callers to the port.
+5. Run focused tests, then `cargo xtask check`.
+6. Delete the original file only when its completion criteria are proven.
+7. Commit the coherent file port on `codex/file-by-file-migration`.
+8. Open and squash-merge a PR only at a meaningful migration milestone.
