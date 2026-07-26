@@ -11,7 +11,7 @@ use crate::presentation::{
     PreviewDimensions, Rgba8PreviewMetadata, SelectedPreviewState,
 };
 use crate::{HistogramData, ViewportGeneration};
-use gtk4::prelude::ListModelExt;
+use gtk4::prelude::{Cast, ListModelExt, WidgetExt};
 use rusttable_core::{EditId, PhotoId, Revision};
 
 fn id(value: u128) -> PhotoId {
@@ -103,7 +103,7 @@ fn grid_model_preserves_controller_order_across_filtered_refreshes() {
     let shell = GtkShell::new(&application);
     let source = workspace_with_photos(&[1, 2, 3]);
 
-    shell.set_lighttable_workspace_filtered(&source, [3, 1]);
+    shell.set_lighttable_workspace_filtered(&source, [id(3), id(1)]);
 
     let selection = shell.lighttable.model().expect("grid selection model");
     let no_selection = selection

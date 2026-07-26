@@ -21,9 +21,11 @@ use rusttable_processing::operations::velvia::{
 use rusttable_processing::operations::vibrance::{
     VIBRANCE_V2_PARAMETER_BYTES, VibranceConfig, VibranceHistory,
 };
+use rusttable_processing::{COLORZONES_V5_PARAMETER_BYTES, ColorZonesConfig, ColorZonesHistory};
 
 const COLOR_CONTRAST_COMPATIBILITY_NAME: &str = "colorcontrast";
 const COLORCORRECTION_COMPATIBILITY_NAME: &str = "colorcorrection";
+const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
 const VIBRANCE_COMPATIBILITY_NAME: &str = "vibrance";
 
@@ -127,6 +129,25 @@ pub struct DecodedColorCorrectionHistoryStep {
     pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
+/// One decoded Color Zones core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedColorZonesHistoryStep {
+    /// The exact original row, including opaque blend and multi-instance metadata.
+    pub source: CompatHistoryStep,
+    /// Checked current v5 core parameters.
+    pub config: ColorZonesConfig,
+    /// Native enabled state retained without creating an executable operation.
+    pub enabled: bool,
+    /// Original Darktable parameter version.
+    pub source_version: u16,
+    /// Canonical current-version parameter bytes.
+    pub canonical_parameters: [u8; COLORZONES_V5_PARAMETER_BYTES],
+    /// Whether the source payload required a pinned v1-v4 migration.
+    pub migrated: bool,
+    /// Explicit reason no executable imported operation was emitted.
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
 /// Typed-but-pending result or a byte-preserving unsupported row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarktableHistoryStepDecode {
@@ -136,6 +157,9 @@ pub enum DarktableHistoryStepDecode {
     /// Color Correction v1 core parameters are decoded, while blend/mask
     /// semantics remain explicitly non-executable.
     ColorCorrectionPendingBlend(DecodedColorCorrectionHistoryStep),
+    /// Color Zones core parameters are decoded and migrated to canonical v5,
+    /// while blend/mask semantics remain explicitly non-executable.
+    ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
     /// Velvia core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     VelviaPendingBlend(DecodedVelviaHistoryStep),
@@ -162,6 +186,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
     match step.operation.name.as_deref() {
         Some(COLOR_CONTRAST_COMPATIBILITY_NAME) => decode_colorcontrast_history_step(step),
         Some(COLORCORRECTION_COMPATIBILITY_NAME) => decode_colorcorrection_history_step(step),
+        Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
         _ => preserved(
@@ -233,6 +258,66 @@ fn decode_colorcorrection_history_step(step: &CompatHistoryStep) -> DarktableHis
             ),
         },
     })
+}
+
+fn decode_colorzones_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Color Zones") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match ColorZonesHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Zones v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let current = match history.current() {
+        Ok(current) => current,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Color Zones v{source_version} parameters remain opaque: {error}"
+                ),
+            );
+        }
+    };
+    let canonical_parameters = current.to_bytes();
+    let config = match ColorZonesConfig::try_from(&current) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Zones v{source_version} parameters have invalid active semantics: {error}"
+                ),
+            );
+        }
+    };
+
+    DarktableHistoryStepDecode::ColorZonesPendingBlend(Box::new(DecodedColorZonesHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters,
+        migrated: source_version != 5,
+        execution_blocker: DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+            detail: format!(
+                "Darktable Color Zones core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+                step.blend_version
+            ),
+        },
+    }))
 }
 
 fn decode_colorcontrast_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {

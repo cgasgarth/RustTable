@@ -499,6 +499,8 @@ fn clear_children(container: &impl IsA<gtk4::Widget>) {
 mod tests {
     use super::{FilmstripState, HistogramSurfaceState, HistogramView};
     use crate::viewport_presentation::ViewportGeneration;
+    #[cfg(target_os = "linux")]
+    use gtk4::prelude::WidgetExt;
     use rusttable_core::PhotoId;
 
     fn id(value: u128) -> PhotoId {

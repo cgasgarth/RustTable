@@ -4284,6 +4284,7 @@ dependencies = [
  "rusttable-metadata",
  "rusttable-processing",
  "rusttable-sqlite-native",
+ "same-file",
  "sha2",
  "tracing",
 ]
