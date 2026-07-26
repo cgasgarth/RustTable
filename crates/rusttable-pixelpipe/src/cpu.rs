@@ -1502,7 +1502,7 @@ mod tests {
     }
 
     #[test]
-    fn colorzones_executes_as_a_cpu_only_lab_point_operation_and_hashes_active_points() {
+    fn colorzones_canonical_cpu_path_hashes_active_points_and_preserves_alpha() {
         let input = lab_colorzones_input(2, 1);
         let snapshot = CpuPixelpipeSnapshot::new(
             input.clone(),

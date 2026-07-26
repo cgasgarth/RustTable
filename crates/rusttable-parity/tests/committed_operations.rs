@@ -160,7 +160,7 @@ fn colorzones_contract_matches_the_lossless_cpu_port() {
 }
 
 #[test]
-fn colorzones_capability_closure_is_cpu_only() {
+fn colorzones_capability_closure_includes_cpu_and_gpu() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../architecture/operation-capabilities.json");
     let source = fs::read_to_string(&path).expect("read operation capability closure");
@@ -181,6 +181,6 @@ fn colorzones_capability_closure_is_cpu_only() {
         assert_eq!(entry["rust_id"], "rusttable.colorzones");
         assert_eq!(entry["status"], "Implemented");
         assert_eq!(entry["cpu_supported"], true);
-        assert_eq!(entry["gpu_supported"], false);
+        assert_eq!(entry["gpu_supported"], true);
     }
 }

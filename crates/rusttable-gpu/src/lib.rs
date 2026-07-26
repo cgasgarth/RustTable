@@ -4,6 +4,7 @@
 
 mod bilateral;
 mod cache;
+mod colorzones;
 mod contracts;
 mod dispatch;
 mod grain;
@@ -28,6 +29,11 @@ pub use bilateral::{
     BilateralGridError, BilateralGridRequest, BilateralGridResult, BilateralSlice,
 };
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
+pub use colorzones::{
+    COLORZONES_LUT_RESOLUTION, ColorZonesError, ColorZonesLutResource, ColorZonesMode,
+    ColorZonesRequest, ColorZonesRequestIdentity, ColorZonesResult, ColorZonesSelection,
+    colorzones_transient_memory_bytes,
+};
 pub use dispatch::{
     BindingResource, CancellationToken, CommandEncoder, DispatchBatch, DispatchError,
     DispatchFailure, DispatchRegion, EncodedBatch, EncodedDispatch, EncodingReceipt, GridPlan,

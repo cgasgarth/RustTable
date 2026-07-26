@@ -43,6 +43,16 @@ pub use execution::{ColorZonesPixel, ColorZonesPlan};
 
 /// `init()` leaves Color Zones disabled in a newly constructed native module.
 pub const COLORZONES_DEFAULT_ENABLED: bool = false;
+/// Dedicated source-compatible WGPU execution uses the core-compute tier.
+pub const COLORZONES_GPU_TIER: u8 = 1;
+/// Stable identity of the dedicated source-compatible Color Zones point shader.
+pub const COLORZONES_WGPU_PASS_ID: &str = "darktable.colorzones.point.v1";
+
+/// WGPU passes used by the qualified dedicated path.
+#[must_use]
+pub const fn wgpu_passes() -> [&'static str; 1] {
+    [COLORZONES_WGPU_PASS_ID]
+}
 
 /// Native selection channel stored in Color Zones history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -522,13 +532,14 @@ pub fn colorzones_descriptor() -> OperationDescriptor {
         },
         capability: CapabilityContract {
             cpu_supported: true,
-            gpu_tier: None,
-            required_features: Vec::new(),
-            required_formats: Vec::new(),
+            gpu_tier: Some(COLORZONES_GPU_TIER),
+            required_features: vec!["lab-boundary".to_owned(), "nearest-lut-storage".to_owned()],
+            required_formats: vec!["lab-f32x4".to_owned()],
             deterministic_cpu: true,
             deterministic_gpu: false,
             fallback_to_cpu: true,
-            precision: "f32 Lab D50 curve LUT with native Smooth/Strong branches".to_owned(),
+            precision: "f32 Lab D50 with interpolating CPU LUTs and source-exact nearest WGPU LUTs"
+                .to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
         },
         io: lab_io(),

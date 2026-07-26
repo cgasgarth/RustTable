@@ -18,6 +18,8 @@ use rusttable_ui::{
 use rusttable_core::{PhotoId, Revision};
 use sha2::{Digest, Sha256};
 
+use super::colorzones_edit::{ColorZonesEditAction, ColorZonesEditError, apply_colorzones_edit};
+
 /// Result published after one darkroom action.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DarkroomEditOutcome {
@@ -199,6 +201,67 @@ impl GtkDarkroomEditController {
             return Err(persistence_error(error.to_string()));
         }
         let projected = project_edit_preserving_disclosure(&replacement, Some(&modules))?;
+        self.modules = Some(projected.clone());
+        Ok(DarkroomEditOutcome {
+            revision: replacement.revision(),
+            modules: projected,
+            processing_changed: true,
+        })
+    }
+
+    /// Applies one source-shaped Color Zones editor action through the selected
+    /// edit's atomic repository transaction.
+    ///
+    /// The generic GTK module remains hidden until its source-derived widget is
+    /// ported; this routing seam exists for that editor without exposing generic
+    /// descriptor controls or decoding opaque imported history rows.
+    ///
+    /// # Errors
+    ///
+    /// Returns a shared darkroom module error for stale revisions, invalid exact
+    /// targets, checked editor mutations, projection, or persistence failures.
+    pub fn apply_colorzones(
+        &mut self,
+        action: &ColorZonesEditAction,
+    ) -> Result<DarkroomEditOutcome, DarkroomModuleError> {
+        let photo_id = self
+            .selected_photo
+            .ok_or(DarkroomModuleError::NoSelection)?;
+        let current = self.load_edit(photo_id)?;
+        let applied = match apply_colorzones_edit(&current, action) {
+            Ok(applied) => applied,
+            Err(ColorZonesEditError::StaleRevision { expected, actual }) => {
+                let projected =
+                    project_edit_preserving_disclosure(&current, self.modules.as_ref())?;
+                self.modules = Some(projected);
+                return Err(DarkroomModuleError::StaleRevision { expected, actual });
+            }
+            Err(error) => return Err(colorzones_edit_error(error)),
+        };
+        if !applied.changed() {
+            let projected = project_edit_preserving_disclosure(&current, self.modules.as_ref())?;
+            self.modules = Some(projected.clone());
+            return Ok(DarkroomEditOutcome {
+                revision: current.revision(),
+                modules: projected,
+                processing_changed: false,
+            });
+        }
+        let replacement = applied.into_edit();
+        let mut repository = self.open_repository()?;
+        if let Err(error) = repository.commit_replacement(current.revision(), &replacement) {
+            tracing::error!(
+                target: "rusttable.gtk.darkroom.colorzones.edit",
+                photo_id = %photo_id,
+                edit_id = %current.id(),
+                current_revision = %current.revision(),
+                requested_revision = %replacement.revision(),
+                cause = ?error,
+                "Color Zones edit persistence failed; keeping the last published edit"
+            );
+            return Err(persistence_error(error.to_string()));
+        }
+        let projected = project_edit_preserving_disclosure(&replacement, self.modules.as_ref())?;
         self.modules = Some(projected.clone());
         Ok(DarkroomEditOutcome {
             revision: replacement.revision(),
@@ -811,57 +874,60 @@ fn multi_instance_operation_id(
     unreachable!("the operation ID space cannot be exhausted by a finite edit")
 }
 
-fn canonical_rank(operation: &Operation) -> usize {
-    const ORDER: &[&str] = &[
-        "invert",
-        "temperature",
-        "rasterfile",
-        "highlights",
-        "ashift",
-        "rotatepixels",
-        "scalepixels",
-        "lens",
-        "flip",
-        "enlargecanvas",
-        "clipping",
-        "liquify",
-        "spots",
-        "retouch",
-        "exposure",
-        "mask_manager",
-        "crop",
-        "graduatednd",
-        "colorin",
-        "censorize",
-        "primaries",
-        "rgbgain",
-        "defringe",
-        "basicadj",
-        "shadhi",
-        "relight",
-        "colorcorrection",
-        "colorcontrast",
-        "velvia",
-        "vibrance",
-        "bloom",
-        "grain",
-        "soften",
-        "vignette",
-        "colorreconstruct",
-        "finalscale",
-        "colorout",
-        "clahe",
-        "dither",
-    ];
+// Source pipeline order. Color Zones is immediately after Vibrance and before Bloom.
+pub(super) const DARKROOM_CANONICAL_ORDER: &[&str] = &[
+    "invert",
+    "temperature",
+    "rasterfile",
+    "highlights",
+    "ashift",
+    "rotatepixels",
+    "scalepixels",
+    "lens",
+    "flip",
+    "enlargecanvas",
+    "clipping",
+    "liquify",
+    "spots",
+    "retouch",
+    "exposure",
+    "mask_manager",
+    "crop",
+    "graduatednd",
+    "colorin",
+    "censorize",
+    "primaries",
+    "rgbgain",
+    "defringe",
+    "basicadj",
+    "shadhi",
+    "relight",
+    "colorcorrection",
+    "colorcontrast",
+    "velvia",
+    "vibrance",
+    "colorzones",
+    "bloom",
+    "grain",
+    "soften",
+    "vignette",
+    "colorreconstruct",
+    "finalscale",
+    "colorout",
+    "clahe",
+    "dither",
+];
+
+pub(super) fn canonical_rank(operation: &Operation) -> usize {
     let name = builtin_registry()
         .definition(operation.key().as_str())
         .map_or(operation.key().as_str(), |definition| {
             definition.descriptor().id.compatibility_name.as_str()
         });
-    ORDER
+    DARKROOM_CANONICAL_ORDER
         .iter()
         .position(|candidate| *candidate == name)
-        .unwrap_or(ORDER.len())
+        .unwrap_or(DARKROOM_CANONICAL_ORDER.len())
 }
 
 fn materialization_error(module_id: &str, message: String) -> DarkroomModuleError {
@@ -924,6 +990,37 @@ fn persistence_error(message: impl Into<String>) -> DarkroomModuleError {
     }
 }
 
+fn colorzones_edit_error(error: ColorZonesEditError) -> DarkroomModuleError {
+    match error {
+        ColorZonesEditError::StaleRevision { expected, actual } => {
+            DarkroomModuleError::StaleRevision { expected, actual }
+        }
+        ColorZonesEditError::MissingOperation(operation_id) => {
+            DarkroomModuleError::MissingOperation {
+                module_id: format!("colorzones operation {operation_id}"),
+            }
+        }
+        ColorZonesEditError::WrongOperation(operation_id) => DarkroomModuleError::WrongOperation {
+            module_id: "colorzones".to_owned(),
+            expected: Some(operation_id),
+            actual: None,
+        },
+        ColorZonesEditError::ExactTargetRequired => {
+            DarkroomModuleError::InstanceActionUnavailable {
+                module_id: "colorzones".to_owned(),
+                action: "Color Zones edit",
+                reason: "an exact operation ID is required for an existing instance",
+            }
+        }
+        ColorZonesEditError::InvalidCanonicalOperation(message)
+        | ColorZonesEditError::Revision(message) => persistence_error(message),
+        error => DarkroomModuleError::Unsupported {
+            module_id: "colorzones".to_owned(),
+            reason: error.to_string(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -933,7 +1030,11 @@ mod tests {
     };
 
     use rusttable_core::{EditId, OperationId, OperationKey, OperationOpacity, ParameterName};
+    use rusttable_processing::{ColorZonesChannel, ColorZonesMode};
 
+    use super::super::colorzones_edit::{
+        ColorZonesEditAction, ColorZonesEditMutation, ColorZonesEditTarget, ColorZonesNodePosition,
+    };
     use super::*;
 
     static TEST_CATALOG_ID: AtomicU64 = AtomicU64::new(0);
@@ -970,6 +1071,136 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.path);
         }
+    }
+
+    #[test]
+    fn colorzones_action_persists_only_the_exact_hidden_instance() {
+        let registry = builtin_registry();
+        let first_id = OperationId::new(0xc701).expect("first Color Zones ID");
+        let second_id = OperationId::new(0xc702).expect("second Color Zones ID");
+        let first = registry
+            .materialize_operation("rusttable.colorzones", first_id)
+            .expect("first Color Zones defaults");
+        let second_defaults = registry
+            .materialize_operation("rusttable.colorzones", second_id)
+            .expect("second Color Zones defaults");
+        let second_opacity = OperationOpacity::new(0.375).expect("partial opacity");
+        let second = Operation::new_with_opacity(
+            second_defaults.id(),
+            second_defaults.key().clone(),
+            false,
+            second_opacity,
+            second_defaults
+                .parameters()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        )
+        .expect("disabled second Color Zones instance");
+        let original = Edit::from_parts(
+            EditId::new(0xc703).expect("edit ID"),
+            PhotoId::new(0xc704).expect("photo ID"),
+            Revision::ZERO,
+            Revision::from_u64(9),
+            [first.clone(), second.clone()],
+        )
+        .expect("multi-instance Color Zones edit");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select Color Zones edit");
+        let action = ColorZonesEditAction::new(
+            original.revision(),
+            ColorZonesEditTarget::Operation(second_id),
+            ColorZonesEditMutation::SetMode(ColorZonesMode::Strong),
+        );
+
+        let outcome = controller
+            .apply_colorzones(&action)
+            .expect("persist exact Color Zones action");
+        let persisted = catalog.load(original.id());
+        let operations = persisted.operations().collect::<Vec<_>>();
+
+        assert_eq!(outcome.revision(), persisted.revision());
+        assert!(outcome.processing_changed());
+        let projected = outcome
+            .modules()
+            .instances("colorzones")
+            .collect::<Vec<_>>();
+        assert_eq!(projected.len(), 2);
+        assert!(projected.iter().all(|module| module.is_hidden()));
+        assert!(
+            projected
+                .iter()
+                .all(|module| module.availability().is_unsupported())
+        );
+        assert_eq!(operations.len(), 2);
+        assert_eq!(operations[0], &first);
+        assert_eq!(operations[1].id(), second_id);
+        assert!(!operations[1].is_enabled());
+        assert_eq!(operations[1].opacity(), second_opacity);
+        assert_eq!(
+            operations[1].parameter(&ParameterName::new("mode").expect("mode parameter")),
+            Some(&ParameterValue::Integer(i64::from(
+                ColorZonesMode::Strong.raw()
+            )))
+        );
+        assert_eq!(
+            operations
+                .iter()
+                .map(|operation| operation.id())
+                .collect::<Vec<_>>(),
+            [first_id, second_id]
+        );
+        assert_eq!(
+            controller.apply_colorzones(&action),
+            Err(DarkroomModuleError::StaleRevision {
+                expected: original.revision(),
+                actual: persisted.revision(),
+            })
+        );
+        assert_eq!(catalog.load(original.id()), persisted);
+    }
+
+    #[test]
+    fn rejected_colorzones_movement_does_not_persist_history() {
+        let operation_id = OperationId::new(0xc711).expect("Color Zones ID");
+        let operation = builtin_registry()
+            .materialize_operation("rusttable.colorzones", operation_id)
+            .expect("Color Zones defaults");
+        let original = Edit::from_parts(
+            EditId::new(0xc712).expect("edit ID"),
+            PhotoId::new(0xc713).expect("photo ID"),
+            Revision::ZERO,
+            Revision::from_u64(9),
+            [operation],
+        )
+        .expect("Color Zones edit");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        controller
+            .select_photo(original.photo_id())
+            .expect("select Color Zones edit");
+        let action = ColorZonesEditAction::new(
+            original.revision(),
+            ColorZonesEditTarget::Operation(operation_id),
+            ColorZonesEditMutation::MoveNode {
+                curve: ColorZonesChannel::Lightness,
+                node: 0,
+                position: ColorZonesNodePosition::new(
+                    0.75 - rusttable_ui::iop::colorzones::COLORZONES_MIN_X_DISTANCE,
+                    0.5,
+                )
+                .expect("position"),
+            },
+        );
+
+        let outcome = controller
+            .apply_colorzones(&action)
+            .expect("consume rejected movement");
+
+        assert_eq!(outcome.revision(), original.revision());
+        assert!(!outcome.processing_changed());
+        assert_eq!(catalog.load(original.id()), original);
     }
 
     fn edit(revision: u64, stops: f64, enabled: bool) -> Edit {

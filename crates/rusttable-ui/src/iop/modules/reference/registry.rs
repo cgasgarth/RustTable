@@ -555,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn colorzones_cpu_definition_does_not_project_generic_gtk_controls() {
+    fn colorzones_backends_do_not_project_generic_gtk_controls() {
         let modules = modules_from_registry().expect("registry module projection");
         let colorzones = modules.module("colorzones").expect("Color Zones module");
 
@@ -569,8 +569,9 @@ mod tests {
         );
         let definition = builtin_registry()
             .definition("rusttable.colorzones")
-            .expect("Color Zones CPU definition");
+            .expect("Color Zones backend definition");
         assert!(definition.availability().is_available());
         assert!(definition.cpu().is_some());
+        assert!(definition.gpu().is_some());
     }
 }
