@@ -1,14 +1,23 @@
 #![forbid(unsafe_code)]
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use gtk4::prelude::*;
-use rusttable_core::PhotoId;
+use rusttable_app::gtk_controller::GtkDarkroomEditController;
+use rusttable_app::gtk_controller::colorzones_edit::ColorZonesEditAction;
+use rusttable_catalog::EditRepository;
+use rusttable_catalog_store::RedbCatalogRepository;
+use rusttable_core::{Edit, EditId, OperationId, PhotoId, Revision};
+use rusttable_processing::builtin_registry;
 use rusttable_ui::gtk_shell::{
     DARKROOM_PANEL_WIDTHS, DARKTABLE_DESKTOP_SPEC, GtkShell, WorkspaceRole,
 };
+use rusttable_ui::iop::colorzones::{ColorZonesGtkActionHandler, ColorZonesGtkHandlerOutcome};
 use rusttable_ui::{
     CollectionControlState, CollectionFilterState, CollectionProperty, HistogramData,
     LighttableColorLabel, LighttablePhotoState, LighttableRating, LighttableToolbarState,
@@ -19,7 +28,45 @@ use rusttable_ui::{
 #[path = "darkroom_shell_runtime_smoke/render.rs"]
 mod render;
 
-use render::{find_widget, find_widget_with_prefix, render_widget};
+use render::{find_widget, find_widget_with_prefix, named_controller, render_widget};
+
+static SMOKE_CATALOG_ID: AtomicU64 = AtomicU64::new(0);
+
+struct SmokeCatalog {
+    path: PathBuf,
+}
+
+impl SmokeCatalog {
+    fn seed(edit: &Edit) -> Self {
+        let id = SMOKE_CATALOG_ID.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "rusttable-darkroom-shell-colorzones-{}-{id}.redb",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        let mut repository =
+            RedbCatalogRepository::open(&path).expect("open Color Zones smoke catalog");
+        repository
+            .commit_new(edit)
+            .expect("seed canonical Color Zones edit");
+        drop(repository);
+        Self { path }
+    }
+
+    fn load_edit(&self, edit_id: EditId) -> Edit {
+        RedbCatalogRepository::open(&self.path)
+            .expect("reopen Color Zones smoke catalog")
+            .find_by_edit_id(edit_id)
+            .expect("read Color Zones smoke edit")
+            .expect("persisted Color Zones smoke edit")
+    }
+}
+
+impl Drop for SmokeCatalog {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
 
 fn main() {
     gtk4::init().expect("GTK must initialize for the app-shell runtime smoke");
@@ -80,6 +127,81 @@ fn app_shell_transition_paints_darkroom_titles() {
     let lighttable_page = find_widget(&root, "lighttable-page").expect("lighttable page");
     let photo_id = PhotoId::new(949).expect("test photo id");
     let workspace = test_workspace(photo_id);
+    let colorzones_operation_id = OperationId::new(0xc701).expect("Color Zones operation id");
+    let colorzones_operation = builtin_registry()
+        .materialize_operation("rusttable.colorzones", colorzones_operation_id)
+        .expect("canonical Color Zones operation");
+    let colorzones_edit = Edit::from_parts(
+        EditId::new(0xc702).expect("Color Zones edit id"),
+        photo_id,
+        Revision::ZERO,
+        Revision::from_u64(7),
+        [colorzones_operation],
+    )
+    .expect("canonical Color Zones edit");
+    let colorzones_edit_id = colorzones_edit.id();
+    let colorzones_catalog = SmokeCatalog::seed(&colorzones_edit);
+    let darkroom_edit_controller = Rc::new(RefCell::new(GtkDarkroomEditController::new(Some(
+        colorzones_catalog.path.clone(),
+    ))));
+    let modules = darkroom_edit_controller
+        .borrow_mut()
+        .select_photo(photo_id)
+        .expect("project canonical Color Zones instance")
+        .clone();
+    let colorzones_widget_id = modules
+        .module_target("colorzones", Some(colorzones_operation_id))
+        .expect("projected Color Zones instance")
+        .widget_id();
+    let published_revision = Rc::new(Cell::new(Revision::ZERO));
+    let colorzones_handler: ColorZonesGtkActionHandler = Rc::new({
+        let controller = Rc::clone(&darkroom_edit_controller);
+        let action_shell = shell.clone();
+        let published_revision = Rc::clone(&published_revision);
+        move |settled| {
+            let action = ColorZonesEditAction::from(settled);
+            match controller.borrow_mut().apply_colorzones(&action) {
+                Ok(outcome) => {
+                    action_shell.update_darkroom_module_stack_snapshot(
+                        outcome.modules(),
+                        outcome.revision(),
+                    );
+                    if outcome.processing_changed() {
+                        let generation = ViewportGeneration::new(2);
+                        action_shell.begin_darkroom_selection(photo_id, generation);
+                        let metadata = thumbnail_metadata();
+                        let histogram =
+                            HistogramData::from_rgba8(metadata.dimensions(), metadata.pixels())
+                                .expect("edited Color Zones histogram");
+                        action_shell
+                            .set_darkroom_preview_result_for_edit(
+                                generation,
+                                &metadata,
+                                Ok(histogram),
+                                colorzones_edit_id,
+                                outcome.revision(),
+                            )
+                            .expect("edited Color Zones selected preview publishes");
+                        action_shell
+                            .set_darkroom_preview_thumbnail_for_edit(
+                                generation,
+                                &metadata,
+                                colorzones_edit_id,
+                                outcome.revision(),
+                            )
+                            .expect("edited Color Zones navigation preview publishes");
+                        published_revision.set(outcome.revision());
+                    }
+                    ColorZonesGtkHandlerOutcome::Commit {
+                        revision: outcome.revision(),
+                    }
+                }
+                Err(_) => ColorZonesGtkHandlerOutcome::Rollback,
+            }
+        }
+    });
+    shell.set_colorzones_action_handler(Some(colorzones_handler));
+    shell.set_darkroom_module_stack(&modules, None);
 
     shell.show_workspace(WorkspaceRole::Lighttable);
     map_inert_test_window(shell.window());
@@ -144,6 +266,14 @@ fn app_shell_transition_paints_darkroom_titles() {
         left_stack.allocated_width()
     );
     assert_darkroom_titles_are_allocated(&shell);
+    assert_mounted_colorzones_geometry_and_paint(
+        &shell,
+        &root,
+        &colorzones_widget_id,
+        &colorzones_catalog,
+        colorzones_edit_id,
+        &published_revision,
+    );
     assert_darkroom_chrome_matches_runtime_geometry(&shell);
     assert_lighttable_preview_geometry(&shell, photo_id);
 }
@@ -393,6 +523,19 @@ fn thumbnail_metadata() -> Rgba8PreviewMetadata {
     .expect("thumbnail metadata")
 }
 
+fn direct_child_of(widget: &gtk4::Widget, ancestor: &gtk4::Widget) -> gtk4::Widget {
+    let mut current = widget.clone();
+    loop {
+        let parent = current
+            .parent()
+            .expect("Color Zones control remains inside its editor");
+        if parent == ancestor.clone() {
+            return current;
+        }
+        current = parent;
+    }
+}
+
 fn settle_gtk_until(done: impl Fn() -> bool, state: impl Fn() -> String) {
     let context = gtk4::glib::MainContext::default();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -417,6 +560,315 @@ fn settle_next_gtk_frame() {
     settle_gtk_until(
         || elapsed.get(),
         || "GTK did not deliver the next frame interval".to_owned(),
+    );
+}
+
+#[allow(clippy::too_many_lines)] // Keep the source-ordered mounted editor contract in one runtime assertion.
+fn assert_mounted_colorzones_geometry_and_paint(
+    shell: &GtkShell,
+    root: &gtk4::Widget,
+    widget_id: &str,
+    catalog: &SmokeCatalog,
+    edit_id: EditId,
+    published_revision: &Cell<Revision>,
+) {
+    let basic = find_widget(root, "group-basic")
+        .expect("basic module group")
+        .downcast::<gtk4::ToggleButton>()
+        .expect("basic module group toggle");
+    basic.set_active(true);
+    settle_gtk_until(
+        || find_widget(root, widget_id).is_none(),
+        || "Color Zones remained visible outside its groups".to_owned(),
+    );
+
+    let search = find_widget(root, "darkroom-module-search")
+        .expect("production module search")
+        .downcast::<gtk4::SearchEntry>()
+        .expect("module search entry");
+    search.set_text("  COLOR ZONES  ");
+    settle_gtk_until(
+        || find_widget(root, widget_id).is_some_and(|module| module.is_mapped()),
+        || "production search did not expose the mounted Color Zones instance".to_owned(),
+    );
+
+    let color = find_widget(root, "group-color")
+        .expect("color module group")
+        .downcast::<gtk4::ToggleButton>()
+        .expect("color module group toggle");
+    color.set_active(true);
+    settle_gtk_until(
+        || {
+            search.text().is_empty()
+                && find_widget(root, widget_id).is_some_and(|module| module.is_mapped())
+        },
+        || "Color group did not clear search and retain Color Zones".to_owned(),
+    );
+
+    let module = find_widget(root, widget_id)
+        .expect("group-filtered Color Zones module")
+        .downcast::<gtk4::Expander>()
+        .expect("Color Zones module expander");
+    assert!(
+        module.is_sensitive(),
+        "mounted canonical Color Zones instance must be supported"
+    );
+    let title_root = module.label_widget().expect("Color Zones source header");
+    assert_eq!(title_root.widget_name(), format!("{widget_id}-title"));
+    assert!(title_root.has_css_class("dt_module_header"));
+    assert!(find_widget(&title_root, &format!("{widget_id}-enabled")).is_some());
+    assert!(find_widget(&title_root, &format!("{widget_id}-reset")).is_some());
+    let content = module.child().expect("Color Zones module body");
+    for omitted in [
+        format!("{widget_id}-header"),
+        format!("{widget_id}-enabled"),
+        format!("{widget_id}-reset"),
+        format!("{widget_id}-status-row"),
+        format!("{widget_id}-status"),
+        format!("{widget_id}-recover"),
+        format!("{widget_id}-partial-warning"),
+        format!("{widget_id}-presets"),
+    ] {
+        assert!(
+            find_widget(&content, &omitted).is_none(),
+            "Color Zones body must not duplicate or invent {omitted}"
+        );
+    }
+    assert!(
+        find_widget(root, &format!("{widget_id}-presets")).is_none(),
+        "unimplemented presets must not appear as a placeholder"
+    );
+    module.set_expanded(true);
+
+    let editor_id = format!("{widget_id}-colorzones-editor");
+    let ordered_ids = [
+        format!("{widget_id}-channel-tabs"),
+        format!("{widget_id}-graph"),
+        format!("{widget_id}-bottom-strip"),
+        format!("{widget_id}-edit-by-area"),
+        format!("{widget_id}-select-by"),
+        format!("{widget_id}-mode"),
+        format!("{widget_id}-strength"),
+        format!("{widget_id}-interpolator"),
+    ];
+    settle_gtk_until(
+        || {
+            find_widget(root, &editor_id).is_some_and(|editor| {
+                editor.is_mapped()
+                    && editor.allocated_width() > 0
+                    && editor.allocated_height() > 0
+                    && ordered_ids.iter().all(|id| {
+                        find_widget(&editor, id).is_some_and(|widget| {
+                            widget.is_mapped()
+                                && widget.allocated_width() > 0
+                                && widget.allocated_height() > 0
+                        })
+                    })
+            })
+        },
+        || format!("expanded Color Zones editor {editor_id} did not receive mapped allocations"),
+    );
+    settle_next_gtk_frame();
+
+    let editor = find_widget(root, &editor_id).expect("mounted Color Zones editor");
+    let editor_box = editor
+        .clone()
+        .downcast::<gtk4::Box>()
+        .expect("Color Zones editor is a vertical source box");
+    assert_eq!(editor_box.orientation(), gtk4::Orientation::Vertical);
+    assert_eq!(editor_box.spacing(), 0);
+    let widgets = ordered_ids
+        .iter()
+        .map(|id| find_widget(&editor, id).unwrap_or_else(|| panic!("missing {id}")))
+        .collect::<Vec<_>>();
+    let bounds = widgets
+        .iter()
+        .map(|widget| {
+            widget
+                .compute_bounds(&editor)
+                .expect("Color Zones child bounds")
+        })
+        .collect::<Vec<_>>();
+    for (pair, ids) in bounds.windows(2).zip(ordered_ids.windows(2)) {
+        assert!(
+            pair[0].y() + pair[0].height() <= pair[1].y() + 1.0,
+            "Color Zones controls must retain source vertical order: {} at {:?}, {} at {:?}",
+            ids[0],
+            pair[0],
+            ids[1],
+            pair[1]
+        );
+    }
+
+    let notebook = find_widget(&editor, &format!("{widget_id}-channel-tabs"))
+        .expect("Color Zones output tabs")
+        .downcast::<gtk4::Notebook>()
+        .expect("Color Zones output tabs type");
+    assert!(!notebook.is_scrollable());
+    assert_eq!(notebook.n_pages(), 3);
+    let tab_widths = (0..notebook.n_pages())
+        .map(|index| {
+            let page = notebook
+                .nth_page(Some(index))
+                .expect("Color Zones output page");
+            let notebook_page = notebook.page(&page);
+            assert!(notebook_page.is_tab_expand() && notebook_page.is_tab_fill());
+            let label = notebook
+                .tab_label(&page)
+                .expect("Color Zones output label")
+                .downcast::<gtk4::Label>()
+                .expect("Color Zones output label type");
+            assert_eq!(label.ellipsize(), gtk4::pango::EllipsizeMode::End);
+            let label_text = label.text();
+            assert_eq!(label.tooltip_text().as_deref(), Some(label_text.as_str()));
+            label.allocated_width()
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        tab_widths
+            .iter()
+            .all(|width| width.abs_diff(tab_widths[0]) <= 1),
+        "the three non-scrollable output tabs must divide the row equally: {tab_widths:?}"
+    );
+
+    let graph = &widgets[1];
+    assert_eq!(
+        graph.allocated_height(),
+        200,
+        "Color Zones graph must retain its native default height"
+    );
+    let graph_width = u16::try_from(graph.allocated_width()).expect("graph width fits u16");
+    let graph_height = u16::try_from(graph.allocated_height()).expect("graph height fits u16");
+    let graph_bounds =
+        gtk4::graphene::Rect::new(0.0, 0.0, f32::from(graph_width), f32::from(graph_height));
+    assert!(
+        render_widget(graph).pixels_differing_from_first(graph_bounds, 8) >= 200,
+        "Color Zones graph must paint coarse non-background field and curve evidence"
+    );
+
+    let strip = &widgets[2];
+    assert!(strip.hexpands() && strip.vexpands());
+    let edit_by_area = widgets[3]
+        .clone()
+        .downcast::<gtk4::CheckButton>()
+        .expect("compact Color Zones edit-by-area control");
+    assert_eq!(edit_by_area.halign(), gtk4::Align::Start);
+    assert!(!edit_by_area.hexpands());
+    for id in &ordered_ids[4..] {
+        let control = find_widget(&editor, id).expect("full-width Color Zones Bauhaus control");
+        let direct = direct_child_of(&control, &editor);
+        assert!(direct.has_css_class("dt_bauhaus"), "{id} is Bauhaus");
+        assert!(direct.hexpands(), "{id} expands across the module body");
+        assert_eq!(direct.halign(), gtk4::Align::Fill);
+        assert!(
+            direct.allocated_width() >= editor.allocated_width() - 2,
+            "{id} must occupy the full Color Zones body width"
+        );
+    }
+    let mix_value = find_widget(&editor, "bauhaus-slider-value")
+        .expect("closed Color Zones mix value")
+        .downcast::<gtk4::Label>()
+        .expect("closed Color Zones mix value type");
+    assert_eq!(mix_value.text(), "+0.00%");
+    let strip_width = u16::try_from(strip.allocated_width()).expect("strip width fits u16");
+    let strip_height = u16::try_from(strip.allocated_height()).expect("strip height fits u16");
+    let strip_bounds =
+        gtk4::graphene::Rect::new(0.0, 0.0, f32::from(strip_width), f32::from(strip_height));
+    assert!(
+        render_widget(strip).pixels_differing_from_first(strip_bounds, 8) >= 50,
+        "Color Zones bottom strip must paint coarse non-background gradient evidence"
+    );
+
+    for omitted in [
+        format!("{widget_id}-picker"),
+        format!("{widget_id}-color-picker"),
+        format!("{widget_id}-display-selection"),
+        format!("{widget_id}-show-selection"),
+        format!("{widget_id}-mask-display"),
+    ] {
+        assert!(
+            find_widget(&editor, &omitted).is_none(),
+            "unported Color Zones control {omitted} must remain omitted"
+        );
+    }
+
+    let mode = find_widget(&editor, &format!("{widget_id}-mode-selection"))
+        .expect("visible Color Zones process mode")
+        .downcast::<gtk4::DropDown>()
+        .expect("visible Color Zones process mode type");
+    assert_eq!(mode.selected(), 0, "canonical process mode starts smooth");
+
+    let graph = graph
+        .clone()
+        .downcast::<gtk4::DrawingArea>()
+        .expect("mounted Color Zones graph type");
+    let motion = named_controller(&graph, "dt-colorzones-motion")
+        .expect("mounted graph motion controller")
+        .downcast::<gtk4::EventControllerMotion>()
+        .expect("mounted graph motion controller type");
+    let click = named_controller(&graph, "dt-colorzones-click")
+        .expect("mounted graph primary controller")
+        .downcast::<gtk4::GestureClick>()
+        .expect("mounted graph primary controller type");
+    let point = |x: f64, y: f64| {
+        (
+            5.0 + (f64::from(graph.allocated_width()) - 10.0) * x,
+            5.0 + (f64::from(graph.allocated_height()) - 10.0) * (1.0 - y),
+        )
+    };
+    let (node_x, node_y) = point(0.25, 0.5);
+    let (drag_x, drag_y) = point(0.2, 0.6);
+    motion.emit_by_name::<()>("motion", &[&node_x, &node_y]);
+    click.emit_by_name::<()>("pressed", &[&1_i32, &node_x, &node_y]);
+    motion.emit_by_name::<()>("motion", &[&drag_x, &drag_y]);
+    settle_gtk_until(
+        || catalog.load_edit(edit_id).revision() == Revision::from_u64(7),
+        || "live Color Zones graph motion unexpectedly committed".to_owned(),
+    );
+    assert_eq!(
+        published_revision.get(),
+        Revision::ZERO,
+        "live graph motion must not publish an image revision"
+    );
+    click.emit_by_name::<()>("released", &[&1_i32, &drag_x, &drag_y]);
+    let expected_revision = Revision::from_u64(8);
+    settle_gtk_until(
+        || {
+            catalog.load_edit(edit_id).revision() == expected_revision
+                && published_revision.get() == expected_revision
+                && shell.darkroom_panel_target().is_some_and(|target| {
+                    target.generation() == ViewportGeneration::new(2)
+                        && target.edit_revision() == expected_revision
+                })
+        },
+        || {
+            format!(
+                "Color Zones edit publication: catalog={}, published={}, target={:?}",
+                catalog.load_edit(edit_id).revision(),
+                published_revision.get(),
+                shell.darkroom_panel_target()
+            )
+        },
+    );
+    assert_eq!(
+        catalog.load_edit(edit_id).revision(),
+        expected_revision,
+        "one settled Color Zones graph edit must atomically advance catalog history once"
+    );
+    assert_eq!(
+        published_revision.get(),
+        expected_revision,
+        "the same production handler must publish the selected edited preview"
+    );
+
+    find_widget(root, "group-active")
+        .expect("active module group")
+        .downcast::<gtk4::ToggleButton>()
+        .expect("active module group toggle")
+        .set_active(true);
+    settle_gtk_until(
+        || find_widget(root, "exposure").is_some(),
+        || "active module group did not restore shared runtime assertions".to_owned(),
     );
 }
 
@@ -449,33 +901,32 @@ fn assert_darkroom_titles_are_allocated(shell: &GtkShell) {
             title.allocated_height()
         );
         assert_eq!(title.text().as_str(), expected, "title text for {id}");
-        for suffix in ["info", "actions"] {
-            let affordance = find_widget(&title_row, &format!("{id}-{suffix}"))
-                .expect("accordion affordance")
-                .downcast::<gtk4::Button>()
-                .expect("accordion affordance button");
-            assert!(
-                affordance.is_visible()
-                    && !affordance.is_sensitive()
-                    && affordance.allocated_width() > 0
-                    && affordance.allocated_height() > 0,
-                "{id}-{suffix} must keep visible neutral geometry"
-            );
-            assert!(
-                affordance
-                    .child()
-                    .is_some_and(|child| child.is::<gtk4::Image>()),
-                "{id}-{suffix} must render a symbolic icon"
-            );
-            let icon = affordance.child().expect("accordion symbolic icon");
-            let icon_bounds = icon
-                .compute_bounds(&visible_split)
-                .expect("accordion symbolic icon bounds");
-            assert!(
-                rendered.pixels_with_channel_at_least(icon_bounds, 80) >= 2,
-                "{id}-{suffix} must paint its neutral symbolic icon"
-            );
-        }
+        let action_id = format!("{id}-actions");
+        let affordance = find_widget(&title_row, &action_id)
+            .expect("accordion affordance")
+            .downcast::<gtk4::Button>()
+            .expect("accordion affordance button");
+        assert!(
+            affordance.is_visible()
+                && !affordance.is_sensitive()
+                && affordance.allocated_width() > 0
+                && affordance.allocated_height() > 0,
+            "{action_id} must keep visible neutral geometry"
+        );
+        assert!(
+            affordance
+                .child()
+                .is_some_and(|child| child.is::<gtk4::Image>()),
+            "{action_id} must render a symbolic icon"
+        );
+        let icon = affordance.child().expect("accordion symbolic icon");
+        let icon_bounds = icon
+            .compute_bounds(&visible_split)
+            .expect("accordion symbolic icon bounds");
+        assert!(
+            rendered.pixels_with_channel_at_least(icon_bounds, 80) >= 2,
+            "{action_id} must paint its neutral symbolic icon"
+        );
         let bounds = title
             .compute_bounds(&visible_split)
             .expect("title bounds within visible desktop split");
@@ -602,7 +1053,7 @@ fn assert_toolbar_and_status_geometry(root: &gtk4::Widget) {
     assert!(!status_text.text().contains("MB"));
     for (id, expected) in [
         ("darkroom-module-order", "module order"),
-        ("darkroom-pipeline-state", "revision 0 · RAW"),
+        ("darkroom-pipeline-state", "revision 8 · RAW"),
     ] {
         let label = find_widget(root, id)
             .expect("pipeline affordance")
@@ -804,9 +1255,7 @@ fn assert_right_rail_resize(root: &gtk4::Widget) {
                 "exposure-multi".to_owned(),
             ]
         } else {
-            ["info", "actions"]
-                .map(|suffix| format!("{id}-{suffix}"))
-                .into()
+            vec![format!("{id}-actions")]
         };
         for action_id in action_ids {
             let affordance =

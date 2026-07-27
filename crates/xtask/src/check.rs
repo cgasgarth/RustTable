@@ -49,6 +49,10 @@ const CUSTOM_HARNESS_TESTS: &[CustomHarnessTest] = &[
     },
     CustomHarnessTest {
         package: "rusttable-ui",
+        target: "colorzones_gtk_boundary",
+    },
+    CustomHarnessTest {
+        package: "rusttable-ui",
         target: "vibrance_gtk_boundary",
     },
     CustomHarnessTest {

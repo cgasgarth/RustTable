@@ -785,6 +785,31 @@ fn canonical_descriptor_and_backend_registry_bindings_match_native_v5_contract()
         .expect("Color Zones registry definition");
     assert!(definition.availability().is_available());
     assert!(!definition.ui_availability().is_available());
+    assert!(definition.ui_availability().is_usable());
+    assert!(definition.ui_availability().is_partial());
+    assert_eq!(
+        definition.ui_availability().reason(),
+        Some(
+            "the Color Zones custom editor is usable, but native UI responsibilities remain deferred"
+        )
+    );
+    assert_eq!(
+        definition
+            .ui_availability()
+            .deferred_responsibilities()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "iop.colorzones.ui.picker-lifecycle",
+            "iop.colorzones.ui.operation-local-histogram",
+            "iop.colorzones.ui.display-selection",
+            "iop.colorzones.ui.presets",
+            "iop.colorzones.ui.global-shortcuts-hold-mode",
+            "iop.colorzones.ui.durable-gui-preferences",
+            "iop.colorzones.ui.pending-import-materialization",
+        ]
+    );
     assert!(definition.cpu().is_some());
     let gpu = definition.gpu().expect("dedicated Color Zones GPU binding");
     assert_eq!(gpu.binding_id(), COLORZONES_WGPU_PASS_ID);

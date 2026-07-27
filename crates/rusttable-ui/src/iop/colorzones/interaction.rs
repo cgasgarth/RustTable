@@ -283,6 +283,30 @@ impl ColorZonesInteraction {
         self.mouse_radius
     }
 
+    /// Returns the current normalized pointer while it remains over the graph.
+    #[must_use]
+    pub const fn pointer(&self) -> Option<(f32, f32)> {
+        if self.pointer_inside {
+            Some((self.mouse_x, self.mouse_y))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the node whose bottom marker is active during area editing.
+    #[must_use]
+    pub const fn area_marker(&self) -> Option<usize> {
+        self.x_move
+    }
+
+    /// Whether source area feedback remains visible during hover or a drag.
+    #[must_use]
+    pub const fn area_feedback_visible(&self) -> bool {
+        self.edit_by_area
+            && (self.pointer_inside
+                || matches!(self.primary_state, ColorZonesPrimaryState::AreaDrag))
+    }
+
     #[must_use]
     pub const fn zoom_factor(&self) -> f32 {
         self.zoom_factor

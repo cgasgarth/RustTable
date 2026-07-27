@@ -71,6 +71,10 @@ pub struct UiConfig {
     pub bauhaus_zoom_step: bool,
     #[serde(default = "default_preview_edge")]
     pub preview_max_edge: u32,
+    /// Durable global GUI state mirroring Darktable's Color Zones `gui_channel`
+    /// and logical-pixel `graphheight` preferences.
+    #[serde(default)]
+    colorzones: ColorZonesGuiConfig,
 }
 impl Default for UiConfig {
     fn default() -> Self {
@@ -80,7 +84,111 @@ impl Default for UiConfig {
             sidebar_visible: true,
             bauhaus_zoom_step: true,
             preview_max_edge: default_preview_edge(),
+            colorzones: ColorZonesGuiConfig::default(),
         }
+    }
+}
+
+impl UiConfig {
+    /// Returns the selected Color Zones output tab as its native channel index.
+    #[must_use]
+    pub const fn colorzones_output_channel_index(&self) -> u8 {
+        self.colorzones.output_channel.index()
+    }
+
+    /// Selects a Color Zones output tab. Unknown native channel indices are rejected.
+    pub const fn set_colorzones_output_channel_index(&mut self, index: u8) -> bool {
+        let Some(channel) = ColorZonesOutputChannel::from_index(index) else {
+            return false;
+        };
+        self.colorzones.output_channel = channel;
+        true
+    }
+
+    /// Returns the durable Color Zones graph height in logical pixels.
+    #[must_use]
+    pub const fn colorzones_graph_logical_height(&self) -> u16 {
+        self.colorzones.graph_logical_height.0
+    }
+
+    /// Stores a Color Zones graph height clamped to the native 100–300 logical-pixel range.
+    pub fn set_colorzones_graph_logical_height(&mut self, logical_pixels: u16) {
+        self.colorzones.graph_logical_height = ColorZonesGraphLogicalHeight::new(logical_pixels);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+struct ColorZonesGuiConfig {
+    #[serde(default)]
+    output_channel: ColorZonesOutputChannel,
+    #[serde(default)]
+    graph_logical_height: ColorZonesGraphLogicalHeight,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum ColorZonesOutputChannel {
+    #[default]
+    Lightness,
+    Chroma,
+    Hue,
+}
+
+impl ColorZonesOutputChannel {
+    const fn index(self) -> u8 {
+        match self {
+            Self::Lightness => 0,
+            Self::Chroma => 1,
+            Self::Hue => 2,
+        }
+    }
+
+    const fn from_index(index: u8) -> Option<Self> {
+        match index {
+            0 => Some(Self::Lightness),
+            1 => Some(Self::Chroma),
+            2 => Some(Self::Hue),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+struct ColorZonesGraphLogicalHeight(u16);
+
+impl ColorZonesGraphLogicalHeight {
+    const MIN: u16 = 100;
+    const MAX: u16 = 300;
+    const DEFAULT: u16 = 200;
+
+    const fn new(logical_pixels: u16) -> Self {
+        if logical_pixels < Self::MIN {
+            Self(Self::MIN)
+        } else if logical_pixels > Self::MAX {
+            Self(Self::MAX)
+        } else {
+            Self(logical_pixels)
+        }
+    }
+}
+
+impl Default for ColorZonesGraphLogicalHeight {
+    fn default() -> Self {
+        Self(Self::DEFAULT)
+    }
+}
+
+impl<'de> Deserialize<'de> for ColorZonesGraphLogicalHeight {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let logical_pixels = i64::deserialize(deserializer)?;
+        let clamped = logical_pixels.clamp(i64::from(Self::MIN), i64::from(Self::MAX));
+        Ok(Self(
+            u16::try_from(clamped).expect("clamped Color Zones graph height fits u16"),
+        ))
     }
 }
 

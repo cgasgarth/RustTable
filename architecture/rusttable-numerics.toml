@@ -56,6 +56,10 @@ path = "crates/rusttable-ui/src/iop/colorzones/interaction.rs"
 policy = "ExplicitFused"
 
 [[explicit_fma]]
+path = "crates/rusttable-ui/src/iop/colorzones/paint.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
 path = "crates/rusttable-render/src/diagnostics/common.rs"
 policy = "ExplicitFused"
 

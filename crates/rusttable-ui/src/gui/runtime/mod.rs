@@ -485,6 +485,22 @@ impl GtkShell {
         self.darkroom.set_module_stack(modules, action_handler);
     }
 
+    /// Installs the typed Color Zones editor handler before its custom leaf is mounted.
+    pub fn set_colorzones_action_handler(
+        &self,
+        handler: Option<crate::iop::colorzones::ColorZonesGtkActionHandler>,
+    ) {
+        self.darkroom.set_colorzones_action_handler(handler);
+    }
+
+    /// Installs the Color Zones durable presentation-state handler before mounting its leaf.
+    pub fn set_colorzones_preferences_handler(
+        &self,
+        handler: Option<crate::iop::colorzones::ColorZonesGtkPreferencesHandler>,
+    ) {
+        self.darkroom.set_colorzones_preferences_handler(handler);
+    }
+
     /// Updates controller-owned module state without replacing mounted controls.
     pub fn update_darkroom_module_stack_snapshot(
         &self,

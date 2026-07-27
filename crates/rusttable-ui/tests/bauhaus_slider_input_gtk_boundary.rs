@@ -560,11 +560,16 @@ fn generic_descriptor_slider_defers_source_popup() {
             && id == "temperature-temperature"
             && (value - 5_000.125).abs() <= f64::EPSILON
     ));
-    let status = find_widget(&temperature_content, "temperature-status")
-        .expect("temperature module status")
-        .downcast::<gtk4::Label>()
-        .expect("temperature status label type");
-    assert_eq!(status.text(), "Ready · revision 1");
+    for omitted in [
+        "temperature-status-row",
+        "temperature-status",
+        "temperature-recover",
+    ] {
+        assert!(
+            find_widget(&temperature_content, omitted).is_none(),
+            "source-style module body must not expose invented {omitted} UI"
+        );
+    }
 
     shell.window().close();
     settle_gtk();

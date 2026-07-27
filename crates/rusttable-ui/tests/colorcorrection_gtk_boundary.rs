@@ -190,11 +190,22 @@ fn colorcorrection_uses_atomic_grid_and_gates_unpersistable_presets_without_show
         saturation.is_sensitive(),
         "native saturation remains interactive while the module is disabled"
     );
-    let enabled = find_widget(&content, "colorcorrection-enabled")
-        .expect("Color Correction enabled toggle")
+    let enabled = find_widget(&title_root, "colorcorrection-enabled")
+        .expect("Color Correction header enabled toggle")
         .downcast::<gtk4::CheckButton>()
         .expect("enabled toggle type");
     assert!(!enabled.is_active());
+    for body_duplicate in [
+        "colorcorrection-enabled",
+        "colorcorrection-reset",
+        "colorcorrection-status",
+        "colorcorrection-recover",
+    ] {
+        assert!(
+            find_widget(&content, body_duplicate).is_none(),
+            "{body_duplicate} belongs only to the shared source header"
+        );
+    }
     #[cfg(target_os = "macos")]
     let one_surface_scroll_unit = 50.0_f64;
     #[cfg(not(target_os = "macos"))]
@@ -246,18 +257,9 @@ fn colorcorrection_uses_atomic_grid_and_gates_unpersistable_presets_without_show
         );
     }
 
-    let presets = find_widget(&content, "colorcorrection-presets")
-        .expect("Color Correction presets")
-        .downcast::<gtk4::Button>()
-        .expect("unavailable Color Correction presets use the inert affordance");
-    assert!(!presets.is_sensitive());
-    assert!(!presets.is_focusable());
-    assert_eq!(
-        presets.tooltip_text().as_deref(),
-        Some(
-            "Color Correction presets require RGB-display blend state, which the current edit model cannot persist"
-        ),
-        "production explains why source-derived presets are gated"
+    assert!(
+        find_widget(&root, "colorcorrection-presets").is_none(),
+        "unavailable Color Correction presets must not become an inert placeholder"
     );
 
     assert!(enabled.is_active());
@@ -482,19 +484,23 @@ fn targetless_colorcorrection_grid_and_reset_callbacks_remain_available_without_
         .expect("Color Correction panel type");
     let title = panel.label_widget().expect("Color Correction title");
     let actions = find_widget(&title, "colorcorrection-actions")
-        .expect("targetless title action placeholder");
+        .expect("targetless multi-instance action geometry");
     assert!(
         !actions.is::<gtk4::MenuButton>(),
         "the targetless template cannot expose an exact-instance MenuButton"
     );
     let actions = actions
         .downcast::<gtk4::Button>()
-        .expect("targetless title retains the inert geometry placeholder");
+        .expect("targetless title retains the inert multi-instance action slot");
     assert!(!actions.is_sensitive());
     assert!(!actions.is_focusable());
     assert_eq!(
         actions.tooltip_text().as_deref(),
-        Some("Presets and module menu unavailable")
+        Some("Multiple instance actions")
+    );
+    assert!(
+        find_widget(&root, "colorcorrection-presets").is_none(),
+        "the shared header must not relabel its instance slot as an unavailable preset"
     );
     assert!(
         find_widget(&root, "colorcorrection-instance-menu").is_none(),

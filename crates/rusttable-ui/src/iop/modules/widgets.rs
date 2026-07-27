@@ -21,8 +21,6 @@ use super::{
 /// Owned action-routing state captured by one control row.
 pub(super) struct ControlRowActionContext {
     pub(super) action_handler: Option<DarkroomModuleActionHandler>,
-    pub(super) status: gtk4::Label,
-    pub(super) recover: gtk4::Button,
     pub(super) current_revision: Rc<RefCell<Revision>>,
     pub(super) module_id: String,
     pub(super) operation_id: Option<OperationId>,
@@ -38,8 +36,6 @@ pub(super) struct InstanceMenuWidgets {
 #[derive(Clone)]
 pub(super) struct InstanceActionContext {
     pub(super) action_handler: DarkroomModuleActionHandler,
-    pub(super) status: gtk4::Label,
-    pub(super) recover: gtk4::Button,
     pub(super) current_revision: Rc<RefCell<Revision>>,
     pub(super) module_id: String,
     pub(super) operation_id: OperationId,
@@ -86,6 +82,7 @@ pub(super) fn build_instance_menu(
         .downcast::<gtk4::Button>()
         .ok()?;
     let action_size = (existing.width_request(), existing.height_request());
+    let previous = existing.prev_sibling();
     let icon = existing.child();
     existing.set_child(None::<&gtk4::Widget>);
     existing.unparent();
@@ -131,7 +128,7 @@ pub(super) fn build_instance_menu(
         anchor.set_child(Some(&icon));
     }
     anchor.set_popover(Some(&popover));
-    title.append(&anchor);
+    title.insert_child_after(&anchor, previous.as_ref());
 
     Some(InstanceMenuWidgets {
         anchor,
@@ -184,8 +181,6 @@ fn dispatch_instance_action(context: &InstanceActionContext, kind: InstanceActio
     let expected_revision = *context.current_revision.borrow();
     dispatch_module_action(
         &context.action_handler,
-        &context.status,
-        &context.recover,
         &context.current_revision,
         kind.action(
             context.module_id.clone(),
@@ -227,8 +222,6 @@ pub(super) fn build_control_row(
 ) -> gtk4::Box {
     let ControlRowActionContext {
         action_handler,
-        status,
-        recover,
         current_revision,
         module_id,
         operation_id,
@@ -276,8 +269,6 @@ pub(super) fn build_control_row(
                         let expected_revision = *current_revision.borrow();
                         dispatch_module_action(
                             &handler,
-                            &status,
-                            &recover,
                             &current_revision,
                             DarkroomModuleAction::Control {
                                 module_id: module_id.clone(),
@@ -315,8 +306,6 @@ pub(super) fn build_control_row(
                         let expected_revision = *current_revision.borrow();
                         dispatch_module_action(
                             &handler,
-                            &status,
-                            &recover,
                             &current_revision,
                             DarkroomModuleAction::Control {
                                 module_id: module_id.clone(),
@@ -351,8 +340,6 @@ pub(super) fn build_control_row(
                     let expected_revision = *current_revision.borrow();
                     dispatch_module_action(
                         &handler,
-                        &status,
-                        &recover,
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
@@ -379,8 +366,6 @@ pub(super) fn build_control_row(
                     let expected_revision = *current_revision.borrow();
                     dispatch_module_action(
                         &handler,
-                        &status,
-                        &recover,
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
@@ -408,8 +393,6 @@ pub(super) fn build_control_row(
                     let expected_revision = *current_revision.borrow();
                     dispatch_module_action(
                         &handler,
-                        &status,
-                        &recover,
                         &current_revision,
                         DarkroomModuleAction::Control {
                             module_id: module_id.clone(),
@@ -457,25 +440,17 @@ fn slider_digits(step: f64) -> i32 {
 
 pub(super) fn dispatch_module_action(
     handler: &DarkroomModuleActionHandler,
-    status: &gtk4::Label,
-    recover: &gtk4::Button,
     current_revision: &RefCell<Revision>,
     action: DarkroomModuleAction,
 ) -> bool {
     match handler(action) {
         Ok(revision) => {
             *current_revision.borrow_mut() = revision;
-            status.set_label(&format!("Ready · revision {revision}"));
-            recover.set_sensitive(false);
             true
         }
         Err(error) => {
             if let Some(actual) = stale_actual_revision(&error) {
                 *current_revision.borrow_mut() = actual;
-                status.set_label("Stale callback · refresh required");
-                recover.set_sensitive(true);
-            } else {
-                status.set_label(&format!("Module error · {error}"));
             }
             false
         }

@@ -1,5 +1,6 @@
 //! GTK4 ports of Darktable's Bauhaus controls.
 
+pub(crate) mod combobox;
 pub mod numeric_input;
 pub mod slider;
 pub(crate) mod slider_input;

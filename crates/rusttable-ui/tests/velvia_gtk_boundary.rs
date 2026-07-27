@@ -93,17 +93,26 @@ fn velvia_source_projection_uses_bauhaus_and_routes_state() {
     );
 
     let velvia_content = velvia.child().expect("Velvia module content");
-    let enabled = find_widget(&velvia_content, "velvia-enabled")
-        .expect("Velvia enable control")
+    let enabled = find_widget(&title_root, "velvia-enabled")
+        .expect("Velvia header enable control")
         .downcast::<gtk4::CheckButton>()
         .expect("Velvia enable control type");
     assert!(!enabled.is_active());
-    let presets = find_widget(&velvia_content, "velvia-presets")
-        .expect("Velvia unavailable-preset affordance")
-        .downcast::<gtk4::Button>()
-        .expect("Velvia unavailable-preset control type");
-    assert!(!presets.is_sensitive());
-    assert!(!presets.is_focusable());
+    for body_duplicate in [
+        "velvia-enabled",
+        "velvia-reset",
+        "velvia-status",
+        "velvia-recover",
+    ] {
+        assert!(
+            find_widget(&velvia_content, body_duplicate).is_none(),
+            "{body_duplicate} belongs only to the shared source header"
+        );
+    }
+    assert!(
+        find_widget(&root, "velvia-presets").is_none(),
+        "an unavailable preset must not be replaced by an inert placeholder"
+    );
 
     let strength = velvia_scale(&velvia_content, "velvia-strength-widget");
     let bias = velvia_scale(&velvia_content, "velvia-bias-widget");

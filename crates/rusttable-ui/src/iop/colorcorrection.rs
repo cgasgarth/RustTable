@@ -11,7 +11,10 @@ use std::{
 
 use gtk4::{gdk, glib, prelude::*};
 
-use crate::presentation::SourceMappedSliderSpec;
+use crate::{
+    bauhaus::slider_popup::{reset_source_scroll_units, source_scroll_unit_delta},
+    presentation::SourceMappedSliderSpec,
+};
 
 pub const COLORCORRECTION_MODULE_ID: &str = "colorcorrection";
 pub const COLORCORRECTION_GRID_TOOLTIP: &str = "drag the line for split-toning. bright means highlights, dark means shadows. use mouse wheel to change saturation.";
@@ -416,8 +419,8 @@ pub(crate) struct ColorCorrectionGridGtkContext {
 
 /// Builds the native square grid using `GTK4` event controllers.
 ///
-/// `GTK4` replaces `GTK3` event masks with controllers. Smooth scroll units are
-/// accumulated per grid rather than in Darktable's process-global helper, and
+/// `GTK4` replaces `GTK3` event masks with controllers. Smooth scroll units use
+/// the GTK-main-thread source helper shared by every migrated caller, while
 /// shortcut speed uses Darktable's default modifier mapping because `RustTable`
 /// does not yet expose Darktable's user-configured accelerator speed table.
 /// The native `dt_gui_ignore_scroll` sidebar preference and its `Ctrl+Alt`
@@ -605,13 +608,11 @@ pub(crate) fn build_grid(context: ColorCorrectionGridGtkContext) -> gtk4::Drawin
     }
     area.add_controller(click);
 
-    let scroll_units = Rc::new(RefCell::new(ScrollUnits::default()));
     let scroll = gtk4::EventControllerScroll::new(gtk4::EventControllerScrollFlags::BOTH_AXES);
     scroll.set_name(Some("dt-colorcorrection-scroll"));
     scroll.set_propagation_phase(gtk4::PropagationPhase::Capture);
     {
         let saturation = saturation.downgrade();
-        let scroll_units = Rc::clone(&scroll_units);
         let saturation_value = Rc::clone(&saturation_for_scroll);
         scroll.connect_scroll(move |controller, delta_x, delta_y| {
             if controller
@@ -620,9 +621,7 @@ pub(crate) fn build_grid(context: ColorCorrectionGridGtkContext) -> gtk4::Drawin
             {
                 return glib::Propagation::Stop;
             }
-            let delta = scroll_units
-                .borrow_mut()
-                .unit_delta(controller.unit(), delta_x, delta_y);
+            let delta = colorcorrection_scroll_unit_delta(controller.unit(), delta_x, delta_y);
             if let (Some(delta), Some(saturation)) = (delta, saturation.upgrade()) {
                 let previous_display = saturation.value();
                 saturation.set_value(scrolled_saturation(saturation_value.get(), delta));
@@ -636,10 +635,14 @@ pub(crate) fn build_grid(context: ColorCorrectionGridGtkContext) -> gtk4::Drawin
             glib::Propagation::Stop
         });
     }
-    {
-        let scroll_units = Rc::clone(&scroll_units);
-        scroll.connect_scroll_end(move |_| scroll_units.borrow_mut().reset());
-    }
+    scroll.connect_scroll_end(|controller| {
+        if !controller
+            .current_event()
+            .is_some_and(|event| event.is_pointer_emulated())
+        {
+            colorcorrection_scroll_end();
+        }
+    });
     area.add_controller(scroll);
 
     let key = gtk4::EventControllerKey::new();
@@ -676,40 +679,18 @@ pub(crate) fn build_grid(context: ColorCorrectionGridGtkContext) -> gtk4::Drawin
     area
 }
 
-#[derive(Debug, Default)]
-struct ScrollUnits {
-    y: f64,
+/// Normalizes both grid scroll axes through the shared source helper.
+pub(crate) fn colorcorrection_scroll_unit_delta(
+    unit: gdk::ScrollUnit,
+    delta_x: f64,
+    delta_y: f64,
+) -> Option<i32> {
+    source_scroll_unit_delta(unit, delta_x, delta_y)
 }
 
-impl ScrollUnits {
-    fn unit_delta(&mut self, unit: gdk::ScrollUnit, _delta_x: f64, delta_y: f64) -> Option<i32> {
-        if unit == gdk::ScrollUnit::Wheel {
-            let delta = scroll_direction(delta_y);
-            return (delta != 0).then_some(delta);
-        }
-        #[cfg(target_os = "macos")]
-        let delta_y = delta_y / 50.0;
-        self.y += delta_y;
-        let units_y = self.y.trunc();
-        if units_y == 0.0 {
-            return None;
-        }
-        self.y -= units_y;
-        #[allow(clippy::cast_possible_truncation)]
-        Some(units_y as i32)
-    }
-
-    fn reset(&mut self) {
-        self.y = 0.0;
-    }
-}
-
-fn scroll_direction(delta: f64) -> i32 {
-    match delta.total_cmp(&0.0) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
+/// Ends a grid scroll sequence and clears the source-global remainder.
+pub(crate) fn colorcorrection_scroll_end() {
+    reset_source_scroll_units();
 }
 
 fn modifier_speed(modifiers: gdk::ModifierType) -> f64 {
@@ -895,8 +876,8 @@ mod tests {
     use super::{
         COLORCORRECTION_GRID_TOOLTIP, COLORCORRECTION_SATURATION, COLORCORRECTION_SOURCE_MAP,
         ColorCorrectionDoubleClick, ColorCorrectionEndpoint, ColorCorrectionGridModel,
-        ColorCorrectionGridState, ScrollUnits, grid_cell_srgb, lab_d50_to_srgb,
-        scrolled_saturation,
+        ColorCorrectionGridState, colorcorrection_scroll_end, colorcorrection_scroll_unit_delta,
+        grid_cell_srgb, lab_d50_to_srgb, scrolled_saturation,
     };
 
     fn assert_exact_f64(actual: f64, expected: f64) {
@@ -999,38 +980,50 @@ mod tests {
     }
 
     #[test]
-    fn native_scroll_uses_only_vertical_wheel_and_surface_units() {
-        let mut units = ScrollUnits::default();
+    fn native_scroll_sums_horizontal_and_vertical_units() {
+        colorcorrection_scroll_end();
         assert_eq!(
-            units.unit_delta(gtk4::gdk::ScrollUnit::Wheel, 1.0, 0.0),
-            None,
-            "horizontal wheel motion is ignored"
+            colorcorrection_scroll_unit_delta(gtk4::gdk::ScrollUnit::Wheel, 1.0, 0.0),
+            Some(1),
+            "horizontal wheel motion contributes one source unit"
         );
         assert_eq!(
-            units.unit_delta(gtk4::gdk::ScrollUnit::Wheel, 50.0, -1.0),
-            Some(-1),
-            "diagonal wheel motion follows only its vertical component"
+            colorcorrection_scroll_unit_delta(gtk4::gdk::ScrollUnit::Wheel, 50.0, -1.0),
+            Some(0),
+            "opposing wheel axes emit a summed zero source unit"
         );
-        for _ in 0..4 {
-            assert_eq!(
-                units.unit_delta(gtk4::gdk::ScrollUnit::Surface, 1_000.0, 0.0),
-                None,
-                "horizontal surface motion never accumulates into saturation"
-            );
-        }
         #[cfg(target_os = "macos")]
-        let vertical_surface_unit = 50.0;
+        let surface_unit = 50.0;
         #[cfg(not(target_os = "macos"))]
-        let vertical_surface_unit = 1.0;
+        let surface_unit = 1.0;
         assert_eq!(
-            units.unit_delta(
+            colorcorrection_scroll_unit_delta(
                 gtk4::gdk::ScrollUnit::Surface,
-                1_000.0,
-                vertical_surface_unit
+                surface_unit * 0.5,
+                0.0,
+            ),
+            None
+        );
+        assert_eq!(
+            colorcorrection_scroll_unit_delta(
+                gtk4::gdk::ScrollUnit::Surface,
+                surface_unit * 0.5,
+                0.0,
             ),
             Some(1),
-            "diagonal surface motion follows only its vertical component"
+            "horizontal surface fractions accumulate into a source unit"
         );
+        colorcorrection_scroll_end();
+        assert_eq!(
+            colorcorrection_scroll_unit_delta(
+                gtk4::gdk::ScrollUnit::Surface,
+                surface_unit,
+                surface_unit,
+            ),
+            Some(2),
+            "whole surface units from both axes are summed"
+        );
+        colorcorrection_scroll_end();
     }
 
     #[test]

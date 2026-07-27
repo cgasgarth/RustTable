@@ -21,11 +21,11 @@ use super::model::ColorZonesEditorState;
 
 /// Native `DT_IOP_COLORZONES_RES` graph sample count.
 pub const COLORZONES_GRAPH_RESOLUTION: usize = 256;
-/// Native graph-height configuration minimum, in percent.
+/// Native graph-height configuration minimum, in logical pixels.
 pub const COLORZONES_GRAPH_HEIGHT_MIN: u16 = 100;
-/// Native graph-height configuration maximum, in percent.
+/// Native graph-height configuration maximum, in logical pixels.
 pub const COLORZONES_GRAPH_HEIGHT_MAX: u16 = 300;
-/// Native graph-height configuration default, in percent.
+/// Native graph-height configuration default, in logical pixels.
 pub const COLORZONES_GRAPH_HEIGHT_DEFAULT: u16 = 200;
 /// Native logical inset around both graph drawing areas.
 pub const COLORZONES_GRAPH_INSET: f32 = 5.0;
@@ -80,22 +80,30 @@ pub const COLORZONES_BAND_LANDMARKS: [ColorZonesBandLandmark; 8] = [
     ColorZonesBandLandmark { name: "magenta", x: 0.875 },
 ];
 
-/// Checked source graph-height percentage.
+/// Checked source graph height in logical pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorZonesGraphHeight(u16);
 
 impl ColorZonesGraphHeight {
     #[must_use]
-    pub const fn new(percent: u16) -> Option<Self> {
-        if percent >= COLORZONES_GRAPH_HEIGHT_MIN && percent <= COLORZONES_GRAPH_HEIGHT_MAX {
-            Some(Self(percent))
+    pub const fn new(logical_pixels: u16) -> Option<Self> {
+        if logical_pixels >= COLORZONES_GRAPH_HEIGHT_MIN
+            && logical_pixels <= COLORZONES_GRAPH_HEIGHT_MAX
+        {
+            Some(Self(logical_pixels))
         } else {
             None
         }
     }
 
+    /// Clamps an arbitrary value to the native logical-pixel bounds.
     #[must_use]
-    pub const fn percent(self) -> u16 {
+    pub fn clamped(logical_pixels: u16) -> Self {
+        Self(logical_pixels.clamp(COLORZONES_GRAPH_HEIGHT_MIN, COLORZONES_GRAPH_HEIGHT_MAX))
+    }
+
+    #[must_use]
+    pub const fn logical_pixels(self) -> u16 {
         self.0
     }
 }
@@ -621,7 +629,9 @@ mod tests {
         assert_eq!((COLORZONES_GRAPH_INSET, COLORZONES_AREA_MARKER_WIDTH), (5.0, 7.0));
         assert_eq!((COLORZONES_FIELD_COLUMNS, COLORZONES_FIELD_ROWS, COLORZONES_GRAPH_RESOLUTION), (64, 36, 256));
         assert!(ColorZonesGraphHeight::new(99).is_none());
-        assert_eq!(ColorZonesGraphHeight::default().percent(), 200);
+        assert_eq!(ColorZonesGraphHeight::default().logical_pixels(), 200);
+        assert_eq!(ColorZonesGraphHeight::clamped(1).logical_pixels(), 100);
+        assert_eq!(ColorZonesGraphHeight::clamped(999).logical_pixels(), 300);
         assert!(ColorZonesBackgroundSaturation::new(0.099).is_none());
         assert_eq!(ColorZonesBackgroundSaturation::default().value().to_bits(), 0.5_f32.to_bits());
         assert_eq!(COLORZONES_BAND_LANDMARKS[0], ColorZonesBandLandmark { name: "red", x: 0.0 });

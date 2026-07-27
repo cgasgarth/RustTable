@@ -4,7 +4,7 @@ use rusttable_core::Revision;
 use rusttable_processing::descriptor::{
     OperationDescriptor, OperationFlags, ParameterDefault, ParameterKind,
 };
-use rusttable_processing::{DefinitionAvailability, builtin_registry};
+use rusttable_processing::{DefinitionAvailability, OperationUiAvailability, builtin_registry};
 
 use crate::iop::colorcontrast::{
     COLORCONTRAST_MODULE_ID, COLORCONTRAST_SOURCE_MAP, ColorContrastSourceMap,
@@ -12,6 +12,9 @@ use crate::iop::colorcontrast::{
 use crate::iop::colorcorrection::{
     COLORCORRECTION_MODULE_ID, COLORCORRECTION_SOURCE_MAP, ColorCorrectionGridState,
     ColorCorrectionSourceMap,
+};
+use crate::iop::colorzones::{
+    COLORZONES_DESCRIPTION, COLORZONES_GROUP_KEYS, COLORZONES_MODULE_ID, COLORZONES_TITLE,
 };
 use crate::iop::velvia::{VELVIA_MODULE_ID, VELVIA_SOURCE_MAP, VelviaSourceMap};
 use crate::iop::vibrance::{VIBRANCE_MODULE_ID, VIBRANCE_SOURCE_MAP, VibranceSourceMap};
@@ -40,22 +43,8 @@ fn module_from_definition(
     let descriptor = definition.descriptor();
     let vibrance_deprecated_message = (descriptor.id.compatibility_name == VIBRANCE_MODULE_ID)
         .then_some(VIBRANCE_SOURCE_MAP.deprecated_message());
-    let ui_supported = definition.ui_availability().is_available();
-    let effective_availability = match definition.availability() {
-        DefinitionAvailability::Available => definition.ui_availability(),
-        unavailable @ DefinitionAvailability::Unavailable { .. } => unavailable,
-    };
-    let availability = match effective_availability {
-        DefinitionAvailability::Available
-            if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
-        {
-            DarkroomModuleAvailability::Deprecated {
-                reason: vibrance_deprecated_message
-                    .unwrap_or("compatibility operation; shown only by the deprecated filter")
-                    .to_owned(),
-            }
-        }
-        DefinitionAvailability::Available => DarkroomModuleAvailability::Supported,
+    let ui_availability = definition.ui_availability();
+    let availability = match definition.availability() {
         DefinitionAvailability::Unavailable { reason }
             if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
         {
@@ -66,14 +55,45 @@ fn module_from_definition(
         DefinitionAvailability::Unavailable { reason } => DarkroomModuleAvailability::Unsupported {
             reason: reason.clone(),
         },
+        DefinitionAvailability::Available => match ui_availability {
+            OperationUiAvailability::Available
+                if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
+            {
+                DarkroomModuleAvailability::Deprecated {
+                    reason: vibrance_deprecated_message
+                        .unwrap_or("compatibility operation; shown only by the deprecated filter")
+                        .to_owned(),
+                }
+            }
+            OperationUiAvailability::Available => DarkroomModuleAvailability::Supported,
+            OperationUiAvailability::PartiallyAvailable {
+                reason,
+                deferred_responsibilities,
+            } => DarkroomModuleAvailability::PartiallySupported {
+                reason: reason.clone(),
+                deferred_responsibilities: deferred_responsibilities.clone(),
+            },
+            OperationUiAvailability::Unavailable { reason }
+                if descriptor.flags.contains(OperationFlags::DEPRECATED) =>
+            {
+                DarkroomModuleAvailability::DeprecatedUnavailable {
+                    reason: reason.clone(),
+                }
+            }
+            OperationUiAvailability::Unavailable { reason } => {
+                DarkroomModuleAvailability::Unsupported {
+                    reason: reason.clone(),
+                }
+            }
+        },
     };
-    module_from_descriptor(descriptor, availability, ui_supported)
+    module_from_descriptor(descriptor, availability, ui_availability)
 }
 
 fn module_from_descriptor(
     descriptor: &OperationDescriptor,
     availability: DarkroomModuleAvailability,
-    ui_supported: bool,
+    ui_availability: &OperationUiAvailability,
 ) -> DarkroomModuleViewModel {
     let id = descriptor.id.compatibility_name.as_str();
     let colorcorrection_source_map =
@@ -82,8 +102,9 @@ fn module_from_descriptor(
         (id == COLORCONTRAST_MODULE_ID).then_some(COLORCONTRAST_SOURCE_MAP);
     let velvia_source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
     let vibrance_source_map = (id == VIBRANCE_MODULE_ID).then_some(VIBRANCE_SOURCE_MAP);
+    let colorzones_custom_editor = id == COLORZONES_MODULE_ID;
     let mut controls = Vec::new();
-    if ui_supported {
+    if ui_availability.is_available() && !colorzones_custom_editor {
         for parameter in &descriptor.parameters {
             if colorcorrection_source_map
                 .is_some_and(|source_map| source_map.saturation(&parameter.id).is_none())
@@ -97,8 +118,9 @@ fn module_from_descriptor(
             controls.extend(control_from_parameter(id, parameter));
         }
     }
-    let title = colorcorrection_source_map
-        .map(|source_map| source_map.title().to_owned())
+    let title = colorzones_custom_editor
+        .then(|| COLORZONES_TITLE.to_owned())
+        .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| velvia_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| vibrance_source_map.map(|source_map| source_map.title().to_owned()))
@@ -108,9 +130,9 @@ fn module_from_descriptor(
         .as_ref()
         .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
     let style_eligible = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
-    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN) || !ui_supported;
-    let default_enabled = colorcorrection_source_map
-        .is_none_or(ColorCorrectionSourceMap::default_enabled)
+    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN) || !ui_availability.is_usable();
+    let default_enabled = !colorzones_custom_editor
+        && colorcorrection_source_map.is_none_or(ColorCorrectionSourceMap::default_enabled)
         && colorcontrast_source_map.is_none_or(ColorContrastSourceMap::default_enabled)
         && velvia_source_map.is_none_or(VelviaSourceMap::default_enabled)
         && vibrance_source_map.is_none_or(VibranceSourceMap::default_enabled);
@@ -125,14 +147,19 @@ fn module_from_descriptor(
         DarkroomModuleSide::Right,
         default_expanded,
         availability.is_supported() && default_enabled,
-        !controls.is_empty(),
+        !controls.is_empty() || colorzones_custom_editor,
         Revision::from_u64(0),
         controls,
     )
     .expect("registry descriptor projects to a valid darkroom module")
     .with_availability(availability)
     .with_registry_metadata(group_key, style_eligible, hidden);
-    if let Some(source_map) = colorcorrection_source_map {
+    if colorzones_custom_editor {
+        module = module
+            .with_description(COLORZONES_DESCRIPTION)
+            .with_colorzones_custom_editor()
+            .with_group_keys(COLORZONES_GROUP_KEYS);
+    } else if let Some(source_map) = colorcorrection_source_map {
         module = module
             .with_color_correction_grid(ColorCorrectionGridState::DEFAULT)
             .with_group_keys(source_map.group_keys().iter().copied());
@@ -458,8 +485,8 @@ fn title_case(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use rusttable_processing::builtin_registry;
     use rusttable_processing::descriptor::{OperationFlags, exposure_descriptor};
+    use rusttable_processing::{OperationUiAvailability, builtin_registry};
 
     use crate::presentation::darkroom_controls::{DarkroomControlKind, DarkroomControlValue};
 
@@ -544,7 +571,7 @@ mod tests {
             super::DarkroomModuleAvailability::Unsupported {
                 reason: "CPU backend unavailable".to_owned(),
             },
-            true,
+            &OperationUiAvailability::Available,
         );
         assert!(!module.enabled());
         assert!(module.availability().is_unsupported());
@@ -555,22 +582,112 @@ mod tests {
     }
 
     #[test]
-    fn colorzones_backends_do_not_project_generic_gtk_controls() {
+    fn registry_projection_keeps_unavailable_ui_hidden() {
+        let module = super::module_from_descriptor(
+            &exposure_descriptor(),
+            super::DarkroomModuleAvailability::Unsupported {
+                reason: "UI not implemented".to_owned(),
+            },
+            &OperationUiAvailability::Unavailable {
+                reason: "UI not implemented".to_owned(),
+            },
+        );
+
+        assert!(module.is_hidden());
+        assert!(module.availability().is_unsupported());
+        assert_eq!(module.controls().controls().len(), 0);
+        assert_eq!(module.status_text(), "Unavailable · UI not implemented");
+    }
+
+    #[test]
+    fn partial_ui_does_not_project_generic_descriptor_controls() {
+        let ui_availability = OperationUiAvailability::PartiallyAvailable {
+            reason: "custom editor only".to_owned(),
+            deferred_responsibilities: vec!["operation.ui.deferred".to_owned()],
+        };
+        let module = super::module_from_descriptor(
+            &exposure_descriptor(),
+            super::DarkroomModuleAvailability::PartiallySupported {
+                reason: "custom editor only".to_owned(),
+                deferred_responsibilities: vec!["operation.ui.deferred".to_owned()],
+            },
+            &ui_availability,
+        );
+
+        assert!(!module.is_hidden());
+        assert!(module.availability().is_supported());
+        assert!(!module.availability().is_fully_supported());
+        assert!(module.availability().is_partial());
+        assert_eq!(module.controls().controls().len(), 0);
+    }
+
+    #[test]
+    fn colorzones_projects_only_the_source_specific_custom_editor_path() {
         let modules = modules_from_registry().expect("registry module projection");
         let colorzones = modules.module("colorzones").expect("Color Zones module");
 
-        assert!(colorzones.is_hidden());
-        assert!(colorzones.availability().is_unsupported());
-        assert!(!colorzones.enabled());
-        assert_eq!(colorzones.controls().controls().len(), 0);
+        assert!(!colorzones.is_hidden());
+        assert!(colorzones.availability().is_supported());
+        assert!(!colorzones.availability().is_fully_supported());
+        assert!(colorzones.availability().is_partial());
+        assert_eq!(
+            colorzones.availability().reason(),
+            Some(
+                "the Color Zones custom editor is usable, but native UI responsibilities remain deferred"
+            )
+        );
         assert_eq!(
             colorzones.status_text(),
-            "Unavailable · source-derived Color Zones GTK module is not implemented"
+            "Partial · the Color Zones custom editor is usable, but native UI responsibilities remain deferred"
+        );
+        assert!(!colorzones.enabled());
+        assert!(colorzones.resettable());
+        assert!(colorzones.has_colorzones_custom_editor());
+        assert!(colorzones.colorzones_editor_state().is_none());
+        assert_eq!(colorzones.controls().controls().len(), 0);
+        assert_eq!(colorzones.title(), "color zones");
+        assert_eq!(
+            colorzones.description(),
+            Some("selectively shift hues, chroma and lightness of pixels")
+        );
+        assert_eq!(
+            colorzones.group_keys().collect::<Vec<_>>(),
+            ["group.color", "group.grading"]
+        );
+        let deferred_responsibilities = [
+            "iop.colorzones.ui.picker-lifecycle",
+            "iop.colorzones.ui.operation-local-histogram",
+            "iop.colorzones.ui.display-selection",
+            "iop.colorzones.ui.presets",
+            "iop.colorzones.ui.global-shortcuts-hold-mode",
+            "iop.colorzones.ui.durable-gui-preferences",
+            "iop.colorzones.ui.pending-import-materialization",
+        ];
+        assert_eq!(
+            colorzones
+                .availability()
+                .deferred_responsibilities()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            deferred_responsibilities
         );
         let definition = builtin_registry()
             .definition("rusttable.colorzones")
             .expect("Color Zones backend definition");
         assert!(definition.availability().is_available());
+        assert!(!definition.ui_availability().is_available());
+        assert!(definition.ui_availability().is_usable());
+        assert!(definition.ui_availability().is_partial());
+        assert_eq!(
+            definition
+                .ui_availability()
+                .deferred_responsibilities()
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            deferred_responsibilities
+        );
         assert!(definition.cpu().is_some());
         assert!(definition.gpu().is_some());
     }

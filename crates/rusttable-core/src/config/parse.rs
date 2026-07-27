@@ -686,7 +686,9 @@ fn known_fields(path: &[&str]) -> &'static [&'static str] {
             "sidebar_visible",
             "bauhaus_zoom_step",
             "preview_max_edge",
+            "colorzones",
         ],
+        ["ui", "colorzones"] => &["output_channel", "graph_logical_height"],
         ["catalog"] => &["path", "create_if_missing", "checkpoint_interval_seconds"],
         ["import"] => &["max_concurrent_items", "mode"],
         ["processing"] => &["cpu_threads", "host_memory_mib", "preview_quality"],
@@ -818,4 +820,54 @@ pub(crate) fn canonical_document(config: &Configuration, unknown: &UnknownFields
 #[allow(dead_code)]
 fn _known_field_set() -> BTreeSet<&'static str> {
     known_fields(&[]).iter().copied().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colorzones_gui_preferences_default_and_clamp_at_parse_boundary() {
+        let defaults = resolve_layers(None, &EnvironmentOverrides::default(), &BTreeMap::new())
+            .expect("defaults")
+            .0;
+        assert_eq!(defaults.ui.colorzones_output_channel_index(), 0);
+        assert_eq!(defaults.ui.colorzones_graph_logical_height(), 200);
+
+        let low = resolve_layers(
+            Some("[ui.colorzones]\noutput_channel = \"hue\"\ngraph_logical_height = -50\n"),
+            &EnvironmentOverrides::default(),
+            &BTreeMap::new(),
+        )
+        .expect("low height clamps")
+        .0;
+        assert_eq!(low.ui.colorzones_output_channel_index(), 2);
+        assert_eq!(low.ui.colorzones_graph_logical_height(), 100);
+
+        let high = resolve_layers(
+            Some("[ui.colorzones]\noutput_channel = \"chroma\"\ngraph_logical_height = 9999999\n"),
+            &EnvironmentOverrides::default(),
+            &BTreeMap::new(),
+        )
+        .expect("high height clamps")
+        .0;
+        assert_eq!(high.ui.colorzones_output_channel_index(), 1);
+        assert_eq!(high.ui.colorzones_graph_logical_height(), 300);
+    }
+
+    #[test]
+    fn colorzones_gui_preferences_are_known_configuration_fields() {
+        let (_, unknown, findings) = resolve_layers(
+            Some("[ui.colorzones]\noutput_channel = \"hue\"\ngraph_logical_height = 240\n"),
+            &EnvironmentOverrides::default(),
+            &BTreeMap::new(),
+        )
+        .expect("preferences parse");
+        assert_eq!(unknown, UnknownFields::empty());
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding.kind != ConfigFindingKind::UnknownField)
+        );
+    }
 }

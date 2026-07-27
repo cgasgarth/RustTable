@@ -222,6 +222,56 @@ impl DefinitionAvailability {
     }
 }
 
+/// Completion and usability of an operation's UI projection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OperationUiAvailability {
+    Available,
+    PartiallyAvailable {
+        reason: String,
+        deferred_responsibilities: Vec<String>,
+    },
+    Unavailable {
+        reason: String,
+    },
+}
+
+impl OperationUiAvailability {
+    /// Reports full UI completion, not merely a usable partial editor.
+    #[must_use]
+    pub const fn is_available(&self) -> bool {
+        matches!(self, Self::Available)
+    }
+
+    #[must_use]
+    pub const fn is_usable(&self) -> bool {
+        matches!(self, Self::Available | Self::PartiallyAvailable { .. })
+    }
+
+    #[must_use]
+    pub const fn is_partial(&self) -> bool {
+        matches!(self, Self::PartiallyAvailable { .. })
+    }
+
+    #[must_use]
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            Self::Available => None,
+            Self::PartiallyAvailable { reason, .. } | Self::Unavailable { reason } => Some(reason),
+        }
+    }
+
+    #[must_use]
+    pub fn deferred_responsibilities(&self) -> &[String] {
+        match self {
+            Self::PartiallyAvailable {
+                deferred_responsibilities,
+                ..
+            } => deferred_responsibilities,
+            Self::Available | Self::Unavailable { .. } => &[],
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct OperationDefinition {
     descriptor: OperationDescriptor,
@@ -231,7 +281,7 @@ pub struct OperationDefinition {
     identity: ImplementationIdentity,
     evidence_ids: Vec<String>,
     availability: DefinitionAvailability,
-    ui_availability: DefinitionAvailability,
+    ui_availability: OperationUiAvailability,
 }
 
 impl fmt::Debug for OperationDefinition {
@@ -268,7 +318,7 @@ impl OperationDefinition {
             identity,
             evidence_ids,
             availability: DefinitionAvailability::Available,
-            ui_availability: DefinitionAvailability::Available,
+            ui_availability: OperationUiAvailability::Available,
         }
     }
 
@@ -279,7 +329,7 @@ impl OperationDefinition {
     }
 
     #[must_use]
-    pub fn with_ui_availability(mut self, availability: DefinitionAvailability) -> Self {
+    pub fn with_ui_availability(mut self, availability: OperationUiAvailability) -> Self {
         self.ui_availability = availability;
         self
     }
@@ -320,7 +370,7 @@ impl OperationDefinition {
     }
 
     #[must_use]
-    pub const fn ui_availability(&self) -> &DefinitionAvailability {
+    pub const fn ui_availability(&self) -> &OperationUiAvailability {
         &self.ui_availability
     }
 }

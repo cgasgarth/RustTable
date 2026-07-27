@@ -343,6 +343,10 @@ fn activate_application(
         &display_profile_state,
         diagnostics,
     );
+    shell.set_colorzones_action_handler(Some(darkroom_bridge.colorzones_handler.clone()));
+    shell.set_colorzones_preferences_handler(Some(
+        darkroom_bridge.colorzones_preferences_handler.clone(),
+    ));
     let darkroom_panel_bridge = darkroom::install_panels(
         &shell,
         &catalog_controller,

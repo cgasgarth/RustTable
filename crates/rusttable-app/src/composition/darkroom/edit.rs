@@ -6,8 +6,12 @@ use std::rc::Rc;
 use crate::composition::selected_preview::PreviewLifecycle;
 use crate::composition::thumbnails::ThumbnailLifecycle;
 use crate::diagnostics::AppDiagnostics;
-use crate::gtk_controller::{GtkCatalogController, GtkDarkroomEditController};
+use crate::gtk_controller::colorzones_edit::{ColorZonesEditAction, ColorZonesGuiPreferences};
+use crate::gtk_controller::{DarkroomEditOutcome, GtkCatalogController, GtkDarkroomEditController};
 use rusttable_display_profile::DisplayProfileSnapshot;
+use rusttable_ui::iop::colorzones::{
+    ColorZonesGtkActionHandler, ColorZonesGtkHandlerOutcome, ColorZonesGtkPreferencesHandler,
+};
 use rusttable_ui::{
     DarkroomControlValue, DarkroomModuleAction, DarkroomModuleActionHandler, GtkShell,
 };
@@ -17,6 +21,8 @@ pub(crate) type DarkroomEditCommitHandler = Rc<dyn Fn()>;
 pub(crate) struct DarkroomEditBridge {
     pub(crate) controller: Rc<RefCell<GtkDarkroomEditController>>,
     pub(crate) handler: DarkroomModuleActionHandler,
+    pub(crate) colorzones_handler: ColorZonesGtkActionHandler,
+    pub(crate) colorzones_preferences_handler: ColorZonesGtkPreferencesHandler,
     after_commit: Rc<RefCell<Option<DarkroomEditCommitHandler>>>,
 }
 
@@ -33,21 +39,49 @@ pub(crate) fn install(
     let thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
     let display_profile = Rc::clone(display_profile);
     let diagnostics = diagnostics.clone();
-    let controller = Rc::new(RefCell::new(GtkDarkroomEditController::new(
-        catalog
-            .borrow()
-            .catalog_path()
-            .map(std::path::Path::to_path_buf),
-    )));
+    let controller = Rc::new(RefCell::new(
+        GtkDarkroomEditController::new(
+            catalog
+                .borrow()
+                .catalog_path()
+                .map(std::path::Path::to_path_buf),
+        )
+        .with_colorzones_gui_preferences(crate::configuration::colorzones_gui_preferences()),
+    ));
+    let after_commit = Rc::new(RefCell::new(None::<DarkroomEditCommitHandler>));
+    let publish_shell = shell.clone();
+    let publish_catalog = Rc::clone(&catalog);
+    let publish_lifecycle = Rc::clone(&lifecycle);
+    let publish_thumbnail_lifecycle = Rc::clone(&thumbnail_lifecycle);
+    let publish_display_profile = Rc::clone(&display_profile);
+    let publish_diagnostics = diagnostics.clone();
+    let publish_after_commit = Rc::clone(&after_commit);
+    let publish_processing_change = Rc::new(move |outcome: &DarkroomEditOutcome| {
+        if !outcome.processing_changed() {
+            return;
+        }
+        publish_shell
+            .set_darkroom_status(&format!("Edit persisted · revision {}", outcome.revision()));
+        if let Some(after_commit) = publish_after_commit.borrow().as_ref() {
+            // Invalidate history and the shared filmstrip before the new preview
+            // starts so an older worker cannot publish across edit identity.
+            after_commit();
+        }
+        crate::composition::selected_preview::start_selected_preview(
+            &publish_shell,
+            publish_catalog.borrow().clone(),
+            Rc::clone(&publish_lifecycle),
+            &publish_thumbnail_lifecycle,
+            publish_diagnostics.clone(),
+            publish_display_profile.borrow().as_ref(),
+        );
+    });
+
     let slot = Rc::new(RefCell::new(None::<DarkroomModuleActionHandler>));
     let action_controller = Rc::clone(&controller);
     let action_shell = shell.clone();
-    let action_catalog = Rc::clone(&catalog);
-    let action_lifecycle = Rc::clone(&lifecycle);
-    let action_display_profile = Rc::clone(&display_profile);
     let slot_for_handler = Rc::clone(&slot);
-    let after_commit = Rc::new(RefCell::new(None::<DarkroomEditCommitHandler>));
-    let after_commit_for_handler = Rc::clone(&after_commit);
+    let publish_generic_change = Rc::clone(&publish_processing_change);
     let handler: DarkroomModuleActionHandler = Rc::new(move |action| {
         let preserve_mounted_control = preserves_mounted_control(&action);
         let result = action_controller.borrow_mut().apply(&action);
@@ -64,27 +98,7 @@ pub(crate) fn install(
                         slot_for_handler.borrow().clone(),
                     );
                 }
-                if outcome.processing_changed() {
-                    action_shell.set_darkroom_status(&format!(
-                        "Edit persisted · revision {}",
-                        outcome.revision()
-                    ));
-                    if let Some(after_commit) = after_commit_for_handler.borrow().as_ref() {
-                        // Invalidate the shared filmstrip before the new preview request starts.
-                        // This prevents an old thumbnail worker from briefly publishing after
-                        // persistence has advanced the edit identity but before the new preview
-                        // is ready.
-                        after_commit();
-                    }
-                    crate::composition::selected_preview::start_selected_preview(
-                        &action_shell,
-                        action_catalog.borrow().clone(),
-                        Rc::clone(&action_lifecycle),
-                        &thumbnail_lifecycle,
-                        diagnostics.clone(),
-                        action_display_profile.borrow().as_ref(),
-                    );
-                }
+                publish_generic_change(&outcome);
                 Ok(outcome.revision())
             }
             Err(error) => {
@@ -107,9 +121,109 @@ pub(crate) fn install(
         }
     });
     slot.replace(Some(handler.clone()));
+
+    let colorzones_controller = Rc::clone(&controller);
+    let colorzones_shell = shell.clone();
+    let publish_colorzones_change = Rc::clone(&publish_processing_change);
+    let colorzones_handler: ColorZonesGtkActionHandler = Rc::new(move |settled| {
+        let target = settled.target();
+        let expected_revision = settled.expected_revision();
+        let action = ColorZonesEditAction::from(settled);
+        let result = colorzones_controller.borrow_mut().apply_colorzones(&action);
+        match result {
+            Ok(outcome) => {
+                // The custom mount reconciles persisted truth in place while
+                // retaining its UI-owned output tab and stable controllers.
+                colorzones_shell
+                    .update_darkroom_module_stack_snapshot(outcome.modules(), outcome.revision());
+                publish_colorzones_change(&outcome);
+                ColorZonesGtkHandlerOutcome::Commit {
+                    revision: outcome.revision(),
+                }
+            }
+            Err(error) => {
+                let selected_photo = colorzones_controller.borrow().selected_photo();
+                tracing::error!(
+                    target: "rusttable.gtk.darkroom.colorzones.edit",
+                    photo_id = ?selected_photo,
+                    operation_id = %target,
+                    expected_revision = %expected_revision,
+                    cause = ?error,
+                    "Color Zones settled action was not persisted"
+                );
+                colorzones_shell.set_darkroom_status(&error.to_string());
+                if matches!(
+                    error,
+                    rusttable_ui::DarkroomModuleError::StaleRevision { .. }
+                ) {
+                    let reconciled = colorzones_controller
+                        .borrow()
+                        .reconcile_colorzones_snapshot(target);
+                    if let Ok(state) = reconciled {
+                        let modules = colorzones_controller.borrow().modules().cloned();
+                        if let Some(modules) = modules {
+                            colorzones_shell
+                                .update_darkroom_module_stack_snapshot(&modules, state.revision());
+                        }
+                        return ColorZonesGtkHandlerOutcome::Reconcile(state);
+                    }
+                }
+                ColorZonesGtkHandlerOutcome::Rollback
+            }
+        }
+    });
+
+    let preferences_controller = Rc::clone(&controller);
+    let preferences_shell = shell.clone();
+    let colorzones_preferences_handler: ColorZonesGtkPreferencesHandler =
+        Rc::new(move |preferences| {
+            let preferences = ColorZonesGuiPreferences::from(preferences);
+            let previous = preferences_controller.borrow().colorzones_gui_preferences();
+            let outcome = match preferences_controller
+                .borrow_mut()
+                .update_colorzones_gui_preferences(preferences)
+            {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    tracing::error!(
+                        target: "rusttable.gtk.darkroom.colorzones.preferences",
+                        cause = ?error,
+                        "Color Zones GUI preferences could not be reconciled"
+                    );
+                    preferences_shell.set_darkroom_status(&error.to_string());
+                    return false;
+                }
+            };
+            if let Err(error) =
+                crate::configuration::persist_colorzones_gui_preferences(preferences)
+            {
+                tracing::error!(
+                    target: "rusttable.gtk.darkroom.colorzones.preferences",
+                    cause = ?error,
+                    "Color Zones GUI preferences were not persisted"
+                );
+                if let Ok(rollback) = preferences_controller
+                    .borrow_mut()
+                    .update_colorzones_gui_preferences(previous)
+                {
+                    preferences_shell.update_darkroom_module_stack_snapshot(
+                        rollback.modules(),
+                        rollback.revision(),
+                    );
+                }
+                preferences_shell.set_darkroom_status(&error.to_string());
+                return false;
+            }
+            preferences_shell
+                .update_darkroom_module_stack_snapshot(outcome.modules(), outcome.revision());
+            true
+        });
+
     DarkroomEditBridge {
         controller,
         handler,
+        colorzones_handler,
+        colorzones_preferences_handler,
         after_commit,
     }
 }

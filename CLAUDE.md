@@ -83,21 +83,25 @@ A processing operation is cross-cutting. Follow established strict ports such as
 
 Use source-derived GTK hierarchy, allocations, state, and interactions as the specification. Screenshots support validation but must not determine geometry.
 
-Without Computer Use, keep E2E validation conventional and project-owned:
+Keep E2E validation conventional and project-owned:
 
 1. Pure Rust tests cover editor state, processing, persistence, and rendering contracts.
 2. Existing non-activating GTK boundary and app runtime-smoke tests cover production widget wiring, controllers, allocations, and paint behavior.
 3. Existing repository scripts build, transactionally install, launch, and smoke-test the real app.
-4. Use small AppleScript/System Events checks only for focused macOS interactions or matched-window captures that the project tests cannot exercise.
+4. Use the installed CUA Computer Use MCP for focused live operation of the real app after automated checks converge. Launch through project-owned scripts, keep the target in an isolated temporary app/catalog/config state, inspect accessibility and matched-window geometry, and verify interactions in a background CUA session without stealing foreground focus.
+5. Use small AppleScript/System Events checks only when a focused macOS interaction or matched-window capture cannot be exercised through project tests or CUA.
 
-Do not build a separate automation framework or survey external UI-driving ecosystems. Foreground automation must be deliberate, use isolated temporary app/catalog/config state, and compare RustTable with the runnable Darktable reference at matched normal-window bounds.
+Do not build a separate automation framework or survey external UI-driving ecosystems. Live automation must be deliberate and compare RustTable with the runnable Darktable reference at matched normal-window bounds.
 
 ## Model-aware workflows
 
 Use workflows to advance one dependency-ready milestone at a time while keeping shared-file ownership explicit. One active PR constrains delivery, not implementation concurrency: default to a broad parallel fan-out for independent work, then converge through one integration owner.
 
+- Before implementation fan-out, produce a source-responsibility inventory covering native functions and constants, Rust callers, ownership/lifetime boundaries, behavior-preserving tests, writable file ownership, and explicit deferred responsibilities.
 - Run source/caller/test research in parallel by responsibility.
 - Parallelize non-overlapping leaf modules, focused tests/contracts, GPU work, and UI/editor work where dependencies permit; use roughly 4–8 active agents for a substantial milestone rather than serializing independent work.
+- Keep implementation and adversarial verification context-independent: reviewers inspect source evidence and the actual diff, try to refute behavioral equivalence, and do not inherit the implementer's rationale as fact.
+- Treat compiler diagnostics as a refreshed integration work queue. Re-run the focused owner check after each mutation batch before partitioning remaining failures by crate and file; never assign agents from stale diagnostics.
 - Use Luna at medium effort for source research and independent constant/format/order verification.
 - Use Luna at xhigh effort for well-scoped, mechanical implementations and focused tests.
 - Use Luna at medium effort for targeted adversarial review passes. Review only the changed responsibility and explicit acceptance boundaries; return concise findings rather than broad audits or review panels.

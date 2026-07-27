@@ -138,11 +138,8 @@ fn assert_left_rail_is_populated(shell: &GtkShell, expected: DarkroomPanelTarget
         );
     }
     for id in [
-        "darkroom-snapshots-info",
         "darkroom-snapshots-actions",
-        "darkroom-history-info",
         "darkroom-history-actions",
-        "darkroom-image-information-info",
         "darkroom-image-information-actions",
     ] {
         let affordance = find_widget(&rail, id)

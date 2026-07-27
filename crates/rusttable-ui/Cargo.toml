@@ -62,6 +62,11 @@ path = "tests/colorcorrection_gtk_boundary.rs"
 harness = false
 
 [[test]]
+name = "colorzones_gtk_boundary"
+path = "tests/colorzones_gtk_boundary.rs"
+harness = false
+
+[[test]]
 name = "vibrance_gtk_boundary"
 path = "tests/vibrance_gtk_boundary.rs"
 harness = false

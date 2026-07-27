@@ -85,8 +85,8 @@ fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_t
             .focus_order(),
         [
             format!("{first_widget_id}-disclosure"),
-            format!("{first_widget_id}-actions"),
             format!("{first_widget_id}-enabled"),
+            format!("{first_widget_id}-actions"),
             format!("{first_widget_id}-reset"),
             format!("{first_widget_id}-a-steepness-widget"),
             format!("{first_widget_id}-b-steepness-widget"),
@@ -99,8 +99,8 @@ fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_t
             .focus_order(),
         [
             format!("{second_widget_id}-disclosure"),
-            format!("{second_widget_id}-actions"),
             format!("{second_widget_id}-enabled"),
+            format!("{second_widget_id}-actions"),
             format!("{second_widget_id}-reset"),
             format!("{second_widget_id}-a-steepness-widget"),
             format!("{second_widget_id}-b-steepness-widget"),
