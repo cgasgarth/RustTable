@@ -18,6 +18,7 @@ use super::validate::validate_and_reflect;
 
 const POINT_SOURCE: &str = "shaders/point.wgsl";
 const BILATERAL_SOURCE: &str = "shaders/bilateral.wgsl";
+const BLOOM_SOURCE: &str = "shaders/bloom.wgsl";
 
 #[derive(Debug, Clone, Copy)]
 struct EntrySpec {
@@ -422,6 +423,144 @@ pub(crate) const BILATERAL_ENTRY_CONTRACTS: &[BilateralEntryContract] = &[
     },
 ];
 
+#[derive(Debug, Clone, Copy)]
+struct BloomEntryContract {
+    entry_point: &'static str,
+    workgroup_size: [u32; 3],
+    bindings: &'static [BindingContract],
+}
+
+const BLOOM_ENTRY_CONTRACTS: &[BloomEntryContract] = &[
+    BloomEntryContract {
+        entry_point: "bloom_threshold",
+        workgroup_size: [16, 16, 1],
+        bindings: &[
+            BindingContract {
+                binding: 0,
+                name: "input_pixels",
+                storage: true,
+                access: "read",
+                minimum_binding_size: 16,
+                type_description: "array<vec4<f32>, runtime>",
+            },
+            BindingContract {
+                binding: 2,
+                name: "light_output",
+                storage: true,
+                access: "read_write",
+                minimum_binding_size: 4,
+                type_description: "array<f32, runtime>",
+            },
+            BindingContract {
+                binding: 4,
+                name: "params",
+                storage: false,
+                access: "read",
+                minimum_binding_size: 32,
+                type_description: "struct",
+            },
+        ],
+    },
+    BloomEntryContract {
+        entry_point: "bloom_hblur",
+        workgroup_size: [256, 1, 1],
+        bindings: &[
+            BindingContract {
+                binding: 1,
+                name: "light_input",
+                storage: true,
+                access: "read",
+                minimum_binding_size: 4,
+                type_description: "array<f32, runtime>",
+            },
+            BindingContract {
+                binding: 2,
+                name: "light_output",
+                storage: true,
+                access: "read_write",
+                minimum_binding_size: 4,
+                type_description: "array<f32, runtime>",
+            },
+            BindingContract {
+                binding: 4,
+                name: "params",
+                storage: false,
+                access: "read",
+                minimum_binding_size: 32,
+                type_description: "struct",
+            },
+        ],
+    },
+    BloomEntryContract {
+        entry_point: "bloom_vblur",
+        workgroup_size: [1, 256, 1],
+        bindings: &[
+            BindingContract {
+                binding: 1,
+                name: "light_input",
+                storage: true,
+                access: "read",
+                minimum_binding_size: 4,
+                type_description: "array<f32, runtime>",
+            },
+            BindingContract {
+                binding: 2,
+                name: "light_output",
+                storage: true,
+                access: "read_write",
+                minimum_binding_size: 4,
+                type_description: "array<f32, runtime>",
+            },
+            BindingContract {
+                binding: 4,
+                name: "params",
+                storage: false,
+                access: "read",
+                minimum_binding_size: 32,
+                type_description: "struct",
+            },
+        ],
+    },
+    BloomEntryContract {
+        entry_point: "bloom_mix",
+        workgroup_size: [16, 16, 1],
+        bindings: &[
+            BindingContract {
+                binding: 0,
+                name: "input_pixels",
+                storage: true,
+                access: "read",
+                minimum_binding_size: 16,
+                type_description: "array<vec4<f32>, runtime>",
+            },
+            BindingContract {
+                binding: 1,
+                name: "light_input",
+                storage: true,
+                access: "read",
+                minimum_binding_size: 4,
+                type_description: "array<f32, runtime>",
+            },
+            BindingContract {
+                binding: 3,
+                name: "output_pixels",
+                storage: true,
+                access: "read_write",
+                minimum_binding_size: 16,
+                type_description: "array<vec4<f32>, runtime>",
+            },
+            BindingContract {
+                binding: 4,
+                name: "params",
+                storage: false,
+                access: "read",
+                minimum_binding_size: 32,
+                type_description: "struct",
+            },
+        ],
+    },
+];
+
 fn point_bindings_match(entry_point: &str, actual: &[BindingReflection]) -> bool {
     let expected = match entry_point {
         "basicadj" => POINT_BASICADJ_BINDINGS,
@@ -644,6 +783,78 @@ impl ShaderRegistry {
             entries.push(ShaderEntry {
                 identity,
                 source_alias: BILATERAL_SOURCE.to_owned(),
+                expanded_source: expanded.text.clone(),
+                reflection,
+            });
+        }
+        let expanded = catalog.expand(BLOOM_SOURCE, &BTreeMap::new())?;
+        let source_tree_hash = catalog.source_tree_hash(BLOOM_SOURCE)?;
+        for entry_contract in BLOOM_ENTRY_CONTRACTS {
+            let entry_point = entry_contract.entry_point;
+            let (contract, numerical) = bloom_numerical_metadata(entry_point);
+            let reflection = validate_and_reflect(
+                BLOOM_SOURCE,
+                &expanded.text,
+                &expanded.line_aliases,
+                entry_point,
+                numerical,
+            )?;
+            if reflection.workgroup_size != entry_contract.workgroup_size {
+                return Err(ShaderError::Reflection(format!("{entry_point} workgroup")));
+            }
+            if !bindings_match(&reflection.bindings, entry_contract.bindings) {
+                return Err(ShaderError::Reflection(format!(
+                    "{entry_point} binding contract"
+                )));
+            }
+            let generated_wgsl_hash = digest(&expanded.text);
+            let implementation_id = format!("rusttable.bloom.{entry_point}");
+            let implementation_numerics = ImplementationNumerics::new(
+                &implementation_id,
+                "rusttable.cpu.bloom",
+                &generated_wgsl_hash,
+                ImplementationFamily::Gpu,
+                CompilerBaseline::BackendToolchain,
+                reflection.numerical.tolerance,
+                contract,
+            )
+            .map_err(|error| ShaderError::Reflection(error.to_string()))?;
+            let identity = ShaderIdentity {
+                program_id: "rusttable.bloom".to_owned(),
+                program_version: 1,
+                entry_point_id: entry_point.to_owned(),
+                entry_point_version: 1,
+                source_tree_hash: source_tree_hash.clone(),
+                generated_wgsl_hash,
+                reflection_schema: reflection.schema.clone(),
+                numerical_class: if matches!(entry_point, "bloom_hblur" | "bloom_vblur") {
+                    NumericalClass::F32Neighborhood
+                } else {
+                    NumericalClass::F32Point
+                },
+                feature_plan: FeaturePlan::CoreCompute,
+                owner_operation_ids: vec!["rusttable.bloom".to_owned()],
+                owner_kernel_ids: vec![format!("darktable.bloom.{entry_point}")],
+                canonical_cpu_reference: "rusttable.cpu.bloom".to_owned(),
+                implementation_version: 1,
+                implementation_numerics,
+            };
+            let identity_name = identity.entry_id().stable_name();
+            if !identities.insert(identity_name.clone()) {
+                return Err(ShaderError::DuplicateIdentity(identity_name));
+            }
+            if identity.implementation_numerics.contract() != reflection.numerical.contract
+                || identity.implementation_numerics.tolerance() != reflection.numerical.tolerance
+                || identity.implementation_numerics.scalar_reference_id()
+                    != reflection.numerical.canonical_cpu_reference
+            {
+                return Err(ShaderError::Reflection(format!(
+                    "{entry_point} numerical registration"
+                )));
+            }
+            entries.push(ShaderEntry {
+                identity,
+                source_alias: BLOOM_SOURCE.to_owned(),
                 expanded_source: expanded.text.clone(),
                 reflection,
             });
@@ -910,6 +1121,55 @@ fn bilateral_numerical_metadata(entry_point: &str) -> (NumericalContract, Numeri
     (contract, metadata)
 }
 
+fn bloom_numerical_metadata(entry_point: &str) -> (NumericalContract, NumericalMetadata) {
+    let neighborhood = matches!(entry_point, "bloom_hblur" | "bloom_vblur");
+    let tolerance = if neighborhood {
+        ToleranceClass::Neighborhood
+    } else {
+        ToleranceClass::Pointwise
+    };
+    let contract = NumericalContract {
+        float_domain: FloatDomainPolicy::F32,
+        non_finite: NonFinitePolicy::Reject,
+        subnormal: SubnormalPolicy::BackendDefined,
+        fma: FmaPolicy::BackendDefined,
+        reduction: if neighborhood {
+            ReductionPolicy::BackendDefined
+        } else {
+            ReductionPolicy::None
+        },
+        transcendental: TranscendentalPolicy::None,
+        conversion: if neighborhood {
+            ConversionPolicy {
+                range: ConversionRange::Clamp,
+                rounding: RoundingPolicy::TowardZero,
+            }
+        } else {
+            ConversionPolicy::checked_nearest_even()
+        },
+    };
+    let metadata = NumericalMetadata {
+        uses_f32: true,
+        uses_f16: false,
+        contraction_assumption: format!(
+            "backend-defined; {} tolerance required",
+            tolerance.as_str()
+        ),
+        transcendental_operations: Vec::new(),
+        texture_filtering: false,
+        sampling: neighborhood,
+        atomics: false,
+        reductions: neighborhood,
+        subnormal_policy: "backend-defined".to_owned(),
+        non_finite_policy: "reject-at-host-boundary".to_owned(),
+        schema_3_tolerance_class: tolerance.as_str().to_owned(),
+        canonical_cpu_reference: "rusttable.cpu.bloom".to_owned(),
+        contract,
+        tolerance,
+    };
+    (contract, metadata)
+}
+
 fn digest(source: &str) -> String {
     let digest: [u8; 32] = Sha256::digest(source.as_bytes()).into();
     super::model::hex(&digest)
@@ -922,7 +1182,7 @@ mod tests {
     #[test]
     fn checked_in_registry_has_stable_initial_entries() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        assert_eq!(registry.entries().len(), 18);
+        assert_eq!(registry.entries().len(), 22);
         let exposure = registry
             .find("rusttable.point", "exposure")
             .expect("point exposure");
@@ -1020,6 +1280,22 @@ mod tests {
             velvia.identity.canonical_cpu_reference,
             "rusttable.cpu.velvia"
         );
+        for (entry_name, numerical_class) in [
+            ("bloom_threshold", NumericalClass::F32Point),
+            ("bloom_hblur", NumericalClass::F32Neighborhood),
+            ("bloom_vblur", NumericalClass::F32Neighborhood),
+            ("bloom_mix", NumericalClass::F32Point),
+        ] {
+            let bloom = registry
+                .find("rusttable.bloom", entry_name)
+                .expect("Bloom shader entry");
+            assert_eq!(bloom.identity.owner_operation_ids, ["rusttable.bloom"]);
+            assert_eq!(bloom.identity.numerical_class, numerical_class);
+            assert_eq!(
+                bloom.identity.canonical_cpu_reference,
+                "rusttable.cpu.bloom"
+            );
+        }
         for entry in registry
             .entries()
             .iter()

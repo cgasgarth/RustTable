@@ -684,6 +684,7 @@ fn dispatch_open_request(
         return;
     };
     let recent_paths = image_paths.clone();
+    shell.set_import_session_state(&import_bridge::running_import_session(&recent_paths));
     let (sender, receiver) = mpsc::channel::<RasterImportBatch>();
     let worker_catalog_path = catalog_path.clone();
     let worker_diagnostics = diagnostics.clone();
@@ -693,18 +694,21 @@ fn dispatch_open_request(
             image_paths,
             &rusttable_import::RasterImportCancellation::default(),
             &|_| {},
-            worker_diagnostics,
+            &worker_diagnostics,
         );
         let _ = sender.send(batch);
     });
 
     let active_collection = Rc::clone(active_collection);
     let thumbnail_lifecycle = Rc::clone(thumbnail_lifecycle);
+    let ui_diagnostics = diagnostics.clone();
     glib::timeout_add_local(Duration::from_millis(16), move || {
         match receiver.try_recv() {
             Ok(batch) => {
                 record_successful_recent_paths(&recent_paths, &batch);
-                let selected_photo = batch.first_selected_photo();
+                let selected_photo = import_bridge::selected_photo_to_open(&batch);
+                let import_session = import_bridge::completed_import_session(&batch, &recent_paths);
+                shell.set_import_session_state(&import_session);
                 *catalog.borrow_mut() = GtkCatalogController::load_catalog_at(catalog_path.clone());
                 refresh_catalog_shell(&shell, &catalog, &active_collection);
                 if let Some(photo_id) = selected_photo {
@@ -714,7 +718,14 @@ fn dispatch_open_request(
                 ControlFlow::Break
             }
             Err(TryRecvError::Empty) => ControlFlow::Continue,
-            Err(TryRecvError::Disconnected) => ControlFlow::Break,
+            Err(TryRecvError::Disconnected) => {
+                ui_diagnostics
+                    .lifecycle_failure("import_worker_disconnected", "raster_import_worker");
+                shell.set_import_session_state(&import_bridge::disconnected_import_session(
+                    &recent_paths,
+                ));
+                ControlFlow::Break
+            }
         }
     });
 }

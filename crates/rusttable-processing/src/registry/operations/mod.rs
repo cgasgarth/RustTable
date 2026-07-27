@@ -969,15 +969,31 @@ fn full_image_definition(
 }
 
 pub fn bloom_definition() -> OperationDefinition {
-    full_image_definition(
-        bloom_descriptor(),
+    let descriptor = bloom_descriptor();
+    let gpu = GpuBinding::new(
+        crate::operations::bloom::BLOOM_WGPU_PASS_ID,
+        crate::operations::bloom::BLOOM_GPU_TIER,
+        descriptor.capability.required_features.clone(),
+        descriptor.capability.required_formats.clone(),
+    );
+    geometry_definition_with_gpu(
+        descriptor,
         prepare_bloom,
         &[
             "iop.bloom.params.v1",
-            "iop.bloom.cpu",
+            "iop.bloom.cpu.scale-1-full-frame",
             "iop.bloom.convolution",
+            "iop.bloom.wgpu.threshold-blur-mix",
+            "iop.bloom.wgpu.cpu-fallback",
             "iop.bloom.alpha-preserve",
+            "iop.bloom.scaled-roi-tiling-deferred",
+            "iop.bloom.allocation-copy-through-deferred",
+            "iop.bloom.opaque-blend-history",
+            "iop.bloom.retained-registrations",
         ],
+        RoiKind::FullImage,
+        std::iter::empty(),
+        Some(gpu),
     )
 }
 

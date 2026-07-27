@@ -6,6 +6,7 @@ use rusttable_processing::descriptor::{
 };
 use rusttable_processing::{DefinitionAvailability, OperationUiAvailability, builtin_registry};
 
+use crate::iop::bloom::{BLOOM_DESCRIPTION, BLOOM_GROUP_KEYS, BLOOM_MODULE_ID, BLOOM_TITLE};
 use crate::iop::colorcontrast::{
     COLORCONTRAST_MODULE_ID, COLORCONTRAST_SOURCE_MAP, ColorContrastSourceMap,
 };
@@ -102,9 +103,11 @@ fn module_from_descriptor(
         (id == COLORCONTRAST_MODULE_ID).then_some(COLORCONTRAST_SOURCE_MAP);
     let velvia_source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
     let vibrance_source_map = (id == VIBRANCE_MODULE_ID).then_some(VIBRANCE_SOURCE_MAP);
+    let bloom_custom_editor = id == BLOOM_MODULE_ID;
     let colorzones_custom_editor = id == COLORZONES_MODULE_ID;
+    let custom_editor = bloom_custom_editor || colorzones_custom_editor;
     let mut controls = Vec::new();
-    if ui_availability.is_available() && !colorzones_custom_editor {
+    if ui_availability.is_available() && !custom_editor {
         for parameter in &descriptor.parameters {
             if colorcorrection_source_map
                 .is_some_and(|source_map| source_map.saturation(&parameter.id).is_none())
@@ -118,8 +121,9 @@ fn module_from_descriptor(
             controls.extend(control_from_parameter(id, parameter));
         }
     }
-    let title = colorzones_custom_editor
-        .then(|| COLORZONES_TITLE.to_owned())
+    let title = bloom_custom_editor
+        .then(|| BLOOM_TITLE.to_owned())
+        .or_else(|| colorzones_custom_editor.then(|| COLORZONES_TITLE.to_owned()))
         .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| velvia_source_map.map(|source_map| source_map.title().to_owned()))
@@ -131,7 +135,7 @@ fn module_from_descriptor(
         .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
     let style_eligible = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
     let hidden = descriptor.flags.contains(OperationFlags::HIDDEN) || !ui_availability.is_usable();
-    let default_enabled = !colorzones_custom_editor
+    let default_enabled = !custom_editor
         && colorcorrection_source_map.is_none_or(ColorCorrectionSourceMap::default_enabled)
         && colorcontrast_source_map.is_none_or(ColorContrastSourceMap::default_enabled)
         && velvia_source_map.is_none_or(VelviaSourceMap::default_enabled)
@@ -147,14 +151,19 @@ fn module_from_descriptor(
         DarkroomModuleSide::Right,
         default_expanded,
         availability.is_supported() && default_enabled,
-        !controls.is_empty() || colorzones_custom_editor,
+        !controls.is_empty() || custom_editor,
         Revision::from_u64(0),
         controls,
     )
     .expect("registry descriptor projects to a valid darkroom module")
     .with_availability(availability)
     .with_registry_metadata(group_key, style_eligible, hidden);
-    if colorzones_custom_editor {
+    if bloom_custom_editor {
+        module = module
+            .with_description(BLOOM_DESCRIPTION)
+            .with_bloom_custom_editor()
+            .with_group_keys(BLOOM_GROUP_KEYS);
+    } else if colorzones_custom_editor {
         module = module
             .with_description(COLORZONES_DESCRIPTION)
             .with_colorzones_custom_editor()
@@ -496,8 +505,14 @@ mod tests {
     fn registry_projection_keeps_backend_ranges_and_deprecated_visibility_metadata() {
         let modules = modules_from_registry().expect("registry module projection");
         let bloom = modules.module("bloom").expect("bloom");
-        let size = bloom.controls().control("bloom-size").expect("bloom size");
-        assert!((size.slider_spec().expect("slider").maximum() - 100.0).abs() < f64::EPSILON);
+        assert!(bloom.has_bloom_custom_editor());
+        assert!(bloom.bloom_editor_state().is_none());
+        assert_eq!(bloom.controls().controls().len(), 0);
+        assert_eq!(bloom.title(), "bloom");
+        assert_eq!(
+            bloom.group_keys().collect::<Vec<_>>(),
+            ["group.effect", "group.effects"]
+        );
         assert!(modules.module("soften").is_some());
         assert!(modules.module("dither").is_some());
         let invert = modules.module("invert").expect("invert");

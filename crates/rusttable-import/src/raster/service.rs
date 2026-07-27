@@ -157,6 +157,7 @@ impl<'a> RasterImportService<'a> {
                 return Err(Box::new(failed(
                     item_id,
                     alias,
+                    RasterImportStage::Opening,
                     map_snapshot_error(&error),
                     observer,
                 )));
@@ -168,6 +169,7 @@ impl<'a> RasterImportService<'a> {
                 return Err(Box::new(failed(
                     item_id,
                     alias,
+                    RasterImportStage::Opening,
                     map_snapshot_read_error(&error),
                     observer,
                 )));
@@ -182,6 +184,7 @@ impl<'a> RasterImportService<'a> {
                 alias,
                 hash,
                 None,
+                RasterImportStage::Probing,
                 RasterImportFailure::UnsupportedOrMalformedRaster,
                 observer,
             )));
@@ -194,6 +197,7 @@ impl<'a> RasterImportService<'a> {
                 alias,
                 hash,
                 Some(probe.format()),
+                RasterImportStage::Decoding,
                 RasterImportFailure::UnsupportedOrMalformedRaster,
                 observer,
             )));
@@ -282,6 +286,7 @@ impl<'a> RasterImportService<'a> {
                 alias,
                 hash,
                 Some(probe.format()),
+                RasterImportStage::Registering,
                 map_snapshot_error(&error),
                 observer,
             );
@@ -296,6 +301,7 @@ impl<'a> RasterImportService<'a> {
                     alias,
                     hash,
                     Some(probe.format()),
+                    RasterImportStage::Registering,
                     map_reference_error(error),
                     observer,
                 );
@@ -309,6 +315,7 @@ impl<'a> RasterImportService<'a> {
                     alias,
                     hash,
                     Some(probe.format()),
+                    RasterImportStage::Registering,
                     map_catalog_error(error),
                     observer,
                 );
@@ -337,6 +344,7 @@ impl<'a> RasterImportService<'a> {
                             alias,
                             hash,
                             Some(probe.format()),
+                            RasterImportStage::Registering,
                             error,
                             observer,
                         );
@@ -365,6 +373,7 @@ impl<'a> RasterImportService<'a> {
                             alias,
                             hash,
                             Some(probe.format()),
+                            RasterImportStage::Registering,
                             map_catalog_error(error),
                             observer,
                         );
@@ -386,6 +395,7 @@ impl<'a> RasterImportService<'a> {
                         alias,
                         hash,
                         Some(probe.format()),
+                        RasterImportStage::Registering,
                         map_catalog_error(error),
                         observer,
                     );
@@ -411,6 +421,7 @@ impl<'a> RasterImportService<'a> {
                                 alias,
                                 hash,
                                 Some(probe.format()),
+                                RasterImportStage::Registering,
                                 map_catalog_error(error),
                                 observer,
                             );
@@ -432,6 +443,7 @@ impl<'a> RasterImportService<'a> {
                             alias,
                             hash,
                             Some(probe.format()),
+                            RasterImportStage::Registering,
                             map_catalog_error(error),
                             observer,
                         );
@@ -457,6 +469,7 @@ impl<'a> RasterImportService<'a> {
                         alias,
                         hash,
                         Some(probe.format()),
+                        RasterImportStage::Registering,
                         error,
                         observer,
                     );
@@ -485,6 +498,7 @@ impl<'a> RasterImportService<'a> {
                         alias,
                         hash,
                         Some(probe.format()),
+                        RasterImportStage::Registering,
                         map_catalog_error(error),
                         observer,
                     );
@@ -506,6 +520,7 @@ impl<'a> RasterImportService<'a> {
                     alias,
                     hash,
                     Some(probe.format()),
+                    RasterImportStage::Registering,
                     map_catalog_error(error),
                     observer,
                 );
@@ -536,7 +551,11 @@ impl<'a> RasterImportService<'a> {
         report(observer, item_id, RasterImportStage::GeneratingPreview);
         match preview.generate_thumbnail(&entry) {
             Ok(preview) => result.preview = Some(preview),
-            Err(_) => result.status = RasterImportStatus::ImportedPreviewFailed,
+            Err(error) => {
+                result.status = RasterImportStatus::ImportedPreviewFailed;
+                result.failure_stage = Some(RasterImportStage::GeneratingPreview);
+                result.preview_failure = Some(error);
+            }
         }
         report(
             observer,
@@ -774,7 +793,7 @@ fn receipt(
     status: RasterImportStatus,
 ) -> RasterImportReceipt {
     RasterImportReceipt {
-        schema_version: 2,
+        schema_version: 3,
         item_id,
         source_alias,
         content_sha256: None,
@@ -783,6 +802,8 @@ fn receipt(
         asset_id: None,
         edit_id: None,
         status,
+        failure_stage: None,
+        preview_failure: None,
         metadata_status: None,
         preview: None,
         duplicates: DuplicateSearchResult::default(),
@@ -805,18 +826,21 @@ fn evidence_receipt(
 fn failed(
     item_id: RasterImportItemId,
     alias: String,
+    stage: RasterImportStage,
     failure: RasterImportFailure,
     observer: &dyn RasterImportObserver,
 ) -> RasterImportReceipt {
     tracing::warn!(
         target: "rusttable.import",
         item_id = item_id.get(),
-        stage = "failure",
+        stage = ?stage,
         cause = ?failure,
         "raster import failed"
     );
     report(observer, item_id, RasterImportStage::Failed);
-    receipt(item_id, alias, RasterImportStatus::Failed(failure))
+    let mut receipt = receipt(item_id, alias, RasterImportStatus::Failed(failure));
+    receipt.failure_stage = Some(stage);
+    receipt
 }
 
 fn failed_with_evidence(
@@ -824,13 +848,14 @@ fn failed_with_evidence(
     alias: String,
     hash: [u8; 32],
     format: Option<InputFormat>,
+    stage: RasterImportStage,
     failure: RasterImportFailure,
     observer: &dyn RasterImportObserver,
 ) -> RasterImportReceipt {
     tracing::warn!(
         target: "rusttable.import",
         item_id = item_id.get(),
-        stage = "failure",
+        stage = ?stage,
         cause = ?failure,
         format = format.map_or("unknown", |format| format_label(format)),
         "raster import failed"
@@ -839,6 +864,7 @@ fn failed_with_evidence(
     let mut receipt = receipt(item_id, alias, RasterImportStatus::Failed(failure));
     receipt.content_sha256 = Some(hash);
     receipt.format = format;
+    receipt.failure_stage = Some(stage);
     receipt
 }
 

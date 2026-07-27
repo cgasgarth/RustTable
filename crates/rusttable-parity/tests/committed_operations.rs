@@ -10,6 +10,37 @@ const PINNED_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 #[derive(serde::Deserialize)]
 struct OperationOverridesFile {
     operation: Vec<OperationOverride>,
+    bloom_completion: BloomCompletion,
+}
+
+#[derive(serde::Deserialize)]
+struct BloomCompletion {
+    schema: String,
+    authoritative_rusttable_baseline: String,
+    source_content_commit: String,
+    native_source: String,
+    status: String,
+    payload_fixture_id: String,
+    canonical_predecessor: String,
+    canonical_order: usize,
+    canonical_successor: String,
+    retained_registrations: Vec<String>,
+    claim: Vec<BloomClaim>,
+    deferral: Vec<BloomDeferral>,
+}
+
+#[derive(serde::Deserialize)]
+struct BloomClaim {
+    name: String,
+    status: String,
+    prerequisites: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct BloomDeferral {
+    name: String,
+    source_path: String,
+    reason: String,
 }
 
 #[test]
@@ -21,6 +52,229 @@ fn committed_operation_manifest_is_valid_and_pinned() {
     validate_operation_manifest(&manifest).expect("validate committed operation manifest");
     assert_eq!(manifest.reference.source_commit, PINNED_COMMIT);
     assert!(!manifest.operations.is_empty());
+}
+
+#[test]
+fn bloom_codegen_override_matches_the_source_payload_and_contract() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
+    let source = fs::read_to_string(&path).expect("read operation overrides");
+    let overrides: OperationOverridesFile =
+        toml::from_str(&source).expect("parse typed operation overrides");
+    let bloom = overrides
+        .operation
+        .iter()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom override");
+
+    assert_eq!(bloom.module_version, Some(1));
+    assert_eq!(bloom.parameter_size, Some(12));
+    assert_eq!(bloom.default_order, Some(61));
+    assert_eq!(bloom.input_color_space.as_deref(), Some("LabD50"));
+    assert_eq!(bloom.output_color_space.as_deref(), Some("LabD50"));
+    assert_eq!(bloom.roi_behavior.as_deref(), Some("identity"));
+    assert_eq!(bloom.tiling_requirement.as_deref(), Some("tiled"));
+    assert_eq!(bloom.multi_instance, Some(true));
+    assert_eq!(bloom.supports_blend_masks, Some(true));
+
+    let evidence = bloom.evidence.as_ref().expect("Bloom source evidence");
+    let registration = evidence
+        .iter()
+        .find(|item| item.field == "registration")
+        .expect("Bloom registration evidence");
+    assert_eq!(
+        registration.evidence.source_path.as_deref(),
+        Some("src/iop/CMakeLists.txt")
+    );
+    assert_eq!(registration.evidence.line_start, Some(68));
+    assert_eq!(registration.evidence.line_end, Some(68));
+    let ordering = evidence
+        .iter()
+        .find(|item| item.field == "ordering")
+        .expect("Bloom ordering evidence");
+    assert_eq!(
+        ordering.evidence.source_path.as_deref(),
+        Some("src/common/iop_order.c")
+    );
+    assert_eq!(
+        (ordering.evidence.line_start, ordering.evidence.line_end),
+        (Some(638), Some(640))
+    );
+
+    let versions = bloom
+        .parameter_versions
+        .as_ref()
+        .expect("Bloom parameter versions");
+    assert_eq!(versions.len(), 1);
+    let version = &versions[0];
+    assert_eq!((version.version, version.byte_size), (1, 12));
+    assert_eq!(version.decoder, "rusttable.bloom.decode.v1");
+    assert!(!version.opaque_blocking);
+    assert_eq!(version.fixture_id, "operation.bloom.params.v1");
+    assert_eq!(version.abi_layouts.len(), 3);
+    assert!(version.abi_layouts.iter().all(|layout| {
+        layout.total_size == 12
+            && layout.alignment == 4
+            && layout.layout_hash == canonical_layout_hash(layout)
+            && layout
+                .fields
+                .iter()
+                .map(|field| {
+                    (
+                        field.name.as_str(),
+                        field.offset,
+                        field.size,
+                        field.alignment,
+                    )
+                })
+                .eq([
+                    ("size", 0, 4, 4),
+                    ("threshold", 4, 4, 4),
+                    ("strength", 8, 4, 4),
+                ])
+    }));
+    let codec = version.codec.as_ref().expect("Bloom v1 codec override");
+    assert_eq!(codec.byte_size, 12);
+    assert_eq!(codec.decoder, "rusttable.bloom.decode.v1");
+    assert_eq!(codec.encoder, "rusttable.bloom.encode.v1");
+    assert_eq!(codec.format, "darktable.iop.bloom.v1");
+    assert_eq!(
+        codec
+            .fields
+            .iter()
+            .map(|field| (field.name.as_str(), field.kind.as_str(), field.offset))
+            .collect::<Vec<_>>(),
+        [
+            ("size", "f32", 0),
+            ("threshold", "f32", 4),
+            ("strength", "f32", 8),
+        ]
+    );
+    let color = bloom.color_contract.as_ref().expect("Bloom color contract");
+    assert_eq!(color.input.value, "LabD50");
+    assert_eq!(color.output.value, "LabD50");
+    let capabilities = bloom
+        .capability_contract
+        .as_ref()
+        .expect("Bloom capability contract");
+    assert!(capabilities.supports_shared_blending);
+    assert!(capabilities.supports_drawn_masks);
+    let roi = bloom.roi_contract.as_ref().expect("Bloom ROI contract");
+    assert_eq!(roi.behavior, "identity");
+    assert_eq!(roi.scale, "roi_in.scale / piece.iscale");
+    assert_eq!(
+        roi.overlap,
+        "5 * min(256, ceil(trunc(256 * min(100, size + 1) / 100) * roi_in.scale / piece.iscale))"
+    );
+    let tiling = bloom
+        .tiling_contract
+        .as_ref()
+        .expect("Bloom tiling contract");
+    assert_eq!(tiling.class, "scaled-overlap");
+    assert_eq!(tiling.overlap, 1280);
+
+    let canonical = ["colorzones", "bloom", "colorize"].map(|name| {
+        overrides
+            .operation
+            .iter()
+            .find(|operation| operation.name == name)
+            .and_then(|operation| operation.default_order)
+            .expect("canonical operation order")
+    });
+    assert_eq!(canonical, [60, 61, 62]);
+}
+
+#[test]
+fn bloom_completion_claims_are_gated_and_deferrals_are_explicit() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
+    let source = fs::read_to_string(&path).expect("read operation overrides");
+    let overrides: OperationOverridesFile =
+        toml::from_str(&source).expect("parse typed operation overrides");
+    let completion = overrides.bloom_completion;
+
+    assert_eq!(completion.schema, "rusttable.bloom-completion.v1");
+    assert_eq!(
+        completion.authoritative_rusttable_baseline,
+        "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+    );
+    assert_eq!(
+        completion.source_content_commit,
+        "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+    );
+    assert_eq!(completion.native_source, "src/iop/bloom.c");
+    assert_eq!(completion.status, "non-deletion-milestone");
+    assert_eq!(completion.payload_fixture_id, "operation.bloom.params.v1");
+    assert_eq!(
+        (
+            completion.canonical_predecessor.as_str(),
+            completion.canonical_order,
+            completion.canonical_successor.as_str(),
+        ),
+        ("colorzones", 61, "colorize")
+    );
+    assert_eq!(
+        completion.retained_registrations,
+        ["src/iop/CMakeLists.txt:68", "data/kernels/programs.conf:15"]
+    );
+
+    assert_eq!(
+        completion
+            .claim
+            .iter()
+            .map(|claim| claim.name.as_str())
+            .collect::<Vec<_>>(),
+        ["cpu", "gpu", "ui", "import"]
+    );
+    assert!(
+        completion.claim.iter().all(|claim| {
+            claim.status == "prerequisite-gated" && !claim.prerequisites.is_empty()
+        })
+    );
+    let cpu = completion
+        .claim
+        .iter()
+        .find(|claim| claim.name == "cpu")
+        .expect("CPU claim");
+    assert!(
+        cpu.prerequisites
+            .iter()
+            .any(|item| item == "scaled-roi-radius-and-five-radius-tiling-overlap")
+    );
+    assert!(
+        cpu.prerequisites
+            .iter()
+            .any(|item| item == "format-and-allocation-failure-copy-through")
+    );
+    let import = completion
+        .claim
+        .iter()
+        .find(|claim| claim.name == "import")
+        .expect("import claim");
+    assert!(
+        import
+            .prerequisites
+            .iter()
+            .any(|item| item == "opaque-blend-version-and-payload-preservation")
+    );
+
+    assert_eq!(
+        completion
+            .deferral
+            .iter()
+            .map(|deferral| deferral.name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "native-source-deletion",
+            "scaled-roi-and-tiling-execution",
+            "allocation-failure-copy-through",
+            "typed-native-blend-payload",
+            "opencl-runtime-resource-strategy",
+        ]
+    );
+    assert!(completion.deferral.iter().all(|deferral| {
+        !deferral.source_path.is_empty() && !deferral.reason.trim().is_empty()
+    }));
 }
 
 #[test]

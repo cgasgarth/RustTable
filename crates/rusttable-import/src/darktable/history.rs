@@ -9,6 +9,7 @@
 use std::fmt;
 
 use rusttable_compat::{CompatHistoryStep, EnabledState};
+use rusttable_processing::operations::bloom::{BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory};
 use rusttable_processing::operations::colorcontrast::{
     COLOR_CONTRAST_V2_PARAMETER_BYTES, ColorContrastConfig, ColorContrastHistory,
 };
@@ -23,6 +24,7 @@ use rusttable_processing::operations::vibrance::{
 };
 use rusttable_processing::{COLORZONES_V5_PARAMETER_BYTES, ColorZonesConfig, ColorZonesHistory};
 
+const BLOOM_COMPATIBILITY_NAME: &str = "bloom";
 const COLOR_CONTRAST_COMPATIBILITY_NAME: &str = "colorcontrast";
 const COLORCORRECTION_COMPATIBILITY_NAME: &str = "colorcorrection";
 const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
@@ -55,6 +57,23 @@ pub struct DarktableHistoryDecodeFinding {
     pub code: DarktableHistoryDecodeFindingCode,
     /// Bounded human-readable diagnostic.
     pub detail: String,
+}
+
+/// One decoded Bloom v1 core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedBloomHistoryStep {
+    /// The exact original row, including opaque blend and multi-instance metadata.
+    pub source: CompatHistoryStep,
+    /// Checked native v1 core parameters.
+    pub config: BloomConfig,
+    /// Native enabled state retained without creating an executable operation.
+    pub enabled: bool,
+    /// Original Darktable parameter version.
+    pub source_version: u16,
+    /// Canonical native v1 parameter bytes.
+    pub canonical_parameters: [u8; BLOOM_PARAMETER_BYTES],
+    /// Explicit reason no executable imported operation was emitted.
+    pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
 /// One decoded Velvia core whose complete Darktable row is not executable yet.
@@ -151,6 +170,9 @@ pub struct DecodedColorZonesHistoryStep {
 /// Typed-but-pending result or a byte-preserving unsupported row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DarktableHistoryStepDecode {
+    /// Bloom v1 core parameters are decoded, while blend/mask semantics remain
+    /// explicitly non-executable.
+    BloomPendingBlend(DecodedBloomHistoryStep),
     /// Color Contrast core parameters are decoded, while blend/mask semantics
     /// remain explicitly non-executable.
     ColorContrastPendingBlend(DecodedColorContrastHistoryStep),
@@ -184,6 +206,7 @@ pub enum DarktableHistoryStepDecode {
 #[must_use]
 pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
     match step.operation.name.as_deref() {
+        Some(BLOOM_COMPATIBILITY_NAME) => decode_bloom_history_step(step),
         Some(COLOR_CONTRAST_COMPATIBILITY_NAME) => decode_colorcontrast_history_step(step),
         Some(COLORCORRECTION_COMPATIBILITY_NAME) => decode_colorcorrection_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
@@ -198,6 +221,63 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
             ),
         ),
     }
+}
+
+fn decode_bloom_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Bloom") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match BloomHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Bloom v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters = match history {
+        BloomHistory::V1(parameters) => parameters,
+        BloomHistory::Opaque { .. } => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Bloom v{source_version} parameters remain opaque: only native v1 is typed"
+                ),
+            );
+        }
+    };
+    let canonical_parameters = parameters.to_bytes();
+    let config = match BloomConfig::try_from(parameters) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!("Darktable Bloom v{source_version} parameters are not executable: {error}"),
+            );
+        }
+    };
+
+    DarktableHistoryStepDecode::BloomPendingBlend(DecodedBloomHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters,
+        execution_blocker: DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+            detail: format!(
+                "Darktable Bloom core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+                step.blend_version
+            ),
+        },
+    })
 }
 
 fn decode_colorcorrection_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {

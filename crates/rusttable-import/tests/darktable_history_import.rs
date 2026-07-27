@@ -5,6 +5,9 @@ use rusttable_compat::{
 use rusttable_import::darktable::{
     DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode, decode_history_step,
 };
+use rusttable_processing::operations::bloom::{
+    BLOOM_PARAMETER_BYTES, BloomConfig, BloomParametersV1,
+};
 use rusttable_processing::operations::colorcontrast::{
     ColorContrastConfig, ColorContrastParametersV2,
 };
@@ -22,6 +25,8 @@ use rusttable_sqlite_native::{
     DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow, RawModuleOrderRow,
 };
 
+const BLOOM_V1_DEFAULT_NATIVE_LE: &[u8; BLOOM_PARAMETER_BYTES] =
+    include_bytes!("fixtures/bloom-v1-default.bin");
 const COLORCONTRAST_V1_NATIVE_LE: [u8; 16] = [
     0x00, 0x00, 0xc0, 0x3f, // a_steepness = 1.5
     0x00, 0x00, 0x00, 0xc0, // a_offset = -2.0
@@ -45,6 +50,74 @@ const COLORCORRECTION_V1_BENCHMARK_LE: [u8; 20] = [
 const VIBRANCE_V2_NATIVE_LE: [u8; 4] = [
     0x00, 0x00, 0xc8, 0x41, // amount = 25.0
 ];
+
+#[test]
+fn bloom_v1_decodes_source_ordered_little_endian_fields_but_remains_pending_blend() {
+    assert_eq!(
+        BLOOM_V1_DEFAULT_NATIVE_LE,
+        &[
+            0x00, 0x00, 0xa0, 0x41, // size = 20.0
+            0x00, 0x00, 0xb4, 0x42, // threshold = 90.0
+            0x00, 0x00, 0xc8, 0x41, // strength = 25.0
+        ]
+    );
+    let payload = BLOOM_V1_DEFAULT_NATIVE_LE.to_vec();
+    let source = history_step(b"bloom", Some(1), Some(0), payload.clone());
+
+    let DarktableHistoryStepDecode::BloomPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("canonical Bloom v1 row must decode as typed pending blend");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source.operation.raw_name, b"bloom");
+    assert_eq!(imported.source.operation.name.as_deref(), Some("bloom"));
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+    assert_eq!(imported.source_version, 1);
+    assert!(!imported.enabled);
+    assert_eq!(imported.canonical_parameters, *BLOOM_V1_DEFAULT_NATIVE_LE);
+    assert_eq!(imported.config, BloomConfig::defaults());
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert!(imported.execution_blocker.detail.contains("blend/mask"));
+    assert!(imported.execution_blocker.detail.contains("multi-instance"));
+}
+
+#[test]
+fn bloom_unknown_malformed_and_nonfinite_payloads_remain_byte_exact() {
+    let unknown = history_step(b"bloom", Some(2), Some(1), vec![9, 8, 7]);
+    assert_preserved_exact(
+        &unknown,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+
+    let malformed = history_step(
+        b"bloom",
+        Some(1),
+        Some(1),
+        vec![0; BLOOM_PARAMETER_BYTES - 1],
+    );
+    assert_preserved_exact(
+        &malformed,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+
+    let nonfinite = history_step(
+        b"bloom",
+        Some(1),
+        Some(1),
+        BloomParametersV1::new(20.0, f32::NAN, 25.0)
+            .to_bytes()
+            .to_vec(),
+    );
+    assert_preserved_exact(
+        &nonfinite,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+}
 
 #[test]
 fn colorcorrection_v1_decodes_exact_checked_payload_but_remains_pending_blend() {
@@ -647,6 +720,7 @@ fn history_step(
 
 fn manifest() -> DarktableOperationManifest {
     let mut manifest = DarktableOperationManifest::new();
+    manifest.insert("bloom", 1, [1], None);
     manifest.insert("colorcontrast", 2, [1, 2], None);
     manifest.insert("colorcorrection", 1, [1], None);
     manifest.insert("colorzones", 5, [1, 2, 3, 4, 5], None);

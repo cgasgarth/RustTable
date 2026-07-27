@@ -926,15 +926,22 @@ evidence_hash = "3357bb62685659d1d6733b2c5ba2c9cdc497f235db43dcb42ba5149c0b699b9
 name = "bloom"
 module_version = 1
 parameter_size = 12
-parameter_layout_hash = "2d96e1a4838859e345d30fa8a47e1837ab658df088505558005af38f4b05d142"
+parameter_layout_hash = "8dab7530b84521ba38cd18b5107129a5bec82a0cd667966484fc5317d0f267f0"
+default_order = 61
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "registered by the pinned darktable build"
+reason = "src/iop/CMakeLists.txt retains the Bloom module registration"
 reviewer = "cgasgarth"
-evidence_hash = "2e859b85f6d6e4e7163a7a61bba1d9f65b62db3827b01910e6d4a073486f425d"
-source_path = "src/iop/bloom.c"
+evidence_hash = "7eb18f26c29d2bdadefcea8105a47fde574299bddbffee421889985014613ea1"
+source_path = "src/iop/CMakeLists.txt"
 line_start = 68
 line_end = 68
 
@@ -942,52 +949,322 @@ line_end = 68
 [[operation.evidence]]
 field = "layout"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "current parameter layout is represented by accepted AST evidence"
+reason = "the v1 payload is three ordered float fields: size, threshold, strength"
 reviewer = "cgasgarth"
-evidence_hash = "639352402e36600c9b895ffc8998151c8da4c66e59b6726777fcfdf639d9982b"
+evidence_hash = "2f2e5cb8df1fcb6b9e72636e3a2e0831688c53de945756ed0079f79f03c004f0"
 source_path = "src/iop/bloom.c"
-line_start = 42
-line_end = 42
+line_start = 44
+line_end = 49
 
 
 [[operation.evidence]]
 field = "contract"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "processing contract is source-evidenced"
+reason = "Lab threshold, scaled radius, box mean, screen blend, channel preservation, and copy-through failures"
 reviewer = "cgasgarth"
-evidence_hash = "5f98f7a8ccbcf1e003b2bccb7753e55e88a0e60f32b355a26cd747fc6505bf47"
+evidence_hash = "3c8b8e8babfb2eefdce3d07d697373f983ed9c6469b9a8c4afe56204d3e4d71e"
 source_path = "src/iop/bloom.c"
 line_start = 98
-line_end = 98
-
+line_end = 162
 
 
 [[operation.evidence]]
 field = "gpu"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "kernel creation is source-evidenced"
+reason = "OpenCL threshold, iterative blur, mix, temporary allocation, and CPU fallback prerequisites"
 reviewer = "cgasgarth"
-evidence_hash = "55154e33b47a3a3b1f748782cc246b7e878981b6ed37efd87a0719979fbbcb0b"
+evidence_hash = "ab95fdfec6b45401b5dc996b440e9f003b4c876664644d231e69a419a265ae24"
 source_path = "src/iop/bloom.c"
-line_start = 333
-line_end = 333
+line_start = 180
+line_end = 344
+
+
+[[operation.evidence]]
+field = "tiling"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "scaled radius controls dynamic five-radius overlap and CPU/GPU memory factors"
+reviewer = "cgasgarth"
+evidence_hash = "b46b70736e81b3ee18ce4091b7abd5ddccf8f06d336aa1562b84b62bdeeec2f7"
+source_path = "src/iop/bloom.c"
+line_start = 306
+line_end = 323
+
+
+[[operation.evidence]]
+field = "ui"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "the native editor composes size, threshold, and strength sliders in that order"
+reviewer = "cgasgarth"
+evidence_hash = "5839e9b80c1981ff595d4ebabd8b92e6b3e6b4f86113732e695a09762e4306d6"
+source_path = "src/iop/bloom.c"
+line_start = 378
+line_end = 393
+
+
+[[operation.evidence]]
+field = "ordering"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "canonical order places Color Zones before Bloom before Colorize"
+reviewer = "cgasgarth"
+evidence_hash = "a67d17506478c1d4f6ca846a028e322123f8522fc9b75396a76a050eb34dda3c"
+source_path = "src/common/iop_order.c"
+line_start = 638
+line_end = 640
 
 
 [[operation.parameter_versions]]
 version = 1
 byte_size = 12
-layout_hash = "b0880bf77001faed9ff5fe3c3978a0ea67f2b24d674fb1934228d383e5b0f87e"
-decoder = "opaque"
-opaque_blocking = true
+layout_hash = "8dab7530b84521ba38cd18b5107129a5bec82a0cd667966484fc5317d0f267f0"
+decoder = "rusttable.bloom.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.bloom.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/bloom.c"
-line_start = 42
-line_end = 42
-reason = "explicit parameter layout declaration"
+line_start = 44
+line_end = 49
+reason = "three little-endian f32 fields preserve the native size-threshold-strength payload order"
 reviewer = "cgasgarth"
-evidence_hash = "53d5f6588b54a5e6762298a938579ac35e3073b770723e9f1eee3eb5d2093fdb"
+evidence_hash = "2f2e5cb8df1fcb6b9e72636e3a2e0831688c53de945756ed0079f79f03c004f0"
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 12
+alignment = 4
+layout_hash = "8dab7530b84521ba38cd18b5107129a5bec82a0cd667966484fc5317d0f267f0"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "size"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "strength"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 12
+alignment = 4
+layout_hash = "7c7f36c2c2ceef2b49a288ea36dd474d0d1bf3d73859884c9bcb603d077d2e6c"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "size"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "strength"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 12
+alignment = 4
+layout_hash = "2d44d0fc76be641f6b6e00db0c68c637255368e9541d2fe6b41d24e95073be81"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "size"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "strength"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[operation.parameter_versions.codec]
+byte_size = 12
+decoder = "rusttable.bloom.decode.v1"
+encoder = "rusttable.bloom.encode.v1"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.bloom.v1"
+
+[[operation.parameter_versions.codec.fields]]
+name = "size"
+kind = "f32"
+offset = 0
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "threshold"
+kind = "f32"
+offset = 4
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "strength"
+kind = "f32"
+offset = 8
+size = 4
+
+[operation.color_contract.input]
+mode = "unconditional"
+value = "LabD50"
+evidence = [{ source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad", source_path = "src/iop/bloom.c", line_start = 98, line_end = 103, reason = "default_colorspace returns IOP_CS_LAB", reviewer = "cgasgarth", evidence_hash = "2f24123c11ee67df30f6e35abfcef24705beac8be286c79a6edff097287c6f47" }]
+
+[operation.color_contract.output]
+mode = "unconditional"
+value = "LabD50"
+evidence = [{ source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad", source_path = "src/iop/bloom.c", line_start = 98, line_end = 103, reason = "Bloom preserves the module Lab colorspace", reviewer = "cgasgarth", evidence_hash = "2f24123c11ee67df30f6e35abfcef24705beac8be286c79a6edff097287c6f47" }]
+
+[operation.capability_contract]
+supports_shared_blending = true
+supports_drawn_masks = true
+publishes_raster_mask = false
+consumes_raster_mask = false
+flags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_EFFECT",
+    "IOP_GROUP_EFFECTS",
+]
+
+[operation.roi_contract]
+behavior = "identity"
+overlap = "5 * min(256, ceil(trunc(256 * min(100, size + 1) / 100) * roi_in.scale / piece.iscale))"
+full_analysis = "not-required"
+geometry = "none"
+fast_pipe = "not-supported"
+scale = "roi_in.scale / piece.iscale"
+
+[operation.tiling_contract]
+class = "scaled-overlap"
+overlap = 1280
+
+[bloom_completion]
+schema = "rusttable.bloom-completion.v1"
+authoritative_rusttable_baseline = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+source_content_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+native_source = "src/iop/bloom.c"
+status = "non-deletion-milestone"
+payload_fixture_id = "operation.bloom.params.v1"
+canonical_predecessor = "colorzones"
+canonical_order = 61
+canonical_successor = "colorize"
+retained_registrations = [
+    "src/iop/CMakeLists.txt:68",
+    "data/kernels/programs.conf:15",
+]
+
+[[bloom_completion.claim]]
+name = "cpu"
+status = "prerequisite-gated"
+prerequisites = [
+    "typed-v1-size-threshold-strength-payload",
+    "LabD50-four-channel-boundary",
+    "source-equivalent-threshold-scale-box-mean-and-screen-equations",
+    "scaled-roi-radius-and-five-radius-tiling-overlap",
+    "format-and-allocation-failure-copy-through",
+    "opaque-blend-history-preservation",
+]
+
+[[bloom_completion.claim]]
+name = "gpu"
+status = "prerequisite-gated"
+prerequisites = [
+    "threshold-horizontal-blur-vertical-blur-and-mix-stages",
+    "scaled-roi-radius-and-tiling-qualification",
+    "allocation-and-runtime-failure-cpu-fallback",
+    "cpu-differential-coverage",
+]
+
+[[bloom_completion.claim]]
+name = "ui"
+status = "prerequisite-gated"
+prerequisites = [
+    "size-threshold-strength-slider-order",
+    "source-defaults-ranges-percent-format-and-tooltips",
+    "production-edit-persistence-and-preview-routing",
+    "GTK-boundary-coverage",
+]
+
+[[bloom_completion.claim]]
+name = "import"
+status = "prerequisite-gated"
+prerequisites = [
+    "little-endian-v1-payload-fixture",
+    "unknown-parameter-version-opaque-preservation",
+    "opaque-blend-version-and-payload-preservation",
+    "round-trip-history-coverage",
+]
+
+[[bloom_completion.deferral]]
+name = "native-source-deletion"
+source_path = "src/iop/bloom.c"
+reason = "This milestone does not prove every file-port completion criterion or permit deleting the retained source."
+
+[[bloom_completion.deferral]]
+name = "scaled-roi-and-tiling-execution"
+source_path = "src/iop/bloom.c:127-133,306-323"
+reason = "The current CPU execution leaf accepts only a complete scale-1 frame; scaled radius planning and five-radius tile overlap remain unimplemented."
+
+[[bloom_completion.deferral]]
+name = "allocation-failure-copy-through"
+source_path = "src/iop/bloom.c:123-128"
+reason = "The current CPU leaf reports preflight and allocation failures; exact native copy-through after allocation failure remains unimplemented."
+
+[[bloom_completion.deferral]]
+name = "typed-native-blend-payload"
+source_path = "src/develop/blends/blend.c"
+reason = "Bloom retains opaque blend versions and bytes; typed decoding and execution of every native blend responsibility remain outside this Bloom slice."
+
+[[bloom_completion.deferral]]
+name = "opencl-runtime-resource-strategy"
+source_path = "src/iop/bloom.c:165-344"
+reason = "WGPU may replace OpenCL bucket and local-buffer resource mechanics, so the milestone claims observable GPU stages and fallback rather than literal OpenCL object lifecycle parity."
 
 
 
@@ -2927,6 +3204,7 @@ name = "colorize"
 module_version = 2
 parameter_size = 20
 parameter_layout_hash = "3b5ce723d4027f8122670a93545be2fbd70d56d713f15d73c8ab134f00b7ba97"
+default_order = 62
 
 [[operation.evidence]]
 field = "registration"
@@ -3421,6 +3699,7 @@ name = "colorzones"
 module_version = 5
 parameter_size = 520
 parameter_layout_hash = "6cfbf9771cfafa954a0e598005128c1185b2863487351577e5dcfc0882eddead"
+default_order = 60
 input_color_space = "LabD50"
 output_color_space = "LabD50"
 roi_behavior = "identity"
