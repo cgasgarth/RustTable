@@ -1,12 +1,24 @@
 //! Source-mapped Color Zones editor contract for Darktable `src/iop/colorzones.c`.
 //!
-//! The GTK registry deliberately does not mount this editor yet. This parent
-//! keeps the pure parameter model, source-shaped interactions, and render data
-//! preparation together so a future GTK4 adapter can remain presentation-only.
+//! The pure parameter model, source-shaped interactions, render preparation,
+//! and GTK4 leaf remain together so the adapter never reimplements processing.
 
+mod gtk;
 mod interaction;
 mod model;
+mod paint;
 mod render;
+
+pub use gtk::{
+    COLORZONES_EDIT_BY_AREA_LABEL, COLORZONES_EDIT_BY_AREA_TOOLTIP, COLORZONES_INTERPOLATION_LABEL,
+    COLORZONES_INTERPOLATION_OPTIONS, COLORZONES_INTERPOLATION_TOOLTIP, COLORZONES_MODE_LABEL,
+    COLORZONES_MODE_OPTIONS, COLORZONES_MODE_TOOLTIP, COLORZONES_OUTPUT_LABELS,
+    COLORZONES_SELECTION_LABEL, COLORZONES_SELECTION_OPTIONS, COLORZONES_SELECTION_TOOLTIP,
+    COLORZONES_STRENGTH_LABEL, COLORZONES_STRENGTH_TOOLTIP, ColorZonesGtkActionHandler,
+    ColorZonesGtkHandlerOutcome, ColorZonesGtkLeaf, ColorZonesGtkPreferences,
+    ColorZonesGtkPreferencesHandler, ColorZonesGtkState, ColorZonesSettledAction,
+    build_colorzones_gtk,
+};
 
 pub use interaction::{
     COLORZONES_BAND_NAMES, COLORZONES_BANDS, COLORZONES_DEFAULT_STEP, COLORZONES_PICKER_FEATHER,

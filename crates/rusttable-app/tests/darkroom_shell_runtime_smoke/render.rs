@@ -45,6 +45,40 @@ impl RenderedWidget {
             .count()
     }
 
+    pub(super) fn pixels_differing_from_first(
+        &self,
+        bounds: gtk4::graphene::Rect,
+        tolerance: u8,
+    ) -> usize {
+        let left = bounds.x();
+        let top = bounds.y();
+        let right = left + bounds.width();
+        let bottom = top + bounds.height();
+        let (pixels, remainder) = self.bytes.as_chunks::<4>();
+        assert!(
+            remainder.is_empty(),
+            "render texture must contain RGBA pixels"
+        );
+        let mut bounded = pixels.iter().enumerate().filter_map(|(index, pixel)| {
+            let x = u16::try_from(index % self.width).expect("render x fits u16");
+            let y = u16::try_from(index / self.width).expect("render y fits u16");
+            let x = f32::from(x);
+            let y = f32::from(y);
+            (x >= left && x < right && y >= top && y < bottom).then_some(pixel)
+        });
+        let Some(reference) = bounded.next().copied() else {
+            return 0;
+        };
+        bounded
+            .filter(|pixel| {
+                pixel[..3]
+                    .iter()
+                    .zip(reference[..3].iter())
+                    .any(|(channel, reference)| channel.abs_diff(*reference) > tolerance)
+            })
+            .count()
+    }
+
     pub(super) fn pixels_with_channel_at_most(
         &self,
         bounds: gtk4::graphene::Rect,
@@ -126,6 +160,20 @@ pub(super) fn find_widget(root: &gtk4::Widget, name: &str) -> Option<gtk4::Widge
         child = current.next_sibling();
     }
     None
+}
+
+pub(super) fn named_controller<W: IsA<gtk4::Widget>>(
+    widget: &W,
+    name: &str,
+) -> Option<gtk4::EventController> {
+    let controllers = widget.observe_controllers();
+    (0..controllers.n_items()).find_map(|index| {
+        let controller = controllers
+            .item(index)?
+            .downcast::<gtk4::EventController>()
+            .ok()?;
+        (controller.name().as_deref() == Some(name)).then_some(controller)
+    })
 }
 
 pub(super) fn find_widget_with_prefix(root: &gtk4::Widget, prefix: &str) -> Option<gtk4::Widget> {

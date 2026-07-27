@@ -7,9 +7,10 @@ use gtk4::prelude::*;
 use rusttable_core::{PhotoId, Revision};
 use rusttable_display_profile::{DisplayProfileReceipt, DisplayProfileSnapshot};
 
+use crate::iop::colorzones::{ColorZonesGtkActionHandler, ColorZonesGtkPreferencesHandler};
 use crate::iop::modules::{
-    DarkroomModuleActionHandler, DarkroomModuleGroup, DarkroomModuleViewModel,
-    DarkroomModulesViewModel, reference_modules,
+    DarkroomCustomEditorMounts, DarkroomModuleActionHandler, DarkroomModuleGroup,
+    DarkroomModuleViewModel, DarkroomModulesViewModel, reference_modules,
 };
 mod interaction;
 mod panel_widgets;
@@ -45,7 +46,7 @@ use crate::libs::profiles::diagnostics::{
 };
 
 /// Stable widget identifiers for the initial darkroom surface.
-pub const DARKROOM_WIDGET_IDS: [&str; 28] = [
+pub const DARKROOM_WIDGET_IDS: [&str; 25] = [
     "darkroom-page",
     "darkroom-toolbar-top",
     "darkroom-photo-preview",
@@ -53,13 +54,10 @@ pub const DARKROOM_WIDGET_IDS: [&str; 28] = [
     "darkroom-left-panel",
     "darkroom-navigation",
     "darkroom-snapshots",
-    "darkroom-snapshots-info",
     "darkroom-snapshots-actions",
     "darkroom-history",
-    "darkroom-history-info",
     "darkroom-history-actions",
     "darkroom-image-information",
-    "darkroom-image-information-info",
     "darkroom-image-information-actions",
     "darkroom-right-panel",
     "darkroom-histogram",
@@ -208,6 +206,7 @@ pub struct DarkroomView {
     typed_modules: Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     module_revision: Rc<RefCell<Revision>>,
     module_action_handler: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    custom_editor_mounts: DarkroomCustomEditorMounts,
     filmstrip_state: Rc<RefCell<FilmstripState>>,
     filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
     filmstrip_widget: Rc<RefCell<Option<gtk4::FlowBox>>>,
@@ -265,6 +264,7 @@ impl DarkroomView {
         let typed_modules = Rc::new(RefCell::new(reference_modules().ok()));
         let module_revision = Rc::new(RefCell::new(Revision::ZERO));
         let module_action_handler = Rc::new(RefCell::new(None));
+        let custom_editor_mounts = DarkroomCustomEditorMounts::default();
         let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
         let filmstrip_handler = Rc::new(RefCell::new(None));
         let filmstrip_widget = Rc::new(RefCell::new(None));
@@ -294,6 +294,7 @@ impl DarkroomView {
             typed_modules,
             module_revision,
             module_action_handler,
+            custom_editor_mounts,
             filmstrip_state,
             filmstrip_handler,
             filmstrip_widget,
@@ -695,7 +696,23 @@ impl DarkroomView {
                 .set_module_action_handler(None, Revision::ZERO);
         }
         self.module_action_handler.replace(action_handler);
+        self.custom_editor_mounts.reconcile(modules);
         self.render_typed_modules();
+    }
+
+    /// Installs the source-specific Color Zones persistence handler used by every
+    /// exact operation instance mounted in the production module rail.
+    pub fn set_colorzones_action_handler(&self, handler: Option<ColorZonesGtkActionHandler>) {
+        self.custom_editor_mounts.set_colorzones_handler(handler);
+    }
+
+    /// Installs the source-specific Color Zones durable presentation-state handler.
+    pub fn set_colorzones_preferences_handler(
+        &self,
+        handler: Option<ColorZonesGtkPreferencesHandler>,
+    ) {
+        self.custom_editor_mounts
+            .set_colorzones_preferences_handler(handler);
     }
 
     /// Reconciles a non-structural processing edit without replacing mounted controls.
@@ -708,9 +725,20 @@ impl DarkroomView {
         modules: &DarkroomModulesViewModel,
         revision: Revision,
     ) {
+        let custom_structure_changed =
+            self.typed_modules.borrow().as_ref().is_some_and(|current| {
+                colorzones_mount_structure(current) != colorzones_mount_structure(modules)
+            });
         self.typed_modules.replace(Some(modules.clone()));
         self.module_revision.replace(revision);
         self.exposure.set_module_revision(revision);
+        self.custom_editor_mounts.reconcile(modules);
+        if custom_structure_changed {
+            // Materialization and instance lifecycle replace only common panel
+            // chrome. The retained custom leaf is reparented intact, preserving
+            // its DrawingAreas and controllers.
+            self.render_typed_modules();
+        }
     }
 
     /// Returns the searchable module entry for shell-level focus and tests.
@@ -767,6 +795,7 @@ impl DarkroomView {
         let typed_modules = Rc::clone(&self.typed_modules);
         let module_revision = Rc::clone(&self.module_revision);
         let module_action_handler = Rc::clone(&self.module_action_handler);
+        let custom_editor_mounts = self.custom_editor_mounts.clone();
         let left_modules = self.left_modules.clone();
         let right_modules = self.right_modules.clone();
         let implemented_modules = self.implemented_modules.clone();
@@ -780,6 +809,7 @@ impl DarkroomView {
                     &typed_modules,
                     &module_action_handler,
                     &module_revision,
+                    &custom_editor_mounts,
                     group,
                     search.text().as_str(),
                 );
@@ -795,6 +825,7 @@ impl DarkroomView {
             &self.typed_modules,
             &self.module_action_handler,
             &self.module_revision,
+            &self.custom_editor_mounts,
             self.module_group.get(),
             self.module_search.text().as_str(),
         );
@@ -804,6 +835,7 @@ impl DarkroomView {
         let typed_modules = Rc::clone(&self.typed_modules);
         let module_revision = Rc::clone(&self.module_revision);
         let module_action_handler = Rc::clone(&self.module_action_handler);
+        let custom_editor_mounts = self.custom_editor_mounts.clone();
         let left_modules = self.left_modules.clone();
         let right_modules = self.right_modules.clone();
         let implemented_modules = self.implemented_modules.clone();
@@ -816,6 +848,7 @@ impl DarkroomView {
                 &typed_modules,
                 &module_action_handler,
                 &module_revision,
+                &custom_editor_mounts,
                 group.get(),
                 search.text().as_str(),
             );
@@ -909,6 +942,15 @@ fn module_stack_revision(modules: &DarkroomModulesViewModel) -> Revision {
         .unwrap_or(Revision::ZERO)
 }
 
+fn colorzones_mount_structure(
+    modules: &DarkroomModulesViewModel,
+) -> Vec<(Option<rusttable_core::OperationId>, usize)> {
+    modules
+        .instances(crate::iop::colorzones::COLORZONES_MODULE_ID)
+        .map(|module| (module.operation_id(), module.instance_count()))
+        .collect()
+}
+
 #[derive(Clone)]
 struct DarkroomRailStatus {
     navigation: panel_widgets::NavigationPreview,
@@ -934,11 +976,14 @@ type DarkroomPanelBuild = (
 
 #[cfg(test)]
 mod tests {
+    use rusttable_core::{OperationId, OperationOpacity, Revision};
+
     use super::{
         DARKROOM_MODULE_WIDGET_IDS, DARKROOM_RAIL_FOCUS_ORDER, DARKROOM_VIEWPORT_FOCUS_ORDER,
         DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS, DarkroomModuleGroup,
     };
     use crate::gtk_shell::DARKROOM_OPERATION_FOCUS_ORDER;
+    use crate::iop::colorzones::{ColorZonesEditorState, ColorZonesGtkState};
 
     #[test]
     fn darkroom_contract_has_stable_unique_roles_and_initial_exposure() {
@@ -1001,5 +1046,45 @@ mod tests {
         assert!(DarkroomModuleGroup::Favorites.matches(&grain.clone().with_favorite(true)));
         assert!(!DarkroomModuleGroup::Technical.matches(exposure));
         assert!(!DarkroomModuleGroup::Correct.matches(hidden));
+    }
+
+    #[test]
+    fn colorzones_custom_payload_preserves_exact_editor_projection() {
+        let operation_id = OperationId::new(0xc020).expect("operation ID");
+        let revision = Revision::from_u64(12);
+        let opacity = OperationOpacity::new(0.73).expect("opacity");
+        let state = ColorZonesGtkState::new(
+            operation_id,
+            revision,
+            ColorZonesEditorState::default(),
+            true,
+            opacity,
+            false,
+            false,
+        );
+        let colorzones = crate::reference_modules()
+            .expect("registry modules")
+            .module("colorzones")
+            .expect("Color Zones")
+            .clone()
+            .with_operation_instance(operation_id, 0, 1)
+            .with_colorzones_editor_state(state.clone());
+
+        assert!(DarkroomModuleGroup::Color.matches(&colorzones));
+        assert!(DarkroomModuleGroup::Grading.matches(&colorzones));
+        assert_eq!(colorzones.operation_id(), Some(operation_id));
+        assert_eq!(colorzones.revision(), revision);
+        assert!(colorzones.enabled());
+        assert_eq!(colorzones.controls().controls().len(), 0);
+        let projected = colorzones
+            .colorzones_editor_state()
+            .expect("custom editor payload");
+        assert_eq!(projected.operation_id(), operation_id);
+        assert_eq!(projected.revision(), revision);
+        assert_eq!(projected.opacity(), opacity);
+        assert!(projected.enabled());
+        assert!(!projected.sensitive());
+        assert!(!projected.materialization_required());
+        assert_eq!(projected, &state);
     }
 }

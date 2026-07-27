@@ -20,8 +20,8 @@ use crate::gui::darktable_components::{
 };
 use crate::gui::{DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS};
 use crate::iop::modules::{
-    DarkroomModuleActionHandler, DarkroomModuleSide, DarkroomModuleViewModel,
-    DarkroomModulesViewModel, build_module_column_with_filter_at_revision,
+    DarkroomCustomEditorMounts, DarkroomModuleActionHandler, DarkroomModuleSide,
+    DarkroomModuleViewModel, DarkroomModulesViewModel, build_module_column_with_filter_at_revision,
     build_module_column_without_empty_at_revision,
 };
 use crate::presentation::{
@@ -309,6 +309,7 @@ pub(super) fn render_typed_modules_into(
     typed_modules: &Rc<RefCell<Option<DarkroomModulesViewModel>>>,
     action_handler: &Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
     current_revision: &Rc<RefCell<Revision>>,
+    custom_mounts: &DarkroomCustomEditorMounts,
     group: DarkroomModuleGroup,
     query: &str,
 ) {
@@ -329,6 +330,7 @@ pub(super) fn render_typed_modules_into(
         query,
         action_handler.as_ref(),
         current_revision,
+        custom_mounts,
     ));
 
     clear_children(right_modules);
@@ -356,6 +358,7 @@ pub(super) fn render_typed_modules_into(
         query,
         action_handler.as_ref(),
         current_revision,
+        custom_mounts,
     ));
     if rendered == 0 {
         let empty = gtk4::Label::new(Some(if query.trim().is_empty() {

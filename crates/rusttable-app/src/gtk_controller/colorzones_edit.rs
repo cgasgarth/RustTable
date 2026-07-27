@@ -1,9 +1,8 @@
-//! Revision-safe Color Zones edit actions mapped from Darktable
+//! Revision-safe Color Zones edit replacement mapped from Darktable
 //! `src/iop/colorzones.c` at the pinned migration baseline.
 //!
-//! This leaf only authors canonical `rusttable.colorzones` operations. Opaque
-//! imported Color Zones history rows remain outside the executable operation
-//! stack and are never decoded or promoted here.
+//! The GTK leaf owns gesture and curve interaction semantics. This adapter only
+//! snapshots canonical v5 parameters and atomically replaces one exact operation.
 
 use std::fmt;
 
@@ -12,130 +11,79 @@ use rusttable_core::{
 };
 use rusttable_processing::{
     COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_MAX_NODES, COLORZONES_RUST_ID,
-    ColorZonesChannel, ColorZonesConfig, ColorZonesCurveType, ColorZonesMode,
-    ColorZonesParametersV5, ColorZonesSplinesVersion, FiniteF32, builtin_registry,
+    ColorZonesChannel, ColorZonesConfig, ColorZonesParametersV5, FiniteF32, builtin_registry,
 };
 use rusttable_ui::iop::colorzones::{
-    COLORZONES_MIN_X_DISTANCE, ColorZonesEditorError, ColorZonesEditorState,
+    ColorZonesEditorState, ColorZonesGraphHeight, ColorZonesGtkPreferences, ColorZonesGtkState,
+    ColorZonesSettledAction,
 };
 use sha2::{Digest, Sha256};
 
-use super::darkroom_edit::{DARKROOM_CANONICAL_ORDER, canonical_rank};
-
-const MINIMUM_STRENGTH: f32 = -200.0;
-const MAXIMUM_STRENGTH: f32 = 200.0;
-
-/// An exact executable target or an explicit request for native defaults.
+/// Durable global Color Zones GUI preferences mirroring native
+/// `plugins/darkroom/colorzones/gui_channel` and
+/// `plugins/darkroom/colorzones/graphheight`.
+///
+/// These are presentation state, never image-operation parameters. Graph height
+/// is measured in logical pixels, not percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorZonesEditTarget {
-    Operation(OperationId),
-    Defaults,
+pub struct ColorZonesGuiPreferences {
+    output_channel: ColorZonesChannel,
+    graph_height: ColorZonesGraphHeight,
 }
 
-/// A checked strength accepted by the native Color Zones parameter contract.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ColorZonesStrength(f32);
-
-impl ColorZonesStrength {
-    /// # Errors
-    ///
-    /// Returns [`ColorZonesEditError::InvalidStrength`] when the value is
-    /// non-finite or outside the native -200 through 200 range.
-    pub fn new(value: f32) -> Result<Self, ColorZonesEditError> {
-        if value.is_finite() && (MINIMUM_STRENGTH..=MAXIMUM_STRENGTH).contains(&value) {
-            Ok(Self(value))
-        } else {
-            Err(ColorZonesEditError::InvalidStrength)
-        }
-    }
-
-    const fn get(self) -> f32 {
-        self.0
-    }
-}
-
-/// One checked graph coordinate in native normalized curve space.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ColorZonesNodePosition {
-    x: f32,
-    y: f32,
-}
-
-impl ColorZonesNodePosition {
-    /// # Errors
-    ///
-    /// Returns [`ColorZonesEditError::InvalidNodePosition`] when either
-    /// coordinate is non-finite or outside normalized curve space.
-    pub fn new(x: f32, y: f32) -> Result<Self, ColorZonesEditError> {
-        if x.is_finite() && y.is_finite() && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y) {
-            Ok(Self { x, y })
-        } else {
-            Err(ColorZonesEditError::InvalidNodePosition)
-        }
-    }
-}
-
-/// Native right-click behavior for one curve node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColorZonesNodeRemoval {
-    Delete,
-    ResetToNeutral,
-}
-
-/// One typed Color Zones parameter mutation.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ColorZonesEditMutation {
-    /// Changing the selection criterion resets all three curves, mode, and
-    /// strength exactly as native `gui_changed()` does.
-    SetSelectionChannel(ColorZonesChannel),
-    SetMode(ColorZonesMode),
-    SetStrength(ColorZonesStrength),
-    SetSplinesVersion(ColorZonesSplinesVersion),
-    SetCurveType {
-        curve: ColorZonesChannel,
-        curve_type: ColorZonesCurveType,
-    },
-    InsertNode {
-        curve: ColorZonesChannel,
-        position: ColorZonesNodePosition,
-    },
-    MoveNode {
-        curve: ColorZonesChannel,
-        node: usize,
-        position: ColorZonesNodePosition,
-    },
-    RemoveNode {
-        curve: ColorZonesChannel,
-        node: usize,
-        removal: ColorZonesNodeRemoval,
-    },
-    ResetCurve(ColorZonesChannel),
-}
-
-/// A mutation coupled to the exact edit revision and operation identity.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ColorZonesEditAction {
-    expected_revision: Revision,
-    target: ColorZonesEditTarget,
-    mutation: ColorZonesEditMutation,
-}
-
-impl ColorZonesEditAction {
+impl ColorZonesGuiPreferences {
     #[must_use]
     pub const fn new(
-        expected_revision: Revision,
-        target: ColorZonesEditTarget,
-        mutation: ColorZonesEditMutation,
+        output_channel: ColorZonesChannel,
+        graph_height: ColorZonesGraphHeight,
     ) -> Self {
         Self {
-            expected_revision,
-            target,
-            mutation,
+            output_channel,
+            graph_height,
+        }
+    }
+
+    #[must_use]
+    pub const fn output_channel(self) -> ColorZonesChannel {
+        self.output_channel
+    }
+
+    #[must_use]
+    pub const fn graph_height(self) -> ColorZonesGraphHeight {
+        self.graph_height
+    }
+
+    #[must_use]
+    pub const fn with_output_channel(mut self, output_channel: ColorZonesChannel) -> Self {
+        self.output_channel = output_channel;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_graph_height(mut self, graph_height: ColorZonesGraphHeight) -> Self {
+        self.graph_height = graph_height;
+        self
+    }
+}
+
+impl From<ColorZonesGtkPreferences> for ColorZonesGuiPreferences {
+    fn from(preferences: ColorZonesGtkPreferences) -> Self {
+        Self::new(preferences.output_channel(), preferences.graph_height())
+    }
+}
+
+impl Default for ColorZonesGuiPreferences {
+    fn default() -> Self {
+        Self {
+            output_channel: ColorZonesChannel::Lightness,
+            graph_height: ColorZonesGraphHeight::default(),
         }
     }
 }
 
-/// The replacement edit and the exact operation instance changed within it.
+use super::darkroom_edit::{DARKROOM_CANONICAL_ORDER, canonical_rank};
+
+/// The replacement edit and exact Color Zones instance changed within it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppliedColorZonesEdit {
     edit: Edit,
@@ -165,7 +113,7 @@ impl AppliedColorZonesEdit {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColorZonesEditError {
     StaleRevision {
         expected: Revision,
@@ -173,16 +121,17 @@ pub enum ColorZonesEditError {
     },
     MissingOperation(OperationId),
     WrongOperation(OperationId),
-    ExactTargetRequired,
-    InvalidStrength,
-    InvalidNodePosition,
-    NodeOutOfRange {
-        curve: ColorZonesChannel,
-        node: usize,
-        count: usize,
+    MaterializationRequired(OperationId),
+    UnexpectedMaterialization(OperationId),
+    MaterializationTargetMismatch {
+        expected: OperationId,
+        actual: OperationId,
     },
-    CurveAtCapacity(ColorZonesChannel),
-    NodeTooClose(ColorZonesChannel),
+    EnableRequirementMismatch {
+        operation_id: OperationId,
+        expected: bool,
+        actual: bool,
+    },
     InvalidCanonicalOperation(String),
     Revision(String),
 }
@@ -204,25 +153,25 @@ impl fmt::Display for ColorZonesEditError {
                 formatter,
                 "operation {operation_id} is not an executable Color Zones instance"
             ),
-            Self::ExactTargetRequired => formatter.write_str(
-                "an exact Color Zones operation ID is required when an executable instance exists",
-            ),
-            Self::InvalidStrength => {
-                formatter.write_str("Color Zones strength must be finite and between -200 and 200")
-            }
-            Self::InvalidNodePosition => formatter
-                .write_str("Color Zones node coordinates must be finite and between zero and one"),
-            Self::NodeOutOfRange { curve, node, count } => write!(
+            Self::MaterializationRequired(operation_id) => write!(
                 formatter,
-                "Color Zones {curve:?} curve node {node} is outside its {count} active nodes"
+                "Color Zones operation {operation_id} is a default snapshot and must be materialized"
             ),
-            Self::CurveAtCapacity(curve) => write!(
+            Self::UnexpectedMaterialization(operation_id) => write!(
                 formatter,
-                "Color Zones {curve:?} curve already has {COLORZONES_MAX_NODES} nodes"
+                "Color Zones operation {operation_id} already exists and cannot be materialized again"
             ),
-            Self::NodeTooClose(curve) => write!(
+            Self::MaterializationTargetMismatch { expected, actual } => write!(
                 formatter,
-                "Color Zones {curve:?} curve nodes must remain more than {COLORZONES_MIN_X_DISTANCE} apart"
+                "Color Zones default snapshot targets {expected}, not {actual}"
+            ),
+            Self::EnableRequirementMismatch {
+                operation_id,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "Color Zones operation {operation_id} enable requirement is {actual}, but the current snapshot requires {expected}"
             ),
             Self::InvalidCanonicalOperation(message) | Self::Revision(message) => {
                 formatter.write_str(message)
@@ -233,16 +182,131 @@ impl fmt::Display for ColorZonesEditError {
 
 impl std::error::Error for ColorZonesEditError {}
 
-/// Applies one action without consulting imported opaque history state.
+/// Projects every persisted Color Zones instance, or one exact unmaterialized
+/// default when the edit has no executable instance.
 ///
-/// Targetless actions materialize disabled native defaults only when no
-/// executable Color Zones instance exists. Existing multi-instance edits must
-/// always name the exact operation ID.
+/// Both UI-owned durable preferences are supplied by the caller so rebuilds and
+/// stale reconciliation preserve the selected output tab and graph height.
 ///
 /// # Errors
 ///
-/// Returns a typed revision, target, canonical-parameter, or checked curve
-/// mutation error without modifying the supplied immutable edit.
+/// Returns an error when a persisted operation is not a valid canonical v5
+/// Color Zones operation.
+pub fn colorzones_snapshots(
+    edit: &Edit,
+    preferences: ColorZonesGuiPreferences,
+) -> Result<Vec<ColorZonesGtkState>, ColorZonesEditError> {
+    let operations = edit
+        .operations()
+        .filter(|operation| is_colorzones_operation(operation))
+        .collect::<Vec<_>>();
+    if operations.is_empty() {
+        return Ok(vec![default_snapshot(edit, preferences)?]);
+    }
+    operations
+        .into_iter()
+        .map(|operation| operation_snapshot(edit, operation, preferences))
+        .collect()
+}
+
+/// Resolves controller truth for a mounted leaf after a stale action.
+///
+/// The same exact instance is preferred. If another transaction removed it,
+/// the first current instance (or the current default snapshot) replaces the
+/// stale target without replaying the rejected action.
+///
+/// # Errors
+///
+/// Returns an error when current persisted Color Zones parameters are invalid.
+pub fn reconcile_colorzones_snapshot(
+    edit: &Edit,
+    preferred_target: OperationId,
+    preferences: ColorZonesGuiPreferences,
+) -> Result<ColorZonesGtkState, ColorZonesEditError> {
+    let snapshots = colorzones_snapshots(edit, preferences)?;
+    Ok(snapshots
+        .iter()
+        .find(|snapshot| snapshot.operation_id() == preferred_target)
+        .cloned()
+        .unwrap_or_else(|| snapshots[0].clone()))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColorZonesEditAction {
+    target: OperationId,
+    expected_revision: Revision,
+    parameters: ColorZonesParametersV5,
+    enable_required: bool,
+    materialization_required: bool,
+}
+
+impl ColorZonesEditAction {
+    #[must_use]
+    pub const fn new(
+        target: OperationId,
+        expected_revision: Revision,
+        parameters: ColorZonesParametersV5,
+        enable_required: bool,
+        materialization_required: bool,
+    ) -> Self {
+        Self {
+            target,
+            expected_revision,
+            parameters,
+            enable_required,
+            materialization_required,
+        }
+    }
+
+    #[must_use]
+    pub const fn target(self) -> OperationId {
+        self.target
+    }
+
+    #[must_use]
+    pub const fn expected_revision(self) -> Revision {
+        self.expected_revision
+    }
+
+    #[must_use]
+    pub const fn parameters(self) -> ColorZonesParametersV5 {
+        self.parameters
+    }
+
+    #[must_use]
+    pub const fn enable_required(self) -> bool {
+        self.enable_required
+    }
+
+    #[must_use]
+    pub const fn materialization_required(self) -> bool {
+        self.materialization_required
+    }
+}
+
+impl From<ColorZonesSettledAction> for ColorZonesEditAction {
+    fn from(action: ColorZonesSettledAction) -> Self {
+        Self {
+            target: action.target(),
+            expected_revision: action.expected_revision(),
+            parameters: action.parameters(),
+            enable_required: action.enable_required(),
+            materialization_required: action.materialization_required(),
+        }
+    }
+}
+
+/// Atomically applies one settled full-parameter replacement.
+///
+/// Exact target, expected revision, enable state, and materialization state are
+/// all checked against the immutable edit. A disabled or default instance is
+/// enabled/materialized in the same single replacement. Existing operation ID,
+/// key, opacity, and stack position are preserved.
+///
+/// # Errors
+///
+/// Returns a typed stale, target, requirement, canonical-parameter, or revision
+/// error without modifying the supplied edit.
 pub fn apply_colorzones_edit(
     current: &Edit,
     action: &ColorZonesEditAction,
@@ -253,168 +317,162 @@ pub fn apply_colorzones_edit(
             actual: current.revision(),
         });
     }
+    validate_parameters(&action.parameters)?;
 
     let mut operations = current.operations().cloned().collect::<Vec<_>>();
-    let materialized_defaults = action.target == ColorZonesEditTarget::Defaults;
-    let (target_index, operation_id) = match action.target {
-        ColorZonesEditTarget::Operation(operation_id) => {
-            let target_index = operations
-                .iter()
-                .position(|operation| operation.id() == operation_id)
-                .ok_or(ColorZonesEditError::MissingOperation(operation_id))?;
-            if !is_colorzones_operation(&operations[target_index]) {
-                return Err(ColorZonesEditError::WrongOperation(operation_id));
-            }
-            (target_index, operation_id)
+    let existing_index = operations
+        .iter()
+        .position(|operation| operation.id() == action.target());
+    let target_index = if let Some(index) = existing_index {
+        if !is_colorzones_operation(&operations[index]) {
+            return Err(ColorZonesEditError::WrongOperation(action.target()));
         }
-        ColorZonesEditTarget::Defaults => {
-            if operations.iter().any(is_colorzones_operation) {
-                return Err(ColorZonesEditError::ExactTargetRequired);
-            }
-            let operation_id = materialized_operation_id(current);
-            let defaults = builtin_registry()
-                .materialize_operation(COLORZONES_RUST_ID, operation_id)
-                .map_err(|error| {
-                    ColorZonesEditError::InvalidCanonicalOperation(error.to_string())
-                })?;
-            let operation = Operation::new_with_opacity(
-                defaults.id(),
-                defaults.key().clone(),
-                false,
-                defaults.opacity(),
-                defaults
-                    .parameters()
-                    .map(|(name, value)| (name.clone(), value.clone())),
-            )
+        if action.materialization_required() {
+            return Err(ColorZonesEditError::UnexpectedMaterialization(
+                action.target(),
+            ));
+        }
+        let expected_enable = !operations[index].is_enabled();
+        if action.enable_required() != expected_enable {
+            return Err(ColorZonesEditError::EnableRequirementMismatch {
+                operation_id: action.target(),
+                expected: expected_enable,
+                actual: action.enable_required(),
+            });
+        }
+        index
+    } else {
+        if !action.materialization_required() {
+            return Err(ColorZonesEditError::MissingOperation(action.target()));
+        }
+        if operations.iter().any(is_colorzones_operation) {
+            return Err(ColorZonesEditError::MaterializationRequired(
+                action.target(),
+            ));
+        }
+        let expected_target = materialized_operation_id(current);
+        if action.target() != expected_target {
+            return Err(ColorZonesEditError::MaterializationTargetMismatch {
+                expected: expected_target,
+                actual: action.target(),
+            });
+        }
+        if !action.enable_required() {
+            return Err(ColorZonesEditError::EnableRequirementMismatch {
+                operation_id: action.target(),
+                expected: true,
+                actual: false,
+            });
+        }
+        let defaults = builtin_registry()
+            .materialize_operation(COLORZONES_RUST_ID, action.target())
             .map_err(|error| ColorZonesEditError::InvalidCanonicalOperation(error.to_string()))?;
-            let target_index = canonical_insertion_index(&operations);
-            operations.insert(target_index, operation);
-            (target_index, operation_id)
-        }
+        let insertion = canonical_insertion_index(&operations);
+        operations.insert(insertion, defaults);
+        insertion
     };
 
-    let (completed, mut parameters) = decode_canonical_operation(&operations[target_index])?;
-    let mutation_changed = apply_mutation(&mut parameters, action.mutation)?;
-    ColorZonesConfig::try_from(&parameters).map_err(|error| {
-        ColorZonesEditError::InvalidCanonicalOperation(format!(
-            "Color Zones action produced invalid canonical parameters: {error}"
-        ))
-    })?;
-    if !materialized_defaults && !mutation_changed {
+    let operation = &operations[target_index];
+    let (_, current_parameters) = decode_canonical_operation(operation)?;
+    let next_enabled = operation.is_enabled() || action.enable_required();
+    if !action.materialization_required()
+        && current_parameters == action.parameters()
+        && next_enabled == operation.is_enabled()
+    {
         return Ok(AppliedColorZonesEdit {
             edit: current.clone(),
-            operation_id,
+            operation_id: action.target(),
             changed: false,
         });
     }
-    operations[target_index] = encode_canonical_operation(&completed, &parameters)?;
 
+    let completed = complete_canonical_operation(operation)?;
+    operations[target_index] =
+        encode_canonical_operation(&completed, &action.parameters(), next_enabled)?;
     let edit = current
         .revised(operations)
         .map_err(|error| ColorZonesEditError::Revision(error.to_string()))?;
     Ok(AppliedColorZonesEdit {
         edit,
-        operation_id,
+        operation_id: action.target(),
         changed: true,
     })
 }
 
-fn apply_mutation(
-    parameters: &mut ColorZonesParametersV5,
-    mutation: ColorZonesEditMutation,
-) -> Result<bool, ColorZonesEditError> {
-    let previous = *parameters;
-    let output_channel = mutation_curve(mutation).unwrap_or(ColorZonesChannel::Lightness);
-    let mut editor = ColorZonesEditorState::from_parameters(*parameters, output_channel)
-        .map_err(|error| map_editor_error(error, output_channel, parameters))?;
-
-    let result = match mutation {
-        ColorZonesEditMutation::SetSelectionChannel(channel) => {
-            editor.set_selection_channel(channel);
-            Ok(())
-        }
-        ColorZonesEditMutation::SetMode(mode) => {
-            editor.set_mode(mode);
-            Ok(())
-        }
-        ColorZonesEditMutation::SetStrength(strength) => editor.set_strength(strength.get()),
-        ColorZonesEditMutation::SetSplinesVersion(version) => {
-            editor.set_splines_version(version);
-            Ok(())
-        }
-        ColorZonesEditMutation::SetCurveType { curve, curve_type } => {
-            editor.set_curve_type(curve, curve_type);
-            Ok(())
-        }
-        ColorZonesEditMutation::InsertNode { curve, position } => editor
-            .insert_node_on(curve, position.x, position.y)
-            .map(|_| ()),
-        ColorZonesEditMutation::MoveNode {
-            curve,
-            node,
-            position,
-        } => editor
-            .move_node_on(curve, node, position.x, position.y)
-            .map(|_| ()),
-        ColorZonesEditMutation::RemoveNode {
-            curve,
-            node,
-            removal: ColorZonesNodeRemoval::Delete,
-        } => editor.delete_node_on(curve, node).map(|_| ()),
-        ColorZonesEditMutation::RemoveNode {
-            curve,
-            node,
-            removal: ColorZonesNodeRemoval::ResetToNeutral,
-        } => editor.neutralize_node_on(curve, node),
-        ColorZonesEditMutation::ResetCurve(curve) => {
-            editor.reset_curve_on(curve);
-            Ok(())
-        }
-    };
-    result.map_err(|error| map_editor_error(error, output_channel, parameters))?;
-    *parameters = editor.into_parameters();
-    Ok(*parameters != previous)
+fn operation_snapshot(
+    edit: &Edit,
+    operation: &Operation,
+    preferences: ColorZonesGuiPreferences,
+) -> Result<ColorZonesGtkState, ColorZonesEditError> {
+    let (_, parameters) = decode_canonical_operation(operation)?;
+    let editor = ColorZonesEditorState::from_parameters(parameters, preferences.output_channel())
+        .map_err(|error| {
+        ColorZonesEditError::InvalidCanonicalOperation(format!(
+            "persisted Color Zones parameters are invalid for the editor: {error}"
+        ))
+    })?;
+    Ok(ColorZonesGtkState::new(
+        operation.id(),
+        edit.revision(),
+        editor,
+        operation.is_enabled(),
+        operation.opacity(),
+        true,
+        false,
+    )
+    .with_graph_height(preferences.graph_height()))
 }
 
-const fn mutation_curve(mutation: ColorZonesEditMutation) -> Option<ColorZonesChannel> {
-    match mutation {
-        ColorZonesEditMutation::SetCurveType { curve, .. }
-        | ColorZonesEditMutation::InsertNode { curve, .. }
-        | ColorZonesEditMutation::MoveNode { curve, .. }
-        | ColorZonesEditMutation::RemoveNode { curve, .. }
-        | ColorZonesEditMutation::ResetCurve(curve) => Some(curve),
-        ColorZonesEditMutation::SetSelectionChannel(_)
-        | ColorZonesEditMutation::SetMode(_)
-        | ColorZonesEditMutation::SetStrength(_)
-        | ColorZonesEditMutation::SetSplinesVersion(_) => None,
-    }
+fn default_snapshot(
+    edit: &Edit,
+    preferences: ColorZonesGuiPreferences,
+) -> Result<ColorZonesGtkState, ColorZonesEditError> {
+    let operation_id = materialized_operation_id(edit);
+    let operation = builtin_registry()
+        .materialize_operation(COLORZONES_RUST_ID, operation_id)
+        .map_err(|error| ColorZonesEditError::InvalidCanonicalOperation(error.to_string()))?;
+    let (_, parameters) = decode_canonical_operation(&operation)?;
+    let editor = ColorZonesEditorState::from_parameters(parameters, preferences.output_channel())
+        .map_err(|error| {
+        ColorZonesEditError::InvalidCanonicalOperation(format!(
+            "native Color Zones defaults are invalid for the editor: {error}"
+        ))
+    })?;
+    Ok(ColorZonesGtkState::new(
+        operation_id,
+        edit.revision(),
+        editor,
+        false,
+        operation.opacity(),
+        true,
+        true,
+    )
+    .with_graph_height(preferences.graph_height()))
 }
 
-fn map_editor_error(
-    error: ColorZonesEditorError,
-    curve: ColorZonesChannel,
-    parameters: &ColorZonesParametersV5,
-) -> ColorZonesEditError {
-    match error {
-        ColorZonesEditorError::InvalidNodeIndex { node, active } => {
-            ColorZonesEditError::NodeOutOfRange {
-                curve,
-                node,
-                count: active,
-            }
-        }
-        ColorZonesEditorError::NodeLimitReached => ColorZonesEditError::CurveAtCapacity(curve),
-        ColorZonesEditorError::NodesTooClose => ColorZonesEditError::NodeTooClose(curve),
-        error => ColorZonesEditError::InvalidCanonicalOperation(format!(
-            "persisted Color Zones parameters are invalid: {error}; selection={}, spline-version={}",
-            parameters.channel, parameters.splines_version
-        )),
-    }
+fn validate_parameters(parameters: &ColorZonesParametersV5) -> Result<(), ColorZonesEditError> {
+    ColorZonesConfig::try_from(parameters)
+        .map(|_| ())
+        .map_err(|error| {
+            ColorZonesEditError::InvalidCanonicalOperation(format!(
+                "Color Zones action contains invalid canonical v5 parameters: {error}"
+            ))
+        })
 }
 
 fn decode_canonical_operation(
     operation: &Operation,
 ) -> Result<(Operation, ColorZonesParametersV5), ColorZonesEditError> {
+    let completed = complete_canonical_operation(operation)?;
+    let mut parameters = ColorZonesParametersV5::defaults();
+    for (name, value) in completed.parameters() {
+        decode_parameter(&mut parameters, name, value)?;
+    }
+    validate_parameters(&parameters)?;
+    Ok((completed, parameters))
+}
+
+fn complete_canonical_operation(operation: &Operation) -> Result<Operation, ColorZonesEditError> {
     let defaults = builtin_registry()
         .materialize_operation(COLORZONES_RUST_ID, operation.id())
         .map_err(|error| ColorZonesEditError::InvalidCanonicalOperation(error.to_string()))?;
@@ -433,25 +491,14 @@ fn decode_canonical_operation(
         };
         *target = value.clone();
     }
-    let completed = Operation::new_with_opacity(
+    Operation::new_with_opacity(
         operation.id(),
         operation.key().clone(),
         operation.is_enabled(),
         operation.opacity(),
         completed_parameters,
     )
-    .map_err(|error| ColorZonesEditError::InvalidCanonicalOperation(error.to_string()))?;
-
-    let mut parameters = ColorZonesParametersV5::defaults();
-    for (name, value) in completed.parameters() {
-        decode_parameter(&mut parameters, name, value)?;
-    }
-    ColorZonesConfig::try_from(&parameters).map_err(|error| {
-        ColorZonesEditError::InvalidCanonicalOperation(format!(
-            "persisted Color Zones parameters are invalid: {error}"
-        ))
-    })?;
-    Ok((completed, parameters))
+    .map_err(|error| ColorZonesEditError::InvalidCanonicalOperation(error.to_string()))
 }
 
 fn decode_parameter(
@@ -526,6 +573,7 @@ fn wrong_parameter_type(name: &ParameterName) -> ColorZonesEditError {
 fn encode_canonical_operation(
     operation: &Operation,
     parameters: &ColorZonesParametersV5,
+    enabled: bool,
 ) -> Result<Operation, ColorZonesEditError> {
     let encoded = operation
         .parameters()
@@ -542,7 +590,7 @@ fn encode_canonical_operation(
     Operation::new_with_opacity(
         operation.id(),
         operation.key().clone(),
-        operation.is_enabled(),
+        enabled,
         operation.opacity(),
         encoded,
     )
@@ -618,7 +666,7 @@ fn canonical_colorzones_rank() -> usize {
 fn materialized_operation_id(edit: &Edit) -> OperationId {
     for nonce in 0_u64.. {
         let mut digest = Sha256::new();
-        digest.update(b"rusttable.darkroom.colorzones.materialized-operation.v1\0");
+        digest.update(b"rusttable.darkroom.colorzones.materialized-operation.v2\0");
         digest.update(edit.id().get().to_be_bytes());
         digest.update(edit.photo_id().get().to_be_bytes());
         digest.update(edit.revision().get().to_be_bytes());
@@ -653,12 +701,8 @@ fn point_name(curve: usize, node: usize, coordinate: char) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::float_cmp,
-        reason = "source-authored f32 editor coordinates are persisted as exact promoted f64 values"
-    )]
-
-    use rusttable_core::{EditId, PhotoId};
+    use rusttable_core::{EditId, OperationOpacity, PhotoId};
+    use rusttable_processing::{ColorZonesCurveType, ColorZonesMode};
 
     use super::*;
 
@@ -673,344 +717,178 @@ mod tests {
         .expect("test edit")
     }
 
-    fn operation(key: &str, id: u128) -> Operation {
-        builtin_registry()
+    fn operation(key: &str, id: u128, enabled: bool) -> Operation {
+        let defaults = builtin_registry()
             .materialize_operation(key, OperationId::new(id).expect("operation ID"))
-            .expect("registry operation")
+            .expect("registry operation");
+        Operation::new_with_opacity(
+            defaults.id(),
+            defaults.key().clone(),
+            enabled,
+            defaults.opacity(),
+            defaults
+                .parameters()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        )
+        .expect("operation")
     }
 
-    fn parameter_i64(operation: &Operation, name: &str) -> i64 {
-        let name = ParameterName::new(name).expect("parameter name");
-        match operation.parameter(&name).expect("parameter exists") {
-            ParameterValue::Integer(value) => *value,
-            other => panic!("expected integer, got {other:?}"),
+    fn settled(
+        state: &ColorZonesGtkState,
+        parameters: &ColorZonesParametersV5,
+    ) -> ColorZonesEditAction {
+        ColorZonesEditAction {
+            target: state.operation_id(),
+            expected_revision: state.revision(),
+            parameters: *parameters,
+            enable_required: !state.enabled(),
+            materialization_required: state.materialization_required(),
         }
-    }
-
-    fn parameter_f64(operation: &Operation, name: &str) -> f64 {
-        let name = ParameterName::new(name).expect("parameter name");
-        match operation.parameter(&name).expect("parameter exists") {
-            ParameterValue::Scalar(value) => value.get(),
-            other => panic!("expected scalar, got {other:?}"),
-        }
-    }
-
-    fn colorzones(edit: &Edit, id: OperationId) -> &Operation {
-        edit.operations()
-            .find(|operation| operation.id() == id)
-            .expect("Color Zones operation")
     }
 
     #[test]
-    fn targetless_action_materializes_disabled_defaults_in_source_order() {
+    fn default_snapshot_materializes_enables_and_replaces_all_parameters_once() {
         let current = edit(
             7,
             [
-                operation("rusttable.vibrance", 11),
-                operation("rusttable.bloom", 12),
+                operation("rusttable.vibrance", 11, true),
+                operation("rusttable.bloom", 12, true),
             ],
         );
-        let action = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Defaults,
-            ColorZonesEditMutation::SetStrength(ColorZonesStrength::new(25.0).expect("strength")),
-        );
+        let state = colorzones_snapshots(
+            &current,
+            ColorZonesGuiPreferences::default().with_output_channel(ColorZonesChannel::Hue),
+        )
+        .expect("default snapshot")
+        .remove(0);
+        assert!(state.materialization_required());
+        assert!(!state.enabled());
+        assert_eq!(state.editor().output_channel(), ColorZonesChannel::Hue);
+        let unchanged_defaults = apply_colorzones_edit(
+            &current,
+            &settled(&state, &state.editor().parameters_value()),
+        )
+        .expect("materialize unchanged defaults");
+        assert!(unchanged_defaults.changed());
+        assert_eq!(unchanged_defaults.edit().revision(), Revision::from_u64(8));
 
-        let applied = apply_colorzones_edit(&current, &action).expect("apply targetless action");
+        let mut parameters = state.editor().parameters_value();
+        parameters.mode = ColorZonesMode::Strong.raw();
+        parameters.curve_num_nodes[1] = 3;
+        parameters.curve_type[1] = ColorZonesCurveType::Monotone.raw();
+        parameters.curves[1][1].x = 0.5;
+        parameters.curves[1][1].y = 0.8;
+
+        let applied = apply_colorzones_edit(&current, &settled(&state, &parameters))
+            .expect("materialize settled action");
         let operations = applied.edit().operations().collect::<Vec<_>>();
-        assert_eq!(operations.len(), 3);
-        assert_eq!(operations[0].key().as_str(), "rusttable.vibrance");
-        assert_eq!(operations[1].key().as_str(), COLORZONES_RUST_ID);
-        assert_eq!(operations[2].key().as_str(), "rusttable.bloom");
-        assert!(!operations[1].is_enabled());
-        assert_eq!(parameter_f64(operations[1], "strength"), 25.0);
         assert!(applied.changed());
         assert_eq!(applied.edit().revision(), Revision::from_u64(8));
+        assert_eq!(operations[1].id(), state.operation_id());
+        assert!(operations[1].is_enabled());
+        assert_eq!(operations[1].key().as_str(), COLORZONES_RUST_ID);
+        assert_eq!(operations[0].key().as_str(), "rusttable.vibrance");
+        assert_eq!(operations[2].key().as_str(), "rusttable.bloom");
     }
 
     #[test]
-    fn stale_revision_and_targetless_existing_instance_are_rejected() {
-        let id = OperationId::new(21).expect("operation ID");
-        let current = edit(3, [operation(COLORZONES_RUST_ID, id.get())]);
-        let stale = ColorZonesEditAction::new(
-            Revision::from_u64(2),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetMode(ColorZonesMode::Strong),
-        );
+    fn exact_disabled_instance_preserves_identity_opacity_order_and_enables_atomically() {
+        let first = operation(COLORZONES_RUST_ID, 21, true);
+        let defaults = operation(COLORZONES_RUST_ID, 22, false);
+        let opacity = OperationOpacity::new(0.375).expect("opacity");
+        let second = Operation::new_with_opacity(
+            defaults.id(),
+            defaults.key().clone(),
+            false,
+            opacity,
+            defaults
+                .parameters()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        )
+        .expect("disabled operation");
+        let current = edit(3, [first.clone(), second]);
+        let states = colorzones_snapshots(
+            &current,
+            ColorZonesGuiPreferences::default().with_output_channel(ColorZonesChannel::Chroma),
+        )
+        .expect("instance snapshots");
+        let state = states
+            .iter()
+            .find(|state| state.operation_id().get() == 22)
+            .expect("second state");
+        let mut parameters = state.editor().parameters_value();
+        parameters.strength = 42.0;
+        parameters.curve_num_nodes[0] = 3;
+        parameters.curves[0][1].x = 0.5;
+        parameters.curves[0][1].y = 0.7;
+
+        let applied = apply_colorzones_edit(&current, &settled(state, &parameters))
+            .expect("replace exact instance");
+        let operations = applied.edit().operations().collect::<Vec<_>>();
+        assert_eq!(operations[0], &first);
+        assert_eq!(operations[1].id(), state.operation_id());
+        assert_eq!(operations[1].opacity(), opacity);
+        assert!(operations[1].is_enabled());
+        assert_eq!(applied.edit().revision(), Revision::from_u64(4));
+    }
+
+    #[test]
+    fn no_op_and_stale_actions_do_not_advance_history() {
+        let current = edit(5, [operation(COLORZONES_RUST_ID, 31, true)]);
+        let state = colorzones_snapshots(&current, ColorZonesGuiPreferences::default())
+            .expect("snapshot")
+            .remove(0);
+        let no_op = settled(&state, &state.editor().parameters_value());
+        let applied = apply_colorzones_edit(&current, &no_op).expect("no-op");
+        assert!(!applied.changed());
+        assert_eq!(applied.edit(), &current);
+
+        let stale_edit = current
+            .revised(current.operations().cloned())
+            .expect("unrelated revision");
         assert!(matches!(
-            apply_colorzones_edit(&current, &stale),
+            apply_colorzones_edit(&stale_edit, &no_op),
             Err(ColorZonesEditError::StaleRevision { .. })
         ));
-
-        let targetless = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Defaults,
-            ColorZonesEditMutation::SetMode(ColorZonesMode::Strong),
+        let preferences = ColorZonesGuiPreferences::new(
+            ColorZonesChannel::Hue,
+            ColorZonesGraphHeight::new(219).expect("graph height"),
         );
-        assert_eq!(
-            apply_colorzones_edit(&current, &targetless),
-            Err(ColorZonesEditError::ExactTargetRequired)
-        );
+        let reconciled =
+            reconcile_colorzones_snapshot(&stale_edit, state.operation_id(), preferences)
+                .expect("controller truth");
+        assert_eq!(reconciled.revision(), stale_edit.revision());
+        assert_eq!(reconciled.operation_id(), state.operation_id());
+        assert_eq!(reconciled.editor().output_channel(), ColorZonesChannel::Hue);
+        assert_eq!(reconciled.graph_height().logical_pixels(), 219);
     }
 
     #[test]
-    fn exact_instance_action_changes_only_the_named_operation() {
-        let first_id = OperationId::new(31).expect("first ID");
-        let second_id = OperationId::new(32).expect("second ID");
-        let current = edit(
-            5,
-            [
-                operation(COLORZONES_RUST_ID, first_id.get()),
-                operation(COLORZONES_RUST_ID, second_id.get()),
-            ],
-        );
-        let action = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(second_id),
-            ColorZonesEditMutation::SetMode(ColorZonesMode::Strong),
-        );
-
-        let applied = apply_colorzones_edit(&current, &action).expect("apply exact action");
-        assert_eq!(applied.operation_id(), second_id);
-        assert_eq!(
-            parameter_i64(colorzones(applied.edit(), first_id), "mode"),
-            0
-        );
-        assert_eq!(
-            parameter_i64(colorzones(applied.edit(), second_id), "mode"),
-            1
-        );
+    fn gui_preferences_change_projection_without_revising_image_edit() {
+        let current = edit(9, [operation(COLORZONES_RUST_ID, 35, true)]);
+        let before_revision = current.revision();
+        let preferences = ColorZonesGuiPreferences::default()
+            .with_output_channel(ColorZonesChannel::Hue)
+            .with_graph_height(ColorZonesGraphHeight::new(241).expect("graph height"));
+        let rebuilt =
+            colorzones_snapshots(&current, preferences).expect("preference-shaped snapshots");
+        assert_eq!(rebuilt[0].editor().output_channel(), ColorZonesChannel::Hue);
+        assert_eq!(rebuilt[0].graph_height().logical_pixels(), 241);
+        assert_eq!(current.revision(), before_revision);
     }
 
     #[test]
-    fn unchanged_and_rejected_movements_preserve_the_edit_revision() {
-        let id = OperationId::new(36).expect("operation ID");
-        let current = edit(5, [operation(COLORZONES_RUST_ID, id.get())]);
-        let unchanged = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::MoveNode {
-                curve: ColorZonesChannel::Lightness,
-                node: 0,
-                position: ColorZonesNodePosition::new(0.25, 0.5).expect("position"),
-            },
-        );
-        let applied = apply_colorzones_edit(&current, &unchanged).expect("unchanged movement");
-        assert!(!applied.changed());
-        assert_eq!(applied.edit(), &current);
-
-        let rejected = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::MoveNode {
-                curve: ColorZonesChannel::Lightness,
-                node: 0,
-                position: ColorZonesNodePosition::new(0.75 - COLORZONES_MIN_X_DISTANCE, 0.5)
-                    .expect("position"),
-            },
-        );
-        let applied = apply_colorzones_edit(&current, &rejected).expect("rejected movement");
-        assert!(!applied.changed());
-        assert_eq!(applied.edit(), &current);
-    }
-
-    #[test]
-    fn selection_change_resets_native_parameters_and_v1_hue_uses_default_interior_nodes() {
-        let id = OperationId::new(41).expect("operation ID");
-        let current = edit(9, [operation(COLORZONES_RUST_ID, id.get())]);
-        let strength = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetStrength(ColorZonesStrength::new(80.0).expect("strength")),
-        );
-        let strengthened = apply_colorzones_edit(&current, &strength)
-            .expect("set strength")
-            .into_edit();
-        let selection = ColorZonesEditAction::new(
-            strengthened.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetSelectionChannel(ColorZonesChannel::Lightness),
-        );
-
-        let applied = apply_colorzones_edit(&strengthened, &selection).expect("change selection");
-        let operation = colorzones(applied.edit(), id);
-        assert_eq!(parameter_i64(operation, "channel"), 0);
-        assert_eq!(parameter_i64(operation, "mode"), 0);
-        assert_eq!(parameter_i64(operation, "splines_version"), 1);
-        assert_eq!(parameter_f64(operation, "strength"), 0.0);
-        for curve in 0..COLORZONES_CHANNELS {
-            assert_eq!(parameter_i64(operation, &curve_count_name(curve)), 2);
-            assert_eq!(parameter_i64(operation, &curve_type_name(curve)), 1);
-            assert_eq!(parameter_f64(operation, &point_name(curve, 0, 'x')), 0.0);
-            assert_eq!(parameter_f64(operation, &point_name(curve, 1, 'x')), 1.0);
-        }
-
-        let v1 = ColorZonesEditAction::new(
-            applied.edit().revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetSplinesVersion(ColorZonesSplinesVersion::V1),
-        );
-        let v1_edit = apply_colorzones_edit(applied.edit(), &v1)
-            .expect("switch to spline v1")
-            .into_edit();
-        let hue = ColorZonesEditAction::new(
-            v1_edit.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetSelectionChannel(ColorZonesChannel::Hue),
-        );
-        let hue_edit = apply_colorzones_edit(&v1_edit, &hue)
-            .expect("select Hue under spline v1")
-            .into_edit();
-        let operation = colorzones(&hue_edit, id);
-        assert_eq!(parameter_i64(operation, "splines_version"), 0);
-        for curve in 0..COLORZONES_CHANNELS {
-            assert_eq!(parameter_f64(operation, &point_name(curve, 0, 'x')), 0.25);
-            assert_eq!(parameter_f64(operation, &point_name(curve, 1, 'x')), 0.75);
-        }
-    }
-
-    #[test]
-    fn node_insert_move_reset_and_delete_follow_native_rules() {
-        let id = OperationId::new(51).expect("operation ID");
-        let mut current = edit(1, [operation(COLORZONES_RUST_ID, id.get())]);
-        let target = ColorZonesEditTarget::Operation(id);
-
-        let insert = ColorZonesEditAction::new(
-            current.revision(),
-            target,
-            ColorZonesEditMutation::InsertNode {
-                curve: ColorZonesChannel::Chroma,
-                position: ColorZonesNodePosition::new(0.5, 0.8).expect("position"),
-            },
-        );
-        current = apply_colorzones_edit(&current, &insert)
-            .expect("insert node")
-            .into_edit();
-        let operation = colorzones(&current, id);
-        assert_eq!(parameter_i64(operation, "curve_1_num_nodes"), 3);
-        assert_eq!(parameter_f64(operation, "curve_1_node_1_x"), 0.5);
-        assert_eq!(
-            parameter_f64(operation, "curve_1_node_1_y"),
-            f64::from(0.8_f32)
-        );
-
-        let move_action = ColorZonesEditAction::new(
-            current.revision(),
-            target,
-            ColorZonesEditMutation::MoveNode {
-                curve: ColorZonesChannel::Chroma,
-                node: 1,
-                position: ColorZonesNodePosition::new(0.6, 0.2).expect("position"),
-            },
-        );
-        current = apply_colorzones_edit(&current, &move_action)
-            .expect("move node")
-            .into_edit();
-        assert_eq!(
-            parameter_f64(colorzones(&current, id), "curve_1_node_1_x"),
-            f64::from(0.6_f32)
-        );
-
-        let neutral = ColorZonesEditAction::new(
-            current.revision(),
-            target,
-            ColorZonesEditMutation::RemoveNode {
-                curve: ColorZonesChannel::Chroma,
-                node: 1,
-                removal: ColorZonesNodeRemoval::ResetToNeutral,
-            },
-        );
-        current = apply_colorzones_edit(&current, &neutral)
-            .expect("neutralize node")
-            .into_edit();
-        assert_eq!(
-            parameter_f64(colorzones(&current, id), "curve_1_node_1_y"),
-            0.5
-        );
-
-        let delete = ColorZonesEditAction::new(
-            current.revision(),
-            target,
-            ColorZonesEditMutation::RemoveNode {
-                curve: ColorZonesChannel::Chroma,
-                node: 1,
-                removal: ColorZonesNodeRemoval::Delete,
-            },
-        );
-        current = apply_colorzones_edit(&current, &delete)
-            .expect("delete node")
-            .into_edit();
-        let operation = colorzones(&current, id);
-        assert_eq!(parameter_i64(operation, "curve_1_num_nodes"), 2);
-        assert_eq!(parameter_f64(operation, "curve_1_node_2_x"), 0.0);
-        assert_eq!(parameter_f64(operation, "curve_1_node_2_y"), 0.0);
-    }
-
-    #[test]
-    fn per_channel_reset_uses_selection_and_spline_boundary_rules() {
-        let id = OperationId::new(61).expect("operation ID");
-        let current = edit(2, [operation(COLORZONES_RUST_ID, id.get())]);
-        let reset = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::ResetCurve(ColorZonesChannel::Hue),
-        );
-
-        let applied = apply_colorzones_edit(&current, &reset).expect("reset Hue curve");
-        let operation = colorzones(applied.edit(), id);
-        assert_eq!(parameter_i64(operation, "curve_2_num_nodes"), 2);
-        assert_eq!(parameter_i64(operation, "curve_2_type"), 1);
-        assert_eq!(parameter_f64(operation, "curve_2_node_0_x"), 0.25);
-        assert_eq!(parameter_f64(operation, "curve_2_node_1_x"), 0.75);
-    }
-
-    #[test]
-    fn spline_version_transition_resets_curves_to_native_v1_boundaries() {
-        let id = OperationId::new(66).expect("operation ID");
-        let current = edit(6, [operation(COLORZONES_RUST_ID, id.get())]);
-        let curve_type = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetCurveType {
-                curve: ColorZonesChannel::Chroma,
-                curve_type: ColorZonesCurveType::Monotone,
-            },
-        );
-        let current = apply_colorzones_edit(&current, &curve_type)
-            .expect("set curve interpolation")
-            .into_edit();
-        let version = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(id),
-            ColorZonesEditMutation::SetSplinesVersion(ColorZonesSplinesVersion::V1),
-        );
-
-        let applied = apply_colorzones_edit(&current, &version).expect("set spline version");
-        let operation = colorzones(applied.edit(), id);
-        assert_eq!(parameter_i64(operation, "curve_0_type"), 1);
-        assert_eq!(parameter_i64(operation, "curve_1_type"), 1);
-        assert_eq!(parameter_i64(operation, "curve_2_type"), 1);
-        assert_eq!(parameter_i64(operation, "splines_version"), 0);
-        for curve in 0..COLORZONES_CHANNELS {
-            assert_eq!(parameter_i64(operation, &curve_count_name(curve)), 2);
-            assert_eq!(parameter_f64(operation, &point_name(curve, 0, 'x')), 0.0);
-            assert_eq!(parameter_f64(operation, &point_name(curve, 1, 'x')), 1.0);
-        }
-    }
-
-    #[test]
-    fn exact_target_rejects_an_unrelated_operation_id() {
-        let exposure_id = OperationId::new(71).expect("exposure ID");
-        let current = edit(4, [operation("rusttable.exposure", exposure_id.get())]);
-        let action = ColorZonesEditAction::new(
-            current.revision(),
-            ColorZonesEditTarget::Operation(exposure_id),
-            ColorZonesEditMutation::SetMode(ColorZonesMode::Strong),
-        );
-
-        assert_eq!(
-            apply_colorzones_edit(&current, &action),
-            Err(ColorZonesEditError::WrongOperation(exposure_id))
-        );
+    fn invalid_full_parameters_are_rejected_without_revising() {
+        let current = edit(2, [operation(COLORZONES_RUST_ID, 41, true)]);
+        let state = colorzones_snapshots(&current, ColorZonesGuiPreferences::default())
+            .expect("snapshot")
+            .remove(0);
+        let mut invalid = state.editor().parameters_value();
+        invalid.mode = 99;
+        assert!(matches!(
+            apply_colorzones_edit(&current, &settled(&state, &invalid)),
+            Err(ColorZonesEditError::InvalidCanonicalOperation(_))
+        ));
+        assert_eq!(current.revision(), Revision::from_u64(2));
     }
 }

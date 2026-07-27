@@ -2,9 +2,42 @@ use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
 use rusttable_processing::{
-    FactoryError, OperationDefinition, ProcessingOperationKind, RegistryValidationError,
-    builtin_registry,
+    DefinitionAvailability, FactoryError, OperationDefinition, OperationUiAvailability,
+    ProcessingOperationKind, RegistryValidationError, builtin_registry,
 };
+
+#[test]
+fn operation_ui_availability_distinguishes_full_partial_and_unavailable() {
+    let available = OperationUiAvailability::Available;
+    let partial = OperationUiAvailability::PartiallyAvailable {
+        reason: "custom editor only".to_owned(),
+        deferred_responsibilities: vec!["operation.ui.deferred".to_owned()],
+    };
+    let unavailable = OperationUiAvailability::Unavailable {
+        reason: "UI not implemented".to_owned(),
+    };
+
+    assert!(available.is_available());
+    assert!(available.is_usable());
+    assert!(!available.is_partial());
+    assert_eq!(available.reason(), None);
+    assert!(available.deferred_responsibilities().is_empty());
+
+    assert!(!partial.is_available());
+    assert!(partial.is_usable());
+    assert!(partial.is_partial());
+    assert_eq!(partial.reason(), Some("custom editor only"));
+    assert_eq!(
+        partial.deferred_responsibilities(),
+        &["operation.ui.deferred".to_owned()]
+    );
+
+    assert!(!unavailable.is_available());
+    assert!(!unavailable.is_usable());
+    assert!(!unavailable.is_partial());
+    assert_eq!(unavailable.reason(), Some("UI not implemented"));
+    assert!(unavailable.deferred_responsibilities().is_empty());
+}
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
     Operation::new(
@@ -288,6 +321,33 @@ fn colorzones_registry_exposes_dedicated_gpu_fallback_and_source_order() {
         .expect("Color Zones registry seam");
     assert_eq!(definition.descriptor().id.compatibility_name, "colorzones");
     assert_eq!(definition.descriptor().id.schema_version, 5);
+    assert_eq!(
+        definition.availability(),
+        &DefinitionAvailability::Available
+    );
+    let deferred_responsibilities = [
+        "iop.colorzones.ui.picker-lifecycle",
+        "iop.colorzones.ui.operation-local-histogram",
+        "iop.colorzones.ui.display-selection",
+        "iop.colorzones.ui.presets",
+        "iop.colorzones.ui.global-shortcuts-hold-mode",
+        "iop.colorzones.ui.durable-gui-preferences",
+        "iop.colorzones.ui.pending-import-materialization",
+    ];
+    assert_eq!(
+        definition.ui_availability(),
+        &OperationUiAvailability::PartiallyAvailable {
+            reason: "the Color Zones custom editor is usable, but native UI responsibilities remain deferred"
+                .to_owned(),
+            deferred_responsibilities: deferred_responsibilities
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        }
+    );
+    assert!(!definition.ui_availability().is_available());
+    assert!(definition.ui_availability().is_usable());
+    assert!(definition.ui_availability().is_partial());
     assert!(definition.cpu().is_some());
     let gpu = definition.gpu().expect("dedicated Color Zones GPU binding");
     assert_eq!(

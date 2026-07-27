@@ -9,8 +9,8 @@ mod clipping;
 mod liquify;
 mod rasterfile;
 use super::{
-    CpuFactory, CpuPrepare, DefinitionAvailability, ExecutionBackend, FactoryError, GpuBinding,
-    ImplementationIdentity, MigrationBinding, OperationCapability, OperationDefinition,
+    CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
+    MigrationBinding, OperationCapability, OperationDefinition, OperationUiAvailability,
     PreparedCpuOperation, REGISTRY_BUILD_ID, REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
 };
 use crate::ProcessingOperation;
@@ -739,8 +739,21 @@ pub fn colorzones_definition() -> OperationDefinition {
         }),
         Some(gpu),
     )
-    .with_ui_availability(DefinitionAvailability::Unavailable {
-        reason: "source-derived Color Zones GTK module is not implemented".to_owned(),
+    .with_ui_availability(OperationUiAvailability::PartiallyAvailable {
+        reason: "the Color Zones custom editor is usable, but native UI responsibilities remain deferred"
+            .to_owned(),
+        deferred_responsibilities: [
+            "iop.colorzones.ui.picker-lifecycle",
+            "iop.colorzones.ui.operation-local-histogram",
+            "iop.colorzones.ui.display-selection",
+            "iop.colorzones.ui.presets",
+            "iop.colorzones.ui.global-shortcuts-hold-mode",
+            "iop.colorzones.ui.durable-gui-preferences",
+            "iop.colorzones.ui.pending-import-materialization",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
     })
 }
 

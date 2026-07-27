@@ -60,6 +60,97 @@ pub(crate) fn module_expander(
 }
 
 pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
+    let title_row = module_title_row(id);
+    title_row.append(&module_title_label(id, title));
+    let action_button = module_action_button(
+        &format!("{id}-actions"),
+        "Presets and module menu unavailable",
+    );
+    action_button.set_visible(true);
+    title_row.append(&action_button);
+    title_row
+}
+
+/// Source-owned processing-module header projected from `src/develop/imageop.c`.
+///
+/// The preset affordance is deliberately absent until preset application is
+/// implemented. The returned controls retain enable/reset routing ownership in
+/// the image-operation module builder.
+pub(crate) struct ImageOperationModuleHeader {
+    pub(crate) widget: gtk4::Box,
+    pub(crate) enabled: gtk4::CheckButton,
+    pub(crate) icon_slot: gtk4::Box,
+    pub(crate) reset: Option<gtk4::Button>,
+}
+
+pub(crate) fn image_operation_module_header(
+    id: &str,
+    operation: &str,
+    title: &str,
+    supports_multi_instance: bool,
+    resettable: bool,
+) -> ImageOperationModuleHeader {
+    let header = module_title_row(id);
+    header.set_spacing(0);
+    header.add_css_class("dt_module_header");
+
+    let enabled = gtk4::CheckButton::new();
+    enabled.set_widget_name(&format!("{id}-enabled"));
+    enabled.set_size_request(MODULE_HEADER_BUTTON_SIZE, MODULE_HEADER_BUTTON_SIZE);
+    enabled.set_focusable(true);
+    enabled.add_css_class("dt_module_action");
+    enabled.update_property(&[gtk4::accessible::Property::Label("Enable module")]);
+    header.append(&enabled);
+
+    let icon_slot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    icon_slot.set_widget_name(&format!("iop-panel-icon-{operation}"));
+    icon_slot.set_size_request(MODULE_HEADER_ICON_SIZE, MODULE_HEADER_ICON_SIZE);
+    icon_slot.set_halign(gtk4::Align::Center);
+    icon_slot.set_valign(gtk4::Align::Center);
+    icon_slot.set_focusable(false);
+    icon_slot.set_can_target(false);
+    icon_slot.add_css_class("dt_icon");
+    header.append(&icon_slot);
+
+    header.append(&module_title_label(id, title));
+
+    let instance_name = gtk4::Label::new(None);
+    instance_name.set_widget_name(&format!("{id}-instance-name"));
+    instance_name.set_halign(gtk4::Align::Start);
+    instance_name.set_valign(gtk4::Align::Baseline);
+    instance_name.set_xalign(0.0);
+    instance_name.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
+    instance_name.add_css_class("dt_module_instance_name");
+    header.append(&instance_name);
+
+    if supports_multi_instance {
+        let action = module_action_button(&format!("{id}-actions"), "Multiple instance actions");
+        action.set_visible(true);
+        header.append(&action);
+    }
+
+    let reset = resettable.then(|| {
+        let reset = module_header_button(
+            &format!("{id}-reset"),
+            "edit-undo-symbolic",
+            "Reset module to defaults",
+        );
+        reset.set_focusable(true);
+        reset.set_sensitive(true);
+        reset.set_tooltip_text(Some("reset parameters"));
+        header.append(&reset);
+        reset
+    });
+
+    ImageOperationModuleHeader {
+        widget: header,
+        enabled,
+        icon_slot,
+        reset,
+    }
+}
+
+fn module_title_row(id: &str) -> gtk4::Box {
     let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
     title_row.set_widget_name(&format!("{id}-title"));
     title_row.set_hexpand(true);
@@ -67,7 +158,10 @@ pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
     title_row.set_valign(gtk4::Align::Center);
     title_row.set_visible(true);
     title_row.add_css_class("dt_darkroom_section_title");
+    title_row
+}
 
+fn module_title_label(id: &str, title: &str) -> gtk4::Label {
     let title_label = gtk4::Label::new(Some(title));
     title_label.set_widget_name(&format!("{id}-label"));
     title_label.set_halign(gtk4::Align::Start);
@@ -83,17 +177,7 @@ pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
         "<span foreground=\"#{red:02x}{green:02x}{blue:02x}\">{escaped_title}</span>"
     ));
     title_label.add_css_class("dt_darkroom_section_label");
-    title_row.append(&title_label);
-    let info_button = module_info_button(&format!("{id}-info"), "Module information unavailable");
-    info_button.set_visible(true);
-    title_row.append(&info_button);
-    let action_button = module_action_button(
-        &format!("{id}-actions"),
-        "Presets and module menu unavailable",
-    );
-    action_button.set_visible(true);
-    title_row.append(&action_button);
-    title_row
+    title_label
 }
 
 pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4::Box {
@@ -160,10 +244,6 @@ pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
 /// the title row so rail geometry matches Darktable's action affordance slot.
 pub(crate) fn module_action_button(id: &str, accessible_name: &str) -> gtk4::Button {
     module_header_button(id, "open-menu-symbolic", accessible_name)
-}
-
-pub(crate) fn module_info_button(id: &str, accessible_name: &str) -> gtk4::Button {
-    module_header_button(id, "help-about-symbolic", accessible_name)
 }
 
 fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {

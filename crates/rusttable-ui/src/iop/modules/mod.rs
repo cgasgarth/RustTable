@@ -2,6 +2,7 @@
 
 use std::{
     cell::{Cell, RefCell},
+    collections::BTreeMap,
     rc::Rc,
 };
 
@@ -10,12 +11,15 @@ use gtk4::prelude::*;
 use rusttable_core::{OperationId, Revision};
 
 use crate::gui::darktable_components::{
-    button as shared_button, dropdown as shared_dropdown,
-    module_expander as shared_module_expander, module_title,
+    image_operation_module_header, module_expander as shared_module_expander,
 };
 use crate::iop::colorcorrection::{
     COLORCORRECTION_MODULE_ID, ColorCorrectionGridGtkContext, ColorCorrectionGridState,
     build_grid as build_color_correction_grid,
+};
+use crate::iop::colorzones::{
+    ColorZonesGtkActionHandler, ColorZonesGtkHandlerOutcome, ColorZonesGtkLeaf,
+    ColorZonesGtkPreferencesHandler, ColorZonesGtkState, build_colorzones_gtk,
 };
 use crate::presentation::PresentationTextError;
 use crate::presentation::darkroom_controls::{
@@ -99,6 +103,79 @@ impl DarkroomModuleGroup {
     }
 }
 
+/// Source-specific editor payload carried by a registry module instead of
+/// descriptor-generated controls.
+#[derive(Debug, Clone, PartialEq)]
+enum DarkroomCustomEditorPayload {
+    ColorZones(Option<ColorZonesGtkState>),
+}
+
+impl DarkroomCustomEditorPayload {
+    const fn colorzones_state(&self) -> Option<&ColorZonesGtkState> {
+        match self {
+            Self::ColorZones(state) => state.as_ref(),
+        }
+    }
+}
+
+/// Mounted custom leaves are retained across processing-snapshot reconciliation.
+#[derive(Clone, Default)]
+pub(crate) struct DarkroomCustomEditorMounts {
+    colorzones: Rc<RefCell<BTreeMap<OperationId, ColorZonesGtkLeaf>>>,
+    colorzones_handler: Rc<RefCell<Option<ColorZonesGtkActionHandler>>>,
+    colorzones_preferences_handler: Rc<RefCell<Option<ColorZonesGtkPreferencesHandler>>>,
+}
+
+impl DarkroomCustomEditorMounts {
+    pub(crate) fn set_colorzones_handler(&self, handler: Option<ColorZonesGtkActionHandler>) {
+        self.colorzones_handler.replace(handler);
+    }
+
+    pub(crate) fn set_colorzones_preferences_handler(
+        &self,
+        handler: Option<ColorZonesGtkPreferencesHandler>,
+    ) {
+        self.colorzones_preferences_handler.replace(handler);
+        let handler = self.colorzones_preferences_handler.borrow().clone();
+        for leaf in self.colorzones.borrow().values() {
+            leaf.set_preferences_handler(handler.clone());
+        }
+    }
+
+    pub(crate) fn reconcile(&self, modules: &DarkroomModulesViewModel) {
+        for module in modules.left_modules().chain(modules.right_modules()) {
+            let Some(state) = module.colorzones_editor_state() else {
+                continue;
+            };
+            if let Some(leaf) = self.colorzones.borrow().get(&state.operation_id()) {
+                let output_channel = leaf.state().editor().output_channel();
+                leaf.reconcile(state.clone().with_output_channel(output_channel));
+            }
+        }
+    }
+
+    fn colorzones_leaf(&self, widget_id: &str, state: &ColorZonesGtkState) -> ColorZonesGtkLeaf {
+        if let Some(leaf) = self.colorzones.borrow().get(&state.operation_id()).cloned() {
+            let output_channel = leaf.state().editor().output_channel();
+            leaf.reconcile(state.clone().with_output_channel(output_channel));
+            return leaf;
+        }
+        let handler_slot = Rc::clone(&self.colorzones_handler);
+        let handler: ColorZonesGtkActionHandler = Rc::new(move |action| {
+            let handler = handler_slot.borrow().clone();
+            handler.map_or(ColorZonesGtkHandlerOutcome::Rollback, |handler| {
+                handler(action)
+            })
+        });
+        let leaf = build_colorzones_gtk(widget_id, state.clone(), Some(handler));
+        leaf.set_preferences_handler(self.colorzones_preferences_handler.borrow().clone());
+        self.colorzones
+            .borrow_mut()
+            .insert(state.operation_id(), leaf.clone());
+        leaf
+    }
+}
+
 /// One ordered, disclosure-capable module in a darkroom side panel.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq)]
@@ -108,6 +185,7 @@ pub struct DarkroomModuleViewModel {
     instance_sequence: usize,
     instance_count: usize,
     title: String,
+    description: Option<String>,
     side: DarkroomModuleSide,
     expanded: bool,
     enabled: bool,
@@ -115,6 +193,7 @@ pub struct DarkroomModuleViewModel {
     revision: Revision,
     controls: DarkroomControlsViewModel,
     color_correction_grid: Option<ColorCorrectionGridState>,
+    custom_editor: Option<DarkroomCustomEditorPayload>,
     presets: Vec<DarkroomModulePreset>,
     presets_unavailable_reason: Option<String>,
     availability: DarkroomModuleAvailability,
@@ -160,6 +239,7 @@ impl DarkroomModuleViewModel {
             instance_sequence: 0,
             instance_count: 1,
             title,
+            description: None,
             side,
             expanded,
             enabled,
@@ -167,6 +247,7 @@ impl DarkroomModuleViewModel {
             revision,
             controls,
             color_correction_grid: None,
+            custom_editor: None,
             presets: Vec::new(),
             presets_unavailable_reason: None,
             availability: DarkroomModuleAvailability::Supported,
@@ -231,6 +312,67 @@ impl DarkroomModuleViewModel {
     #[must_use]
     pub fn title(&self) -> &str {
         &self.title
+    }
+
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Marks this module as a source-specific Color Zones editor and removes
+    /// every descriptor-generated control.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if constructing an empty control snapshot is rejected.
+    #[must_use]
+    pub fn with_colorzones_custom_editor(mut self) -> Self {
+        debug_assert_eq!(self.id, crate::iop::colorzones::COLORZONES_MODULE_ID);
+        self.controls
+            .replace_snapshot(self.revision, Vec::new())
+            .expect("Color Zones custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::ColorZones(None));
+        self
+    }
+
+    /// Installs the exact Color Zones operation projection consumed by its
+    /// source-specific GTK leaf.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if constructing an empty control snapshot is rejected.
+    #[must_use]
+    pub fn with_colorzones_editor_state(mut self, state: ColorZonesGtkState) -> Self {
+        debug_assert_eq!(self.id, crate::iop::colorzones::COLORZONES_MODULE_ID);
+        self.operation_id = (!state.materialization_required()).then_some(state.operation_id());
+        self.revision = state.revision();
+        self.enabled = state.enabled();
+        self.controls
+            .replace_snapshot(state.revision(), Vec::new())
+            .expect("Color Zones custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::ColorZones(Some(state)));
+        self
+    }
+
+    #[must_use]
+    pub fn has_colorzones_custom_editor(&self) -> bool {
+        matches!(
+            &self.custom_editor,
+            Some(DarkroomCustomEditorPayload::ColorZones(_))
+        )
+    }
+
+    #[must_use]
+    pub fn colorzones_editor_state(&self) -> Option<&ColorZonesGtkState> {
+        self.custom_editor
+            .as_ref()
+            .and_then(DarkroomCustomEditorPayload::colorzones_state)
     }
 
     #[must_use]
@@ -430,16 +572,15 @@ impl DarkroomModuleViewModel {
     #[must_use]
     pub fn focus_order(&self) -> Vec<String> {
         let widget_id = self.widget_id();
-        let mut order = vec![format!("{widget_id}-disclosure")];
+        let mut order = vec![
+            format!("{widget_id}-disclosure"),
+            format!("{widget_id}-enabled"),
+        ];
         if self.can_add_instance() {
             order.push(format!("{widget_id}-actions"));
         }
-        order.push(format!("{widget_id}-enabled"));
         if self.resettable {
             order.push(format!("{widget_id}-reset"));
-        }
-        if !self.presets.is_empty() {
-            order.insert(2, format!("{widget_id}-presets"));
         }
         if self.color_correction_grid.is_some() {
             order.push(format!("{widget_id}-grid"));
@@ -715,6 +856,9 @@ impl DarkroomModuleViewModel {
             DarkroomModuleAvailability::Unsupported { reason }
             | DarkroomModuleAvailability::DeprecatedUnavailable { reason } => {
                 return format!("Unavailable · {reason}");
+            }
+            DarkroomModuleAvailability::PartiallySupported { reason, .. } => {
+                return format!("Partial · {reason}");
             }
             DarkroomModuleAvailability::Deprecated { reason } => {
                 return format!("Deprecated · {reason}");
@@ -1107,7 +1251,7 @@ pub fn build_module_panel_with_actions(
     action_handler: Option<DarkroomModuleActionHandler>,
 ) -> gtk4::Expander {
     let current_revision = Rc::new(RefCell::new(module.revision()));
-    build_module_panel_with_action_revision(module, action_handler, &current_revision)
+    build_module_panel_with_action_revision(module, action_handler, &current_revision, None)
 }
 
 #[must_use]
@@ -1116,85 +1260,52 @@ fn build_module_panel_with_action_revision(
     module: &DarkroomModuleViewModel,
     action_handler: Option<DarkroomModuleActionHandler>,
     current_revision: &Rc<RefCell<Revision>>,
+    custom_mounts: Option<&DarkroomCustomEditorMounts>,
 ) -> gtk4::Expander {
     let module_id = module.id().to_owned();
     let operation_id = module.operation_id();
     let widget_id = module.widget_id();
     let module_available = module.availability().is_supported();
     let module_resettable = module_available && module.resettable();
-    let presets_enable_module = module.presets_enable_module();
     let deprecation_message = match module.availability() {
         DarkroomModuleAvailability::Deprecated { reason } => Some(reason.as_str()),
         DarkroomModuleAvailability::Supported
+        | DarkroomModuleAvailability::PartiallySupported { .. }
         | DarkroomModuleAvailability::DeprecatedUnavailable { .. }
         | DarkroomModuleAvailability::Unsupported { .. } => None,
     };
-    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    content.set_widget_name(&format!("{widget_id}-content"));
-    apply_theme_role(&content, ThemeRole::Module);
 
-    let status_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    status_row.set_widget_name(&format!("{widget_id}-status-row"));
-    let status = gtk4::Label::new(Some(&module.status_text()));
-    status.set_widget_name(&format!("{widget_id}-status"));
-    status.set_halign(gtk4::Align::Start);
-    status.set_hexpand(true);
-    status.set_accessible_role(gtk4::AccessibleRole::Status);
-    status.update_property(&[Property::Label("Module status")]);
-    let recover = shared_button(&format!("{widget_id}-recover"), "Refresh");
-    recover.set_sensitive(false);
-    recover.set_focus_on_click(false);
-    recover.update_property(&[Property::Label("Refresh module snapshot")]);
-    if deprecation_message.is_none() {
-        status_row.append(&status);
-        status_row.append(&recover);
-    }
-    let header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    header.set_widget_name(&format!("{widget_id}-header"));
-    header.add_css_class("dt_module_header");
-    let enabled = gtk4::CheckButton::new();
-    enabled.set_widget_name(&format!("{widget_id}-enabled"));
-    enabled.set_label(Some("Enabled"));
+    let module_header = image_operation_module_header(
+        &widget_id,
+        module.id(),
+        module.title(),
+        module.supports_multi_instance(),
+        module.resettable(),
+    );
+    let title = module_header.widget;
+    let enabled = module_header.enabled;
+    let icon_slot = module_header.icon_slot;
+    let reset = module_header.reset;
     enabled.set_active(module.enabled());
     enabled.set_sensitive(module_available);
-    enabled.set_focusable(true);
-    enabled.update_property(&[Property::Label("Enable module")]);
-    header.append(&enabled);
-    let presets = if module.presets().len() == 0 {
-        let button = shared_button(&format!("{widget_id}-presets"), "Presets");
-        button.set_tooltip_text(Some(
-            module
-                .presets_unavailable_reason()
-                .unwrap_or("Presets are unavailable for this module"),
-        ));
-        button.set_sensitive(false);
-        button.set_focusable(false);
-        button.update_property(&[Property::Label("Module presets unavailable")]);
-        header.append(&button);
-        None
-    } else {
-        let labels = module
-            .presets()
-            .map(DarkroomModulePreset::label)
-            .collect::<Vec<_>>();
-        let dropdown = shared_dropdown(&format!("{widget_id}-presets"), &labels);
-        dropdown.set_selected(u32::MAX);
-        dropdown.set_sensitive(module_available && (module.enabled() || presets_enable_module));
-        dropdown.set_focusable(true);
-        dropdown.update_property(&[Property::Label("Choose module preset")]);
-        header.append(&dropdown);
-        Some(dropdown)
-    };
-    let reset = module.resettable().then(|| {
-        let reset = shared_button(&format!("{widget_id}-reset"), "Reset");
+    if let Some(reset) = reset.as_ref() {
         reset.set_sensitive(module_resettable);
-        reset.set_focus_on_click(false);
-        reset.set_halign(gtk4::Align::End);
-        reset.update_property(&[Property::Label("Reset module to defaults")]);
-        header.append(&reset);
-        reset
-    });
-    content.append(&header);
+    }
+    if module.id() == crate::iop::velvia::VELVIA_MODULE_ID {
+        let velvia_title = crate::iop::velvia::module_title_widget();
+        if let Some(icon) = velvia_title.first_child() {
+            icon.unparent();
+            icon_slot.append(&icon);
+        }
+    }
+    if let Some(description) = module.description() {
+        title.set_tooltip_text(Some(description));
+    }
+
+    let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    content.set_widget_name(&format!("{widget_id}-content"));
+    content.add_css_class("dt_plugin_ui");
+    apply_theme_role(&content, ThemeRole::Module);
     if let Some(deprecation_message) = deprecation_message {
         let warning = gtk4::Label::new(Some(deprecation_message));
         warning.set_widget_name(&format!("{widget_id}-deprecation-warning"));
@@ -1207,11 +1318,10 @@ fn build_module_panel_with_action_revision(
         warning.set_accessible_role(gtk4::AccessibleRole::Status);
         warning.update_property(&[Property::Label("Module deprecation warning")]);
         content.append(&warning);
-    } else {
-        // RustTable's actionable backend status occupies Darktable's trouble
-        // row only when there is no persistent source deprecation warning.
-        content.append(&status_row);
     }
+    let operation_root = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    operation_root.set_widget_name(&format!("{widget_id}-operation-root"));
+    operation_root.add_css_class("dt_plugin_ui_main");
 
     let color_correction_controls_enable_module = module.id() == COLORCORRECTION_MODULE_ID;
     let synchronizing_enabled = Rc::new(Cell::new(false));
@@ -1241,8 +1351,6 @@ fn build_module_panel_with_action_revision(
             module_available && (module.enabled() || color_correction_controls_enable_module),
             ControlRowActionContext {
                 action_handler: interaction_action_handler.clone(),
-                status: status.clone(),
-                recover: recover.clone(),
                 current_revision: current_revision.clone(),
                 module_id: module_id.clone(),
                 operation_id,
@@ -1277,16 +1385,12 @@ fn build_module_panel_with_action_revision(
         };
         let commit_grid = interaction_action_handler.as_ref().map(|handler| {
             let handler = handler.clone();
-            let status = status.clone();
-            let recover = recover.clone();
             let current_revision = current_revision.clone();
             let module_id = module_id.clone();
             Rc::new(move |grid| {
                 let expected_revision = *current_revision.borrow();
                 dispatch_module_action(
                     &handler,
-                    &status,
-                    &recover,
                     &current_revision,
                     DarkroomModuleAction::ColorCorrectionGrid {
                         module_id: module_id.clone(),
@@ -1299,16 +1403,12 @@ fn build_module_panel_with_action_revision(
         });
         let reset_all = interaction_action_handler.as_ref().map(|handler| {
             let handler = handler.clone();
-            let status = status.clone();
-            let recover = recover.clone();
             let current_revision = current_revision.clone();
             let module_id = module_id.clone();
             Rc::new(move || {
                 let expected_revision = *current_revision.borrow();
                 dispatch_module_action(
                     &handler,
-                    &status,
-                    &recover,
                     &current_revision,
                     DarkroomModuleAction::ColorCorrectionResetParameters {
                         module_id: module_id.clone(),
@@ -1328,14 +1428,22 @@ fn build_module_panel_with_action_revision(
             commit_grid,
             reset_all,
         });
-        content.append(&grid);
+        operation_root.append(&grid);
         Some(grid)
     } else {
         None
     };
-    for row in &control_rows {
-        content.append(row);
+    if let (Some(custom_mounts), Some(state)) = (custom_mounts, module.colorzones_editor_state()) {
+        let leaf = custom_mounts.colorzones_leaf(&widget_id, state);
+        if leaf.widget().parent().is_some() {
+            leaf.widget().unparent();
+        }
+        operation_root.append(leaf.widget());
     }
+    for row in &control_rows {
+        operation_root.append(row);
+    }
+    content.append(&operation_root);
 
     let expander = shared_module_expander(
         &widget_id,
@@ -1343,11 +1451,6 @@ fn build_module_panel_with_action_revision(
         module.expanded(),
         Some(&content),
     );
-    let title = if module.id() == crate::iop::velvia::VELVIA_MODULE_ID {
-        crate::iop::velvia::module_title_widget()
-    } else {
-        module_title(&widget_id, module.title())
-    };
     if let Some(deprecation_message) = deprecation_message {
         let mut child = title.first_child();
         while let Some(current) = child {
@@ -1370,16 +1473,12 @@ fn build_module_panel_with_action_revision(
                 instance_menu,
                 InstanceActionContext {
                     action_handler: handler.clone(),
-                    status: status.clone(),
-                    recover: recover.clone(),
                     current_revision: current_revision.clone(),
                     module_id: module_id.clone(),
                     operation_id,
                 },
             );
         }
-        let status_for_expander = status.clone();
-        let recover_for_expander = recover.clone();
         let current_revision_for_expander = current_revision.clone();
         let handler_for_expander = handler.clone();
         let module_id_for_expander = module_id.clone();
@@ -1387,8 +1486,6 @@ fn build_module_panel_with_action_revision(
             let expected_revision = *current_revision_for_expander.borrow();
             dispatch_module_action(
                 &handler_for_expander,
-                &status_for_expander,
-                &recover_for_expander,
                 &current_revision_for_expander,
                 DarkroomModuleAction::Disclosure {
                     module_id: module_id_for_expander.clone(),
@@ -1400,10 +1497,7 @@ fn build_module_panel_with_action_revision(
         });
 
         let handler_for_enabled = handler.clone();
-        let status_for_enabled = status.clone();
-        let recover_for_enabled = recover.clone();
         let reset_for_enabled = reset.clone();
-        let presets_for_enabled = presets.clone();
         let current_revision_for_enabled = current_revision.clone();
         let module_id_for_enabled = module_id.clone();
         let control_rows_for_enabled = control_rows.clone();
@@ -1412,11 +1506,6 @@ fn build_module_panel_with_action_revision(
         enabled.connect_toggled(move |enabled| {
             if let Some(reset) = reset_for_enabled.as_ref() {
                 reset.set_sensitive(module_resettable);
-            }
-            if let Some(presets) = presets_for_enabled.as_ref() {
-                presets.set_sensitive(
-                    module_available && (enabled.is_active() || presets_enable_module),
-                );
             }
             for row in &control_rows_for_enabled {
                 row.set_sensitive(
@@ -1436,8 +1525,6 @@ fn build_module_panel_with_action_revision(
             let expected_revision = *current_revision_for_enabled.borrow();
             dispatch_module_action(
                 &handler_for_enabled,
-                &status_for_enabled,
-                &recover_for_enabled,
                 &current_revision_for_enabled,
                 DarkroomModuleAction::Enable {
                     module_id: module_id_for_enabled.clone(),
@@ -1449,8 +1536,6 @@ fn build_module_panel_with_action_revision(
         });
 
         if let Some(reset) = reset {
-            let status_for_reset = status.clone();
-            let recover_for_reset = recover.clone();
             let routed_handler_for_reset = handler.clone();
             let reset_succeeded = Rc::new(Cell::new(false));
             let reset_succeeded_for_handler = Rc::clone(&reset_succeeded);
@@ -1468,8 +1553,6 @@ fn build_module_panel_with_action_revision(
                 let expected_revision = *current_revision_for_reset.borrow();
                 dispatch_module_action(
                     &handler_for_reset,
-                    &status_for_reset,
-                    &recover_for_reset,
                     &current_revision_for_reset,
                     DarkroomModuleAction::Reset {
                         module_id: module_id_for_reset.clone(),
@@ -1482,73 +1565,6 @@ fn build_module_panel_with_action_revision(
                     enabled_for_reset.set_active(true);
                     synchronizing_enabled_for_reset.set(false);
                 }
-            });
-        }
-
-        if let Some(presets) = presets {
-            let status_for_presets = status.clone();
-            let recover_for_presets = recover.clone();
-            let handler_for_presets = handler.clone();
-            let current_revision_for_presets = current_revision.clone();
-            let module_id_for_presets = module_id.clone();
-            let preset_ids = module
-                .presets()
-                .map(|preset| preset.id().to_owned())
-                .collect::<Vec<_>>();
-            let preset_enables = module
-                .presets()
-                .map(DarkroomModulePreset::enables_module)
-                .collect::<Vec<_>>();
-            let enabled_for_presets = enabled.clone();
-            let synchronizing_enabled_for_presets = Rc::clone(&synchronizing_enabled);
-            presets.connect_selected_notify(move |presets| {
-                let Ok(index) = usize::try_from(presets.selected()) else {
-                    return;
-                };
-                let Some(preset_id) = preset_ids.get(index) else {
-                    return;
-                };
-                let expected_revision = *current_revision_for_presets.borrow();
-                let succeeded = dispatch_module_action(
-                    &handler_for_presets,
-                    &status_for_presets,
-                    &recover_for_presets,
-                    &current_revision_for_presets,
-                    DarkroomModuleAction::Preset {
-                        module_id: module_id_for_presets.clone(),
-                        operation_id,
-                        expected_revision,
-                        preset_id: preset_id.clone(),
-                    },
-                );
-                if succeeded && preset_enables.get(index).copied().unwrap_or(false) {
-                    synchronizing_enabled_for_presets.set(true);
-                    enabled_for_presets.set_active(true);
-                    synchronizing_enabled_for_presets.set(false);
-                }
-                presets.set_selected(u32::MAX);
-            });
-        }
-
-        if deprecation_message.is_none() {
-            let current_revision_for_recovery = current_revision.clone();
-            let handler_for_recovery = handler.clone();
-            let status_for_recovery = status.clone();
-            let recover_for_recovery = recover.clone();
-            let module_id_for_recovery = module_id.clone();
-            recover.connect_clicked(move |_| {
-                let expected_revision = *current_revision_for_recovery.borrow();
-                dispatch_module_action(
-                    &handler_for_recovery,
-                    &status_for_recovery,
-                    &recover_for_recovery,
-                    &current_revision_for_recovery,
-                    DarkroomModuleAction::Recover {
-                        module_id: module_id_for_recovery.clone(),
-                        operation_id,
-                        expected_revision,
-                    },
-                );
             });
         }
     }
@@ -1614,7 +1630,7 @@ pub fn build_module_column_with_filter<'a>(
     query: &str,
     action_handler: Option<&DarkroomModuleActionHandler>,
 ) -> gtk4::Box {
-    build_module_column_with_filter_and_revision(modules, side, query, action_handler, None)
+    build_module_column_with_filter_and_revision(modules, side, query, action_handler, None, None)
 }
 
 pub(crate) fn build_module_column_with_filter_at_revision<'a>(
@@ -1623,6 +1639,7 @@ pub(crate) fn build_module_column_with_filter_at_revision<'a>(
     query: &str,
     action_handler: Option<&DarkroomModuleActionHandler>,
     current_revision: &Rc<RefCell<Revision>>,
+    custom_mounts: &DarkroomCustomEditorMounts,
 ) -> gtk4::Box {
     build_module_column_with_filter_and_revision(
         modules,
@@ -1630,6 +1647,7 @@ pub(crate) fn build_module_column_with_filter_at_revision<'a>(
         query,
         action_handler,
         Some(current_revision),
+        Some(custom_mounts),
     )
 }
 
@@ -1639,6 +1657,7 @@ fn build_module_column_with_filter_and_revision<'a>(
     query: &str,
     action_handler: Option<&DarkroomModuleActionHandler>,
     current_revision: Option<&Rc<RefCell<Revision>>>,
+    custom_mounts: Option<&DarkroomCustomEditorMounts>,
 ) -> gtk4::Box {
     let column = build_module_column_without_empty_and_revision(
         modules,
@@ -1646,6 +1665,7 @@ fn build_module_column_with_filter_and_revision<'a>(
         query,
         action_handler,
         current_revision,
+        custom_mounts,
     );
     let query = query.trim().to_ascii_lowercase();
     if column.first_child().is_none() {
@@ -1669,6 +1689,7 @@ pub(crate) fn build_module_column_without_empty_at_revision<'a>(
     query: &str,
     action_handler: Option<&DarkroomModuleActionHandler>,
     current_revision: &Rc<RefCell<Revision>>,
+    custom_mounts: &DarkroomCustomEditorMounts,
 ) -> gtk4::Box {
     build_module_column_without_empty_and_revision(
         modules,
@@ -1676,6 +1697,7 @@ pub(crate) fn build_module_column_without_empty_at_revision<'a>(
         query,
         action_handler,
         Some(current_revision),
+        Some(custom_mounts),
     )
 }
 
@@ -1685,6 +1707,7 @@ fn build_module_column_without_empty_and_revision<'a>(
     query: &str,
     action_handler: Option<&DarkroomModuleActionHandler>,
     current_revision: Option<&Rc<RefCell<Revision>>>,
+    custom_mounts: Option<&DarkroomCustomEditorMounts>,
 ) -> gtk4::Box {
     let column = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     column.set_widget_name(side.widget_name());
@@ -1705,6 +1728,7 @@ fn build_module_column_without_empty_and_revision<'a>(
             module,
             action_handler.cloned(),
             &current_revision,
+            custom_mounts,
         ));
     }
     column

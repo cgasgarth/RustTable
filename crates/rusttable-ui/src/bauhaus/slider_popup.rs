@@ -7,6 +7,10 @@
 //! `src/gui/gtk.c`. GTK4 event/controller ownership remains in the Bauhaus
 //! slider adapter.
 
+use std::cell::RefCell;
+
+use gtk4::gdk;
+
 /// The normalized radius inside which the full-circle popup keeps its old
 /// slider position.
 const FULL_CIRCLE_DEAD_ZONE_RADIUS: f32 = 0.25;
@@ -289,8 +293,13 @@ impl SmoothScrollAccumulator {
             return None;
         }
 
-        self.x += delta_x;
-        self.y += delta_y;
+        let next_x = self.x + delta_x;
+        let next_y = self.y + delta_y;
+        if !next_x.is_finite() || !next_y.is_finite() {
+            return None;
+        }
+        self.x = next_x;
+        self.y = next_y;
         let amount_x = self.x.trunc();
         let amount_y = self.y.trunc();
         if amount_x == 0.0 && amount_y == 0.0 {
@@ -322,7 +331,126 @@ impl SmoothScrollAccumulator {
     }
 }
 
+thread_local! {
+    // GTK controllers run on the main thread. One thread-local therefore gives
+    // every production widget the process-global source remainder without an
+    // unsafe mutable static.
+    static SOURCE_SCROLL_UNITS: RefCell<SmoothScrollAccumulator> =
+        RefCell::new(SmoothScrollAccumulator::default());
+}
+
+/// Normalizes one raw GTK scroll event through Darktable's shared unit helper.
+///
+/// Wheel axes become signed discrete units. Surface axes retain independent
+/// fractions, including the source's Quartz divisor, and emit their summed
+/// whole units after truncation toward zero.
+pub(crate) fn source_scroll_unit_delta(
+    unit: gdk::ScrollUnit,
+    delta_x: f64,
+    delta_y: f64,
+) -> Option<i32> {
+    if !delta_x.is_finite() || !delta_y.is_finite() {
+        return None;
+    }
+
+    if unit == gdk::ScrollUnit::Wheel {
+        let unit_x = wheel_unit(delta_x);
+        let unit_y = wheel_unit(delta_y);
+        return (unit_x != 0 || unit_y != 0).then_some(unit_x.saturating_add(unit_y));
+    }
+    if unit != gdk::ScrollUnit::Surface {
+        return None;
+    }
+
+    #[cfg(target_os = "macos")]
+    let (delta_x, delta_y) = (delta_x / 50.0, delta_y / 50.0);
+    SOURCE_SCROLL_UNITS.with(|units| units.borrow_mut().push_sum(delta_x, delta_y))
+}
+
+/// Clears both source-global surface-scroll fractions at any sequence end.
+pub(crate) fn reset_source_scroll_units() {
+    SOURCE_SCROLL_UNITS.with(|units| units.borrow_mut().stop());
+}
+
+fn wheel_unit(delta: f64) -> i32 {
+    match delta.total_cmp(&0.0) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
+}
+
 #[allow(clippy::cast_possible_truncation)]
 fn unit_as_i32(amount: f64) -> i32 {
     amount.clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{reset_source_scroll_units, source_scroll_unit_delta};
+    use gtk4::gdk;
+
+    #[test]
+    fn source_unit_normalization_preserves_axes_signs_scaling_and_reset() {
+        reset_source_scroll_units();
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Wheel, -8.0, 3.0),
+            Some(0),
+            "opposing signed wheel axes are handled and summed"
+        );
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Wheel, 0.25, 0.0),
+            Some(1)
+        );
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Wheel, f64::NAN, 1.0),
+            None
+        );
+
+        #[cfg(target_os = "macos")]
+        let raw_unit = 50.0;
+        #[cfg(not(target_os = "macos"))]
+        let raw_unit = 1.0;
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.6 * raw_unit, -0.6 * raw_unit,),
+            None
+        );
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.6 * raw_unit, 0.0),
+            Some(1),
+            "the x fraction truncates independently toward zero"
+        );
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, -0.6 * raw_unit),
+            Some(-1),
+            "the y fraction truncates independently toward zero"
+        );
+
+        reset_source_scroll_units();
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, 0.5 * raw_unit),
+            None
+        );
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, f64::INFINITY),
+            None,
+            "non-finite input is rejected without poisoning the remainder"
+        );
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, 0.5 * raw_unit),
+            Some(1)
+        );
+
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, 0.75 * raw_unit),
+            None
+        );
+        reset_source_scroll_units();
+        assert_eq!(
+            source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, 0.5 * raw_unit),
+            None,
+            "any scroll stop discards both global fractions"
+        );
+        reset_source_scroll_units();
+    }
 }

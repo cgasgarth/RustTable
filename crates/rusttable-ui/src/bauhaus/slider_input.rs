@@ -19,8 +19,9 @@ use super::{
     numeric_input::{NumericInputBuffer, resolve_raw_value},
     slider::{AutomaticStepPolicy, BauhausSliderModel},
     slider_popup::{
-        SliderRange, SliderRanges, SmoothScrollAccumulator, ZoomRangeChange,
-        linear_pointer_position, loupe_scale, should_activate_change, zoom_range,
+        SliderRange, SliderRanges, ZoomRangeChange, linear_pointer_position, loupe_scale,
+        reset_source_scroll_units, should_activate_change,
+        source_scroll_unit_delta as normalize_source_scroll_unit_delta, zoom_range,
     },
 };
 use crate::gui::darktable_spec::DARKTABLE_COLORS;
@@ -47,13 +48,6 @@ const POPUP_SCROLL_CONTROLLER_NAME: &str = "dt-bauhaus-popup-scroll";
 // Darktable re-reads the global `bauhaus/zoom_step` preference for every
 // automatic-step query.
 static SOURCE_ZOOM_STEP: AtomicBool = AtomicBool::new(true);
-
-thread_local! {
-    // `dt_gui_get_scroll_unit_deltas` deliberately shares these remainders
-    // across every widget on GTK's main thread (`src/gui/gtk.c:522-523`).
-    static SOURCE_SCROLL_UNITS: RefCell<SmoothScrollAccumulator> =
-        RefCell::new(SmoothScrollAccumulator::default());
-}
 
 pub(super) fn set_zoom_step(enabled: bool) {
     SOURCE_ZOOM_STEP.store(enabled, Ordering::Relaxed);
@@ -119,6 +113,50 @@ impl ActionCoalescer {
     }
 }
 
+type SettledCallback = Box<dyn Fn(f64)>;
+
+/// A source edit is settled when its pointer, scroll, keyboard, or popup
+/// interaction has completed. Programmatic synchronization does not emit it.
+#[derive(Default)]
+struct SettledChange {
+    origin: Cell<Option<f64>>,
+    callbacks: RefCell<Vec<SettledCallback>>,
+}
+
+impl std::fmt::Debug for SettledChange {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SettledChange")
+            .field("origin", &self.origin.get())
+            .field("callback_count", &self.callbacks.borrow().len())
+            .finish()
+    }
+}
+
+impl SettledChange {
+    fn begin(&self, value: f64) {
+        if self.origin.get().is_none() {
+            self.origin.set(Some(value));
+        }
+    }
+
+    fn finish(&self, value: f64) {
+        let Some(origin) = self.origin.take() else {
+            return;
+        };
+        if origin.to_bits() == value.to_bits() {
+            return;
+        }
+        for callback in self.callbacks.borrow().iter() {
+            callback(value);
+        }
+    }
+
+    fn connect(&self, callback: impl Fn(f64) + 'static) {
+        self.callbacks.borrow_mut().push(Box::new(callback));
+    }
+}
+
 /// The GTK4 composition that gives a scale a supported popover owner.
 ///
 /// GTK4 scales do not own or allocate arbitrary popover children. A one-pixel
@@ -130,6 +168,11 @@ pub(crate) struct BauhausSlider {
     scale: gtk4::Scale,
     model: Rc<RefCell<BauhausSliderModel>>,
     sync_guard: Rc<Cell<bool>>,
+    labeled_content: gtk4::Box,
+    label_row: gtk4::Box,
+    label: gtk4::Label,
+    closed_value: gtk4::Label,
+    settled_change: Rc<SettledChange>,
 }
 
 impl BauhausSlider {
@@ -143,6 +186,7 @@ impl BauhausSlider {
 
     pub(crate) fn set_value(&self, value: f64) {
         source_set_value(&self.scale, &self.model, &self.sync_guard, value);
+        self.sync_closed_value();
         debug_assert_eq!(self.value().to_bits(), self.scale.value().to_bits());
     }
 
@@ -154,7 +198,77 @@ impl BauhausSlider {
     pub(crate) fn set_digits(&self, digits: i32) {
         self.model.borrow_mut().set_digits(digits);
         sync_scale_from_model(&self.scale, &self.model, &self.sync_guard);
+        self.sync_closed_value();
     }
+
+    /// Adds Darktable's label/value header inside this full-width control.
+    /// Existing unlabeled slider consumers retain their current hierarchy.
+    pub(crate) fn set_internal_label(&self, label: &str) {
+        if self.label_row.parent().is_none() {
+            self.root.set_child(None::<&gtk4::Widget>);
+            self.labeled_content.append(&self.label_row);
+            self.labeled_content.append(&self.scale);
+            self.root.set_child(Some(&self.labeled_content));
+        }
+        self.label.set_text(label);
+        self.scale
+            .update_property(&[gtk4::accessible::Property::Label(label)]);
+        self.sync_closed_value();
+    }
+
+    /// Connects a logical settled edit callback. Dragging emits once on release,
+    /// smooth scrolling once on scroll-end, and popup edits once on acceptance.
+    pub(crate) fn connect_value_settled(&self, callback: impl Fn(f64) + 'static) {
+        self.settled_change.connect(callback);
+    }
+
+    fn sync_closed_value(&self) {
+        let model = self.model.borrow();
+        self.closed_value
+            .set_text(&source_closed_value_text(&model, model.value()));
+    }
+}
+
+/// Source metadata for a reusable full-width slider composite.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FullWidthSliderSpec<'a> {
+    pub(crate) widget_name: &'a str,
+    pub(crate) label: &'a str,
+    pub(crate) tooltip: &'a str,
+    pub(crate) minimum: f64,
+    pub(crate) maximum: f64,
+    /// A positive increment required by GTK. Bauhaus automatic stepping is
+    /// selected independently through `input.with_automatic_step()`.
+    pub(crate) gtk_step: f64,
+    pub(crate) value: f64,
+    pub(crate) input: SliderInputSpec,
+}
+
+/// Builds a reusable, full-width source-style slider with its label and value
+/// inside the control. The supplied GTK step remains a valid native increment;
+/// `SliderInputSpec::with_automatic_step` independently selects Darktable's
+/// effective-step calculation for Bauhaus input.
+pub(crate) fn full_width_slider(spec: FullWidthSliderSpec<'_>) -> BauhausSlider {
+    let scale = gtk4::Scale::with_range(
+        gtk4::Orientation::Horizontal,
+        spec.minimum,
+        spec.maximum,
+        spec.gtk_step,
+    );
+    scale.set_widget_name(spec.widget_name);
+    scale.set_hexpand(true);
+    scale.set_halign(gtk4::Align::Fill);
+    scale.set_draw_value(false);
+    scale.set_value(spec.value);
+    scale.set_tooltip_text(Some(spec.tooltip));
+    scale.add_css_class("dt_slider");
+
+    let slider = attach(scale, spec.input);
+    slider.widget().set_hexpand(true);
+    slider.widget().set_halign(gtk4::Align::Fill);
+    slider.widget().set_tooltip_text(Some(spec.tooltip));
+    slider.set_internal_label(spec.label);
+    slider
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -210,6 +324,15 @@ impl SliderInputSpec {
             ..self
         }
     }
+
+    fn apply_to_model(self, model: &mut BauhausSliderModel) {
+        model.set_factor(self.factor);
+        model.set_offset(self.offset);
+        model.set_format(self.suffix);
+        if let Some((minimum, maximum)) = self.soft_range {
+            model.set_soft_range(minimum, maximum);
+        }
+    }
 }
 
 impl Default for SliderInputSpec {
@@ -236,12 +359,7 @@ fn model_from_scale(scale: &gtk4::Scale, spec: SliderInputSpec) -> BauhausSlider
         true,
     )
     .expect("GTK Scale and SliderInputSpec must define a valid Bauhaus slider");
-    model.set_factor(spec.factor);
-    model.set_offset(spec.offset);
-    model.set_format(spec.suffix);
-    if let Some((minimum, maximum)) = spec.soft_range {
-        model.set_soft_range(minimum, maximum);
-    }
+    spec.apply_to_model(&mut model);
     model
 }
 
@@ -267,6 +385,21 @@ impl BauhausSliderModel {
 
 fn install_scale_value_format(scale: &gtk4::Scale, model: Rc<RefCell<BauhausSliderModel>>) {
     scale.set_format_value_func(move |_, value| source_closed_value_text(&model.borrow(), value));
+}
+
+fn install_closed_value_label_sync(
+    scale: &gtk4::Scale,
+    closed_value: &gtk4::Label,
+    model: Rc<RefCell<BauhausSliderModel>>,
+) {
+    let closed_value = closed_value.downgrade();
+    scale.connect_value_changed(move |_| {
+        let Some(closed_value) = closed_value.upgrade() else {
+            return;
+        };
+        let model = model.borrow();
+        closed_value.set_text(&source_closed_value_text(&model, model.value()));
+    });
 }
 
 fn source_closed_value_text(model: &BauhausSliderModel, value: f64) -> String {
@@ -346,7 +479,33 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
     let input = Rc::new(RefCell::new(NumericInputBuffer::new()));
     let sync_guard = Rc::new(Cell::new(false));
     let action_coalescer = Rc::new(ActionCoalescer::default());
+    let settled_change = Rc::new(SettledChange::default());
     let model = Rc::new(RefCell::new(model));
+
+    let labeled_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    labeled_content.set_hexpand(true);
+    labeled_content.set_halign(gtk4::Align::Fill);
+
+    let label_row = gtk4::Box::new(gtk4::Orientation::Horizontal, INNER_PADDING);
+    label_row.set_widget_name("bauhaus-slider-label-row");
+    label_row.set_hexpand(true);
+    label_row.set_halign(gtk4::Align::Fill);
+    label_row.set_can_target(false);
+
+    let label = gtk4::Label::new(None);
+    label.set_widget_name("bauhaus-slider-label");
+    label.set_halign(gtk4::Align::Start);
+    label.set_hexpand(true);
+    label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    label.add_css_class("dt_bauhaus_label");
+    label_row.append(&label);
+
+    let closed_value = gtk4::Label::new(None);
+    closed_value.set_widget_name("bauhaus-slider-value");
+    closed_value.set_halign(gtk4::Align::End);
+    closed_value.add_css_class("dt_bauhaus_value");
+    label_row.append(&closed_value);
+
     install_scale_value_format(&scale, Rc::clone(&model));
     install_scale_model_sync(
         &scale,
@@ -354,6 +513,7 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
         Rc::clone(&sync_guard),
         Rc::clone(&action_coalescer),
     );
+    install_closed_value_label_sync(&scale, &closed_value, Rc::clone(&model));
     let opening_position = Rc::new(Cell::new(model.borrow().normalized_position()));
     let accepted = Rc::new(Cell::new(false));
     let change_active = Rc::new(Cell::new(false));
@@ -414,6 +574,11 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
     popup.set_halign(gtk4::Align::Start);
     popup.set_focusable(true);
     popup.add_css_class("dt_bauhaus_popup");
+    {
+        let model = Rc::clone(&model);
+        let settled_change = Rc::clone(&settled_change);
+        popup.connect_show(move |_| settled_change.begin(model.borrow().value()));
+    }
     install_popup_presentation_sync(
         &scale,
         &popup,
@@ -476,6 +641,7 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
         Rc::clone(&accepted),
         Rc::clone(&model),
         Rc::clone(&sync_guard),
+        Rc::clone(&settled_change),
     );
     install_closed_slider_input(
         &scale,
@@ -488,6 +654,7 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
         &model,
         &sync_guard,
         &action_coalescer,
+        &settled_change,
     );
     install_secondary_click(
         &scale,
@@ -523,6 +690,7 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
         &popup,
         Rc::clone(&model),
         Rc::clone(&sync_guard),
+        Rc::clone(&settled_change),
     );
 
     let digits = model.borrow().digits();
@@ -531,6 +699,11 @@ fn attach_model(scale: gtk4::Scale, model: BauhausSliderModel) -> BauhausSlider 
         scale,
         model,
         sync_guard,
+        labeled_content,
+        label_row,
+        label,
+        closed_value,
+        settled_change,
     };
     slider.set_digits(digits);
     slider
@@ -821,8 +994,13 @@ fn install_popup_pointer_input(
             glib::Propagation::Stop
         });
     }
-    scroll.connect_scroll_end(|_| {
-        reset_source_scroll_units();
+    scroll.connect_scroll_end(|controller| {
+        if !controller
+            .current_event()
+            .is_some_and(|event| event.is_pointer_emulated())
+        {
+            reset_source_scroll_units();
+        }
     });
     content.add_controller(scroll);
 }
@@ -832,24 +1010,7 @@ fn source_scroll_unit_delta(
     delta_x: f64,
     delta_y: f64,
 ) -> Option<i32> {
-    if controller.unit() == gdk::ScrollUnit::Wheel {
-        let x = scroll_direction(delta_x);
-        let y = scroll_direction(delta_y);
-        let delta = x.saturating_add(y);
-        return (delta != 0).then_some(delta);
-    }
-
-    source_smooth_scroll_unit_delta(delta_x, delta_y)
-}
-
-fn source_smooth_scroll_unit_delta(delta_x: f64, delta_y: f64) -> Option<i32> {
-    #[cfg(target_os = "macos")]
-    let (delta_x, delta_y) = (delta_x / 50.0, delta_y / 50.0);
-    SOURCE_SCROLL_UNITS.with(|units| units.borrow_mut().push_sum(delta_x, delta_y))
-}
-
-fn reset_source_scroll_units() {
-    SOURCE_SCROLL_UNITS.with(|units| units.borrow_mut().stop());
+    normalize_source_scroll_unit_delta(controller.unit(), delta_x, delta_y)
 }
 
 fn source_gesture_button(gesture: &gtk4::GestureClick) -> u32 {
@@ -863,14 +1024,6 @@ fn source_gesture_button(gesture: &gtk4::GestureClick) -> u32 {
 
 fn request_source_focus(scale: &gtk4::Scale) {
     scale.grab_focus();
-}
-
-fn scroll_direction(delta: f64) -> i32 {
-    match delta.total_cmp(&0.0) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1296,6 +1449,7 @@ fn install_closed_slider_input(
     model: &Rc<RefCell<BauhausSliderModel>>,
     sync_guard: &Rc<Cell<bool>>,
     action_coalescer: &Rc<ActionCoalescer>,
+    settled_change: &Rc<SettledChange>,
 ) {
     let dragging = Rc::new(Cell::new(false));
     let mouse_x = Rc::new(Cell::new(f64::NAN));
@@ -1389,18 +1543,22 @@ fn install_closed_slider_input(
         let model = Rc::clone(model);
         let sync_guard = Rc::clone(sync_guard);
         let action_coalescer = Rc::clone(action_coalescer);
+        let settled_change = Rc::clone(settled_change);
         primary.connect_pressed(move |gesture, press_count, x, y| {
             let (Some(scale), Some(popup)) = (scale.upgrade(), popup.upgrade()) else {
                 return;
             };
             request_source_focus(&scale);
             scale.queue_draw();
+            settled_change.begin(model.borrow().value());
             if press_count == 2 {
                 dragging.set(false);
                 action_coalescer.finish(&scale);
                 let previous = scale.value();
                 model.borrow_mut().reset();
                 sync_source_change(&scale, &model, &sync_guard, previous);
+                let settled_value = model.borrow().value();
+                settled_change.finish(settled_value);
                 popup.popdown();
             } else {
                 dragging.set(true);
@@ -1422,22 +1580,30 @@ fn install_closed_slider_input(
         let scale = scale.downgrade();
         let dragging = Rc::clone(&dragging);
         let action_coalescer = Rc::clone(action_coalescer);
+        let model = Rc::clone(model);
+        let settled_change = Rc::clone(settled_change);
         primary.connect_released(move |gesture, _, _, _| {
             dragging.set(false);
             if let Some(scale) = scale.upgrade() {
                 action_coalescer.finish(&scale);
                 scale.queue_draw();
             }
+            let settled_value = model.borrow().value();
+            settled_change.finish(settled_value);
             let _ = gesture.set_state(gtk4::EventSequenceState::Claimed);
         });
     }
     {
         let scale = scale.downgrade();
         let action_coalescer = Rc::clone(action_coalescer);
+        let model = Rc::clone(model);
+        let settled_change = Rc::clone(settled_change);
         primary.connect_stopped(move |_| {
             if let Some(scale) = scale.upgrade() {
                 action_coalescer.flush(&scale);
             }
+            let settled_value = model.borrow().value();
+            settled_change.finish(settled_value);
         });
     }
     scale.add_controller(primary);
@@ -1507,6 +1673,7 @@ fn install_closed_slider_input(
         let force_element = Rc::clone(&force_element);
         let model = Rc::clone(model);
         let sync_guard = Rc::clone(sync_guard);
+        let settled_change = Rc::clone(settled_change);
         scroll.connect_scroll(move |controller, delta_x, delta_y| {
             if controller
                 .current_event()
@@ -1520,6 +1687,8 @@ fn install_closed_slider_input(
             let Some(scale) = scale.upgrade() else {
                 return glib::Propagation::Stop;
             };
+            let settles_immediately = controller.unit() == gdk::ScrollUnit::Wheel;
+            settled_change.begin(model.borrow().value());
             request_source_focus(&scale);
             let modifiers = controller.current_event_state();
             if force_element.get() && source_force_range_step(modifiers) {
@@ -1559,12 +1728,27 @@ fn install_closed_slider_input(
                 );
             }
             scale.queue_draw();
+            if settles_immediately {
+                let settled_value = model.borrow().value();
+                settled_change.finish(settled_value);
+            }
             glib::Propagation::Stop
         });
     }
-    scroll.connect_scroll_end(|_| {
-        reset_source_scroll_units();
-    });
+    {
+        let model = Rc::clone(model);
+        let settled_change = Rc::clone(settled_change);
+        scroll.connect_scroll_end(move |controller| {
+            if !controller
+                .current_event()
+                .is_some_and(|event| event.is_pointer_emulated())
+            {
+                reset_source_scroll_units();
+                let settled_value = model.borrow().value();
+                settled_change.finish(settled_value);
+            }
+        });
+    }
     scale.add_controller(scroll);
 }
 
@@ -1583,6 +1767,7 @@ fn install_scale_keyboard(
     accepted: Rc<Cell<bool>>,
     model: Rc<RefCell<BauhausSliderModel>>,
     sync_guard: Rc<Cell<bool>>,
+    settled_change: Rc<SettledChange>,
 ) {
     let scale_widget = scale.clone();
     let anchor = anchor.downgrade();
@@ -1639,11 +1824,25 @@ fn install_scale_keyboard(
             }
             gdk::Key::Right | gdk::Key::KP_Right | gdk::Key::Up | gdk::Key::KP_Up => {
                 request_source_focus(&scale);
-                source_add_step(&scale, &model, &sync_guard, 1.0, modifiers);
+                source_add_step_settled(
+                    &scale,
+                    &model,
+                    &sync_guard,
+                    &settled_change,
+                    1.0,
+                    modifiers,
+                );
             }
             gdk::Key::Left | gdk::Key::KP_Left | gdk::Key::Down | gdk::Key::KP_Down => {
                 request_source_focus(&scale);
-                source_add_step(&scale, &model, &sync_guard, -1.0, modifiers);
+                source_add_step_settled(
+                    &scale,
+                    &model,
+                    &sync_guard,
+                    &settled_change,
+                    -1.0,
+                    modifiers,
+                );
             }
             // The retained widget is a DrawingArea and therefore has no native
             // Scale bindings for these range/arithmetic keys. Stop only those
@@ -1848,20 +2047,22 @@ fn install_rejection(
     popup: &gtk4::Popover,
     model: Rc<RefCell<BauhausSliderModel>>,
     sync_guard: Rc<Cell<bool>>,
+    settled_change: Rc<SettledChange>,
 ) {
     let scale = scale.downgrade();
     let expression = expression.downgrade();
     let current_value = current_value.downgrade();
     popup.connect_closed(move |_| {
-        if !accepted.replace(false)
-            && let Some(scale) = scale.upgrade()
-        {
+        let was_accepted = accepted.replace(false);
+        if !was_accepted && let Some(scale) = scale.upgrade() {
             let previous = scale.value();
             model
                 .borrow_mut()
                 .set_normalized_position(opening_position.get());
             sync_source_change(&scale, &model, &sync_guard, previous);
         }
+        let settled_value = model.borrow().value();
+        settled_change.finish(settled_value);
         input.borrow_mut().clear();
         if let Some(expression) = expression.upgrade() {
             expression.set_text("");
@@ -1928,6 +2129,20 @@ fn source_relative_drag_transition(
         f64::from(direction * steps),
         reference + f64::from(steps * scaled_step),
     ))
+}
+
+fn source_add_step_settled(
+    scale: &gtk4::Scale,
+    model: &RefCell<BauhausSliderModel>,
+    sync_guard: &Cell<bool>,
+    settled_change: &SettledChange,
+    delta: f64,
+    modifiers: gdk::ModifierType,
+) {
+    settled_change.begin(model.borrow().value());
+    source_add_step(scale, model, sync_guard, delta, modifiers);
+    let settled_value = model.borrow().value();
+    settled_change.finish(settled_value);
 }
 
 fn source_add_step(
@@ -2054,15 +2269,16 @@ fn sync_source_change(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::{cell::Cell, rc::Rc, sync::Mutex};
 
     use gtk4::gdk;
 
     use super::{
-        AutomaticStepPolicy, BauhausSliderModel, SliderInputSpec, modifier_speed_multiplier,
-        primary_accelerator_mask, reset_source_scroll_units, set_zoom_step,
-        source_automatic_step_policy, source_closed_value_text, source_force_range_step,
-        source_relative_drag_transition, source_scale_inverted, source_smooth_scroll_unit_delta,
+        AutomaticStepPolicy, BauhausSliderModel, SettledChange, SliderInputSpec,
+        modifier_speed_multiplier, normalize_source_scroll_unit_delta, primary_accelerator_mask,
+        reset_source_scroll_units, set_zoom_step, source_automatic_step_policy,
+        source_closed_value_text, source_force_range_step, source_relative_drag_transition,
+        source_scale_inverted,
     };
 
     static ZOOM_STEP_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -2142,6 +2358,69 @@ mod tests {
     }
 
     #[test]
+    fn source_mix_spec_uses_signed_two_digit_percent_and_automatic_step() {
+        const SPEC: SliderInputSpec = SliderInputSpec::IDENTITY
+            .with_suffix("%")
+            .with_default_value(0.0)
+            .with_digits(2)
+            .with_automatic_step();
+        let mut model = BauhausSliderModel::new(
+            -200.0,
+            200.0,
+            if SPEC.automatic_step { 0.0 } else { 1.0 },
+            SPEC.default_value.expect("source mix default"),
+            SPEC.digits.expect("source mix digits"),
+            true,
+        )
+        .expect("source mix range is valid");
+        SPEC.apply_to_model(&mut model);
+
+        assert_eq!(model.hard_range(), (-200.0, 200.0));
+        assert_eq!(model.default_value().to_bits(), 0.0_f64.to_bits());
+        assert_eq!(model.value_text(model.value()), "+0.00%");
+        assert_eq!(
+            model
+                .effective_step(AutomaticStepPolicy::VisibleRange)
+                .to_bits(),
+            1.0_f64.to_bits()
+        );
+        model.set_value(-200.0);
+        assert_eq!(model.value_text(model.value()), "-200.00%");
+        model.set_value(200.0);
+        assert_eq!(model.value_text(model.value()), "+200.00%");
+        model.reset();
+        assert_eq!(model.value_text(model.value()), "+0.00%");
+    }
+
+    #[test]
+    fn settled_change_emits_once_only_after_a_changed_interaction() {
+        let settled = SettledChange::default();
+        let calls = Rc::new(Cell::new(0));
+        let observed = Rc::new(Cell::new(f64::NAN));
+        {
+            let calls = Rc::clone(&calls);
+            let observed = Rc::clone(&observed);
+            settled.connect(move |value| {
+                calls.set(calls.get() + 1);
+                observed.set(value);
+            });
+        }
+
+        settled.begin(0.0);
+        settled.begin(25.0);
+        settled.finish(25.0);
+        assert_eq!(calls.get(), 1);
+        assert_eq!(observed.get().to_bits(), 25.0_f64.to_bits());
+
+        settled.finish(50.0);
+        assert_eq!(calls.get(), 1, "an interaction settles only once");
+
+        settled.begin(25.0);
+        settled.finish(25.0);
+        assert_eq!(calls.get(), 1, "unchanged interactions do not emit");
+    }
+
+    #[test]
     fn disabled_live_zoom_step_configuration_selects_soft_range_policy() {
         let _lock = ZOOM_STEP_TEST_LOCK
             .lock()
@@ -2161,18 +2440,35 @@ mod tests {
     fn smooth_scroll_accumulates_shared_fractions_and_stop_resets_remainder() {
         reset_source_scroll_units();
         let fraction = source_scroll_fraction(0.4);
-        assert_eq!(source_smooth_scroll_unit_delta(0.0, fraction), None);
-        assert_eq!(source_smooth_scroll_unit_delta(0.0, fraction), None);
-        assert_eq!(source_smooth_scroll_unit_delta(0.0, fraction), Some(1));
+        assert_eq!(
+            normalize_source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, fraction),
+            None
+        );
+        assert_eq!(
+            normalize_source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, fraction),
+            None
+        );
+        assert_eq!(
+            normalize_source_scroll_unit_delta(gdk::ScrollUnit::Surface, 0.0, fraction),
+            Some(1)
+        );
 
         reset_source_scroll_units();
         assert_eq!(
-            source_smooth_scroll_unit_delta(0.0, source_scroll_fraction(0.75)),
+            normalize_source_scroll_unit_delta(
+                gdk::ScrollUnit::Surface,
+                0.0,
+                source_scroll_fraction(0.75),
+            ),
             None
         );
         reset_source_scroll_units();
         assert_eq!(
-            source_smooth_scroll_unit_delta(0.0, source_scroll_fraction(0.5)),
+            normalize_source_scroll_unit_delta(
+                gdk::ScrollUnit::Surface,
+                0.0,
+                source_scroll_fraction(0.5),
+            ),
             None,
             "scroll-end reset must discard the preceding 0.75 remainder"
         );

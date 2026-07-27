@@ -110,25 +110,34 @@ fn colorcontrast_uses_two_bauhaus_sliders_without_an_invented_icon() {
     let content = colorcontrast
         .child()
         .expect("Color Contrast module content");
-    let enabled = find_widget(&content, "colorcontrast-enabled")
-        .expect("Color Contrast enable control")
+    let enabled = find_widget(&title_root, "colorcontrast-enabled")
+        .expect("Color Contrast header enable control")
         .downcast::<gtk4::CheckButton>()
         .expect("Color Contrast enable control type");
     assert!(!enabled.is_active());
-    let reset = find_widget(&content, "colorcontrast-reset")
-        .expect("Color Contrast reset control")
+    let reset = find_widget(&title_root, "colorcontrast-reset")
+        .expect("Color Contrast header reset control")
         .downcast::<gtk4::Button>()
         .expect("Color Contrast reset control type");
     assert!(
         reset.is_sensitive(),
         "an available resettable module can reset while disabled"
     );
-    let presets = find_widget(&content, "colorcontrast-presets")
-        .expect("Color Contrast unavailable-preset affordance")
-        .downcast::<gtk4::Button>()
-        .expect("Color Contrast unavailable-preset control type");
-    assert!(!presets.is_sensitive());
-    assert!(!presets.is_focusable());
+    for body_duplicate in [
+        "colorcontrast-enabled",
+        "colorcontrast-reset",
+        "colorcontrast-status",
+        "colorcontrast-recover",
+    ] {
+        assert!(
+            find_widget(&content, body_duplicate).is_none(),
+            "{body_duplicate} belongs only to the shared source header"
+        );
+    }
+    assert!(
+        find_widget(&root, "colorcontrast-presets").is_none(),
+        "an unavailable preset must not be replaced by an inert placeholder"
+    );
 
     let a_steepness = source_scale(&content, "colorcontrast-a-steepness-widget");
     let b_steepness = source_scale(&content, "colorcontrast-b-steepness-widget");
@@ -379,14 +388,19 @@ fn assert_multi_instance_descendant_identity_and_targets(shell: &GtkShell, root:
         "a duplicated stack must not expose the ambiguous logical control id as a GTK name"
     );
 
-    let first_enabled = find_widget(&first_content, &format!("{first_widget_id}-enabled"))
-        .expect("first instance enable control")
+    let first_enabled = find_widget(root, &format!("{first_widget_id}-enabled"))
+        .expect("first instance header enable control")
         .downcast::<gtk4::CheckButton>()
         .expect("first instance enable type");
-    let second_enabled = find_widget(&second_content, &format!("{second_widget_id}-enabled"))
-        .expect("second instance enable control")
+    let second_enabled = find_widget(root, &format!("{second_widget_id}-enabled"))
+        .expect("second instance header enable control")
         .downcast::<gtk4::CheckButton>()
         .expect("second instance enable type");
+    assert!(
+        find_widget(&first_content, &format!("{first_widget_id}-enabled")).is_none()
+            && find_widget(&second_content, &format!("{second_widget_id}-enabled")).is_none(),
+        "duplicate instance enables stay in their exact source headers"
+    );
     first_enabled.set_active(true);
     second_enabled.set_active(true);
     settle_gtk();

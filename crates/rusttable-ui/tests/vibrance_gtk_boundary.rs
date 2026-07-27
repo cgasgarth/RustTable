@@ -167,16 +167,22 @@ fn vibrance_uses_one_deprecated_bauhaus_slider_and_exact_operation_target() {
         find_widget(&content, "vibrance-recover").is_none(),
         "available deprecated modules do not expose an irrelevant refresh control"
     );
-    let enabled = find_widget(&content, "vibrance-enabled")
-        .expect("Vibrance enable control")
+    let enabled = find_widget(&title_root, "vibrance-enabled")
+        .expect("Vibrance header enable control")
         .downcast::<gtk4::CheckButton>()
         .expect("Vibrance enable type");
     assert!(!enabled.is_active());
-    let reset = find_widget(&content, "vibrance-reset")
-        .expect("Vibrance reset")
+    let reset = find_widget(&title_root, "vibrance-reset")
+        .expect("Vibrance header reset")
         .downcast::<gtk4::Button>()
         .expect("Vibrance reset type");
     assert!(reset.is_sensitive());
+    assert!(find_widget(&content, "vibrance-enabled").is_none());
+    assert!(find_widget(&content, "vibrance-reset").is_none());
+    assert!(
+        find_widget(&root, "vibrance-presets").is_none(),
+        "an unavailable preset must not be replaced by an inert placeholder"
+    );
 
     let amount = source_scale(&content, "vibrance-amount-widget");
     assert_eq!(

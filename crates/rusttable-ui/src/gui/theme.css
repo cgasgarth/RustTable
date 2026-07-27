@@ -1,5 +1,8 @@
 /* RustTable's compact GTK4 transcription of Darktable's elegant-grey theme. */
 
+/* Source `graph_overlay` is `@grey_50`; paint callbacks resolve it by name. */
+@define-color graph_overlay #777777;
+
 * {
   color: {{foreground}};
   font-family: "Roboto Light", "Roboto",
@@ -111,7 +114,6 @@ window,
 .dt_button,
 .dt_export_action,
 button,
-checkbutton check,
 entry,
 dropdown,
 spinbutton,
@@ -124,6 +126,43 @@ textview {
   background-image: none;
   box-shadow: none;
   color: {{foreground}};
+}
+
+/* Keep source check indicators compact without imposing button/control metrics. */
+checkbutton check {
+  min-width: 0;
+  min-height: 0;
+  margin: 0.07em 0.4em 0.07em 0.07em;
+  padding: 1px;
+  border: 1px solid {{button_border}};
+  border-radius: 0.21em;
+  background-color: alpha({{foreground}}, 0.09);
+}
+
+checkbutton check:checked {
+  background-color: #919191ff;
+  color: #ffffffff;
+}
+
+/* Darktable notebook tab and header spacing. */
+notebook tab label {
+  padding: 0.28em 0.07em;
+  border-bottom: 0.1em solid transparent;
+  color: shade(#ffffffff, 0.75);
+}
+
+notebook tab:hover label {
+  border-bottom-color: shade(#ffffffff, 0.7);
+  color: shade(#ffffffff, 0.9);
+}
+
+notebook tab:checked label {
+  border-bottom-color: #ffffffff;
+  color: #ffffffff;
+}
+
+notebook header {
+  margin-bottom: 0.42em;
 }
 
 .dt_view_switcher button:hover,
@@ -1036,6 +1075,11 @@ scale:focus-visible {
 .dt_rail_scroll viewport,
 .dt_rail_scroll .dt_module_expander {
   min-width: 0;
+}
+
+/* Source Color Zones wrapper metric; its drawing-area child expands into it. */
+#iop-bottom-bar {
+  min-height: 1.2em;
 }
 
 #darkroom-histogram {
