@@ -235,7 +235,8 @@ fn preserves_mounted_control(action: &DarkroomModuleAction) -> bool {
             DarkroomModuleAction::Control {
                 value: DarkroomControlValue::Slider(_),
                 ..
-            } | DarkroomModuleAction::ColorCorrectionGrid { .. }
+            } | DarkroomModuleAction::BloomSettled { .. }
+                | DarkroomModuleAction::ColorCorrectionGrid { .. }
         )
 }
 
@@ -276,6 +277,13 @@ mod tests {
             operation_id: None,
             expected_revision: Revision::ZERO,
         };
+        let exact_bloom = DarkroomModuleAction::BloomSettled {
+            module_id: "bloom".to_owned(),
+            operation_id: Some(operation_id),
+            expected_revision: Revision::ZERO,
+            parameters: rusttable_processing::operations::bloom::BloomParametersV1::defaults(),
+            enable_required: true,
+        };
         let exact_grid = DarkroomModuleAction::ColorCorrectionGrid {
             module_id: "colorcorrection".to_owned(),
             operation_id: Some(operation_id),
@@ -290,6 +298,7 @@ mod tests {
         };
 
         assert!(preserves_mounted_control(&exact_slider));
+        assert!(preserves_mounted_control(&exact_bloom));
         assert!(preserves_mounted_control(&exact_grid));
         assert!(!preserves_mounted_control(&targetless_slider));
         assert!(!preserves_mounted_control(&targetless_grid));

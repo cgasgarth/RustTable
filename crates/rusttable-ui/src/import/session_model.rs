@@ -55,7 +55,7 @@ impl ImportItemOutcome {
     }
 }
 
-/// One privacy-safe review row; physical paths never enter the view model.
+/// One review row carrying the readable source filename, never its physical path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportReviewRow {
     pub item_id: String,

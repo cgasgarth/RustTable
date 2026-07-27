@@ -1,4 +1,6 @@
 use std::sync::Arc;
+#[cfg(test)]
+use std::sync::Mutex;
 
 use rusttable_core::{EditId, PhotoId};
 use rusttable_diagnostics::{
@@ -7,6 +9,10 @@ use rusttable_diagnostics::{
 };
 use rusttable_image::{ImageDimensions, InputFormat};
 use rusttable_image_io::{RawCapabilityKind, RawContainerKind, RawDecodeError};
+use rusttable_import::{
+    RasterImportFailure, RasterImportReceipt, RasterImportStage, RasterImportStatus,
+    RasterPreviewError,
+};
 
 use crate::lifecycle::Recorder;
 use crate::workspace::preview_loader::WorkspacePreviewError;
@@ -16,11 +22,17 @@ use crate::{CatalogPreviewError, PreviewError};
 #[derive(Clone, Default)]
 pub(crate) struct AppDiagnostics {
     guard: Option<Arc<DiagnosticsGuard>>,
+    #[cfg(test)]
+    recorded_events: Arc<Mutex<Vec<DiagnosticEvent>>>,
 }
 
 impl AppDiagnostics {
     pub(crate) fn from_guard(guard: Option<Arc<DiagnosticsGuard>>) -> Self {
-        Self { guard }
+        Self {
+            guard,
+            #[cfg(test)]
+            recorded_events: Arc::default(),
+        }
     }
 
     pub(crate) fn lifecycle_failure(&self, code: &'static str, operation: &'static str) {
@@ -123,26 +135,32 @@ impl AppDiagnostics {
         );
     }
 
-    pub(crate) fn import_preview_failure(
-        &self,
-        format: Option<InputFormat>,
-        dimensions: Option<(u32, u32)>,
-        cause: &'static str,
-    ) {
+    pub(crate) fn raster_import_failure(&self, receipt: &RasterImportReceipt) {
+        let Some((stage, failure)) = raster_import_failure_evidence(receipt) else {
+            return;
+        };
         self.record(
             "import",
-            "preview",
+            "raster.failure",
             Severity::Error,
-            "import_preview",
-            "import_preview",
-            Some(cause),
+            "raster_import",
+            raster_import_stage_label(stage),
+            Some(raster_import_failure_label(failure)),
             None,
             None,
             None,
-            format,
-            dimensions.and_then(|(width, height)| ImageDimensions::new(width, height).ok()),
-            Vec::new(),
+            None,
+            None,
+            raster_import_failure_fields(receipt, stage, failure),
         );
+    }
+
+    #[cfg(test)]
+    pub(crate) fn recorded_event_count(&self) -> usize {
+        self.recorded_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     }
 
     #[expect(
@@ -202,6 +220,11 @@ impl AppDiagnostics {
                 Err(_) => return,
             };
         }
+        #[cfg(test)]
+        self.recorded_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event.clone());
         if let Some(guard) = self.guard.as_ref() {
             if guard.record(&event).is_err() {
                 tracing::warn!(target: "rusttable.app", operation, stage, code = %code_text, "diagnostic record unavailable");
@@ -210,6 +233,101 @@ impl AppDiagnostics {
             rusttable_diagnostics::emit(&event);
         }
         tracing::error!(target: "rusttable.app", operation, stage, code = %code_text, "application boundary failure");
+    }
+}
+
+fn raster_import_failure_evidence(
+    receipt: &RasterImportReceipt,
+) -> Option<(RasterImportStage, RasterImportFailure)> {
+    let failure = match receipt.status {
+        RasterImportStatus::Failed(failure) => failure,
+        RasterImportStatus::ImportedPreviewFailed => RasterImportFailure::PreviewFailed,
+        RasterImportStatus::Imported
+        | RasterImportStatus::AlreadyImported
+        | RasterImportStatus::ImportedPreviewPending
+        | RasterImportStatus::Cancelled => return None,
+    };
+    Some((
+        receipt.failure_stage.unwrap_or(RasterImportStage::Failed),
+        failure,
+    ))
+}
+
+fn raster_import_failure_fields(
+    receipt: &RasterImportReceipt,
+    stage: RasterImportStage,
+    failure: RasterImportFailure,
+) -> Vec<Result<DiagnosticField, rusttable_diagnostics::DiagnosticsError>> {
+    let mut fields = vec![
+        DiagnosticField::unsigned("item_id", receipt.item_id.get()),
+        DiagnosticField::public_text("source_alias", &receipt.source_alias),
+        DiagnosticField::public_text("detected_format", detected_format_label(receipt.format)),
+        DiagnosticField::public_text("terminal_stage", raster_import_stage_label(stage)),
+        DiagnosticField::public_text("failure_reason", raster_import_failure_label(failure)),
+    ];
+    if let Some(preview_failure) = receipt.preview_failure {
+        fields.push(DiagnosticField::public_text(
+            "preview_reason",
+            raster_preview_error_label(preview_failure),
+        ));
+    }
+    fields
+}
+
+fn detected_format_label(format: Option<InputFormat>) -> &'static str {
+    format.map_or("unknown", format_label)
+}
+
+const fn raster_import_stage_label(stage: RasterImportStage) -> &'static str {
+    match stage {
+        RasterImportStage::Queued => "queued",
+        RasterImportStage::Opening => "opening",
+        RasterImportStage::Hashing => "hashing",
+        RasterImportStage::Probing => "probing",
+        RasterImportStage::DecodingHeader => "decoding_header",
+        RasterImportStage::Decoding => "decoding",
+        RasterImportStage::Registering => "registering",
+        RasterImportStage::GeneratingPreview => "generating_preview",
+        RasterImportStage::Completed => "completed",
+        RasterImportStage::AlreadyImported => "already_imported",
+        RasterImportStage::Failed => "failed",
+        RasterImportStage::Cancelled => "cancelled",
+    }
+}
+
+const fn raster_import_failure_label(failure: RasterImportFailure) -> &'static str {
+    match failure {
+        RasterImportFailure::SourceUnavailable => "source_unavailable",
+        RasterImportFailure::NonRegularSource => "non_regular_source",
+        RasterImportFailure::SymlinkRejected => "symlink_rejected",
+        RasterImportFailure::SourceChanged => "source_changed",
+        RasterImportFailure::SourceTooLarge => "source_too_large",
+        RasterImportFailure::UnsupportedOrMalformedRaster => "unsupported_or_malformed_raster",
+        RasterImportFailure::UnsupportedPathEncoding => "unsupported_path_encoding",
+        RasterImportFailure::CatalogUnavailable => "catalog_unavailable",
+        RasterImportFailure::CatalogConflict => "catalog_conflict",
+        RasterImportFailure::CatalogCorrupt => "catalog_corrupt",
+        RasterImportFailure::CatalogCommitFailed => "catalog_commit_failed",
+        RasterImportFailure::PreviewFailed => "preview_failed",
+        RasterImportFailure::InternalInvariant => "internal_invariant",
+    }
+}
+
+const fn raster_preview_error_label(error: RasterPreviewError) -> &'static str {
+    match error {
+        RasterPreviewError::Unavailable => "unavailable",
+        RasterPreviewError::SourceChanged => "source_changed",
+        RasterPreviewError::Decode => "decode",
+        RasterPreviewError::RawDecode => "raw_decode",
+        RasterPreviewError::DecodedFrame => "decoded_frame",
+        RasterPreviewError::UnsupportedPixelpipeColor => "unsupported_pixelpipe_color",
+        RasterPreviewError::PixelpipeInput => "pixelpipe_input",
+        RasterPreviewError::PixelpipeSnapshot => "pixelpipe_snapshot",
+        RasterPreviewError::Graph => "graph_compilation",
+        RasterPreviewError::RawPipeline => "raw_pipeline",
+        RasterPreviewError::Pixelpipe => "pixelpipe",
+        RasterPreviewError::Prepared => "render_preparation",
+        RasterPreviewError::Render => "final_render",
     }
 }
 
@@ -390,14 +508,22 @@ fn format_label(format: InputFormat) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use rusttable_catalog::DuplicateSearchResult;
+    use rusttable_diagnostics::PrivacyClass;
     use rusttable_image::{ImageDimensions, InputFormat};
     use rusttable_image_io::{
         RawCapabilityError, RawCapabilityEvidence, RawCapabilityKind, RawCompression,
         RawCompressionEvidence, RawContainerKind, RawDecodeError, RawMetadataError,
     };
+    use rusttable_import::{
+        RasterImportFailure, RasterImportReceipt, RasterImportRequest, RasterImportStage,
+        RasterImportStatus, RasterPreviewError,
+    };
 
     use super::{
-        fields, format_label, preview_code, raw_capability_label, raw_container_label,
+        detected_format_label, fields, format_label, preview_code, raster_import_failure_evidence,
+        raster_import_failure_fields, raster_import_failure_label, raster_import_stage_label,
+        raster_preview_error_label, raw_capability_label, raw_container_label,
         raw_decode_error_fields,
     };
 
@@ -437,6 +563,85 @@ mod tests {
         );
         assert_eq!(format_label(InputFormat::Png), "png");
         assert!(!fields.iter().any(|key| key == "path"));
+    }
+
+    #[test]
+    fn raster_import_failure_fields_are_stable_public_receipt_evidence() {
+        let request = RasterImportRequest::new(["readable-source.dng"]).expect("request");
+        let item_id = request.items().next().expect("request item").0;
+        let receipt = RasterImportReceipt {
+            schema_version: 3,
+            item_id,
+            source_alias: "readable-source.dng".to_owned(),
+            content_sha256: None,
+            format: Some(InputFormat::Tiff),
+            photo_id: None,
+            asset_id: None,
+            edit_id: None,
+            status: RasterImportStatus::ImportedPreviewFailed,
+            failure_stage: Some(RasterImportStage::GeneratingPreview),
+            preview_failure: Some(RasterPreviewError::PixelpipeSnapshot),
+            metadata_status: None,
+            preview: None,
+            duplicates: DuplicateSearchResult::default(),
+        };
+        let (stage, failure) =
+            raster_import_failure_evidence(&receipt).expect("failed preview receipt");
+        let fields = raster_import_failure_fields(&receipt, stage, failure)
+            .into_iter()
+            .map(|field| field.expect("valid raster import field"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            fields
+                .iter()
+                .map(rusttable_diagnostics::DiagnosticField::key)
+                .collect::<Vec<_>>(),
+            [
+                "item_id",
+                "source_alias",
+                "detected_format",
+                "terminal_stage",
+                "failure_reason",
+                "preview_reason",
+            ]
+        );
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.key() == "source_alias")
+                .expect("source alias field")
+                .privacy(),
+            PrivacyClass::Public
+        );
+        assert_eq!(raster_import_stage_label(stage), "generating_preview");
+        assert_eq!(raster_import_failure_label(failure), "preview_failed");
+        assert_eq!(
+            raster_preview_error_label(RasterPreviewError::PixelpipeSnapshot),
+            "pixelpipe_snapshot"
+        );
+        assert_eq!(
+            raster_preview_error_label(RasterPreviewError::Prepared),
+            "render_preparation"
+        );
+        assert_eq!(
+            raster_preview_error_label(RasterPreviewError::Render),
+            "final_render"
+        );
+        assert_eq!(detected_format_label(Some(InputFormat::Tiff)), "tiff");
+        assert_eq!(detected_format_label(None), "unknown");
+    }
+
+    #[test]
+    fn raster_import_terminal_taxonomy_preserves_decode_failure_identity() {
+        assert_eq!(
+            raster_import_stage_label(RasterImportStage::Decoding),
+            "decoding"
+        );
+        assert_eq!(
+            raster_import_failure_label(RasterImportFailure::UnsupportedOrMalformedRaster),
+            "unsupported_or_malformed_raster"
+        );
     }
 
     #[test]

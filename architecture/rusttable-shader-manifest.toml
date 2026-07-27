@@ -518,6 +518,334 @@ source_line = 26
 source_column = 1
 
 [[shader]]
+id = "rusttable.bloom.bloom_hblur"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/bloom.wgsl"
+source_tree_hash = "d5b260f9cb031e4638ead6ec2c1da78bb6bdf7b036a89404a7923f81c4af4a91"
+generated_wgsl_hash = "93ea70490ffb2cb4d19b40fbf7b27da120581a865fef19b507fc810bf2f5d6d4"
+feature_plan = "CoreCompute"
+numerical_class = "F32Neighborhood"
+canonical_cpu_reference = "rusttable.cpu.bloom"
+owner_operations = ["rusttable.bloom"]
+owner_kernels = ["darktable.bloom.bloom_hblur"]
+workgroup_size = [256, 1, 1]
+uses_f32 = true
+uses_f16 = false
+float_domain = "F32"
+non_finite_policy = "Reject"
+subnormal_policy = "BackendDefined"
+fma_policy = "BackendDefined"
+reduction_policy = "BackendDefined"
+transcendental_policy = "None"
+transcendental_operations = []
+texture_filtering = false
+sampling = true
+atomics = false
+reductions = true
+tolerance_class = "Neighborhood"
+numerical_contract_id = "f32-reject-backend-subnormal-backend-fma-backend-reduction-none-clamped-toward-zero"
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_hblur"
+group = 0
+binding = 1
+name = "light_input"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<f32, runtime>"
+minimum_binding_size = 4
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 16
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_hblur"
+group = 0
+binding = 2
+name = "light_output"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<f32, runtime>"
+minimum_binding_size = 4
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 19
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_hblur"
+group = 0
+binding = 4
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 32
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 25
+source_column = 1
+
+[[shader]]
+id = "rusttable.bloom.bloom_mix"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/bloom.wgsl"
+source_tree_hash = "d5b260f9cb031e4638ead6ec2c1da78bb6bdf7b036a89404a7923f81c4af4a91"
+generated_wgsl_hash = "93ea70490ffb2cb4d19b40fbf7b27da120581a865fef19b507fc810bf2f5d6d4"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "rusttable.cpu.bloom"
+owner_operations = ["rusttable.bloom"]
+owner_kernels = ["darktable.bloom.bloom_mix"]
+workgroup_size = [16, 16, 1]
+uses_f32 = true
+uses_f16 = false
+float_domain = "F32"
+non_finite_policy = "Reject"
+subnormal_policy = "BackendDefined"
+fma_policy = "BackendDefined"
+reduction_policy = "None"
+transcendental_policy = "None"
+transcendental_operations = []
+texture_filtering = false
+sampling = false
+atomics = false
+reductions = false
+tolerance_class = "Pointwise"
+numerical_contract_id = "f32-reject-backend-subnormal-backend-fma-none-none-checked-nearest-even"
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_mix"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_mix"
+group = 0
+binding = 1
+name = "light_input"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<f32, runtime>"
+minimum_binding_size = 4
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 16
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_mix"
+group = 0
+binding = 3
+name = "output_pixels"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 22
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_mix"
+group = 0
+binding = 4
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 32
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 25
+source_column = 1
+
+[[shader]]
+id = "rusttable.bloom.bloom_threshold"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/bloom.wgsl"
+source_tree_hash = "d5b260f9cb031e4638ead6ec2c1da78bb6bdf7b036a89404a7923f81c4af4a91"
+generated_wgsl_hash = "93ea70490ffb2cb4d19b40fbf7b27da120581a865fef19b507fc810bf2f5d6d4"
+feature_plan = "CoreCompute"
+numerical_class = "F32Point"
+canonical_cpu_reference = "rusttable.cpu.bloom"
+owner_operations = ["rusttable.bloom"]
+owner_kernels = ["darktable.bloom.bloom_threshold"]
+workgroup_size = [16, 16, 1]
+uses_f32 = true
+uses_f16 = false
+float_domain = "F32"
+non_finite_policy = "Reject"
+subnormal_policy = "BackendDefined"
+fma_policy = "BackendDefined"
+reduction_policy = "None"
+transcendental_policy = "None"
+transcendental_operations = []
+texture_filtering = false
+sampling = false
+atomics = false
+reductions = false
+tolerance_class = "Pointwise"
+numerical_contract_id = "f32-reject-backend-subnormal-backend-fma-none-none-checked-nearest-even"
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_threshold"
+group = 0
+binding = 0
+name = "input_pixels"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<vec4<f32>, runtime>"
+minimum_binding_size = 16
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 13
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_threshold"
+group = 0
+binding = 2
+name = "light_output"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<f32, runtime>"
+minimum_binding_size = 4
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 19
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_threshold"
+group = 0
+binding = 4
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 32
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 25
+source_column = 1
+
+[[shader]]
+id = "rusttable.bloom.bloom_vblur"
+program_version = 1
+entry_point_version = 1
+implementation_version = 1
+source_alias = "shaders/bloom.wgsl"
+source_tree_hash = "d5b260f9cb031e4638ead6ec2c1da78bb6bdf7b036a89404a7923f81c4af4a91"
+generated_wgsl_hash = "93ea70490ffb2cb4d19b40fbf7b27da120581a865fef19b507fc810bf2f5d6d4"
+feature_plan = "CoreCompute"
+numerical_class = "F32Neighborhood"
+canonical_cpu_reference = "rusttable.cpu.bloom"
+owner_operations = ["rusttable.bloom"]
+owner_kernels = ["darktable.bloom.bloom_vblur"]
+workgroup_size = [1, 256, 1]
+uses_f32 = true
+uses_f16 = false
+float_domain = "F32"
+non_finite_policy = "Reject"
+subnormal_policy = "BackendDefined"
+fma_policy = "BackendDefined"
+reduction_policy = "BackendDefined"
+transcendental_policy = "None"
+transcendental_operations = []
+texture_filtering = false
+sampling = true
+atomics = false
+reductions = true
+tolerance_class = "Neighborhood"
+numerical_contract_id = "f32-reject-backend-subnormal-backend-fma-backend-reduction-none-clamped-toward-zero"
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_vblur"
+group = 0
+binding = 1
+name = "light_input"
+resource = "StorageBuffer"
+access = "read"
+address_space = "storage"
+type = "array<f32, runtime>"
+minimum_binding_size = 4
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 16
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_vblur"
+group = 0
+binding = 2
+name = "light_output"
+resource = "StorageBuffer"
+access = "read_write"
+address_space = "storage"
+type = "array<f32, runtime>"
+minimum_binding_size = 4
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 19
+source_column = 1
+
+[[shader.binding]]
+shader = "rusttable.bloom.bloom_vblur"
+group = 0
+binding = 4
+name = "params"
+resource = "UniformBuffer"
+access = "read"
+address_space = "uniform"
+type = "struct"
+minimum_binding_size = 32
+dynamic_offset = false
+dynamic_offset_alignment = 256
+source_alias = "shaders/bloom.wgsl"
+source_line = 25
+source_column = 1
+
+[[shader]]
 id = "rusttable.point.basicadj"
 program_version = 1
 entry_point_version = 2

@@ -32,6 +32,10 @@ impl SourceCatalog {
             include_str!("../../shaders/bilateral.wgsl").to_owned(),
         );
         sources.insert(
+            "shaders/bloom.wgsl".to_owned(),
+            include_str!("../../shaders/bloom.wgsl").to_owned(),
+        );
+        sources.insert(
             "shaders/includes/point_common.wgsl".to_owned(),
             include_str!("../../shaders/includes/point_common.wgsl").to_owned(),
         );

@@ -8,6 +8,7 @@ use rusttable_core::{Edit, FiniteF64, Operation, OperationId, ParameterText, Par
 use rusttable_processing::builtin_registry;
 use rusttable_processing::defringe_compatibility::DefringeMode;
 use rusttable_processing::descriptor::OperationFlags;
+use rusttable_ui::iop::bloom::{BLOOM_MODULE_ID, BloomEditorState, BloomGtkState};
 use rusttable_ui::iop::colorcorrection::{COLORCORRECTION_MODULE_ID, ColorCorrectionGridState};
 use rusttable_ui::iop::colorzones::{COLORZONES_MODULE_ID, ColorZonesGtkState};
 use rusttable_ui::presentation::{DarkroomControlKind, DarkroomControlValue};
@@ -426,6 +427,44 @@ fn project_edit_with_preferences(
         .collect::<Vec<_>>();
     let mut projected = Vec::new();
     for template in templates {
+        if template.id() == BLOOM_MODULE_ID {
+            let operations = edit
+                .operations()
+                .filter(|operation| operation_matches_module(operation, BLOOM_MODULE_ID))
+                .collect::<Vec<_>>();
+            if operations.is_empty() {
+                let state = BloomGtkState::new(
+                    materialized_operation_id(edit, "rusttable.bloom"),
+                    edit.revision(),
+                    BloomEditorState::default(),
+                    false,
+                    template.availability().is_supported(),
+                    true,
+                );
+                projected.push(template.with_bloom_editor_state(state));
+                continue;
+            }
+            let instance_count = operations.len();
+            for (instance_sequence, operation) in operations.into_iter().enumerate() {
+                let parameters = bloom_parameters(operation)?;
+                let state = BloomGtkState::new(
+                    operation.id(),
+                    edit.revision(),
+                    BloomEditorState::new(parameters)
+                        .map_err(|error| persistence_error(error.to_string()))?,
+                    operation.is_enabled() && template.availability().is_supported(),
+                    template.availability().is_supported(),
+                    false,
+                );
+                projected.push(
+                    template
+                        .clone()
+                        .with_operation_instance(operation.id(), instance_sequence, instance_count)
+                        .with_bloom_editor_state(state),
+                );
+            }
+            continue;
+        }
         if template.id() == COLORZONES_MODULE_ID {
             let states = colorzones_snapshots(edit, colorzones_preferences)
                 .map_err(colorzones_edit_error)?;
@@ -486,6 +525,25 @@ fn project_edit_with_preferences(
         }
     }
     DarkroomModulesViewModel::new(projected)
+}
+
+fn bloom_parameters(
+    operation: &Operation,
+) -> Result<rusttable_processing::operations::bloom::BloomParametersV1, DarkroomModuleError> {
+    let compiled = rusttable_processing::ProcessingOperation::compile(operation)
+        .map_err(|error| persistence_error(error.to_string()))?;
+    let rusttable_processing::ProcessingOperationKind::Bloom { config } = compiled.kind() else {
+        return Err(persistence_error(
+            "Bloom operation compiled to a different kind",
+        ));
+    };
+    Ok(
+        rusttable_processing::operations::bloom::BloomParametersV1::new(
+            config.size(),
+            config.threshold(),
+            config.strength(),
+        ),
+    )
 }
 
 fn resolve_action_target(
@@ -857,6 +915,7 @@ fn rewrite_instance_operations(
         | DarkroomModuleAction::Reset { .. }
         | DarkroomModuleAction::Preset { .. }
         | DarkroomModuleAction::Control { .. }
+        | DarkroomModuleAction::BloomSettled { .. }
         | DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Recover { .. } => {
@@ -880,6 +939,7 @@ fn instance_action_name(action: &DarkroomModuleAction) -> &'static str {
         | DarkroomModuleAction::Reset { .. }
         | DarkroomModuleAction::Preset { .. }
         | DarkroomModuleAction::Control { .. }
+        | DarkroomModuleAction::BloomSettled { .. }
         | DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Recover { .. } => "instance action",
@@ -928,7 +988,9 @@ fn rewrite_target_operation(
     let enabled = match action {
         DarkroomModuleAction::Enable { enabled, .. } => *enabled,
         DarkroomModuleAction::Reset { .. } => true,
-        DarkroomModuleAction::Preset { .. } => module.enabled(),
+        DarkroomModuleAction::Preset { .. } | DarkroomModuleAction::BloomSettled { .. } => {
+            module.enabled()
+        }
         DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Control { .. }
@@ -957,6 +1019,29 @@ fn rewrite_target_operation(
         };
         if let Some(replacement) = parameter_from_control(control, value) {
             *value = replacement;
+        }
+    }
+    if let DarkroomModuleAction::BloomSettled {
+        parameters: bloom, ..
+    } = action
+    {
+        for (name, replacement) in [
+            ("size", bloom.size),
+            ("threshold", bloom.threshold),
+            ("strength", bloom.strength),
+        ] {
+            let Some((_, value)) = parameters
+                .iter_mut()
+                .find(|(parameter, _)| parameter.as_str() == name)
+            else {
+                return Err(persistence_error(format!(
+                    "Bloom operation is missing {name}"
+                )));
+            };
+            *value =
+                ParameterValue::Scalar(FiniteF64::new(f64::from(replacement)).map_err(|_| {
+                    persistence_error(format!("Bloom parameter {name} must be finite"))
+                })?);
         }
     }
     if let Some(grid) = module.color_correction_grid() {
@@ -1378,6 +1463,93 @@ mod tests {
     }
 
     #[test]
+    fn bloom_settled_action_persists_only_the_exact_mounted_instance() {
+        let registry = builtin_registry();
+        let first_id = OperationId::new(0xb701).expect("first Bloom ID");
+        let second_id = OperationId::new(0xb702).expect("second Bloom ID");
+        let first = registry
+            .materialize_operation("rusttable.bloom", first_id)
+            .expect("first Bloom defaults");
+        let second_defaults = registry
+            .materialize_operation("rusttable.bloom", second_id)
+            .expect("second Bloom defaults");
+        let second_opacity = OperationOpacity::new(0.375).expect("partial opacity");
+        let second = Operation::new_with_opacity(
+            second_id,
+            second_defaults.key().clone(),
+            false,
+            second_opacity,
+            second_defaults
+                .parameters()
+                .map(|(name, value)| (name.clone(), value.clone())),
+        )
+        .expect("disabled second Bloom instance");
+        let original = Edit::from_parts(
+            EditId::new(0xb703).expect("edit ID"),
+            PhotoId::new(0xb704).expect("photo ID"),
+            Revision::ZERO,
+            Revision::from_u64(9),
+            [first.clone(), second],
+        )
+        .expect("multi-instance Bloom edit");
+        let catalog = TestCatalog::seed(&original);
+        let mut controller = GtkDarkroomEditController::new(Some(catalog.path.clone()));
+        let modules = controller
+            .select_photo(original.photo_id())
+            .expect("select Bloom edit");
+        assert_eq!(modules.instances(BLOOM_MODULE_ID).count(), 2);
+        let action = DarkroomModuleAction::BloomSettled {
+            module_id: BLOOM_MODULE_ID.to_owned(),
+            operation_id: Some(second_id),
+            expected_revision: original.revision(),
+            parameters: rusttable_processing::operations::bloom::BloomParametersV1::new(
+                20.0, 90.0, 50.0,
+            ),
+            enable_required: true,
+        };
+
+        let outcome = controller
+            .apply(&action)
+            .expect("persist exact Bloom action");
+        let persisted = catalog.load(original.id());
+        let operations = persisted.operations().collect::<Vec<_>>();
+
+        assert!(outcome.processing_changed());
+        assert_eq!(outcome.revision(), persisted.revision());
+        assert_eq!(operations.len(), 2);
+        assert_eq!(operations[0], &first);
+        assert_eq!(operations[1].id(), second_id);
+        assert!(operations[1].is_enabled());
+        assert_eq!(operations[1].opacity(), second_opacity);
+        assert_eq!(
+            operations[1].parameter(&ParameterName::new("strength").expect("strength")),
+            Some(&scalar(50.0)),
+        );
+        let projected = outcome
+            .modules()
+            .instances(BLOOM_MODULE_ID)
+            .collect::<Vec<_>>();
+        assert_eq!(projected.len(), 2);
+        assert_eq!(
+            projected[1]
+                .bloom_editor_state()
+                .expect("second Bloom state")
+                .editor()
+                .strength()
+                .to_bits(),
+            50.0_f32.to_bits(),
+        );
+        assert_eq!(
+            controller.apply(&action),
+            Err(DarkroomModuleError::StaleRevision {
+                expected: original.revision(),
+                actual: persisted.revision(),
+            }),
+        );
+        assert_eq!(catalog.load(original.id()), persisted);
+    }
+
+    #[test]
     fn no_op_colorzones_replacement_does_not_persist_history() {
         let operation_id = OperationId::new(0xc711).expect("Color Zones ID");
         let operation = builtin_registry()
@@ -1439,7 +1611,7 @@ mod tests {
     }
 
     #[test]
-    fn first_control_on_imported_two_node_edit_materializes_registry_defaults() {
+    fn first_bloom_settle_on_imported_edit_materializes_complete_parameters() {
         let original = Edit::from_parts(
             EditId::new(101).expect("edit id"),
             PhotoId::new(202).expect("photo id"),
@@ -1472,14 +1644,16 @@ mod tests {
         .expect("imported edit");
         let mut modules = project_edit(&original).expect("projection");
         let module = modules.module_mut("bloom").expect("bloom module");
-        let action = DarkroomModuleAction::Control {
+        let action = DarkroomModuleAction::BloomSettled {
             module_id: "bloom".to_owned(),
             operation_id: None,
             expected_revision: original.revision(),
-            id: "bloom-strength".to_owned(),
-            value: DarkroomControlValue::Slider(50.0),
+            parameters: rusttable_processing::operations::bloom::BloomParametersV1::new(
+                20.0, 90.0, 50.0,
+            ),
+            enable_required: true,
         };
-        module.apply(action.clone()).expect("first control");
+        module.apply(action.clone()).expect("first settle");
 
         let operations = rewrite_operations(&original, module, &action).expect("materialization");
         let replacement = original.revised(operations).expect("history revision");
@@ -3108,27 +3282,17 @@ mod tests {
             builtin_registry().definitions().len()
         );
         let module = modules.module_mut("bloom").expect("bloom module");
-        module
-            .apply(DarkroomModuleAction::Control {
-                module_id: "bloom".to_owned(),
-                operation_id: Some(OperationId::new(9).expect("bloom id")),
-                expected_revision: Revision::from_u64(4),
-                id: "bloom-strength".to_owned(),
-                value: DarkroomControlValue::Slider(50.0),
-            })
-            .expect("bloom action");
-        let operations = rewrite_operations(
-            &original,
-            module,
-            &DarkroomModuleAction::Control {
-                module_id: "bloom".to_owned(),
-                operation_id: Some(OperationId::new(9).expect("bloom id")),
-                expected_revision: Revision::from_u64(4),
-                id: "bloom-strength".to_owned(),
-                value: DarkroomControlValue::Slider(50.0),
-            },
-        )
-        .expect("rewrite");
+        let action = DarkroomModuleAction::BloomSettled {
+            module_id: "bloom".to_owned(),
+            operation_id: Some(OperationId::new(9).expect("bloom id")),
+            expected_revision: Revision::from_u64(4),
+            parameters: rusttable_processing::operations::bloom::BloomParametersV1::new(
+                20.0, 90.0, 50.0,
+            ),
+            enable_required: false,
+        };
+        module.apply(action.clone()).expect("bloom action");
+        let operations = rewrite_operations(&original, module, &action).expect("rewrite");
         let replacement = original.revised(operations).expect("history revision");
         let operation = replacement.operations().next().expect("operation");
         assert_eq!(

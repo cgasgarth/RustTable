@@ -43,7 +43,7 @@ pub fn run_raster_import(
         paths,
         cancellation,
         observer,
-        AppDiagnostics::default(),
+        &AppDiagnostics::default(),
     )
 }
 
@@ -52,7 +52,7 @@ pub(crate) fn run_raster_import_with_diagnostics(
     paths: Vec<PathBuf>,
     cancellation: &RasterImportCancellation,
     observer: &dyn RasterImportObserver,
-    diagnostics: AppDiagnostics,
+    diagnostics: &AppDiagnostics,
 ) -> RasterImportBatch {
     let request =
         RasterImportRequest::new(paths).expect("application starts only nonempty bounded requests");
@@ -60,27 +60,17 @@ pub(crate) fn run_raster_import_with_diagnostics(
     let image = FileImageInput::new(decode_limits());
     let metadata = ExifMetadataInput::new(metadata_limits());
     let service = RasterImportService::new(source_limits(), &snapshot, &image, &metadata);
-    if let Ok(repository) = RedbCatalogRepository::open(catalog_path) {
+    let batch = if let Ok(repository) = RedbCatalogRepository::open(catalog_path) {
         let mut catalog = AppCatalog(repository);
-        service.import(
-            &request,
-            &mut catalog,
-            &AppPreview {
-                diagnostics: diagnostics.clone(),
-            },
-            cancellation,
-            observer,
-        )
+        service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
     } else {
         let mut catalog = UnavailableCatalog;
-        service.import(
-            &request,
-            &mut catalog,
-            &AppPreview { diagnostics },
-            cancellation,
-            observer,
-        )
+        service.import(&request, &mut catalog, &AppPreview, cancellation, observer)
+    };
+    for receipt in batch.receipts() {
+        diagnostics.raster_import_failure(receipt);
     }
+    batch
 }
 
 struct AppCatalog(RedbCatalogRepository);
@@ -232,9 +222,7 @@ impl AtomicRasterCatalog for UnavailableCatalog {
     }
 }
 
-struct AppPreview {
-    diagnostics: AppDiagnostics,
-}
+struct AppPreview;
 
 impl RasterPreviewPort for AppPreview {
     fn generate_thumbnail(
@@ -256,28 +244,10 @@ impl RasterPreviewPort for AppPreview {
                 .expect("constant preview bounds are valid"),
         )
         .render_bytes(&bytes, &entry.edit)
-        .map_err(|error| {
-            self.diagnostics.import_preview_failure(
-                Some(entry.record.probe().format()),
-                Some((
-                    entry.record.probe().dimensions().width(),
-                    entry.record.probe().dimensions().height(),
-                )),
-                preview_error_cause(&error),
-            );
-            RasterPreviewError::Render
-        })?;
-        reader.revalidate(&snapshot, source_limits()).map_err(|_| {
-            self.diagnostics.import_preview_failure(
-                Some(entry.record.probe().format()),
-                Some((
-                    entry.record.probe().dimensions().width(),
-                    entry.record.probe().dimensions().height(),
-                )),
-                "source_changed",
-            );
-            RasterPreviewError::SourceChanged
-        })?;
+        .map_err(|error| preview_error_reason(&error))?;
+        reader
+            .revalidate(&snapshot, source_limits())
+            .map_err(|_| RasterPreviewError::SourceChanged)?;
         let dimensions = output.image().dimensions();
         let mut hasher = Sha256::new();
         hasher.update(output.image().pixels());
@@ -289,18 +259,21 @@ impl RasterPreviewPort for AppPreview {
     }
 }
 
-fn preview_error_cause(error: &crate::PreviewError) -> &'static str {
+fn preview_error_reason(error: &crate::PreviewError) -> RasterPreviewError {
     match error {
-        crate::PreviewError::Decode(_) | crate::PreviewError::RawDecode(_) => "decode",
-        crate::PreviewError::DecodedFrame => "decoded_frame",
-        crate::PreviewError::UnsupportedPixelpipeColor { .. } => "unsupported_color",
-        crate::PreviewError::PixelpipeInput(_) => "pixelpipe_input",
-        crate::PreviewError::PixelpipeSnapshot(_) => "pixelpipe_snapshot",
-        crate::PreviewError::Graph(_) => "processing_graph",
-        crate::PreviewError::RawPipeline(_) => "processing_raw_pipeline",
-        crate::PreviewError::Pixelpipe(_) => "processing_pixelpipe",
-        crate::PreviewError::Prepared(_) => "processing_prepare",
-        crate::PreviewError::Render(_) => "render",
+        crate::PreviewError::Decode(_) => RasterPreviewError::Decode,
+        crate::PreviewError::RawDecode(_) => RasterPreviewError::RawDecode,
+        crate::PreviewError::DecodedFrame => RasterPreviewError::DecodedFrame,
+        crate::PreviewError::UnsupportedPixelpipeColor { .. } => {
+            RasterPreviewError::UnsupportedPixelpipeColor
+        }
+        crate::PreviewError::PixelpipeInput(_) => RasterPreviewError::PixelpipeInput,
+        crate::PreviewError::PixelpipeSnapshot(_) => RasterPreviewError::PixelpipeSnapshot,
+        crate::PreviewError::Graph(_) => RasterPreviewError::Graph,
+        crate::PreviewError::RawPipeline(_) => RasterPreviewError::RawPipeline,
+        crate::PreviewError::Pixelpipe(_) => RasterPreviewError::Pixelpipe,
+        crate::PreviewError::Prepared(_) => RasterPreviewError::Prepared,
+        crate::PreviewError::Render(_) => RasterPreviewError::Render,
     }
 }
 
@@ -350,15 +323,17 @@ mod tests {
     use rusttable_image_io::FileImageOutput;
     use rusttable_import::{
         AtomicRasterCatalog, RASTER_DECODER_IDENTITY_VERSION, RasterDuplicateIdentity,
-        RasterImportCancellation, RasterImportStatus,
+        RasterImportCancellation, RasterImportFailure, RasterImportStage, RasterImportStatus,
     };
     use rusttable_metadata::MetadataInput;
     use sha2::{Digest, Sha256};
 
     use super::{
-        AppCatalog, ExifMetadataInput, metadata_limits, preview_error_cause, run_raster_import,
+        AppCatalog, ExifMetadataInput, metadata_limits, preview_error_reason, run_raster_import,
+        run_raster_import_with_diagnostics,
     };
     use crate::PreviewError;
+    use crate::diagnostics::AppDiagnostics;
     use crate::gtk_thumbnail_controller::{GtkThumbnailController, GtkThumbnailSource};
     use crate::library::{LibraryLoadResult, load_catalog};
     use crate::workspace::{load_selected_export_render, load_selected_preview};
@@ -384,6 +359,33 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn tiff_probed_dng_with_unsupported_color_model() -> Vec<u8> {
+        let entries = [
+            (256_u16, 4_u16, 1_u32, 1_u32),
+            (257, 4, 1, 1),
+            (258, 3, 1, 8),
+            (262, 3, 1, 5),
+            (273, 4, 1, 98),
+            (277, 3, 1, 4),
+            (279, 4, 1, 4),
+        ];
+        let mut bytes = b"II\x2a\0\x08\0\0\0".to_vec();
+        bytes.extend_from_slice(
+            &u16::try_from(entries.len())
+                .expect("entry count")
+                .to_le_bytes(),
+        );
+        for (tag, field_type, count, value) in entries {
+            bytes.extend_from_slice(&tag.to_le_bytes());
+            bytes.extend_from_slice(&field_type.to_le_bytes());
+            bytes.extend_from_slice(&count.to_le_bytes());
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&0_u32.to_le_bytes());
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes
     }
 
     fn jpeg_with_orientation(directory: &Path, code: u16) -> Vec<u8> {
@@ -417,6 +419,44 @@ mod tests {
         bytes.extend_from_slice(&payload);
         bytes.extend_from_slice(&source[2..]);
         bytes
+    }
+
+    #[test]
+    fn tiff_probed_dng_decode_failure_records_once_and_success_records_nothing() {
+        let directory = TempDirectory::new();
+        let malformed = directory.0.join("unsupported.dng");
+        let valid = directory.0.join("valid.png");
+        let catalog = directory.0.join("catalog.redb");
+        fs::write(&malformed, tiff_probed_dng_with_unsupported_color_model())
+            .expect("TIFF-probed DNG fixture");
+        fs::write(
+            &valid,
+            decode_base64(include_str!(
+                "../../../rusttable-image-io/tests/fixtures/rgba-2x1.png.b64"
+            )),
+        )
+        .expect("valid PNG fixture");
+        let diagnostics = AppDiagnostics::default();
+
+        let batch = run_raster_import_with_diagnostics(
+            &catalog,
+            vec![malformed, valid],
+            &RasterImportCancellation::default(),
+            &|_| {},
+            &diagnostics,
+        );
+        let receipts = batch.receipts().collect::<Vec<_>>();
+
+        assert_eq!(receipts.len(), 2);
+        assert_eq!(receipts[0].source_alias, "unsupported.dng");
+        assert_eq!(receipts[0].format, Some(InputFormat::Tiff));
+        assert_eq!(receipts[0].failure_stage, Some(RasterImportStage::Decoding));
+        assert_eq!(
+            receipts[0].status,
+            RasterImportStatus::Failed(RasterImportFailure::UnsupportedOrMalformedRaster)
+        );
+        assert_eq!(receipts[1].status, RasterImportStatus::Imported);
+        assert_eq!(diagnostics.recorded_event_count(), 1);
     }
 
     #[test]
@@ -541,18 +581,22 @@ mod tests {
     }
 
     #[test]
-    fn import_preview_error_causes_are_stable_and_path_free() {
+    fn import_preview_errors_keep_their_typed_receipt_reason() {
         assert_eq!(
-            preview_error_cause(&PreviewError::Decode(
+            preview_error_reason(&PreviewError::Decode(
                 rusttable_image::ImageInputError::ArithmeticOverflow,
             )),
-            "decode"
+            rusttable_import::RasterPreviewError::Decode
         );
         assert_eq!(
-            preview_error_cause(&PreviewError::UnsupportedPixelpipeColor {
+            preview_error_reason(&PreviewError::DecodedFrame),
+            rusttable_import::RasterPreviewError::DecodedFrame
+        );
+        assert_eq!(
+            preview_error_reason(&PreviewError::UnsupportedPixelpipeColor {
                 actual: rusttable_image::ColorEncoding::DisplayP3D65,
             }),
-            "unsupported_color"
+            rusttable_import::RasterPreviewError::UnsupportedPixelpipeColor
         );
     }
 

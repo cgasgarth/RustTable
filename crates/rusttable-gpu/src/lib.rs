@@ -3,6 +3,7 @@
 #![doc = "GPU execution boundary contracts for the `RustTable` rewrite."]
 
 mod bilateral;
+mod bloom;
 mod cache;
 mod colorzones;
 mod contracts;
@@ -27,6 +28,10 @@ pub use contracts::{
 
 pub use bilateral::{
     BilateralGridError, BilateralGridRequest, BilateralGridResult, BilateralSlice,
+};
+pub use bloom::{
+    BLOOM_BOX_ITERATIONS, BLOOM_MAX_RADIUS, BLOOM_TEMPORARY_BUCKETS, BloomError, BloomRequest,
+    BloomResult, bloom_transient_memory_bytes,
 };
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
 pub use colorzones::{

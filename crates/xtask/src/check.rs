@@ -33,6 +33,10 @@ const CUSTOM_HARNESS_TESTS: &[CustomHarnessTest] = &[
     },
     CustomHarnessTest {
         package: "rusttable-ui",
+        target: "bloom_gtk_boundary",
+    },
+    CustomHarnessTest {
+        package: "rusttable-ui",
         target: "neural_restore_strength_gtk_boundary",
     },
     CustomHarnessTest {

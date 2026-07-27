@@ -13,6 +13,7 @@ use rusttable_core::{OperationId, Revision};
 use crate::gui::darktable_components::{
     image_operation_module_header, module_expander as shared_module_expander,
 };
+use crate::iop::bloom::{BloomGtkHandlerOutcome, BloomGtkLeaf, BloomGtkState, build_bloom_gtk};
 use crate::iop::colorcorrection::{
     COLORCORRECTION_MODULE_ID, ColorCorrectionGridGtkContext, ColorCorrectionGridState,
     build_grid as build_color_correction_grid,
@@ -107,12 +108,21 @@ impl DarkroomModuleGroup {
 /// descriptor-generated controls.
 #[derive(Debug, Clone, PartialEq)]
 enum DarkroomCustomEditorPayload {
+    Bloom(Option<BloomGtkState>),
     ColorZones(Option<ColorZonesGtkState>),
 }
 
 impl DarkroomCustomEditorPayload {
+    const fn bloom_state(&self) -> Option<&BloomGtkState> {
+        match self {
+            Self::Bloom(state) => state.as_ref(),
+            Self::ColorZones(_) => None,
+        }
+    }
+
     const fn colorzones_state(&self) -> Option<&ColorZonesGtkState> {
         match self {
+            Self::Bloom(_) => None,
             Self::ColorZones(state) => state.as_ref(),
         }
     }
@@ -121,6 +131,7 @@ impl DarkroomCustomEditorPayload {
 /// Mounted custom leaves are retained across processing-snapshot reconciliation.
 #[derive(Clone, Default)]
 pub(crate) struct DarkroomCustomEditorMounts {
+    bloom: Rc<RefCell<BTreeMap<OperationId, BloomGtkLeaf>>>,
     colorzones: Rc<RefCell<BTreeMap<OperationId, ColorZonesGtkLeaf>>>,
     colorzones_handler: Rc<RefCell<Option<ColorZonesGtkActionHandler>>>,
     colorzones_preferences_handler: Rc<RefCell<Option<ColorZonesGtkPreferencesHandler>>>,
@@ -144,14 +155,50 @@ impl DarkroomCustomEditorMounts {
 
     pub(crate) fn reconcile(&self, modules: &DarkroomModulesViewModel) {
         for module in modules.left_modules().chain(modules.right_modules()) {
-            let Some(state) = module.colorzones_editor_state() else {
-                continue;
-            };
-            if let Some(leaf) = self.colorzones.borrow().get(&state.operation_id()) {
+            if let Some(state) = module.bloom_editor_state()
+                && let Some(leaf) = self.bloom.borrow().get(&state.operation_id())
+            {
+                leaf.reconcile(*state);
+            }
+            if let Some(state) = module.colorzones_editor_state()
+                && let Some(leaf) = self.colorzones.borrow().get(&state.operation_id())
+            {
                 let output_channel = leaf.state().editor().output_channel();
                 leaf.reconcile(state.clone().with_output_channel(output_channel));
             }
         }
+    }
+
+    fn bloom_leaf(
+        &self,
+        widget_id: &str,
+        state: BloomGtkState,
+        action_handler: Option<&DarkroomModuleActionHandler>,
+    ) -> BloomGtkLeaf {
+        if let Some(leaf) = self.bloom.borrow().get(&state.operation_id()).cloned() {
+            leaf.reconcile(state);
+            return leaf;
+        }
+        let handler = action_handler.cloned().map(|handler| {
+            Rc::new(move |settled: crate::iop::bloom::BloomSettledAction| {
+                let action = DarkroomModuleAction::BloomSettled {
+                    module_id: crate::iop::bloom::BLOOM_MODULE_ID.to_owned(),
+                    operation_id: (!settled.materialization_required()).then_some(settled.target()),
+                    expected_revision: settled.expected_revision(),
+                    parameters: settled.parameters(),
+                    enable_required: settled.enable_required(),
+                };
+                match handler(action) {
+                    Ok(revision) => BloomGtkHandlerOutcome::Commit { revision },
+                    Err(_) => BloomGtkHandlerOutcome::Rollback,
+                }
+            }) as crate::iop::bloom::BloomGtkActionHandler
+        });
+        let leaf = build_bloom_gtk(widget_id, state, handler);
+        self.bloom
+            .borrow_mut()
+            .insert(state.operation_id(), leaf.clone());
+        leaf
     }
 
     fn colorzones_leaf(&self, widget_id: &str, state: &ColorZonesGtkState) -> ColorZonesGtkLeaf {
@@ -323,6 +370,56 @@ impl DarkroomModuleViewModel {
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
+    }
+
+    /// Marks this module as a source-specific Bloom editor and removes every
+    /// descriptor-generated control.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if constructing an empty control snapshot is rejected.
+    #[must_use]
+    pub fn with_bloom_custom_editor(mut self) -> Self {
+        debug_assert_eq!(self.id, crate::iop::bloom::BLOOM_MODULE_ID);
+        self.controls
+            .replace_snapshot(self.revision, Vec::new())
+            .expect("Bloom custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::Bloom(None));
+        self
+    }
+
+    /// Installs the exact Bloom operation projection consumed by its
+    /// source-specific GTK leaf.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if constructing an empty control snapshot is rejected.
+    #[must_use]
+    pub fn with_bloom_editor_state(mut self, state: BloomGtkState) -> Self {
+        debug_assert_eq!(self.id, crate::iop::bloom::BLOOM_MODULE_ID);
+        self.operation_id = (!state.materialization_required()).then_some(state.operation_id());
+        self.revision = state.revision();
+        self.enabled = state.enabled();
+        self.controls
+            .replace_snapshot(state.revision(), Vec::new())
+            .expect("Bloom custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::Bloom(Some(state)));
+        self
+    }
+
+    #[must_use]
+    pub fn has_bloom_custom_editor(&self) -> bool {
+        matches!(
+            &self.custom_editor,
+            Some(DarkroomCustomEditorPayload::Bloom(_))
+        )
+    }
+
+    #[must_use]
+    pub fn bloom_editor_state(&self) -> Option<&BloomGtkState> {
+        self.custom_editor
+            .as_ref()
+            .and_then(DarkroomCustomEditorPayload::bloom_state)
     }
 
     /// Marks this module as a source-specific Color Zones editor and removes
@@ -585,6 +682,11 @@ impl DarkroomModuleViewModel {
         if self.color_correction_grid.is_some() {
             order.push(format!("{widget_id}-grid"));
         }
+        if self.bloom_editor_state().is_some() {
+            order.extend(
+                crate::iop::bloom::BLOOM_SLIDERS.map(|slider| slider.widget_name(&widget_id)),
+            );
+        }
         order.extend(self.controls.controls().map(|control| {
             format!(
                 "{}-widget",
@@ -625,6 +727,7 @@ impl DarkroomModuleViewModel {
                     | DarkroomModuleAction::Reset { .. }
                     | DarkroomModuleAction::Preset { .. }
                     | DarkroomModuleAction::Control { .. }
+                    | DarkroomModuleAction::BloomSettled { .. }
                     | DarkroomModuleAction::ColorCorrectionGrid { .. }
                     | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
                     | DarkroomModuleAction::NewInstance { .. }
@@ -668,6 +771,12 @@ impl DarkroomModuleViewModel {
                 value,
                 ..
             } => self.set_control(expected_revision, &id, value),
+            DarkroomModuleAction::BloomSettled {
+                expected_revision,
+                parameters,
+                enable_required,
+                ..
+            } => self.set_bloom_parameters(expected_revision, parameters, enable_required),
             DarkroomModuleAction::ColorCorrectionGrid {
                 expected_revision,
                 grid,
@@ -939,6 +1048,45 @@ impl DarkroomModuleViewModel {
         Ok(revision)
     }
 
+    /// Applies all three source Bloom parameters in one settled revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for stale callbacks, invalid parameters, or non-Bloom modules.
+    pub fn set_bloom_parameters(
+        &mut self,
+        expected_revision: Revision,
+        parameters: rusttable_processing::operations::bloom::BloomParametersV1,
+        enable_required: bool,
+    ) -> Result<Revision, DarkroomModuleError> {
+        self.check_revision(expected_revision)?;
+        let Some(current) = self.bloom_editor_state().copied() else {
+            return Err(self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: "module has no Bloom custom editor".to_owned(),
+            }));
+        };
+        let editor = crate::iop::bloom::BloomEditorState::new(parameters).map_err(|error| {
+            self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: error.to_string(),
+            })
+        })?;
+        let revision = self.advance_revision()?;
+        self.enabled = current.enabled() || enable_required;
+        self.custom_editor = Some(DarkroomCustomEditorPayload::Bloom(Some(
+            BloomGtkState::new(
+                current.operation_id(),
+                revision,
+                editor,
+                self.enabled,
+                current.sensitive(),
+                current.materialization_required(),
+            ),
+        )));
+        Ok(revision)
+    }
+
     /// Applies all four Color Correction endpoint parameters in one revision.
     ///
     /// # Errors
@@ -1006,6 +1154,18 @@ impl DarkroomModuleViewModel {
             .reset_all(expected_revision)
             .map_err(|error| self.record_control_error(error))?;
         self.revision = revision;
+        if let Some(current) = self.bloom_editor_state().copied() {
+            self.custom_editor = Some(DarkroomCustomEditorPayload::Bloom(Some(
+                BloomGtkState::new(
+                    current.operation_id(),
+                    revision,
+                    crate::iop::bloom::BloomEditorState::default(),
+                    true,
+                    current.sensitive(),
+                    current.materialization_required(),
+                ),
+            )));
+        }
         if self.color_correction_grid.is_some() {
             self.color_correction_grid = Some(ColorCorrectionGridState::DEFAULT);
         }
@@ -1433,6 +1593,14 @@ fn build_module_panel_with_action_revision(
     } else {
         None
     };
+    if let (Some(custom_mounts), Some(state)) = (custom_mounts, module.bloom_editor_state()) {
+        let leaf =
+            custom_mounts.bloom_leaf(&widget_id, *state, interaction_action_handler.as_ref());
+        if leaf.widget().parent().is_some() {
+            leaf.widget().unparent();
+        }
+        operation_root.append(leaf.widget());
+    }
     if let (Some(custom_mounts), Some(state)) = (custom_mounts, module.colorzones_editor_state()) {
         let leaf = custom_mounts.colorzones_leaf(&widget_id, state);
         if leaf.widget().parent().is_some() {

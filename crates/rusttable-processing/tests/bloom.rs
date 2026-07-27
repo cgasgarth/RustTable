@@ -5,7 +5,9 @@ use rusttable_core::{
 use rusttable_masks::MaskRaster;
 use rusttable_processing::common::box_filters::{BOX_ITERATIONS, box_mean};
 use rusttable_processing::operations::bloom::{
-    BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory, BloomParametersV1, BloomPixel, BloomPlan,
+    BLOOM_BOX_ITERATIONS, BLOOM_CPU_REQUIRES_FULL_FRAME, BLOOM_CPU_ROI_SCALE, BLOOM_GPU_TIER,
+    BLOOM_OPENCL_NUM_BUCKETS, BLOOM_PARAMETER_BYTES, BLOOM_WGPU_PASS_ID, BloomConfig, BloomHistory,
+    BloomParametersV1, BloomPixel, BloomPlan,
 };
 use rusttable_processing::{
     CompiledOperationGraph, CompiledPipeline, FiniteF32, FrameBoundaryMode, FrameBoundaryOptions,
@@ -30,16 +32,21 @@ fn lab_pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> BloomPixel {
     BloomPixel::new(lightness, a, b, alpha)
 }
 
+const _: () = assert!(BLOOM_CPU_REQUIRES_FULL_FRAME);
+
 #[test]
-fn v1_payload_defaults_and_unknown_history_are_typed() {
+fn v1_payload_is_three_little_endian_native_floats_in_declaration_order() {
     let parameters = BloomParametersV1::defaults();
-    assert_eq!(parameters.to_bytes().len(), BLOOM_PARAMETER_BYTES);
+    let expected = [
+        0x00, 0x00, 0xa0, 0x41, // size = 20
+        0x00, 0x00, 0xb4, 0x42, // threshold = 90
+        0x00, 0x00, 0xc8, 0x41, // strength = 25
+    ];
+    assert_eq!(BLOOM_PARAMETER_BYTES, 3 * std::mem::size_of::<f32>());
+    assert_eq!(parameters.to_bytes(), expected);
+    assert_eq!(BloomParametersV1::from_bytes(&expected), Ok(parameters));
     assert_eq!(
-        BloomParametersV1::from_bytes(&parameters.to_bytes()),
-        Ok(parameters)
-    );
-    assert_eq!(
-        BloomHistory::decode(1, &parameters.to_bytes()).expect("v1 history"),
+        BloomHistory::decode(1, &expected).expect("v1 history"),
         BloomHistory::V1(parameters)
     );
     assert_eq!(
@@ -49,6 +56,29 @@ fn v1_payload_defaults_and_unknown_history_are_typed() {
             bytes: vec![1, 2, 3]
         }
     );
+}
+
+#[test]
+fn v1_payload_preservation_is_distinct_from_executable_validation() {
+    let source_bits = [0xc0a0_0000_u32, 0x7fc0_1234, 0x42cb_0000];
+    let mut payload = [0_u8; BLOOM_PARAMETER_BYTES];
+    for (field, bits) in source_bits.into_iter().enumerate() {
+        payload[field * 4..field * 4 + 4].copy_from_slice(&bits.to_le_bytes());
+    }
+
+    let parameters = BloomParametersV1::from_bytes(&payload).expect("typed native payload");
+    assert_eq!(parameters.size.to_bits(), source_bits[0]);
+    assert_eq!(parameters.threshold.to_bits(), source_bits[1]);
+    assert_eq!(parameters.strength.to_bits(), source_bits[2]);
+    assert_eq!(parameters.to_bytes(), payload);
+    assert!(BloomConfig::try_from(parameters).is_err());
+    assert_eq!(
+        BloomHistory::decode(1, &payload)
+            .expect("known history remains typed")
+            .payload(),
+        payload
+    );
+    assert!(BloomParametersV1::from_bytes(&payload[..11]).is_err());
 }
 
 #[test]
@@ -72,6 +102,30 @@ fn descriptor_registry_and_validation_match_the_backend_contract() {
     );
     assert_eq!(descriptor.stage, "display-referred-lab");
     assert!(descriptor.mask_blend.consumes_mask);
+    assert!(!descriptor.mask_blend.analysis);
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::MULTI_INSTANCE)
+    );
+    assert!(
+        descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::FULL_IMAGE)
+    );
+    assert!(
+        !descriptor
+            .flags
+            .contains(rusttable_processing::descriptor::OperationFlags::TILEABLE),
+        "scaled overlap tiling execution remains explicitly deferred",
+    );
+    assert_eq!(descriptor.capability.gpu_tier, Some(BLOOM_GPU_TIER));
+    let definition = builtin_registry()
+        .definition("rusttable.bloom")
+        .expect("Bloom definition");
+    let gpu = definition.gpu().expect("Bloom GPU binding");
+    assert_eq!(gpu.binding_id(), BLOOM_WGPU_PASS_ID);
+    assert_eq!(gpu.tier(), BLOOM_GPU_TIER);
     let soften = descriptor::soften_descriptor();
     assert_eq!(soften.io.input.channels, 3);
     assert_eq!(
@@ -81,6 +135,52 @@ fn descriptor_registry_and_validation_match_the_backend_contract() {
     assert_eq!(soften.stage, "display-linear");
     assert!(builtin_registry().definition("rusttable.bloom").is_some());
     assert!(BloomConfig::new(-1.0, 90.0, 25.0).is_err());
+}
+
+#[test]
+fn bloom_registry_order_follows_color_zones() {
+    let executable = builtin_registry()
+        .definitions_in_declaration_order()
+        .into_iter()
+        .map(|definition| definition.descriptor().id.compatibility_name.as_str())
+        .collect::<Vec<_>>();
+    let colorzones = executable
+        .iter()
+        .position(|name| *name == "colorzones")
+        .expect("Color Zones registry entry");
+    let bloom = executable
+        .iter()
+        .position(|name| *name == "bloom")
+        .expect("Bloom registry entry");
+    assert!(colorzones < bloom);
+}
+
+#[test]
+fn executable_validation_checks_every_finite_native_range() {
+    for parameters in [
+        BloomParametersV1::new(f32::NAN, 90.0, 25.0),
+        BloomParametersV1::new(20.0, f32::INFINITY, 25.0),
+        BloomParametersV1::new(20.0, 90.0, f32::NEG_INFINITY),
+        BloomParametersV1::new(-f32::EPSILON, 90.0, 25.0),
+        BloomParametersV1::new(20.0, f32::from_bits(100.0_f32.to_bits() + 1), 25.0),
+        BloomParametersV1::new(20.0, 90.0, f32::from_bits(100.0_f32.to_bits() + 1)),
+    ] {
+        assert!(BloomConfig::try_from(parameters).is_err());
+        assert_eq!(
+            BloomParametersV1::from_bytes(&parameters.to_bytes())
+                .expect("payload representation")
+                .to_bytes(),
+            parameters.to_bytes()
+        );
+    }
+}
+
+#[test]
+fn retained_execution_constants_and_current_cpu_limits_are_explicit() {
+    assert_eq!(BLOOM_OPENCL_NUM_BUCKETS, 4);
+    assert_eq!(BLOOM_BOX_ITERATIONS, 8);
+    assert_eq!(BLOOM_BOX_ITERATIONS, BOX_ITERATIONS);
+    assert_eq!(BLOOM_CPU_ROI_SCALE.to_bits(), 1.0_f32.to_bits());
 }
 
 #[test]
@@ -96,10 +196,29 @@ fn shared_box_mean_normalizes_border_windows_by_their_available_samples() {
 }
 
 #[test]
-fn production_bloom_uses_the_shared_eight_pass_box_mean() {
+fn scale_one_radius_vectors_preserve_float_to_int_truncation() {
+    for (size, expected) in [
+        (0.0, 2),
+        (0.5, 3),
+        (20.0, 53),
+        (50.0, 130),
+        (98.0, 253),
+        (99.0, 256),
+        (100.0, 256),
+    ] {
+        let plan = BloomPlan::new(
+            BloomConfig::new(size, 90.0, 25.0).expect("config"),
+            dimensions(1, 1),
+        )
+        .expect("plan");
+        assert_eq!(plan.radius(), expected, "size {size}");
+    }
+}
+
+#[test]
+fn production_bloom_runs_eight_horizontal_vertical_box_iterations() {
     let config = BloomConfig::new(0.0, 0.0, 25.0).expect("config");
     let plan = BloomPlan::new(config, dimensions(9, 1)).expect("plan");
-    // bloom.c truncates `rad` before applying ROI scale.
     assert_eq!(plan.radius(), 2);
     let mut input = vec![lab_pixel(0.0, 12.0, -8.0, 0.25); 9];
     input[4] = lab_pixel(100.0, -24.0, 32.0, 0.75);
@@ -109,19 +228,42 @@ fn production_bloom_uses_the_shared_eight_pass_box_mean() {
     let second = plan.execute(&input).expect("second");
     assert_eq!(first, second);
 
-    let scale = 1.0 / (-26.0f32 / 100.0).exp2();
-    let mut lightness = vec![0.0; 9];
-    lightness[4] = 100.0 * scale;
-    box_mean(&mut lightness, 1, 9, 1, 2, BOX_ITERATIONS).expect("shared bloom mean");
-    for (index, (actual, original)) in first.iter().zip(&input).enumerate() {
-        let old = original.lightness();
-        let expected = (100.0 - ((100.0 - old) * (100.0 - lightness[index]) / 100.0)) / 100.0;
-        assert!((actual.lightness() / 100.0 - expected).abs() < 1.0e-6);
+    // bloom.c threshold/strength transforms followed by eight separable H/V
+    // iterations and the final screen equation, evaluated in source f32 order.
+    let expected_lightness = [
+        15.236_61, 15.301_178, 15.347_45, 15.422_76, 100.0, 15.422_76, 15.347_443, 15.301_178,
+        15.236_61,
+    ];
+    for ((actual, original), expected) in first.iter().zip(&input).zip(expected_lightness) {
+        assert!((actual.lightness() - expected).abs() < 1.0e-5);
         assert_eq!(actual.a().to_bits(), original.a().to_bits());
         assert_eq!(actual.b().to_bits(), original.b().to_bits());
         assert_eq!(actual.alpha().to_bits(), original.alpha().to_bits());
     }
-    assert!(first[0].lightness() > 0.0);
+}
+
+#[test]
+fn source_vector_matches_threshold_strength_blur_and_screen_equations() {
+    let plan = BloomPlan::new(
+        BloomConfig::new(0.0, 50.0, 25.0).expect("config"),
+        dimensions(2, 2),
+    )
+    .expect("plan");
+    let input = [
+        lab_pixel(10.0, 1.0, -2.0, 0.1),
+        lab_pixel(40.0, 3.0, -4.0, 0.2),
+        lab_pixel(80.0, 5.0, -6.0, 0.3),
+        lab_pixel(100.0, 7.0, -8.0, 0.4),
+    ];
+    let output = plan.execute(&input).expect("bloom");
+    let expected_lightness = [58.497_89, 72.331_924, 90.777_306, 100.0];
+
+    for ((actual, source), expected) in output.iter().zip(input).zip(expected_lightness) {
+        assert!((actual.lightness() - expected).abs() < 1.0e-5);
+        assert_eq!(actual.a().to_bits(), source.a().to_bits());
+        assert_eq!(actual.b().to_bits(), source.b().to_bits());
+        assert_eq!(actual.alpha().to_bits(), source.alpha().to_bits());
+    }
 }
 
 #[test]

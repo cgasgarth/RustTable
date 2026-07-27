@@ -1,5 +1,11 @@
 //! Darktable-compatible bloom glow ported from retained `src/iop/bloom.c`.
+//!
+//! The executable leaf currently accepts one complete scale-1 Lab frame. The
+//! retained scaled-ROI radius, tiling callback, allocation copy-through path,
+//! `OpenCL` dispatch/registrations, opaque blend history, and GTK composition are
+//! explicit responsibilities outside this leaf and are not claimed here.
 
+#![forbid(unsafe_code)]
 #![allow(
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
@@ -20,6 +26,18 @@ pub const BLOOM_PARAMETER_BYTES: usize = 12;
 pub const BLOOM_DEFAULT_SIZE: f32 = 20.0;
 pub const BLOOM_DEFAULT_THRESHOLD: f32 = 90.0;
 pub const BLOOM_DEFAULT_STRENGTH: f32 = 25.0;
+/// Retained `NUM_BUCKETS` for the as-yet unported `OpenCL` temporary chain.
+pub const BLOOM_OPENCL_NUM_BUCKETS: usize = 4;
+/// Dedicated source-compatible WGPU execution uses the core-compute tier.
+pub const BLOOM_GPU_TIER: u8 = 1;
+/// Stable identity of the dedicated threshold/blur/mix WGPU path.
+pub const BLOOM_WGPU_PASS_ID: &str = "darktable.bloom.blur.v1";
+/// Native CPU box-mean iterations; each iteration performs H then V passes.
+pub const BLOOM_BOX_ITERATIONS: u32 = BOX_ITERATIONS;
+/// The only ROI scale accepted by this complete-frame CPU execution leaf.
+pub const BLOOM_CPU_ROI_SCALE: f32 = 1.0;
+/// This leaf does not claim the retained scaled-ROI/tiling responsibility.
+pub const BLOOM_CPU_REQUIRES_FULL_FRAME: bool = true;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BloomParametersV1 {
@@ -66,9 +84,7 @@ impl BloomParametersV1 {
         let read = |range: std::ops::Range<usize>| {
             f32::from_le_bytes(bytes[range].try_into().expect("checked range"))
         };
-        let parameters = Self::new(read(0..4), read(4..8), read(8..12));
-        BloomConfig::try_from(parameters).map_err(BloomCodecError::Parameters)?;
-        Ok(parameters)
+        Ok(Self::new(read(0..4), read(4..8), read(8..12)))
     }
 }
 
@@ -81,7 +97,6 @@ pub enum BloomHistory {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BloomCodecError {
     InvalidLength { expected: usize, actual: usize },
-    Parameters(BloomParameterError),
 }
 
 impl fmt::Display for BloomCodecError {
@@ -93,7 +108,6 @@ impl fmt::Display for BloomCodecError {
                     "bloom payload has {actual} bytes; expected {expected}"
                 )
             }
-            Self::Parameters(error) => write!(formatter, "invalid bloom parameters: {error}"),
         }
     }
 }
@@ -334,7 +348,7 @@ impl BloomPlan {
         let height =
             usize::try_from(self.dimensions.height()).expect("validated height fits usize");
         let radius = usize::try_from(self.radius).expect("bloom radius is at most 256");
-        box_mean(&mut blurred, height, width, 1, radius, BOX_ITERATIONS)
+        box_mean(&mut blurred, height, width, 1, radius, BLOOM_BOX_ITERATIONS)
             .map_err(box_filter_error)?;
         if cancelled() {
             return Err(OperationExecutionError::Cancelled);
@@ -436,6 +450,10 @@ fn bounded(
     Ok(FiniteF32::new(value).expect("finite value was checked"))
 }
 
-fn bloom_radius(size: f32, _dimensions: RasterDimensions) -> u32 {
-    (256.0 * ((size + 1.0).min(100.0) / 100.0)).min(256.0) as u32
+fn bloom_radius(size: f32, _full_frame: RasterDimensions) -> u32 {
+    // bloom.c first converts the base-radius float to int. At this leaf's
+    // explicit roi_in.scale / piece->iscale == 1 limit, the following ceil is
+    // therefore a no-op; scaled ROI radius planning remains unimplemented.
+    let base_radius = (256.0_f32 * ((size + 1.0_f32).min(100.0_f32) / 100.0_f32)) as u32;
+    base_radius.min(256)
 }

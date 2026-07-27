@@ -97,6 +97,42 @@ rust_owner = "crates/rusttable-pixelpipe/src/gpu.rs"
 status = "Replaced"
 
 [[responsibility]]
+id = "program-registry-bloom"
+upstream_path = "data/kernels/programs.conf"
+upstream_symbol = "bloom"
+rust_owner = "crates/rusttable-gpu/src/shader/registry.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "kernel-source-bloom"
+upstream_path = "data/kernels/bloom.cl"
+upstream_symbol = "bloom_threshold/bloom_hblur/bloom_vblur/bloom_mix"
+rust_owner = "crates/rusttable-gpu/shaders/bloom.wgsl"
+status = "Replaced"
+
+[[responsibility]]
+id = "host-bloom-observable-stages"
+upstream_path = "src/iop/bloom.c"
+upstream_symbol = "process_cl threshold/blur/mix/failure boundary"
+rust_owner = "crates/rusttable-gpu/src/bloom.rs"
+status = "Replaced"
+
+[[responsibility]]
+id = "host-bloom-opencl-resource-strategy"
+upstream_path = "src/iop/bloom.c"
+upstream_symbol = "init_global/local-buffer optimization/cleanup_global"
+rust_owner = "architecture/operation-overrides.toml"
+status = "Deferred"
+owner_issue = 395
+
+[[responsibility]]
+id = "bloom-production-route"
+upstream_path = "src/iop/bloom.c"
+upstream_symbol = "process_cl"
+rust_owner = "crates/rusttable-pixelpipe/src/gpu.rs"
+status = "Replaced"
+
+[[responsibility]]
 id = "unported-operation-kernels"
 upstream_path = "data/kernels/programs.conf"
 upstream_symbol = "unported entries"

@@ -42,7 +42,8 @@ use crate::ai_models::AiModelsPanel;
 use crate::camera::{CameraAction, CameraPanel, CameraViewModel};
 use crate::external_editor::{ExternalEditorAction, ExternalEditorPanel, ExternalEditorViewModel};
 use crate::import::{
-    ImportDialog, ImportSessionAction, ImportSessionPanel, ImportSessionViewModel,
+    ImportDialog, ImportSessionAction, ImportSessionPanel, ImportSessionState,
+    ImportSessionViewModel,
 };
 use crate::input_mapping::InputMappingEditor;
 use crate::libs::profiles::diagnostics::ProfileDiagnosticRequest;
@@ -198,6 +199,8 @@ impl GtkShell {
             camera_panel,
             import_session_panel,
         ) = right_panel();
+        import_session_panel.widget().set_visible(false);
+        lighttable_right_panel.append(import_session_panel.widget());
         let (left_panel, right_panel) = build_mode_panels(
             &workspace,
             &lighttable_left_panel,
@@ -755,6 +758,16 @@ impl GtkShell {
     /// Projects import-session review/progress/recovery state into the shell.
     pub fn set_import_session_state(&self, state: &ImportSessionViewModel) {
         self.import_session_panel.set_state(state);
+        self.import_session_panel
+            .widget()
+            .set_visible(state.state != ImportSessionState::Idle);
+        if matches!(
+            state.state,
+            ImportSessionState::Running | ImportSessionState::Failed
+        ) {
+            self.show_workspace(WorkspaceRole::Lighttable);
+            self.set_lighttable_panel_visibility(LighttablePanel::Right, true);
+        }
     }
 
     /// Sends import-session actions to an application-owned import service adapter.

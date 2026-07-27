@@ -22,7 +22,21 @@ pub fn bloom_descriptor() -> OperationDescriptor {
         "display-referred-lab",
         lab_effect_io(),
     );
+    descriptor.flags = OperationFlags::MULTI_INSTANCE
+        .insert(OperationFlags::STYLE_ELIGIBLE)
+        .insert(OperationFlags::HISTORY_VISIBLE)
+        .insert(OperationFlags::FULL_IMAGE)
+        .insert(OperationFlags::DETERMINISTIC_CPU)
+        .insert(OperationFlags::COLOR)
+        .insert(OperationFlags::MASKS)
+        .insert(OperationFlags::BLENDING);
+    descriptor.roi = RoiKind::FullImage;
+    descriptor.capability.gpu_tier = Some(crate::operations::bloom::BLOOM_GPU_TIER);
+    descriptor.capability.required_features = vec!["lab-boundary".to_owned()];
+    descriptor.capability.required_formats = vec!["lab-f32x4".to_owned()];
+    descriptor.capability.deterministic_gpu = false;
     descriptor.mask_blend.consumes_mask = true;
+    descriptor.mask_blend.analysis = false;
     descriptor
 }
 

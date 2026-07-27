@@ -19,10 +19,11 @@ use rusttable_image::{
 use rusttable_image_io::FileImageInput;
 use rusttable_import::{
     AtomicRasterCatalog, AtomicRasterCatalogError, FileSourceSnapshotReader, ImportSourceLimits,
-    RasterCatalogEntry, RasterDuplicateIdentity, RasterImportCancellation, RasterImportProgress,
-    RasterImportRequest, RasterImportService, RasterImportStage, RasterImportStatus,
-    RasterPreviewError, RasterPreviewPort, RasterPreviewReceipt, SourceSnapshot,
-    SourceSnapshotError, SourceSnapshotReader, decode_reference_source,
+    RasterCatalogEntry, RasterDuplicateIdentity, RasterImportCancellation, RasterImportFailure,
+    RasterImportProgress, RasterImportRequest, RasterImportService, RasterImportStage,
+    RasterImportStatus, RasterPreviewError, RasterPreviewPort, RasterPreviewReceipt,
+    SourceReadStage, SourceSnapshot, SourceSnapshotError, SourceSnapshotReader,
+    decode_reference_source,
 };
 use rusttable_metadata::{MetadataInput, MetadataInputError, MetadataReadResult};
 use support::ConstantImageInput;
@@ -61,6 +62,7 @@ struct MemoryCatalog {
     entries: Vec<RasterCatalogEntry>,
     duplicate_evidence: Vec<DuplicateEvidence>,
     fail_commit: bool,
+    fail_find_by_source: Option<AtomicRasterCatalogError>,
     fail_duplicate_query: bool,
     cancel_on_duplicate_query: Option<RasterImportCancellation>,
 }
@@ -70,6 +72,9 @@ impl AtomicRasterCatalog for MemoryCatalog {
         &self,
         identity: ReferencePathIdentity,
     ) -> Result<Option<RasterCatalogEntry>, AtomicRasterCatalogError> {
+        if let Some(error) = self.fail_find_by_source {
+            return Err(error);
+        }
         Ok(self
             .entries
             .iter()
@@ -179,6 +184,55 @@ impl AtomicRasterCatalog for MemoryCatalog {
 }
 
 struct CheckedPreview;
+
+#[derive(Clone, Copy)]
+struct FailingPreview(RasterPreviewError);
+
+impl RasterPreviewPort for FailingPreview {
+    fn generate_thumbnail(
+        &self,
+        _entry: &RasterCatalogEntry,
+    ) -> Result<RasterPreviewReceipt, RasterPreviewError> {
+        Err(self.0)
+    }
+}
+
+#[derive(Clone)]
+struct OpeningFails(SourceSnapshotError);
+
+impl SourceSnapshotReader for OpeningFails {
+    fn read_snapshot(
+        &self,
+        _path: &Path,
+        _limits: ImportSourceLimits,
+    ) -> Result<SourceSnapshot, SourceSnapshotError> {
+        Err(self.0.clone())
+    }
+}
+
+struct RevalidationFails {
+    delegate: FileSourceSnapshotReader,
+}
+
+impl SourceSnapshotReader for RevalidationFails {
+    fn read_snapshot(
+        &self,
+        path: &Path,
+        limits: ImportSourceLimits,
+    ) -> Result<SourceSnapshot, SourceSnapshotError> {
+        self.delegate.read_snapshot(path, limits)
+    }
+
+    fn revalidate(
+        &self,
+        snapshot: &SourceSnapshot,
+        _limits: ImportSourceLimits,
+    ) -> Result<(), SourceSnapshotError> {
+        Err(SourceSnapshotError::SourceChanged {
+            path: snapshot.path().to_owned(),
+        })
+    }
+}
 
 impl RasterPreviewPort for CheckedPreview {
     fn generate_thumbnail(
@@ -402,6 +456,266 @@ impl SourceSnapshotReader for ConcurrentReader {
 }
 
 #[test]
+fn source_opening_failures_preserve_exact_stage_without_physical_paths() {
+    let directory = TempDirectory::new();
+    let evidence_path = directory.0.join("private-source.png");
+    let cases = [
+        (
+            SourceSnapshotError::Io {
+                stage: SourceReadStage::Open,
+                path: evidence_path.clone(),
+            },
+            RasterImportFailure::SourceUnavailable,
+        ),
+        (
+            SourceSnapshotError::NotRegularFile {
+                path: evidence_path.clone(),
+            },
+            RasterImportFailure::NonRegularSource,
+        ),
+        (
+            SourceSnapshotError::SymlinkRejected {
+                path: evidence_path.clone(),
+            },
+            RasterImportFailure::SymlinkRejected,
+        ),
+        (
+            SourceSnapshotError::SourceChanged {
+                path: evidence_path.clone(),
+            },
+            RasterImportFailure::SourceChanged,
+        ),
+        (
+            SourceSnapshotError::SourceTooLarge {
+                path: evidence_path.clone(),
+                limit: 4,
+                actual: 5,
+            },
+            RasterImportFailure::SourceTooLarge,
+        ),
+        (
+            SourceSnapshotError::EmptySource,
+            RasterImportFailure::SourceUnavailable,
+        ),
+        (
+            SourceSnapshotError::AllocationFailure {
+                path: evidence_path.clone(),
+            },
+            RasterImportFailure::SourceUnavailable,
+        ),
+        (
+            SourceSnapshotError::LengthConversion,
+            RasterImportFailure::InternalInvariant,
+        ),
+        (
+            SourceSnapshotError::MaxPlusOneOverflow,
+            RasterImportFailure::InternalInvariant,
+        ),
+    ];
+
+    for (index, (source_error, expected_failure)) in cases.into_iter().enumerate() {
+        let selected_path = directory.0.join(format!("selected-{index}.png"));
+        let request = RasterImportRequest::new([selected_path]).unwrap();
+        let reader = OpeningFails(source_error);
+        let service = RasterImportService::new(
+            ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+            &reader,
+            &ConstantImageInput,
+            &EmptyMetadata,
+        );
+        let mut catalog = MemoryCatalog::default();
+
+        let batch = service.import(
+            &request,
+            &mut catalog,
+            &CheckedPreview,
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let receipt = batch.receipts().next().unwrap();
+
+        assert_eq!(receipt.schema_version, 3);
+        assert_eq!(receipt.source_alias, format!("selected-{index}.png"));
+        assert_eq!(receipt.status, RasterImportStatus::Failed(expected_failure));
+        assert_eq!(receipt.failure_stage, Some(RasterImportStage::Opening));
+        assert_eq!(receipt.preview_failure, None);
+        assert_eq!(receipt.content_sha256, None);
+        assert_eq!(receipt.format, None);
+        assert!(!format!("{receipt:?}").contains(directory.0.to_str().unwrap()));
+    }
+}
+
+#[test]
+fn probe_failure_preserves_hash_and_probing_stage_without_a_format() {
+    let directory = TempDirectory::new();
+    let path = directory.write("malformed.png", b"not an image");
+    let request = RasterImportRequest::new([path]).unwrap();
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service().import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let receipt = batch.receipts().next().unwrap();
+
+    assert_eq!(receipt.schema_version, 3);
+    assert_eq!(
+        receipt.status,
+        RasterImportStatus::Failed(RasterImportFailure::UnsupportedOrMalformedRaster)
+    );
+    assert_eq!(receipt.failure_stage, Some(RasterImportStage::Probing));
+    assert_eq!(receipt.preview_failure, None);
+    assert!(receipt.content_sha256.is_some());
+    assert_eq!(receipt.format, None);
+}
+
+#[test]
+fn source_changed_during_registration_retains_decode_evidence_and_registration_stage() {
+    let directory = TempDirectory::new();
+    let path = directory.write("changed.png", &fixture("rgba-2x1.png.b64"));
+    let request = RasterImportRequest::new([path]).unwrap();
+    let reader = RevalidationFails {
+        delegate: FileSourceSnapshotReader,
+    };
+    let image = FileImageInput::new(
+        DecodeLimits::new(4 * 1024 * 1024, 8_192, 8_192, 32_000_000, 128_000_000).unwrap(),
+    );
+    let service = RasterImportService::new(
+        ImportSourceLimits::new(4 * 1024 * 1024).unwrap(),
+        &reader,
+        &image,
+        &EmptyMetadata,
+    );
+    let mut catalog = MemoryCatalog::default();
+
+    let batch = service.import(
+        &request,
+        &mut catalog,
+        &CheckedPreview,
+        &RasterImportCancellation::default(),
+        &|_| {},
+    );
+    let receipt = batch.receipts().next().unwrap();
+
+    assert_eq!(
+        receipt.status,
+        RasterImportStatus::Failed(RasterImportFailure::SourceChanged)
+    );
+    assert_eq!(receipt.failure_stage, Some(RasterImportStage::Registering));
+    assert_eq!(receipt.preview_failure, None);
+    assert!(receipt.content_sha256.is_some());
+    assert_eq!(receipt.format, Some(InputFormat::Png));
+}
+
+#[test]
+fn catalog_failure_matrix_retains_decode_evidence_and_registration_stage() {
+    let cases = [
+        (
+            AtomicRasterCatalogError::Unavailable,
+            RasterImportFailure::CatalogUnavailable,
+        ),
+        (
+            AtomicRasterCatalogError::Conflict,
+            RasterImportFailure::CatalogConflict,
+        ),
+        (
+            AtomicRasterCatalogError::Corrupt,
+            RasterImportFailure::CatalogCorrupt,
+        ),
+        (
+            AtomicRasterCatalogError::CommitFailed,
+            RasterImportFailure::CatalogCommitFailed,
+        ),
+    ];
+
+    for (index, (catalog_error, expected_failure)) in cases.into_iter().enumerate() {
+        let directory = TempDirectory::new();
+        let path = directory.write(
+            &format!("catalog-{index}.png"),
+            &fixture("rgba-2x1.png.b64"),
+        );
+        let request = RasterImportRequest::new([path]).unwrap();
+        let mut catalog = MemoryCatalog {
+            fail_find_by_source: Some(catalog_error),
+            ..MemoryCatalog::default()
+        };
+
+        let batch = service().import(
+            &request,
+            &mut catalog,
+            &CheckedPreview,
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let receipt = batch.receipts().next().unwrap();
+
+        assert_eq!(receipt.status, RasterImportStatus::Failed(expected_failure));
+        assert_eq!(receipt.failure_stage, Some(RasterImportStage::Registering));
+        assert_eq!(receipt.preview_failure, None);
+        assert!(receipt.content_sha256.is_some());
+        assert_eq!(receipt.format, Some(InputFormat::Png));
+        assert!(catalog.entries.is_empty());
+    }
+}
+
+#[test]
+fn preview_failure_matrix_preserves_exact_typed_error_and_import_evidence() {
+    for (index, error) in [
+        RasterPreviewError::Unavailable,
+        RasterPreviewError::SourceChanged,
+        RasterPreviewError::Decode,
+        RasterPreviewError::RawDecode,
+        RasterPreviewError::DecodedFrame,
+        RasterPreviewError::UnsupportedPixelpipeColor,
+        RasterPreviewError::PixelpipeInput,
+        RasterPreviewError::PixelpipeSnapshot,
+        RasterPreviewError::Graph,
+        RasterPreviewError::RawPipeline,
+        RasterPreviewError::Pixelpipe,
+        RasterPreviewError::Prepared,
+        RasterPreviewError::Render,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let directory = TempDirectory::new();
+        let path = directory.write(
+            &format!("preview-{index}.png"),
+            &fixture("rgba-2x1.png.b64"),
+        );
+        let request = RasterImportRequest::new([path]).unwrap();
+        let mut catalog = MemoryCatalog::default();
+
+        let batch = service().import(
+            &request,
+            &mut catalog,
+            &FailingPreview(error),
+            &RasterImportCancellation::default(),
+            &|_| {},
+        );
+        let receipt = batch.receipts().next().unwrap();
+
+        assert_eq!(receipt.schema_version, 3);
+        assert_eq!(receipt.status, RasterImportStatus::ImportedPreviewFailed);
+        assert_eq!(
+            receipt.failure_stage,
+            Some(RasterImportStage::GeneratingPreview)
+        );
+        assert_eq!(receipt.preview_failure, Some(error));
+        assert!(receipt.content_sha256.is_some());
+        assert_eq!(receipt.format, Some(InputFormat::Png));
+        assert!(receipt.photo_id.is_some());
+        assert!(receipt.asset_id.is_some());
+        assert!(receipt.edit_id.is_some());
+        assert_eq!(receipt.preview, None);
+        assert_eq!(catalog.entries.len(), 1);
+    }
+}
+
+#[test]
 fn six_items_use_at_most_four_preparations_and_keep_request_order() {
     let directory = TempDirectory::new();
     let bytes = fixture("rgba-2x1.png.b64");
@@ -433,6 +747,17 @@ fn six_items_use_at_most_four_preparations_and_keep_request_order() {
 
     assert_eq!(reader.maximum_active.load(Ordering::Acquire), 4);
     assert_eq!(receipts.len(), 6);
+    assert!(receipts.iter().all(|receipt| receipt.schema_version == 3));
+    assert!(
+        receipts
+            .iter()
+            .all(|receipt| receipt.failure_stage.is_none())
+    );
+    assert!(
+        receipts
+            .iter()
+            .all(|receipt| receipt.preview_failure.is_none())
+    );
     assert_eq!(
         receipts
             .iter()
@@ -646,10 +971,14 @@ fn duplicate_query_error_fails_before_catalog_mutation() {
         &|_| {},
     );
 
+    let receipt = batch.receipts().next().unwrap();
     assert_eq!(
-        batch.receipts().next().unwrap().status,
-        RasterImportStatus::Failed(rusttable_import::RasterImportFailure::CatalogCorrupt)
+        receipt.status,
+        RasterImportStatus::Failed(RasterImportFailure::CatalogCorrupt)
     );
+    assert_eq!(receipt.failure_stage, Some(RasterImportStage::Registering));
+    assert_eq!(receipt.preview_failure, None);
+    assert_eq!(receipt.format, Some(InputFormat::Png));
     assert!(catalog.entries.is_empty());
     assert!(catalog.duplicate_evidence.is_empty());
 }
@@ -672,10 +1001,14 @@ fn catalog_commit_failure_leaves_no_partial_photo_or_edit() {
         &|_| {},
     );
 
-    assert!(matches!(
-        batch.receipts().next().unwrap().status,
-        RasterImportStatus::Failed(rusttable_import::RasterImportFailure::CatalogCommitFailed)
-    ));
+    let receipt = batch.receipts().next().unwrap();
+    assert_eq!(
+        receipt.status,
+        RasterImportStatus::Failed(RasterImportFailure::CatalogCommitFailed)
+    );
+    assert_eq!(receipt.failure_stage, Some(RasterImportStage::Registering));
+    assert_eq!(receipt.preview_failure, None);
+    assert_eq!(receipt.format, Some(InputFormat::Png));
     assert!(catalog.entries.is_empty());
     assert!(catalog.duplicate_evidence.is_empty());
 }
@@ -702,10 +1035,10 @@ fn cancellation_before_commit_creates_no_catalog_record() {
         &observer,
     );
 
-    assert_eq!(
-        batch.receipts().next().unwrap().status,
-        RasterImportStatus::Cancelled
-    );
+    let receipt = batch.receipts().next().unwrap();
+    assert_eq!(receipt.status, RasterImportStatus::Cancelled);
+    assert_eq!(receipt.failure_stage, None);
+    assert_eq!(receipt.preview_failure, None);
     assert!(catalog.entries.is_empty());
     assert!(catalog.duplicate_evidence.is_empty());
 }
@@ -729,10 +1062,10 @@ fn cancellation_during_duplicate_query_prevents_catalog_commit() {
         &|_| {},
     );
 
-    assert_eq!(
-        batch.receipts().next().unwrap().status,
-        RasterImportStatus::Cancelled
-    );
+    let receipt = batch.receipts().next().unwrap();
+    assert_eq!(receipt.status, RasterImportStatus::Cancelled);
+    assert_eq!(receipt.failure_stage, None);
+    assert_eq!(receipt.preview_failure, None);
     assert!(catalog.entries.is_empty());
     assert!(catalog.duplicate_evidence.is_empty());
 }
@@ -908,12 +1241,15 @@ fn full_decode_failure_remains_fatal_before_metadata_registration() {
         &|_| {},
     );
 
+    let receipt = batch.receipts().next().unwrap();
     assert_eq!(
-        batch.receipts().next().unwrap().status,
-        RasterImportStatus::Failed(
-            rusttable_import::RasterImportFailure::UnsupportedOrMalformedRaster
-        )
+        receipt.status,
+        RasterImportStatus::Failed(RasterImportFailure::UnsupportedOrMalformedRaster)
     );
+    assert_eq!(receipt.failure_stage, Some(RasterImportStage::Decoding));
+    assert_eq!(receipt.preview_failure, None);
+    assert!(receipt.content_sha256.is_some());
+    assert_eq!(receipt.format, Some(InputFormat::Png));
     assert!(catalog.entries.is_empty());
 }
 

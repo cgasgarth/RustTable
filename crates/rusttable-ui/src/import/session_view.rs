@@ -177,27 +177,35 @@ fn review_row(
     handler: Rc<RefCell<Option<ActionHandler>>>,
 ) -> gtk4::ListBoxRow {
     let list_row = gtk4::ListBoxRow::new();
-    let box_widget = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-    box_widget.set_margin_top(3);
-    box_widget.set_margin_bottom(3);
+    let row_content = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    row_content.set_margin_top(3);
+    row_content.set_margin_bottom(3);
+    let summary = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     let alias = gtk4::Label::new(Some(&row.alias));
     alias.set_halign(gtk4::Align::Start);
     alias.set_hexpand(true);
     alias.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
-    box_widget.append(&alias);
+    summary.append(&alias);
     let result = gtk4::Label::new(Some(row.outcome.label()));
     result.set_halign(gtk4::Align::End);
-    box_widget.append(&result);
-    if let Some(detail) = &row.detail {
-        result.set_tooltip_text(Some(detail));
-    }
+    summary.append(&result);
     if row.outcome.can_retry() {
         let retry = button("import-session-retry", "Retry");
         let item_id = row.item_id.clone();
         retry.connect_clicked(move |_| emit(&handler, ImportSessionAction::Retry(item_id.clone())));
-        box_widget.append(&retry);
+        summary.append(&retry);
     }
-    list_row.set_child(Some(&box_widget));
+    row_content.append(&summary);
+    if let Some(detail) = &row.detail {
+        let detail_label = gtk4::Label::new(Some(detail));
+        detail_label.set_widget_name("import-session-row-detail");
+        detail_label.set_halign(gtk4::Align::Start);
+        detail_label.set_wrap(true);
+        detail_label.set_xalign(0.0);
+        detail_label.add_css_class("dim-label");
+        row_content.append(&detail_label);
+    }
+    list_row.set_child(Some(&row_content));
     list_row
 }
 
