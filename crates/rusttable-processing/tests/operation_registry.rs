@@ -180,6 +180,27 @@ fn colorreconstruct_registry_keeps_deferred_capabilities_unavailable() {
 }
 
 #[test]
+fn crop_keeps_cpu_execution_but_fails_closed_for_ui_context() {
+    let definition = builtin_registry()
+        .definition("rusttable.crop")
+        .expect("Crop registry seam");
+    assert!(definition.availability().is_available());
+    assert!(definition.cpu().is_some());
+    assert_eq!(
+        definition.ui_availability(),
+        &OperationUiAvailability::Unavailable {
+            reason: "Crop editing requires transformed crop-stage preview context".to_owned(),
+        }
+    );
+    assert!(!definition.ui_availability().is_available());
+    assert!(!definition.ui_availability().is_usable());
+    assert_eq!(
+        definition.ui_availability().reason(),
+        Some("Crop editing requires transformed crop-stage preview context")
+    );
+}
+
+#[test]
 fn operation_registry_keeps_unknown_imported_identity_opaque() {
     let error = builtin_registry()
         .prepare_cpu(&operation(7, "rusttable.unknown", &[]))

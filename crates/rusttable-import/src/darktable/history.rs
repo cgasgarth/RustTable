@@ -25,6 +25,9 @@ use rusttable_processing::operations::colorreconstruction::{
     ColorReconstructionConfig, ColorReconstructionV1, ColorReconstructionV2, ColorReconstructionV3,
     migrate_v1 as migrate_colorreconstruction_v1, migrate_v2 as migrate_colorreconstruction_v2,
 };
+use rusttable_processing::operations::crop::{
+    CROP_PARAMETER_BYTES, CropCodecError, CropConfig, CropParametersV3,
+};
 use rusttable_processing::operations::velvia::{
     VELVIA_V2_PARAMETER_BYTES, VelviaConfig, VelviaHistory,
 };
@@ -37,6 +40,7 @@ const BLOOM_COMPATIBILITY_NAME: &str = "bloom";
 const COLOR_CONTRAST_COMPATIBILITY_NAME: &str = "colorcontrast";
 const COLORCORRECTION_COMPATIBILITY_NAME: &str = "colorcorrection";
 const COLORRECONSTRUCTION_COMPATIBILITY_NAME: &str = "colorreconstruct";
+const CROP_COMPATIBILITY_NAME: &str = "crop";
 const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
 
@@ -182,6 +186,25 @@ pub struct DecodedColorReconstructionHistoryStep {
     pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
+/// One decoded Crop v3 core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedCropHistoryStep {
+    /// The exact original row, including opaque blend and multi-instance metadata.
+    pub source: CompatHistoryStep,
+    /// Checked current v3 core parameters.
+    pub config: CropConfig,
+    /// Native enabled state retained without creating an executable operation.
+    pub enabled: bool,
+    /// Original Darktable parameter version.
+    pub source_version: u16,
+    /// Canonical 24-byte current-version parameters in native field order.
+    pub canonical_parameters: [u8; CROP_PARAMETER_BYTES],
+    /// Whether the source payload required a migration to v3.
+    pub migrated: bool,
+    /// Explicit reason no executable imported operation was emitted.
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
 /// One decoded Color Zones core whose complete Darktable row is not executable yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedColorZonesHistoryStep {
@@ -216,6 +239,9 @@ pub enum DarktableHistoryStepDecode {
     /// Color Reconstruction core parameters are decoded and migrated to canonical v3,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorReconstructionPendingBlend(DecodedColorReconstructionHistoryStep),
+    /// Crop v3 core parameters are decoded, while blend/mask semantics remain
+    /// explicitly non-executable.
+    CropPendingBlend(DecodedCropHistoryStep),
     /// Color Zones core parameters are decoded and migrated to canonical v5,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
@@ -249,6 +275,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(COLORRECONSTRUCTION_COMPATIBILITY_NAME) => {
             decode_colorreconstruction_history_step(step)
         }
+        Some(CROP_COMPATIBILITY_NAME) => decode_crop_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
@@ -519,6 +546,62 @@ fn encode_colorreconstruction_v3(
     bytes[12..16].copy_from_slice(&parameters.hue.to_le_bytes());
     bytes[16..20].copy_from_slice(&parameters.precedence.to_le_bytes());
     bytes
+}
+
+fn decode_crop_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Crop") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    if source_version != 3 {
+        let result = rusttable_processing::operations::crop::decode_legacy(
+            source_version,
+            &step.operation_params.bytes,
+        );
+        let (code, detail) = match result {
+            Err(CropCodecError::LegacyPayloadOpaque { expected, .. }) => (
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Crop v{source_version} payload remains opaque: the native {expected}-byte ABI layout requires source-context migration"
+                ),
+            ),
+            Err(error) => (
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Crop v{source_version} parameters could not be decoded: {error}"
+                ),
+            ),
+            Ok(()) => unreachable!("Crop legacy decoder never materializes a payload"),
+        };
+        return preserved(step, code, detail);
+    }
+
+    let parameters = match CropParametersV3::from_bytes(&step.operation_params.bytes) {
+        Ok(parameters) => parameters,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!("Darktable Crop v3 parameters could not be decoded: {error}"),
+            );
+        }
+    };
+    let config = parameters.config();
+    DarktableHistoryStepDecode::CropPendingBlend(DecodedCropHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        migrated: false,
+        execution_blocker: DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+            detail: format!(
+                "Darktable Crop core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+                step.blend_version
+            ),
+        },
+    })
 }
 
 fn decode_colorzones_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
