@@ -1020,6 +1020,9 @@ pub fn crop_definition() -> OperationDefinition {
             MigrationBinding::new(version, version + 1, format!("crop.migration.v{version}"))
         }),
     )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Crop editing requires transformed crop-stage preview context".to_owned(),
+    })
 }
 
 pub fn flip_definition() -> OperationDefinition {

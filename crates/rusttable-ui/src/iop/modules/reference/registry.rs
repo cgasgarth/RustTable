@@ -21,6 +21,9 @@ use crate::iop::colorreconstruct::{
 use crate::iop::colorzones::{
     COLORZONES_DESCRIPTION, COLORZONES_GROUP_KEYS, COLORZONES_MODULE_ID, COLORZONES_TITLE,
 };
+use crate::iop::crop::{
+    CROP_ALIASES, CROP_DESCRIPTION, CROP_GROUP_KEYS, CROP_MODULE_ID, CROP_TITLE,
+};
 use crate::iop::velvia::{VELVIA_MODULE_ID, VELVIA_SOURCE_MAP, VelviaSourceMap};
 use crate::iop::vibrance::{VIBRANCE_MODULE_ID, VIBRANCE_SOURCE_MAP, VibranceSourceMap};
 use crate::presentation::darkroom_controls::{DarkroomControlValue, DarkroomControlViewModel};
@@ -110,6 +113,7 @@ fn module_from_descriptor(
     let bloom_custom_editor = id == BLOOM_MODULE_ID;
     let colorreconstruct_custom_editor = id == COLORRECONSTRUCTION_MODULE_ID;
     let colorzones_custom_editor = id == COLORZONES_MODULE_ID;
+    let crop_editor = id == CROP_MODULE_ID;
     let custom_editor =
         bloom_custom_editor || colorreconstruct_custom_editor || colorzones_custom_editor;
     let mut controls = Vec::new();
@@ -131,6 +135,7 @@ fn module_from_descriptor(
         .then(|| BLOOM_TITLE.to_owned())
         .or_else(|| colorreconstruct_custom_editor.then(|| COLORRECONSTRUCTION_TITLE.to_owned()))
         .or_else(|| colorzones_custom_editor.then(|| COLORZONES_TITLE.to_owned()))
+        .or_else(|| crop_editor.then(|| CROP_TITLE.to_owned()))
         .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| velvia_source_map.map(|source_map| source_map.title().to_owned()))
@@ -180,6 +185,11 @@ fn module_from_descriptor(
             .with_description(COLORZONES_DESCRIPTION)
             .with_colorzones_custom_editor()
             .with_group_keys(COLORZONES_GROUP_KEYS);
+    } else if crop_editor {
+        module = module
+            .with_description(CROP_DESCRIPTION)
+            .with_group_keys(CROP_GROUP_KEYS)
+            .with_aliases(CROP_ALIASES);
     } else if let Some(source_map) = colorcorrection_source_map {
         module = module
             .with_color_correction_grid(ColorCorrectionGridState::DEFAULT)
@@ -624,6 +634,38 @@ mod tests {
         assert!(module.availability().is_unsupported());
         assert_eq!(module.controls().controls().len(), 0);
         assert_eq!(module.status_text(), "Unavailable · UI not implemented");
+    }
+
+    #[test]
+    fn crop_projects_exact_metadata_and_fails_closed_without_controls() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let crop = modules.module("crop").expect("Crop module");
+
+        assert_eq!(crop.title(), "crop");
+        assert_eq!(crop.description(), Some("change the framing"));
+        assert_eq!(
+            crop.group_keys().collect::<Vec<_>>(),
+            ["group.basic", "group.technical"]
+        );
+        assert_eq!(
+            crop.aliases().collect::<Vec<_>>(),
+            ["reframe", "distortion"]
+        );
+        assert!(crop.is_hidden());
+        assert!(!crop.enabled());
+        assert!(!crop.resettable());
+        assert!(crop.availability().is_unsupported());
+        assert_eq!(crop.controls().controls().len(), 0);
+        assert_eq!(
+            crop.status_text(),
+            "Unavailable · Crop editing requires transformed crop-stage preview context"
+        );
+
+        let definition = builtin_registry()
+            .definition("rusttable.crop")
+            .expect("Crop backend definition");
+        assert!(definition.cpu().is_some());
+        assert!(!definition.ui_availability().is_usable());
     }
 
     #[test]

@@ -17,6 +17,10 @@ use rusttable_processing::operations::colorcorrection::{
 use rusttable_processing::operations::colorreconstruction::{
     ColorReconstructionConfig, ColorReconstructionPrecedence,
 };
+use rusttable_processing::operations::crop::{
+    CROP_LEGACY_V1_BYTES, CROP_LEGACY_V2_BYTES, CROP_PARAMETER_BYTES, CropConfig,
+    CropLegacyParametersV1, CropLegacyParametersV2, CropParametersV3,
+};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
@@ -452,6 +456,104 @@ fn colorreconstruct_unknown_malformed_and_invalid_payloads_remain_byte_exact() {
         &unknown_precedence,
         DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
     );
+}
+
+#[test]
+fn crop_v3_decodes_exact_24_byte_native_field_order_pending_blend() {
+    let parameters = CropParametersV3::new(
+        CropConfig::new(0.125, 0.25, 0.875, 0.75, 3, -2).expect("finite crop parameters"),
+    );
+    let payload = vec![
+        0x00, 0x00, 0x00, 0x3e, // cx = 0.125
+        0x00, 0x00, 0x80, 0x3e, // cy = 0.25
+        0x00, 0x00, 0x60, 0x3f, // cw = 0.875
+        0x00, 0x00, 0x40, 0x3f, // ch = 0.75
+        0x03, 0x00, 0x00, 0x00, // ratio_n = 3
+        0xfe, 0xff, 0xff, 0xff, // ratio_d = -2
+    ];
+    assert_eq!(CROP_PARAMETER_BYTES, 24);
+    assert_eq!(parameters.to_bytes().as_slice(), payload.as_slice());
+    let source = history_step(b"crop", Some(3), Some(1), payload.clone());
+
+    let DarktableHistoryStepDecode::CropPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("known Crop v3 row must decode as typed pending blend");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source_version, 3);
+    assert!(imported.enabled);
+    assert!(!imported.migrated);
+    assert_eq!(imported.source.operation_params.bytes, payload);
+    assert_eq!(imported.canonical_parameters, parameters.to_bytes());
+    assert_eq!(imported.config, parameters.config());
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert!(imported.execution_blocker.detail.contains("blend/mask"));
+    assert!(imported.execution_blocker.detail.contains("multi-instance"));
+}
+
+#[test]
+fn crop_legacy_rows_use_native_sizes_and_remain_byte_exact_without_image_context() {
+    let v1 = CropLegacyParametersV1 {
+        cx: 0.125,
+        cy: 0.25,
+        cw: 0.875,
+        ch: 0.75,
+        ratio_n: 3,
+        ratio_d: -2,
+    };
+    assert_eq!(CROP_LEGACY_V1_BYTES, 24);
+    assert_preserved_exact(
+        &history_step(b"crop", Some(1), Some(1), v1.to_bytes().to_vec()),
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+
+    let v2 = CropLegacyParametersV2 {
+        cx: v1.cx,
+        cy: v1.cy,
+        cw: v1.cw,
+        ch: v1.ch,
+        ratio_n: v1.ratio_n,
+        ratio_d: v1.ratio_d,
+        aligned: 1,
+    };
+    assert_eq!(CROP_LEGACY_V2_BYTES, 28);
+    assert_eq!(&v2.to_bytes()[..24], v1.to_bytes().as_slice());
+    assert_eq!(&v2.to_bytes()[24..], &1_i32.to_le_bytes());
+    assert_preserved_exact(
+        &history_step(b"crop", Some(2), Some(1), v2.to_bytes().to_vec()),
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+}
+
+#[test]
+fn crop_malformed_and_nonfinite_rows_remain_byte_exact() {
+    for (version, payload) in [
+        (1, vec![0; CROP_LEGACY_V1_BYTES - 1]),
+        (2, vec![0; CROP_LEGACY_V2_BYTES + 1]),
+        (3, vec![0; CROP_PARAMETER_BYTES - 1]),
+    ] {
+        assert_preserved_exact(
+            &history_step(b"crop", Some(version), Some(1), payload),
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        );
+    }
+
+    for (version, length) in [
+        (1, CROP_LEGACY_V1_BYTES),
+        (2, CROP_LEGACY_V2_BYTES),
+        (3, CROP_PARAMETER_BYTES),
+    ] {
+        let mut nonfinite = vec![0_u8; length];
+        nonfinite[..4].copy_from_slice(&f32::NAN.to_le_bytes());
+        assert_preserved_exact(
+            &history_step(b"crop", Some(version), Some(1), nonfinite),
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        );
+    }
 }
 
 #[test]
@@ -1002,6 +1104,7 @@ fn manifest() -> DarktableOperationManifest {
     manifest.insert("colorcontrast", 2, [1, 2], None);
     manifest.insert("colorcorrection", 1, [1], None);
     manifest.insert("colorreconstruct", 3, [1, 2, 3], None);
+    manifest.insert("crop", 3, [1, 2, 3], None);
     manifest.insert("colorzones", 5, [1, 2, 3, 4, 5], None);
     manifest.insert("velvia", 2, [1, 2], None);
     manifest.insert("vibrance", 2, [2], None);

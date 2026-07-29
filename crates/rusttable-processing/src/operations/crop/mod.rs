@@ -28,9 +28,9 @@ pub use descriptor::crop_descriptor;
 pub const CROP_COMPATIBILITY_ID: &str = "crop";
 pub const CROP_RUST_ID: &str = "rusttable.crop";
 pub const CROP_SCHEMA_VERSION: u16 = 3;
-pub const CROP_PARAMETER_BYTES: usize = 32;
-pub const CROP_LEGACY_V1_BYTES: usize = 184;
-pub const CROP_LEGACY_V2_BYTES: usize = 208;
+pub const CROP_PARAMETER_BYTES: usize = 24;
+pub const CROP_LEGACY_V1_BYTES: usize = 24;
+pub const CROP_LEGACY_V2_BYTES: usize = 28;
 pub const MIN_CROP_SIZE: f32 = 0.01;
 pub const MIN_OUTPUT_EDGE: u32 = 4;
 
@@ -121,27 +121,17 @@ impl fmt::Display for CropConfigError {
 
 impl std::error::Error for CropConfigError {}
 
-/// The modern v3 DTO, including the eight bytes of ABI padding retained in
-/// imported history. The old C payloads are intentionally opaque because
-/// their layouts are platform-dependent and are not safe portable decoders.
+/// The modern v3 DTO in the exact native layout: four `f32` fields followed
+/// by two `i32` fields, with no trailing padding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CropParametersV3 {
     config: CropConfig,
-    padding: [u8; 8],
 }
 
 impl CropParametersV3 {
     #[must_use]
     pub const fn new(config: CropConfig) -> Self {
-        Self {
-            config,
-            padding: [0; 8],
-        }
-    }
-
-    #[must_use]
-    pub const fn with_padding(config: CropConfig, padding: [u8; 8]) -> Self {
-        Self { config, padding }
+        Self { config }
     }
 
     #[must_use]
@@ -149,46 +139,15 @@ impl CropParametersV3 {
         self.config
     }
 
-    #[must_use]
-    pub const fn padding(self) -> [u8; 8] {
-        self.padding
-    }
-
-    /// Encodes the stable little-endian modern payload and preserves padding.
+    /// Encodes the stable little-endian 24-byte native v3 payload.
     #[must_use]
     pub fn to_bytes(self) -> [u8; CROP_PARAMETER_BYTES] {
-        let mut bytes = [0; CROP_PARAMETER_BYTES];
-        write_f32(&mut bytes[0..4], self.config.cx().get());
-        write_f32(&mut bytes[4..8], self.config.cy().get());
-        write_f32(&mut bytes[8..12], self.config.cw().get());
-        write_f32(&mut bytes[12..16], self.config.ch().get());
-        bytes[16..20].copy_from_slice(&self.config.ratio_n().to_le_bytes());
-        bytes[20..24].copy_from_slice(&self.config.ratio_d().to_le_bytes());
-        bytes[24..32].copy_from_slice(&self.padding);
-        bytes
+        encode_config(self.config)
     }
 
-    /// Decodes exactly the modern v3 payload.
+    /// Decodes exactly the 24-byte native v3 payload.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, CropCodecError> {
-        if bytes.len() != CROP_PARAMETER_BYTES {
-            return Err(CropCodecError::InvalidLength {
-                expected: CROP_PARAMETER_BYTES,
-                actual: bytes.len(),
-            });
-        }
-        let config = CropConfig::new(
-            read_f32(&bytes[0..4]),
-            read_f32(&bytes[4..8]),
-            read_f32(&bytes[8..12]),
-            read_f32(&bytes[12..16]),
-            i32::from_le_bytes(bytes[16..20].try_into().expect("checked slice")),
-            i32::from_le_bytes(bytes[20..24].try_into().expect("checked slice")),
-        )
-        .map_err(CropCodecError::Config)?;
-        Ok(Self::with_padding(
-            config,
-            bytes[24..32].try_into().expect("checked slice"),
-        ))
+        Ok(Self::new(decode_config(bytes, CROP_PARAMETER_BYTES)?))
     }
 }
 
@@ -219,8 +178,7 @@ impl fmt::Display for CropCodecError {
 
 impl std::error::Error for CropCodecError {}
 
-/// Semantic representation of darktable's v1 payload for migration tests and
-/// audited adapters. Raw v1 bytes remain opaque at the persistence boundary.
+/// Exact semantic representation of darktable's 24-byte v1 payload.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CropLegacyParametersV1 {
     pub cx: f32,
@@ -231,8 +189,35 @@ pub struct CropLegacyParametersV1 {
     pub ratio_d: i32,
 }
 
-/// Semantic representation of darktable's v2 payload. `aligned` was removed
-/// in v3 after being folded into the crop geometry behavior.
+impl CropLegacyParametersV1 {
+    #[must_use]
+    pub fn to_bytes(self) -> [u8; CROP_LEGACY_V1_BYTES] {
+        encode_fields(
+            self.cx,
+            self.cy,
+            self.cw,
+            self.ch,
+            self.ratio_n,
+            self.ratio_d,
+        )
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CropCodecError> {
+        let config = decode_config(bytes, CROP_LEGACY_V1_BYTES)?;
+        Ok(Self {
+            cx: config.cx().get(),
+            cy: config.cy().get(),
+            cw: config.cw().get(),
+            ch: config.ch().get(),
+            ratio_n: config.ratio_n(),
+            ratio_d: config.ratio_d(),
+        })
+    }
+}
+
+/// Exact semantic representation of darktable's 28-byte v2 payload. Native
+/// `gboolean` is a signed 32-bit integer; retaining it as `i32` avoids
+/// normalizing unusual but byte-valid persisted values before v3 drops it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CropLegacyParametersV2 {
     pub cx: f32,
@@ -241,7 +226,43 @@ pub struct CropLegacyParametersV2 {
     pub ch: f32,
     pub ratio_n: i32,
     pub ratio_d: i32,
-    pub aligned: bool,
+    pub aligned: i32,
+}
+
+impl CropLegacyParametersV2 {
+    #[must_use]
+    pub fn to_bytes(self) -> [u8; CROP_LEGACY_V2_BYTES] {
+        let mut bytes = [0; CROP_LEGACY_V2_BYTES];
+        bytes[..CROP_LEGACY_V1_BYTES].copy_from_slice(&encode_fields(
+            self.cx,
+            self.cy,
+            self.cw,
+            self.ch,
+            self.ratio_n,
+            self.ratio_d,
+        ));
+        bytes[24..28].copy_from_slice(&self.aligned.to_le_bytes());
+        bytes
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CropCodecError> {
+        if bytes.len() != CROP_LEGACY_V2_BYTES {
+            return Err(CropCodecError::InvalidLength {
+                expected: CROP_LEGACY_V2_BYTES,
+                actual: bytes.len(),
+            });
+        }
+        let v1 = CropLegacyParametersV1::from_bytes(&bytes[..CROP_LEGACY_V1_BYTES])?;
+        Ok(Self {
+            cx: v1.cx,
+            cy: v1.cy,
+            cw: v1.cw,
+            ch: v1.ch,
+            ratio_n: v1.ratio_n,
+            ratio_d: v1.ratio_d,
+            aligned: i32::from_le_bytes(bytes[24..28].try_into().expect("checked slice")),
+        })
+    }
 }
 
 /// Dimensions/orientation needed to reproduce darktable's v2→v3 recovery for
@@ -279,14 +300,12 @@ impl CropMigrationContext {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CropMigrationError {
     Config(CropConfigError),
-    InvalidContext,
 }
 
 impl fmt::Display for CropMigrationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Config(error) => write!(formatter, "crop migration config error: {error}"),
-            Self::InvalidContext => formatter.write_str("crop migration context is invalid"),
         }
     }
 }
@@ -312,21 +331,19 @@ pub fn migrate_v1(
         ch: value.ch,
         ratio_n: value.ratio_n,
         ratio_d: value.ratio_d,
-        aligned: false,
+        aligned: 0,
     })
 }
 
-/// Converts v2 to modern v3 and reproduces darktable's guarded recovery of
-/// malformed original-image square crops. The `aligned` bit is intentionally
-/// discarded because v3 has no such field.
+/// Converts v2 to modern v3 and drops native's removed `gboolean`. When the
+/// owning develop/image state is available, this also reproduces the guarded
+/// issue #19919 recovery. With no context, native's `self && self->dev` guard
+/// skips that recovery and the first 24 bytes pass through unchanged.
 pub fn migrate_v2(
     value: CropLegacyParametersV2,
-    context: CropMigrationContext,
+    context: Option<CropMigrationContext>,
 ) -> Result<CropParametersV3, CropMigrationError> {
     ensure_finite([value.cx, value.cy, value.cw, value.ch])?;
-    if context.image_width == 0 || context.image_height == 0 {
-        return Err(CropMigrationError::InvalidContext);
-    }
     let mut current = CropConfig::new(
         value.cx,
         value.cy,
@@ -335,7 +352,10 @@ pub fn migrate_v2(
         value.ratio_n,
         value.ratio_d,
     )?;
-    if value.ratio_n == 0 && value.ratio_d.unsigned_abs() == 1 {
+    if value.ratio_n == 0
+        && value.ratio_d.unsigned_abs() == 1
+        && let Some(context) = context
+    {
         recover_original_square(&mut current, context);
     }
     Ok(CropParametersV3::new(current))
@@ -356,11 +376,14 @@ pub fn decode_legacy(version: u16, bytes: &[u8]) -> Result<(), CropCodecError> {
         version,
         expected: 0,
     })?;
-    if bytes.len() != expected {
-        return Err(CropCodecError::InvalidLength {
-            expected,
-            actual: bytes.len(),
-        });
+    match version {
+        1 => {
+            CropLegacyParametersV1::from_bytes(bytes)?;
+        }
+        2 => {
+            CropLegacyParametersV2::from_bytes(bytes)?;
+        }
+        _ => unreachable!("legacy payload size exists only for v1 and v2"),
     }
     Err(CropCodecError::LegacyPayloadOpaque { version, expected })
 }
@@ -490,7 +513,7 @@ impl CropPlan {
         let input_roi =
             normalized_roi(config, source_dimensions).map_err(CropPlanError::Geometry)?;
         let input_roi = if mode == CropPlanMode::Export {
-            align_export_roi(input_roi, config)?
+            align_export_roi(input_roi, config, source_dimensions)?
         } else {
             input_roi
         };
@@ -712,28 +735,66 @@ fn normalized_roi(
     Ok(roi)
 }
 
-fn align_export_roi(mut roi: CropRoi, config: CropConfig) -> Result<CropRoi, CropPlanError> {
+fn align_export_roi(
+    roi: CropRoi,
+    config: CropConfig,
+    source_dimensions: RasterDimensions,
+) -> Result<CropRoi, CropPlanError> {
     if config.ratio_n() == 0 || config.ratio_d() == 0 {
         return Ok(roi);
     }
-    let mut align_w = config.ratio_d().unsigned_abs().max(1);
-    let mut align_h = config.ratio_n().unsigned_abs().max(1);
-    for divisor in (2..=7).rev() {
-        while align_w % divisor == 0 && align_h % divisor == 0 {
-            align_w /= divisor;
-            align_h /= divisor;
+
+    // `commit_params()` stores ratio_d / ratio_n in `d->aspect`. A negative
+    // aspect is the native orientation-toggle marker. `modify_roi_out()` still
+    // computes the aspect-corrected dimensions, but uses them only in its pipe
+    // diagnostic; alignment and the final ROI continue to use the raw ROI.
+    let native_aspect = config.ratio_d() as f32 / config.ratio_n() as f32;
+    let aspect = if native_aspect < 0.0 {
+        (1.0 / native_aspect).abs()
+    } else {
+        native_aspect
+    };
+    let keep_aspect = aspect > 1e-5;
+    if !aspect.is_finite() {
+        return Err(CropPlanError::Geometry(CropGeometryError::NonFiniteAspect));
+    }
+
+    let cx = config.cx().get().clamp(0.0, 1.0 - MIN_CROP_SIZE);
+    let cy = config.cy().get().clamp(0.0, 1.0 - MIN_CROP_SIZE);
+    let cw = config.cw().get().clamp(MIN_CROP_SIZE, 1.0);
+    let ch = config.ch().get().clamp(MIN_CROP_SIZE, 1.0);
+    let odx = ((cw - cx) * source_dimensions.width() as f32).floor();
+    let ody = ((ch - cy) * source_dimensions.height() as f32).floor();
+    let landscape = source_dimensions.width() >= source_dimensions.height();
+    let mut diagnostic_width = odx;
+    let mut diagnostic_height = ody;
+    if keep_aspect {
+        if odx > ody {
+            diagnostic_height = (if landscape {
+                odx / aspect
+            } else {
+                odx * aspect
+            })
+            .floor();
+        } else {
+            diagnostic_width = (if landscape {
+                ody * aspect
+            } else {
+                ody / aspect
+            })
+            .floor();
         }
     }
-    if align_w > 16 || align_h > 16 || (align_w == 1 && align_h == 1) {
-        return Ok(roi);
-    }
-    let (align_width, align_height) = if roi.width() >= roi.height() {
-        (align_w, align_h)
+    let _ = (diagnostic_width, diagnostic_height);
+
+    let (align_w, align_h) = if roi.width() >= roi.height() {
+        (config.ratio_d(), config.ratio_n())
     } else {
-        (align_h, align_w)
+        (config.ratio_n(), config.ratio_d())
     };
-    let drop_width = roi.width() % align_width;
-    let drop_height = roi.height() % align_height;
+    let (align_w, align_h, exact) = reduce_aligners(align_w, align_h);
+    let drop_width = if exact { roi.width() % align_w } else { 0 };
+    let drop_height = if exact { roi.height() % align_h } else { 0 };
     let width = roi.width().saturating_sub(drop_width).max(MIN_OUTPUT_EDGE);
     let height = roi
         .height()
@@ -751,8 +812,24 @@ fn align_export_roi(mut roi: CropRoi, config: CropConfig) -> Result<CropRoi, Cro
         .ok_or(CropPlanError::Geometry(
             CropGeometryError::ArithmeticOverflow,
         ))?;
-    roi = CropRoi::new(x, y, width, height).map_err(CropPlanError::Geometry)?;
+    let roi = CropRoi::new(x, y, width, height).map_err(CropPlanError::Geometry)?;
+    if roi.right() > source_dimensions.width() || roi.bottom() > source_dimensions.height() {
+        return Err(CropPlanError::Geometry(CropGeometryError::OutsideSource));
+    }
     Ok(roi)
+}
+
+fn reduce_aligners(align_w: i32, align_h: i32) -> (u32, u32, bool) {
+    let mut align_w = align_w.unsigned_abs().max(1);
+    let mut align_h = align_h.unsigned_abs().max(1);
+    for divisor in (2..=7).rev() {
+        while align_w % divisor == 0 && align_h % divisor == 0 {
+            align_w /= divisor;
+            align_h /= divisor;
+        }
+    }
+    let exact = align_w <= 16 && align_h <= 16 && (align_w > 1 || align_h > 1);
+    (align_w, align_h, exact)
 }
 
 fn crop_aspect(
@@ -813,71 +890,49 @@ fn transform_points(
 }
 
 fn recover_original_square(config: &mut CropConfig, context: CropMigrationContext) {
-    let width = context.image_width.max(1) as f32;
-    let height = context.image_height.max(1) as f32;
-    if context.image_width <= 4 || context.image_height <= 4 {
-        return;
-    }
-    let landscape = if context.swaps_xy {
-        height > width
-    } else {
-        width >= height
-    };
-    let (wd, ht) = if landscape {
-        (width, height)
-    } else {
-        (height, width)
-    };
-    let ratio = if wd >= ht { wd / ht } else { ht / wd };
+    let pwd = context.image_width.max(1) as f32;
+    let pht = context.image_height.max(1) as f32;
+    let safe = context.image_width > 4 && context.image_height > 4;
+    let ratio = if safe { pwd / pht } else { 1.0 };
+    let landscape = !context.swaps_xy;
+    let (wd, ht) = if landscape { (pwd, pht) } else { (pht, pwd) };
     let px = config.cx().get() * wd;
     let py = config.cy().get() * ht;
     let dx = (config.cw().get() - config.cx().get()) * wd;
     let dy = (config.ch().get() - config.cy().get()) * ht;
     let correct =
         approximately_equal(ratio, dx / dy, 0.01) || approximately_equal(ratio, dy / dx, 0.01);
-    if correct {
+    if correct || !safe {
         return;
     }
+
     let flipped = config.ratio_d() < 0;
-    let new_width = if landscape {
-        if flipped { dy / ratio } else { dx }
+    let mut cw = config.cw().get();
+    let mut ch = config.ch().get();
+    if landscape {
+        if flipped {
+            cw = (dy / ratio + px) / wd;
+        } else {
+            ch = (dx / ratio + py) / ht;
+        }
     } else if flipped {
-        dy * ratio
+        cw = (dy * ratio + px) / wd;
     } else {
-        dy / ratio
-    };
-    let new_height = if landscape && !flipped {
-        dx / ratio
-    } else {
-        dy
-    };
-    if new_width.is_finite() && new_height.is_finite() && new_width > 0.0 && new_height > 0.0 {
-        let cw = if landscape && !flipped {
-            config.cw().get()
-        } else {
-            (new_width + px) / wd
-        };
-        let ch = if landscape && !flipped {
-            (new_height + py) / ht
-        } else {
-            config.ch().get()
-        };
-        *config = CropConfig::new(
-            config.cx().get(),
-            config.cy().get(),
-            cw,
-            ch,
-            config.ratio_n(),
-            config.ratio_d(),
-        )
-        .expect("finite recovered crop");
+        cw = (dy / ratio + px) / wd;
     }
+    *config = CropConfig::new(
+        config.cx().get(),
+        config.cy().get(),
+        cw,
+        ch,
+        config.ratio_n(),
+        config.ratio_d(),
+    )
+    .expect("finite dimensions and crop fields produce finite recovery");
 }
 
 fn approximately_equal(left: f32, right: f32, tolerance: f32) -> bool {
-    left.is_finite()
-        && right.is_finite()
-        && (left - right).abs() <= tolerance * left.abs().max(right.abs()).max(1.0)
+    (left - right).abs() < tolerance
 }
 
 fn finite(value: f32) -> Result<FiniteF32, CropConfigError> {
@@ -890,6 +945,53 @@ fn ensure_finite(values: [f32; 4]) -> Result<(), CropMigrationError> {
     } else {
         Err(CropMigrationError::Config(CropConfigError::NonFinite))
     }
+}
+
+fn encode_config(config: CropConfig) -> [u8; CROP_PARAMETER_BYTES] {
+    encode_fields(
+        config.cx().get(),
+        config.cy().get(),
+        config.cw().get(),
+        config.ch().get(),
+        config.ratio_n(),
+        config.ratio_d(),
+    )
+}
+
+fn encode_fields(
+    cx: f32,
+    cy: f32,
+    cw: f32,
+    ch: f32,
+    ratio_n: i32,
+    ratio_d: i32,
+) -> [u8; CROP_PARAMETER_BYTES] {
+    let mut bytes = [0; CROP_PARAMETER_BYTES];
+    write_f32(&mut bytes[0..4], cx);
+    write_f32(&mut bytes[4..8], cy);
+    write_f32(&mut bytes[8..12], cw);
+    write_f32(&mut bytes[12..16], ch);
+    bytes[16..20].copy_from_slice(&ratio_n.to_le_bytes());
+    bytes[20..24].copy_from_slice(&ratio_d.to_le_bytes());
+    bytes
+}
+
+fn decode_config(bytes: &[u8], expected: usize) -> Result<CropConfig, CropCodecError> {
+    if bytes.len() != expected {
+        return Err(CropCodecError::InvalidLength {
+            expected,
+            actual: bytes.len(),
+        });
+    }
+    CropConfig::new(
+        read_f32(&bytes[0..4]),
+        read_f32(&bytes[4..8]),
+        read_f32(&bytes[8..12]),
+        read_f32(&bytes[12..16]),
+        i32::from_le_bytes(bytes[16..20].try_into().expect("checked slice")),
+        i32::from_le_bytes(bytes[20..24].try_into().expect("checked slice")),
+    )
+    .map_err(CropCodecError::Config)
 }
 
 fn write_f32(target: &mut [u8], value: f32) {

@@ -5,6 +5,7 @@ pub mod colorcorrection;
 pub mod colorreconstruct;
 pub mod colorzones;
 pub(crate) mod controls;
+pub mod crop;
 pub(crate) mod exposure;
 pub(crate) mod modules;
 pub mod velvia;
