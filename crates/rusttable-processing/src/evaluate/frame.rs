@@ -2,13 +2,14 @@ use std::collections::BTreeMap;
 
 use rusttable_core::{FiniteF64, OperationId};
 use rusttable_image::Orientation;
+use rusttable_masks::MaskRaster;
 use sha2::{Digest, Sha256};
 
 use super::{BasicAdjPlanSet, apply_operation_with_profile_with_cancellation};
 use crate::operations::{
     clipping::{ClippingInterpolation, ClippingPlan},
     crop::{CropPlan, CropPlanMode},
-    enlargecanvas::{CanvasFill, EnlargeCanvasPlan},
+    enlargecanvas::{CanvasFill, EnlargeCanvasExecutionError, EnlargeCanvasPlan},
     finalscale::FinalScalePlan,
     flip::FlipPlan,
     lenscorrection::LensCorrectionPlan,
@@ -572,6 +573,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() ->
     let mut terminal_output = None;
     let mut terminal_working_pixels = None;
     let mut basicadj = BTreeMap::new();
+    let mut active_masks = masks.cloned();
 
     for step in &plan.steps {
         if cancelled() {
@@ -608,7 +610,7 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() ->
                         Some(plans),
                         &mut frame,
                         &mut terminal_output,
-                        masks,
+                        active_masks.as_ref(),
                         &cancelled,
                     )?;
                 }
@@ -617,9 +619,36 @@ pub(crate) fn evaluate_graph_at_frame_boundaries_with_plans_and_masks<F: Fn() ->
                 let node = nodes[*node_index];
                 let output = execute_boundary(plan, &pixels, &alpha, &cancelled)
                     .map_err(|reason| node_error(node, reason))?;
+                let transformed_masks = match (plan.as_ref(), active_masks.as_ref()) {
+                    (
+                        FrameBoundaryOperation::Discrete(DiscreteGeometryPlan::EnlargeCanvas(
+                            canvas_plan,
+                        )),
+                        Some(masks),
+                    ) => Some(
+                        match transform_masks_for_enlargecanvas(
+                            masks,
+                            &nodes[*node_index + 1..],
+                            canvas_plan,
+                            &cancelled,
+                        ) {
+                            Ok(masks) => masks,
+                            Err(EnlargeCanvasMaskTransformError::Cancelled) => {
+                                return Err(cancelled_error(node));
+                            }
+                            Err(EnlargeCanvasMaskTransformError::Invalid(reason)) => {
+                                return Err(node_error(node, reason));
+                            }
+                        },
+                    ),
+                    _ => None,
+                };
                 dimensions = plan.output_dimensions();
                 pixels = output.0;
                 alpha = output.1;
+                if let Some(transformed_masks) = transformed_masks {
+                    active_masks = Some(transformed_masks);
+                }
             }
         }
     }
@@ -821,6 +850,52 @@ fn execute_discrete_boundary<F: Fn() -> bool>(
             Ok((rgb.pixels().to_vec(), red_plane(alpha.pixels())))
         }
     }
+}
+
+enum EnlargeCanvasMaskTransformError {
+    Cancelled,
+    Invalid(String),
+}
+
+fn transform_masks_for_enlargecanvas<F: Fn() -> bool>(
+    masks: &OperationMaskSet,
+    nodes: &[&OperationGraphNode],
+    plan: &EnlargeCanvasPlan,
+    cancelled: &F,
+) -> Result<OperationMaskSet, EnlargeCanvasMaskTransformError> {
+    let mut entries = Vec::new();
+    for node in nodes {
+        if cancelled() {
+            return Err(EnlargeCanvasMaskTransformError::Cancelled);
+        }
+        let operation_id = node.operation().operation_id();
+        let Some(mask) = masks.mask_for(operation_id) else {
+            continue;
+        };
+        let raster = if mask.width() == plan.source_dimensions().width()
+            && mask.height() == plan.source_dimensions().height()
+        {
+            let values = plan
+                .execute_mask_with_cancel(mask.values(), cancelled)
+                .map_err(|error| match error {
+                    EnlargeCanvasExecutionError::Cancelled => {
+                        EnlargeCanvasMaskTransformError::Cancelled
+                    }
+                    error => EnlargeCanvasMaskTransformError::Invalid(error.to_string()),
+                })?;
+            MaskRaster::new(
+                plan.output_dimensions().width(),
+                plan.output_dimensions().height(),
+                values,
+            )
+            .map_err(|error| EnlargeCanvasMaskTransformError::Invalid(error.to_string()))?
+        } else {
+            mask.clone()
+        };
+        entries.push((operation_id, raster));
+    }
+    OperationMaskSet::from_entries(entries)
+        .map_err(|error| EnlargeCanvasMaskTransformError::Invalid(error.to_string()))
 }
 
 fn execute_distortion_boundary<F: Fn() -> bool>(

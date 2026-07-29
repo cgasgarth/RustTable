@@ -1101,23 +1101,22 @@ pub fn finalscale_definition() -> OperationDefinition {
 }
 
 pub fn enlargecanvas_definition() -> OperationDefinition {
-    geometry_definition_with_gpu(
+    geometry_definition(
         enlargecanvas_descriptor(),
         prepare_enlargecanvas,
         &[
             "iop.enlargecanvas.descriptor",
             "iop.enlargecanvas.cpu",
-            "iop.enlargecanvas.wgpu",
+            "iop.enlargecanvas.geometry",
+            "iop.enlargecanvas.mask-distortion",
         ],
         RoiKind::Scale,
         std::iter::empty(),
-        Some(GpuBinding::new(
-            "rusttable.enlargecanvas.wgpu",
-            1,
-            vec!["enlargecanvas_fill_copy".to_owned()],
-            vec!["rgba32float".to_owned()],
-        )),
     )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Enlarge Canvas color-picker and source-shaped GTK interactions are not ported"
+            .to_owned(),
+    })
 }
 
 pub fn perspective_definition() -> OperationDefinition {

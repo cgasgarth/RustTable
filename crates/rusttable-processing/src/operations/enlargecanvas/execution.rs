@@ -1,6 +1,7 @@
 use crate::{LinearRgb, RasterDimensions};
 use rusttable_image::{
-    ByteOrder, ChannelLayout, ImageDescriptor, ImageView, ImageViewError, SampleType, StorageLayout,
+    AlphaMode, ByteOrder, ChannelLayout, ColorEncoding, ImageDescriptor, ImageView, ImageViewError,
+    SampleType, StorageLayout,
 };
 use std::fmt;
 
@@ -32,6 +33,9 @@ impl EnlargeCanvasPlan {
                 actual: input.len(),
             });
         }
+        if cancelled() {
+            return Err(EnlargeCanvasExecutionError::Cancelled);
+        }
         let output_count = usize::try_from(self.output_dimensions().pixel_count())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         let mut pixels = vec![self.fill().rgb_pixel(); output_count];
@@ -39,10 +43,11 @@ impl EnlargeCanvasPlan {
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         let output_width = usize::try_from(self.output_dimensions().width())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
-        let left = usize::try_from(self.geometry().left())
-            .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
-        let top = usize::try_from(self.geometry().top())
-            .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
+        let (left, top) = self.source_offset();
+        let left =
+            usize::try_from(left).map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
+        let top =
+            usize::try_from(top).map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         let source_height = usize::try_from(self.source_dimensions().height())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         for row in 0..source_height {
@@ -59,6 +64,9 @@ impl EnlargeCanvasPlan {
             pixels[output_start..output_start + source_width]
                 .copy_from_slice(&input[source_start..source_start + source_width]);
         }
+        if cancelled() {
+            return Err(EnlargeCanvasExecutionError::Cancelled);
+        }
         Ok(EnlargeCanvasExecution {
             pixels,
             dimensions: self.output_dimensions(),
@@ -67,8 +75,18 @@ impl EnlargeCanvasPlan {
     }
 
     /// Copies a single-plane mask using the same placement and fills new
-    /// canvas pixels with zero.  A zero-sized source intersection is valid.
+    /// canvas pixels with zero.
     pub fn execute_mask(&self, input: &[f32]) -> Result<Vec<f32>, EnlargeCanvasExecutionError> {
+        self.execute_mask_with_cancel(input, || false)
+    }
+
+    /// Cancellable mask execution with checks before allocation, between rows,
+    /// and before publishing the completed plane.
+    pub fn execute_mask_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[f32],
+        cancelled: F,
+    ) -> Result<Vec<f32>, EnlargeCanvasExecutionError> {
         let expected = usize::try_from(self.source_dimensions().pixel_count())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         if input.len() != expected {
@@ -77,6 +95,9 @@ impl EnlargeCanvasPlan {
                 actual: input.len(),
             });
         }
+        if cancelled() {
+            return Err(EnlargeCanvasExecutionError::Cancelled);
+        }
         let output_count = usize::try_from(self.output_dimensions().pixel_count())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         let mut output = vec![0.0; output_count];
@@ -84,21 +105,35 @@ impl EnlargeCanvasPlan {
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
         let output_width = usize::try_from(self.output_dimensions().width())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
-        let left = usize::try_from(self.geometry().left())
+        let (left, top) = self.source_offset();
+        let left =
+            usize::try_from(left).map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
+        let top =
+            usize::try_from(top).map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
+        let source_height = usize::try_from(self.source_dimensions().height())
             .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
-        let top = usize::try_from(self.geometry().top())
-            .map_err(|_| EnlargeCanvasExecutionError::ArithmeticOverflow)?;
-        for row in 0..usize::try_from(self.source_dimensions().height()).expect("u32 fits usize") {
-            let source_start = row * source_width;
-            let output_start = (top + row) * output_width + left;
+        for row in 0..source_height {
+            if cancelled() {
+                return Err(EnlargeCanvasExecutionError::Cancelled);
+            }
+            let source_start = row
+                .checked_mul(source_width)
+                .ok_or(EnlargeCanvasExecutionError::ArithmeticOverflow)?;
+            let output_start = (top + row)
+                .checked_mul(output_width)
+                .and_then(|value| value.checked_add(left))
+                .ok_or(EnlargeCanvasExecutionError::ArithmeticOverflow)?;
             output[output_start..output_start + source_width]
                 .copy_from_slice(&input[source_start..source_start + source_width]);
+        }
+        if cancelled() {
+            return Err(EnlargeCanvasExecutionError::Cancelled);
         }
         Ok(output)
     }
 
-    /// Executes a validated native-F32 image while preserving its image
-    /// descriptor's color encoding, profile, orientation, and channel layout.
+    /// Executes a validated native-F32 RGBA image while preserving its image
+    /// descriptor's color encoding, profile, orientation, and row padding.
     pub fn execute_image(
         &self,
         descriptor: &ImageDescriptor,
@@ -133,14 +168,8 @@ impl EnlargeCanvasPlan {
         .map_err(|_| EnlargeCanvasImageError::ArithmeticOverflow)?;
         let mut output = vec![0_u8; output_descriptor.byte_length()];
         fill_image(&output_descriptor, &mut output, self.fill())?;
-        copy_image(
-            descriptor,
-            view,
-            &output_descriptor,
-            &mut output,
-            self.geometry().left(),
-            self.geometry().top(),
-        )?;
+        let (left, top) = self.source_offset();
+        copy_image(descriptor, view, &output_descriptor, &mut output, left, top)?;
         Ok(EnlargeCanvasImageExecution {
             descriptor: output_descriptor,
             bytes: output,
@@ -220,6 +249,8 @@ pub enum EnlargeCanvasImageError {
     UnsupportedSampleType,
     UnsupportedByteOrder,
     UnsupportedMosaic,
+    UnsupportedLayout,
+    UnsupportedEncoding,
     DimensionsMismatch {
         expected: RasterDimensions,
         actual: rusttable_image::ImageDimensions,
@@ -234,6 +265,10 @@ impl fmt::Display for EnlargeCanvasImageError {
             Self::UnsupportedSampleType => "enlargecanvas requires native F32 samples",
             Self::UnsupportedByteOrder => "enlargecanvas requires native byte order",
             Self::UnsupportedMosaic => "enlargecanvas does not fill mosaic images",
+            Self::UnsupportedLayout => {
+                "enlargecanvas requires an interleaved straight-alpha RGBA layout"
+            }
+            Self::UnsupportedEncoding => "enlargecanvas requires LinearSrgbD65 encoding",
             Self::DimensionsMismatch { .. } => {
                 "enlargecanvas image dimensions do not match the plan"
             }
@@ -254,6 +289,15 @@ fn validate_image_format(descriptor: &ImageDescriptor) -> Result<(), EnlargeCanv
     }
     if format.channels().is_mosaic() {
         return Err(EnlargeCanvasImageError::UnsupportedMosaic);
+    }
+    if format.channels() != ChannelLayout::Rgba
+        || format.alpha() != AlphaMode::Straight
+        || format.storage() != StorageLayout::Interleaved
+    {
+        return Err(EnlargeCanvasImageError::UnsupportedLayout);
+    }
+    if descriptor.color_encoding() != ColorEncoding::LinearSrgbD65 {
+        return Err(EnlargeCanvasImageError::UnsupportedEncoding);
     }
     Ok(())
 }

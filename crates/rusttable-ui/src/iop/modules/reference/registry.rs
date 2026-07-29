@@ -669,6 +669,32 @@ mod tests {
     }
 
     #[test]
+    fn enlargecanvas_backend_stays_hidden_without_source_shaped_editor() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let canvas = modules
+            .module("enlargecanvas")
+            .expect("Enlarge Canvas module");
+
+        assert!(canvas.is_hidden());
+        assert!(!canvas.enabled());
+        assert!(!canvas.resettable());
+        assert!(canvas.availability().is_unsupported());
+        assert_eq!(canvas.controls().controls().len(), 0);
+        assert_eq!(
+            canvas.status_text(),
+            "Unavailable · Enlarge Canvas color-picker and source-shaped GTK interactions are not ported"
+        );
+
+        let definition = builtin_registry()
+            .definition("rusttable.enlargecanvas")
+            .expect("Enlarge Canvas backend definition");
+        assert!(definition.cpu().is_some());
+        assert!(definition.gpu().is_none());
+        assert!(!definition.ui_availability().is_usable());
+        assert!(definition.descriptor().ui.is_none());
+    }
+
+    #[test]
     fn partial_ui_does_not_project_generic_descriptor_controls() {
         let ui_availability = OperationUiAvailability::PartiallyAvailable {
             reason: "custom editor only".to_owned(),

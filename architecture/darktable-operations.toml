@@ -16142,7 +16142,7 @@ name = "enlargecanvas"
 reference_path = "src/iop/enlargecanvas.c"
 module_version = 1
 parameter_size = 20
-parameter_layout_hash = "1384abf72e8a84a45fb18496ecc030c29a8008ea30d60b4790b94d5b5c4241ef"
+parameter_layout_hash = "6e309af2482880a1c4aa9a01951329046c5187d67f1448b498f3f5ce8d4f8c97"
 default_enabled = false
 default_order = 87
 group = "basic"
@@ -16170,18 +16170,16 @@ presets = []
 [[operations.parameter_versions]]
 version = 1
 byte_size = 20
-layout_hash = "19df81c040a09af69e3f7eb5e52cd85646eaaf33a9b1a908e7ef13a97b47d3de"
-decoder = "generated.bytes.decode.v1"
+layout_hash = "6e309af2482880a1c4aa9a01951329046c5187d67f1448b498f3f5ce8d4f8c97"
+decoder = "rusttable.enlargecanvas.decode.v1"
 opaque_blocking = false
 fixture_id = "operation.enlargecanvas.params.v1"
-target_codecs = []
-
 [operations.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/enlargecanvas.c"
-line_start = 31
-line_end = 31
-reason = "explicit parameter layout declaration"
+line_start = 42
+line_end = 49
+reason = "four ordered f32 percentages followed by the native canvas-color enum"
 reviewer = "cgasgarth"
 evidence_hash = "2e9249e27aab90cbbacf0ec8f22bd3e1d97ceb55a85bc27c5dd5dcb380671d62"
 
@@ -16192,17 +16190,45 @@ endianness = "little"
 pointer_width = 64
 padding = []
 total_size = 20
-alignment = 1
-layout_hash = "1384abf72e8a84a45fb18496ecc030c29a8008ea30d60b4790b94d5b5c4241ef"
+alignment = 4
+layout_hash = "6e309af2482880a1c4aa9a01951329046c5187d67f1448b498f3f5ce8d4f8c97"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[20]"
-array_extent = 20
+name = "percent_left"
+type_name = "float"
 offset = 0
-size = 20
-alignment = 1
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_right"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_top"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_bottom"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "color"
+type_name = "dt_iop_canvas_color_t"
+enum_identity = "dt_iop_canvas_color_t"
+offset = 16
+size = 4
+alignment = 4
 
 [[operations.parameter_versions.abi_layouts]]
 target = "aarch64-apple-darwin"
@@ -16211,17 +16237,45 @@ endianness = "little"
 pointer_width = 64
 padding = []
 total_size = 20
-alignment = 1
-layout_hash = "32e5a8e0a233b7a6ba2c5dbc4c075141ca5774550c9b42dc11f146ea86794395"
+alignment = 4
+layout_hash = "2f37c72899793bf53519f4836a457fe3cdd46dae697d90dbc8b694953ca0abfc"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[20]"
-array_extent = 20
+name = "percent_left"
+type_name = "float"
 offset = 0
-size = 20
-alignment = 1
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_right"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_top"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_bottom"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "color"
+type_name = "dt_iop_canvas_color_t"
+enum_identity = "dt_iop_canvas_color_t"
+offset = 16
+size = 4
+alignment = 4
 
 [[operations.parameter_versions.abi_layouts]]
 target = "x86_64-pc-windows-msvc"
@@ -16230,33 +16284,90 @@ endianness = "little"
 pointer_width = 64
 padding = []
 total_size = 20
-alignment = 1
-layout_hash = "a1e99f2f97625f80bfa737db45948703bf8b158493244d7cb652d44f4c2b97a0"
+alignment = 4
+layout_hash = "94c7c6bed7a5f4e0e4d36f4c23c9790a4dd4f0590e6c5ad302fbcbe8d19fc8be"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[20]"
-array_extent = 20
+name = "percent_left"
+type_name = "float"
 offset = 0
-size = 20
-alignment = 1
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_right"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_top"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "percent_bottom"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "color"
+type_name = "dt_iop_canvas_color_t"
+enum_identity = "dt_iop_canvas_color_t"
+offset = 16
+size = 4
+alignment = 4
 
 [operations.parameter_versions.codec]
 byte_size = 20
-decoder = "generated.bytes.decode.v1"
-encoder = "generated.bytes.encode.v1"
+decoder = "rusttable.enlargecanvas.decode.v1"
+encoder = "rusttable.enlargecanvas.encode.v1"
 byte_order = "little"
 preserves_padding = true
-format = "rusttable.operation.v1"
+format = "darktable.iop.enlargecanvas.v1"
 
 [[operations.parameter_versions.codec.fields]]
-name = "raw"
-kind = "bytes"
+name = "percent_left"
+kind = "f32"
 offset = 0
-size = 20
-array_extent = 20
-enum_values = []
+size = 4
+
+[[operations.parameter_versions.codec.fields]]
+name = "percent_right"
+kind = "f32"
+offset = 4
+size = 4
+
+[[operations.parameter_versions.codec.fields]]
+name = "percent_top"
+kind = "f32"
+offset = 8
+size = 4
+
+[[operations.parameter_versions.codec.fields]]
+name = "percent_bottom"
+kind = "f32"
+offset = 12
+size = 4
+
+[[operations.parameter_versions.codec.fields]]
+name = "color"
+kind = "u32"
+offset = 16
+size = 4
+enum_values = [
+    { name = "DT_IOP_CANVAS_COLOR_GREEN", value = 0 },
+    { name = "DT_IOP_CANVAS_COLOR_RED", value = 1 },
+    { name = "DT_IOP_CANVAS_COLOR_BLUE", value = 2 },
+    { name = "DT_IOP_CANVAS_COLOR_BLACK", value = 3 },
+    { name = "DT_IOP_CANVAS_COLOR_WHITE", value = 4 },
+]
 
 [[operations.evidence]]
 field = "registration"
@@ -16272,11 +16383,11 @@ evidence_hash = "38c146fc76cc055e99b8bc3dc31c9649719de8af1ae36c9fc1ad2ba0aba62f7
 field = "layout"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/enlargecanvas.c"
-line_start = 31
-line_end = 31
-reason = "current parameter layout is represented by accepted AST evidence"
+line_start = 42
+line_end = 49
+reason = "four ordered f32 percentages followed by the native canvas-color enum"
 reviewer = "cgasgarth"
-evidence_hash = "eaed5aa350c7152d33bb6d21a87b72102c883fbe39c1ecbddf5b69258a566f10"
+evidence_hash = "2e9249e27aab90cbbacf0ec8f22bd3e1d97ceb55a85bc27c5dd5dcb380671d62"
 
 [[operations.evidence]]
 field = "contract"

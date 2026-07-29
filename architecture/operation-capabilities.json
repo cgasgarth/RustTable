@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "04ee8a111f5be85c90790741c0c73e1b50241fd5fe98c7ceead8295eb84b346c",
+  "registry_hash": "ccfbdc6d692731306cbe15635a9bc3bccadc401dc001b9e78821284c87deb238",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -760,7 +760,7 @@
       "issue_sequence_id": 395,
       "order": 87,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
@@ -1821,7 +1821,7 @@
       "order": 0,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2083,7 +2083,7 @@
       "order": 13,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2101,7 +2101,7 @@
       "order": 14,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "DeprecatedImplemented",
       "reason": "deprecated compatibility operation; hidden from new-edit discovery"
     },
@@ -2137,7 +2137,7 @@
       "issue_sequence_id": 395,
       "order": 16,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
@@ -2193,7 +2193,7 @@
       "order": 19,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2211,7 +2211,7 @@
       "order": 20,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2288,7 +2288,7 @@
       "order": 24,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2306,7 +2306,7 @@
       "order": 25,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2324,7 +2324,7 @@
       "order": 26,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2342,7 +2342,7 @@
       "order": 27,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2414,7 +2414,7 @@
       "order": 31,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "DeprecatedImplemented",
       "reason": "deprecated compatibility operation; hidden from new-edit discovery"
     },
@@ -2432,7 +2432,7 @@
       "order": 32,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2450,7 +2450,7 @@
       "order": 33,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2508,7 +2508,7 @@
       "order": 36,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2526,7 +2526,7 @@
       "order": 37,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2545,7 +2545,7 @@
       "order": 38,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "DeprecatedImplemented",
       "reason": "deprecated compatibility operation; hidden from new-edit discovery"
     },
@@ -2566,7 +2566,7 @@
       "order": 39,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
@@ -2624,7 +2624,7 @@
       "order": 42,
       "cpu_supported": true,
       "gpu_supported": false,
-      "cpu_fallback": false,
+      "cpu_fallback": true,
       "status": "Implemented",
       "reason": null
     },
