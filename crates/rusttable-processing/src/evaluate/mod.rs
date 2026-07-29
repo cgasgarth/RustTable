@@ -1,6 +1,5 @@
 use crate::operations::{
     OperationExecutionError,
-    colorreconstruction::ColorReconstructionPlan,
     highlights::{HighlightsInputClass, HighlightsPlan},
 };
 use crate::{
@@ -36,8 +35,9 @@ pub use lab_boundary::{
     evaluate_bilateral_shadhi_with_cancellation,
 };
 use lab_boundary::{
-    apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection, apply_colorzones,
-    apply_defringe, apply_relight, apply_shadhi_with_cancellation, apply_vibrance,
+    apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection,
+    apply_colorreconstruction_with_cancellation, apply_colorzones, apply_defringe, apply_relight,
+    apply_shadhi_with_cancellation, apply_vibrance,
 };
 use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
@@ -810,18 +810,22 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             )
         }
         ProcessingOperationKind::ColorReconstruction { config } => {
-            let plan = ColorReconstructionPlan::new(
-                *config,
-                dimensions,
-                crate::operations::ReconstructionBudget::default(),
+            let candidate = apply_colorreconstruction_with_cancellation(
+                *config, pixels, dimensions, *frame, &cancelled,
             )
-            .map_err(|error| operation_error(step_index, operation_id, error))?;
-            let execution = plan
-                .execute(pixels)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
             apply_reconstruction(
                 pixels,
-                execution.pixels(),
+                &candidate,
                 opacity,
                 step_index,
                 operation_id,

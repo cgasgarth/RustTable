@@ -184,6 +184,13 @@ pub enum DarkroomModuleAction {
         parameters: rusttable_processing::operations::bloom::BloomParametersV1,
         enable_required: bool,
     },
+    ColorReconstructionSettled {
+        module_id: String,
+        operation_id: Option<OperationId>,
+        expected_revision: Revision,
+        parameters: rusttable_processing::operations::colorreconstruction::ColorReconstructionV3,
+        enable_required: bool,
+    },
     ColorCorrectionGrid {
         module_id: String,
         operation_id: Option<OperationId>,
@@ -237,6 +244,7 @@ impl DarkroomModuleAction {
             | Self::Preset { module_id, .. }
             | Self::Control { module_id, .. }
             | Self::BloomSettled { module_id, .. }
+            | Self::ColorReconstructionSettled { module_id, .. }
             | Self::ColorCorrectionGrid { module_id, .. }
             | Self::ColorCorrectionResetParameters { module_id, .. }
             | Self::NewInstance { module_id, .. }
@@ -262,6 +270,7 @@ impl DarkroomModuleAction {
             | Self::Preset { operation_id, .. }
             | Self::Control { operation_id, .. }
             | Self::BloomSettled { operation_id, .. }
+            | Self::ColorReconstructionSettled { operation_id, .. }
             | Self::ColorCorrectionGrid { operation_id, .. }
             | Self::ColorCorrectionResetParameters { operation_id, .. }
             | Self::NewInstance { operation_id, .. }
@@ -301,6 +310,10 @@ impl DarkroomModuleAction {
                 ..
             }
             | Self::BloomSettled {
+                operation_id: target,
+                ..
+            }
+            | Self::ColorReconstructionSettled {
                 operation_id: target,
                 ..
             }
@@ -359,6 +372,9 @@ impl DarkroomModuleAction {
                 expected_revision, ..
             }
             | Self::BloomSettled {
+                expected_revision, ..
+            }
+            | Self::ColorReconstructionSettled {
                 expected_revision, ..
             }
             | Self::ColorCorrectionGrid {

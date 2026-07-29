@@ -5,6 +5,7 @@
 mod bilateral;
 mod bloom;
 mod cache;
+mod colorreconstruct;
 mod colorzones;
 mod contracts;
 mod dispatch;
@@ -34,6 +35,12 @@ pub use bloom::{
     BloomResult, bloom_transient_memory_bytes,
 };
 pub use cache::{CacheError, PipelineCacheIdentity, PipelineCacheStore};
+pub use colorreconstruct::{
+    COLORRECONSTRUCTION_MAX_RANGE_RESOLUTION, COLORRECONSTRUCTION_MAX_SPATIAL_RESOLUTION,
+    COLORRECONSTRUCTION_SPATIAL_APPROXIMATION, ColorReconstructionError,
+    ColorReconstructionPrecedence, ColorReconstructionRequest, ColorReconstructionResult,
+    ColorReconstructionRoi, colorreconstruction_transient_memory_bytes,
+};
 pub use colorzones::{
     COLORZONES_LUT_RESOLUTION, ColorZonesError, ColorZonesLutResource, ColorZonesMode,
     ColorZonesRequest, ColorZonesRequestIdentity, ColorZonesResult, ColorZonesSelection,

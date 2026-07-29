@@ -10,6 +10,7 @@ use rusttable_color::{
 };
 
 use crate::operations::OperationExecutionError;
+use crate::operations::ReconstructionBudget;
 use crate::operations::bloom::{BloomConfig, BloomPixel, BloomPlan};
 use crate::operations::colorcontrast::{
     ColorContrastConfig, ColorContrastPixel, ColorContrastPlan,
@@ -17,6 +18,7 @@ use crate::operations::colorcontrast::{
 use crate::operations::colorcorrection::{
     ColorCorrectionConfig, ColorCorrectionPixel, ColorCorrectionPlan,
 };
+use crate::operations::colorreconstruction::{ColorReconstructionConfig, ColorReconstructionPlan};
 use crate::operations::colorzones::{ColorZonesPixel, ColorZonesPlan};
 use crate::operations::defringe::{
     DefringeConfig, DefringeExecutionError, DefringePixel, DefringePlan,
@@ -41,7 +43,9 @@ pub(crate) enum LabBoundaryError {
     Defringe(DefringeExecutionError),
     Shadhi(crate::operations::OperationExecutionError),
     Relight(crate::operations::OperationExecutionError),
+    ColorReconstruction(crate::operations::OperationExecutionError),
     ColorContrastRgbContainerCannotCarryLab,
+    ColorReconstructionRgbContainerCannotCarryLab,
     ColorCorrectionRgbContainerCannotCarryLab,
     ColorZonesRgbContainerCannotCarryLab,
     VibranceRgbContainerCannotCarryLab,
@@ -62,9 +66,19 @@ impl fmt::Display for LabBoundaryError {
             Self::Defringe(error) => write!(formatter, "Lab operation failed: {error}"),
             Self::Shadhi(error) => write!(formatter, "Lab shadhi operation failed: {error}"),
             Self::Relight(error) => write!(formatter, "Lab relight operation failed: {error}"),
+            Self::ColorReconstruction(error) => {
+                write!(
+                    formatter,
+                    "Lab Color Reconstruction operation failed: {error}"
+                )
+            }
             Self::ColorContrastRgbContainerCannotCarryLab => write!(
                 formatter,
                 "Color Contrast cannot consume Lab channels through the linear-RGB evaluator"
+            ),
+            Self::ColorReconstructionRgbContainerCannotCarryLab => write!(
+                formatter,
+                "Color Reconstruction cannot consume Lab channels through the linear-RGB evaluator"
             ),
             Self::ColorCorrectionRgbContainerCannotCarryLab => write!(
                 formatter,
@@ -105,6 +119,7 @@ impl LabBoundaryError {
             self,
             Self::Transform(TransformExecutionError::Cancelled)
                 | Self::Bloom(OperationExecutionError::Cancelled)
+                | Self::ColorReconstruction(OperationExecutionError::Cancelled)
                 | Self::Shadhi(OperationExecutionError::Cancelled)
         )
     }
@@ -494,6 +509,60 @@ pub(crate) fn apply_relight(
             let channels = value.channels();
             let rgb = from_lab
                 .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                .map_err(LabBoundaryError::Transform)?;
+            let red = finite(rgb[0], pixel, RgbChannel::Red)?;
+            let green = finite(rgb[1], pixel, RgbChannel::Green)?;
+            let blue = finite(rgb[2], pixel, RgbChannel::Blue)?;
+            Ok(LinearRgb::new(red, green, blue))
+        })
+        .collect()
+}
+
+pub(crate) fn apply_colorreconstruction_with_cancellation<C: Fn() -> bool>(
+    config: ColorReconstructionConfig,
+    pixels: &[LinearRgb],
+    dimensions: RasterDimensions,
+    source_frame: WorkingFrameDescriptor,
+    cancelled: C,
+) -> Result<Vec<LinearRgb>, LabBoundaryError> {
+    if source_frame.encoding() == ColorEncoding::LabD50 {
+        return Err(LabBoundaryError::ColorReconstructionRgbContainerCannotCarryLab);
+    }
+    let to_lab = plan_working_to_lab(source_frame)?;
+    let from_lab = plan_lab_to_working(source_frame)?;
+    let lab_pixels = pixels
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let lab = to_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    &cancelled,
+                )
+                .map_err(LabBoundaryError::Transform)?;
+            let lightness = finite(lab[0], pixel, RgbChannel::Red)?;
+            let a = finite(lab[1], pixel, RgbChannel::Green)?;
+            let b = finite(lab[2], pixel, RgbChannel::Blue)?;
+            Ok(LinearRgb::new(lightness, a, b))
+        })
+        .collect::<Result<Vec<_>, LabBoundaryError>>()?;
+    let plan = ColorReconstructionPlan::new(config, dimensions, ReconstructionBudget::default())
+        .map_err(LabBoundaryError::ColorReconstruction)?;
+    let execution = plan
+        .execute_with_cancel(&lab_pixels, &cancelled)
+        .map_err(LabBoundaryError::ColorReconstruction)?;
+    execution
+        .pixels()
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let rgb = from_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    &cancelled,
+                )
                 .map_err(LabBoundaryError::Transform)?;
             let red = finite(rgb[0], pixel, RgbChannel::Red)?;
             let green = finite(rgb[1], pixel, RgbChannel::Green)?;

@@ -7,10 +7,14 @@ use rusttable_core::OperationId;
 use rusttable_gpu::{
     BasicAdjPointParameters, BasicPointColorSpace, BasicPointError, BasicPointOperation,
     BasicPointRequest, BilateralGridError, BilateralGridRequest, BloomError as GpuBloomError,
-    BloomRequest, CancellationToken as GpuCancellationToken, ColorZonesError as GpuColorZonesError,
+    BloomRequest, CancellationToken as GpuCancellationToken,
+    ColorReconstructionError as GpuColorReconstructionError,
+    ColorReconstructionPrecedence as GpuColorReconstructionPrecedence, ColorReconstructionRequest,
+    ColorReconstructionRoi, ColorZonesError as GpuColorZonesError,
     ColorZonesMode as GpuColorZonesMode, ColorZonesRequest, ColorZonesRequestIdentity,
     ColorZonesSelection as GpuColorZonesSelection, GpuRuntime, GrainPointError, GrainPointRequest,
-    bloom_transient_memory_bytes, colorzones_transient_memory_bytes,
+    bloom_transient_memory_bytes, colorreconstruction_transient_memory_bytes,
+    colorzones_transient_memory_bytes,
 };
 use rusttable_processing::operations::bloom::{BloomConfig, BloomPlan};
 use rusttable_processing::operations::colorzones::{
@@ -43,6 +47,7 @@ pub enum PixelpipeBackend {
     CpuTiledFallback,
     WgpuBasic,
     WgpuBloom,
+    WgpuColorReconstruction,
     WgpuColorZones,
     WgpuTiled,
     WgpuBilateralHybrid,
@@ -53,6 +58,7 @@ pub enum PixelpipeBackend {
 pub enum PixelpipeGpuFallback {
     Basic(BasicPointError),
     Bloom(GpuBloomError),
+    ColorReconstruction(GpuColorReconstructionError),
     ColorZones(GpuColorZonesError),
     Grain(GrainPointError),
     Bilateral(BilateralGridError),
@@ -64,6 +70,7 @@ impl PixelpipeGpuFallback {
         matches!(
             self,
             Self::Bloom(GpuBloomError::Cancelled)
+                | Self::ColorReconstruction(GpuColorReconstructionError::Cancelled)
                 | Self::ColorZones(GpuColorZonesError::Cancelled)
                 | Self::Bilateral(BilateralGridError::Cancelled)
                 | Self::ShadhiBoundary(ShadhiBilateralBoundaryError::Operation(
@@ -82,6 +89,12 @@ impl From<BasicPointError> for PixelpipeGpuFallback {
 impl From<GpuBloomError> for PixelpipeGpuFallback {
     fn from(error: GpuBloomError) -> Self {
         Self::Bloom(error)
+    }
+}
+
+impl From<GpuColorReconstructionError> for PixelpipeGpuFallback {
+    fn from(error: GpuColorReconstructionError) -> Self {
+        Self::ColorReconstruction(error)
     }
 }
 
@@ -108,6 +121,7 @@ impl std::fmt::Display for PixelpipeGpuFallback {
         match self {
             Self::Basic(error) => std::fmt::Display::fmt(error, formatter),
             Self::Bloom(error) => std::fmt::Display::fmt(error, formatter),
+            Self::ColorReconstruction(error) => std::fmt::Display::fmt(error, formatter),
             Self::ColorZones(error) => std::fmt::Display::fmt(error, formatter),
             Self::Grain(error) => std::fmt::Display::fmt(error, formatter),
             Self::Bilateral(error) => std::fmt::Display::fmt(error, formatter),
@@ -121,6 +135,7 @@ impl std::error::Error for PixelpipeGpuFallback {
         match self {
             Self::Basic(error) => Some(error),
             Self::Bloom(error) => Some(error),
+            Self::ColorReconstruction(error) => Some(error),
             Self::ColorZones(error) => Some(error),
             Self::Grain(error) => Some(error),
             Self::Bilateral(error) => Some(error),
@@ -495,7 +510,9 @@ impl PixelpipeExecutionService {
         check_cancellation(scope, CancellationStage::Preparation)?;
         if matches!(
             plan,
-            GpuPlan::Bloom { .. } | GpuPlan::ShadhiBilateral { .. }
+            GpuPlan::Bloom { .. }
+                | GpuPlan::ColorReconstruction { .. }
+                | GpuPlan::ShadhiBilateral { .. }
         ) {
             let Some(gpu) = self.gpu.as_ref() else {
                 return self.cpu_result(snapshot, None, scope);
@@ -773,16 +790,30 @@ fn full_frame_tiling_receipt(snapshot: &CpuPixelpipeSnapshot) -> PixelpipeTiling
 #[derive(Debug, Clone, PartialEq)]
 enum GpuPlan {
     Basic(Vec<BasicPointOperation>),
-    Bloom { config: BloomConfig, opacity: f32 },
-    ColorZones { plan: ColorZonesPlan, opacity: f32 },
+    Bloom {
+        config: BloomConfig,
+        opacity: f32,
+    },
+    ColorReconstruction {
+        config: rusttable_processing::operations::colorreconstruction::ColorReconstructionConfig,
+        opacity: f32,
+    },
+    ColorZones {
+        plan: ColorZonesPlan,
+        opacity: f32,
+    },
     Grain(rusttable_processing::operations::grain::GrainConfig),
-    ShadhiBilateral { config: ShadhiConfig, opacity: f32 },
+    ShadhiBilateral {
+        config: ShadhiConfig,
+        opacity: f32,
+    },
 }
 
 impl GpuPlan {
     const fn backend(&self) -> PixelpipeBackend {
         match self {
             Self::Bloom { .. } => PixelpipeBackend::WgpuBloom,
+            Self::ColorReconstruction { .. } => PixelpipeBackend::WgpuColorReconstruction,
             Self::ColorZones { .. } => PixelpipeBackend::WgpuColorZones,
             Self::ShadhiBilateral { .. } => PixelpipeBackend::WgpuBilateralHybrid,
             Self::Basic(_) | Self::Grain(_) => PixelpipeBackend::WgpuBasic,
@@ -801,6 +832,13 @@ impl GpuPlan {
             } else {
                 GpuBloomError::Unhealthy
             }),
+            Self::ColorReconstruction { .. } => {
+                PixelpipeGpuFallback::ColorReconstruction(if cpu_only {
+                    GpuColorReconstructionError::CpuOnly
+                } else {
+                    GpuColorReconstructionError::Unhealthy
+                })
+            }
             Self::ColorZones { .. } => PixelpipeGpuFallback::ColorZones(if cpu_only {
                 GpuColorZonesError::CpuOnly
             } else {
@@ -829,10 +867,23 @@ struct QualifiedGpuPlan {
 #[derive(Debug, Clone)]
 enum GpuPlanCandidate {
     Basic(Vec<BasicPointCandidate>),
-    Bloom { config: BloomConfig, opacity: f32 },
-    ColorZones { plan: ColorZonesPlan, opacity: f32 },
+    Bloom {
+        config: BloomConfig,
+        opacity: f32,
+    },
+    ColorReconstruction {
+        config: rusttable_processing::operations::colorreconstruction::ColorReconstructionConfig,
+        opacity: f32,
+    },
+    ColorZones {
+        plan: ColorZonesPlan,
+        opacity: f32,
+    },
     Grain(rusttable_processing::operations::grain::GrainConfig),
-    ShadhiBilateral { config: ShadhiConfig, opacity: f32 },
+    ShadhiBilateral {
+        config: ShadhiConfig,
+        opacity: f32,
+    },
 }
 
 impl GpuPlanCandidate {
@@ -852,6 +903,9 @@ impl GpuPlanCandidate {
                 .collect::<Option<Vec<_>>>()
                 .map(GpuPlan::Basic),
             Self::Bloom { config, opacity } => Some(GpuPlan::Bloom { config, opacity }),
+            Self::ColorReconstruction { config, opacity } => {
+                Some(GpuPlan::ColorReconstruction { config, opacity })
+            }
             Self::ColorZones { plan, opacity } => Some(GpuPlan::ColorZones { plan, opacity }),
             Self::Grain(config) => Some(GpuPlan::Grain(config)),
             Self::ShadhiBilateral { config, opacity } => {
@@ -970,6 +1024,7 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
     }
     let mut operations = Vec::new();
     let mut bloom = None;
+    let mut colorreconstruct = None;
     let mut colorzones = None;
     let mut grain = None;
     let mut shadhi = None;
@@ -1043,6 +1098,7 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
             }
             rusttable_processing::ProcessingOperationKind::Bloom { config } => {
                 if bloom.is_some()
+                    || colorreconstruct.is_some()
                     || colorzones.is_some()
                     || grain.is_some()
                     || shadhi.is_some()
@@ -1053,8 +1109,22 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                 bloom = Some((*config, operation.opacity().get()));
                 continue;
             }
+            rusttable_processing::ProcessingOperationKind::ColorReconstruction { config } => {
+                if colorreconstruct.is_some()
+                    || bloom.is_some()
+                    || colorzones.is_some()
+                    || grain.is_some()
+                    || shadhi.is_some()
+                    || !operations.is_empty()
+                {
+                    return None;
+                }
+                colorreconstruct = Some((*config, operation.opacity().get()));
+                continue;
+            }
             rusttable_processing::ProcessingOperationKind::ColorZones { plan } => {
                 if bloom.is_some()
+                    || colorreconstruct.is_some()
                     || colorzones.is_some()
                     || grain.is_some()
                     || shadhi.is_some()
@@ -1068,6 +1138,7 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
             rusttable_processing::ProcessingOperationKind::Grain { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits()
                     || bloom.is_some()
+                    || colorreconstruct.is_some()
                     || colorzones.is_some()
                     || grain.is_some()
                     || shadhi.is_some()
@@ -1082,6 +1153,7 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                 if operation.opacity().get() == 0.0
                     || config.shadhi_algo() != ShadhiAlgorithm::Bilateral
                     || bloom.is_some()
+                    || colorreconstruct.is_some()
                     || colorzones.is_some()
                     || grain.is_some()
                     || shadhi.is_some()
@@ -1094,13 +1166,20 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
             }
             _ => return None,
         };
-        if bloom.is_some() || colorzones.is_some() || grain.is_some() || shadhi.is_some() {
+        if bloom.is_some()
+            || colorreconstruct.is_some()
+            || colorzones.is_some()
+            || grain.is_some()
+            || shadhi.is_some()
+        {
             return None;
         }
         operations.push(gpu_operation);
     }
     if let Some((config, opacity)) = bloom {
         Some(GpuPlanCandidate::Bloom { config, opacity })
+    } else if let Some((config, opacity)) = colorreconstruct {
+        Some(GpuPlanCandidate::ColorReconstruction { config, opacity })
     } else if let Some((plan, opacity)) = colorzones {
         Some(GpuPlanCandidate::ColorZones { plan, opacity })
     } else if let Some(config) = grain {
@@ -1229,6 +1308,14 @@ fn execute_gpu(
             *opacity,
             scope,
         ),
+        GpuPlan::ColorReconstruction { config, opacity } => execute_gpu_colorreconstruct_image(
+            gpu,
+            snapshot.input(),
+            snapshot.output_mode(),
+            *config,
+            *opacity,
+            scope,
+        ),
         GpuPlan::ColorZones { plan, opacity } => execute_gpu_colorzones_image(
             gpu,
             snapshot.input(),
@@ -1322,7 +1409,7 @@ fn execute_gpu_image(
     let color_space =
         basic_point_chain_color_space(input.descriptor().color_encoding(), operations)?;
     if color_space == BasicPointColorSpace::LabD50 {
-        let (packed, boundary) = packed_lab_d50(input)?;
+        let (packed, boundary) = packed_lab_d50(input, || false)?;
         let result = gpu.execute_basic_point(BasicPointRequest {
             pixels: &packed,
             operations,
@@ -1334,6 +1421,7 @@ fn execute_gpu_image(
             result.dispatches(),
             boundary,
             output_mode,
+            || false,
         );
     }
     let (frame, packed) = packed_linear_working(input)?;
@@ -1386,8 +1474,9 @@ struct LabGpuBoundary {
     frame: WorkingFrameDescriptor,
 }
 
-fn packed_lab_d50(
+fn packed_lab_d50<C: Fn() -> bool>(
     input: &RgbaF32Image,
+    cancelled: C,
 ) -> Result<(Vec<f32>, Option<LabGpuBoundary>), PixelpipeGpuFallback> {
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         let mut packed = Vec::with_capacity(input.pixels().len() * 4);
@@ -1413,7 +1502,7 @@ fn packed_lab_d50(
         let channels = to_lab
             .apply_rgb(
                 [pixel.red().get(), pixel.green().get(), pixel.blue().get()],
-                || false,
+                &cancelled,
             )
             .map_err(|error| {
                 BasicPointError::Readback(format!(
@@ -1431,26 +1520,35 @@ fn packed_lab_d50(
     ))
 }
 
-fn lab_image_from_packed(
+fn lab_image_from_packed<C: Fn() -> bool>(
     input: &RgbaF32Image,
     packed: &[f32],
     dispatches: u32,
     boundary: Option<LabGpuBoundary>,
     output_mode: CpuPixelpipeOutputMode,
+    cancelled: C,
 ) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
     let (packed_pixels, remainder) = packed.as_chunks::<4>();
     if !remainder.is_empty() {
         return Err(BasicPointError::InvalidPixelPacking.into());
     }
-    lab_image_from_pixels(input, packed_pixels, dispatches, boundary, output_mode)
+    lab_image_from_pixels(
+        input,
+        packed_pixels,
+        dispatches,
+        boundary,
+        output_mode,
+        cancelled,
+    )
 }
 
-fn lab_image_from_pixels(
+fn lab_image_from_pixels<C: Fn() -> bool>(
     input: &RgbaF32Image,
     packed_pixels: &[[f32; 4]],
     dispatches: u32,
     boundary: Option<LabGpuBoundary>,
     output_mode: CpuPixelpipeOutputMode,
+    cancelled: C,
 ) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
     if packed_pixels.len() != input.pixels().len() {
         return Err(BasicPointError::InvalidPixelPacking.into());
@@ -1462,7 +1560,7 @@ fn lab_image_from_pixels(
             .map(|(pixel_index, pixel)| {
                 let rgb = boundary
                     .from_lab
-                    .apply_rgb([pixel[0], pixel[1], pixel[2]], || false)
+                    .apply_rgb([pixel[0], pixel[1], pixel[2]], &cancelled)
                     .map_err(|error| {
                         BasicPointError::Readback(format!(
                             "GPU Lab point egress failed at pixel {pixel_index}: {error}"
@@ -1514,7 +1612,7 @@ fn execute_gpu_bloom_image(
     opacity: f32,
     scope: &CancellationScope,
 ) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
-    let (packed, boundary) = packed_lab_d50(input)?;
+    let (packed, boundary) = packed_lab_d50(input, || scope.check().is_err())?;
     let (source_channels, remainder) = packed.as_chunks::<4>();
     if !remainder.is_empty() || source_channels.len() != input.pixels().len() {
         return Err(BasicPointError::InvalidPixelPacking.into());
@@ -1563,7 +1661,127 @@ fn execute_gpu_bloom_image(
             })
             .collect()
     };
-    lab_image_from_pixels(input, &output_channels, dispatches, boundary, output_mode)
+    lab_image_from_pixels(
+        input,
+        &output_channels,
+        dispatches,
+        boundary,
+        output_mode,
+        || scope.check().is_err(),
+    )
+}
+
+fn execute_gpu_colorreconstruct_image(
+    gpu: &GpuRuntime,
+    input: &RgbaF32Image,
+    output_mode: CpuPixelpipeOutputMode,
+    config: rusttable_processing::operations::colorreconstruction::ColorReconstructionConfig,
+    opacity: f32,
+    scope: &CancellationScope,
+) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
+    let transfer_scope = scope.child(CancellationStage::Transfer);
+    transfer_scope
+        .check()
+        .map_err(|_| GpuColorReconstructionError::Cancelled)?;
+    let (packed, boundary) = packed_lab_d50(input, || transfer_scope.check().is_err())
+        .map_err(|error| colorreconstruct_boundary_fallback(error, &transfer_scope))?;
+    let (source_channels, remainder) = packed.as_chunks::<4>();
+    if !remainder.is_empty() || source_channels.len() != input.pixels().len() {
+        return Err(GpuColorReconstructionError::Readback(
+            BasicPointError::InvalidPixelPacking.to_string(),
+        )
+        .into());
+    }
+    let dimensions = input.descriptor().dimensions();
+    let width = dimensions.width();
+    let height = dimensions.height();
+    let roi = ColorReconstructionRoi::new(0, 0, width as usize, height as usize, 1.0);
+    let transient_memory_budget = colorreconstruction_transient_memory_bytes(
+        roi,
+        1.0,
+        config.spatial().get(),
+        config.range().get(),
+    )?;
+    let gpu_cancellation = GpuCancellationToken::new();
+    let linked_cancellation = gpu_cancellation.clone();
+    let _cleanup = scope.register_cleanup(move |_reason| linked_cancellation.cancel());
+    let request = ColorReconstructionRequest::new(
+        source_channels,
+        roi,
+        1.0,
+        config.threshold().get(),
+        config.spatial().get(),
+        config.range().get(),
+        config.hue().get(),
+        gpu_colorreconstruct_precedence(config.precedence()),
+        transient_memory_budget,
+    )
+    .with_cancellation(&gpu_cancellation);
+    let result = gpu.execute_color_reconstruction(request)?;
+    transfer_scope
+        .check()
+        .map_err(|_| GpuColorReconstructionError::Cancelled)?;
+    let dispatches = result.dispatches();
+    let candidate_channels = result.into_pixels();
+    let output_channels = if opacity.to_bits() == 1.0_f32.to_bits() {
+        candidate_channels
+    } else {
+        source_channels
+            .iter()
+            .zip(candidate_channels)
+            .map(|(source, candidate)| {
+                let mut blended = *source;
+                for channel in 0..3 {
+                    blended[channel] =
+                        source[channel] * (1.0 - opacity) + candidate[channel] * opacity;
+                }
+                blended
+            })
+            .collect()
+    };
+    lab_image_from_pixels(
+        input,
+        &output_channels,
+        dispatches,
+        boundary,
+        output_mode,
+        || transfer_scope.check().is_err(),
+    )
+    .map_err(|error| colorreconstruct_boundary_fallback(error, &transfer_scope))
+}
+
+fn colorreconstruct_boundary_fallback(
+    error: PixelpipeGpuFallback,
+    scope: &CancellationScope,
+) -> PixelpipeGpuFallback {
+    if scope.check().is_err() {
+        return GpuColorReconstructionError::Cancelled.into();
+    }
+    match error {
+        PixelpipeGpuFallback::Basic(BasicPointError::Readback(error)) => {
+            GpuColorReconstructionError::Readback(error).into()
+        }
+        PixelpipeGpuFallback::Basic(BasicPointError::Poll(error)) => {
+            GpuColorReconstructionError::Poll(error).into()
+        }
+        PixelpipeGpuFallback::Basic(error) => {
+            GpuColorReconstructionError::Readback(error.to_string()).into()
+        }
+        error => error,
+    }
+}
+
+fn gpu_colorreconstruct_precedence(
+    precedence: rusttable_processing::operations::colorreconstruction::ColorReconstructionPrecedence,
+) -> GpuColorReconstructionPrecedence {
+    match precedence {
+        rusttable_processing::operations::colorreconstruction::ColorReconstructionPrecedence::None =>
+            GpuColorReconstructionPrecedence::None,
+        rusttable_processing::operations::colorreconstruction::ColorReconstructionPrecedence::Chroma =>
+            GpuColorReconstructionPrecedence::Chroma,
+        rusttable_processing::operations::colorreconstruction::ColorReconstructionPrecedence::Hue =>
+            GpuColorReconstructionPrecedence::Hue,
+    }
 }
 
 fn execute_gpu_colorzones_image(
@@ -1575,7 +1793,7 @@ fn execute_gpu_colorzones_image(
     snapshot_identity: crate::CpuPixelpipeSnapshotIdentity,
     scope: &CancellationScope,
 ) -> Result<(RgbaF32Image, u32), PixelpipeGpuFallback> {
-    let (packed, boundary) = packed_lab_d50(input)?;
+    let (packed, boundary) = packed_lab_d50(input, || scope.check().is_err())?;
     let (source_channels, remainder) = packed.as_chunks::<4>();
     if !remainder.is_empty() || source_channels.len() != input.pixels().len() {
         return Err(BasicPointError::InvalidPixelPacking.into());
@@ -1632,7 +1850,14 @@ fn execute_gpu_colorzones_image(
             .map(ColorZonesPixel::channels)
             .collect()
     };
-    lab_image_from_pixels(input, &output_channels, dispatches, boundary, output_mode)
+    lab_image_from_pixels(
+        input,
+        &output_channels,
+        dispatches,
+        boundary,
+        output_mode,
+        || transfer_scope.check().is_err(),
+    )
 }
 
 const fn gpu_colorzones_selection(channel: ColorZonesChannel) -> GpuColorZonesSelection {
@@ -1773,7 +1998,9 @@ fn execute_gpu_tiled(
 ) -> Result<(RgbaF32Image, u32, u64), GpuTiledExecutionError> {
     if matches!(
         plan,
-        GpuPlan::Bloom { .. } | GpuPlan::ShadhiBilateral { .. }
+        GpuPlan::Bloom { .. }
+            | GpuPlan::ColorReconstruction { .. }
+            | GpuPlan::ShadhiBilateral { .. }
     ) {
         check_tiled_cancellation(scope, CancellationStage::Transfer)?;
         let (image, dispatches) = execute_gpu(gpu, snapshot, plan, scope)?;
@@ -1815,7 +2042,9 @@ fn execute_gpu_tiled(
                 input.descriptor().dimensions(),
                 (tile.origin_x(), tile.origin_y()),
             )?,
-            GpuPlan::Bloom { .. } | GpuPlan::ShadhiBilateral { .. } => {
+            GpuPlan::Bloom { .. }
+            | GpuPlan::ColorReconstruction { .. }
+            | GpuPlan::ShadhiBilateral { .. } => {
                 unreachable!("full-frame GPU plans are dispatched before tile iteration")
             }
         };
@@ -2800,6 +3029,34 @@ mod tests {
         assert_eq!(
             bilateral.availability_error(false),
             PixelpipeGpuFallback::Bilateral(BilateralGridError::Unhealthy)
+        );
+    }
+
+    #[test]
+    fn colorreconstruct_boundaries_retain_backend_and_cancellation_identity() {
+        let scope = CancellationScope::root(PipelineGeneration::new(12).expect("generation"))
+            .child(CancellationStage::Transfer);
+        assert_eq!(
+            colorreconstruct_boundary_fallback(
+                PixelpipeGpuFallback::Basic(BasicPointError::Readback(
+                    "RGB-to-Lab ingress failed".to_owned(),
+                )),
+                &scope,
+            ),
+            PixelpipeGpuFallback::ColorReconstruction(GpuColorReconstructionError::Readback(
+                "RGB-to-Lab ingress failed".to_owned(),
+            ),)
+        );
+
+        scope.cancel(CancellationReason::SelectionChanged);
+        assert_eq!(
+            colorreconstruct_boundary_fallback(
+                PixelpipeGpuFallback::Basic(BasicPointError::Readback(
+                    "cancelled transform".to_owned(),
+                )),
+                &scope,
+            ),
+            PixelpipeGpuFallback::ColorReconstruction(GpuColorReconstructionError::Cancelled,)
         );
     }
 

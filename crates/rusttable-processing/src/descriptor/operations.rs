@@ -411,7 +411,7 @@ pub fn highlights_descriptor() -> OperationDescriptor {
     descriptor.tiling.overlap_pixels = 2048;
     descriptor.tiling.preferred_tile_edge = 1024;
     descriptor.capability = reconstruction_capability();
-    descriptor.io = reconstruction_io();
+    descriptor.io = default_io_contract();
     descriptor.mask_blend = MaskBlendContract {
         consumes_mask: false,
         publishes_mask: true,
@@ -436,14 +436,8 @@ pub fn highlights_descriptor() -> OperationDescriptor {
 #[allow(clippy::assigning_clones, clippy::missing_panics_doc)]
 pub fn color_reconstruction_descriptor() -> OperationDescriptor {
     let mut descriptor = base_exposure_descriptor();
-    descriptor.id = DescriptorId::new(
-        "colorreconstruction",
-        "rusttable.colorreconstruction",
-        3,
-        3,
-        1,
-    )
-    .expect("static ID");
+    descriptor.id = DescriptorId::new("colorreconstruct", "rusttable.colorreconstruct", 3, 3, 1)
+        .expect("static ID");
     descriptor.parameters = vec![
         scalar_parameter("threshold", 50.0, 150.0, 100.0, ParameterRole::Mask),
         scalar_parameter("spatial", 0.0, 1000.0, 400.0, ParameterRole::Geometry),
@@ -451,23 +445,29 @@ pub fn color_reconstruction_descriptor() -> OperationDescriptor {
         scalar_parameter("hue", 0.0, 1.0, 0.66, ParameterRole::Color),
         scalar_parameter("precedence", 0.0, 2.0, 0.0, ParameterRole::Color),
     ];
-    descriptor.flags = OperationFlags::DETERMINISTIC_CPU
-        .insert(OperationFlags::DETERMINISTIC_GPU)
+    // The native module opts into the shared blend UI, but this Rust slice does
+    // not yet own that shared payload or drawn-mask execution. Keep those
+    // capabilities out of the descriptor so generic projections cannot expose
+    // unsupported controls. The reconstruction's own full-image analysis is
+    // still represented independently below.
+    descriptor.flags = OperationFlags::MULTI_INSTANCE
+        .insert(OperationFlags::STYLE_ELIGIBLE)
+        .insert(OperationFlags::DETERMINISTIC_CPU)
         .insert(OperationFlags::FULL_IMAGE)
         .insert(OperationFlags::COLOR)
-        .insert(OperationFlags::MASKS)
-        .insert(OperationFlags::BLENDING)
         .insert(OperationFlags::ANALYSIS);
     descriptor.stage = "post-demosaic-color-reconstruction".to_owned();
     descriptor.roi = RoiKind::FullImage;
     descriptor.tiling.overlap_pixels = 1000;
     descriptor.tiling.preferred_tile_edge = 1024;
     descriptor.capability = reconstruction_capability();
-    descriptor.io = reconstruction_io();
+    descriptor.io = color_reconstruction_io();
     descriptor.mask_blend = MaskBlendContract {
+        // Shared blend payloads and drawn masks remain deferred for this slice;
+        // the operation only consumes its own full-image analysis state.
         consumes_mask: false,
-        publishes_mask: true,
-        blend_if: true,
+        publishes_mask: false,
+        blend_if: false,
         geometry: false,
         analysis: true,
     };
@@ -477,7 +477,7 @@ pub fn color_reconstruction_descriptor() -> OperationDescriptor {
         opaque_unknown_allowed: true,
     };
     descriptor.ui = Some(UiHint {
-        label_key: "operation.colorreconstruction".to_owned(),
+        label_key: "operation.colorreconstruct".to_owned(),
         group_key: "group.basic".to_owned(),
         control: "color-reconstruction".to_owned(),
     });
@@ -513,24 +513,21 @@ fn reconstruction_capability() -> CapabilityContract {
     CapabilityContract {
         cpu_supported: true,
         gpu_tier: Some(1),
-        required_features: vec![
-            "f32-storage".to_owned(),
-            "deterministic-row-major".to_owned(),
-        ],
+        required_features: vec!["f32-storage".to_owned()],
         required_formats: vec!["rgba32float".to_owned()],
         deterministic_cpu: true,
-        deterministic_gpu: true,
+        deterministic_gpu: false,
         fallback_to_cpu: true,
         precision: "f32".to_owned(),
         modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
     }
 }
 
-fn reconstruction_io() -> InputOutputContract {
+fn color_reconstruction_io() -> InputOutputContract {
     let image = ImagePredicate {
         channels: 3,
         alpha: AlphaPolicy::Preserve,
-        encodings: vec![ColorEncoding::LinearSrgbD65],
+        encodings: vec![ColorEncoding::LabD50],
         nonfinite: NonFinitePolicy::Reject,
     };
     InputOutputContract {

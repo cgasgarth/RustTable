@@ -13,6 +13,18 @@ pub const ENTRY_BLOOM_BLOOM_HBLUR_ID: &str = "rusttable.bloom.bloom_hblur";
 pub const ENTRY_BLOOM_BLOOM_MIX_ID: &str = "rusttable.bloom.bloom_mix";
 pub const ENTRY_BLOOM_BLOOM_THRESHOLD_ID: &str = "rusttable.bloom.bloom_threshold";
 pub const ENTRY_BLOOM_BLOOM_VBLUR_ID: &str = "rusttable.bloom.bloom_vblur";
+pub const ENTRY_COLORRECONSTRUCT_COLORRECONSTRUCTION_BLUR_X_ID: &str =
+    "rusttable.colorreconstruct.colorreconstruction_blur_x";
+pub const ENTRY_COLORRECONSTRUCT_COLORRECONSTRUCTION_BLUR_Y_ID: &str =
+    "rusttable.colorreconstruct.colorreconstruction_blur_y";
+pub const ENTRY_COLORRECONSTRUCT_COLORRECONSTRUCTION_BLUR_Z_ID: &str =
+    "rusttable.colorreconstruct.colorreconstruction_blur_z";
+pub const ENTRY_COLORRECONSTRUCT_COLORRECONSTRUCTION_SLICE_ID: &str =
+    "rusttable.colorreconstruct.colorreconstruction_slice";
+pub const ENTRY_COLORRECONSTRUCT_COLORRECONSTRUCTION_SPLAT_ID: &str =
+    "rusttable.colorreconstruct.colorreconstruction_splat";
+pub const ENTRY_COLORRECONSTRUCT_COLORRECONSTRUCTION_ZERO_ID: &str =
+    "rusttable.colorreconstruct.colorreconstruction_zero";
 pub const ENTRY_BASICADJ_ID: &str = "rusttable.point.basicadj";
 pub const ENTRY_COLORCONTRAST_ID: &str = "rusttable.point.colorcontrast";
 pub const ENTRY_COLORCORRECTION_ID: &str = "rusttable.point.colorcorrection";

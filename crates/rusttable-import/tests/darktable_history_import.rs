@@ -14,6 +14,9 @@ use rusttable_processing::operations::colorcontrast::{
 use rusttable_processing::operations::colorcorrection::{
     ColorCorrectionConfig, ColorCorrectionParametersV1,
 };
+use rusttable_processing::operations::colorreconstruction::{
+    ColorReconstructionConfig, ColorReconstructionPrecedence,
+};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
@@ -47,6 +50,12 @@ const COLORCORRECTION_V1_BENCHMARK_LE: [u8; 20] = [
     0x0a, 0x72, 0x7e, 0xc0, // lob = -3.9757104
     0x00, 0x00, 0x80, 0x3f, // saturation = 1.0
 ];
+const COLORRECONSTRUCT_V1_NATIVE_LE: &[u8; 12] =
+    include_bytes!("fixtures/colorreconstruct-v1-native-le.bin");
+const COLORRECONSTRUCT_V2_NATIVE_LE: &[u8; 16] =
+    include_bytes!("fixtures/colorreconstruct-v2-native-le.bin");
+const COLORRECONSTRUCT_V3_NATIVE_LE: &[u8; 20] =
+    include_bytes!("fixtures/colorreconstruct-v3-native-le.bin");
 const VIBRANCE_V2_NATIVE_LE: [u8; 4] = [
     0x00, 0x00, 0xc8, 0x41, // amount = 25.0
 ];
@@ -193,6 +202,255 @@ fn colorcorrection_finite_outlier_decodes_while_unknown_malformed_and_nonfinite_
         &history_step(b"colorcorrection", Some(1), Some(1), nonfinite.clone()),
         DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
         &nonfinite,
+    );
+}
+
+#[test]
+fn colorreconstruct_v1_uses_the_exact_three_float_layout_and_migrates_directly_to_v3() {
+    assert_eq!(
+        COLORRECONSTRUCT_V1_NATIVE_LE,
+        &[
+            0x00, 0x00, 0xf7, 0x42, // threshold = 123.5
+            0x00, 0xa0, 0xa0, 0x43, // spatial = 321.25
+            0x00, 0x00, 0x4c, 0x41, // range = 12.75
+        ]
+    );
+    let source = history_step(
+        b"colorreconstruct",
+        Some(1),
+        Some(1),
+        COLORRECONSTRUCT_V1_NATIVE_LE.to_vec(),
+    );
+
+    let DarktableHistoryStepDecode::ColorReconstructionPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("known Color Reconstruction v1 row must decode");
+    };
+
+    let mut expected_canonical = [0_u8; 20];
+    expected_canonical[..12].copy_from_slice(COLORRECONSTRUCT_V1_NATIVE_LE);
+    expected_canonical[12..16].copy_from_slice(&0.66_f32.to_le_bytes());
+    expected_canonical[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source.operation.raw_name, b"colorreconstruct");
+    assert_eq!(
+        imported.source.operation.name.as_deref(),
+        Some("colorreconstruct")
+    );
+    assert_eq!(imported.source_version, 1);
+    assert!(imported.migrated);
+    assert!(imported.enabled);
+    assert_eq!(imported.canonical_parameters, expected_canonical);
+    assert_eq!(
+        imported.config,
+        ColorReconstructionConfig::new(
+            123.5,
+            321.25,
+            12.75,
+            0.66,
+            ColorReconstructionPrecedence::None,
+        )
+        .expect("migrated v1 parameters")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert!(imported.execution_blocker.detail.contains("blend/mask"));
+    assert!(imported.execution_blocker.detail.contains("multi-instance"));
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+}
+
+#[test]
+fn colorreconstruct_v2_preserves_precedence_and_appends_hue_in_v3_field_order() {
+    assert_eq!(
+        COLORRECONSTRUCT_V2_NATIVE_LE,
+        &[
+            0x00, 0x80, 0x9a, 0x42, // threshold = 77.25
+            0x00, 0x20, 0x20, 0x44, // spatial = 640.5
+            0x00, 0x00, 0x02, 0x41, // range = 8.125
+            0x02, 0x00, 0x00, 0x00, // precedence = hue
+        ]
+    );
+    let source = history_step(
+        b"colorreconstruct",
+        Some(2),
+        Some(0),
+        COLORRECONSTRUCT_V2_NATIVE_LE.to_vec(),
+    );
+
+    let DarktableHistoryStepDecode::ColorReconstructionPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("known Color Reconstruction v2 row must decode");
+    };
+
+    let mut expected_canonical = [0_u8; 20];
+    expected_canonical[..12].copy_from_slice(&COLORRECONSTRUCT_V2_NATIVE_LE[..12]);
+    expected_canonical[12..16].copy_from_slice(&0.66_f32.to_le_bytes());
+    expected_canonical[16..20].copy_from_slice(&2_i32.to_le_bytes());
+    assert_eq!(
+        imported.source.operation_params.bytes,
+        *COLORRECONSTRUCT_V2_NATIVE_LE
+    );
+    assert_eq!(imported.source_version, 2);
+    assert!(imported.migrated);
+    assert!(!imported.enabled);
+    assert_eq!(imported.canonical_parameters, expected_canonical);
+    assert_eq!(
+        imported.config,
+        ColorReconstructionConfig::new(
+            77.25,
+            640.5,
+            8.125,
+            0.66,
+            ColorReconstructionPrecedence::Hue,
+        )
+        .expect("migrated v2 parameters")
+    );
+}
+
+#[test]
+fn colorreconstruct_v3_decodes_threshold_spatial_range_hue_then_precedence() {
+    assert_eq!(
+        COLORRECONSTRUCT_V3_NATIVE_LE,
+        &[
+            0x00, 0x80, 0xdb, 0x42, // threshold = 109.75
+            0x00, 0x40, 0xe4, 0x43, // spatial = 456.5
+            0x00, 0x00, 0xb2, 0x41, // range = 22.25
+            0x00, 0x00, 0xc0, 0x3e, // hue = 0.375
+            0x01, 0x00, 0x00, 0x00, // precedence = saturated colors
+        ]
+    );
+    let source = history_step(
+        b"colorreconstruct",
+        Some(3),
+        Some(1),
+        COLORRECONSTRUCT_V3_NATIVE_LE.to_vec(),
+    );
+
+    let DarktableHistoryStepDecode::ColorReconstructionPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("known Color Reconstruction v3 row must decode");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source_version, 3);
+    assert!(!imported.migrated);
+    assert!(imported.enabled);
+    assert_eq!(
+        imported.canonical_parameters,
+        *COLORRECONSTRUCT_V3_NATIVE_LE
+    );
+    assert_eq!(
+        imported.config,
+        ColorReconstructionConfig::new(
+            109.75,
+            456.5,
+            22.25,
+            0.375,
+            ColorReconstructionPrecedence::Chroma,
+        )
+        .expect("native v3 parameters")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+}
+
+#[test]
+fn colorreconstruct_finite_outliers_decode_for_every_native_version() {
+    let cases = [
+        (
+            1,
+            [200.0_f32, 2_000.0, 75.0]
+                .into_iter()
+                .flat_map(f32::to_le_bytes)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            2,
+            [200.0_f32, 2_000.0, 75.0]
+                .into_iter()
+                .flat_map(f32::to_le_bytes)
+                .chain(1_i32.to_le_bytes())
+                .collect::<Vec<_>>(),
+        ),
+        (
+            3,
+            [200.0_f32, 2_000.0, 75.0, -0.25]
+                .into_iter()
+                .flat_map(f32::to_le_bytes)
+                .chain(2_i32.to_le_bytes())
+                .collect::<Vec<_>>(),
+        ),
+    ];
+
+    for (version, payload) in cases {
+        let source = history_step(b"colorreconstruct", Some(version), Some(1), payload);
+        let DarktableHistoryStepDecode::ColorReconstructionPendingBlend(imported) =
+            decode_history_step(&source)
+        else {
+            panic!("finite Color Reconstruction v{version} outlier must decode");
+        };
+        assert_eq!(
+            imported.config.threshold().get().to_bits(),
+            200.0_f32.to_bits()
+        );
+        assert_eq!(
+            imported.config.spatial().get().to_bits(),
+            2_000.0_f32.to_bits()
+        );
+        assert_eq!(imported.config.range().get().to_bits(), 75.0_f32.to_bits());
+        assert_eq!(
+            imported.config.hue().get().to_bits(),
+            if version < 3 { 0.66_f32 } else { -0.25_f32 }.to_bits()
+        );
+    }
+}
+
+#[test]
+fn colorreconstruct_unknown_malformed_and_invalid_payloads_remain_byte_exact() {
+    let unknown = history_step(b"colorreconstruct", Some(4), Some(1), vec![9, 8, 7]);
+    assert_preserved_exact(
+        &unknown,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+
+    for (version, malformed) in [
+        (1, vec![0; COLORRECONSTRUCT_V1_NATIVE_LE.len() - 1]),
+        (2, vec![0; COLORRECONSTRUCT_V2_NATIVE_LE.len() + 1]),
+        (3, vec![0; COLORRECONSTRUCT_V3_NATIVE_LE.len() - 1]),
+    ] {
+        let source = history_step(b"colorreconstruct", Some(version), Some(1), malformed);
+        assert_preserved_exact(
+            &source,
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        );
+    }
+
+    let mut nonfinite = *COLORRECONSTRUCT_V3_NATIVE_LE;
+    nonfinite[..4].copy_from_slice(&f32::NAN.to_le_bytes());
+    let nonfinite = history_step(b"colorreconstruct", Some(3), Some(1), nonfinite.to_vec());
+    assert_preserved_exact(
+        &nonfinite,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+
+    let mut unknown_precedence = *COLORRECONSTRUCT_V3_NATIVE_LE;
+    unknown_precedence[16..20].copy_from_slice(&99_i32.to_le_bytes());
+    let unknown_precedence = history_step(
+        b"colorreconstruct",
+        Some(3),
+        Some(1),
+        unknown_precedence.to_vec(),
+    );
+    assert_preserved_exact(
+        &unknown_precedence,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
     );
 }
 
@@ -686,6 +944,26 @@ fn production_manifest_decodes_colorcontrast_before_velvia() {
     ));
 }
 
+#[test]
+fn production_manifest_recognizes_canonical_colorreconstruct_history_name() {
+    let history = built_in_history(vec![raw_history_row(
+        41,
+        0,
+        b"colorreconstruct",
+        Some(3),
+        Some(1),
+        COLORRECONSTRUCT_V3_NATIVE_LE.to_vec(),
+    )]);
+    let step = &history.steps[0];
+
+    assert_eq!(step.operation.raw_name, b"colorreconstruct");
+    assert_eq!(step.operation.name.as_deref(), Some("colorreconstruct"));
+    assert!(matches!(
+        decode_history_step(step),
+        DarktableHistoryStepDecode::ColorReconstructionPendingBlend(_)
+    ));
+}
+
 fn history_step(
     operation: &[u8],
     module: Option<i64>,
@@ -723,6 +1001,7 @@ fn manifest() -> DarktableOperationManifest {
     manifest.insert("bloom", 1, [1], None);
     manifest.insert("colorcontrast", 2, [1, 2], None);
     manifest.insert("colorcorrection", 1, [1], None);
+    manifest.insert("colorreconstruct", 3, [1, 2, 3], None);
     manifest.insert("colorzones", 5, [1, 2, 3, 4, 5], None);
     manifest.insert("velvia", 2, [1, 2], None);
     manifest.insert("vibrance", 2, [2], None);

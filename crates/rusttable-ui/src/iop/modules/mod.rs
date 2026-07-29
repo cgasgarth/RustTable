@@ -18,6 +18,10 @@ use crate::iop::colorcorrection::{
     COLORCORRECTION_MODULE_ID, ColorCorrectionGridGtkContext, ColorCorrectionGridState,
     build_grid as build_color_correction_grid,
 };
+use crate::iop::colorreconstruct::{
+    ColorReconstructionGtkActionHandler, ColorReconstructionGtkHandlerOutcome,
+    ColorReconstructionGtkLeaf, ColorReconstructionGtkState, build_colorreconstruction_gtk,
+};
 use crate::iop::colorzones::{
     ColorZonesGtkActionHandler, ColorZonesGtkHandlerOutcome, ColorZonesGtkLeaf,
     ColorZonesGtkPreferencesHandler, ColorZonesGtkState, build_colorzones_gtk,
@@ -109,6 +113,7 @@ impl DarkroomModuleGroup {
 #[derive(Debug, Clone, PartialEq)]
 enum DarkroomCustomEditorPayload {
     Bloom(Option<BloomGtkState>),
+    ColorReconstruction(Option<ColorReconstructionGtkState>),
     ColorZones(Option<ColorZonesGtkState>),
 }
 
@@ -116,13 +121,20 @@ impl DarkroomCustomEditorPayload {
     const fn bloom_state(&self) -> Option<&BloomGtkState> {
         match self {
             Self::Bloom(state) => state.as_ref(),
-            Self::ColorZones(_) => None,
+            Self::ColorReconstruction(_) | Self::ColorZones(_) => None,
+        }
+    }
+
+    const fn colorreconstruct_state(&self) -> Option<&ColorReconstructionGtkState> {
+        match self {
+            Self::ColorReconstruction(state) => state.as_ref(),
+            Self::Bloom(_) | Self::ColorZones(_) => None,
         }
     }
 
     const fn colorzones_state(&self) -> Option<&ColorZonesGtkState> {
         match self {
-            Self::Bloom(_) => None,
+            Self::Bloom(_) | Self::ColorReconstruction(_) => None,
             Self::ColorZones(state) => state.as_ref(),
         }
     }
@@ -132,6 +144,7 @@ impl DarkroomCustomEditorPayload {
 #[derive(Clone, Default)]
 pub(crate) struct DarkroomCustomEditorMounts {
     bloom: Rc<RefCell<BTreeMap<OperationId, BloomGtkLeaf>>>,
+    colorreconstruct: Rc<RefCell<BTreeMap<OperationId, ColorReconstructionGtkLeaf>>>,
     colorzones: Rc<RefCell<BTreeMap<OperationId, ColorZonesGtkLeaf>>>,
     colorzones_handler: Rc<RefCell<Option<ColorZonesGtkActionHandler>>>,
     colorzones_preferences_handler: Rc<RefCell<Option<ColorZonesGtkPreferencesHandler>>>,
@@ -157,6 +170,11 @@ impl DarkroomCustomEditorMounts {
         for module in modules.left_modules().chain(modules.right_modules()) {
             if let Some(state) = module.bloom_editor_state()
                 && let Some(leaf) = self.bloom.borrow().get(&state.operation_id())
+            {
+                leaf.reconcile(*state);
+            }
+            if let Some(state) = module.colorreconstruct_editor_state()
+                && let Some(leaf) = self.colorreconstruct.borrow().get(&state.operation_id())
             {
                 leaf.reconcile(*state);
             }
@@ -196,6 +214,47 @@ impl DarkroomCustomEditorMounts {
         });
         let leaf = build_bloom_gtk(widget_id, state, handler);
         self.bloom
+            .borrow_mut()
+            .insert(state.operation_id(), leaf.clone());
+        leaf
+    }
+
+    fn colorreconstruct_leaf(
+        &self,
+        widget_id: &str,
+        state: ColorReconstructionGtkState,
+        action_handler: Option<&DarkroomModuleActionHandler>,
+    ) -> ColorReconstructionGtkLeaf {
+        if let Some(leaf) = self
+            .colorreconstruct
+            .borrow()
+            .get(&state.operation_id())
+            .cloned()
+        {
+            leaf.reconcile(state);
+            return leaf;
+        }
+        let handler = action_handler.cloned().map(|handler| {
+            Rc::new(
+                move |settled: crate::iop::colorreconstruct::ColorReconstructionSettledAction| {
+                    let action = DarkroomModuleAction::ColorReconstructionSettled {
+                        module_id: crate::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID
+                            .to_owned(),
+                        operation_id: (!settled.materialization_required())
+                            .then_some(settled.target()),
+                        expected_revision: settled.expected_revision(),
+                        parameters: settled.parameters(),
+                        enable_required: settled.enable_required(),
+                    };
+                    match handler(action) {
+                        Ok(revision) => ColorReconstructionGtkHandlerOutcome::Commit { revision },
+                        Err(_) => ColorReconstructionGtkHandlerOutcome::Rollback,
+                    }
+                },
+            ) as ColorReconstructionGtkActionHandler
+        });
+        let leaf = build_colorreconstruction_gtk(widget_id, state, handler);
+        self.colorreconstruct
             .borrow_mut()
             .insert(state.operation_id(), leaf.clone());
         leaf
@@ -420,6 +479,65 @@ impl DarkroomModuleViewModel {
         self.custom_editor
             .as_ref()
             .and_then(DarkroomCustomEditorPayload::bloom_state)
+    }
+
+    /// Marks this module as a source-specific Color Reconstruction editor and removes
+    /// every descriptor-generated control.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the custom projection cannot replace its zero generic controls.
+    #[must_use]
+    pub fn with_colorreconstruct_custom_editor(mut self) -> Self {
+        debug_assert_eq!(
+            self.id,
+            crate::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID
+        );
+        self.controls
+            .replace_snapshot(self.revision, Vec::new())
+            .expect("Color Reconstruction custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::ColorReconstruction(None));
+        self
+    }
+
+    ///
+    /// # Panics
+    ///
+    /// Panics if the custom projection cannot replace its zero generic controls.
+    #[must_use]
+    pub fn with_colorreconstruct_editor_state(
+        mut self,
+        state: ColorReconstructionGtkState,
+    ) -> Self {
+        debug_assert_eq!(
+            self.id,
+            crate::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID
+        );
+        self.operation_id = (!state.materialization_required()).then_some(state.operation_id());
+        self.revision = state.revision();
+        self.enabled = state.enabled();
+        self.controls
+            .replace_snapshot(state.revision(), Vec::new())
+            .expect("Color Reconstruction custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::ColorReconstruction(Some(
+            state,
+        )));
+        self
+    }
+
+    #[must_use]
+    pub fn has_colorreconstruct_custom_editor(&self) -> bool {
+        matches!(
+            &self.custom_editor,
+            Some(DarkroomCustomEditorPayload::ColorReconstruction(_))
+        )
+    }
+
+    #[must_use]
+    pub fn colorreconstruct_editor_state(&self) -> Option<&ColorReconstructionGtkState> {
+        self.custom_editor
+            .as_ref()
+            .and_then(DarkroomCustomEditorPayload::colorreconstruct_state)
     }
 
     /// Marks this module as a source-specific Color Zones editor and removes
@@ -687,6 +805,33 @@ impl DarkroomModuleViewModel {
                 crate::iop::bloom::BLOOM_SLIDERS.map(|slider| slider.widget_name(&widget_id)),
             );
         }
+        if self.colorreconstruct_editor_state().is_some() {
+            order.extend(
+                crate::iop::colorreconstruct::COLORRECONSTRUCTION_CONTROLS.map(|control| {
+                    match control {
+                        crate::iop::colorreconstruct::ColorReconstructionControl::Threshold => {
+                            crate::iop::colorreconstruct::COLORRECONSTRUCTION_THRESHOLD_SLIDER
+                                .widget_name(&widget_id)
+                        }
+                        crate::iop::colorreconstruct::ColorReconstructionControl::Spatial => {
+                            crate::iop::colorreconstruct::COLORRECONSTRUCTION_SPATIAL_SLIDER
+                                .widget_name(&widget_id)
+                        }
+                        crate::iop::colorreconstruct::ColorReconstructionControl::Range => {
+                            crate::iop::colorreconstruct::COLORRECONSTRUCTION_RANGE_SLIDER
+                                .widget_name(&widget_id)
+                        }
+                        crate::iop::colorreconstruct::ColorReconstructionControl::Precedence => {
+                            format!("{widget_id}-precedence")
+                        }
+                        crate::iop::colorreconstruct::ColorReconstructionControl::Hue => {
+                            crate::iop::colorreconstruct::COLORRECONSTRUCTION_HUE_SLIDER
+                                .widget_name(&widget_id)
+                        }
+                    }
+                }),
+            );
+        }
         order.extend(self.controls.controls().map(|control| {
             format!(
                 "{}-widget",
@@ -728,6 +873,7 @@ impl DarkroomModuleViewModel {
                     | DarkroomModuleAction::Preset { .. }
                     | DarkroomModuleAction::Control { .. }
                     | DarkroomModuleAction::BloomSettled { .. }
+                    | DarkroomModuleAction::ColorReconstructionSettled { .. }
                     | DarkroomModuleAction::ColorCorrectionGrid { .. }
                     | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
                     | DarkroomModuleAction::NewInstance { .. }
@@ -777,6 +923,14 @@ impl DarkroomModuleViewModel {
                 enable_required,
                 ..
             } => self.set_bloom_parameters(expected_revision, parameters, enable_required),
+            DarkroomModuleAction::ColorReconstructionSettled {
+                expected_revision,
+                parameters,
+                enable_required,
+                ..
+            } => {
+                self.set_colorreconstruct_parameters(expected_revision, parameters, enable_required)
+            }
             DarkroomModuleAction::ColorCorrectionGrid {
                 expected_revision,
                 grid,
@@ -1087,6 +1241,44 @@ impl DarkroomModuleViewModel {
         Ok(revision)
     }
 
+    /// Applies all native Color Reconstruction parameters in one settled revision.
+    ///
+    /// # Errors
+    pub fn set_colorreconstruct_parameters(
+        &mut self,
+        expected_revision: Revision,
+        parameters: rusttable_processing::operations::colorreconstruction::ColorReconstructionV3,
+        enable_required: bool,
+    ) -> Result<Revision, DarkroomModuleError> {
+        self.check_revision(expected_revision)?;
+        let Some(current) = self.colorreconstruct_editor_state().copied() else {
+            return Err(self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: "module has no Color Reconstruction custom editor".to_owned(),
+            }));
+        };
+        let editor = crate::iop::colorreconstruct::ColorReconstructionEditorState::new(parameters)
+            .map_err(|error| {
+                self.record_error(DarkroomModuleError::Unsupported {
+                    module_id: self.id.clone(),
+                    reason: error.to_string(),
+                })
+            })?;
+        let revision = self.advance_revision()?;
+        self.enabled = current.enabled() || enable_required;
+        self.custom_editor = Some(DarkroomCustomEditorPayload::ColorReconstruction(Some(
+            ColorReconstructionGtkState::new(
+                current.operation_id(),
+                revision,
+                editor,
+                self.enabled,
+                current.sensitive(),
+                current.materialization_required(),
+            ),
+        )));
+        Ok(revision)
+    }
+
     /// Applies all four Color Correction endpoint parameters in one revision.
     ///
     /// # Errors
@@ -1160,6 +1352,18 @@ impl DarkroomModuleViewModel {
                     current.operation_id(),
                     revision,
                     crate::iop::bloom::BloomEditorState::default(),
+                    true,
+                    current.sensitive(),
+                    current.materialization_required(),
+                ),
+            )));
+        }
+        if let Some(current) = self.colorreconstruct_editor_state().copied() {
+            self.custom_editor = Some(DarkroomCustomEditorPayload::ColorReconstruction(Some(
+                ColorReconstructionGtkState::new(
+                    current.operation_id(),
+                    revision,
+                    crate::iop::colorreconstruct::ColorReconstructionEditorState::default(),
                     true,
                     current.sensitive(),
                     current.materialization_required(),
@@ -1596,6 +1800,19 @@ fn build_module_panel_with_action_revision(
     if let (Some(custom_mounts), Some(state)) = (custom_mounts, module.bloom_editor_state()) {
         let leaf =
             custom_mounts.bloom_leaf(&widget_id, *state, interaction_action_handler.as_ref());
+        if leaf.widget().parent().is_some() {
+            leaf.widget().unparent();
+        }
+        operation_root.append(leaf.widget());
+    }
+    if let (Some(custom_mounts), Some(state)) =
+        (custom_mounts, module.colorreconstruct_editor_state())
+    {
+        let leaf = custom_mounts.colorreconstruct_leaf(
+            &widget_id,
+            *state,
+            interaction_action_handler.as_ref(),
+        );
         if leaf.widget().parent().is_some() {
             leaf.widget().unparent();
         }

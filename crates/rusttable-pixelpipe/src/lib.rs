@@ -52,8 +52,8 @@ pub use pipeline::publication::{
 };
 
 pub use cpu::{
-    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeResult,
-    CpuTileAssemblyError,
+    CpuPixelpipeDiagnostic, CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode,
+    CpuPixelpipeResult, CpuTileAssemblyError,
 };
 pub use failure::{
     AttemptReceipt, CacheAction, CleanupAction, Failure, FailureBackend, FailureCacheHook,

@@ -27,6 +27,64 @@ fn module(id: &str, side: DarkroomModuleSide) -> DarkroomModuleViewModel {
 }
 
 #[test]
+fn colorreconstruct_focus_order_includes_every_native_control() {
+    let operation_id = OperationId::new(37).expect("operation id");
+    let template = reference_modules()
+        .expect("source-derived reference modules")
+        .module("colorreconstruct")
+        .expect("Color Reconstruction template")
+        .clone();
+    let state = crate::iop::colorreconstruct::ColorReconstructionGtkState::new(
+        operation_id,
+        Revision::from_u64(7),
+        crate::iop::colorreconstruct::ColorReconstructionEditorState::default(),
+        false,
+        true,
+        true,
+    );
+    let module = template.with_colorreconstruct_editor_state(state);
+
+    assert_eq!(
+        module.focus_order(),
+        [
+            "colorreconstruct-disclosure",
+            "colorreconstruct-enabled",
+            "colorreconstruct-reset",
+            "colorreconstruct-threshold",
+            "colorreconstruct-spatial",
+            "colorreconstruct-range",
+            "colorreconstruct-precedence",
+            "colorreconstruct-hue",
+        ]
+    );
+}
+
+#[test]
+fn colorreconstruct_projection_keeps_deferred_surfaces_partial_and_hidden() {
+    let modules = reference_modules().expect("source-derived reference modules");
+    let template = modules
+        .module("colorreconstruct")
+        .expect("Color Reconstruction template");
+    assert!(template.availability().is_supported());
+    assert!(template.availability().is_partial());
+    assert_eq!(
+        template
+            .availability()
+            .deferred_responsibilities()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "iop.colorreconstruct.ui.shared-blending-and-drawn-masks",
+            "iop.colorreconstruct.ui.monochrome-applicability",
+            "iop.colorreconstruct.ui.preview-grid-lifecycle",
+        ]
+    );
+    assert!(template.has_colorreconstruct_custom_editor());
+    assert!(template.controls().controls().next().is_none());
+}
+
+#[test]
 fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_targets() {
     let first_id = OperationId::new(41).expect("first operation id");
     let second_id = OperationId::new(73).expect("second operation id");
@@ -420,7 +478,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "retouch",
             "spots",
             "highlights",
-            "colorreconstruction",
+            "colorreconstruct",
             "colorin",
             "primaries",
             "colorout",

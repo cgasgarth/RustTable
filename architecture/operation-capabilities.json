@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "227ff5350e23ddfef9fb5d9fc552e2d4cf01159afed59c4dccb2bbd3d5e8bdea",
+  "registry_hash": "04ee8a111f5be85c90790741c0c73e1b50241fd5fe98c7ceead8295eb84b346c",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -565,7 +565,7 @@
     {
       "identity": "darktable:colorreconstruct:src/iop/colorreconstruction.c:v3",
       "compatibility_name": "colorreconstruct",
-      "rust_id": null,
+      "rust_id": "rusttable.colorreconstruct",
       "reference_path": "src/iop/colorreconstruction.c",
       "descriptor_version": 3,
       "parameter_versions": [
@@ -573,14 +573,14 @@
         2,
         3
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
-      "order": 71,
+      "order": 69,
       "cpu_supported": true,
       "gpu_supported": true,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:colortransfer:src/iop/colortransfer.c:v1",
@@ -2026,9 +2026,9 @@
       "reason": null
     },
     {
-      "identity": "rusttable.colorreconstruction",
-      "compatibility_name": "colorreconstruction",
-      "rust_id": "rusttable.colorreconstruction",
+      "identity": "rusttable.colorreconstruct",
+      "compatibility_name": "colorreconstruct",
+      "rust_id": "rusttable.colorreconstruct",
       "reference_path": "",
       "descriptor_version": 3,
       "parameter_versions": [

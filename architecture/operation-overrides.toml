@@ -3507,118 +3507,638 @@ evidence_hash = "1c69aa41b7ea09bccb117d46b9fc11cfaed0300e67c317adb44f713d30cb4b4
 name = "colorreconstruct"
 module_version = 3
 parameter_size = 20
-parameter_layout_hash = "ffbb8d864dd4211017a09aa42618b97dec87d32e98fecb86942a06f298b80c77"
+parameter_layout_hash = "3756c4815d337d3909424f2833160234eb848b3d538059a748efd4f6c8ae98b8"
+parameter_decoder = "rusttable.colorreconstruct.decode.v3"
+default_order = 69
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "full-frame"
+cpu_implementation = "process"
+opencl_programs = ["colorreconstruction"]
+opencl_kernels = [
+    "colorreconstruction_zero",
+    "colorreconstruction_splat",
+    "colorreconstruction_blur_line",
+    "colorreconstruction_slice",
+]
 
 [[operation.evidence]]
 field = "registration"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "registered by the pinned darktable build"
+reason = "the build registers canonical history identity colorreconstruct from colorreconstruction.c"
 reviewer = "cgasgarth"
-evidence_hash = "a242e077e5afa9713ed5b8ab952a158c3b6e39452bc75ada606cf25e9e9f92d3"
-source_path = "src/iop/colorreconstruction.c"
+evidence_hash = "3344874c04a50ca773e16ac65faa6edf8643a061a1356871ca1cb46f12e764b9"
+source_path = "src/iop/CMakeLists.txt"
 line_start = 72
 line_end = 72
-
 
 [[operation.evidence]]
 field = "layout"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "current parameter layout is represented by accepted AST evidence"
+reason = "v3 stores threshold, spatial, range, hue, and precedence in that order"
 reviewer = "cgasgarth"
-evidence_hash = "03ed341545179c0055d915919cdeb9c3f4d01e4ca801a526d352ad91ccb2c3b5"
+evidence_hash = "7e60a7eb7c5cbeedfa909c3caecf174a3ea599021b456fe17a43acce2c7d295e"
 source_path = "src/iop/colorreconstruction.c"
-line_start = 45
-line_end = 45
-
+line_start = 54
+line_end = 61
 
 [[operation.evidence]]
 field = "contract"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "processing contract is source-evidenced"
+reason = "the CPU path defines hue conversion, bilateral-grid splat and blur, trilinear slice, preview-grid reuse, and failure copy-through"
 reviewer = "cgasgarth"
-evidence_hash = "5585cfe9377c153e57105446087108f4989ce28255257cd0c103cb1de6216202"
+evidence_hash = "292b2deae6b42534accdc303cbc078a2d9920e734f6ada95f7f91e729b8ae987"
 source_path = "src/iop/colorreconstruction.c"
-line_start = 135
-line_end = 135
-
-
+line_start = 216
+line_end = 673
 
 [[operation.evidence]]
 field = "gpu"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "kernel creation is source-evidenced"
+reason = "the OpenCL host path qualifies atomics and local memory, manages frozen grids, and dispatches zero, splat, three-axis blur, and slice"
 reviewer = "cgasgarth"
-evidence_hash = "8b2c615a9cdc3bf2b1a4851785fc7a7df1b6750d48ef78b15f407b53fc23c981"
+evidence_hash = "3b0706a4322e7d687e039e34140659b7fdcd14fd8b34cbd3b2d2e14ee6621930"
 source_path = "src/iop/colorreconstruction.c"
-line_start = 1195
-line_end = 1195
+line_start = 675
+line_end = 1072
 
+[[operation.evidence]]
+field = "gpu-kernels"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "the retained kernels define exact grid projection, threshold and precedence weighting, blur coefficients, trilinear slicing, and chroma reconstruction"
+reviewer = "cgasgarth"
+evidence_hash = "f1418cbb89a494908b2c406d8e9db59fccf9a55c4a8562267ab74647844c7fdc"
+source_path = "data/kernels/colorreconstruction.cl"
+line_start = 50
+line_end = 273
+
+[[operation.evidence]]
+field = "ui"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "the editor defines control order, conditional hue visibility and gradient, tooltips, and the monochrome not-applicable stack"
+reviewer = "cgasgarth"
+evidence_hash = "37cbf17d7e137fa2d7cebe22e0ad3bdd5ed33838036d2670459a1ea951ef5e45"
+source_path = "src/iop/colorreconstruction.c"
+line_start = 1133
+line_end = 1254
+
+[[operation.evidence]]
+field = "colorspace"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "default_colorspace unconditionally returns IOP_CS_LAB"
+reviewer = "cgasgarth"
+evidence_hash = "2f24123c11ee67df30f6e35abfcef24705beac8be286c79a6edff097287c6f47"
+source_path = "src/iop/colorreconstruction.c"
+line_start = 135
+line_end = 140
+
+[[operation.evidence]]
+field = "ordering"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "the current order places colorreconstruct at 69 after vignette and before finalscale and colorout"
+reviewer = "cgasgarth"
+evidence_hash = "1da7253ee289485659535f5f07e66739c5509f1bb2a09474663daf9102b7981e"
+source_path = "src/common/iop_order.c"
+line_start = 646
+line_end = 650
+
+[[operation.evidence]]
+field = "tiling"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "module flags intentionally prohibit tiling because reconstruction needs the full highlight surroundings"
+reviewer = "cgasgarth"
+evidence_hash = "0804020e49073ed1c5a9690269025dfd45af08277bb122e7011201eb6f57702c"
+source_path = "src/iop/colorreconstruction.c"
+line_start = 123
+line_end = 128
+
+[[operation.evidence]]
+field = "tiling-callback"
+source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+reason = "the callback still supplies bilateral-grid memory factors, maximum buffer use, and a four-sigma overlap to the full-frame planner"
+reviewer = "cgasgarth"
+evidence_hash = "4a05cda8a182729de92ca890dc30fddd88aa5cf6af606833b9e8a9a39ac26a0b"
+source_path = "src/iop/colorreconstruction.c"
+line_start = 1076
+line_end = 1130
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 216
-layout_hash = "10b72b9d102fcd27602d2a75bcd9344afb692b3e260777deb69628939ca8f58c"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 12
+layout_hash = "463e0b63a879e781180102784f3c4842db824f4854f7cb5dcf9e735cbc7d91e7"
+decoder = "rusttable.colorreconstruct.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.colorreconstruct.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorreconstruction.c"
 line_start = 160
-line_end = 160
-reason = "explicit parameter layout declaration"
+line_end = 165
+reason = "v1 is three ordered floats: threshold, spatial, and range"
 reviewer = "cgasgarth"
-evidence_hash = "c874b6d668c00193407b54b7506f2c6729868f7287b4db0d098bf33a451150c4"
+evidence_hash = "e72c9335447424b1e19648ec8e7ba4f3ad75932ad750acecfb9b085d827712dc"
 
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 12
+alignment = 4
+layout_hash = "463e0b63a879e781180102784f3c4842db824f4854f7cb5dcf9e735cbc7d91e7"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 12
+alignment = 4
+layout_hash = "47918541b637fa8404d6bfc6bf201dd8836ef6f5cb8a01e797f5c647ff161056"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 12
+alignment = 4
+layout_hash = "8b7806ae522ff222ca17d3a1fb2b0cc065094f1c7678ad2cc4250886e042a214"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[operation.parameter_versions.codec]
+byte_size = 12
+decoder = "rusttable.colorreconstruct.decode.v1"
+encoder = "rusttable.colorreconstruct.encode.v1"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.colorreconstruct.v1"
+
+[[operation.parameter_versions.codec.fields]]
+name = "threshold"
+kind = "f32"
+offset = 0
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "spatial"
+kind = "f32"
+offset = 4
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "range"
+kind = "f32"
+offset = 8
+size = 4
 
 [[operation.parameter_versions]]
 version = 2
-byte_size = 312
-layout_hash = "d3db9cf1e717d5ecf30a15b55409783ee3f664dabfd6bb2b21df5bdeaf19aec9"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 16
+layout_hash = "84445661bafeda4e6626b3d6b9b7b6947a0a05b29ab92741e9a3f90f5cf0361d"
+decoder = "rusttable.colorreconstruct.decode.v2"
+opaque_blocking = false
 fixture_id = "operation.colorreconstruct.params.v2"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorreconstruction.c"
 line_start = 182
-line_end = 182
-reason = "explicit parameter layout declaration"
+line_end = 188
+reason = "v2 appends the precedence enum to the three v1 floats"
 reviewer = "cgasgarth"
-evidence_hash = "fc41cabc9c3675eada21d69cdc80dd6c41588e9b84356fed0dcedc425b14cac2"
+evidence_hash = "f2df88edcf4f97e502eaf3f3a7ecb634873ba6fc18e25825de7f1d1442958d82"
 
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 16
+alignment = 4
+layout_hash = "84445661bafeda4e6626b3d6b9b7b6947a0a05b29ab92741e9a3f90f5cf0361d"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "precedence"
+type_name = "dt_iop_colorreconstruct_precedence_t"
+enum_identity = "dt_iop_colorreconstruct_precedence_t"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 16
+alignment = 4
+layout_hash = "11404ccec49362a8b837ea72ad1961d506a497e0caa7987bc00edb417c45078a"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "precedence"
+type_name = "dt_iop_colorreconstruct_precedence_t"
+enum_identity = "dt_iop_colorreconstruct_precedence_t"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 16
+alignment = 4
+layout_hash = "828bb5139d582764601e2f129959af4f6094aa5de49b784c8c1bc61b6883e53d"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "precedence"
+type_name = "dt_iop_colorreconstruct_precedence_t"
+enum_identity = "dt_iop_colorreconstruct_precedence_t"
+offset = 12
+size = 4
+alignment = 4
+
+[operation.parameter_versions.codec]
+byte_size = 16
+decoder = "rusttable.colorreconstruct.decode.v2"
+encoder = "rusttable.colorreconstruct.encode.v2"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.colorreconstruct.v2"
+
+[[operation.parameter_versions.codec.fields]]
+name = "threshold"
+kind = "f32"
+offset = 0
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "spatial"
+kind = "f32"
+offset = 4
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "range"
+kind = "f32"
+offset = 8
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "precedence"
+kind = "i32"
+offset = 12
+size = 4
 
 [[operation.parameter_versions]]
 version = 3
 byte_size = 20
-layout_hash = "1321074949c246eba96f4b2e8df07eb2eb4b70b752ffd89ab876c1ab9196e9ad"
-decoder = "opaque"
-opaque_blocking = true
+layout_hash = "3756c4815d337d3909424f2833160234eb848b3d538059a748efd4f6c8ae98b8"
+decoder = "rusttable.colorreconstruct.decode.v3"
+opaque_blocking = false
 fixture_id = "operation.colorreconstruct.params.v3"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorreconstruction.c"
-line_start = 45
-line_end = 45
-reason = "explicit parameter layout declaration"
+line_start = 54
+line_end = 61
+reason = "v3 inserts hue before precedence in the current five-field payload"
 reviewer = "cgasgarth"
-evidence_hash = "077066d0b079817eb66c5b8e47e1a6b9e443edcc1a30a067d598a88f43f64dd4"
+evidence_hash = "7e60a7eb7c5cbeedfa909c3caecf174a3ea599021b456fe17a43acce2c7d295e"
 
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 20
+alignment = 4
+layout_hash = "3756c4815d337d3909424f2833160234eb848b3d538059a748efd4f6c8ae98b8"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "hue"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "precedence"
+type_name = "dt_iop_colorreconstruct_precedence_t"
+enum_identity = "dt_iop_colorreconstruct_precedence_t"
+offset = 16
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 20
+alignment = 4
+layout_hash = "9d806cedb7d6523282b83c4095fa7c573626ffcabe5eaae4baa2f027272a9d41"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "hue"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "precedence"
+type_name = "dt_iop_colorreconstruct_precedence_t"
+enum_identity = "dt_iop_colorreconstruct_precedence_t"
+offset = 16
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 20
+alignment = 4
+layout_hash = "fd1397000d6a419d50cd276a81645ab2f0fef0de31731243021d7a780a65745b"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "threshold"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "spatial"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "range"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "hue"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "precedence"
+type_name = "dt_iop_colorreconstruct_precedence_t"
+enum_identity = "dt_iop_colorreconstruct_precedence_t"
+offset = 16
+size = 4
+alignment = 4
+
+[operation.parameter_versions.codec]
+byte_size = 20
+decoder = "rusttable.colorreconstruct.decode.v3"
+encoder = "rusttable.colorreconstruct.encode.v3"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.colorreconstruct.v3"
+
+[[operation.parameter_versions.codec.fields]]
+name = "threshold"
+kind = "f32"
+offset = 0
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "spatial"
+kind = "f32"
+offset = 4
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "range"
+kind = "f32"
+offset = 8
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "hue"
+kind = "f32"
+offset = 12
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "precedence"
+kind = "i32"
+offset = 16
+size = 4
 
 [[operation.migrations]]
 from_version = 1
-to_version = 2
+to_version = 3
 strategy = "reference-legacy-params"
-fixture_id = "operation.colorreconstruct.migration.v1-v2"
+fixture_id = "operation.colorreconstruct.migration.v1-v3"
 [operation.migrations.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorreconstruction.c"
 line_start = 158
-line_end = 158
-reason = "explicit legacy_params branch"
+line_end = 179
+reason = "v1 migrates directly to v3, preserving three floats and defaulting precedence to none and hue to 0.66"
 reviewer = "cgasgarth"
-evidence_hash = "09f519dd5e3c1ac872a947ec0a7628b116088ba1ac97d6a85138ea1f04fb227f"
-
+evidence_hash = "173ef778d32be336843e631c3bd13e05ab8e4c828b64272a260349f00cb4cb67"
 
 [[operation.migrations]]
 from_version = 2
@@ -3629,10 +4149,182 @@ fixture_id = "operation.colorreconstruct.migration.v2-v3"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colorreconstruction.c"
 line_start = 180
-line_end = 180
-reason = "explicit legacy_params branch"
+line_end = 202
+reason = "v2 migrates directly to v3, preserving precedence and defaulting hue to 0.66"
 reviewer = "cgasgarth"
-evidence_hash = "353295dec059dba68982a23a589cafa76c36aa9df5a27d2bfb7506c0150e8350"
+evidence_hash = "6e05815d78747448dccf23b9ecc94bfdae799c12e539c2cab4d808af357b7f56"
+
+[operation.color_contract.input]
+mode = "unconditional"
+value = "LabD50"
+evidence = [{ source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad", source_path = "src/iop/colorreconstruction.c", line_start = 135, line_end = 140, reason = "default_colorspace returns IOP_CS_LAB", reviewer = "cgasgarth", evidence_hash = "2f24123c11ee67df30f6e35abfcef24705beac8be286c79a6edff097287c6f47" }]
+
+[operation.color_contract.output]
+mode = "unconditional"
+value = "LabD50"
+evidence = [{ source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad", source_path = "src/iop/colorreconstruction.c", line_start = 135, line_end = 140, reason = "color reconstruction preserves the module Lab colorspace", reviewer = "cgasgarth", evidence_hash = "2f24123c11ee67df30f6e35abfcef24705beac8be286c79a6edff097287c6f47" }]
+
+[operation.capability_contract]
+supports_shared_blending = true
+supports_drawn_masks = true
+publishes_raster_mask = false
+consumes_raster_mask = false
+flags = [
+    "IOP_FLAGS_INCLUDE_IN_STYLES",
+    "IOP_FLAGS_SUPPORTS_BLENDING",
+    "IOP_GROUP_BASIC",
+    "IOP_GROUP_TECHNICAL",
+]
+
+[operation.roi_contract]
+behavior = "identity"
+overlap = "none-full-frame-only"
+full_analysis = "required"
+geometry = "none"
+fast_pipe = "not-supported"
+scale = "piece.iscale / roi_in.scale"
+
+[operation.tiling_contract]
+class = "full-frame"
+overlap = 0
+
+[colorreconstruct_completion]
+schema = "rusttable.colorreconstruct-completion.v1"
+authoritative_rusttable_baseline = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+source_content_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+canonical_identity = "colorreconstruct"
+rust_id = "rusttable.colorreconstruct"
+native_source = "src/iop/colorreconstruction.c"
+native_kernel_source = "data/kernels/colorreconstruction.cl"
+status = "non-deletion-milestone"
+parameter_fixture_ids = [
+    "operation.colorreconstruct.params.v1",
+    "operation.colorreconstruct.params.v2",
+    "operation.colorreconstruct.params.v3",
+]
+migration_fixture_ids = [
+    "operation.colorreconstruct.migration.v1-v3",
+    "operation.colorreconstruct.migration.v2-v3",
+]
+canonical_predecessor = "vignette"
+canonical_order = 69
+canonical_successor = "finalscale"
+retained_registrations = [
+    "src/iop/CMakeLists.txt:72",
+    "data/kernels/programs.conf:16",
+    "src/common/iop_order.c:647",
+]
+retained_dependencies = [
+    "src/common/colorspaces_inline_conversions.h",
+    "src/common/opencl.h",
+    "src/develop/imageop.h",
+    "src/develop/imageop_gui.h",
+    "src/develop/tiling.h",
+    "data/kernels/colorreconstruction.cl",
+]
+
+[[colorreconstruct_completion.claim]]
+name = "cpu"
+status = "prerequisite-gated"
+prerequisites = [
+    "canonical-colorreconstruct-identity",
+    "typed-v1-v2-v3-payloads-and-direct-v1-v3-v2-v3-migrations",
+    "LabD50-four-channel-boundary",
+    "source-equivalent-HSL-Rec709-XYZ-D50-Lab-hue-conversion",
+    "bounded-bilateral-grid-geometry-and-roi-rescaling",
+    "threshold-exclusion-and-none-chroma-hue-precedence-weighting",
+    "three-axis-five-tap-blur-and-trilinear-slice",
+    "threshold-ramp-Lin-over-Lout-chroma-reconstruction-and-alpha-preservation",
+    "preview-to-full-frozen-grid-hash-lock-and-zoom-routing",
+    "allocation-failure-log-and-copy-through",
+    "opaque-blend-history-preservation",
+]
+
+[[colorreconstruct_completion.claim]]
+name = "gpu"
+status = "prerequisite-gated"
+prerequisites = [
+    "zero-splat-three-axis-blur-and-slice-stages",
+    "atomic-and-local-buffer-resource-qualification",
+    "bounded-grid-allocation-and-frozen-grid-host-transfer",
+    "preview-to-full-grid-reuse",
+    "allocation-dispatch-and-transfer-failure-cpu-fallback",
+    "cpu-differential-coverage",
+]
+
+[[colorreconstruct_completion.claim]]
+name = "ui"
+status = "prerequisite-gated"
+prerequisites = [
+    "threshold-spatial-range-precedence-hue-control-order",
+    "source-defaults-ranges-and-tooltips",
+    "conditional-hue-visibility-degree-format-and-seven-stop-gradient",
+    "monochrome-not-applicable-stack-and-hidden-enable-button",
+    "production-edit-persistence-and-preview-routing",
+    "GTK-boundary-coverage",
+]
+
+[[colorreconstruct_completion.claim]]
+name = "import"
+status = "prerequisite-gated"
+prerequisites = [
+    "little-endian-v1-v2-v3-payload-fixtures",
+    "direct-v1-v3-and-v2-v3-migration-fixtures",
+    "unknown-parameter-version-opaque-preservation",
+    "opaque-blend-version-payload-and-multi-instance-preservation",
+    "round-trip-history-coverage",
+]
+
+[[colorreconstruct_completion.claim]]
+name = "pipeline"
+status = "prerequisite-gated"
+prerequisites = [
+    "canonical-order-vignette-colorreconstruct-finalscale-colorout",
+    "identity-roi-with-full-frame-analysis",
+    "native-bilateral-grid-memory-factor-and-maxbuf-accounting",
+    "no-tile-execution-despite-four-sigma-planner-overlap",
+    "shared-blending-and-drawn-mask-routing",
+]
+
+[[colorreconstruct_completion.deferral]]
+name = "native-source-deletion"
+source_path = "src/iop/colorreconstruction.c"
+reason = "This milestone records strict prerequisites but does not prove every file-port completion criterion or permit deleting the retained source."
+
+[[colorreconstruct_completion.deferral]]
+name = "native-kernel-deletion"
+source_path = "data/kernels/colorreconstruction.cl"
+reason = "The retained kernel remains required as the source oracle until zero, splat, all three blur axes, slice, resource qualification, failure fallback, and CPU differential parity are proven."
+
+[[colorreconstruct_completion.deferral]]
+name = "preview-full-frozen-grid-sharing"
+source_path = "src/iop/colorreconstruction.c:303-373,617-664,797-929,1023-1067"
+reason = "Exact preview-grid freeze/thaw, pixelpipe hash synchronization, zoom threshold, locking, and CPU/GPU cross-pipe reuse must be production-routed before deletion."
+
+[[colorreconstruct_completion.deferral]]
+name = "full-frame-tiling-and-memory-accounting"
+source_path = "src/iop/colorreconstruction.c:123-128,1076-1130"
+reason = "The native module prohibits tiled execution while still reporting dynamic bilateral-grid memory, max-buffer, and four-sigma overlap requirements; all planner behavior remains a deletion blocker."
+
+[[colorreconstruct_completion.deferral]]
+name = "allocation-failure-copy-through"
+source_path = "src/iop/colorreconstruction.c:262-373,646-673"
+reason = "Every host and aligned-grid allocation failure must preserve native logging, cleanup, and final image copy-through behavior."
+
+[[colorreconstruct_completion.deferral]]
+name = "typed-native-blend-payload"
+source_path = "src/develop/blends/blend.c"
+reason = "Color Reconstruction still depends on shared native blending and drawn-mask behavior; opaque blend versions and bytes must remain preserved until that responsibility is typed and executed."
+
+[[colorreconstruct_completion.deferral]]
+name = "monochrome-and-editor-lifecycle"
+source_path = "src/iop/colorreconstruction.c:1133-1260"
+reason = "Monochrome applicability, conditional hue state, cached-grid invalidation, tooltips, gradient stops, and GUI cleanup must be production-routed and boundary-tested."
+
+[[colorreconstruct_completion.deferral]]
+name = "opencl-runtime-resource-strategy"
+source_path = "src/iop/colorreconstruction.c:675-1072"
+reason = "WGPU may replace OpenCL local-memory and object-lifecycle mechanics, so deletion requires equivalent observable qualification, transfer, cleanup, and fallback rather than literal OpenCL API parity."
 
 
 
