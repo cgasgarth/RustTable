@@ -19,6 +19,7 @@ use super::validate::validate_and_reflect;
 const POINT_SOURCE: &str = "shaders/point.wgsl";
 const BILATERAL_SOURCE: &str = "shaders/bilateral.wgsl";
 const BLOOM_SOURCE: &str = "shaders/bloom.wgsl";
+const COLORRECONSTRUCT_SOURCE: &str = "shaders/colorreconstruct.wgsl";
 
 #[derive(Debug, Clone, Copy)]
 struct EntrySpec {
@@ -561,6 +562,77 @@ const BLOOM_ENTRY_CONTRACTS: &[BloomEntryContract] = &[
     },
 ];
 
+const COLORRECONSTRUCT_INPUT: BindingContract = BindingContract {
+    binding: 0,
+    name: "input_pixels",
+    storage: true,
+    access: "read",
+    minimum_binding_size: 16,
+    type_description: "array<vec4<f32>, runtime>",
+};
+const COLORRECONSTRUCT_GRID_A: BindingContract = BindingContract {
+    binding: 1,
+    name: "grid_a",
+    storage: true,
+    access: "read_write",
+    minimum_binding_size: 4,
+    type_description: "array<atomic<u32>, runtime>",
+};
+const COLORRECONSTRUCT_GRID_B: BindingContract = BindingContract {
+    binding: 2,
+    name: "grid_b",
+    storage: true,
+    access: "read_write",
+    minimum_binding_size: 4,
+    type_description: "array<atomic<u32>, runtime>",
+};
+const COLORRECONSTRUCT_OUTPUT: BindingContract = BindingContract {
+    binding: 3,
+    name: "output_pixels",
+    storage: true,
+    access: "read_write",
+    minimum_binding_size: 16,
+    type_description: "array<vec4<f32>, runtime>",
+};
+const COLORRECONSTRUCT_PARAMS: BindingContract = BindingContract {
+    binding: 4,
+    name: "params",
+    storage: false,
+    access: "read",
+    minimum_binding_size: 80,
+    type_description: "struct",
+};
+const COLORRECONSTRUCT_ZERO_BINDINGS: &[BindingContract] =
+    &[COLORRECONSTRUCT_GRID_A, COLORRECONSTRUCT_PARAMS];
+const COLORRECONSTRUCT_SPLAT_BINDINGS: &[BindingContract] = &[
+    COLORRECONSTRUCT_INPUT,
+    COLORRECONSTRUCT_GRID_A,
+    COLORRECONSTRUCT_PARAMS,
+];
+const COLORRECONSTRUCT_BLUR_BINDINGS: &[BindingContract] = &[
+    COLORRECONSTRUCT_GRID_A,
+    COLORRECONSTRUCT_GRID_B,
+    COLORRECONSTRUCT_PARAMS,
+];
+const COLORRECONSTRUCT_SLICE_BINDINGS: &[BindingContract] = &[
+    COLORRECONSTRUCT_INPUT,
+    COLORRECONSTRUCT_GRID_A,
+    COLORRECONSTRUCT_OUTPUT,
+    COLORRECONSTRUCT_PARAMS,
+];
+
+fn colorreconstruct_bindings(entry_point: &str) -> &'static [BindingContract] {
+    match entry_point {
+        "colorreconstruction_zero" => COLORRECONSTRUCT_ZERO_BINDINGS,
+        "colorreconstruction_splat" => COLORRECONSTRUCT_SPLAT_BINDINGS,
+        "colorreconstruction_blur_x"
+        | "colorreconstruction_blur_y"
+        | "colorreconstruction_blur_z" => COLORRECONSTRUCT_BLUR_BINDINGS,
+        "colorreconstruction_slice" => COLORRECONSTRUCT_SLICE_BINDINGS,
+        _ => &[],
+    }
+}
+
 fn point_bindings_match(entry_point: &str, actual: &[BindingReflection]) -> bool {
     let expected = match entry_point {
         "basicadj" => POINT_BASICADJ_BINDINGS,
@@ -859,6 +931,74 @@ impl ShaderRegistry {
                 reflection,
             });
         }
+        let expanded = catalog.expand(COLORRECONSTRUCT_SOURCE, &BTreeMap::new())?;
+        let source_tree_hash = catalog.source_tree_hash(COLORRECONSTRUCT_SOURCE)?;
+        for entry_point in [
+            "colorreconstruction_zero",
+            "colorreconstruction_splat",
+            "colorreconstruction_blur_x",
+            "colorreconstruction_blur_y",
+            "colorreconstruction_blur_z",
+            "colorreconstruction_slice",
+        ] {
+            let (contract, numerical) = colorreconstruct_numerical_metadata(entry_point);
+            let reflection = validate_and_reflect(
+                COLORRECONSTRUCT_SOURCE,
+                &expanded.text,
+                &expanded.line_aliases,
+                entry_point,
+                numerical,
+            )?;
+            if reflection.workgroup_size != [16, 16, 1]
+                || !bindings_match(&reflection.bindings, colorreconstruct_bindings(entry_point))
+            {
+                return Err(ShaderError::Reflection(format!(
+                    "{entry_point} Color Reconstruction contract"
+                )));
+            }
+            let generated_wgsl_hash = digest(&expanded.text);
+            let implementation_id = format!("rusttable.colorreconstruct.{entry_point}");
+            let implementation_numerics = ImplementationNumerics::new(
+                &implementation_id,
+                "rusttable.cpu.colorreconstruct",
+                &generated_wgsl_hash,
+                ImplementationFamily::Gpu,
+                CompilerBaseline::BackendToolchain,
+                reflection.numerical.tolerance,
+                contract,
+            )
+            .map_err(|error| ShaderError::Reflection(error.to_string()))?;
+            let identity = ShaderIdentity {
+                program_id: "rusttable.colorreconstruct".to_owned(),
+                program_version: 1,
+                entry_point_id: entry_point.to_owned(),
+                entry_point_version: 1,
+                source_tree_hash: source_tree_hash.clone(),
+                generated_wgsl_hash,
+                reflection_schema: reflection.schema.clone(),
+                numerical_class: if entry_point == "colorreconstruction_zero" {
+                    NumericalClass::F32Point
+                } else {
+                    NumericalClass::F32Neighborhood
+                },
+                feature_plan: FeaturePlan::CoreCompute,
+                owner_operation_ids: vec!["rusttable.colorreconstruct".to_owned()],
+                owner_kernel_ids: vec![colorreconstruct_owner_kernel(entry_point).to_owned()],
+                canonical_cpu_reference: "rusttable.cpu.colorreconstruct".to_owned(),
+                implementation_version: 1,
+                implementation_numerics,
+            };
+            let identity_name = identity.entry_id().stable_name();
+            if !identities.insert(identity_name.clone()) {
+                return Err(ShaderError::DuplicateIdentity(identity_name));
+            }
+            entries.push(ShaderEntry {
+                identity,
+                source_alias: COLORRECONSTRUCT_SOURCE.to_owned(),
+                expanded_source: expanded.text.clone(),
+                reflection,
+            });
+        }
         entries.sort_by_key(super::model::ShaderEntry::id);
         Ok(Self { entries })
     }
@@ -981,12 +1121,19 @@ impl ShaderRegistry {
                 generated_names.insert(name.clone()),
                 "validated shader identities must generate unique Rust constants"
             );
-            let _ = writeln!(
-                output,
-                "pub const ENTRY_{}_ID: &str = \"{}\";",
-                name,
+            let declaration = format!(
+                "pub const ENTRY_{name}_ID: &str = \"{}\";",
                 entry.id().stable_name()
             );
+            if declaration.len() <= 100 {
+                let _ = writeln!(output, "{declaration}");
+            } else {
+                let _ = writeln!(
+                    output,
+                    "pub const ENTRY_{name}_ID: &str =\n    \"{}\";",
+                    entry.id().stable_name()
+                );
+            }
         }
         output.push_str("\n#[derive(Debug, Clone, Copy, PartialEq)]\n#[repr(C)]\npub struct PointParams {\n    pub pixel_count: u32,\n    pub exposure_stops: f32,\n    pub linear_offset: f32,\n    pub gain_red: f32,\n    pub gain_green: f32,\n    pub gain_blue: f32,\n    pub transfer_gamma: f32,\n    pub reserved: [u32; 5],\n}\n\nimpl PointParams {\n    #[must_use]\n    pub fn bytes(self) -> [u8; POINT_PARAMS_SIZE] {\n        let mut bytes = [0u8; POINT_PARAMS_SIZE];\n        let words = [self.pixel_count.to_le_bytes(), self.exposure_stops.to_le_bytes(), self.linear_offset.to_le_bytes(), self.gain_red.to_le_bytes(), self.gain_green.to_le_bytes(), self.gain_blue.to_le_bytes(), self.transfer_gamma.to_le_bytes(), self.reserved[0].to_le_bytes(), self.reserved[1].to_le_bytes(), self.reserved[2].to_le_bytes(), self.reserved[3].to_le_bytes(), self.reserved[4].to_le_bytes()];\n        for (index, word) in words.into_iter().enumerate() { bytes[index * 4..index * 4 + 4].copy_from_slice(&word); }\n        bytes\n    }\n}\n");
         output.truncate(output.find("\n#[derive").unwrap_or(output.len()));
@@ -1170,6 +1317,96 @@ fn bloom_numerical_metadata(entry_point: &str) -> (NumericalContract, NumericalM
     (contract, metadata)
 }
 
+fn colorreconstruct_owner_kernel(entry_point: &str) -> &'static str {
+    match entry_point {
+        "colorreconstruction_zero" => "darktable.colorreconstruction.colorreconstruction_zero",
+        "colorreconstruction_splat" => "darktable.colorreconstruction.colorreconstruction_splat",
+        "colorreconstruction_blur_x"
+        | "colorreconstruction_blur_y"
+        | "colorreconstruction_blur_z" => {
+            "darktable.colorreconstruction.colorreconstruction_blur_line"
+        }
+        "colorreconstruction_slice" => "darktable.colorreconstruction.colorreconstruction_slice",
+        _ => unreachable!("registered Color Reconstruction entry point"),
+    }
+}
+
+fn colorreconstruct_numerical_metadata(
+    entry_point: &str,
+) -> (NumericalContract, NumericalMetadata) {
+    let zero = entry_point == "colorreconstruction_zero";
+    let splat = entry_point == "colorreconstruction_splat";
+    let slice = entry_point == "colorreconstruction_slice";
+    let tolerance = if zero {
+        ToleranceClass::Exact
+    } else if splat {
+        ToleranceClass::LegacyGpu
+    } else {
+        ToleranceClass::Neighborhood
+    };
+    let contract = NumericalContract {
+        float_domain: FloatDomainPolicy::F32,
+        non_finite: NonFinitePolicy::Reject,
+        subnormal: if zero {
+            SubnormalPolicy::Preserve
+        } else {
+            SubnormalPolicy::BackendDefined
+        },
+        fma: if zero {
+            FmaPolicy::SeparateRoundings
+        } else {
+            FmaPolicy::BackendDefined
+        },
+        reduction: if zero {
+            ReductionPolicy::None
+        } else {
+            ReductionPolicy::BackendDefined
+        },
+        transcendental: if splat {
+            TranscendentalPolicy::WgslBackend
+        } else {
+            TranscendentalPolicy::None
+        },
+        conversion: if splat || slice {
+            ConversionPolicy {
+                range: ConversionRange::Clamp,
+                rounding: RoundingPolicy::TowardZero,
+            }
+        } else {
+            ConversionPolicy::checked_nearest_even()
+        },
+    };
+    let metadata = NumericalMetadata {
+        uses_f32: true,
+        uses_f16: false,
+        contraction_assumption: if zero {
+            "no floating-point arithmetic; exact zero store".to_owned()
+        } else {
+            format!("backend-defined; {} tolerance required", tolerance.as_str())
+        },
+        transcendental_operations: if splat {
+            vec!["sqrt".to_owned(), "atan2".to_owned(), "exp".to_owned()]
+        } else {
+            Vec::new()
+        },
+        texture_filtering: false,
+        sampling: !zero,
+        atomics: zero || splat,
+        reductions: !zero,
+        subnormal_policy: if zero {
+            "preserve".to_owned()
+        } else {
+            "backend-defined".to_owned()
+        },
+        non_finite_policy: "reject-at-host-boundary".to_owned(),
+        schema_3_tolerance_class: tolerance.as_str().to_owned(),
+        canonical_cpu_reference: "rusttable.cpu.colorreconstruct".to_owned(),
+        contract,
+        tolerance,
+    };
+    (contract, metadata)
+}
+
 fn digest(source: &str) -> String {
     let digest: [u8; 32] = Sha256::digest(source.as_bytes()).into();
     super::model::hex(&digest)
@@ -1182,7 +1419,7 @@ mod tests {
     #[test]
     fn checked_in_registry_has_stable_initial_entries() {
         let registry = ShaderRegistry::try_checked_in().expect("registry");
-        assert_eq!(registry.entries().len(), 22);
+        assert_eq!(registry.entries().len(), 28);
         let exposure = registry
             .find("rusttable.point", "exposure")
             .expect("point exposure");
@@ -1315,6 +1552,71 @@ mod tests {
             assert_eq!(
                 entry.identity.implementation_numerics.contract(),
                 entry.reflection.numerical.contract
+            );
+        }
+    }
+
+    #[test]
+    fn colorreconstruct_entries_retain_native_owners_and_stage_numerics() {
+        let registry = ShaderRegistry::try_checked_in().expect("registry");
+        let zero = registry
+            .find("rusttable.colorreconstruct", "colorreconstruction_zero")
+            .expect("Color Reconstruction zero");
+        assert_eq!(
+            zero.identity.owner_kernel_ids,
+            ["darktable.colorreconstruction.colorreconstruction_zero"]
+        );
+        assert_eq!(zero.identity.numerical_class, NumericalClass::F32Point);
+        assert_eq!(
+            zero.identity.implementation_numerics.tolerance(),
+            ToleranceClass::Exact
+        );
+        assert!(!zero.reflection.numerical.reductions);
+        assert!(
+            zero.reflection
+                .numerical
+                .transcendental_operations
+                .is_empty()
+        );
+
+        let splat = registry
+            .find("rusttable.colorreconstruct", "colorreconstruction_splat")
+            .expect("Color Reconstruction splat");
+        assert_eq!(
+            splat.identity.owner_kernel_ids,
+            ["darktable.colorreconstruction.colorreconstruction_splat"]
+        );
+        assert_eq!(
+            splat.identity.implementation_numerics.tolerance(),
+            ToleranceClass::LegacyGpu
+        );
+        assert_eq!(
+            splat.reflection.numerical.transcendental_operations,
+            ["sqrt", "atan2", "exp"]
+        );
+        assert!(splat.reflection.numerical.reductions);
+
+        for entry_name in [
+            "colorreconstruction_blur_x",
+            "colorreconstruction_blur_y",
+            "colorreconstruction_blur_z",
+        ] {
+            let blur = registry
+                .find("rusttable.colorreconstruct", entry_name)
+                .expect("Color Reconstruction blur");
+            assert_eq!(
+                blur.identity.owner_kernel_ids,
+                ["darktable.colorreconstruction.colorreconstruction_blur_line"]
+            );
+            assert_eq!(
+                blur.identity.implementation_numerics.tolerance(),
+                ToleranceClass::Neighborhood
+            );
+            assert!(
+                blur.reflection
+                    .numerical
+                    .transcendental_operations
+                    .is_empty()
             );
         }
     }

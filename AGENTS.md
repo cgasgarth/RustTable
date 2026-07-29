@@ -37,7 +37,7 @@
 
 ## Git and delivery
 
-- Use only `/Users/cgas/Documents/RustTable/RustTable` for migration development. Do not create Git worktrees.
+- Use `/Users/cgas/Documents/RustTable/RustTable` as the canonical integration checkout for migration development. Up to three temporary Git worktrees may be active concurrently for independent worker batches; never create more than three.
 - Work on the long-lived `codex/file-by-file-migration` branch. Keep `main` protected from direct commits.
 - Commit coherent source-file ports as they complete. Open a ready-for-review PR only for a meaningful migration milestone, then squash-merge it.
 - GitHub issues track major milestones and concrete defects discovered during faithful ports. Do not create abstraction-first backlogs, one issue per trivial step, artificial PR batches, or priority-driven work that skips source order.
@@ -46,8 +46,9 @@
 
 ## Agent orchestration
 
-- All agents work in the single real checkout on its current branch; never create worktrees.
-- Subagents may analyze, test, review, and edit coordinated non-overlapping files in that checkout. The orchestrator owns task partitioning, shared-file conflict avoidance, integration, and final validation.
+- The canonical integration checkout owns `codex/file-by-file-migration`, delivery, and the single active milestone PR. Up to three temporary Git worktrees may be active concurrently for independent implementation, diagnostics, tests, or review.
+- Each worker worktree has exclusive file ownership. Never assign the same writable file to two worktrees; keep exhaustive-match registries, pixelpipe dispatch, app composition, and other shared hubs with one integration owner in the canonical checkout.
+- Workers may analyze, test, review, edit, and commit only their assigned paths. The orchestrator inspects and integrates those scoped changes, runs final validation in the canonical checkout, and owns all push and PR actions.
 - Give agents exact Darktable and Rust paths. Require findings about implemented-but-incorrect behavior; do not report functionality that is merely unported.
 - Prefer parallel migration work that advances faithful Rust implementation over process, PR, or orchestration churn. Do not poll running agents routinely; completion notifications wake the orchestrator.
 

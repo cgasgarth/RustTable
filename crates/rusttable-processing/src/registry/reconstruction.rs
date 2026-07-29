@@ -2,7 +2,7 @@ use crate::ProcessingOperation;
 use crate::descriptor::{DescriptorId, OperationDescriptor, RoiKind};
 use crate::registry::{
     CpuFactory, CpuPrepare, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
-    OperationDefinition, PreparedCpuOperation,
+    OperationDefinition, OperationUiAvailability, PreparedCpuOperation,
 };
 use rusttable_core::Operation;
 
@@ -145,7 +145,7 @@ pub(crate) fn highlights_definition() -> OperationDefinition {
             "iop.highlights.scalar",
             "iop.highlights.masks",
         ],
-        4,
+        &[(1, 2), (2, 3), (3, 4)],
     )
 }
 
@@ -155,12 +155,24 @@ pub(crate) fn color_reconstruction_definition() -> OperationDefinition {
         prepare_color_reconstruction,
         crate::operations::colorreconstruction::wgpu_passes(),
         &[
-            "iop.colorreconstruction.params.v1-v3",
-            "iop.colorreconstruction.scalar",
-            "iop.colorreconstruction.luminance",
+            "iop.colorreconstruct.params.v1-v3",
+            "iop.colorreconstruct.scalar",
+            "iop.colorreconstruct.luminance",
         ],
-        3,
+        &[(1, 3), (2, 3)],
     )
+    .with_ui_availability(OperationUiAvailability::PartiallyAvailable {
+        reason: "the Color Reconstruction parameter editor is usable, but native UI adjuncts remain deferred"
+            .to_owned(),
+        deferred_responsibilities: [
+            "iop.colorreconstruct.ui.shared-blending-and-drawn-masks",
+            "iop.colorreconstruct.ui.monochrome-applicability",
+            "iop.colorreconstruct.ui.preview-grid-lifecycle",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
+    })
 }
 
 fn reconstruction_definition<const N: usize>(
@@ -168,15 +180,19 @@ fn reconstruction_definition<const N: usize>(
     prepare: CpuPrepare,
     passes: [&'static str; N],
     evidence: &'static [&'static str],
-    target_version: u16,
+    migration_edges: &'static [(u16, u16)],
 ) -> OperationDefinition {
     let compatibility_name = descriptor.id.compatibility_name.clone();
-    let migrations = (1..target_version)
-        .map(|from| {
+    let migrations = migration_edges
+        .iter()
+        .map(|(from, to)| {
             MigrationBinding::new(
-                from,
-                from + 1,
-                format!("{}.migration.v{from}", descriptor.id.compatibility_name),
+                *from,
+                *to,
+                format!(
+                    "{}.migration.v{from}-v{to}",
+                    descriptor.id.compatibility_name
+                ),
             )
         })
         .collect();

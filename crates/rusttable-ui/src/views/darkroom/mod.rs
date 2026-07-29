@@ -727,7 +727,7 @@ impl DarkroomView {
     ) {
         let custom_structure_changed =
             self.typed_modules.borrow().as_ref().is_some_and(|current| {
-                colorzones_mount_structure(current) != colorzones_mount_structure(modules)
+                custom_editor_mount_structure(current) != custom_editor_mount_structure(modules)
             });
         self.typed_modules.replace(Some(modules.clone()));
         self.module_revision.replace(revision);
@@ -942,13 +942,20 @@ fn module_stack_revision(modules: &DarkroomModulesViewModel) -> Revision {
         .unwrap_or(Revision::ZERO)
 }
 
-fn colorzones_mount_structure(
+fn custom_editor_mount_structure(
     modules: &DarkroomModulesViewModel,
-) -> Vec<(Option<rusttable_core::OperationId>, usize)> {
-    modules
-        .instances(crate::iop::colorzones::COLORZONES_MODULE_ID)
-        .map(|module| (module.operation_id(), module.instance_count()))
-        .collect()
+) -> Vec<(&str, Option<rusttable_core::OperationId>, usize)> {
+    [
+        crate::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID,
+        crate::iop::colorzones::COLORZONES_MODULE_ID,
+    ]
+    .into_iter()
+    .flat_map(|module_id| {
+        modules
+            .instances(module_id)
+            .map(move |module| (module_id, module.operation_id(), module.instance_count()))
+    })
+    .collect()
 }
 
 #[derive(Clone)]

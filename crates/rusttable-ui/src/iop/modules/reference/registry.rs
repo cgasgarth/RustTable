@@ -14,6 +14,10 @@ use crate::iop::colorcorrection::{
     COLORCORRECTION_MODULE_ID, COLORCORRECTION_SOURCE_MAP, ColorCorrectionGridState,
     ColorCorrectionSourceMap,
 };
+use crate::iop::colorreconstruct::{
+    COLORRECONSTRUCTION_DESCRIPTION, COLORRECONSTRUCTION_GROUP_KEYS, COLORRECONSTRUCTION_MODULE_ID,
+    COLORRECONSTRUCTION_TITLE,
+};
 use crate::iop::colorzones::{
     COLORZONES_DESCRIPTION, COLORZONES_GROUP_KEYS, COLORZONES_MODULE_ID, COLORZONES_TITLE,
 };
@@ -104,8 +108,10 @@ fn module_from_descriptor(
     let velvia_source_map = (id == VELVIA_MODULE_ID).then_some(VELVIA_SOURCE_MAP);
     let vibrance_source_map = (id == VIBRANCE_MODULE_ID).then_some(VIBRANCE_SOURCE_MAP);
     let bloom_custom_editor = id == BLOOM_MODULE_ID;
+    let colorreconstruct_custom_editor = id == COLORRECONSTRUCTION_MODULE_ID;
     let colorzones_custom_editor = id == COLORZONES_MODULE_ID;
-    let custom_editor = bloom_custom_editor || colorzones_custom_editor;
+    let custom_editor =
+        bloom_custom_editor || colorreconstruct_custom_editor || colorzones_custom_editor;
     let mut controls = Vec::new();
     if ui_availability.is_available() && !custom_editor {
         for parameter in &descriptor.parameters {
@@ -123,6 +129,7 @@ fn module_from_descriptor(
     }
     let title = bloom_custom_editor
         .then(|| BLOOM_TITLE.to_owned())
+        .or_else(|| colorreconstruct_custom_editor.then(|| COLORRECONSTRUCTION_TITLE.to_owned()))
         .or_else(|| colorzones_custom_editor.then(|| COLORZONES_TITLE.to_owned()))
         .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
@@ -163,6 +170,11 @@ fn module_from_descriptor(
             .with_description(BLOOM_DESCRIPTION)
             .with_bloom_custom_editor()
             .with_group_keys(BLOOM_GROUP_KEYS);
+    } else if colorreconstruct_custom_editor {
+        module = module
+            .with_description(COLORRECONSTRUCTION_DESCRIPTION)
+            .with_colorreconstruct_custom_editor()
+            .with_group_keys(COLORRECONSTRUCTION_GROUP_KEYS);
     } else if colorzones_custom_editor {
         module = module
             .with_description(COLORZONES_DESCRIPTION)

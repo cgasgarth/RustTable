@@ -10,6 +10,7 @@ use rusttable_processing::defringe_compatibility::DefringeMode;
 use rusttable_processing::descriptor::OperationFlags;
 use rusttable_ui::iop::bloom::{BLOOM_MODULE_ID, BloomEditorState, BloomGtkState};
 use rusttable_ui::iop::colorcorrection::{COLORCORRECTION_MODULE_ID, ColorCorrectionGridState};
+use rusttable_ui::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID;
 use rusttable_ui::iop::colorzones::{COLORZONES_MODULE_ID, ColorZonesGtkState};
 use rusttable_ui::presentation::{DarkroomControlKind, DarkroomControlValue};
 use rusttable_ui::{
@@ -465,6 +466,48 @@ fn project_edit_with_preferences(
             }
             continue;
         }
+        if template.id() == COLORRECONSTRUCTION_MODULE_ID {
+            let operations = edit
+                .operations()
+                .filter(|operation| {
+                    operation_matches_module(operation, COLORRECONSTRUCTION_MODULE_ID)
+                })
+                .collect::<Vec<_>>();
+            if operations.is_empty() {
+                let state = rusttable_ui::iop::colorreconstruct::ColorReconstructionGtkState::new(
+                    materialized_operation_id(edit, "rusttable.colorreconstruct"),
+                    edit.revision(),
+                    rusttable_ui::iop::colorreconstruct::ColorReconstructionEditorState::default(),
+                    false,
+                    template.availability().is_supported(),
+                    true,
+                );
+                projected.push(template.with_colorreconstruct_editor_state(state));
+                continue;
+            }
+            let instance_count = operations.len();
+            for (instance_sequence, operation) in operations.into_iter().enumerate() {
+                let parameters = colorreconstruct_parameters(operation)?;
+                let state = rusttable_ui::iop::colorreconstruct::ColorReconstructionGtkState::new(
+                    operation.id(),
+                    edit.revision(),
+                    rusttable_ui::iop::colorreconstruct::ColorReconstructionEditorState::new(
+                        parameters,
+                    )
+                    .map_err(|error| persistence_error(error.to_string()))?,
+                    operation.is_enabled() && template.availability().is_supported(),
+                    template.availability().is_supported(),
+                    false,
+                );
+                projected.push(
+                    template
+                        .clone()
+                        .with_operation_instance(operation.id(), instance_sequence, instance_count)
+                        .with_colorreconstruct_editor_state(state),
+                );
+            }
+            continue;
+        }
         if template.id() == COLORZONES_MODULE_ID {
             let states = colorzones_snapshots(edit, colorzones_preferences)
                 .map_err(colorzones_edit_error)?;
@@ -525,6 +568,32 @@ fn project_edit_with_preferences(
         }
     }
     DarkroomModulesViewModel::new(projected)
+}
+
+fn colorreconstruct_parameters(
+    operation: &Operation,
+) -> Result<
+    rusttable_processing::operations::colorreconstruction::ColorReconstructionV3,
+    DarkroomModuleError,
+> {
+    let compiled = rusttable_processing::ProcessingOperation::compile(operation)
+        .map_err(|error| persistence_error(error.to_string()))?;
+    let rusttable_processing::ProcessingOperationKind::ColorReconstruction { config } =
+        compiled.kind()
+    else {
+        return Err(persistence_error(
+            "Color Reconstruction operation compiled to a different kind",
+        ));
+    };
+    Ok(
+        rusttable_processing::operations::colorreconstruction::ColorReconstructionV3 {
+            threshold: config.threshold().get(),
+            spatial: config.spatial().get(),
+            range: config.range().get(),
+            hue: config.hue().get(),
+            precedence: config.precedence().id(),
+        },
+    )
 }
 
 fn bloom_parameters(
@@ -916,6 +985,7 @@ fn rewrite_instance_operations(
         | DarkroomModuleAction::Preset { .. }
         | DarkroomModuleAction::Control { .. }
         | DarkroomModuleAction::BloomSettled { .. }
+        | DarkroomModuleAction::ColorReconstructionSettled { .. }
         | DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Recover { .. } => {
@@ -940,6 +1010,7 @@ fn instance_action_name(action: &DarkroomModuleAction) -> &'static str {
         | DarkroomModuleAction::Preset { .. }
         | DarkroomModuleAction::Control { .. }
         | DarkroomModuleAction::BloomSettled { .. }
+        | DarkroomModuleAction::ColorReconstructionSettled { .. }
         | DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Recover { .. } => "instance action",
@@ -991,6 +1062,9 @@ fn rewrite_target_operation(
         DarkroomModuleAction::Preset { .. } | DarkroomModuleAction::BloomSettled { .. } => {
             module.enabled()
         }
+        DarkroomModuleAction::ColorReconstructionSettled {
+            enable_required, ..
+        } => module.enabled() || *enable_required,
         DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Control { .. }
@@ -1043,6 +1117,42 @@ fn rewrite_target_operation(
                     persistence_error(format!("Bloom parameter {name} must be finite"))
                 })?);
         }
+    }
+    if let DarkroomModuleAction::ColorReconstructionSettled {
+        parameters: reconstruction,
+        ..
+    } = action
+    {
+        for (name, replacement) in [
+            ("threshold", reconstruction.threshold),
+            ("spatial", reconstruction.spatial),
+            ("range", reconstruction.range),
+            ("hue", reconstruction.hue),
+        ] {
+            let Some((_, value)) = parameters
+                .iter_mut()
+                .find(|(parameter, _)| parameter.as_str() == name)
+            else {
+                return Err(persistence_error(format!(
+                    "Color Reconstruction operation is missing {name}"
+                )));
+            };
+            *value =
+                ParameterValue::Scalar(FiniteF64::new(f64::from(replacement)).map_err(|_| {
+                    persistence_error(format!(
+                        "Color Reconstruction parameter {name} must be finite"
+                    ))
+                })?);
+        }
+        let Some((_, value)) = parameters
+            .iter_mut()
+            .find(|(parameter, _)| parameter.as_str() == "precedence")
+        else {
+            return Err(persistence_error(
+                "Color Reconstruction operation is missing precedence",
+            ));
+        };
+        *value = ParameterValue::Integer(i64::from(reconstruction.precedence));
     }
     if let Some(grid) = module.color_correction_grid() {
         for (name, replacement) in [

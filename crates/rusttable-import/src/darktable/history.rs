@@ -5,8 +5,13 @@
 //! pinned module version and opaque bytes become typed parameters. It does not
 //! emit an executable operation until Darktable's blend/mask and multi-instance
 //! payloads are also understood.
+//!
+//! The Color Reconstruction payload decoder mirrors `legacy_params` and the
+//! v1/v2/v3 declarations in `src/iop/colorreconstruction.c`; its byte order is
+//! the little-endian native history format used by the supported Darktable
+//! catalog fixtures.
 
-use std::fmt;
+use std::{fmt, mem::size_of};
 
 use rusttable_compat::{CompatHistoryStep, EnabledState};
 use rusttable_processing::operations::bloom::{BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory};
@@ -15,6 +20,10 @@ use rusttable_processing::operations::colorcontrast::{
 };
 use rusttable_processing::operations::colorcorrection::{
     COLORCORRECTION_V1_PARAMETER_BYTES, ColorCorrectionConfig, ColorCorrectionHistory,
+};
+use rusttable_processing::operations::colorreconstruction::{
+    ColorReconstructionConfig, ColorReconstructionV1, ColorReconstructionV2, ColorReconstructionV3,
+    migrate_v1 as migrate_colorreconstruction_v1, migrate_v2 as migrate_colorreconstruction_v2,
 };
 use rusttable_processing::operations::velvia::{
     VELVIA_V2_PARAMETER_BYTES, VelviaConfig, VelviaHistory,
@@ -27,8 +36,14 @@ use rusttable_processing::{COLORZONES_V5_PARAMETER_BYTES, ColorZonesConfig, Colo
 const BLOOM_COMPATIBILITY_NAME: &str = "bloom";
 const COLOR_CONTRAST_COMPATIBILITY_NAME: &str = "colorcontrast";
 const COLORCORRECTION_COMPATIBILITY_NAME: &str = "colorcorrection";
+const COLORRECONSTRUCTION_COMPATIBILITY_NAME: &str = "colorreconstruct";
 const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
+
+const COLORRECONSTRUCTION_V1_PARAMETER_BYTES: usize = 3 * size_of::<f32>();
+const COLORRECONSTRUCTION_V2_PARAMETER_BYTES: usize =
+    COLORRECONSTRUCTION_V1_PARAMETER_BYTES + size_of::<i32>();
+const COLORRECONSTRUCTION_V3_PARAMETER_BYTES: usize = 4 * size_of::<f32>() + size_of::<i32>();
 const VIBRANCE_COMPATIBILITY_NAME: &str = "vibrance";
 
 /// Stable reason an imported history row remains opaque.
@@ -148,6 +163,25 @@ pub struct DecodedColorCorrectionHistoryStep {
     pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
+/// One decoded Color Reconstruction core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedColorReconstructionHistoryStep {
+    /// The exact original row, including opaque blend and multi-instance metadata.
+    pub source: CompatHistoryStep,
+    /// Checked current v3 core parameters.
+    pub config: ColorReconstructionConfig,
+    /// Native enabled state retained without creating an executable operation.
+    pub enabled: bool,
+    /// Original Darktable parameter version.
+    pub source_version: u16,
+    /// Canonical current-version parameter bytes in native field order.
+    pub canonical_parameters: [u8; COLORRECONSTRUCTION_V3_PARAMETER_BYTES],
+    /// Whether the source payload required the pinned v1/v2-to-v3 migration.
+    pub migrated: bool,
+    /// Explicit reason no executable imported operation was emitted.
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
 /// One decoded Color Zones core whose complete Darktable row is not executable yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedColorZonesHistoryStep {
@@ -179,6 +213,9 @@ pub enum DarktableHistoryStepDecode {
     /// Color Correction v1 core parameters are decoded, while blend/mask
     /// semantics remain explicitly non-executable.
     ColorCorrectionPendingBlend(DecodedColorCorrectionHistoryStep),
+    /// Color Reconstruction core parameters are decoded and migrated to canonical v3,
+    /// while blend/mask semantics remain explicitly non-executable.
+    ColorReconstructionPendingBlend(DecodedColorReconstructionHistoryStep),
     /// Color Zones core parameters are decoded and migrated to canonical v5,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
@@ -209,6 +246,9 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(BLOOM_COMPATIBILITY_NAME) => decode_bloom_history_step(step),
         Some(COLOR_CONTRAST_COMPATIBILITY_NAME) => decode_colorcontrast_history_step(step),
         Some(COLORCORRECTION_COMPATIBILITY_NAME) => decode_colorcorrection_history_step(step),
+        Some(COLORRECONSTRUCTION_COMPATIBILITY_NAME) => {
+            decode_colorreconstruction_history_step(step)
+        }
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
@@ -338,6 +378,147 @@ fn decode_colorcorrection_history_step(step: &CompatHistoryStep) -> DarktableHis
             ),
         },
     })
+}
+
+fn decode_colorreconstruction_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Color Reconstruction") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let (current, migrated) = match decode_colorreconstruction_parameters(
+        source_version,
+        &step.operation_params.bytes,
+    ) {
+        Ok(Some(decoded)) => decoded,
+        Ok(None) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Color Reconstruction v{source_version} parameters remain opaque: only native v1, v2, and v3 are typed"
+                ),
+            );
+        }
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Reconstruction v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let config = match current.config() {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Reconstruction v{source_version} parameters are not executable: {error}"
+                ),
+            );
+        }
+    };
+
+    DarktableHistoryStepDecode::ColorReconstructionPendingBlend(
+        DecodedColorReconstructionHistoryStep {
+            source: step.clone(),
+            config,
+            enabled,
+            source_version,
+            canonical_parameters: encode_colorreconstruction_v3(current),
+            migrated,
+            execution_blocker: DarktableHistoryDecodeFinding {
+                code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+                detail: format!(
+                    "Darktable Color Reconstruction core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+                    step.blend_version
+                ),
+            },
+        },
+    )
+}
+
+fn decode_colorreconstruction_parameters(
+    source_version: u16,
+    bytes: &[u8],
+) -> Result<Option<(ColorReconstructionV3, bool)>, String> {
+    match source_version {
+        1 => {
+            require_parameter_size(bytes, COLORRECONSTRUCTION_V1_PARAMETER_BYTES)?;
+            let parameters = ColorReconstructionV1 {
+                threshold: read_f32_le(bytes, 0),
+                spatial: read_f32_le(bytes, 4),
+                range: read_f32_le(bytes, 8),
+            };
+            Ok(Some((migrate_colorreconstruction_v1(parameters), true)))
+        }
+        2 => {
+            require_parameter_size(bytes, COLORRECONSTRUCTION_V2_PARAMETER_BYTES)?;
+            let parameters = ColorReconstructionV2 {
+                threshold: read_f32_le(bytes, 0),
+                spatial: read_f32_le(bytes, 4),
+                range: read_f32_le(bytes, 8),
+                precedence: read_i32_le(bytes, 12),
+            };
+            Ok(Some((migrate_colorreconstruction_v2(parameters), true)))
+        }
+        3 => {
+            require_parameter_size(bytes, COLORRECONSTRUCTION_V3_PARAMETER_BYTES)?;
+            Ok(Some((
+                ColorReconstructionV3 {
+                    threshold: read_f32_le(bytes, 0),
+                    spatial: read_f32_le(bytes, 4),
+                    range: read_f32_le(bytes, 8),
+                    hue: read_f32_le(bytes, 12),
+                    precedence: read_i32_le(bytes, 16),
+                },
+                false,
+            )))
+        }
+        _ => Ok(None),
+    }
+}
+
+fn require_parameter_size(bytes: &[u8], expected: usize) -> Result<(), String> {
+    if bytes.len() == expected {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected {expected} bytes in the pinned native layout, found {}",
+            bytes.len()
+        ))
+    }
+}
+
+fn read_f32_le(bytes: &[u8], offset: usize) -> f32 {
+    f32::from_le_bytes(
+        bytes[offset..offset + size_of::<f32>()]
+            .try_into()
+            .expect("payload size was checked before decoding"),
+    )
+}
+
+fn read_i32_le(bytes: &[u8], offset: usize) -> i32 {
+    i32::from_le_bytes(
+        bytes[offset..offset + size_of::<i32>()]
+            .try_into()
+            .expect("payload size was checked before decoding"),
+    )
+}
+
+fn encode_colorreconstruction_v3(
+    parameters: ColorReconstructionV3,
+) -> [u8; COLORRECONSTRUCTION_V3_PARAMETER_BYTES] {
+    let mut bytes = [0_u8; COLORRECONSTRUCTION_V3_PARAMETER_BYTES];
+    bytes[0..4].copy_from_slice(&parameters.threshold.to_le_bytes());
+    bytes[4..8].copy_from_slice(&parameters.spatial.to_le_bytes());
+    bytes[8..12].copy_from_slice(&parameters.range.to_le_bytes());
+    bytes[12..16].copy_from_slice(&parameters.hue.to_le_bytes());
+    bytes[16..20].copy_from_slice(&parameters.precedence.to_le_bytes());
+    bytes
 }
 
 fn decode_colorzones_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {

@@ -538,6 +538,7 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
             operation.kind(),
             rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
                 | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
         ) {
@@ -624,6 +625,23 @@ fn execute_lab_point_chain(
                     scope.check().map_err(CpuPixelpipeError::Cancelled)
                 })
             })?;
+            continue;
+        }
+        if let rusttable_processing::ProcessingOperationKind::ColorReconstruction { config } =
+            operation.kind()
+        {
+            execute_colorreconstruction_chunks(
+                *config,
+                &mut output,
+                dimensions,
+                mask,
+                opacity,
+                || {
+                    scope.map_or(Ok(()), |scope| {
+                        scope.check().map_err(CpuPixelpipeError::Cancelled)
+                    })
+                },
+            )?;
             continue;
         }
         output = match operation.kind() {
@@ -741,6 +759,71 @@ fn execute_lab_point_chain(
 }
 
 const COLORZONES_CANCELLATION_CHUNK_PIXELS: usize = 1_024;
+
+fn execute_colorreconstruction_chunks(
+    config: rusttable_processing::operations::colorreconstruction::ColorReconstructionConfig,
+    output: &mut [[f32; 4]],
+    dimensions: RasterDimensions,
+    mask: Option<&[f32]>,
+    opacity: f32,
+    poll_cancellation: impl Fn() -> Result<(), CpuPixelpipeError>,
+) -> Result<(), CpuPixelpipeError> {
+    poll_cancellation()?;
+    let source = output
+        .iter()
+        .map(|pixel| {
+            Ok(LinearRgb::new(
+                FiniteF32::new(pixel[0]).map_err(|_| {
+                    CpuPixelpipeError::SourceColorPlan(
+                        "Color Reconstruction received non-finite Lab lightness".to_owned(),
+                    )
+                })?,
+                FiniteF32::new(pixel[1]).map_err(|_| {
+                    CpuPixelpipeError::SourceColorPlan(
+                        "Color Reconstruction received non-finite Lab a channel".to_owned(),
+                    )
+                })?,
+                FiniteF32::new(pixel[2]).map_err(|_| {
+                    CpuPixelpipeError::SourceColorPlan(
+                        "Color Reconstruction received non-finite Lab b channel".to_owned(),
+                    )
+                })?,
+            ))
+        })
+        .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
+    let plan = rusttable_processing::operations::colorreconstruction::ColorReconstructionPlan::new(
+        config,
+        dimensions,
+        rusttable_processing::operations::ReconstructionBudget::default(),
+    )
+    .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    let execution = match plan.execute_with_cancel(&source, || poll_cancellation().is_err()) {
+        Ok(execution) => execution,
+        Err(rusttable_processing::operations::OperationExecutionError::Cancelled) => {
+            // The plan can observe cancellation only through this node scope.
+            // Re-check it to retain the typed stage and cancellation reason.
+            poll_cancellation()?;
+            return Err(CpuPixelpipeError::SourceColorPlan(
+                "Color Reconstruction reported cancellation without a cancelled node scope"
+                    .to_owned(),
+            ));
+        }
+        Err(error) => return Err(CpuPixelpipeError::SourceColorPlan(error.to_string())),
+    };
+    poll_cancellation()?;
+    for (index, (source, candidate)) in source.iter().zip(execution.pixels()).enumerate() {
+        if index % 1_024 == 0 {
+            poll_cancellation()?;
+        }
+        let coverage = mask.map_or(opacity, |values| values[index] * opacity);
+        output[index][0] = source.red().get() * (1.0 - coverage) + candidate.red().get() * coverage;
+        output[index][1] =
+            source.green().get() * (1.0 - coverage) + candidate.green().get() * coverage;
+        output[index][2] =
+            source.blue().get() * (1.0 - coverage) + candidate.blue().get() * coverage;
+    }
+    Ok(())
+}
 
 fn execute_colorzones_chunks(
     plan: &rusttable_processing::operations::colorzones::ColorZonesPlan,
@@ -1428,6 +1511,9 @@ mod tests {
     };
     use rusttable_processing::PipelineStepIndex;
     use rusttable_processing::operations::colorcontrast::ColorContrastConfig;
+    use rusttable_processing::operations::colorreconstruction::{
+        ColorReconstructionConfig, ColorReconstructionPrecedence,
+    };
     use rusttable_processing::operations::vibrance::VibranceConfig;
 
     use super::*;
@@ -1895,6 +1981,41 @@ mod tests {
                 .image(),
             &one_boundary_vibrance_reference(&input, &configs, CpuPixelpipeOutputMode::FullExport,)
         );
+    }
+
+    #[test]
+    fn colorreconstruction_plan_cancellation_preserves_node_scope_reason() {
+        let dimensions = RasterDimensions::new(64, 64).expect("dimensions");
+        let mut output = vec![[50.0, 20.0, -10.0, 1.0]; 64 * 64];
+        output[64 * 32 + 32] = [110.0, 0.0, 0.0, 1.0];
+        let config = ColorReconstructionConfig::new(
+            100.0,
+            1.0,
+            10.0,
+            0.66,
+            ColorReconstructionPrecedence::None,
+        )
+        .expect("config");
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(11).expect("nonzero generation"))
+                .child(CancellationStage::Node);
+        let polls = std::cell::Cell::new(0_u32);
+
+        let error =
+            execute_colorreconstruction_chunks(config, &mut output, dimensions, None, 1.0, || {
+                let poll = polls.get() + 1;
+                polls.set(poll);
+                if poll == 2 {
+                    scope.cancel(CancellationReason::EditChanged);
+                }
+                scope.check().map_err(CpuPixelpipeError::Cancelled)
+            })
+            .expect_err("cancelled reconstruction must publish no result");
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("reconstruction cancellation must remain typed");
+        };
+        assert_eq!(error.reason(), CancellationReason::EditChanged);
+        assert_eq!(error.stage(), Some(CancellationStage::Node));
     }
 
     #[test]
