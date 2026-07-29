@@ -5683,7 +5683,7 @@ evidence_hash = "0873d37777373799a4c7bfde663ca331ee4d621e01f6bc18e1230bffb742d51
 name = "enlargecanvas"
 module_version = 1
 parameter_size = 20
-parameter_layout_hash = "d9553ad7631fcb8ec75307ae140d066bb806cc7a77c1fc637712a802bda3d88c"
+parameter_layout_hash = "6e309af2482880a1c4aa9a01951329046c5187d67f1448b498f3f5ce8d4f8c97"
 
 [[operation.evidence]]
 field = "registration"
@@ -5699,12 +5699,12 @@ line_end = 88
 [[operation.evidence]]
 field = "layout"
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
-reason = "current parameter layout is represented by accepted AST evidence"
+reason = "four ordered f32 percentages followed by the native canvas-color enum"
 reviewer = "cgasgarth"
-evidence_hash = "eaed5aa350c7152d33bb6d21a87b72102c883fbe39c1ecbddf5b69258a566f10"
+evidence_hash = "2e9249e27aab90cbbacf0ec8f22bd3e1d97ceb55a85bc27c5dd5dcb380671d62"
 source_path = "src/iop/enlargecanvas.c"
-line_start = 31
-line_end = 31
+line_start = 42
+line_end = 49
 
 
 [[operation.evidence]]
@@ -5722,18 +5722,204 @@ line_end = 107
 [[operation.parameter_versions]]
 version = 1
 byte_size = 20
-layout_hash = "19df81c040a09af69e3f7eb5e52cd85646eaaf33a9b1a908e7ef13a97b47d3de"
-decoder = "opaque"
-opaque_blocking = true
+layout_hash = "6e309af2482880a1c4aa9a01951329046c5187d67f1448b498f3f5ce8d4f8c97"
+decoder = "rusttable.enlargecanvas.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.enlargecanvas.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/enlargecanvas.c"
-line_start = 31
-line_end = 31
-reason = "explicit parameter layout declaration"
+line_start = 42
+line_end = 49
+reason = "four ordered f32 percentages followed by the native canvas-color enum"
 reviewer = "cgasgarth"
 evidence_hash = "2e9249e27aab90cbbacf0ec8f22bd3e1d97ceb55a85bc27c5dd5dcb380671d62"
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 20
+alignment = 4
+layout_hash = "6e309af2482880a1c4aa9a01951329046c5187d67f1448b498f3f5ce8d4f8c97"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_left"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_right"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_top"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_bottom"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "color"
+type_name = "dt_iop_canvas_color_t"
+enum_identity = "dt_iop_canvas_color_t"
+offset = 16
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 20
+alignment = 4
+layout_hash = "2f37c72899793bf53519f4836a457fe3cdd46dae697d90dbc8b694953ca0abfc"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_left"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_right"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_top"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_bottom"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "color"
+type_name = "dt_iop_canvas_color_t"
+enum_identity = "dt_iop_canvas_color_t"
+offset = 16
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 20
+alignment = 4
+layout_hash = "94c7c6bed7a5f4e0e4d36f4c23c9790a4dd4f0590e6c5ad302fbcbe8d19fc8be"
+difference_from = []
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_left"
+type_name = "float"
+offset = 0
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_right"
+type_name = "float"
+offset = 4
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_top"
+type_name = "float"
+offset = 8
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "percent_bottom"
+type_name = "float"
+offset = 12
+size = 4
+alignment = 4
+
+[[operation.parameter_versions.abi_layouts.fields]]
+name = "color"
+type_name = "dt_iop_canvas_color_t"
+enum_identity = "dt_iop_canvas_color_t"
+offset = 16
+size = 4
+alignment = 4
+
+[operation.parameter_versions.codec]
+byte_size = 20
+decoder = "rusttable.enlargecanvas.decode.v1"
+encoder = "rusttable.enlargecanvas.encode.v1"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.enlargecanvas.v1"
+
+[[operation.parameter_versions.codec.fields]]
+name = "percent_left"
+kind = "f32"
+offset = 0
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "percent_right"
+kind = "f32"
+offset = 4
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "percent_top"
+kind = "f32"
+offset = 8
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "percent_bottom"
+kind = "f32"
+offset = 12
+size = 4
+
+[[operation.parameter_versions.codec.fields]]
+name = "color"
+kind = "u32"
+offset = 16
+size = 4
+enum_values = [
+    { name = "DT_IOP_CANVAS_COLOR_GREEN", value = 0 },
+    { name = "DT_IOP_CANVAS_COLOR_RED", value = 1 },
+    { name = "DT_IOP_CANVAS_COLOR_BLUE", value = 2 },
+    { name = "DT_IOP_CANVAS_COLOR_BLACK", value = 3 },
+    { name = "DT_IOP_CANVAS_COLOR_WHITE", value = 4 },
+]
 
 
 

@@ -4,7 +4,7 @@ use rusttable_core::{
 use rusttable_processing::descriptor::OperationFlags;
 use rusttable_processing::{
     DefinitionAvailability, FactoryError, OperationDefinition, OperationUiAvailability,
-    ProcessingOperationKind, RegistryValidationError, builtin_registry,
+    ProcessingOperationKind, RegistryClosure, RegistryValidationError, builtin_registry,
 };
 
 #[test]
@@ -197,6 +197,41 @@ fn crop_keeps_cpu_execution_but_fails_closed_for_ui_context() {
     assert_eq!(
         definition.ui_availability().reason(),
         Some("Crop editing requires transformed crop-stage preview context")
+    );
+}
+
+#[test]
+fn enlargecanvas_keeps_cpu_geometry_without_gpu_or_generic_ui_claims() {
+    let definition = builtin_registry()
+        .definition("rusttable.enlargecanvas")
+        .expect("Enlarge Canvas registry seam");
+    let descriptor = definition.descriptor();
+
+    assert!(definition.availability().is_available());
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_none());
+    assert!(descriptor.capability.fallback_to_cpu);
+    assert!(descriptor.capability.gpu_tier.is_none());
+    assert!(!descriptor.capability.deterministic_gpu);
+    assert!(descriptor.capability.required_features.is_empty());
+    assert!(descriptor.capability.required_formats.is_empty());
+    assert!(!descriptor.flags.contains(OperationFlags::DETERMINISTIC_GPU));
+    assert!(descriptor.ui.is_none());
+    let closure = RegistryClosure::from_registry(builtin_registry()).expect("registry closure");
+    let capability = closure
+        .entries
+        .iter()
+        .find(|entry| entry.identity == "rusttable.enlargecanvas")
+        .expect("Enlarge Canvas capability");
+    assert!(capability.cpu_supported);
+    assert!(!capability.gpu_supported);
+    assert!(capability.cpu_fallback);
+    assert_eq!(
+        definition.ui_availability(),
+        &OperationUiAvailability::Unavailable {
+            reason: "Enlarge Canvas color-picker and source-shaped GTK interactions are not ported"
+                .to_owned(),
+        }
     );
 }
 

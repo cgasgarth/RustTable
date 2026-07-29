@@ -21,6 +21,9 @@ use rusttable_processing::operations::crop::{
     CROP_LEGACY_V1_BYTES, CROP_LEGACY_V2_BYTES, CROP_PARAMETER_BYTES, CropConfig,
     CropLegacyParametersV1, CropLegacyParametersV2, CropParametersV3,
 };
+use rusttable_processing::operations::enlargecanvas::{
+    CanvasColor, ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasParametersV1,
+};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
@@ -63,6 +66,8 @@ const COLORRECONSTRUCT_V3_NATIVE_LE: &[u8; 20] =
 const VIBRANCE_V2_NATIVE_LE: [u8; 4] = [
     0x00, 0x00, 0xc8, 0x41, // amount = 25.0
 ];
+const ENLARGECANVAS_V1_NATIVE_LE: &[u8; ENLARGECANVAS_PARAMETER_BYTES] =
+    include_bytes!("../../../fixtures/corpus/assets/operation-enlargecanvas-params-v1.bin");
 
 #[test]
 fn bloom_v1_decodes_source_ordered_little_endian_fields_but_remains_pending_blend() {
@@ -554,6 +559,128 @@ fn crop_malformed_and_nonfinite_rows_remain_byte_exact() {
             DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
         );
     }
+}
+
+#[test]
+fn enlargecanvas_v1_decodes_exact_four_float_and_native_color_layout_pending_blend() {
+    assert_eq!(
+        ENLARGECANVAS_V1_NATIVE_LE,
+        &[
+            0x00, 0x00, 0x48, 0x41, // percent_left = 12.5
+            0x00, 0x00, 0xc8, 0x41, // percent_right = 25.0
+            0x00, 0x00, 0x48, 0x42, // percent_top = 50.0
+            0x00, 0x00, 0x00, 0x00, // percent_bottom = 0.0
+            0x02, 0x00, 0x00, 0x00, // color = blue
+        ]
+    );
+    let parameters = EnlargeCanvasParametersV1::from_bytes(ENLARGECANVAS_V1_NATIVE_LE)
+        .expect("source-sized v1 Enlarge Canvas payload");
+    let source = history_step(
+        b"enlargecanvas",
+        Some(1),
+        Some(1),
+        ENLARGECANVAS_V1_NATIVE_LE.to_vec(),
+    );
+
+    let DarktableHistoryStepDecode::EnlargeCanvasPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("known Enlarge Canvas v1 row must decode as typed pending blend");
+    };
+
+    assert_eq!(imported.source, source);
+    assert_eq!(imported.source.operation.raw_name, b"enlargecanvas");
+    assert_eq!(
+        imported.source.operation.name.as_deref(),
+        Some("enlargecanvas")
+    );
+    assert_eq!(imported.source_version, 1);
+    assert!(imported.enabled);
+    assert_eq!(imported.canonical_parameters, *ENLARGECANVAS_V1_NATIVE_LE);
+    assert_eq!(imported.config, parameters.config());
+    assert_eq!(
+        imported.config.percent_left().get().to_bits(),
+        12.5_f32.to_bits()
+    );
+    assert_eq!(
+        imported.config.percent_right().get().to_bits(),
+        25.0_f32.to_bits()
+    );
+    assert_eq!(
+        imported.config.percent_top().get().to_bits(),
+        50.0_f32.to_bits()
+    );
+    assert_eq!(
+        imported.config.percent_bottom().get().to_bits(),
+        0.0_f32.to_bits()
+    );
+    assert_eq!(imported.config.color(), CanvasColor::Blue);
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+    assert!(imported.execution_blocker.detail.contains("blend/mask"));
+    assert!(imported.execution_blocker.detail.contains("multi-instance"));
+    assert_eq!(imported.source.blend_params.bytes, [0xaa, 0xbb]);
+    assert_eq!(imported.source.multi_name.bytes, b"base");
+}
+
+#[test]
+fn enlargecanvas_unknown_malformed_nonfinite_color_and_invalid_enabled_rows_remain_exact() {
+    let unknown = history_step(b"enlargecanvas", Some(2), Some(1), vec![9, 8, 7]);
+    assert_preserved_exact(
+        &unknown,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+
+    let malformed = history_step(
+        b"enlargecanvas",
+        Some(1),
+        Some(1),
+        ENLARGECANVAS_V1_NATIVE_LE[..ENLARGECANVAS_PARAMETER_BYTES - 1].to_vec(),
+    );
+    assert_preserved_exact(
+        &malformed,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+
+    let mut nonfinite = *ENLARGECANVAS_V1_NATIVE_LE;
+    nonfinite[..4].copy_from_slice(&f32::NAN.to_le_bytes());
+    let nonfinite = history_step(b"enlargecanvas", Some(1), Some(1), nonfinite.to_vec());
+    assert_preserved_exact(
+        &nonfinite,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+
+    let mut unknown_color = *ENLARGECANVAS_V1_NATIVE_LE;
+    unknown_color[16..20].copy_from_slice(&99_u32.to_le_bytes());
+    let unknown_color = history_step(b"enlargecanvas", Some(1), Some(1), unknown_color.to_vec());
+    assert_preserved_exact(
+        &unknown_color,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+
+    for (offset, value) in [(0, -1.0_f32), (4, 101.0_f32)] {
+        let mut invalid_percent = *ENLARGECANVAS_V1_NATIVE_LE;
+        invalid_percent[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        let invalid_percent =
+            history_step(b"enlargecanvas", Some(1), Some(1), invalid_percent.to_vec());
+        assert_preserved_exact(
+            &invalid_percent,
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+        );
+    }
+
+    let invalid_enabled = history_step(
+        b"enlargecanvas",
+        Some(1),
+        Some(7),
+        ENLARGECANVAS_V1_NATIVE_LE.to_vec(),
+    );
+    assert_preserved_exact(
+        &invalid_enabled,
+        DarktableHistoryDecodeFindingCode::InvalidEnabledState,
+    );
 }
 
 #[test]
@@ -1066,6 +1193,26 @@ fn production_manifest_recognizes_canonical_colorreconstruct_history_name() {
     ));
 }
 
+#[test]
+fn production_manifest_recognizes_enlargecanvas_history_name_and_typed_payload() {
+    let history = built_in_history(vec![raw_history_row(
+        41,
+        0,
+        b"enlargecanvas",
+        Some(1),
+        Some(1),
+        ENLARGECANVAS_V1_NATIVE_LE.to_vec(),
+    )]);
+    let step = &history.steps[0];
+
+    assert_eq!(step.operation.raw_name, b"enlargecanvas");
+    assert_eq!(step.operation.name.as_deref(), Some("enlargecanvas"));
+    assert!(matches!(
+        decode_history_step(step),
+        DarktableHistoryStepDecode::EnlargeCanvasPendingBlend(_)
+    ));
+}
+
 fn history_step(
     operation: &[u8],
     module: Option<i64>,
@@ -1105,6 +1252,7 @@ fn manifest() -> DarktableOperationManifest {
     manifest.insert("colorcorrection", 1, [1], None);
     manifest.insert("colorreconstruct", 3, [1, 2, 3], None);
     manifest.insert("crop", 3, [1, 2, 3], None);
+    manifest.insert("enlargecanvas", 1, [1], None);
     manifest.insert("colorzones", 5, [1, 2, 3, 4, 5], None);
     manifest.insert("velvia", 2, [1, 2], None);
     manifest.insert("vibrance", 2, [2], None);

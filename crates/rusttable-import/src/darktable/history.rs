@@ -10,6 +10,10 @@
 //! v1/v2/v3 declarations in `src/iop/colorreconstruction.c`; its byte order is
 //! the little-endian native history format used by the supported Darktable
 //! catalog fixtures.
+//!
+//! The Enlarge Canvas payload decoder mirrors the v1 declaration in
+//! `src/iop/enlargecanvas.c`: four little-endian `f32` percentages followed by
+//! the native five-value canvas-color enum.
 
 use std::{fmt, mem::size_of};
 
@@ -27,6 +31,10 @@ use rusttable_processing::operations::colorreconstruction::{
 };
 use rusttable_processing::operations::crop::{
     CROP_PARAMETER_BYTES, CropCodecError, CropConfig, CropParametersV3,
+};
+use rusttable_processing::operations::enlargecanvas::{
+    ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasConfig, EnlargeCanvasHistoryParameters,
+    decode_history as decode_enlargecanvas_history,
 };
 use rusttable_processing::operations::velvia::{
     VELVIA_V2_PARAMETER_BYTES, VelviaConfig, VelviaHistory,
@@ -48,6 +56,7 @@ const COLORRECONSTRUCTION_V1_PARAMETER_BYTES: usize = 3 * size_of::<f32>();
 const COLORRECONSTRUCTION_V2_PARAMETER_BYTES: usize =
     COLORRECONSTRUCTION_V1_PARAMETER_BYTES + size_of::<i32>();
 const COLORRECONSTRUCTION_V3_PARAMETER_BYTES: usize = 4 * size_of::<f32>() + size_of::<i32>();
+const ENLARGECANVAS_COMPATIBILITY_NAME: &str = "enlargecanvas";
 const VIBRANCE_COMPATIBILITY_NAME: &str = "vibrance";
 
 /// Stable reason an imported history row remains opaque.
@@ -205,6 +214,24 @@ pub struct DecodedCropHistoryStep {
     pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
+/// One decoded Enlarge Canvas v1 core whose complete Darktable row is not
+/// executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedEnlargeCanvasHistoryStep {
+    /// The exact original row, including opaque blend and multi-instance metadata.
+    pub source: CompatHistoryStep,
+    /// Checked native v1 core parameters.
+    pub config: EnlargeCanvasConfig,
+    /// Native enabled state retained without creating an executable operation.
+    pub enabled: bool,
+    /// Original Darktable parameter version.
+    pub source_version: u16,
+    /// Canonical native v1 parameter bytes.
+    pub canonical_parameters: [u8; ENLARGECANVAS_PARAMETER_BYTES],
+    /// Explicit reason no executable imported operation was emitted.
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
 /// One decoded Color Zones core whose complete Darktable row is not executable yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedColorZonesHistoryStep {
@@ -242,6 +269,9 @@ pub enum DarktableHistoryStepDecode {
     /// Crop v3 core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     CropPendingBlend(DecodedCropHistoryStep),
+    /// Enlarge Canvas v1 core parameters are decoded, while blend/mask
+    /// semantics remain explicitly non-executable.
+    EnlargeCanvasPendingBlend(DecodedEnlargeCanvasHistoryStep),
     /// Color Zones core parameters are decoded and migrated to canonical v5,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
@@ -276,6 +306,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
             decode_colorreconstruction_history_step(step)
         }
         Some(CROP_COMPATIBILITY_NAME) => decode_crop_history_step(step),
+        Some(ENLARGECANVAS_COMPATIBILITY_NAME) => decode_enlargecanvas_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
@@ -598,6 +629,52 @@ fn decode_crop_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDec
             code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
             detail: format!(
                 "Darktable Crop core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+                step.blend_version
+            ),
+        },
+    })
+}
+
+fn decode_enlargecanvas_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Enlarge Canvas") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match decode_enlargecanvas_history(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Enlarge Canvas v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters = match history {
+        EnlargeCanvasHistoryParameters::V1(parameters) => parameters,
+        EnlargeCanvasHistoryParameters::Opaque { .. } => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Enlarge Canvas v{source_version} parameters remain opaque: only native v1 is typed"
+                ),
+            );
+        }
+    };
+
+    DarktableHistoryStepDecode::EnlargeCanvasPendingBlend(DecodedEnlargeCanvasHistoryStep {
+        source: step.clone(),
+        config: parameters.config(),
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        execution_blocker: DarktableHistoryDecodeFinding {
+            code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+            detail: format!(
+                "Darktable Enlarge Canvas core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
                 step.blend_version
             ),
         },

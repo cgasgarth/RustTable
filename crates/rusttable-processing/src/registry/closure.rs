@@ -186,7 +186,8 @@ fn entry_from_definition(definition: &OperationDefinition, order: usize) -> Regi
         order,
         cpu_supported: definition.cpu().is_some(),
         gpu_supported: definition.gpu().is_some(),
-        cpu_fallback: definition.cpu().is_some() && definition.gpu().is_some(),
+        cpu_fallback: definition.cpu().is_some()
+            && definition.descriptor().capability.fallback_to_cpu,
         status: if definition.availability().is_available() {
             if definition
                 .descriptor()

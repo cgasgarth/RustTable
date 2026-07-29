@@ -2,7 +2,6 @@ use crate::descriptor::{
     AlphaPolicy, CapabilityContract, DescriptorId, ImagePredicate, InputOutputContract,
     MaskBlendContract, MigrationContract, NonFinitePolicy, OperationDescriptor, OperationFlags,
     ParameterDefault, ParameterDescriptor, ParameterKind, ParameterRole, RoiKind, TilingContract,
-    UiHint,
 };
 use rusttable_color::ColorEncoding;
 
@@ -76,7 +75,6 @@ pub fn enlargecanvas_descriptor() -> OperationDescriptor {
         flags: OperationFlags::HISTORY_VISIBLE
             .insert(OperationFlags::TILEABLE)
             .insert(OperationFlags::DETERMINISTIC_CPU)
-            .insert(OperationFlags::DETERMINISTIC_GPU)
             .insert(OperationFlags::GEOMETRY)
             .insert(OperationFlags::SCALE)
             .insert(OperationFlags::MASKS),
@@ -93,11 +91,11 @@ pub fn enlargecanvas_descriptor() -> OperationDescriptor {
         },
         capability: CapabilityContract {
             cpu_supported: true,
-            gpu_tier: Some(1),
-            required_features: vec!["enlargecanvas_fill_copy".to_owned()],
-            required_formats: vec!["rgba32float".to_owned()],
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: Vec::new(),
             deterministic_cpu: true,
-            deterministic_gpu: true,
+            deterministic_gpu: false,
             fallback_to_cpu: true,
             precision: "f32 source and fill with checked integer geometry".to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
@@ -119,10 +117,8 @@ pub fn enlargecanvas_descriptor() -> OperationDescriptor {
             target_version: ENLARGECANVAS_PARAMETER_VERSION,
             opaque_unknown_allowed: true,
         },
-        ui: Some(UiHint {
-            label_key: "operation.enlargecanvas".to_owned(),
-            group_key: "group.geometry".to_owned(),
-            control: "enlargecanvas".to_owned(),
-        }),
+        // `gui_init` is not ported; keeping this absent prevents generic
+        // numeric controls from masquerading as Darktable's source-shaped UI.
+        ui: None,
     }
 }
