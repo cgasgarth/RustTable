@@ -445,14 +445,16 @@ pub fn color_reconstruction_descriptor() -> OperationDescriptor {
         scalar_parameter("hue", 0.0, 1.0, 0.66, ParameterRole::Color),
         scalar_parameter("precedence", 0.0, 2.0, 0.0, ParameterRole::Color),
     ];
+    // The native module opts into the shared blend UI, but this Rust slice does
+    // not yet own that shared payload or drawn-mask execution. Keep those
+    // capabilities out of the descriptor so generic projections cannot expose
+    // unsupported controls. The reconstruction's own full-image analysis is
+    // still represented independently below.
     descriptor.flags = OperationFlags::MULTI_INSTANCE
         .insert(OperationFlags::STYLE_ELIGIBLE)
         .insert(OperationFlags::DETERMINISTIC_CPU)
-        .insert(OperationFlags::DETERMINISTIC_GPU)
         .insert(OperationFlags::FULL_IMAGE)
         .insert(OperationFlags::COLOR)
-        .insert(OperationFlags::MASKS)
-        .insert(OperationFlags::BLENDING)
         .insert(OperationFlags::ANALYSIS);
     descriptor.stage = "post-demosaic-color-reconstruction".to_owned();
     descriptor.roi = RoiKind::FullImage;
@@ -461,9 +463,11 @@ pub fn color_reconstruction_descriptor() -> OperationDescriptor {
     descriptor.capability = reconstruction_capability();
     descriptor.io = color_reconstruction_io();
     descriptor.mask_blend = MaskBlendContract {
+        // Shared blend payloads and drawn masks remain deferred for this slice;
+        // the operation only consumes its own full-image analysis state.
         consumes_mask: false,
-        publishes_mask: true,
-        blend_if: true,
+        publishes_mask: false,
+        blend_if: false,
         geometry: false,
         analysis: true,
     };
@@ -509,13 +513,10 @@ fn reconstruction_capability() -> CapabilityContract {
     CapabilityContract {
         cpu_supported: true,
         gpu_tier: Some(1),
-        required_features: vec![
-            "f32-storage".to_owned(),
-            "deterministic-row-major".to_owned(),
-        ],
+        required_features: vec!["f32-storage".to_owned()],
         required_formats: vec!["rgba32float".to_owned()],
         deterministic_cpu: true,
-        deterministic_gpu: true,
+        deterministic_gpu: false,
         fallback_to_cpu: true,
         precision: "f32".to_owned(),
         modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],

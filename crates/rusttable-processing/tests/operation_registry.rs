@@ -1,6 +1,7 @@
 use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
+use rusttable_processing::descriptor::OperationFlags;
 use rusttable_processing::{
     DefinitionAvailability, FactoryError, OperationDefinition, OperationUiAvailability,
     ProcessingOperationKind, RegistryValidationError, builtin_registry,
@@ -133,6 +134,49 @@ fn operation_registry_executes_all_first_party_operations_through_factories() {
         prepared[4].operation().kind(),
         ProcessingOperationKind::Soften { .. }
     ));
+}
+
+#[test]
+fn colorreconstruct_registry_keeps_deferred_capabilities_unavailable() {
+    let definition = builtin_registry()
+        .definition("rusttable.colorreconstruct")
+        .expect("Color Reconstruction registry seam");
+    let descriptor = definition.descriptor();
+    assert_eq!(descriptor.id.compatibility_name, "colorreconstruct");
+    assert!(definition.availability().is_available());
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_some());
+    assert!(!descriptor.flags.contains(OperationFlags::BLENDING));
+    assert!(!descriptor.flags.contains(OperationFlags::MASKS));
+    assert_eq!(
+        descriptor.mask_blend,
+        rusttable_processing::descriptor::MaskBlendContract {
+            consumes_mask: false,
+            publishes_mask: false,
+            blend_if: false,
+            geometry: false,
+            analysis: true,
+        }
+    );
+
+    assert_eq!(
+        definition.ui_availability(),
+        &OperationUiAvailability::PartiallyAvailable {
+            reason: "the Color Reconstruction parameter editor is usable, but native UI adjuncts remain deferred"
+                .to_owned(),
+            deferred_responsibilities: [
+                "iop.colorreconstruct.ui.shared-blending-and-drawn-masks",
+                "iop.colorreconstruct.ui.monochrome-applicability",
+                "iop.colorreconstruct.ui.preview-grid-lifecycle",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        }
+    );
+    assert!(!definition.ui_availability().is_available());
+    assert!(definition.ui_availability().is_usable());
+    assert!(definition.ui_availability().is_partial());
 }
 
 #[test]

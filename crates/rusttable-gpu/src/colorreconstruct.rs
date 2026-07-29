@@ -1119,6 +1119,18 @@ mod tests {
     }
 
     #[test]
+    fn splat_reduction_preserves_native_overwrite_runs() {
+        assert!(
+            COLORRECONSTRUCTION_SHADER_SOURCE
+                .contains("accumulated = local_accumulator[line_index];")
+        );
+        assert!(
+            !COLORRECONSTRUCTION_SHADER_SOURCE
+                .contains("accumulated += local_accumulator[line_index];")
+        );
+    }
+
+    #[test]
     fn retained_grid_geometry_clamps_then_adds_guard_cells() {
         let pixels = vec![[50.0, 0.0, 0.0, 1.0]; 400 * 300];
         let validated = ValidatedRequest::new(

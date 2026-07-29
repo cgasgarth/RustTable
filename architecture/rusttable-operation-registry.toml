@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "351636441355dc9552a284b5719a449c9a5d6bb62cbc8a18df4355b2136219d8"
+snapshot_hash = "1889bc0d311d8da349bdd383293c4ad160997d2e312ed2cc3eb751389395ccd7"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -91,8 +91,8 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
-rust_id = "rusttable.colorreconstruction"
-compatibility_name = "colorreconstruction"
+rust_id = "rusttable.colorreconstruct"
+compatibility_name = "colorreconstruct"
 descriptor_version = 3
 parameter_version = 3
 implementation_version = 1

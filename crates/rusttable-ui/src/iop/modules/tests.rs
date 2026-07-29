@@ -60,6 +60,31 @@ fn colorreconstruct_focus_order_includes_every_native_control() {
 }
 
 #[test]
+fn colorreconstruct_projection_keeps_deferred_surfaces_partial_and_hidden() {
+    let modules = reference_modules().expect("source-derived reference modules");
+    let template = modules
+        .module("colorreconstruct")
+        .expect("Color Reconstruction template");
+    assert!(template.availability().is_supported());
+    assert!(template.availability().is_partial());
+    assert_eq!(
+        template
+            .availability()
+            .deferred_responsibilities()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "iop.colorreconstruct.ui.shared-blending-and-drawn-masks",
+            "iop.colorreconstruct.ui.monochrome-applicability",
+            "iop.colorreconstruct.ui.preview-grid-lifecycle",
+        ]
+    );
+    assert!(template.has_colorreconstruct_custom_editor());
+    assert!(template.controls().controls().next().is_none());
+}
+
+#[test]
 fn persisted_instances_keep_compatibility_identity_but_require_exact_operation_targets() {
     let first_id = OperationId::new(41).expect("first operation id");
     let second_id = OperationId::new(73).expect("second operation id");

@@ -463,20 +463,37 @@ impl ColorReconstructionPlan {
                 pixels: output,
                 diagnostics,
                 receipt,
+                resource_failure: None,
             });
         }
 
-        let mut grid = BilateralGrid::allocate(self.geometry, self.required_bytes)?;
-        grid.splat(input, self.dimensions, self.config, &cancelled)?;
-        grid.blur(&cancelled)?;
-        let output = grid.slice(
-            input,
-            self.dimensions,
-            self.config.threshold().get(),
-            &mut diagnostics,
-            &cancelled,
-            self.required_bytes,
-        )?;
+        let mut resource_failure = None;
+        let output = match BilateralGrid::allocate(self.geometry, self.required_bytes) {
+            Ok(mut grid) => {
+                grid.splat(input, self.dimensions, self.config, &cancelled)?;
+                grid.blur(&cancelled)?;
+                match grid.slice(
+                    input,
+                    self.dimensions,
+                    self.config.threshold().get(),
+                    &mut diagnostics,
+                    &cancelled,
+                    self.required_bytes,
+                ) {
+                    Ok(output) => output,
+                    Err(error @ OperationExecutionError::AllocationFailed { .. }) => {
+                        resource_failure = Some(error);
+                        try_clone_pixels(input, self.required_bytes)?
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            Err(error @ OperationExecutionError::AllocationFailed { .. }) => {
+                resource_failure = Some(error);
+                try_clone_pixels(input, self.required_bytes)?
+            }
+            Err(error) => return Err(error),
+        };
         let receipt = ReconstructionReceipt::new(
             COLORRECONSTRUCTION_COMPATIBILITY_ID,
             COLORRECONSTRUCTION_SCHEMA_VERSION,
@@ -488,6 +505,7 @@ impl ColorReconstructionPlan {
             pixels: output,
             diagnostics,
             receipt,
+            resource_failure,
         })
     }
 }
@@ -497,6 +515,7 @@ pub struct ColorReconstructionExecution {
     pixels: Vec<LinearRgb>,
     diagnostics: ReconstructionDiagnostics,
     receipt: ReconstructionReceipt,
+    resource_failure: Option<OperationExecutionError>,
 }
 
 impl ColorReconstructionExecution {
@@ -513,6 +532,12 @@ impl ColorReconstructionExecution {
     #[must_use]
     pub const fn receipt(&self) -> &ReconstructionReceipt {
         &self.receipt
+    }
+
+    /// Returns a typed resource diagnostic when native-style passthrough was used.
+    #[must_use]
+    pub const fn resource_failure(&self) -> Option<&OperationExecutionError> {
+        self.resource_failure.as_ref()
     }
 }
 

@@ -253,8 +253,6 @@ fn colorreconstruction_splat(
             old_grid_index = local_grid_index[line_index];
             accumulated = local_accumulator[line_index];
         } else {
-            // This assignment, rather than addition, intentionally retains the
-            // OpenCL backend's per-run reduction semantics.
             accumulated = local_accumulator[line_index];
         }
         column += 1u;

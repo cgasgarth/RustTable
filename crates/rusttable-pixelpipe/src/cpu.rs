@@ -51,11 +51,19 @@ impl CpuPixelpipeOutputMode {
     }
 }
 
+/// Typed non-fatal diagnostics emitted when a CPU node preserves its source
+/// pixels after a source-derived resource failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CpuPixelpipeDiagnostic {
+    ColorReconstructionResourceFailure(rusttable_processing::operations::OperationExecutionError),
+}
+
 /// Immutable output from the registered scalar CPU executor.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CpuPixelpipeResult {
     image: RgbaF32Image,
     receipt: CpuPipelineReceipt,
+    diagnostics: Vec<CpuPixelpipeDiagnostic>,
 }
 
 impl CpuPixelpipeResult {
@@ -67,6 +75,11 @@ impl CpuPixelpipeResult {
     #[must_use]
     pub const fn receipt(&self) -> &CpuPipelineReceipt {
         &self.receipt
+    }
+
+    #[must_use]
+    pub fn diagnostics(&self) -> &[CpuPixelpipeDiagnostic] {
+        &self.diagnostics
     }
 
     pub(crate) fn into_parts(self) -> (RgbaF32Image, CpuPipelineReceipt) {
@@ -131,6 +144,7 @@ impl CpuPixelpipeExecutor {
                 image,
                 basicadj_identity,
                 frame_plan_identity,
+                Vec::new(),
             ));
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
@@ -139,14 +153,20 @@ impl CpuPixelpipeExecutor {
         } else {
             Self::prepare_plans(request)?
         };
-        let image = Self::execute_image(
+        let (image, diagnostics) = Self::execute_image(
             request,
             request.input(),
             preserve_inert_lab,
             &plans,
             masks.as_ref(),
         )?;
-        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
+        Ok(Self::result_for(
+            request,
+            image,
+            plans.identity(),
+            [0; 32],
+            diagnostics,
+        ))
     }
 
     /// Executes with a generation-owned cancellation scope. The scope is
@@ -174,6 +194,7 @@ impl CpuPixelpipeExecutor {
                 image,
                 basicadj_identity,
                 frame_plan_identity,
+                Vec::new(),
             ));
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
@@ -182,7 +203,7 @@ impl CpuPixelpipeExecutor {
         } else {
             Self::prepare_plans_with_cancellation(request, scope)?
         };
-        let image = Self::execute_image_with_cancellation(
+        let (image, diagnostics) = Self::execute_image_with_cancellation(
             request,
             request.input(),
             preserve_inert_lab,
@@ -194,7 +215,13 @@ impl CpuPixelpipeExecutor {
             .child(CancellationStage::Publication)
             .check()
             .map_err(CpuPixelpipeError::Cancelled)?;
-        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
+        Ok(Self::result_for(
+            request,
+            image,
+            plans.identity(),
+            [0; 32],
+            diagnostics,
+        ))
     }
 
     /// Executes a point-operation graph in deterministic, row-major tiles.
@@ -240,7 +267,7 @@ impl CpuPixelpipeExecutor {
                 .as_ref()
                 .map(|set| crop_masks(set, tile))
                 .transpose()?;
-            let tile_output = Self::execute_image(
+            let (tile_output, _) = Self::execute_image(
                 request,
                 &tile_input,
                 preserve_inert_lab,
@@ -262,7 +289,13 @@ impl CpuPixelpipeExecutor {
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
+        Ok(Self::result_for(
+            request,
+            image,
+            plans.identity(),
+            [0; 32],
+            Vec::new(),
+        ))
     }
 
     /// Executes row-major tiles with a mandatory check before every tile and
@@ -318,7 +351,7 @@ impl CpuPixelpipeExecutor {
                 .as_ref()
                 .map(|set| crop_masks(set, tile))
                 .transpose()?;
-            let tile_output = Self::execute_image_with_cancellation(
+            let (tile_output, _) = Self::execute_image_with_cancellation(
                 request,
                 &tile_input,
                 preserve_inert_lab,
@@ -344,7 +377,13 @@ impl CpuPixelpipeExecutor {
         );
         let image = RgbaF32Image::new(output_descriptor, assembled)
             .map_err(|source| CpuPixelpipeError::OutputBoundary { source })?;
-        Ok(Self::result_for(request, image, plans.identity(), [0; 32]))
+        Ok(Self::result_for(
+            request,
+            image,
+            plans.identity(),
+            [0; 32],
+            Vec::new(),
+        ))
     }
 
     fn execute_image(
@@ -353,7 +392,7 @@ impl CpuPixelpipeExecutor {
         preserve_inert_lab: bool,
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
-    ) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    ) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
         Self::execute_image_with_cancellation(
             request,
             input,
@@ -371,7 +410,7 @@ impl CpuPixelpipeExecutor {
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
         scope: Option<&CancellationScope>,
-    ) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    ) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
         validate_input_encoding(input)?;
         let node_scope = scope.map(|scope| scope.child(CancellationStage::Node));
         if let Some(scope) = &node_scope {
@@ -379,7 +418,7 @@ impl CpuPixelpipeExecutor {
         }
 
         if preserve_inert_lab {
-            return Ok(input.clone());
+            return Ok((input.clone(), Vec::new()));
         }
 
         if is_lab_point_chain(request, input) {
@@ -394,7 +433,8 @@ impl CpuPixelpipeExecutor {
         }) && request.graph().nodes().count() == 1
             && masks.is_none()
         {
-            return execute_censorize_image(request, input, node, node_scope.as_ref());
+            return execute_censorize_image(request, input, node, node_scope.as_ref())
+                .map(|image| (image, Vec::new()));
         }
 
         if let Some(node) = request.graph().nodes().find(|node| {
@@ -405,7 +445,8 @@ impl CpuPixelpipeExecutor {
         }) && request.graph().nodes().count() == 1
             && masks.is_none()
         {
-            return execute_clahe_image(request, input, node, node_scope.as_ref());
+            return execute_clahe_image(request, input, node, node_scope.as_ref())
+                .map(|image| (image, Vec::new()));
         }
 
         let linear_input = to_linear_working(input)?;
@@ -425,6 +466,7 @@ impl CpuPixelpipeExecutor {
             scope.check().map_err(CpuPixelpipeError::Cancelled)?;
         }
         output_from_working(request.output_mode(), input, &evaluated)
+            .map(|image| (image, Vec::new()))
     }
 
     fn prepare_plans(request: &CpuPixelpipeSnapshot) -> Result<BasicAdjPlanSet, CpuPixelpipeError> {
@@ -459,6 +501,7 @@ impl CpuPixelpipeExecutor {
         image: RgbaF32Image,
         basicadj_plan_identity: [u8; 32],
         frame_plan_identity: [u8; 32],
+        diagnostics: Vec<CpuPixelpipeDiagnostic>,
     ) -> CpuPixelpipeResult {
         let receipt = CpuPipelineReceipt::new(
             request.input().descriptor(),
@@ -478,7 +521,11 @@ impl CpuPixelpipeExecutor {
                 })
                 .collect(),
         );
-        CpuPixelpipeResult { image, receipt }
+        CpuPixelpipeResult {
+            image,
+            receipt,
+            diagnostics,
+        }
     }
 }
 
@@ -554,7 +601,7 @@ fn execute_lab_point_chain(
     input: &RgbaF32Image,
     masks: Option<&OperationMaskSet>,
     scope: Option<&CancellationScope>,
-) -> Result<RgbaF32Image, CpuPixelpipeError> {
+) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
     let rgb_boundary;
     let mut output = if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         rgb_boundary = None;
@@ -592,6 +639,7 @@ fn execute_lab_point_chain(
         rgb_boundary = Some((from_lab, working.frame()));
         lab
     };
+    let mut diagnostics = Vec::new();
     for node in request.graph().nodes() {
         if let Some(scope) = scope {
             scope.check().map_err(CpuPixelpipeError::Cancelled)?;
@@ -630,7 +678,7 @@ fn execute_lab_point_chain(
         if let rusttable_processing::ProcessingOperationKind::ColorReconstruction { config } =
             operation.kind()
         {
-            execute_colorreconstruction_chunks(
+            if let Some(diagnostic) = execute_colorreconstruction_chunks(
                 *config,
                 &mut output,
                 dimensions,
@@ -641,7 +689,11 @@ fn execute_lab_point_chain(
                         scope.check().map_err(CpuPixelpipeError::Cancelled)
                     })
                 },
-            )?;
+            )? {
+                diagnostics.push(CpuPixelpipeDiagnostic::ColorReconstructionResourceFailure(
+                    diagnostic,
+                ));
+            }
             continue;
         }
         output = match operation.kind() {
@@ -740,7 +792,8 @@ fn execute_lab_point_chain(
         let evaluated =
             WorkingRgbImage::new_with_frame(input.descriptor().dimensions(), pixels, frame)
                 .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
-        return output_from_working(request.output_mode(), input, &evaluated);
+        return output_from_working(request.output_mode(), input, &evaluated)
+            .map(|image| (image, diagnostics));
     }
     let pixels = output
         .iter()
@@ -756,6 +809,7 @@ fn execute_lab_point_chain(
     );
     RgbaF32Image::new(descriptor, pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+        .map(|image| (image, diagnostics))
 }
 
 const COLORZONES_CANCELLATION_CHUNK_PIXELS: usize = 1_024;
@@ -767,7 +821,27 @@ fn execute_colorreconstruction_chunks(
     mask: Option<&[f32]>,
     opacity: f32,
     poll_cancellation: impl Fn() -> Result<(), CpuPixelpipeError>,
-) -> Result<(), CpuPixelpipeError> {
+) -> Result<Option<rusttable_processing::operations::OperationExecutionError>, CpuPixelpipeError> {
+    execute_colorreconstruction_chunks_with_budget(
+        config,
+        output,
+        dimensions,
+        mask,
+        opacity,
+        rusttable_processing::operations::ReconstructionBudget::default(),
+        poll_cancellation,
+    )
+}
+
+fn execute_colorreconstruction_chunks_with_budget(
+    config: rusttable_processing::operations::colorreconstruction::ColorReconstructionConfig,
+    output: &mut [[f32; 4]],
+    dimensions: RasterDimensions,
+    mask: Option<&[f32]>,
+    opacity: f32,
+    budget: rusttable_processing::operations::ReconstructionBudget,
+    poll_cancellation: impl Fn() -> Result<(), CpuPixelpipeError>,
+) -> Result<Option<rusttable_processing::operations::OperationExecutionError>, CpuPixelpipeError> {
     poll_cancellation()?;
     let source = output
         .iter()
@@ -791,12 +865,29 @@ fn execute_colorreconstruction_chunks(
             ))
         })
         .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
-    let plan = rusttable_processing::operations::colorreconstruction::ColorReconstructionPlan::new(
+    let plan = match rusttable_processing::operations::colorreconstruction::ColorReconstructionPlan::new(
         config,
         dimensions,
-        rusttable_processing::operations::ReconstructionBudget::default(),
-    )
-    .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+        budget,
+    ) {
+        Ok(plan) => plan,
+        Err(
+            error @ (rusttable_processing::operations::OperationExecutionError::MemoryBudgetExceeded {
+                ..
+            }
+            | rusttable_processing::operations::OperationExecutionError::AllocationFailed {
+                ..
+            }),
+        ) => {
+            // Native `process()` copies `ivoid` to `ovoid` when the bilateral
+            // grid cannot be allocated. `output` still contains that source,
+            // so preserve it and keep cancellation terminal rather than
+            // turning a resource diagnostic into a failed publication.
+            poll_cancellation()?;
+            return Ok(Some(error));
+        }
+        Err(error) => return Err(CpuPixelpipeError::SourceColorPlan(error.to_string())),
+    };
     let execution = match plan.execute_with_cancel(&source, || poll_cancellation().is_err()) {
         Ok(execution) => execution,
         Err(rusttable_processing::operations::OperationExecutionError::Cancelled) => {
@@ -811,6 +902,13 @@ fn execute_colorreconstruction_chunks(
         Err(error) => return Err(CpuPixelpipeError::SourceColorPlan(error.to_string())),
     };
     poll_cancellation()?;
+    let resource_failure = execution.resource_failure().copied();
+    if resource_failure.is_some() {
+        // The native error path copies the original input without even applying
+        // opacity or mask arithmetic. Leave `output` untouched for bit-exact
+        // passthrough and retain the typed diagnostic for publication.
+        return Ok(resource_failure);
+    }
     for (index, (source, candidate)) in source.iter().zip(execution.pixels()).enumerate() {
         if index % 1_024 == 0 {
             poll_cancellation()?;
@@ -822,7 +920,7 @@ fn execute_colorreconstruction_chunks(
         output[index][2] =
             source.blue().get() * (1.0 - coverage) + candidate.blue().get() * coverage;
     }
-    Ok(())
+    Ok(None)
 }
 
 fn execute_colorzones_chunks(
@@ -2016,6 +2114,69 @@ mod tests {
         };
         assert_eq!(error.reason(), CancellationReason::EditChanged);
         assert_eq!(error.stage(), Some(CancellationStage::Node));
+    }
+
+    #[test]
+    fn colorreconstruction_resource_failure_passthrough_keeps_typed_diagnostic() {
+        let dimensions = RasterDimensions::new(4, 1).expect("dimensions");
+        let input = [[50.0, 20.0, -10.0, 1.0]; 4];
+        let config = ColorReconstructionConfig::new(
+            100.0,
+            1.0,
+            10.0,
+            0.66,
+            ColorReconstructionPrecedence::None,
+        )
+        .expect("config");
+
+        let diagnostic = execute_colorreconstruction_chunks_with_budget(
+            config,
+            &mut input.clone(),
+            dimensions,
+            None,
+            1.0,
+            rusttable_processing::operations::ReconstructionBudget::new(1),
+            || Ok(()),
+        )
+        .expect("resource failure is a non-fatal passthrough")
+        .expect("typed resource diagnostic");
+        assert!(matches!(
+            diagnostic,
+            rusttable_processing::operations::OperationExecutionError::MemoryBudgetExceeded { .. }
+        ));
+
+        let mut output = input;
+        let mask = [0.25, 0.5, 0.75, 1.0];
+        let result = execute_colorreconstruction_chunks_with_budget(
+            config,
+            &mut output,
+            dimensions,
+            Some(&mask),
+            0.3,
+            rusttable_processing::operations::ReconstructionBudget::new(1),
+            || Ok(()),
+        )
+        .expect("resource failure is a non-fatal passthrough");
+        assert!(result.is_some());
+        assert_eq!(output, input);
+
+        let scope =
+            CancellationScope::root(PipelineGeneration::new(12).expect("nonzero generation"));
+        scope.cancel(CancellationReason::EditChanged);
+        let error = execute_colorreconstruction_chunks_with_budget(
+            config,
+            &mut input.clone(),
+            dimensions,
+            None,
+            1.0,
+            rusttable_processing::operations::ReconstructionBudget::new(1),
+            || scope.check().map_err(CpuPixelpipeError::Cancelled),
+        )
+        .expect_err("cancelled resource fallback must not publish");
+        let CpuPixelpipeError::Cancelled(error) = error else {
+            panic!("resource fallback must retain typed cancellation");
+        };
+        assert_eq!(error.reason(), CancellationReason::EditChanged);
     }
 
     #[test]
