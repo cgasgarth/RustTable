@@ -8,7 +8,8 @@ const BASICADJ_SNAPSHOT_KIND_TAG: u8 = 21;
 const CLIPPING_SNAPSHOT_KIND_TAG: u8 = 29;
 const COLORZONES_SNAPSHOT_KIND_TAG: u8 = 30;
 const SHARPEN_SNAPSHOT_KIND_TAG: u8 = 31;
-const SNAPSHOT_KIND_TAGS: [u8; 32] = [
+const CHANNEL_MIXER_SNAPSHOT_KIND_TAG: u8 = 32;
+const SNAPSHOT_KIND_TAGS: [u8; 33] = [
     0,
     1,
     2,
@@ -41,6 +42,7 @@ const SNAPSHOT_KIND_TAGS: [u8; 32] = [
     CLIPPING_SNAPSHOT_KIND_TAG,
     COLORZONES_SNAPSHOT_KIND_TAG,
     SHARPEN_SNAPSHOT_KIND_TAG,
+    CHANNEL_MIXER_SNAPSHOT_KIND_TAG,
 ];
 const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
 
@@ -630,6 +632,18 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
             hasher.update([26]);
             hasher.update(config.strength().to_bits().to_le_bytes());
             hasher.update(config.bias().to_bits().to_le_bytes());
+        }
+        ProcessingOperationKind::ChannelMixer { config } => {
+            hasher.update([CHANNEL_MIXER_SNAPSHOT_KIND_TAG]);
+            for value in config
+                .red()
+                .into_iter()
+                .chain(config.green())
+                .chain(config.blue())
+            {
+                hasher.update(value.to_bits().to_le_bytes());
+            }
+            hasher.update((config.algorithm_version() as i32).to_le_bytes());
         }
         ProcessingOperationKind::ColorContrast { config } => {
             hasher.update([27]);

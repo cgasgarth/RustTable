@@ -17,6 +17,11 @@
 
 use std::{fmt, mem::size_of};
 
+pub use rusttable_compat::channelmixer::DecodedChannelMixerHistoryStep;
+use rusttable_compat::channelmixer::{
+    ChannelMixerHistoryDecodeFindingCode, ChannelMixerHistoryStepDecode,
+    decode_channelmixer_history_step,
+};
 pub use rusttable_compat::sharpen::DecodedSharpenHistoryStep;
 use rusttable_compat::sharpen::{
     SharpenHistoryDecodeFindingCode, SharpenHistoryStepDecode, decode_sharpen_history_step,
@@ -58,6 +63,7 @@ const COLORCORRECTION_COMPATIBILITY_NAME: &str = "colorcorrection";
 const COLORRECONSTRUCTION_COMPATIBILITY_NAME: &str = "colorreconstruct";
 const CROP_COMPATIBILITY_NAME: &str = "crop";
 const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
+const CHANNELMIXER_COMPATIBILITY_NAME: &str = "channelmixer";
 const SHARPEN_COMPATIBILITY_NAME: &str = "sharpen";
 const SOFTEN_COMPATIBILITY_NAME: &str = "soften";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
@@ -285,6 +291,9 @@ pub enum DarktableHistoryStepDecode {
     /// Color Zones core parameters are decoded and migrated to canonical v5,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
+    /// Channel Mixer core parameters are decoded, while the complete blend/mask
+    /// and multi-instance row remains byte-preserved and non-executable.
+    ChannelMixerPendingBlend(DecodedChannelMixerHistoryStep),
     /// Sharpen v1 core parameters are decoded, while the complete blend/mask
     /// and multi-instance row remains byte-preserved and non-executable.
     SharpenPendingBlend(DecodedSharpenHistoryStep),
@@ -324,6 +333,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(CROP_COMPATIBILITY_NAME) => decode_crop_history_step(step),
         Some(ENLARGECANVAS_COMPATIBILITY_NAME) => decode_enlargecanvas_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
+        Some(CHANNELMIXER_COMPATIBILITY_NAME) => decode_channelmixer_import_history_step(step),
         Some(SHARPEN_COMPATIBILITY_NAME) => decode_sharpen_import_history_step(step),
         Some(SOFTEN_COMPATIBILITY_NAME) => decode_soften_import_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
@@ -817,6 +827,42 @@ fn decode_colorcontrast_history_step(step: &CompatHistoryStep) -> DarktableHisto
             ),
         },
     })
+}
+
+fn decode_channelmixer_import_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    match decode_channelmixer_history_step(step) {
+        ChannelMixerHistoryStepDecode::ChannelMixerPendingBlend(decoded) => {
+            DarktableHistoryStepDecode::ChannelMixerPendingBlend(decoded)
+        }
+        ChannelMixerHistoryStepDecode::Preserved { source, finding } => {
+            DarktableHistoryStepDecode::Preserved {
+                source,
+                finding: DarktableHistoryDecodeFinding {
+                    code: match finding.code {
+                        ChannelMixerHistoryDecodeFindingCode::MissingModuleVersion => {
+                            DarktableHistoryDecodeFindingCode::MissingModuleVersion
+                        }
+                        ChannelMixerHistoryDecodeFindingCode::InvalidModuleVersion => {
+                            DarktableHistoryDecodeFindingCode::InvalidModuleVersion
+                        }
+                        ChannelMixerHistoryDecodeFindingCode::UnsupportedParameterVersion => {
+                            DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion
+                        }
+                        ChannelMixerHistoryDecodeFindingCode::InvalidOperationParameters => {
+                            DarktableHistoryDecodeFindingCode::InvalidOperationParameters
+                        }
+                        ChannelMixerHistoryDecodeFindingCode::InvalidEnabledState => {
+                            DarktableHistoryDecodeFindingCode::InvalidEnabledState
+                        }
+                        ChannelMixerHistoryDecodeFindingCode::OpaqueBlendSemantics => {
+                            DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+                        }
+                    },
+                    detail: finding.detail,
+                },
+            }
+        }
+    }
 }
 
 fn decode_sharpen_import_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {

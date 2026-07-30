@@ -1,6 +1,7 @@
 use crate::operations::{
     basicadj::BasicAdjConfig,
     bloom::BloomConfig,
+    channelmixer::ChannelMixerConfig,
     clipping::ClippingConfig,
     colorcontrast::ColorContrastConfig,
     colorcorrection::ColorCorrectionConfig,
@@ -38,6 +39,7 @@ use rusttable_core::{
 };
 
 mod basicadj;
+mod channelmixer;
 mod compat;
 mod error;
 mod geometry;
@@ -64,6 +66,7 @@ mod velvia;
 mod vibrance;
 pub(crate) use basicadj::compile_basicadj;
 pub(crate) use censorize::compile_censorize;
+pub(crate) use channelmixer::compile_channelmixer;
 pub(crate) use clahe::compile_clahe;
 pub(crate) use colorcontrast::compile_colorcontrast;
 pub(crate) use colorcorrection::compile_colorcorrection;
@@ -172,6 +175,9 @@ pub enum ProcessingOperationKind {
     },
     ColorContrast {
         config: ColorContrastConfig,
+    },
+    ChannelMixer {
+        config: ChannelMixerConfig,
     },
     ColorZones {
         plan: ColorZonesPlan,
@@ -480,6 +486,11 @@ impl ProcessingOperation {
         operation: &Operation,
     ) -> Result<Self, OperationCompileError> {
         compile_colorcontrast(operation)
+    }
+    pub(crate) fn compile_channelmixer(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_channelmixer(operation)
     }
     pub(crate) fn compile_colorzones(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_colorzones(operation)

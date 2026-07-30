@@ -16,6 +16,7 @@ mod masks;
 mod operations;
 mod retouch;
 pub use crate::operations::borders::borders_descriptor;
+pub use crate::operations::channelmixer::channelmixer_descriptor;
 pub use crate::operations::clahe::clahe_descriptor;
 pub use crate::operations::clipping::clipping_descriptor;
 pub use crate::operations::colorcontrast::colorcontrast_descriptor;

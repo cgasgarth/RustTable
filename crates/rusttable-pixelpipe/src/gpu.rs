@@ -1072,6 +1072,12 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                     blue: blue.get(),
                 })
             }
+            rusttable_processing::ProcessingOperationKind::ChannelMixer { .. } => {
+                // The native extended.cl pass needs a dedicated matrix payload;
+                // the shared point buffer cannot represent it. Never infer GPU
+                // support from the unrelated channelmixerrgb shader.
+                return None;
+            }
             rusttable_processing::ProcessingOperationKind::Velvia { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
                     return None;

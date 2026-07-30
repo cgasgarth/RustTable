@@ -27,6 +27,11 @@ objc2.workspace = true
 objc2-app-kit.workspace = true
 
 [[test]]
+name = "channelmixer_gtk_boundary"
+path = "tests/channelmixer_gtk_boundary.rs"
+harness = false
+
+[[test]]
 name = "exposure_gtk_boundary"
 path = "tests/exposure_gtk_boundary.rs"
 harness = false

@@ -16,13 +16,13 @@ use super::{
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, colorcontrast_descriptor,
-    colorzones_descriptor, crop_descriptor, dither_descriptor, enlargecanvas_descriptor,
-    exposure_descriptor, finalscale_descriptor, flip_descriptor, graduatednd_descriptor,
-    grain_descriptor, invert_descriptor, linear_offset_descriptor, relight_descriptor,
-    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
-    sharpen_descriptor, soften_descriptor, temperature_descriptor, velvia_descriptor,
-    vibrance_descriptor, vignette_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, channelmixer_descriptor,
+    colorcontrast_descriptor, colorzones_descriptor, crop_descriptor, dither_descriptor,
+    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
+    graduatednd_descriptor, grain_descriptor, invert_descriptor, linear_offset_descriptor,
+    relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    shadhi_descriptor, sharpen_descriptor, soften_descriptor, temperature_descriptor,
+    velvia_descriptor, vibrance_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -280,6 +280,17 @@ fn prepare_colorcontrast(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_colorcontrast(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_channelmixer(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_channelmixer(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -737,6 +748,28 @@ pub fn colorcontrast_definition() -> OperationDefinition {
         [MigrationBinding::new(1, 2, "colorcontrast.migration.v1-v2")],
         Some(gpu),
     )
+}
+
+pub fn channelmixer_definition() -> OperationDefinition {
+    geometry_definition(
+        channelmixer_descriptor(),
+        prepare_channelmixer,
+        &[
+            "iop.channelmixer.params.v1-v2",
+            "iop.channelmixer.cpu.native-modes",
+            "iop.channelmixer.opacity-mask-reconstruction",
+            "iop.channelmixer.alpha-preserve",
+            "iop.channelmixer.gpu-unavailable",
+            "iop.channelmixer.ui-fail-closed",
+            "iop.channelmixer.order.v30-106",
+        ],
+        RoiKind::Identity,
+        [MigrationBinding::new(1, 2, "channelmixer.migration.v1-v2")],
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "the source-shaped Channel Mixer editor is not mounted in production edit routing"
+            .to_owned(),
+    })
 }
 
 pub fn colorzones_definition() -> OperationDefinition {
@@ -1214,6 +1247,7 @@ macro_rules! builtin_operations {
             $crate::registry::velvia_definition,
             $crate::registry::vibrance_definition,
             $crate::registry::colorzones_definition,
+            $crate::registry::channelmixer_definition,
             $crate::registry::shadhi_definition,
             $crate::registry::temperature_definition,
             $crate::registry::bloom_definition,

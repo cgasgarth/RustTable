@@ -491,6 +491,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "velvia",
             "vibrance",
             "colorzones",
+            "channelmixer",
             "shadhi",
             "temperature",
             "bloom",

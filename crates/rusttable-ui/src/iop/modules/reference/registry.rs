@@ -7,6 +7,10 @@ use rusttable_processing::descriptor::{
 use rusttable_processing::{DefinitionAvailability, OperationUiAvailability, builtin_registry};
 
 use crate::iop::bloom::{BLOOM_DESCRIPTION, BLOOM_GROUP_KEYS, BLOOM_MODULE_ID, BLOOM_TITLE};
+use crate::iop::channelmixer::{
+    CHANNEL_MIXER_DESCRIPTION, CHANNEL_MIXER_GROUP_KEYS, CHANNEL_MIXER_MODULE_ID,
+    CHANNEL_MIXER_TITLE,
+};
 use crate::iop::colorcontrast::{
     COLORCONTRAST_MODULE_ID, COLORCONTRAST_SOURCE_MAP, ColorContrastSourceMap,
 };
@@ -114,12 +118,14 @@ fn module_from_descriptor(
     let bloom_custom_editor = id == BLOOM_MODULE_ID;
     let colorreconstruct_custom_editor = id == COLORRECONSTRUCTION_MODULE_ID;
     let colorzones_custom_editor = id == COLORZONES_MODULE_ID;
+    let channelmixer_module = id == CHANNEL_MIXER_MODULE_ID;
     let soften_module = id == SOFTEN_MODULE_ID;
     let soften_custom_editor = soften_module && ui_availability.is_usable();
     let crop_editor = id == CROP_MODULE_ID;
     let custom_editor = bloom_custom_editor
         || colorreconstruct_custom_editor
         || colorzones_custom_editor
+        || (channelmixer_module && ui_availability.is_usable())
         || soften_custom_editor;
     let mut controls = Vec::new();
     if ui_availability.is_available() && !custom_editor {
@@ -140,6 +146,7 @@ fn module_from_descriptor(
         .then(|| BLOOM_TITLE.to_owned())
         .or_else(|| colorreconstruct_custom_editor.then(|| COLORRECONSTRUCTION_TITLE.to_owned()))
         .or_else(|| colorzones_custom_editor.then(|| COLORZONES_TITLE.to_owned()))
+        .or_else(|| channelmixer_module.then(|| CHANNEL_MIXER_TITLE.to_owned()))
         .or_else(|| soften_module.then(|| SOFTEN_TITLE.to_owned()))
         .or_else(|| crop_editor.then(|| CROP_TITLE.to_owned()))
         .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
@@ -196,6 +203,10 @@ fn module_from_descriptor(
             .with_description(COLORZONES_DESCRIPTION)
             .with_colorzones_custom_editor()
             .with_group_keys(COLORZONES_GROUP_KEYS);
+    } else if channelmixer_module {
+        module = module
+            .with_description(CHANNEL_MIXER_DESCRIPTION)
+            .with_group_keys(CHANNEL_MIXER_GROUP_KEYS);
     } else if soften_module {
         module = module
             .with_description(SOFTEN_DESCRIPTION)
@@ -683,6 +694,39 @@ mod tests {
             .definition("rusttable.crop")
             .expect("Crop backend definition");
         assert!(definition.cpu().is_some());
+        assert!(!definition.ui_availability().is_usable());
+    }
+
+    #[test]
+    fn channelmixer_projects_source_metadata_but_stays_fail_closed() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let channelmixer = modules
+            .module("channelmixer")
+            .expect("Channel Mixer module");
+
+        assert_eq!(channelmixer.title(), "channel mixer");
+        assert_eq!(
+            channelmixer.description(),
+            Some(
+                "perform color space corrections\nsuch as white balance, channels mixing\nand conversions to monochrome emulating film"
+            )
+        );
+        assert_eq!(
+            channelmixer.group_keys().collect::<Vec<_>>(),
+            ["group.color", "group.grading"]
+        );
+        assert!(channelmixer.is_hidden());
+        assert!(!channelmixer.enabled());
+        assert!(!channelmixer.resettable());
+        assert!(channelmixer.availability().is_deprecated());
+        assert!(!channelmixer.availability().is_supported());
+        assert_eq!(channelmixer.controls().controls().len(), 0);
+
+        let definition = builtin_registry()
+            .definition("rusttable.channelmixer")
+            .expect("Channel Mixer backend definition");
+        assert!(definition.cpu().is_some());
+        assert!(definition.gpu().is_none());
         assert!(!definition.ui_availability().is_usable());
     }
 
