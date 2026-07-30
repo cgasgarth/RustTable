@@ -1,6 +1,9 @@
 use std::fmt;
 
-use super::{HistoryApplyOutcome, HistoryCommand, HistoryError, HistoryState, HistoryVersion};
+use super::{
+    HistoryApplyOutcome, HistoryCommand, HistoryError, HistorySnapshotDocument, HistorySnapshotId,
+    HistoryState, HistoryVersion,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HistoryRepositoryError {
@@ -46,6 +49,42 @@ pub trait HistoryRepository {
         &mut self,
         expected: HistoryVersion,
         state: &HistoryState,
+    ) -> Result<(), HistoryRepositoryError>;
+}
+
+/// Persists native-style history snapshot documents for one photo.
+///
+/// Implementations must publish each document atomically. A failed store or
+/// clear leaves the previously committed snapshot untouched.
+pub trait HistorySnapshotRepository {
+    /// Loads one snapshot by its photo-local identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed availability or corruption error.
+    fn load_snapshot(
+        &self,
+        snapshot_id: HistorySnapshotId,
+    ) -> Result<Option<HistorySnapshotDocument>, HistoryRepositoryError>;
+
+    /// Stores one complete snapshot document atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed availability, corruption, or commit error.
+    fn store_snapshot(
+        &mut self,
+        snapshot: &HistorySnapshotDocument,
+    ) -> Result<(), HistoryRepositoryError>;
+
+    /// Removes one snapshot atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed availability or commit error.
+    fn clear_snapshot(
+        &mut self,
+        snapshot_id: HistorySnapshotId,
     ) -> Result<(), HistoryRepositoryError>;
 }
 

@@ -267,12 +267,7 @@ impl HistoryState {
             &snapshots,
         )?;
         validate_journal(&persisted_journal, commit_sequence, &revisions, &branches)?;
-        if persisted_provenance
-            .keys()
-            .any(|revision| !revisions.contains_key(revision))
-        {
-            return Err(HistoryError::InvalidPersistedState);
-        }
+        validate_provenance(&persisted_provenance, &revisions)?;
         Ok(Self {
             photo_id,
             version,
@@ -568,6 +563,7 @@ impl HistoryState {
             return Err(HistoryError::InvalidBranchName);
         }
         self.validate_cursor(source)?;
+        source.revision().ok_or(HistoryError::EmptyHistory)?;
         let source_branch = self
             .branches
             .get(&source.branch())
@@ -752,6 +748,10 @@ impl HistoryState {
             return Err(HistoryError::BranchHasEvidence(branch));
         }
         self.branches.remove(&branch);
+        self.journal
+            .retain(|entry| entry.before().branch() != branch && entry.after().branch() != branch);
+        self.provenance
+            .retain(|revision, _| self.revisions.contains_key(revision));
         Ok(())
     }
 
@@ -778,6 +778,32 @@ impl HistoryState {
         }
         let before = self.revisions.len();
         self.revisions.retain(|id, _| closure.contains(id));
+        self.evidence
+            .retain(|evidence| self.revisions.contains_key(&evidence.revision()));
+        self.provenance
+            .retain(|revision, _| self.revisions.contains_key(revision));
+        self.journal.retain(|entry| {
+            entry
+                .revision()
+                .is_none_or(|revision| self.revisions.contains_key(&revision))
+                && entry
+                    .restore_from()
+                    .is_none_or(|revision| self.revisions.contains_key(&revision))
+                && entry.before().revision().is_none_or(|revision| {
+                    self.revisions.contains_key(&revision)
+                        && self
+                            .branches
+                            .get(&entry.before().branch())
+                            .is_some_and(|branch| branch.lineage().contains(&revision))
+                })
+                && entry.after().revision().is_none_or(|revision| {
+                    self.revisions.contains_key(&revision)
+                        && self
+                            .branches
+                            .get(&entry.after().branch())
+                            .is_some_and(|branch| branch.lineage().contains(&revision))
+                })
+        });
         before - self.revisions.len()
     }
 
@@ -841,6 +867,17 @@ fn restore_revisions(
                     .parent()
                     .is_some_and(|parent| !revisions.contains_key(&parent))
         })
+        || revisions.values().any(|revision| {
+            let mut seen = BTreeSet::new();
+            let mut current = Some(revision.id());
+            while let Some(id) = current {
+                if !seen.insert(id) {
+                    return true;
+                }
+                current = revisions.get(&id).and_then(HistoryRevision::parent);
+            }
+            false
+        })
     {
         return Err(HistoryError::InvalidPersistedState);
     }
@@ -862,22 +899,70 @@ fn restore_branches(
         || !branches.contains_key(&active_branch)
         || branches.values().any(|branch| {
             !validate_name(branch.name())
+                || !valid_branch_origin(branch)
+                || branch.lineage().is_empty() != branch.cursor().is_none()
+                || has_duplicate_ids(branch.lineage())
                 || branch
                     .lineage()
                     .iter()
                     .any(|revision| !revisions.contains_key(revision))
+                || !lineage_follows_parents(branch, revisions)
                 || branch.cursor().is_some_and(|cursor| {
                     !branch.lineage().contains(&cursor) || !revisions.contains_key(&cursor)
                 })
-                || branch
-                    .redo()
-                    .iter()
-                    .any(|revision| !revisions.contains_key(revision))
+                || branch.redo().iter().any(|revision| {
+                    !revisions.contains_key(revision) || !branch.lineage().contains(revision)
+                })
+                || !redo_matches_cursor(branch)
         })
     {
         return Err(HistoryError::InvalidPersistedState);
     }
     Ok(branches)
+}
+
+fn valid_branch_origin(branch: &HistoryBranch) -> bool {
+    let main = HistoryBranchId::new(1).expect("literal branch ID is nonzero");
+    match (branch.id() == main, branch.origin()) {
+        (true, None) => true,
+        (false, Some(origin)) => branch.lineage().contains(&origin),
+        _ => false,
+    }
+}
+
+fn has_duplicate_ids(ids: &[HistoryRevisionId]) -> bool {
+    let mut seen = BTreeSet::new();
+    ids.iter().any(|id| !seen.insert(*id))
+}
+
+fn lineage_follows_parents(
+    branch: &HistoryBranch,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+) -> bool {
+    branch.lineage().windows(2).all(|pair| {
+        revisions
+            .get(&pair[1])
+            .is_some_and(|revision| revision.parent() == Some(pair[0]))
+    }) && branch
+        .lineage()
+        .first()
+        .and_then(|id| revisions.get(id))
+        .is_some_and(|revision| revision.parent().is_none())
+}
+
+fn redo_matches_cursor(branch: &HistoryBranch) -> bool {
+    let Some(cursor) = branch.cursor() else {
+        return branch.redo().is_empty();
+    };
+    let Some(cursor_index) = branch.lineage().iter().position(|id| *id == cursor) else {
+        return false;
+    };
+    let expected = branch.lineage()[cursor_index + 1..]
+        .iter()
+        .rev()
+        .copied()
+        .collect::<Vec<_>>();
+    branch.redo() == expected
 }
 
 fn restore_snapshots(
@@ -893,8 +978,9 @@ fn restore_snapshots(
     if snapshots.len() != count
         || snapshots.values().any(|value| {
             !validate_name(value.name())
+                || value.cursor().revision().is_none()
                 || branches.get(&value.cursor().branch()).is_none_or(|branch| {
-                    value.cursor().revision().is_some_and(|revision| {
+                    value.cursor().revision().is_none_or(|revision| {
                         !branch.lineage().contains(&revision) || !revisions.contains_key(&revision)
                     })
                 })
@@ -932,7 +1018,10 @@ fn validate_counters(
     let max_revision = revisions.keys().map(|id| id.get()).max().unwrap_or(0);
     let max_branch = branches.keys().map(|id| id.get()).max().unwrap_or(0);
     let max_snapshot = snapshots.keys().map(|id| id.get()).max().unwrap_or(0);
-    if next_revision_id <= max_revision
+    if next_revision_id == 0
+        || next_branch_id == 0
+        || next_snapshot_id == 0
+        || next_revision_id <= max_revision
         || next_branch_id <= max_branch
         || next_snapshot_id <= max_snapshot
     {
@@ -948,16 +1037,55 @@ fn validate_journal(
     revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
     branches: &BTreeMap<HistoryBranchId, HistoryBranch>,
 ) -> Result<(), HistoryError> {
-    if journal.iter().enumerate().any(|(index, entry)| {
-        entry.sequence() == 0
+    let mut journal_revisions = BTreeSet::new();
+    for (index, entry) in journal.iter().enumerate() {
+        let valid_restore_reference = entry.restore_from().is_none_or(|revision| {
+            revisions.contains_key(&revision) && journal_revisions.contains(&revision)
+        });
+        let valid_revision = entry.revision().is_none_or(|revision| {
+            revisions.contains_key(&revision) && entry.after().revision() == Some(revision)
+        });
+        if entry.sequence() == 0
             || entry.sequence() > commit_sequence
             || (index > 0 && journal[index - 1].sequence() >= entry.sequence())
-            || entry
-                .revision()
-                .is_some_and(|revision| !revisions.contains_key(&revision))
-            || !branches.contains_key(&entry.before().branch())
-            || !branches.contains_key(&entry.after().branch())
-    }) {
+            || !valid_revision
+            || !cursor_matches_graph(entry.before(), branches, revisions)
+            || !cursor_matches_graph(entry.after(), branches, revisions)
+            || !valid_restore_reference
+            || !entry.provenance().is_valid()
+        {
+            return Err(HistoryError::InvalidPersistedState);
+        }
+        if let Some(revision) = entry.revision()
+            && !journal_revisions.insert(revision)
+        {
+            return Err(HistoryError::InvalidPersistedState);
+        }
+    }
+    Ok(())
+}
+
+fn cursor_matches_graph(
+    cursor: HistoryCursor,
+    branches: &BTreeMap<HistoryBranchId, HistoryBranch>,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+) -> bool {
+    let Some(branch) = branches.get(&cursor.branch()) else {
+        return false;
+    };
+    cursor.revision().is_none_or(|revision| {
+        revisions.contains_key(&revision) && branch.lineage().contains(&revision)
+    })
+}
+
+fn validate_provenance(
+    provenance: &BTreeMap<HistoryRevisionId, HistoryProvenance>,
+    revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
+) -> Result<(), HistoryError> {
+    if provenance
+        .iter()
+        .any(|(revision, value)| !revisions.contains_key(revision) || !value.is_valid())
+    {
         Err(HistoryError::InvalidPersistedState)
     } else {
         Ok(())

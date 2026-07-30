@@ -11,7 +11,7 @@ use codecs::photo_groups as photo_group_codec;
 use codecs::virtual_copies as virtual_copy_codec;
 use codecs::{
     duplicates as duplicate_codec, edit as edit_codec, history as history_codec,
-    import_details as import_details_codec,
+    history_snapshot as history_snapshot_codec, import_details as import_details_codec,
 };
 
 pub use repositories::RedbImportRepository;

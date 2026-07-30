@@ -28,7 +28,7 @@ pub(crate) use metadata_schema::*;
 pub(crate) use tag_schema::*;
 pub(crate) use virtual_copy_schema::*;
 
-pub const CURRENT_SCHEMA_VERSION: u8 = 15;
+pub const CURRENT_SCHEMA_VERSION: u8 = 16;
 
 pub(crate) const SCHEMA_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_schema");
@@ -82,6 +82,8 @@ pub(crate) const HISTORY_BLOBS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blobs");
 pub(crate) const HISTORY_BLOB_REFS_TABLE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_history_blob_refs");
+pub(crate) const HISTORY_SNAPSHOTS_TABLE: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_history_snapshots");
 pub(crate) const VERSION_KEY: &[u8] = b"schema-version";
 pub(crate) const ORGANIZATION_REVISION_KEY: &[u8] = b"organization-revision";
 const DATABASE_OPEN_RETRY_TIMEOUT: Duration = Duration::from_secs(1);
@@ -218,25 +220,32 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             drop(schema);
             drop(transaction);
             history_migration::repair_legacy_blob_refs(database)?;
+            history_migration::ensure_snapshot_table(database)?;
             let transaction = database
                 .begin_read()
                 .map_err(|_| RepositoryError::Unavailable)?;
             validation::validate_tables(&transaction)
         }
-        [14] => virtual_copy_schema::migrate_to_v15(database),
+        [15] => history_migration::migrate_to_v16(database),
+        [14] => virtual_copy_schema::migrate_to_v15(database)
+            .and_then(|()| history_migration::ensure_snapshot_table(database)),
         [13] => photo_group_schema::migrate_to_v14(database)
-            .and_then(|()| virtual_copy_schema::migrate_to_v15(database)),
+            .and_then(|()| virtual_copy_schema::migrate_to_v15(database))
+            .and_then(|()| history_migration::ensure_snapshot_table(database)),
         [6] => {
             drop(schema);
             drop(transaction);
             migrate_to_v7(database)
                 .and_then(|()| migrate_to_v8(database))
                 .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [7] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v8(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
+            migrate_to_v8(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [8] => {
             drop(schema);
@@ -244,11 +253,14 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             migrate_to_v9(database)
                 .and_then(|()| migrate_to_v10(database))
                 .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [9] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v10(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
+            migrate_to_v10(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [10] => {
             drop(schema);
@@ -256,6 +268,7 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             migrate_metadata_and_tags_to_v12(database)
                 .and_then(|()| migrate_duplicates_to_v13(database))
                 .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [11] => {
             drop(schema);
@@ -263,33 +276,42 @@ fn validate(database: &Database) -> Result<(), RepositoryError> {
             migrate_tags_to_v12(database)
                 .and_then(|()| migrate_duplicates_to_v13(database))
                 .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [12] => {
             drop(schema);
             drop(transaction);
             migrate_duplicates_to_v13(database)
                 .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [5] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v6(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
+            migrate_to_v6(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [4] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v5(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
+            migrate_to_v5(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [3] => {
             drop(schema);
             drop(transaction);
-            migrate_to_v4(database).and_then(|()| virtual_copy_schema::ensure_tables(database))
+            migrate_to_v4(database)
+                .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         [1 | 2] => {
             drop(schema);
             drop(transaction);
             migrate_legacy_to_v4(database)
                 .and_then(|()| virtual_copy_schema::ensure_tables(database))
+                .and_then(|()| history_migration::ensure_snapshot_table(database))
         }
         _ => Err(RepositoryError::CorruptPersistedData),
     }

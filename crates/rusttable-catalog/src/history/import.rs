@@ -34,6 +34,16 @@ impl HistoryImport {
         {
             return Err(HistoryImportError::PhotoMismatch);
         }
+        if entries.iter().any(|entry| !entry.provenance().is_valid()) {
+            return Err(HistoryImportError::InvalidProvenance);
+        }
+        if let Some(index) = entries
+            .iter()
+            .filter_map(super::types::HistoryImportEntry::restore_from)
+            .find(|index| *index >= entries.len())
+        {
+            return Err(HistoryImportError::InvalidRestoreReference { index });
+        }
         Ok(Self {
             photo_id,
             entries,
@@ -81,6 +91,8 @@ impl HistoryImport {
 pub enum HistoryImportError {
     InvalidCurrentIndex,
     PhotoMismatch,
+    InvalidProvenance,
+    InvalidRestoreReference { index: usize },
     History(HistoryError),
 }
 
@@ -91,6 +103,13 @@ impl fmt::Display for HistoryImportError {
                 formatter.write_str("history import current index is invalid")
             }
             Self::PhotoMismatch => formatter.write_str("history import contains another photo"),
+            Self::InvalidProvenance => formatter.write_str("history import provenance is invalid"),
+            Self::InvalidRestoreReference { index } => {
+                write!(
+                    formatter,
+                    "history import restore reference {index} is invalid"
+                )
+            }
             Self::History(source) => write!(formatter, "history import failed: {source}"),
         }
     }
