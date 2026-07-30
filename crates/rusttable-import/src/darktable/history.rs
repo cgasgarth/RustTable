@@ -21,6 +21,10 @@ pub use rusttable_compat::sharpen::DecodedSharpenHistoryStep;
 use rusttable_compat::sharpen::{
     SharpenHistoryDecodeFindingCode, SharpenHistoryStepDecode, decode_sharpen_history_step,
 };
+pub use rusttable_compat::soften::DecodedSoftenHistoryStep;
+use rusttable_compat::soften::{
+    SoftenHistoryDecodeFindingCode, SoftenHistoryStepDecode, decode_soften_history_step,
+};
 use rusttable_compat::{CompatHistoryStep, EnabledState};
 use rusttable_processing::operations::bloom::{BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory};
 use rusttable_processing::operations::colorcontrast::{
@@ -55,6 +59,7 @@ const COLORRECONSTRUCTION_COMPATIBILITY_NAME: &str = "colorreconstruct";
 const CROP_COMPATIBILITY_NAME: &str = "crop";
 const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
 const SHARPEN_COMPATIBILITY_NAME: &str = "sharpen";
+const SOFTEN_COMPATIBILITY_NAME: &str = "soften";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
 
 const COLORRECONSTRUCTION_V1_PARAMETER_BYTES: usize = 3 * size_of::<f32>();
@@ -283,6 +288,9 @@ pub enum DarktableHistoryStepDecode {
     /// Sharpen v1 core parameters are decoded, while the complete blend/mask
     /// and multi-instance row remains byte-preserved and non-executable.
     SharpenPendingBlend(DecodedSharpenHistoryStep),
+    /// Soften v1 core parameters are decoded, while blend/mask semantics remain
+    /// explicitly non-executable.
+    SoftenPendingBlend(DecodedSoftenHistoryStep),
     /// Velvia core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     VelviaPendingBlend(DecodedVelviaHistoryStep),
@@ -317,6 +325,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(ENLARGECANVAS_COMPATIBILITY_NAME) => decode_enlargecanvas_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
         Some(SHARPEN_COMPATIBILITY_NAME) => decode_sharpen_import_history_step(step),
+        Some(SOFTEN_COMPATIBILITY_NAME) => decode_soften_import_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
         _ => preserved(
@@ -836,6 +845,42 @@ fn decode_sharpen_import_history_step(step: &CompatHistoryStep) -> DarktableHist
                             DarktableHistoryDecodeFindingCode::InvalidEnabledState
                         }
                         SharpenHistoryDecodeFindingCode::OpaqueBlendSemantics => {
+                            DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+                        }
+                    },
+                    detail: finding.detail,
+                },
+            }
+        }
+    }
+}
+
+fn decode_soften_import_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    match decode_soften_history_step(step) {
+        SoftenHistoryStepDecode::SoftenPendingBlend(decoded) => {
+            DarktableHistoryStepDecode::SoftenPendingBlend(decoded)
+        }
+        SoftenHistoryStepDecode::Preserved { source, finding } => {
+            DarktableHistoryStepDecode::Preserved {
+                source,
+                finding: DarktableHistoryDecodeFinding {
+                    code: match finding.code {
+                        SoftenHistoryDecodeFindingCode::MissingModuleVersion => {
+                            DarktableHistoryDecodeFindingCode::MissingModuleVersion
+                        }
+                        SoftenHistoryDecodeFindingCode::InvalidModuleVersion => {
+                            DarktableHistoryDecodeFindingCode::InvalidModuleVersion
+                        }
+                        SoftenHistoryDecodeFindingCode::UnsupportedParameterVersion => {
+                            DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion
+                        }
+                        SoftenHistoryDecodeFindingCode::InvalidOperationParameters => {
+                            DarktableHistoryDecodeFindingCode::InvalidOperationParameters
+                        }
+                        SoftenHistoryDecodeFindingCode::InvalidEnabledState => {
+                            DarktableHistoryDecodeFindingCode::InvalidEnabledState
+                        }
+                        SoftenHistoryDecodeFindingCode::OpaqueBlendSemantics => {
                             DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
                         }
                     },

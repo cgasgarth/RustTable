@@ -3,6 +3,7 @@
 
 pub mod purpose;
 pub mod sharpen;
+pub mod soften;
 
 mod accounting;
 mod history;

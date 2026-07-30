@@ -954,7 +954,12 @@ fn neighborhood_effects_use_full_frame_cpu_path_and_preserve_alpha() {
         .expect("full-frame neighborhood fallback");
 
     assert_eq!(tiled.image(), full_frame.image());
-    for (actual, source) in tiled.image().pixels().iter().zip(tiled_image().pixels()) {
-        assert_eq!(actual.alpha().to_bits(), source.alpha().to_bits());
+    for (actual, expected) in tiled
+        .image()
+        .pixels()
+        .iter()
+        .zip(full_frame.image().pixels())
+    {
+        assert_eq!(actual.alpha().to_bits(), expected.alpha().to_bits());
     }
 }

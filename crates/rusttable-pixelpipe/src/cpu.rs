@@ -148,8 +148,8 @@ impl CpuPixelpipeExecutor {
                 Vec::new(),
             ));
         }
-        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab
+        let preserve_inert_input = preserves_inert_input(request, request.input());
+        let plans = if preserve_inert_input
             || is_pure_lab_chain(request, request.input())
             || !has_active_basicadj(request)
         {
@@ -160,7 +160,7 @@ impl CpuPixelpipeExecutor {
         let (image, diagnostics) = Self::execute_image(
             request,
             request.input(),
-            preserve_inert_lab,
+            preserve_inert_input,
             &plans,
             masks.as_ref(),
         )?;
@@ -201,8 +201,8 @@ impl CpuPixelpipeExecutor {
                 Vec::new(),
             ));
         }
-        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab
+        let preserve_inert_input = preserves_inert_input(request, request.input());
+        let plans = if preserve_inert_input
             || is_pure_lab_chain(request, request.input())
             || !has_active_basicadj(request)
         {
@@ -213,7 +213,7 @@ impl CpuPixelpipeExecutor {
         let (image, diagnostics) = Self::execute_image_with_cancellation(
             request,
             request.input(),
-            preserve_inert_lab,
+            preserve_inert_input,
             &plans,
             masks.as_ref(),
             Some(scope),
@@ -244,14 +244,14 @@ impl CpuPixelpipeExecutor {
     ) -> Result<CpuPixelpipeResult, CpuPixelpipeError> {
         validate_input_encoding(request.input())?;
         if requires_full_frame_execution(request) {
-            // Both Darktable operations freeze full-image evidence before
-            // replacement. Running them independently per tile changes their
-            // result, so the legal tiled contract is a full-frame analysis
-            // followed by one publication.
+            // Full-frame operations freeze evidence or retain source-sensitive
+            // native arithmetic before replacement. Running them independently
+            // per tile changes their result, so the legal tiled contract is one
+            // full-frame publication.
             return self.execute(request);
         }
-        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab
+        let preserve_inert_input = preserves_inert_input(request, request.input());
+        let plans = if preserve_inert_input
             || is_pure_lab_chain(request, request.input())
             || !has_active_basicadj(request)
         {
@@ -286,7 +286,7 @@ impl CpuPixelpipeExecutor {
             let (tile_output, _) = Self::execute_image(
                 request,
                 &tile_input,
-                preserve_inert_lab,
+                preserve_inert_input,
                 &plans,
                 tile_masks.as_ref(),
             )?;
@@ -350,8 +350,8 @@ impl CpuPixelpipeExecutor {
                 .map_err(CpuPixelpipeError::Cancelled)?;
             return Ok(result);
         }
-        let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab
+        let preserve_inert_input = preserves_inert_input(request, request.input());
+        let plans = if preserve_inert_input
             || is_pure_lab_chain(request, request.input())
             || !has_active_basicadj(request)
         {
@@ -390,7 +390,7 @@ impl CpuPixelpipeExecutor {
             let (tile_output, _) = Self::execute_image_with_cancellation(
                 request,
                 &tile_input,
-                preserve_inert_lab,
+                preserve_inert_input,
                 &plans,
                 tile_masks.as_ref(),
                 Some(scope),
@@ -436,14 +436,14 @@ impl CpuPixelpipeExecutor {
     fn execute_image(
         request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
-        preserve_inert_lab: bool,
+        preserve_inert_input: bool,
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
     ) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
         Self::execute_image_with_cancellation(
             request,
             input,
-            preserve_inert_lab,
+            preserve_inert_input,
             plans,
             masks,
             None,
@@ -453,7 +453,7 @@ impl CpuPixelpipeExecutor {
     fn execute_image_with_cancellation(
         request: &CpuPixelpipeSnapshot,
         input: &RgbaF32Image,
-        preserve_inert_lab: bool,
+        preserve_inert_input: bool,
         plans: &BasicAdjPlanSet,
         masks: Option<&OperationMaskSet>,
         scope: Option<&CancellationScope>,
@@ -464,8 +464,12 @@ impl CpuPixelpipeExecutor {
             scope.check().map_err(CpuPixelpipeError::Cancelled)?;
         }
 
-        if preserve_inert_lab {
+        if preserve_inert_input {
             return Ok((input.clone(), Vec::new()));
+        }
+
+        if has_active_soften(request) {
+            return execute_soften_graph(request, input, plans, masks, node_scope.as_ref());
         }
 
         if is_lab_point_chain(request, input) {
@@ -596,10 +600,9 @@ pub(crate) fn operation_is_semantically_active(operation: &ProcessingOperation) 
     operation.is_enabled() && operation.opacity().get().to_bits() != 0.0_f32.to_bits()
 }
 
-fn preserves_inert_lab_input(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
+fn preserves_inert_input(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
     let input_encoding = input.descriptor().color_encoding();
-    input_encoding == RgbaF32ColorEncoding::LabD50
-        && output_encoding(request.output_mode(), input.descriptor()) == input_encoding
+    output_encoding(request.output_mode(), input.descriptor()) == input_encoding
         && request
             .graph()
             .nodes()
@@ -1365,6 +1368,236 @@ fn lab_point_transform_error(
     ))
 }
 
+fn has_active_soften(request: &CpuPixelpipeSnapshot) -> bool {
+    request.graph().nodes().any(|node| {
+        operation_is_semantically_active(node.operation())
+            && matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::Soften { .. }
+            )
+    })
+}
+
+fn execute_soften_graph(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    plans: &BasicAdjPlanSet,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
+    let mut working = to_linear_working(input)?;
+    let mut alpha = input
+        .pixels()
+        .iter()
+        .map(|pixel| pixel.alpha())
+        .collect::<Vec<_>>();
+    let full_dimensions = request.input().descriptor().dimensions();
+
+    for node in request.graph().nodes() {
+        if let Some(scope) = scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        if !operation_is_semantically_active(node.operation()) {
+            continue;
+        }
+        if matches!(
+            node.operation().kind(),
+            rusttable_processing::ProcessingOperationKind::Soften { .. }
+        ) {
+            (working, alpha) = execute_soften_working(
+                request,
+                &working,
+                &alpha,
+                full_dimensions,
+                node,
+                masks,
+                scope,
+            )?;
+        } else {
+            working = evaluate_graph_node_with_context_and_cancellation(
+                node,
+                &working,
+                Some(plans),
+                masks,
+                || scope.is_some_and(|scope| scope.check().is_err()),
+            )
+            .map_err(|source| cancellable_evaluation_error(source, scope))?;
+        }
+    }
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    output_from_working_with_alpha(request.output_mode(), input, &working, &alpha)
+        .map(|image| (image, Vec::new()))
+}
+
+fn execute_soften_working(
+    request: &CpuPixelpipeSnapshot,
+    input: &WorkingRgbImage,
+    alpha: &[f32],
+    full_dimensions: RasterDimensions,
+    node: &rusttable_processing::OperationGraphNode,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<(WorkingRgbImage, Vec<f32>), CpuPixelpipeError> {
+    let dimensions = input.dimensions();
+    if alpha.len() != usize::try_from(dimensions.pixel_count()).unwrap_or(usize::MAX) {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: "Soften alpha shape does not match the working raster".to_owned(),
+            },
+        });
+    }
+    let config = match node.operation().kind() {
+        rusttable_processing::ProcessingOperationKind::Soften { config } => *config,
+        _ => unreachable!("soften working bridge is only called for soften"),
+    };
+    let scale = request.scale_context();
+    let rgba = input
+        .pixels()
+        .zip(alpha)
+        .map(|(rgb, alpha)| {
+            rusttable_processing::operations::soften::SoftenPixel::new(
+                rgb.red().get(),
+                rgb.green().get(),
+                rgb.blue().get(),
+                *alpha,
+            )
+        })
+        .collect::<Vec<_>>();
+    let plan = rusttable_processing::operations::soften::SoftenPlan::new_with_scale(
+        config,
+        full_dimensions,
+        scale.roi_scale(),
+        scale.piece_iscale(),
+    )
+    .map_err(|source| soften_evaluation_error(node, source, scope))?;
+    let candidate = plan
+        .execute_rgba_with_input_dimensions_with_cancel(&rgba, dimensions, || {
+            scope.is_some_and(|scope| scope.check().is_err())
+        })
+        .map_err(|source| soften_evaluation_error(node, source, scope))?;
+    let mask = masks.and_then(|set| set.mask_for(node.operation().operation_id()));
+    if mask.is_some_and(|raster| {
+        raster.width() != dimensions.width()
+            || raster.height() != dimensions.height()
+            || raster.values().len() != alpha.len()
+    }) {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: "Soften mask dimensions do not match the expanded input ROI".to_owned(),
+            },
+        });
+    }
+    let opacity = node.operation().opacity().get();
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(candidate.len())
+        .map_err(|_| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: "Soften output could not allocate its RGBA publication buffer".to_owned(),
+            },
+        })?;
+    for (index, (source, processed)) in rgba.iter().zip(candidate).enumerate() {
+        if index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let coverage = mask.map_or(opacity, |raster| raster.values()[index] * opacity);
+        let source = source.channels();
+        let processed = processed.channels();
+        output.push([
+            source[0] + (processed[0] - source[0]) * coverage,
+            source[1] + (processed[1] - source[1]) * coverage,
+            source[2] + (processed[2] - source[2]) * coverage,
+            source[3] + (processed[3] - source[3]) * coverage,
+        ]);
+    }
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    let mut working_pixels = Vec::new();
+    let mut output_alpha = Vec::new();
+    working_pixels
+        .try_reserve_exact(output.len())
+        .map_err(|_| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: "Soften output could not allocate its working buffer".to_owned(),
+            },
+        })?;
+    output_alpha
+        .try_reserve_exact(output.len())
+        .map_err(|_| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: "Soften output could not allocate its alpha buffer".to_owned(),
+            },
+        })?;
+    for (index, channels) in output.into_iter().enumerate() {
+        let red = FiniteF32::new(channels[0]).map_err(|_| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: format!("Soften produced non-finite red at pixel {index}"),
+            },
+        })?;
+        let green = FiniteF32::new(channels[1]).map_err(|_| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: format!("Soften produced non-finite green at pixel {index}"),
+            },
+        })?;
+        let blue = FiniteF32::new(channels[2]).map_err(|_| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: format!("Soften produced non-finite blue at pixel {index}"),
+            },
+        })?;
+        working_pixels.push(LinearRgb::new(red, green, blue));
+        output_alpha.push(channels[3]);
+    }
+    let working = WorkingRgbImage::new_with_frame(dimensions, working_pixels, input.frame())
+        .map_err(|error| CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: error.to_string(),
+            },
+        })?;
+    Ok((working, output_alpha))
+}
+
+fn soften_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: rusttable_processing::operations::OperationExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if source == rusttable_processing::operations::OperationExecutionError::Cancelled
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
 fn execute_censorize_image(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
@@ -1587,6 +1820,7 @@ struct NeighborhoodTile {
 
 fn neighborhood_overlap(request: &CpuPixelpipeSnapshot) -> Result<u32, CpuPixelpipeError> {
     let scale = request.scale_context();
+    let dimensions = request.input().descriptor().dimensions();
     let mut overlap = 0_u32;
     for node in request.graph().nodes() {
         let operation = node.operation();
@@ -1594,7 +1828,7 @@ fn neighborhood_overlap(request: &CpuPixelpipeSnapshot) -> Result<u32, CpuPixelp
             continue;
         }
         let node_overlap = operation
-            .neighborhood_overlap_pixels(scale.roi_scale(), scale.piece_iscale())
+            .neighborhood_overlap_pixels(dimensions, scale.roi_scale(), scale.piece_iscale())
             .map_err(|error| CpuPixelpipeError::Evaluation {
                 source: EvaluationError::OperationExecution {
                     step_index: node.pipeline_step_index(),
@@ -1647,13 +1881,24 @@ fn expand_tile(
 
 pub(crate) fn requires_full_frame_execution(request: &CpuPixelpipeSnapshot) -> bool {
     request.graph().nodes().any(|node| {
-        node.operation().requires_full_image_analysis()
+        let operation = node.operation();
+        // The shared effect descriptor carries conservative full-image flags,
+        // but Darktable's Soften module explicitly supplies a neighborhood
+        // tiling callback. Its committed overlap is resolved below instead of
+        // silently collapsing a tiled request into one full-frame execution.
+        let is_soften = matches!(
+            operation.kind(),
+            rusttable_processing::ProcessingOperationKind::Soften { .. }
+        );
+        if is_soften && !operation_is_semantically_active(operation) {
+            return false;
+        }
+        (!is_soften && operation.requires_full_image_analysis())
             || matches!(
-                node.operation().kind(),
+                operation.kind(),
                 rusttable_processing::ProcessingOperationKind::Highlights { .. }
                     | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
                     | rusttable_processing::ProcessingOperationKind::Bloom { .. }
-                    | rusttable_processing::ProcessingOperationKind::Soften { .. }
                     | rusttable_processing::ProcessingOperationKind::Crop { .. }
                     | rusttable_processing::ProcessingOperationKind::Flip { .. }
                     | rusttable_processing::ProcessingOperationKind::RotatePixels { .. }
@@ -1753,6 +1998,7 @@ fn output_pixels(
     mode: CpuPixelpipeOutputMode,
     evaluated: &rusttable_processing::WorkingRgbImage,
     input: &RgbaF32Image,
+    alpha: &[f32],
 ) -> Result<Vec<RgbaF32Pixel>, CpuPixelpipeError> {
     if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         let to_lab = color_transform(
@@ -1761,9 +2007,9 @@ fn output_pixels(
         )?;
         return evaluated
             .pixels()
-            .zip(input.pixels())
+            .zip(alpha.iter().copied())
             .enumerate()
-            .map(|(pixel_index, (rgb, source))| {
+            .map(|(pixel_index, (rgb, alpha))| {
                 let lab = to_lab
                     .apply_rgb(
                         [rgb.red().get(), rgb.green().get(), rgb.blue().get()],
@@ -1774,7 +2020,7 @@ fn output_pixels(
                             "Lab output transform failed at pixel {pixel_index}: {error}"
                         ))
                     })?;
-                Ok(RgbaF32Pixel::new(lab[0], lab[1], lab[2], source.alpha()))
+                Ok(RgbaF32Pixel::new(lab[0], lab[1], lab[2], alpha))
             })
             .collect();
     }
@@ -1782,26 +2028,16 @@ fn output_pixels(
         CpuPixelpipeOutputMode::Preview => Ok(encode_working_to_srgb(evaluated)
             .image()
             .pixels()
-            .zip(input.pixels())
-            .map(|(rgb, source)| {
-                RgbaF32Pixel::new(
-                    rgb.red().get(),
-                    rgb.green().get(),
-                    rgb.blue().get(),
-                    source.alpha(),
-                )
+            .zip(alpha.iter().copied())
+            .map(|(rgb, alpha)| {
+                RgbaF32Pixel::new(rgb.red().get(), rgb.green().get(), rgb.blue().get(), alpha)
             })
             .collect()),
         CpuPixelpipeOutputMode::FullExport => Ok(convert_working_to_linear_srgb(evaluated)
             .pixels()
-            .zip(input.pixels())
-            .map(|(rgb, source)| {
-                RgbaF32Pixel::new(
-                    rgb.red().get(),
-                    rgb.green().get(),
-                    rgb.blue().get(),
-                    source.alpha(),
-                )
+            .zip(alpha.iter().copied())
+            .map(|(rgb, alpha)| {
+                RgbaF32Pixel::new(rgb.red().get(), rgb.green().get(), rgb.blue().get(), alpha)
             })
             .collect()),
     }
@@ -1958,9 +2194,22 @@ pub(crate) fn output_from_working(
     input: &RgbaF32Image,
     evaluated: &WorkingRgbImage,
 ) -> Result<RgbaF32Image, CpuPixelpipeError> {
-    let output_descriptor =
-        output_descriptor(mode, input.descriptor(), input.descriptor().dimensions());
-    let pixels = output_pixels(mode, evaluated, input)?;
+    let alpha = input
+        .pixels()
+        .iter()
+        .map(|pixel| pixel.alpha())
+        .collect::<Vec<_>>();
+    output_from_working_with_alpha(mode, input, evaluated, &alpha)
+}
+
+fn output_from_working_with_alpha(
+    mode: CpuPixelpipeOutputMode,
+    input: &RgbaF32Image,
+    evaluated: &WorkingRgbImage,
+    alpha: &[f32],
+) -> Result<RgbaF32Image, CpuPixelpipeError> {
+    let output_descriptor = output_descriptor(mode, input.descriptor(), evaluated.dimensions());
+    let pixels = output_pixels(mode, evaluated, input, alpha)?;
     RgbaF32Image::new(output_descriptor, pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
 }

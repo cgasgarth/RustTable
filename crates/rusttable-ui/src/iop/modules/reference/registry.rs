@@ -24,6 +24,7 @@ use crate::iop::colorzones::{
 use crate::iop::crop::{
     CROP_ALIASES, CROP_DESCRIPTION, CROP_GROUP_KEYS, CROP_MODULE_ID, CROP_TITLE,
 };
+use crate::iop::soften::{SOFTEN_DESCRIPTION, SOFTEN_GROUP_KEYS, SOFTEN_MODULE_ID, SOFTEN_TITLE};
 use crate::iop::velvia::{VELVIA_MODULE_ID, VELVIA_SOURCE_MAP, VelviaSourceMap};
 use crate::iop::vibrance::{VIBRANCE_MODULE_ID, VIBRANCE_SOURCE_MAP, VibranceSourceMap};
 use crate::presentation::darkroom_controls::{DarkroomControlValue, DarkroomControlViewModel};
@@ -113,9 +114,13 @@ fn module_from_descriptor(
     let bloom_custom_editor = id == BLOOM_MODULE_ID;
     let colorreconstruct_custom_editor = id == COLORRECONSTRUCTION_MODULE_ID;
     let colorzones_custom_editor = id == COLORZONES_MODULE_ID;
+    let soften_module = id == SOFTEN_MODULE_ID;
+    let soften_custom_editor = soften_module && ui_availability.is_usable();
     let crop_editor = id == CROP_MODULE_ID;
-    let custom_editor =
-        bloom_custom_editor || colorreconstruct_custom_editor || colorzones_custom_editor;
+    let custom_editor = bloom_custom_editor
+        || colorreconstruct_custom_editor
+        || colorzones_custom_editor
+        || soften_custom_editor;
     let mut controls = Vec::new();
     if ui_availability.is_available() && !custom_editor {
         for parameter in &descriptor.parameters {
@@ -135,6 +140,7 @@ fn module_from_descriptor(
         .then(|| BLOOM_TITLE.to_owned())
         .or_else(|| colorreconstruct_custom_editor.then(|| COLORRECONSTRUCTION_TITLE.to_owned()))
         .or_else(|| colorzones_custom_editor.then(|| COLORZONES_TITLE.to_owned()))
+        .or_else(|| soften_module.then(|| SOFTEN_TITLE.to_owned()))
         .or_else(|| crop_editor.then(|| CROP_TITLE.to_owned()))
         .or_else(|| colorcorrection_source_map.map(|source_map| source_map.title().to_owned()))
         .or_else(|| colorcontrast_source_map.map(|source_map| source_map.title().to_owned()))
@@ -190,6 +196,13 @@ fn module_from_descriptor(
             .with_description(COLORZONES_DESCRIPTION)
             .with_colorzones_custom_editor()
             .with_group_keys(COLORZONES_GROUP_KEYS);
+    } else if soften_module {
+        module = module
+            .with_description(SOFTEN_DESCRIPTION)
+            .with_group_keys(SOFTEN_GROUP_KEYS);
+        if soften_custom_editor {
+            module = module.with_soften_custom_editor();
+        }
     } else if crop_editor {
         module = module
             .with_description(CROP_DESCRIPTION)
@@ -750,6 +763,56 @@ mod tests {
         assert!(!module.availability().is_fully_supported());
         assert!(module.availability().is_partial());
         assert_eq!(module.controls().controls().len(), 0);
+    }
+
+    #[test]
+    fn soften_projects_only_the_source_specific_custom_editor_path() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let soften = modules.module("soften").expect("Soften module");
+
+        assert!(!soften.is_hidden());
+        assert!(soften.availability().is_supported());
+        assert!(soften.has_soften_custom_editor());
+        assert!(soften.soften_editor_state().is_none());
+        assert_eq!(soften.controls().controls().len(), 0);
+        assert_eq!(soften.title(), "soften");
+        assert_eq!(
+            soften.description(),
+            Some("create a softened image using the Orton effect")
+        );
+        assert_eq!(
+            soften.group_keys().collect::<Vec<_>>(),
+            ["group.effect", "group.effects"]
+        );
+    }
+
+    #[test]
+    fn soften_fallback_is_hidden_unavailable_and_control_less_without_ui() {
+        let registry = builtin_registry();
+        let descriptor = registry
+            .definition("rusttable.soften")
+            .expect("Soften backend definition")
+            .descriptor();
+        let module = super::module_from_descriptor(
+            descriptor,
+            super::DarkroomModuleAvailability::Unsupported {
+                reason: "source-shaped Soften editor is unavailable".to_owned(),
+            },
+            &OperationUiAvailability::Unavailable {
+                reason: "source-shaped Soften editor is unavailable".to_owned(),
+            },
+        );
+
+        assert!(module.is_hidden());
+        assert!(!module.enabled());
+        assert!(!module.resettable());
+        assert!(module.availability().is_unsupported());
+        assert!(!module.has_soften_custom_editor());
+        assert_eq!(module.controls().controls().len(), 0);
+        assert_eq!(
+            module.status_text(),
+            "Unavailable · source-shaped Soften editor is unavailable"
+        );
     }
 
     #[test]

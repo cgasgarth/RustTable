@@ -215,11 +215,20 @@ impl RedbEditRepository {
             "current edit",
         )
         .map_err(|_| EditRepositoryError::CorruptPersistedData)?;
+        let (mask_bytes, pipeline_bytes) = state.current_revision().map_or_else(
+            || (Vec::new(), Vec::new()),
+            |revision| {
+                (
+                    revision.payload().mask_bytes().to_owned(),
+                    revision.payload().pipeline_bytes().to_owned(),
+                )
+            },
+        );
         state
             .apply(
                 expected,
                 HistoryCommand::Append {
-                    payload: HistoryPayload::new(edit.clone(), Vec::new(), Vec::new(), summary),
+                    payload: HistoryPayload::new(edit.clone(), mask_bytes, pipeline_bytes, summary),
                 },
             )
             .map_err(|_| EditRepositoryError::CorruptPersistedData)?;

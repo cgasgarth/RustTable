@@ -127,7 +127,7 @@ fn descriptor_registry_and_validation_match_the_backend_contract() {
     assert_eq!(gpu.binding_id(), BLOOM_WGPU_PASS_ID);
     assert_eq!(gpu.tier(), BLOOM_GPU_TIER);
     let soften = descriptor::soften_descriptor();
-    assert_eq!(soften.io.input.channels, 3);
+    assert_eq!(soften.io.input.channels, 4);
     assert_eq!(
         soften.io.input.encodings,
         vec![rusttable_color::ColorEncoding::LinearSrgbD65]

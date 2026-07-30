@@ -676,11 +676,22 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             Ok(())
         }
         ProcessingOperationKind::Soften { config } => {
-            let plan = crate::operations::soften::SoftenPlan::new(*config, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            // The pixelpipe intercepts active Soften nodes before this RGB-only
+            // processing boundary so it can retain native RGBA and ROI scale.
+            // This branch remains the unit-scale leaf for processing callers.
+            let plan = crate::operations::soften::SoftenPlan::new_with_scale(
+                *config, dimensions, 1.0, 1.0,
+            )
+            .map_err(|error| operation_error(step_index, operation_id, error))?;
             let candidate = plan
-                .execute(pixels, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
+                .execute_with_cancel(pixels, dimensions, &cancelled)
+                .map_err(|error| match error {
+                    OperationExecutionError::Cancelled => EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    },
+                    error => operation_error(step_index, operation_id, error),
+                })?;
             apply_reconstruction(
                 pixels,
                 &candidate,
