@@ -30986,12 +30986,12 @@ tags = [
     "IOP_GROUP_CORRECT",
     "IOP_GROUP_EFFECTS",
 ]
-multi_instance = false
-supports_blend_masks = false
-input_color_space = "scene-linear"
-output_color_space = "scene-linear"
+multi_instance = true
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
 roi_behavior = "identity"
-tiling_requirement = "full-frame"
+tiling_requirement = "tiled"
 cpu_implementation = "process"
 opencl_programs = ["sharpen"]
 opencl_kernels = [
@@ -31222,35 +31222,35 @@ enum_values = []
 
 [operations.color_contract.input]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.input.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/sharpen.c"
-line_start = 1
-line_end = 1
-reason = "reviewed callback semantic extraction"
+line_start = 83
+line_end = 88
+reason = "default_colorspace returns IOP_CS_LAB"
 reviewer = "cgasgarth"
 evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 [operations.color_contract.output]
 mode = "unconditional"
-value = "scene-linear"
+value = "LabD50"
 
 [[operations.color_contract.output.evidence]]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/sharpen.c"
-line_start = 1
-line_end = 1
-reason = "reviewed callback semantic extraction"
+line_start = 83
+line_end = 88
+reason = "default_colorspace returns IOP_CS_LAB"
 reviewer = "cgasgarth"
 evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 [operations.capability_contract]
 supports_shared_blending = true
-supports_drawn_masks = false
+supports_drawn_masks = true
 publishes_raster_mask = false
-consumes_raster_mask = false
+consumes_raster_mask = true
 flags = [
     "IOP_FLAGS_ALLOW_TILING",
     "IOP_FLAGS_SUPPORTS_BLENDING",
@@ -31260,15 +31260,15 @@ flags = [
 
 [operations.roi_contract]
 behavior = "identity"
-overlap = "none"
+overlap = "dynamic-committed-radius-capped-at-12"
 full_analysis = "not-required"
 geometry = "none"
 fast_pipe = "not-supported"
 scale = "preserve"
 
 [operations.tiling_contract]
-class = "full-frame"
-overlap = 0
+class = "tiled"
+overlap = 12
 
 [[operations.opencl_resolution]]
 program = "sharpen"
@@ -31283,12 +31283,12 @@ kernels = [
 [[operations.presets]]
 identity = "sharpen.preset.1"
 parameter_version = 1
-payload_hex = ""
+payload_hex = "000000400000003f0000003f"
 auto_apply = "false"
-format = "any"
+format = "raw"
 source_path = "src/iop/sharpen.c"
-line_start = 1
-line_end = 1
+line_start = 99
+line_end = 109
 
 [operations.presets.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"

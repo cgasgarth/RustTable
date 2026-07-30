@@ -146,7 +146,12 @@ fn module_from_descriptor(
         .as_ref()
         .map_or_else(|| fallback_group_key(descriptor), |ui| ui.group_key.clone());
     let style_eligible = descriptor.flags.contains(OperationFlags::STYLE_ELIGIBLE);
-    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN) || !ui_availability.is_usable();
+    // Native Sharpen is DEFAULT_VISIBLE even while its source-shaped editor is
+    // unavailable. Keep that identity visible, but leave the projection
+    // fail-closed with no generic controls below.
+    let native_visible_without_editor = id == "sharpen";
+    let hidden = descriptor.flags.contains(OperationFlags::HIDDEN)
+        || (!native_visible_without_editor && !ui_availability.is_usable());
     let default_enabled = !custom_editor
         && colorcorrection_source_map.is_none_or(ColorCorrectionSourceMap::default_enabled)
         && colorcontrast_source_map.is_none_or(ColorContrastSourceMap::default_enabled)
@@ -690,6 +695,37 @@ mod tests {
             .expect("Enlarge Canvas backend definition");
         assert!(definition.cpu().is_some());
         assert!(definition.gpu().is_none());
+        assert!(!definition.ui_availability().is_usable());
+        assert!(definition.descriptor().ui.is_none());
+    }
+
+    #[test]
+    fn sharpen_backend_stays_visible_without_source_shaped_editor() {
+        let modules = modules_from_registry().expect("registry module projection");
+        let sharpen = modules.module("sharpen").expect("Sharpen module");
+
+        assert!(!sharpen.is_hidden());
+        assert!(!sharpen.enabled());
+        assert!(!sharpen.resettable());
+        assert!(sharpen.availability().is_unsupported());
+        assert_eq!(sharpen.controls().controls().len(), 0);
+        assert_eq!(
+            sharpen.status_text(),
+            "Unavailable · the CPU/Lab backend is executable, but imported blend/mask and multi-instance history materialization remains blocked"
+        );
+
+        let definition = builtin_registry()
+            .definition("rusttable.sharpen")
+            .expect("Sharpen backend definition");
+        assert!(definition.cpu().is_some());
+        assert!(definition.gpu().is_none());
+        assert!(
+            !definition
+                .descriptor()
+                .flags
+                .contains(OperationFlags::HIDDEN)
+        );
+        assert!(!definition.availability().is_available());
         assert!(!definition.ui_availability().is_usable());
         assert!(definition.descriptor().ui.is_none());
     }

@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "b4c0ea92d547584e03737ddb20eb1f3788f059f72973ba76ea351753af9907f9"
+snapshot_hash = "c86c3f08684106850aa35bc7603a0b8394b199a96097502a709493d5b07f8819"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -297,6 +297,14 @@ descriptor_version = 5
 parameter_version = 5
 implementation_version = 1
 status = "available"
+
+[[operation]]
+rust_id = "rusttable.sharpen"
+compatibility_name = "sharpen"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "unavailable"
 
 [[operation]]
 rust_id = "rusttable.soften"

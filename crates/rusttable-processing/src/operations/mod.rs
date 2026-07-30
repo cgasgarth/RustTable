@@ -41,6 +41,7 @@ pub mod retouch;
 pub mod rotatepixels;
 pub mod scalepixels;
 pub mod shadhi;
+pub mod sharpen;
 pub mod soften;
 pub mod spots;
 pub mod temperature;

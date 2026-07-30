@@ -444,6 +444,7 @@ fn reference_modules_expose_registry_controls_and_deprecated_filter_data() {
             "rgbgain",
             "invert",
             "defringe",
+            "sharpen",
             "clahe",
             "dither",
             "grain",

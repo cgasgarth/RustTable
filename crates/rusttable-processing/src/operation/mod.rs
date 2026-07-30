@@ -24,6 +24,7 @@ use crate::operations::{
     rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
     scalepixels::ScalePixelsConfig,
     shadhi::ShadhiConfig,
+    sharpen::SharpenConfig,
     soften::SoftenConfig,
     spots::SpotsParametersV2,
     temperature::{TemperatureConfig, WhiteBalanceSource},
@@ -195,6 +196,9 @@ pub enum ProcessingOperationKind {
     },
     Shadhi {
         config: ShadhiConfig,
+    },
+    Sharpen {
+        config: SharpenConfig,
     },
     Vignette {
         config: VignetteConfig,
@@ -420,6 +424,33 @@ impl ProcessingOperation {
     pub(crate) fn compile_shadhi(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_shadhi(operation)
     }
+    pub(crate) fn compile_sharpen(operation: &Operation) -> Result<Self, OperationCompileError> {
+        reject_unexpected(operation, &["radius", "amount", "threshold"])?;
+        let config = SharpenConfig::new(
+            parameter_f32(
+                operation,
+                "radius",
+                f64::from(crate::operations::sharpen::SHARPEN_DEFAULT_RADIUS),
+            )?,
+            parameter_f32(
+                operation,
+                "amount",
+                f64::from(crate::operations::sharpen::SHARPEN_DEFAULT_AMOUNT),
+            )?,
+            parameter_f32(
+                operation,
+                "threshold",
+                f64::from(crate::operations::sharpen::SHARPEN_DEFAULT_THRESHOLD),
+            )?,
+        )
+        .map_err(|error| invalid_parameters(operation, error))?;
+        Ok(Self {
+            operation_id: operation.id(),
+            enabled: operation.is_enabled(),
+            opacity: compile_opacity(operation)?,
+            kind: ProcessingOperationKind::Sharpen { config },
+        })
+    }
     pub(crate) fn compile_highlights(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_highlights(operation)
     }
@@ -500,6 +531,40 @@ impl ProcessingOperation {
                     .flags
                     .contains(crate::descriptor::OperationFlags::ANALYSIS)
             })
+    }
+
+    /// Resolves the source-derived per-edge neighborhood required at one
+    /// immutable ROI/input scale pair.
+    ///
+    /// Point and full-frame operations return zero. Neighborhood operations
+    /// quantize their support from committed parameters rather than relying on
+    /// a misleading static descriptor overlap.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unsupported-capability error when finite positive scale
+    /// evidence cannot resolve the operation's committed neighborhood.
+    pub fn neighborhood_overlap_pixels(
+        &self,
+        roi_scale: f32,
+        piece_iscale: f32,
+    ) -> Result<u32, crate::operations::OperationExecutionError> {
+        match self.kind() {
+            ProcessingOperationKind::Sharpen { config } => {
+                crate::operations::sharpen::tiling::SharpenTilingPlan::from_committed_radius(
+                    config.commit().radius(),
+                    roi_scale,
+                    piece_iscale,
+                )
+                .map(crate::operations::sharpen::tiling::SharpenTilingPlan::overlap)
+                .map_err(|_| {
+                    crate::operations::OperationExecutionError::UnsupportedCapability(
+                        "sharpen could not resolve its dynamic neighborhood overlap",
+                    )
+                })
+            }
+            _ => Ok(0),
+        }
     }
 }
 

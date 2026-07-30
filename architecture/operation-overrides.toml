@@ -10248,8 +10248,8 @@ line_end = 103
 version = 1
 byte_size = 12
 layout_hash = "4cc50c742a7dc36f1abddd7df0723a3dc2013faf80c645ef0e8eec28d5d10391"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.sharpen.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.sharpen.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"

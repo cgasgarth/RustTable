@@ -19,6 +19,14 @@ impl CpuPixelpipeTile {
         }
     }
 
+    pub(crate) const fn from_parts(
+        origin_x: u32,
+        origin_y: u32,
+        dimensions: RasterDimensions,
+    ) -> Self {
+        Self::new(origin_x, origin_y, dimensions)
+    }
+
     /// Horizontal source-pixel coordinate of this tile's top-left corner.
     #[must_use]
     pub const fn origin_x(self) -> u32 {

@@ -234,8 +234,8 @@ pub use registry::{
 pub use scalar::{FiniteF32, FiniteF32Error, ScalarNarrowingError};
 pub use window::{
     EvaluatedRowWindow, GraphWindowEvaluationError, RasterRowWindow, RasterRowWindowError,
-    evaluate_graph, evaluate_graph_output_with_basicadj_plans,
-    evaluate_graph_output_with_basicadj_plans_and_masks,
+    evaluate_graph, evaluate_graph_node_with_context_and_cancellation,
+    evaluate_graph_output_with_basicadj_plans, evaluate_graph_output_with_basicadj_plans_and_masks,
     evaluate_graph_output_with_basicadj_plans_and_masks_with_cancellation, evaluate_graph_window,
     evaluate_graph_with_basicadj_plans, evaluate_graph_with_basicadj_plans_and_masks,
     evaluate_graph_with_basicadj_plans_and_masks_with_cancellation,

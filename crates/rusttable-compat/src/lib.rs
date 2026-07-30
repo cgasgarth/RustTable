@@ -2,6 +2,7 @@
 #![doc = "Compatibility boundary contracts for the `RustTable` rewrite."]
 
 pub mod purpose;
+pub mod sharpen;
 
 mod accounting;
 mod history;
