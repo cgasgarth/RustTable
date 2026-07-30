@@ -1,3 +1,7 @@
+//! Compiler adapter for the source-declared `basicadj` parameter order.
+//!
+//! Source lineage: `src/iop/basicadj.c`.
+
 use rusttable_core::Operation;
 
 use crate::operations::basicadj::{BasicAdjConfig, BasicAdjParametersV2};

@@ -653,6 +653,32 @@ source = "rusttable-test"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-import::darktable-history"
 [[fixtures]]
+id = "corpus.operation.basicadj-params-v1"
+path = "fixtures/corpus/assets/operation-basicadj-params-v1.bin"
+size = 40
+sha256 = "04823ac5f3391eed8fc5584291fbf3c7641f496874680e8781a15c379b8f61b0"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-compat", "rusttable-import"]
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-compat::basicadj"
+[[fixtures]]
+id = "corpus.operation.basicadj-params-v2"
+path = "fixtures/corpus/assets/operation-basicadj-params-v2.bin"
+size = 44
+sha256 = "062a74a7a630d54ad1a7967c71f86d609cdde88525dfbdd5204ba89b54267a7f"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-compat", "rusttable-import"]
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-compat::basicadj"
+[[fixtures]]
 id = "corpus.operation.channelmixer-params-v1"
 path = "fixtures/corpus/assets/operation-channelmixer-params-v1.bin"
 size = 84

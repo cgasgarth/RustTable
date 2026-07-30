@@ -4,12 +4,12 @@ use rusttable_compat::{
 };
 use rusttable_import::darktable::{
     BASICADJ_V1_PARAMETER_BYTES, BasicAdjHistoryDecodeFindingCode, BasicAdjHistoryStepDecode,
-    decode_basicadj_import_history_step,
+    DarktableHistoryStepDecode, decode_basicadj_import_history_step, decode_history_step,
 };
 use rusttable_sqlite_native::{DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow};
 
 const BASICADJ_V1_NATIVE_LE: &[u8; BASICADJ_V1_PARAMETER_BYTES] =
-    include_bytes!("fixtures/basicadj-v1-native-le.bin");
+    include_bytes!("../../../fixtures/corpus/assets/operation-basicadj-params-v1.bin");
 
 #[test]
 fn operation_local_import_leaf_decodes_v1_as_pending_and_retains_opaque_row_data() {
@@ -35,6 +35,24 @@ fn operation_local_import_leaf_decodes_v1_as_pending_and_retains_opaque_row_data
         decoded.execution_blocker.code,
         BasicAdjHistoryDecodeFindingCode::OpaqueBlendSemantics
     );
+}
+
+#[test]
+fn aggregate_history_dispatch_routes_basicadj_without_dropping_opaque_rows() {
+    let source = history_step(Some(1), Some(1), BASICADJ_V1_NATIVE_LE.to_vec(), true, true);
+    assert!(matches!(
+        decode_history_step(&source),
+        DarktableHistoryStepDecode::BasicAdjPendingBlend(_)
+    ));
+
+    let future = history_step(Some(9), Some(1), vec![0xde, 0xad], true, true);
+    let DarktableHistoryStepDecode::Preserved {
+        source: preserved, ..
+    } = decode_history_step(&future)
+    else {
+        panic!("future Basic Adjust versions must remain opaque through aggregate dispatch");
+    };
+    assert_eq!(preserved, future);
 }
 
 #[test]

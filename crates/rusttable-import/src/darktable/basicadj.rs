@@ -1,8 +1,8 @@
 //! Operation-local Basic Adjustments history import leaf.
 //!
 //! This leaf intentionally stops at typed core plus an explicit pending-blend
-//! status. The exhaustive `history.rs` dispatcher remains owned by the shared
-//! import integration lane and must continue to preserve unsupported rows.
+//! status. The exhaustive `history.rs` dispatcher owns the aggregate conversion
+//! and continues to preserve unsupported rows.
 
 pub use rusttable_compat::basicadj::{
     BASIC_ADJUSTMENTS_COMPATIBILITY_NAME, BASIC_ADJUSTMENTS_V1_PARAMETER_BYTES,
@@ -10,8 +10,8 @@ pub use rusttable_compat::basicadj::{
     BASICADJ_V1_VERSION, BASICADJ_V2_PARAMETER_BYTES, BASICADJ_V2_VERSION, BasicAdjCodecError,
     BasicAdjHistory, BasicAdjHistoryDecodeFinding, BasicAdjHistoryDecodeFindingCode,
     BasicAdjHistoryStepDecode, BasicAdjParametersV1, BasicAdjParametersV2, BasicAdjPreserveColors,
-    DecodedBasicAdjHistoryStep, decode_basic_adjustments_history_step,
-    decode_basicadj_history_step, migrate_v1, migrate_v1_to_v2,
+    decode_basic_adjustments_history_step, decode_basicadj_history_step, migrate_v1,
+    migrate_v1_to_v2,
 };
 
 /// Decodes one Basic Adjustments row at the operation-local import boundary.

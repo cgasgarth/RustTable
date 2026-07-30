@@ -1,25 +1,37 @@
 //! Darktable's legacy `basicadj` composite adjustment operation.
 //!
+//! Source lineage: `src/iop/basicadj.c` and `src/common/rgb_norms.h`.
+//!
 //! The operation stays atomic because Darktable applies these stages in a
 //! compatibility-sensitive order.  The current `RustTable` operation boundary
 //! supplies deterministic point execution, so the auto-levels controls are
 //! retained in the persisted configuration while automatic analysis resolves
 //! one immutable plan before execution.
 
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::large_stack_arrays,
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::needless_range_loop,
+    clippy::struct_field_names
+)]
 
 pub mod analysis;
 
 use self::analysis::{BasicAdjAnalysisError, BasicAdjAnalysisRaster, BasicAdjAnalysisResult};
 use super::common::OperationExecutionError;
-use crate::{FiniteF32, LinearRgb, RgbChannel};
+use crate::{FiniteF32, LinearRgb, RgbChannel, WorkingFrameDescriptor};
+use rusttable_color::rgb_to_xyz_matrix;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
 pub const BASICADJ_COMPATIBILITY_ID: &str = "basicadj";
 pub const BASICADJ_SCHEMA_VERSION: u16 = 2;
 const DEFAULT_MIDDLE_GREY: f32 = 18.42;
-const CAMERA_LUMINANCE: [f32; 3] = [0.222_504_5, 0.716_878_6, 0.060_616_9];
+const BASICADJ_LUT_SIZE: usize = 0x10000;
 
 /// Legacy controls that may be resolved by one deterministic full-image pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -155,6 +167,140 @@ impl PreserveColors {
             6 => Ok(Self::Power),
             value => Err(BasicAdjConfigError::UnknownPreserveColors(value)),
         }
+    }
+}
+
+/// Working-profile evidence required by the native luminance norm.
+///
+/// Darktable supplies the current working profile's input matrix to
+/// `dt_rgb_norm`. A `basicadj` execution must receive equivalent evidence rather
+/// than silently falling back to camera coefficients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BasicAdjNormEvidence {
+    luminance_coefficients: [FiniteF32; 3],
+    profile_identity: [u8; 32],
+}
+
+impl BasicAdjNormEvidence {
+    /// Creates evidence from the Y row of the authoritative working RGB to XYZ
+    /// matrix and its frame identity.
+    pub fn new(
+        luminance_coefficients: [f32; 3],
+        profile_identity: [u8; 32],
+    ) -> Result<Self, BasicAdjNormEvidenceError> {
+        let luminance_coefficients = luminance_coefficients
+            .map(|value| FiniteF32::new(value).map_err(|_| BasicAdjNormEvidenceError::NonFinite));
+        let luminance_coefficients: [FiniteF32; 3] = luminance_coefficients
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .try_into()
+            .map_err(|_| BasicAdjNormEvidenceError::InvalidCoefficients)?;
+        if luminance_coefficients
+            .iter()
+            .all(|coefficient| coefficient.get() == 0.0)
+        {
+            return Err(BasicAdjNormEvidenceError::InvalidCoefficients);
+        }
+        Ok(Self {
+            luminance_coefficients,
+            profile_identity,
+        })
+    }
+
+    /// Derives the matrix evidence from a typed working frame.
+    pub fn from_working_frame(
+        frame: WorkingFrameDescriptor,
+    ) -> Result<Self, BasicAdjNormEvidenceError> {
+        let primaries = frame.primaries();
+        let matrix = rgb_to_xyz_matrix(
+            [
+                (primaries.red().0.get(), primaries.red().1.get()),
+                (primaries.green().0.get(), primaries.green().1.get()),
+                (primaries.blue().0.get(), primaries.blue().1.get()),
+            ],
+            primaries.white(),
+        )
+        .map_err(|_| BasicAdjNormEvidenceError::InvalidCoefficients)?;
+        let rows = matrix.rows();
+        Self::new([rows[3], rows[4], rows[5]], frame.identity())
+    }
+
+    #[must_use]
+    pub const fn luminance_coefficients(self) -> [FiniteF32; 3] {
+        self.luminance_coefficients
+    }
+
+    #[must_use]
+    pub const fn profile_identity(self) -> [u8; 32] {
+        self.profile_identity
+    }
+
+    #[must_use]
+    pub fn luminance(self, values: [f32; 3]) -> f32 {
+        values[0] * self.luminance_coefficients[0].get()
+            + values[1] * self.luminance_coefficients[1].get()
+            + values[2] * self.luminance_coefficients[2].get()
+    }
+
+    #[must_use]
+    pub fn luminance_for(self, values: [f32; 3], mode: PreserveColors) -> f32 {
+        match mode {
+            PreserveColors::Luminance => self.luminance(values),
+            PreserveColors::None | PreserveColors::Average => {
+                (values[0] + values[1] + values[2]) / 3.0
+            }
+            PreserveColors::Max => values[0].max(values[1]).max(values[2]),
+            PreserveColors::Sum => values[0] + values[1] + values[2],
+            PreserveColors::Norm => {
+                (values[0] * values[0] + values[1] * values[1] + values[2] * values[2]).sqrt()
+            }
+            PreserveColors::Power => {
+                let squares = values.map(|value| value * value);
+                (values[0] * squares[0] + values[1] * squares[1] + values[2] * squares[2])
+                    / (squares[0] + squares[1] + squares[2])
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BasicAdjNormEvidenceError {
+    NonFinite,
+    InvalidCoefficients,
+}
+
+impl fmt::Display for BasicAdjNormEvidenceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NonFinite => "basicadj working-profile norm coefficients are non-finite",
+            Self::InvalidCoefficients => "basicadj working-profile norm coefficients are invalid",
+        })
+    }
+}
+
+impl std::error::Error for BasicAdjNormEvidenceError {}
+
+/// RGBA sample used by the operation-local execution boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BasicAdjRgba {
+    rgb: LinearRgb,
+    alpha: FiniteF32,
+}
+
+impl BasicAdjRgba {
+    #[must_use]
+    pub const fn new(rgb: LinearRgb, alpha: FiniteF32) -> Self {
+        Self { rgb, alpha }
+    }
+
+    #[must_use]
+    pub const fn rgb(self) -> LinearRgb {
+        self.rgb
+    }
+
+    #[must_use]
+    pub const fn alpha(self) -> FiniteF32 {
+        self.alpha
     }
 }
 
@@ -438,6 +584,8 @@ pub struct BasicAdjPlan {
     contrast: FiniteF32,
     hlcomp: FiniteF32,
     hlrange: FiniteF32,
+    lut_gamma: Box<[FiniteF32; BASICADJ_LUT_SIZE]>,
+    lut_contrast: Box<[FiniteF32; BASICADJ_LUT_SIZE]>,
     analysis_identity: [u8; 32],
     identity: [u8; 32],
 }
@@ -475,6 +623,32 @@ impl BasicAdjPlan {
         let hlrange = FiniteF32::new(1.0 - shoulder)
             .map_err(|_| BasicAdjPlanError::InvalidDerivedValue("highlight range"))?;
         let contrast = FiniteF32::from_proven_finite(config.contrast() + 1.0);
+        let mut lut_gamma: Box<[FiniteF32; BASICADJ_LUT_SIZE]> =
+            vec![FiniteF32::from_proven_finite(0.0); BASICADJ_LUT_SIZE]
+                .into_boxed_slice()
+                .try_into()
+                .expect("basicadj gamma LUT has its fixed native size");
+        let mut lut_contrast: Box<[FiniteF32; BASICADJ_LUT_SIZE]> =
+            vec![FiniteF32::from_proven_finite(0.0); BASICADJ_LUT_SIZE]
+                .into_boxed_slice()
+                .try_into()
+                .expect("basicadj contrast LUT has its fixed native size");
+        let process_gamma = config.brightness() != 0.0;
+        let plain_contrast =
+            config.preserve_colors() == PreserveColors::None && config.contrast() != 0.0;
+        if process_gamma || plain_contrast {
+            for index in 0..BASICADJ_LUT_SIZE {
+                let percentage = index as f32 / BASICADJ_LUT_SIZE as f32;
+                if process_gamma {
+                    lut_gamma[index] = FiniteF32::from_proven_finite(percentage.powf(gamma.get()));
+                }
+                if plain_contrast {
+                    lut_contrast[index] = FiniteF32::from_proven_finite(
+                        (percentage / middle_grey.get()).powf(contrast.get()) * middle_grey.get(),
+                    );
+                }
+            }
+        }
         let identity = plan_identity(
             &config,
             scale,
@@ -494,6 +668,8 @@ impl BasicAdjPlan {
             contrast,
             hlcomp,
             hlrange,
+            lut_gamma,
+            lut_contrast,
             analysis_identity,
             identity,
         })
@@ -563,6 +739,21 @@ impl BasicAdjPlan {
         BasicAdjExecutionReceipt {
             plan_identity: self.identity,
             analysis_identity: self.analysis_identity,
+            profile_identity: [0; 32],
+        }
+    }
+
+    /// Produces a profile-qualified execution receipt. A plan may only be
+    /// reused across frames when this evidence is also unchanged.
+    #[must_use]
+    pub const fn receipt_with_norm_evidence(
+        &self,
+        evidence: BasicAdjNormEvidence,
+    ) -> BasicAdjExecutionReceipt {
+        BasicAdjExecutionReceipt {
+            plan_identity: self.identity,
+            analysis_identity: self.analysis_identity,
+            profile_identity: evidence.profile_identity(),
         }
     }
 
@@ -571,27 +762,179 @@ impl BasicAdjPlan {
         self.config
     }
 
+    /// Executes against the default sRGB linear working-frame contract.
+    ///
+    /// Callers processing another working frame must use
+    /// [`Self::execute_with_working_frame`] so its profile-derived luminance is
+    /// carried explicitly. This default keeps the legacy evaluator boundary
+    /// source-faithful without falling back to camera coefficients.
     pub fn execute(
         &self,
         input: &[LinearRgb],
         pixel_index_offset: usize,
     ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
-        input
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(index, pixel)| {
-                let values = self.apply_pixel(pixel);
-                Ok(LinearRgb::new(
+        let evidence = if self.requires_luminance_norm() {
+            Some(
+                BasicAdjNormEvidence::from_working_frame(WorkingFrameDescriptor::srgb()).map_err(
+                    |_| {
+                        OperationExecutionError::UnsupportedCapability(
+                            "basicadj requires valid default working-frame norm evidence",
+                        )
+                    },
+                )?,
+            )
+        } else {
+            None
+        };
+        self.execute_inner(input, pixel_index_offset, evidence.as_ref(), || false)
+    }
+
+    /// Executes a profile-independent plan with bounded cancellation polling.
+    pub fn execute_with_cancellation<C: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        should_cancel: C,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        self.execute_inner(input, pixel_index_offset, None, should_cancel)
+    }
+
+    /// Executes with working-frame norm evidence and bounded cancellation polling.
+    pub fn execute_with_working_frame_and_cancellation<C: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        frame: WorkingFrameDescriptor,
+        should_cancel: C,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        let evidence = BasicAdjNormEvidence::from_working_frame(frame).map_err(|_| {
+            OperationExecutionError::UnsupportedCapability(
+                "basicadj requires valid working-profile norm evidence",
+            )
+        })?;
+        self.execute_inner(input, pixel_index_offset, Some(&evidence), should_cancel)
+    }
+
+    /// Executes with the authoritative working-frame norm/profile evidence.
+    pub fn execute_with_norm_evidence(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        evidence: &BasicAdjNormEvidence,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        self.execute_inner(input, pixel_index_offset, Some(evidence), || false)
+    }
+
+    /// Derives operation-local norm evidence from the typed working frame.
+    pub fn execute_with_working_frame(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        frame: WorkingFrameDescriptor,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        let evidence = BasicAdjNormEvidence::from_working_frame(frame).map_err(|_| {
+            OperationExecutionError::UnsupportedCapability(
+                "basicadj requires valid working-profile norm evidence",
+            )
+        })?;
+        self.execute_with_norm_evidence(input, pixel_index_offset, &evidence)
+    }
+
+    /// Executes with bounded cancellation polling. A candidate is published
+    /// only after the complete input has been checked for finite output.
+    pub fn execute_with_norm_evidence_and_cancellation<C: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        evidence: &BasicAdjNormEvidence,
+        should_cancel: C,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        self.execute_inner(input, pixel_index_offset, Some(evidence), should_cancel)
+    }
+
+    /// Executes RGBA samples while preserving alpha bit-for-bit through the
+    /// operation-local candidate/reconstruction boundary.
+    pub fn execute_rgba_with_working_frame(
+        &self,
+        input: &[BasicAdjRgba],
+        pixel_index_offset: usize,
+        frame: WorkingFrameDescriptor,
+    ) -> Result<Vec<BasicAdjRgba>, OperationExecutionError> {
+        let evidence = BasicAdjNormEvidence::from_working_frame(frame).map_err(|_| {
+            OperationExecutionError::UnsupportedCapability(
+                "basicadj requires valid working-profile norm evidence",
+            )
+        })?;
+        self.validate_norm_evidence(Some(&evidence), input.is_empty())?;
+        let mut output = Vec::with_capacity(input.len());
+        for (index, sample) in input.iter().copied().enumerate() {
+            let values = self.apply_pixel(sample.rgb, Some(&evidence))?;
+            output.push(BasicAdjRgba::new(
+                LinearRgb::new(
                     checked(values[0], pixel_index_offset + index, RgbChannel::Red)?,
                     checked(values[1], pixel_index_offset + index, RgbChannel::Green)?,
                     checked(values[2], pixel_index_offset + index, RgbChannel::Blue)?,
-                ))
-            })
-            .collect()
+                ),
+                sample.alpha,
+            ));
+        }
+        Ok(output)
     }
 
-    fn apply_pixel(&self, pixel: LinearRgb) -> [f32; 3] {
+    fn execute_inner<C: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        evidence: Option<&BasicAdjNormEvidence>,
+        should_cancel: C,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        self.validate_norm_evidence(evidence, input.is_empty())?;
+        if should_cancel() {
+            return Err(OperationExecutionError::Cancelled);
+        }
+        let mut output = Vec::with_capacity(input.len());
+        for (index, pixel) in input.iter().copied().enumerate() {
+            if index != 0 && index.is_multiple_of(1024) && should_cancel() {
+                return Err(OperationExecutionError::Cancelled);
+            }
+            let values = self.apply_pixel(pixel, evidence)?;
+            output.push(LinearRgb::new(
+                checked(values[0], pixel_index_offset + index, RgbChannel::Red)?,
+                checked(values[1], pixel_index_offset + index, RgbChannel::Green)?,
+                checked(values[2], pixel_index_offset + index, RgbChannel::Blue)?,
+            ));
+        }
+        if should_cancel() {
+            return Err(OperationExecutionError::Cancelled);
+        }
+        Ok(output)
+    }
+
+    fn validate_norm_evidence(
+        &self,
+        evidence: Option<&BasicAdjNormEvidence>,
+        empty_input: bool,
+    ) -> Result<(), OperationExecutionError> {
+        if empty_input || !self.requires_luminance_norm() || evidence.is_some() {
+            Ok(())
+        } else {
+            Err(OperationExecutionError::UnsupportedCapability(
+                "basicadj requires working-frame norm evidence",
+            ))
+        }
+    }
+
+    fn requires_luminance_norm(&self) -> bool {
+        self.config.hlcompr() > 0.0
+            || (self.config.contrast() != 0.0
+                && self.config.preserve_colors() == PreserveColors::Luminance)
+    }
+
+    fn apply_pixel(
+        &self,
+        pixel: LinearRgb,
+        evidence: Option<&BasicAdjNormEvidence>,
+    ) -> Result<[f32; 3], OperationExecutionError> {
         let mut values = [pixel.red().get(), pixel.green().get(), pixel.blue().get()];
         let black = self.config.black_point();
         for value in &mut values {
@@ -599,7 +942,11 @@ impl BasicAdjPlan {
         }
 
         if self.config.hlcompr() > 0.0 {
-            let luminance = Self::norm(values, PreserveColors::Luminance);
+            let luminance = evidence
+                .ok_or(OperationExecutionError::UnsupportedCapability(
+                    "basicadj requires working-frame norm evidence",
+                ))?
+                .luminance(values);
             if luminance > 0.0 {
                 let ratio = hlcurve(luminance, self.hlcomp.get(), self.hlrange.get());
                 for value in &mut values {
@@ -611,7 +958,7 @@ impl BasicAdjPlan {
         if self.config.brightness() != 0.0 {
             for value in &mut values {
                 if *value > 0.0 {
-                    *value = value.powf(self.gamma.get());
+                    *value = get_lut_gamma(*value, self.gamma.get(), &self.lut_gamma);
                 }
             }
         }
@@ -619,14 +966,26 @@ impl BasicAdjPlan {
         if self.config.preserve_colors() == PreserveColors::None && self.config.contrast() != 0.0 {
             for value in &mut values {
                 if *value > 0.0 {
-                    *value = (*value / self.middle_grey.get()).powf(self.contrast.get())
-                        * self.middle_grey.get();
+                    *value = get_lut_contrast(
+                        *value,
+                        self.contrast.get(),
+                        self.middle_grey.get(),
+                        &self.lut_contrast,
+                    );
                 }
             }
         } else if self.config.preserve_colors() != PreserveColors::None
             && self.config.contrast() != 0.0
         {
-            let luminance = Self::norm(values, self.config.preserve_colors());
+            let luminance = if self.config.preserve_colors() == PreserveColors::Luminance {
+                evidence
+                    .ok_or(OperationExecutionError::UnsupportedCapability(
+                        "basicadj requires working-frame norm evidence",
+                    ))?
+                    .luminance(values)
+            } else {
+                norm_without_profile(values, self.config.preserve_colors())
+            };
             if luminance > 0.0 {
                 let contrast_luminance = (luminance / self.middle_grey.get())
                     .powf(self.contrast.get())
@@ -640,10 +999,10 @@ impl BasicAdjPlan {
 
         if self.config.saturation() != 0.0 || self.config.vibrance() != 0.0 {
             let average = (values[0] + values[1] + values[2]) / 3.0;
-            let delta = ((values[0] - average).powi(2)
-                + (values[1] - average).powi(2)
-                + (values[2] - average).powi(2))
-            .sqrt();
+            let delta = ((average - values[0]) * (average - values[0])
+                + (average - values[1]) * (average - values[1])
+                + (average - values[2]) * (average - values[2]))
+                .sqrt();
             let vibrance = self.config.vibrance() / 1.4;
             let boost = vibrance * (1.0 - delta.powf(vibrance.abs()));
             let factor = self.config.saturation() + 1.0 + boost;
@@ -651,32 +1010,7 @@ impl BasicAdjPlan {
                 *value = average + factor * (*value - average);
             }
         }
-        values
-    }
-
-    fn norm(values: [f32; 3], mode: PreserveColors) -> f32 {
-        match mode {
-            PreserveColors::None | PreserveColors::Average => {
-                (values[0] + values[1] + values[2]) / 3.0
-            }
-            PreserveColors::Luminance => {
-                values[0] * CAMERA_LUMINANCE[0]
-                    + values[1] * CAMERA_LUMINANCE[1]
-                    + values[2] * CAMERA_LUMINANCE[2]
-            }
-            PreserveColors::Max => values.into_iter().fold(f32::NEG_INFINITY, f32::max),
-            PreserveColors::Sum => values.into_iter().sum(),
-            PreserveColors::Norm => values
-                .into_iter()
-                .map(|value| value * value)
-                .sum::<f32>()
-                .sqrt(),
-            PreserveColors::Power => {
-                let squares = values.map(|value| value * value);
-                (values[0] * squares[0] + values[1] * squares[1] + values[2] * squares[2])
-                    / squares.into_iter().sum::<f32>()
-            }
-        }
+        Ok(values)
     }
 }
 
@@ -720,6 +1054,7 @@ pub struct BasicAdjGpuParameters {
 pub struct BasicAdjExecutionReceipt {
     plan_identity: [u8; 32],
     analysis_identity: [u8; 32],
+    profile_identity: [u8; 32],
 }
 
 impl BasicAdjExecutionReceipt {
@@ -732,10 +1067,32 @@ impl BasicAdjExecutionReceipt {
     pub const fn analysis_identity(self) -> [u8; 32] {
         self.analysis_identity
     }
+
+    #[must_use]
+    pub const fn profile_identity(self) -> [u8; 32] {
+        self.profile_identity
+    }
 }
 
 /// Descriptive alias used by cache and pixelpipe callers.
 pub type BasicAdjustmentsPlan = BasicAdjPlan;
+
+fn norm_without_profile(values: [f32; 3], mode: PreserveColors) -> f32 {
+    match mode {
+        PreserveColors::None | PreserveColors::Average => (values[0] + values[1] + values[2]) / 3.0,
+        PreserveColors::Max => values[0].max(values[1]).max(values[2]),
+        PreserveColors::Sum => values[0] + values[1] + values[2],
+        PreserveColors::Norm => {
+            (values[0] * values[0] + values[1] * values[1] + values[2] * values[2]).sqrt()
+        }
+        PreserveColors::Power => {
+            let squares = values.map(|value| value * value);
+            (values[0] * squares[0] + values[1] * squares[1] + values[2] * squares[2])
+                / (squares[0] + squares[1] + squares[2])
+        }
+        PreserveColors::Luminance => unreachable!("profile luminance is handled by evidence"),
+    }
+}
 
 fn checked(
     value: f32,
@@ -743,6 +1100,29 @@ fn checked(
     channel: RgbChannel,
 ) -> Result<FiniteF32, OperationExecutionError> {
     FiniteF32::new(value).map_err(|_| OperationExecutionError::NonFiniteResult { pixel, channel })
+}
+
+fn get_lut_gamma(value: f32, gamma: f32, lut: &[FiniteF32; BASICADJ_LUT_SIZE]) -> f32 {
+    if value > 1.0 {
+        value.powf(gamma)
+    } else {
+        let index = ((value * BASICADJ_LUT_SIZE as f32) as isize).clamp(0, 0xffff) as usize;
+        lut[index].get()
+    }
+}
+
+fn get_lut_contrast(
+    value: f32,
+    contrast: f32,
+    middle_grey: f32,
+    lut: &[FiniteF32; BASICADJ_LUT_SIZE],
+) -> f32 {
+    if value > 1.0 {
+        (value / middle_grey).powf(contrast) * middle_grey
+    } else {
+        let index = ((value * BASICADJ_LUT_SIZE as f32) as isize).clamp(0, 0xffff) as usize;
+        lut[index].get()
+    }
 }
 
 fn hlcurve(level: f32, hlcomp: f32, hlrange: f32) -> f32 {
@@ -844,7 +1224,9 @@ mod tests {
             FiniteF32::new(0.3).expect("finite"),
             FiniteF32::new(0.6).expect("finite"),
         );
-        let output = plan.execute(&[pixel], 0).expect("execution")[0];
+        let output = plan
+            .execute_with_working_frame(&[pixel], 0, WorkingFrameDescriptor::srgb())
+            .expect("execution")[0];
         let ratio = output.red().get() / pixel.red().get();
         assert!((output.green().get() / pixel.green().get() - ratio).abs() < 0.000_01);
         assert!((output.blue().get() / pixel.blue().get() - ratio).abs() < 0.000_01);

@@ -17,6 +17,11 @@
 
 use std::{fmt, mem::size_of};
 
+pub use rusttable_compat::basicadj::DecodedBasicAdjHistoryStep;
+use rusttable_compat::basicadj::{
+    BASICADJ_COMPATIBILITY_NAME, BasicAdjHistoryDecodeFindingCode, BasicAdjHistoryStepDecode,
+    decode_basicadj_history_step,
+};
 pub use rusttable_compat::channelmixer::DecodedChannelMixerHistoryStep;
 use rusttable_compat::channelmixer::{
     ChannelMixerHistoryDecodeFindingCode, ChannelMixerHistoryStepDecode,
@@ -291,6 +296,9 @@ pub enum DarktableHistoryStepDecode {
     /// Color Zones core parameters are decoded and migrated to canonical v5,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
+    /// Basic Adjust core parameters are decoded, while the complete blend/mask
+    /// and multi-instance row remains byte-preserved and non-executable.
+    BasicAdjPendingBlend(DecodedBasicAdjHistoryStep),
     /// Channel Mixer core parameters are decoded, while the complete blend/mask
     /// and multi-instance row remains byte-preserved and non-executable.
     ChannelMixerPendingBlend(DecodedChannelMixerHistoryStep),
@@ -333,6 +341,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(CROP_COMPATIBILITY_NAME) => decode_crop_history_step(step),
         Some(ENLARGECANVAS_COMPATIBILITY_NAME) => decode_enlargecanvas_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
+        Some(BASICADJ_COMPATIBILITY_NAME) => decode_basicadj_import_history_step(step),
         Some(CHANNELMIXER_COMPATIBILITY_NAME) => decode_channelmixer_import_history_step(step),
         Some(SHARPEN_COMPATIBILITY_NAME) => decode_sharpen_import_history_step(step),
         Some(SOFTEN_COMPATIBILITY_NAME) => decode_soften_import_history_step(step),
@@ -346,6 +355,48 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
                 step.operation.raw_name
             ),
         ),
+    }
+}
+
+fn decode_basicadj_import_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    match decode_basicadj_history_step(step) {
+        BasicAdjHistoryStepDecode::BasicAdjPendingBlend(decoded) => {
+            DarktableHistoryStepDecode::BasicAdjPendingBlend(decoded)
+        }
+        BasicAdjHistoryStepDecode::Preserved { source, finding } => {
+            DarktableHistoryStepDecode::Preserved {
+                source,
+                finding: DarktableHistoryDecodeFinding {
+                    code: map_basicadj_finding_code(finding.code),
+                    detail: finding.detail,
+                },
+            }
+        }
+    }
+}
+
+const fn map_basicadj_finding_code(
+    code: BasicAdjHistoryDecodeFindingCode,
+) -> DarktableHistoryDecodeFindingCode {
+    match code {
+        BasicAdjHistoryDecodeFindingCode::MissingModuleVersion => {
+            DarktableHistoryDecodeFindingCode::MissingModuleVersion
+        }
+        BasicAdjHistoryDecodeFindingCode::InvalidModuleVersion => {
+            DarktableHistoryDecodeFindingCode::InvalidModuleVersion
+        }
+        BasicAdjHistoryDecodeFindingCode::UnsupportedParameterVersion => {
+            DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion
+        }
+        BasicAdjHistoryDecodeFindingCode::InvalidOperationParameters => {
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters
+        }
+        BasicAdjHistoryDecodeFindingCode::InvalidEnabledState => {
+            DarktableHistoryDecodeFindingCode::InvalidEnabledState
+        }
+        BasicAdjHistoryDecodeFindingCode::OpaqueBlendSemantics => {
+            DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+        }
     }
 }
 

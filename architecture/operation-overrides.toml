@@ -683,10 +683,10 @@ line_end = 471
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 288
+byte_size = 40
 layout_hash = "011fee3ea6b617643143b34a46df799f10b06ae254c115f7666f1b7bf66253b6"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.basicadj.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.basicadj.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -702,8 +702,8 @@ evidence_hash = "170e557e852b94fa7d79e1ec61f41345191cb0df8a1bb0ab1af218ac959b9ac
 version = 2
 byte_size = 44
 layout_hash = "63a7cb5b40837abfb60f9aeb968eda5b93924ee35e2c5fe526867e130b809da2"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.basicadj.decode.v2"
+opaque_blocking = false
 fixture_id = "operation.basicadj.params.v2"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"

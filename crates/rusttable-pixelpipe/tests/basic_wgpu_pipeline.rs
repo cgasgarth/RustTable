@@ -1711,75 +1711,47 @@ async fn wgpu_colorcorrection_colorcontrast_and_vibrance_share_one_ordered_lab_c
 }
 
 #[tokio::test]
-async fn wgpu_basicadj_matches_cpu_at_supported_source_boundaries_full_frame_and_tiled() {
+async fn basicadj_gpu_route_fails_closed_to_cpu_without_profile_payloads() {
     let Some(runtime) = gpu_runtime().await else {
         return;
     };
     let service = PixelpipeExecutionService::with_gpu(runtime);
 
     for (label, input) in source_boundary_images() {
-        let source_descriptor = input.descriptor();
         let snapshot = basicadj_snapshot(input);
         let canonical = CpuPixelpipeExecutor
             .execute(&snapshot)
             .expect("CPU basicadj result");
         let full = service
             .execute(&snapshot)
-            .expect("full-frame GPU basicadj result");
+            .expect("full-frame Basic Adjust result");
         let tiled = service
             .execute_tiled(&snapshot, CpuTilePlan::new(2, 1).expect("tile plan"))
-            .expect("tiled GPU basicadj result");
+            .expect("tiled Basic Adjust result");
 
         assert_eq!(
             full.receipt().backend(),
-            PixelpipeBackend::WgpuBasic,
-            "{label}: full-frame fallback {:?}",
-            full.receipt().gpu_fallback()
+            PixelpipeBackend::CpuCanonical,
+            "{label}"
         );
         assert_eq!(
             tiled.receipt().backend(),
-            PixelpipeBackend::WgpuTiled,
-            "{label}: tiled fallback {:?}",
-            tiled.receipt().gpu_fallback()
+            PixelpipeBackend::CpuCanonical,
+            "{label}"
+        );
+        assert_eq!(full.receipt().gpu_fallback(), None, "{label}");
+        assert_eq!(tiled.receipt().gpu_fallback(), None, "{label}");
+        assert_eq!(full.image(), canonical.image(), "{label}: full frame");
+        assert_eq!(tiled.image(), canonical.image(), "{label}: tiled");
+        assert_eq!(
+            full.receipt().snapshot_identity(),
+            snapshot.identity(),
+            "{label}"
         );
         assert_eq!(
-            full.receipt().basicadj_plan_identity(),
-            canonical.receipt().basicadj_plan_identity(),
-            "{label}: full-frame BasicAdj plan"
-        );
-        assert_eq!(
-            tiled.receipt().basicadj_plan_identity(),
-            canonical.receipt().basicadj_plan_identity(),
-            "{label}: tiled BasicAdj plan"
-        );
-        assert_eq!(
-            full.receipt().basicadj_plan_identity(),
-            tiled.receipt().basicadj_plan_identity(),
-            "{label}: full and tiled receipts must reuse one qualified plan identity"
-        );
-        assert_eq!(full.receipt().snapshot_identity(), snapshot.identity());
-        assert_eq!(tiled.receipt().snapshot_identity(), snapshot.identity());
-        assert_eq!(full.receipt().dispatches(), 1, "{label}: full dispatches");
-        assert_eq!(tiled.receipt().dispatches(), 4, "{label}: tiled dispatches");
-        let tiling = tiled
-            .receipt()
-            .tiling()
-            .unwrap_or_else(|| panic!("{label}: tiled BasicAdj receipt"));
-        assert_eq!(tiling.tile_count(), 4, "{label}: tile count");
-        assert_eq!(tiling.attempts(), 1, "{label}: attempts");
-        assert_gpu_image_matches_cpu(
-            label,
-            full.image(),
-            canonical.image(),
-            source_descriptor,
-            0.002,
-        );
-        assert_gpu_image_matches_cpu(
-            label,
-            tiled.image(),
-            canonical.image(),
-            source_descriptor,
-            0.002,
+            tiled.receipt().snapshot_identity(),
+            snapshot.identity(),
+            "{label}"
         );
     }
 }

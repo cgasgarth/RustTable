@@ -749,6 +749,15 @@ fn validate_request(
     ) {
         return Err(BasicPointError::Unhealthy);
     }
+    if request
+        .operations
+        .iter()
+        .any(|operation| matches!(operation, BasicPointOperation::BasicAdj(_)))
+    {
+        // The Basic Adjust shader has no authoritative working-profile or LUT
+        // payload. Never execute its legacy camera-luminance shortcut.
+        return Err(BasicPointError::ShaderUnavailable);
+    }
     if request.pixels.is_empty() {
         return Err(BasicPointError::EmptyInput);
     }
@@ -1205,7 +1214,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn basicadj_dispatch_preserves_atomic_order_and_alpha_when_gpu_is_available() {
+    async fn basicadj_gpu_dispatch_fails_closed_without_profile_evidence() {
         let Ok(runtime) = GpuRuntime::initialize(crate::GpuRuntimeConfig::default()).await else {
             return;
         };
@@ -1225,23 +1234,14 @@ mod tests {
             vibrance: 0.0,
         };
         let input = [0.4, 0.2, 0.8, 0.37];
-        let result = runtime
+        let error = runtime
             .execute_basic_point(BasicPointRequest {
                 pixels: &input,
                 operations: &[BasicPointOperation::BasicAdj(parameters)],
                 color_space: BasicPointColorSpace::LinearRgb,
             })
-            .expect("basicadj dispatch");
-        let expected = [
-            (0.4_f32 - 0.1).mul_add(1.5, 0.0).sqrt(),
-            (0.2_f32 - 0.1).mul_add(1.5, 0.0).sqrt(),
-            (0.8_f32 - 0.1).mul_add(1.5, 0.0).sqrt(),
-            0.37,
-        ];
-        for (actual, expected) in result.pixels().iter().zip(expected) {
-            assert!((actual - expected).abs() < 0.0001, "{actual} != {expected}");
-        }
-        assert_eq!(result.dispatches(), 1);
+            .expect_err("Basic Adjust GPU execution must remain unavailable");
+        assert!(matches!(error, BasicPointError::ShaderUnavailable));
     }
 
     fn comparison_clamps(value: f32, low: f32, high: f32) -> f32 {

@@ -11,9 +11,9 @@ use rusttable_compat::{
 use rusttable_sqlite_native::{DarktableSchema, HistoryRows, RawHistoryRow, RawImageHistoryRow};
 
 const BASICADJ_V1_NATIVE_LE: &[u8; BASICADJ_V1_PARAMETER_BYTES] =
-    include_bytes!("../../rusttable-import/tests/fixtures/basicadj-v1-native-le.bin");
+    include_bytes!("../../../fixtures/corpus/assets/operation-basicadj-params-v1.bin");
 const BASICADJ_V2_NATIVE_LE: &[u8; BASICADJ_V2_PARAMETER_BYTES] =
-    include_bytes!("../../rusttable-import/tests/fixtures/basicadj-v2-native-le.bin");
+    include_bytes!("../../../fixtures/corpus/assets/operation-basicadj-params-v2.bin");
 
 fn v1_parameters() -> BasicAdjParametersV1 {
     BasicAdjParametersV1 {

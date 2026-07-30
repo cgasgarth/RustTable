@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "9f473e5aca5ecc9d4627549c457704015a33d89bdecda45371073279f41b6b10"
+snapshot_hash = "26d71f8ce85a3f64ce672305a7391504484628ed1d9fe296fe7e54330a7ae25b"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -16,7 +16,7 @@ compatibility_name = "basicadj"
 descriptor_version = 2
 parameter_version = 2
 implementation_version = 1
-status = "available"
+status = "unavailable"
 
 [[operation]]
 rust_id = "rusttable.bloom"

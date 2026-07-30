@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+//! Full-frame automatic `BasicAdj` analysis reused by tiled execution.
+//!
+//! Source lineage: `src/iop/basicadj.c` process-time auto-exposure path.
 
-use sha2::Digest;
+use std::collections::BTreeMap;
 
 use super::{
     BasicAdjPlanSet, FrameBoundaryMode, FrameBoundaryOptions,
@@ -75,10 +77,7 @@ pub fn prepare_basicadj_plans_with_cancellation<C: Fn() -> bool>(
             )?;
             plans.insert(operation.operation_id(), plan);
         }
-        let plan_set = BasicAdjPlanSet {
-            plans: plans.clone(),
-            identity: [0; 32],
-        };
+        let plan_set = BasicAdjPlanSet::transient(plans.clone());
         apply_operation_with_profile_with_cancellation(
             node.pipeline_step_index(),
             operation,
@@ -93,18 +92,7 @@ pub fn prepare_basicadj_plans_with_cancellation<C: Fn() -> bool>(
         )?;
     }
 
-    let identity = if plans.is_empty() {
-        [0; 32]
-    } else {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(b"rusttable.basicadj.plan-set.v1");
-        for (operation_id, plan) in &plans {
-            hasher.update(operation_id.get().to_le_bytes());
-            hasher.update(plan.identity());
-        }
-        hasher.finalize().into()
-    };
-    Ok(BasicAdjPlanSet { plans, identity })
+    Ok(BasicAdjPlanSet::published(plans))
 }
 
 fn resolve_auto_basicadj_plan<C: Fn() -> bool>(

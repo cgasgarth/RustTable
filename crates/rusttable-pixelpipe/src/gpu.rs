@@ -1,13 +1,12 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rusttable_core::OperationId;
 use rusttable_gpu::{
-    BasicAdjPointParameters, BasicPointColorSpace, BasicPointError, BasicPointOperation,
-    BasicPointRequest, BilateralGridError, BilateralGridRequest, BloomError as GpuBloomError,
-    BloomRequest, CancellationToken as GpuCancellationToken,
+    BasicPointColorSpace, BasicPointError, BasicPointOperation, BasicPointRequest,
+    BilateralGridError, BilateralGridRequest, BloomError as GpuBloomError, BloomRequest,
+    CancellationToken as GpuCancellationToken,
     ColorReconstructionError as GpuColorReconstructionError,
     ColorReconstructionPrecedence as GpuColorReconstructionPrecedence, ColorReconstructionRequest,
     ColorReconstructionRoi, ColorZonesError as GpuColorZonesError,
@@ -22,10 +21,9 @@ use rusttable_processing::operations::colorzones::{
 };
 use rusttable_processing::operations::shadhi::{ShadhiAlgorithm, ShadhiConfig};
 use rusttable_processing::{
-    BasicAdjConfig, BasicAdjPlan, BasicAdjPlanSet, FiniteF32, GrainPlan, LinearRgb,
-    RasterDimensions, ShadhiBilateralBoundaryError, ShadhiBilateralEvaluationError,
-    WorkingFrameDescriptor, WorkingRgbImage, evaluate_bilateral_shadhi_with_cancellation,
-    prepare_basicadj_plans_with_cancellation,
+    FiniteF32, GrainPlan, LinearRgb, RasterDimensions, ShadhiBilateralBoundaryError,
+    ShadhiBilateralEvaluationError, WorkingFrameDescriptor, WorkingRgbImage,
+    evaluate_bilateral_shadhi_with_cancellation,
 };
 use sha2::{Digest, Sha256};
 
@@ -353,7 +351,7 @@ impl PixelpipeExecutionService {
         #[cfg(test)]
         self.uncached_executions.fetch_add(1, Ordering::AcqRel);
         check_cancellation(scope, CancellationStage::Preparation)?;
-        let Some(qualified) = gpu_plan(snapshot, scope)? else {
+        let Some(qualified) = gpu_plan(snapshot, scope) else {
             return self.cpu_result(snapshot, None, scope);
         };
         let plan = &qualified.plan;
@@ -503,7 +501,7 @@ impl PixelpipeExecutionService {
         #[cfg(test)]
         self.uncached_executions.fetch_add(1, Ordering::AcqRel);
         check_cancellation(scope, CancellationStage::Preparation)?;
-        let Some(qualified) = gpu_plan(snapshot, scope)? else {
+        let Some(qualified) = gpu_plan(snapshot, scope) else {
             return self.cpu_tiled_result(snapshot, tile_plan, None, 0, scope);
         };
         let plan = &qualified.plan;
@@ -887,29 +885,22 @@ enum GpuPlanCandidate {
 }
 
 impl GpuPlanCandidate {
-    fn requires_basicadj_resolution(&self) -> bool {
-        matches!(
-            self,
-            Self::Basic(operations)
-                if operations.iter().any(BasicPointCandidate::requires_resolution)
-        )
-    }
-
-    fn resolve(self, resolved: Option<&ResolvedBasicAdjPlans>) -> Option<GpuPlan> {
+    fn resolve(self) -> GpuPlan {
         match self {
-            Self::Basic(operations) => operations
-                .into_iter()
-                .map(|operation| operation.resolve(resolved))
-                .collect::<Option<Vec<_>>>()
-                .map(GpuPlan::Basic),
-            Self::Bloom { config, opacity } => Some(GpuPlan::Bloom { config, opacity }),
+            Self::Basic(operations) => GpuPlan::Basic(
+                operations
+                    .into_iter()
+                    .map(BasicPointCandidate::resolve)
+                    .collect(),
+            ),
+            Self::Bloom { config, opacity } => GpuPlan::Bloom { config, opacity },
             Self::ColorReconstruction { config, opacity } => {
-                Some(GpuPlan::ColorReconstruction { config, opacity })
+                GpuPlan::ColorReconstruction { config, opacity }
             }
-            Self::ColorZones { plan, opacity } => Some(GpuPlan::ColorZones { plan, opacity }),
-            Self::Grain(config) => Some(GpuPlan::Grain(config)),
+            Self::ColorZones { plan, opacity } => GpuPlan::ColorZones { plan, opacity },
+            Self::Grain(config) => GpuPlan::Grain(config),
             Self::ShadhiBilateral { config, opacity } => {
-                Some(GpuPlan::ShadhiBilateral { config, opacity })
+                GpuPlan::ShadhiBilateral { config, opacity }
             }
         }
     }
@@ -917,102 +908,30 @@ impl GpuPlanCandidate {
 
 #[derive(Debug, Clone)]
 enum BasicPointCandidate {
-    BasicAdj {
-        operation_id: OperationId,
-        config: BasicAdjConfig,
-    },
     Ready(BasicPointOperation),
 }
 
 impl BasicPointCandidate {
-    fn requires_resolution(&self) -> bool {
-        matches!(
-            self,
-            Self::BasicAdj { config, .. } if config.auto_controls().is_active()
-        )
-    }
-
-    fn resolve(self, resolved: Option<&ResolvedBasicAdjPlans>) -> Option<BasicPointOperation> {
+    fn resolve(self) -> BasicPointOperation {
         match self {
-            Self::BasicAdj {
-                operation_id,
-                config,
-            } => {
-                let plan = if config.auto_controls().is_active() {
-                    resolved?.plan(operation_id)?.clone()
-                } else {
-                    BasicAdjPlan::new(config).ok()?
-                };
-                Some(basicadj_point_operation(&plan))
-            }
-            Self::Ready(operation) => Some(operation),
+            Self::Ready(operation) => operation,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ResolvedBasicAdjPlans {
-    plans: BTreeMap<OperationId, BasicAdjPlan>,
-    identity: [u8; 32],
-}
-
-impl ResolvedBasicAdjPlans {
-    fn from_plan_set(snapshot: &CpuPixelpipeSnapshot, plan_set: &BasicAdjPlanSet) -> Self {
-        let plans = snapshot
-            .graph()
-            .nodes()
-            .filter_map(|node| {
-                plan_set
-                    .plan(node.operation().operation_id())
-                    .cloned()
-                    .map(|plan| (node.operation().operation_id(), plan))
-            })
-            .collect();
-        Self {
-            plans,
-            identity: plan_set.identity(),
-        }
-    }
-
-    fn plan(&self, operation_id: OperationId) -> Option<&BasicAdjPlan> {
-        self.plans.get(&operation_id)
     }
 }
 
 fn gpu_plan(
     snapshot: &CpuPixelpipeSnapshot,
-    scope: &CancellationScope,
-) -> Result<Option<QualifiedGpuPlan>, CpuPixelpipeError> {
-    let Some(candidate) = gpu_plan_candidate(snapshot) else {
-        return Ok(None);
-    };
-    resolve_gpu_plan_candidate(candidate, || prepare_gpu_basicadj_plans(snapshot, scope))
+    _scope: &CancellationScope,
+) -> Option<QualifiedGpuPlan> {
+    let candidate = gpu_plan_candidate(snapshot)?;
+    Some(resolve_gpu_plan_candidate(candidate))
 }
 
-fn resolve_gpu_plan_candidate<R>(
-    candidate: GpuPlanCandidate,
-    load_plans: R,
-) -> Result<Option<QualifiedGpuPlan>, CpuPixelpipeError>
-where
-    R: FnOnce() -> Result<Option<ResolvedBasicAdjPlans>, CpuPixelpipeError>,
-{
-    let plan_evidence = if candidate.requires_basicadj_resolution() {
-        let Some(plans) = load_plans()? else {
-            return Ok(None);
-        };
-        Some(plans)
-    } else {
-        None
-    };
-    let basicadj_plan_identity = plan_evidence
-        .as_ref()
-        .map_or([0; 32], |plans| plans.identity);
-    Ok(candidate
-        .resolve(plan_evidence.as_ref())
-        .map(|plan| QualifiedGpuPlan {
-            plan,
-            basicadj_plan_identity,
-        }))
+fn resolve_gpu_plan_candidate(candidate: GpuPlanCandidate) -> QualifiedGpuPlan {
+    QualifiedGpuPlan {
+        plan: candidate.resolve(),
+        basicadj_plan_identity: [0; 32],
+    }
 }
 
 fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidate> {
@@ -1038,14 +957,11 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
         }
         has_active_nodes = true;
         let gpu_operation = match operation.kind() {
-            rusttable_processing::ProcessingOperationKind::BasicAdj { config } => {
-                if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
-                    return None;
-                }
-                BasicPointCandidate::BasicAdj {
-                    operation_id: operation.operation_id(),
-                    config: *config,
-                }
+            rusttable_processing::ProcessingOperationKind::BasicAdj { .. }
+            | rusttable_processing::ProcessingOperationKind::ChannelMixer { .. } => {
+                // These operations require dedicated profile/matrix payloads
+                // that the shared point buffer cannot represent.
+                return None;
             }
             rusttable_processing::ProcessingOperationKind::Exposure { stops, black } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
@@ -1071,12 +987,6 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
                     green: green.get(),
                     blue: blue.get(),
                 })
-            }
-            rusttable_processing::ProcessingOperationKind::ChannelMixer { .. } => {
-                // The native extended.cl pass needs a dedicated matrix payload;
-                // the shared point buffer cannot represent it. Never infer GPU
-                // support from the unrelated channelmixerrgb shader.
-                return None;
             }
             rusttable_processing::ProcessingOperationKind::Velvia { config } => {
                 if operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
@@ -1197,61 +1107,6 @@ fn gpu_plan_candidate(snapshot: &CpuPixelpipeSnapshot) -> Option<GpuPlanCandidat
     } else {
         Some(GpuPlanCandidate::Basic(operations))
     }
-}
-
-fn prepare_gpu_basicadj_plans(
-    snapshot: &CpuPixelpipeSnapshot,
-    scope: &CancellationScope,
-) -> Result<Option<ResolvedBasicAdjPlans>, CpuPixelpipeError> {
-    let analysis_scope = scope.child(CancellationStage::Analysis);
-    analysis_scope
-        .check()
-        .map_err(CpuPixelpipeError::Cancelled)?;
-    let Ok(linear) = to_linear_working(snapshot.input()) else {
-        return Ok(None);
-    };
-    analysis_scope
-        .check()
-        .map_err(CpuPixelpipeError::Cancelled)?;
-    let plan_set = match prepare_basicadj_plans_with_cancellation(snapshot.graph(), &linear, || {
-        analysis_scope.check().is_err()
-    }) {
-        Ok(plan_set) => plan_set,
-        Err(source) if source.is_cancelled() => {
-            if let Err(error) = analysis_scope.check() {
-                return Err(CpuPixelpipeError::Cancelled(error));
-            }
-            scope.cancel(CancellationReason::ParentFailed);
-            return Err(CpuPixelpipeError::Cancelled(
-                analysis_scope
-                    .check()
-                    .expect_err("parent cancellation propagates to the analysis child"),
-            ));
-        }
-        Err(_) => return Ok(None),
-    };
-    analysis_scope
-        .check()
-        .map_err(CpuPixelpipeError::Cancelled)?;
-    Ok(Some(ResolvedBasicAdjPlans::from_plan_set(
-        snapshot, &plan_set,
-    )))
-}
-
-fn basicadj_point_operation(plan: &BasicAdjPlan) -> BasicPointOperation {
-    let parameters = plan.gpu_parameters();
-    BasicPointOperation::BasicAdj(BasicAdjPointParameters {
-        black_point: parameters.black_point,
-        scale: parameters.scale,
-        gamma: parameters.gamma,
-        middle_grey: parameters.middle_grey,
-        contrast: parameters.contrast,
-        hlcomp: parameters.hlcomp,
-        hlrange: parameters.hlrange,
-        preserve_colors: parameters.preserve_colors,
-        saturation: parameters.saturation,
-        vibrance: parameters.vibrance,
-    })
 }
 
 fn velvia_point_operation(
@@ -2147,89 +2002,16 @@ fn place_tile(
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
     use std::sync::Barrier;
     use std::time::Instant;
 
     use rusttable_core::{
-        Edit, EditId, FiniteF64, Operation, OperationKey, OperationOpacity, ParameterName,
-        ParameterValue, PhotoId, Revision,
+        Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity,
+        ParameterName, ParameterValue, PhotoId, Revision,
     };
 
     use super::*;
     use crate::{RgbaF32ColorEncoding, RgbaF32Descriptor};
-
-    #[test]
-    fn auto_basicadj_candidate_resolves_once_and_carries_the_same_identity() {
-        let operation_id = OperationId::new(0xba51).expect("operation ID");
-        let config = BasicAdjConfig::defaults()
-            .with_auto_controls(rusttable_processing::BasicAdjAutoControls::all());
-        let dimensions = RasterDimensions::new(3, 2).expect("dimensions");
-        let sample = LinearRgb::new(
-            FiniteF32::new(0.15).expect("red"),
-            FiniteF32::new(0.30).expect("green"),
-            FiniteF32::new(0.45).expect("blue"),
-        );
-        let pixels = [sample; 6];
-        let raster = rusttable_processing::BasicAdjAnalysisRaster::new(dimensions, &pixels, None)
-            .expect("analysis raster");
-        let plan = BasicAdjPlan::resolve(config, raster).expect("resolved automatic plan");
-        let expected_operation = basicadj_point_operation(&plan);
-        let identity = [0xa5; 32];
-        let resolved = ResolvedBasicAdjPlans {
-            plans: BTreeMap::from([(operation_id, plan)]),
-            identity,
-        };
-        let calls = Cell::new(0_usize);
-        let candidate = GpuPlanCandidate::Basic(vec![BasicPointCandidate::BasicAdj {
-            operation_id,
-            config,
-        }]);
-
-        let qualified = resolve_gpu_plan_candidate(candidate, || {
-            calls.set(calls.get() + 1);
-            Ok(Some(resolved))
-        })
-        .expect("qualification")
-        .expect("qualified plan");
-
-        assert_eq!(calls.get(), 1);
-        assert_eq!(qualified.basicadj_plan_identity, identity);
-        assert_eq!(
-            qualified.plan,
-            GpuPlan::Basic(vec![expected_operation]),
-            "the operation and receipt identity must come from one resolution"
-        );
-    }
-
-    #[test]
-    fn auto_basicadj_analysis_cancellation_is_terminal() {
-        let operation_id = OperationId::new(0xba52).expect("operation ID");
-        let config = BasicAdjConfig::defaults()
-            .with_auto_controls(rusttable_processing::BasicAdjAutoControls::all());
-        let candidate = GpuPlanCandidate::Basic(vec![BasicPointCandidate::BasicAdj {
-            operation_id,
-            config,
-        }]);
-        let scope = CancellationScope::root(
-            PipelineGeneration::new(18).expect("nonzero pipeline generation"),
-        );
-        scope.cancel(CancellationReason::EditChanged);
-        let snapshot = empty_snapshot();
-        let calls = Cell::new(0_usize);
-
-        let result = resolve_gpu_plan_candidate(candidate, || {
-            calls.set(calls.get() + 1);
-            prepare_gpu_basicadj_plans(&snapshot, &scope)
-        });
-
-        let Err(CpuPixelpipeError::Cancelled(error)) = result else {
-            panic!("automatic BasicAdj cancellation must not become CPU fallback");
-        };
-        assert_eq!(calls.get(), 1);
-        assert_eq!(error.reason(), CancellationReason::EditChanged);
-        assert_eq!(error.stage(), Some(CancellationStage::Analysis));
-    }
 
     #[test]
     fn non_basicadj_qualification_skips_analysis_resolution() {
@@ -2240,11 +2022,7 @@ mod tests {
             },
         )]);
 
-        let qualified = resolve_gpu_plan_candidate(candidate, || {
-            panic!("non-BasicAdj qualification must not resolve BasicAdj evidence")
-        })
-        .expect("qualification")
-        .expect("qualified plan");
+        let qualified = resolve_gpu_plan_candidate(candidate);
 
         assert_eq!(qualified.basicadj_plan_identity, [0; 32]);
         assert_eq!(
@@ -2471,11 +2249,7 @@ mod tests {
             ],
         );
         let candidate = gpu_plan_candidate(&snapshot).expect("continuous Lab GPU candidate");
-        let qualified = resolve_gpu_plan_candidate(candidate, || {
-            panic!("Lab point operations do not require BasicAdj analysis")
-        })
-        .expect("qualification")
-        .expect("qualified plan");
+        let qualified = resolve_gpu_plan_candidate(candidate);
         let expected = vec![
             colorcorrection_point_operation(first_correction),
             colorcontrast_point_operation(contrast),
@@ -2518,11 +2292,7 @@ mod tests {
             ],
         );
         let candidate = gpu_plan_candidate(&snapshot).expect("opaque unmasked GPU candidate");
-        let qualified = resolve_gpu_plan_candidate(candidate, || {
-            panic!("Color Contrast does not require BasicAdj analysis")
-        })
-        .expect("qualification")
-        .expect("qualified plan");
+        let qualified = resolve_gpu_plan_candidate(candidate);
         let expected = vec![
             colorcontrast_point_operation(first),
             colorcontrast_point_operation(second),
@@ -2573,11 +2343,7 @@ mod tests {
     fn truly_empty_graph_retains_an_empty_gpu_plan() {
         let snapshot = snapshot_with_operations(RgbaF32ColorEncoding::LabD50, std::iter::empty());
         let candidate = gpu_plan_candidate(&snapshot).expect("empty graph GPU candidate");
-        let qualified = resolve_gpu_plan_candidate(candidate, || {
-            panic!("an empty point chain does not require BasicAdj analysis")
-        })
-        .expect("qualification")
-        .expect("qualified plan");
+        let qualified = resolve_gpu_plan_candidate(candidate);
 
         assert_eq!(qualified.plan, GpuPlan::Basic(Vec::new()));
     }
@@ -2614,11 +2380,7 @@ mod tests {
         );
         let candidate =
             gpu_plan_candidate(&snapshot).expect("continuous Color Contrast GPU candidate");
-        let qualified = resolve_gpu_plan_candidate(candidate, || {
-            panic!("Color Contrast does not require BasicAdj analysis")
-        })
-        .expect("qualification")
-        .expect("qualified plan");
+        let qualified = resolve_gpu_plan_candidate(candidate);
         let expected = vec![
             colorcontrast_point_operation(first),
             colorcontrast_point_operation(second),

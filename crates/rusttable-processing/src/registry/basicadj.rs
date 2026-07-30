@@ -1,6 +1,6 @@
 use super::{
-    CpuFactory, FactoryError, GpuBinding, ImplementationIdentity, MigrationBinding,
-    OperationDefinition, PreparedCpuOperation, REGISTRY_BUILD_ID, RoiKind,
+    CpuFactory, DefinitionAvailability, FactoryError, ImplementationIdentity, MigrationBinding,
+    OperationDefinition, OperationUiAvailability, PreparedCpuOperation, REGISTRY_BUILD_ID, RoiKind,
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{DescriptorId, basicadj_descriptor};
@@ -26,18 +26,10 @@ pub fn basicadj_definition() -> OperationDefinition {
             crate::evaluate::execute_prepared_operation,
             RoiKind::Identity,
             true,
-            true,
+            false,
         )),
-        Some(GpuBinding::new(
-            "rusttable.basicadj.wgsl",
-            1,
-            [
-                "f32-storage".to_owned(),
-                "deterministic-row-major".to_owned(),
-            ],
-            ["rgba32float".to_owned()],
-        )),
-        vec![MigrationBinding::new(1, 2, "basicadj.migration.v1")],
+        None,
+        vec![MigrationBinding::new(1, 2, "basicadj.migration.v1-v2")],
         ImplementationIdentity::new(
             format!("{REGISTRY_BUILD_ID}.basicadj"),
             1,
@@ -49,4 +41,10 @@ pub fn basicadj_definition() -> OperationDefinition {
             "iop.basicadj.stage-order".to_owned(),
         ],
     )
+    .with_availability(DefinitionAvailability::Unavailable {
+        reason: "Basic Adjust is preserved as typed compatibility data, but profile-aware luminance, automatic levels, source blend/mask semantics, and imported materialization are incomplete".to_owned(),
+    })
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "the source-shaped Basic Adjust UI, profile-aware picker, and automatic-level action are not ported".to_owned(),
+    })
 }

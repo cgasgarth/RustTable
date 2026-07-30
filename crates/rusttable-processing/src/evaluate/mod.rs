@@ -387,20 +387,59 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
         validate_operation_mask(mask, pixels.len(), dimensions, step_index, operation_id)?;
     }
     let mask_route = OperationMaskRoute::new(operation.kind(), mask);
+    if matches!(operation.kind(), ProcessingOperationKind::BasicAdj { .. }) {
+        if opacity.to_bits() != 1.0_f32.to_bits() {
+            return Err(operation_plan_error(
+                step_index,
+                operation_id,
+                OperationExecutionError::UnsupportedCapability(
+                    "basicadj opacity/blend semantics are not yet source-faithful",
+                ),
+            ));
+        }
+        if mask.is_some() {
+            return Err(operation_plan_error(
+                step_index,
+                operation_id,
+                OperationExecutionError::UnsupportedCapability(
+                    "basicadj mask semantics are not yet source-faithful",
+                ),
+            ));
+        }
+    }
     let before_mask = mask_route.working_rgb_blend().map(|_| pixels.to_vec());
     let result = match operation.kind() {
         ProcessingOperationKind::BasicAdj { config } => {
-            let plan = basicadj_plans
-                .and_then(|plans| plans.plan(operation_id))
-                .cloned()
-                .map_or_else(
-                    || crate::operations::basicadj::BasicAdjPlan::new(*config),
-                    Ok,
-                )
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let plan = if let Some(plan) = basicadj_plans.and_then(|plans| plans.plan(operation_id))
+            {
+                plan.clone()
+            } else {
+                if config.auto_controls().is_active() {
+                    return Err(operation_plan_error(
+                        step_index,
+                        operation_id,
+                        OperationExecutionError::UnsupportedCapability(
+                            "basicadj automatic controls require a published full-frame plan",
+                        ),
+                    ));
+                }
+                crate::operations::basicadj::BasicAdjPlan::new(*config)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?
+            };
             let candidate = plan
-                .execute(pixels, pixel_index_offset)
-                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+                .execute_with_working_frame_and_cancellation(
+                    pixels,
+                    pixel_index_offset,
+                    *frame,
+                    &cancelled,
+                )
+                .map_err(|error| match error {
+                    OperationExecutionError::Cancelled => EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    },
+                    error => operation_plan_error(step_index, operation_id, error),
+                })?;
             apply_reconstruction(
                 pixels,
                 &candidate,
