@@ -20,10 +20,6 @@ target_features = []
 # Each product/test source that deliberately requests fused rounding is named.
 # xtask rejects an added or stale `.mul_add` path until this table is reviewed.
 [[explicit_fma]]
-path = "crates/rusttable-gpu/src/point.rs"
-policy = "ExplicitFused"
-
-[[explicit_fma]]
 path = "crates/rusttable-masks/src/model.rs"
 policy = "ExplicitFused"
 

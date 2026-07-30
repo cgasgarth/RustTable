@@ -1,10 +1,15 @@
 //! Descriptor for Darktable's atomic legacy basic-adjustments operation.
+//!
+//! Source lineage: `src/iop/basicadj.c`.
+//!
+//! The descriptor remains a compatibility contract, but its product registry is
+//! fail-closed until profile-aware luminance, automatic-level publication,
+//! source blend/mask semantics, and the native UI are complete.
 
 use super::operations::{default_io_contract, default_mask_blend};
 use super::{
     CapabilityContract, DescriptorId, MigrationContract, OperationDescriptor, OperationFlags,
     ParameterDefault, ParameterDescriptor, ParameterKind, ParameterRole, RoiKind, TilingContract,
-    UiHint,
 };
 
 #[must_use]
@@ -69,16 +74,16 @@ pub fn basicadj_descriptor() -> OperationDescriptor {
             output_multiplier_milli: 1000,
         },
         capability: CapabilityContract {
+            // The leaf CPU equations remain available for source-vector work,
+            // but product discovery is disabled by the registry until the
+            // profile and history/blend contracts are complete.
             cpu_supported: true,
-            gpu_tier: Some(1),
-            required_features: vec![
-                "f32-storage".to_owned(),
-                "deterministic-row-major".to_owned(),
-            ],
-            required_formats: vec!["rgba32float".to_owned()],
+            gpu_tier: None,
+            required_features: Vec::new(),
+            required_formats: Vec::new(),
             deterministic_cpu: true,
-            deterministic_gpu: true,
-            fallback_to_cpu: true,
+            deterministic_gpu: false,
+            fallback_to_cpu: false,
             precision: "f32".to_owned(),
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
         },
@@ -89,11 +94,9 @@ pub fn basicadj_descriptor() -> OperationDescriptor {
             target_version: 2,
             opaque_unknown_allowed: true,
         },
-        ui: Some(UiHint {
-            label_key: "operation.basicadj".to_owned(),
-            group_key: "group.basic".to_owned(),
-            control: "basic-adjustments".to_owned(),
-        }),
+        // No generic controls: the source-shaped GTK editor, auto-level
+        // action, and profile-aware picker are not ported yet.
+        ui: None,
     }
 }
 

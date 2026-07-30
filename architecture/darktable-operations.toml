@@ -2223,12 +2223,12 @@ tags = [
     "IOP_GROUP_BASIC",
     "IOP_GROUP_GRADING",
 ]
-multi_instance = false
-supports_blend_masks = false
+multi_instance = true
+supports_blend_masks = true
 input_color_space = "scene-linear"
 output_color_space = "scene-linear"
 roi_behavior = "identity"
-tiling_requirement = "full-frame"
+tiling_requirement = "tiled"
 cpu_implementation = "process"
 opencl_programs = ["basicadj"]
 opencl_kernels = ["basicadj"]
@@ -2238,10 +2238,10 @@ presets = []
 
 [[operations.parameter_versions]]
 version = 1
-byte_size = 288
+byte_size = 40
 layout_hash = "011fee3ea6b617643143b34a46df799f10b06ae254c115f7666f1b7bf66253b6"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.basicadj.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.basicadj.params.v1"
 abi_layouts = []
 target_codecs = []
@@ -2259,7 +2259,7 @@ evidence_hash = "170e557e852b94fa7d79e1ec61f41345191cb0df8a1bb0ab1af218ac959b9ac
 version = 2
 byte_size = 44
 layout_hash = "63a7cb5b40837abfb60f9aeb968eda5b93924ee35e2c5fe526867e130b809da2"
-decoder = "generated.bytes.decode.v2"
+decoder = "rusttable.basicadj.decode.v2"
 opaque_blocking = false
 fixture_id = "operation.basicadj.params.v2"
 target_codecs = []
@@ -2502,7 +2502,7 @@ evidence_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 [operations.capability_contract]
 supports_shared_blending = true
-supports_drawn_masks = false
+supports_drawn_masks = true
 publishes_raster_mask = false
 consumes_raster_mask = false
 flags = [
@@ -2522,7 +2522,7 @@ fast_pipe = "not-supported"
 scale = "preserve"
 
 [operations.tiling_contract]
-class = "full-frame"
+class = "tiled"
 overlap = 0
 
 [[operations.opencl_resolution]]

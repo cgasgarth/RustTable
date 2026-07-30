@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![doc = "Compatibility boundary contracts for the `RustTable` rewrite."]
 
+pub mod basicadj;
 pub mod channelmixer;
 pub mod purpose;
 pub mod sharpen;

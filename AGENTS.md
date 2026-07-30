@@ -46,7 +46,7 @@
 
 ## Agent orchestration
 
-- The canonical integration checkout owns `codex/file-by-file-migration`, delivery, and the single active milestone PR. Use as many temporary Git worktrees/workflows as independent implementation, diagnostics, tests, review, and subsystem lanes require, bounded by available host capacity rather than a fixed count.
+- The canonical integration checkout owns the active migration branch, delivery, and the single active milestone PR. Maintain a rolling stream of source audits, implementation, diagnostics, tests, reviews, and subsystem lanes; use as many temporary Git worktrees/workflows as independent ownership and host capacity require rather than a fixed count, and do not leave implementation idle between milestones unless the user explicitly asks to stop or a genuine blocker requires user input.
 - Each worker worktree has exclusive file ownership. Never assign the same writable file to two worktrees; keep exhaustive-match registries, pixelpipe dispatch, app composition, and other shared hubs with one integration owner in the canonical checkout.
 - Workers may analyze, test, review, edit, and commit only their assigned paths. The orchestrator inspects and integrates those scoped changes, runs final validation in the canonical checkout, and owns all push and PR actions.
 - Give agents exact Darktable and Rust paths. Require findings about implemented-but-incorrect behavior; do not report functionality that is merely unported.
