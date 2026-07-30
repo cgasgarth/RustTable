@@ -701,10 +701,15 @@ fn png_source_color(
         )
         .map_err(|error| source_color_error(InputFormat::Png, error))?
     {
-        // The cICP profile is synthetic source evidence, so the unrelated
-        // ICC payload cannot be attached to the typed frame's profile identity.
-        // It remains validated in the PNG metadata inventory.
-        return Ok((source_color, None));
+        // cICP controls interpretation, while the bounded iCCP payload remains
+        // independently available for downstream color-management consumers.
+        return Ok((
+            source_color,
+            metadata
+                .icc_profile
+                .as_ref()
+                .map(|profile| profile.data.clone()),
+        ));
     }
     if let Some(profile) = &metadata.icc_profile {
         let expected_color_space = match header.color_type {

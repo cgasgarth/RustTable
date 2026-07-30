@@ -273,7 +273,7 @@ fn png_cicp_precedes_icc_and_receipts_retain_the_selected_color() {
         frame.image().descriptor().color_encoding(),
         source.encoding()
     );
-    assert_eq!(frame.embedded_icc(), None);
+    assert_eq!(frame.embedded_icc(), Some(profile.as_slice()));
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn valid_cicp_survives_a_structurally_valid_unsupported_icc() {
         SourceColorEvidence::EmbeddedContainerMetadata
     );
     assert_eq!(frame.source_color().transfer(), Some(TransferFunction::Pq));
-    assert_eq!(frame.embedded_icc(), None);
+    assert_eq!(frame.embedded_icc(), Some(lut_icc().as_slice()));
 }
 
 #[test]
@@ -321,6 +321,30 @@ fn unsupported_icc_without_cicp_is_retained_as_authoritative_source() {
 }
 
 #[test]
+fn malformed_icc_with_valid_cicp_remains_fail_closed_for_both_apis() {
+    let bytes = png_with_chunks(&[
+        (*b"cICP", vec![9, 16, 0, 1]),
+        (*b"iCCP", iccp_chunk(b"not an ICC profile")),
+    ]);
+    let registry = ImageDecoderRegistry::standard();
+
+    assert!(matches!(
+        registry.decode_bytes(&bytes, precision_limits()),
+        Err(ImageInputError::MalformedInput {
+            format: InputFormat::Png,
+            ..
+        })
+    ));
+    assert!(matches!(
+        registry.decode_frame_bytes(&bytes, precision_limits()),
+        Err(ImageInputError::MalformedInput {
+            format: InputFormat::Png,
+            ..
+        })
+    ));
+}
+
+#[test]
 fn unsupported_png_cicp_falls_back_to_the_existing_metadata_precedence() {
     let bytes = png_with_chunks(&[(*b"cICP", vec![9, 14, 0, 0]), (*b"sRGB", vec![0])]);
     let frame = ImageDecoderRegistry::standard()
@@ -330,6 +354,30 @@ fn unsupported_png_cicp_falls_back_to_the_existing_metadata_precedence() {
 
     assert_eq!(source.encoding(), rusttable_image::ColorEncoding::SrgbD65);
     assert_eq!(source.evidence(), SourceColorEvidence::DeclaredEncoding);
+}
+
+#[test]
+fn unsupported_cicp_falls_back_to_the_structurally_valid_icc_profile() {
+    let profile = lut_icc();
+    let bytes = png_with_chunks(&[
+        (*b"cICP", vec![9, 14, 0, 0]),
+        (*b"iCCP", iccp_chunk(&profile)),
+    ]);
+    let registry = ImageDecoderRegistry::standard();
+    let legacy = registry
+        .decode_bytes(&bytes, precision_limits())
+        .expect("legacy ICC fallback");
+    let frame = registry
+        .decode_frame_bytes(&bytes, precision_limits())
+        .expect("typed ICC fallback");
+
+    assert_eq!(legacy.color_encoding(), frame.source_color().encoding());
+    assert_eq!(
+        frame.source_color().evidence(),
+        SourceColorEvidence::EmbeddedIcc
+    );
+    assert_eq!(frame.source_color().transfer(), None);
+    assert_eq!(frame.embedded_icc(), Some(profile.as_slice()));
 }
 
 #[test]
