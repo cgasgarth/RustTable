@@ -32,7 +32,7 @@ use crate::operations::{
     vibrance::VibranceConfig,
     vignette::VignetteConfig,
 };
-use crate::{FiniteF32, ScalarNarrowingError};
+use crate::{FiniteF32, RasterDimensions, ScalarNarrowingError};
 use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
@@ -546,6 +546,7 @@ impl ProcessingOperation {
     /// evidence cannot resolve the operation's committed neighborhood.
     pub fn neighborhood_overlap_pixels(
         &self,
+        dimensions: RasterDimensions,
         roi_scale: f32,
         piece_iscale: f32,
     ) -> Result<u32, crate::operations::OperationExecutionError> {
@@ -562,6 +563,14 @@ impl ProcessingOperation {
                         "sharpen could not resolve its dynamic neighborhood overlap",
                     )
                 })
+            }
+            ProcessingOperationKind::Soften { config } => {
+                crate::operations::soften::SoftenPlan::overlap_pixels(
+                    *config,
+                    dimensions,
+                    roi_scale,
+                    piece_iscale,
+                )
             }
             _ => Ok(0),
         }

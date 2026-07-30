@@ -60,6 +60,43 @@ fn colorreconstruct_focus_order_includes_every_native_control() {
 }
 
 #[test]
+fn soften_projection_mounts_source_controls_without_generic_fallback() {
+    let operation_id = OperationId::new(53).expect("operation id");
+    let template = reference_modules()
+        .expect("source-derived reference modules")
+        .module("soften")
+        .expect("Soften template")
+        .clone();
+    let state = crate::iop::soften::SoftenGtkState::new(
+        operation_id,
+        Revision::from_u64(11),
+        crate::iop::soften::SoftenEditorState::default(),
+        false,
+        true,
+        false,
+    );
+    let module = template
+        .with_operation_instance(operation_id, 0, 1)
+        .with_soften_editor_state(state);
+
+    assert!(module.has_soften_custom_editor());
+    assert_eq!(module.soften_editor_state(), Some(&state));
+    assert_eq!(module.controls().controls().count(), 0);
+    assert_eq!(
+        module.focus_order(),
+        [
+            "soften-disclosure",
+            "soften-enabled",
+            "soften-reset",
+            "soften-size",
+            "soften-saturation",
+            "soften-brightness",
+            "soften-amount",
+        ]
+    );
+}
+
+#[test]
 fn colorreconstruct_projection_keeps_deferred_surfaces_partial_and_hidden() {
     let modules = reference_modules().expect("source-derived reference modules");
     let template = modules

@@ -26,6 +26,10 @@ use crate::iop::colorzones::{
     ColorZonesGtkActionHandler, ColorZonesGtkHandlerOutcome, ColorZonesGtkLeaf,
     ColorZonesGtkPreferencesHandler, ColorZonesGtkState, build_colorzones_gtk,
 };
+use crate::iop::soften::{
+    SoftenGtkActionHandler, SoftenGtkHandlerOutcome, SoftenGtkLeaf, SoftenGtkState,
+    build_soften_gtk,
+};
 use crate::presentation::PresentationTextError;
 use crate::presentation::darkroom_controls::{
     ControlId, ControlIdError, ControlValidationError, DarkroomControlError, DarkroomControlValue,
@@ -115,27 +119,35 @@ enum DarkroomCustomEditorPayload {
     Bloom(Option<BloomGtkState>),
     ColorReconstruction(Option<ColorReconstructionGtkState>),
     ColorZones(Option<ColorZonesGtkState>),
+    Soften(Option<SoftenGtkState>),
 }
 
 impl DarkroomCustomEditorPayload {
     const fn bloom_state(&self) -> Option<&BloomGtkState> {
         match self {
             Self::Bloom(state) => state.as_ref(),
-            Self::ColorReconstruction(_) | Self::ColorZones(_) => None,
+            Self::ColorReconstruction(_) | Self::ColorZones(_) | Self::Soften(_) => None,
         }
     }
 
     const fn colorreconstruct_state(&self) -> Option<&ColorReconstructionGtkState> {
         match self {
             Self::ColorReconstruction(state) => state.as_ref(),
-            Self::Bloom(_) | Self::ColorZones(_) => None,
+            Self::Bloom(_) | Self::ColorZones(_) | Self::Soften(_) => None,
         }
     }
 
     const fn colorzones_state(&self) -> Option<&ColorZonesGtkState> {
         match self {
-            Self::Bloom(_) | Self::ColorReconstruction(_) => None,
+            Self::Bloom(_) | Self::ColorReconstruction(_) | Self::Soften(_) => None,
             Self::ColorZones(state) => state.as_ref(),
+        }
+    }
+
+    const fn soften_state(&self) -> Option<&SoftenGtkState> {
+        match self {
+            Self::Soften(state) => state.as_ref(),
+            Self::Bloom(_) | Self::ColorReconstruction(_) | Self::ColorZones(_) => None,
         }
     }
 }
@@ -146,6 +158,7 @@ pub(crate) struct DarkroomCustomEditorMounts {
     bloom: Rc<RefCell<BTreeMap<OperationId, BloomGtkLeaf>>>,
     colorreconstruct: Rc<RefCell<BTreeMap<OperationId, ColorReconstructionGtkLeaf>>>,
     colorzones: Rc<RefCell<BTreeMap<OperationId, ColorZonesGtkLeaf>>>,
+    soften: Rc<RefCell<BTreeMap<OperationId, SoftenGtkLeaf>>>,
     colorzones_handler: Rc<RefCell<Option<ColorZonesGtkActionHandler>>>,
     colorzones_preferences_handler: Rc<RefCell<Option<ColorZonesGtkPreferencesHandler>>>,
 }
@@ -183,6 +196,11 @@ impl DarkroomCustomEditorMounts {
             {
                 let output_channel = leaf.state().editor().output_channel();
                 leaf.reconcile(state.clone().with_output_channel(output_channel));
+            }
+            if let Some(state) = module.soften_editor_state()
+                && let Some(leaf) = self.soften.borrow().get(&state.operation_id())
+            {
+                leaf.reconcile(*state);
             }
         }
     }
@@ -276,6 +294,51 @@ impl DarkroomCustomEditorMounts {
         let leaf = build_colorzones_gtk(widget_id, state.clone(), Some(handler));
         leaf.set_preferences_handler(self.colorzones_preferences_handler.borrow().clone());
         self.colorzones
+            .borrow_mut()
+            .insert(state.operation_id(), leaf.clone());
+        leaf
+    }
+
+    fn soften_leaf(
+        &self,
+        widget_id: &str,
+        state: SoftenGtkState,
+        action_handler: Option<&DarkroomModuleActionHandler>,
+    ) -> SoftenGtkLeaf {
+        if let Some(leaf) = self.soften.borrow().get(&state.operation_id()).cloned() {
+            leaf.reconcile(state);
+            return leaf;
+        }
+        let handler = action_handler.cloned().map(|handler| {
+            Rc::new(move |settled: crate::iop::soften::SoftenSettledAction| {
+                let action = DarkroomModuleAction::Control {
+                    module_id: crate::iop::soften::SOFTEN_MODULE_ID.to_owned(),
+                    operation_id: (!settled.materialization_required()).then_some(settled.target()),
+                    expected_revision: settled.expected_revision(),
+                    id: format!(
+                        "{}-{}",
+                        crate::iop::soften::SOFTEN_MODULE_ID,
+                        settled.parameter().id()
+                    ),
+                    value: DarkroomControlValue::Slider(f64::from(match settled.parameter() {
+                        crate::iop::soften::SoftenParameter::Size => settled.parameters().size,
+                        crate::iop::soften::SoftenParameter::Saturation => {
+                            settled.parameters().saturation
+                        }
+                        crate::iop::soften::SoftenParameter::Brightness => {
+                            settled.parameters().brightness
+                        }
+                        crate::iop::soften::SoftenParameter::Amount => settled.parameters().amount,
+                    })),
+                };
+                match handler(action) {
+                    Ok(revision) => SoftenGtkHandlerOutcome::Commit { revision },
+                    Err(_) => SoftenGtkHandlerOutcome::Rollback,
+                }
+            }) as SoftenGtkActionHandler
+        });
+        let leaf = build_soften_gtk(widget_id, state, handler);
+        self.soften
             .borrow_mut()
             .insert(state.operation_id(), leaf.clone());
         leaf
@@ -479,6 +542,58 @@ impl DarkroomModuleViewModel {
         self.custom_editor
             .as_ref()
             .and_then(DarkroomCustomEditorPayload::bloom_state)
+    }
+
+    /// Marks this module as a source-specific Soften editor and removes every
+    /// descriptor-generated control.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if replacing the generic controls with an empty snapshot is
+    /// rejected by the shared control model.
+    #[must_use]
+    pub fn with_soften_custom_editor(mut self) -> Self {
+        debug_assert_eq!(self.id, crate::iop::soften::SOFTEN_MODULE_ID);
+        self.controls
+            .replace_snapshot(self.revision, Vec::new())
+            .expect("Soften custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::Soften(None));
+        self
+    }
+
+    /// Installs the exact Soften operation projection consumed by its
+    /// source-specific GTK leaf.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if replacing the generic controls with an empty snapshot is
+    /// rejected by the shared control model.
+    #[must_use]
+    pub fn with_soften_editor_state(mut self, state: SoftenGtkState) -> Self {
+        debug_assert_eq!(self.id, crate::iop::soften::SOFTEN_MODULE_ID);
+        self.operation_id = (!state.materialization_required()).then_some(state.operation_id());
+        self.revision = state.revision();
+        self.enabled = state.enabled();
+        self.controls
+            .replace_snapshot(state.revision(), Vec::new())
+            .expect("Soften custom projection retains zero generic controls");
+        self.custom_editor = Some(DarkroomCustomEditorPayload::Soften(Some(state)));
+        self
+    }
+
+    #[must_use]
+    pub fn has_soften_custom_editor(&self) -> bool {
+        matches!(
+            &self.custom_editor,
+            Some(DarkroomCustomEditorPayload::Soften(_))
+        )
+    }
+
+    #[must_use]
+    pub fn soften_editor_state(&self) -> Option<&SoftenGtkState> {
+        self.custom_editor
+            .as_ref()
+            .and_then(DarkroomCustomEditorPayload::soften_state)
     }
 
     /// Marks this module as a source-specific Color Reconstruction editor and removes
@@ -803,6 +918,11 @@ impl DarkroomModuleViewModel {
         if self.bloom_editor_state().is_some() {
             order.extend(
                 crate::iop::bloom::BLOOM_SLIDERS.map(|slider| slider.widget_name(&widget_id)),
+            );
+        }
+        if self.soften_editor_state().is_some() {
+            order.extend(
+                crate::iop::soften::SOFTEN_SLIDERS.map(|slider| slider.widget_name(&widget_id)),
             );
         }
         if self.colorreconstruct_editor_state().is_some() {
@@ -1190,6 +1310,9 @@ impl DarkroomModuleViewModel {
         value: DarkroomControlValue,
     ) -> Result<Revision, DarkroomModuleError> {
         self.check_revision(expected_revision)?;
+        if self.id == crate::iop::soften::SOFTEN_MODULE_ID && self.has_soften_custom_editor() {
+            return self.set_soften_control(expected_revision, id, &value);
+        }
         let revision = self
             .controls
             .set_value(expected_revision, id, value)
@@ -1199,6 +1322,64 @@ impl DarkroomModuleViewModel {
             self.enabled = true;
         }
         self.status = DarkroomModuleStatus::Ready;
+        Ok(revision)
+    }
+
+    fn set_soften_control(
+        &mut self,
+        expected_revision: Revision,
+        id: &str,
+        value: &DarkroomControlValue,
+    ) -> Result<Revision, DarkroomModuleError> {
+        self.check_revision(expected_revision)?;
+        let parameter = match id {
+            "soften-size" => crate::iop::soften::SoftenParameter::Size,
+            "soften-saturation" => crate::iop::soften::SoftenParameter::Saturation,
+            "soften-brightness" => crate::iop::soften::SoftenParameter::Brightness,
+            "soften-amount" => crate::iop::soften::SoftenParameter::Amount,
+            _ => {
+                return Err(self.record_error(DarkroomModuleError::Unsupported {
+                    module_id: self.id.clone(),
+                    reason: format!("unknown Soften control {id}"),
+                }));
+            }
+        };
+        let DarkroomControlValue::Slider(value) = value else {
+            return Err(self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: format!("Soften control {id} requires a slider value"),
+            }));
+        };
+        let current = self.soften_editor_state().copied().ok_or_else(|| {
+            self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: "module has no Soften custom editor".to_owned(),
+            })
+        })?;
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "the descriptor-backed slider is bounded to the native f32 range"
+        )]
+        let value = *value as f32;
+        let mut editor = current.editor();
+        editor.set(parameter, value).map_err(|error| {
+            self.record_error(DarkroomModuleError::Unsupported {
+                module_id: self.id.clone(),
+                reason: error.to_string(),
+            })
+        })?;
+        let revision = self.advance_revision()?;
+        self.enabled = true;
+        self.custom_editor = Some(DarkroomCustomEditorPayload::Soften(Some(
+            SoftenGtkState::new(
+                current.operation_id(),
+                revision,
+                editor,
+                true,
+                current.sensitive(),
+                current.materialization_required(),
+            ),
+        )));
         Ok(revision)
     }
 
@@ -1364,6 +1545,18 @@ impl DarkroomModuleViewModel {
                     current.operation_id(),
                     revision,
                     crate::iop::colorreconstruct::ColorReconstructionEditorState::default(),
+                    true,
+                    current.sensitive(),
+                    current.materialization_required(),
+                ),
+            )));
+        }
+        if let Some(current) = self.soften_editor_state().copied() {
+            self.custom_editor = Some(DarkroomCustomEditorPayload::Soften(Some(
+                SoftenGtkState::new(
+                    current.operation_id(),
+                    revision,
+                    crate::iop::soften::SoftenEditorState::default(),
                     true,
                     current.sensitive(),
                     current.materialization_required(),
@@ -1820,6 +2013,14 @@ fn build_module_panel_with_action_revision(
     }
     if let (Some(custom_mounts), Some(state)) = (custom_mounts, module.colorzones_editor_state()) {
         let leaf = custom_mounts.colorzones_leaf(&widget_id, state);
+        if leaf.widget().parent().is_some() {
+            leaf.widget().unparent();
+        }
+        operation_root.append(leaf.widget());
+    }
+    if let (Some(custom_mounts), Some(state)) = (custom_mounts, module.soften_editor_state()) {
+        let leaf =
+            custom_mounts.soften_leaf(&widget_id, *state, interaction_action_handler.as_ref());
         if leaf.widget().parent().is_some() {
             leaf.widget().unparent();
         }

@@ -653,6 +653,19 @@ source = "rusttable-test"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-import::darktable-history"
 [[fixtures]]
+id = "corpus.operation.soften-params-v1"
+path = "fixtures/corpus/assets/operation-soften-params-v1.bin"
+size = 16
+sha256 = "c78c23aa2933f8a102a767b480a16f7b6bef52526cd7cfb3709f13596739fd32"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-compat", "rusttable-import"]
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-compat::soften"
+[[fixtures]]
 id = "corpus.operation.spots"
 path = "fixtures/corpus/assets/operation-spots.toml"
 size = 303

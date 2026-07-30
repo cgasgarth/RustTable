@@ -99,6 +99,32 @@ impl fmt::Display for BoxFilterError {
 
 impl std::error::Error for BoxFilterError {}
 
+/// Failure returned by the cancellable box-mean entry point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CancellableBoxFilterError {
+    /// A regular box-filter validation, size, or allocation failure.
+    Filter(BoxFilterError),
+    /// The caller requested cancellation before the blur completed.
+    Cancelled,
+}
+
+impl fmt::Display for CancellableBoxFilterError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Filter(error) => error.fmt(formatter),
+            Self::Cancelled => formatter.write_str("box filter was cancelled"),
+        }
+    }
+}
+
+impl std::error::Error for CancellableBoxFilterError {}
+
+impl From<BoxFilterError> for CancellableBoxFilterError {
+    fn from(error: BoxFilterError) -> Self {
+        Self::Filter(error)
+    }
+}
+
 /// Applies an in-place separable box mean for one, two, or four channels.
 ///
 /// Ordinary summation is selected by channel modes `1`, `2`, and `4`.
@@ -173,7 +199,85 @@ pub fn box_mean(
                 compensated,
                 vertical_scratch_rows,
                 &mut scratch[..vertical_scratch_len],
+                None,
             );
+        }
+    }
+    Ok(())
+}
+
+/// Applies a cancellable in-place separable box mean.
+///
+/// Cancellation is polled at scanline boundaries and throughout each scanline.
+/// The function may have modified `buffer` when it returns [`CancellableBoxFilterError::Cancelled`];
+/// callers that publish results must keep the working buffer private until this
+/// function succeeds.
+///
+/// # Errors
+///
+/// Returns the same validation and allocation errors as [`box_mean`], or
+/// [`CancellableBoxFilterError::Cancelled`] when `cancelled` requests
+/// cancellation.
+pub fn box_mean_with_cancel<F: Fn() -> bool>(
+    buffer: &mut [f32],
+    height: usize,
+    width: usize,
+    channels: u32,
+    radius: usize,
+    iterations: u32,
+    cancelled: F,
+) -> Result<(), CancellableBoxFilterError> {
+    let (channel_count, compensated) = decode_mean_channels(channels)?;
+    let shape = validate_image(buffer, height, width, channel_count)?;
+    if cancelled() {
+        return Err(CancellableBoxFilterError::Cancelled);
+    }
+    if iterations == 0 || radius == 0 {
+        return Ok(());
+    }
+
+    // The cancellable path stays sequential so the caller's poll closure has
+    // one well-defined order and the arithmetic remains the retained
+    // scanline/column order. The ordinary entry point retains its parallel
+    // cache-aware implementation above.
+    let vertical_scratch_rows = vertical_scratch_rows(height, radius);
+    let vertical_scratch_len = vertical_scratch_rows
+        .checked_mul(MAX_VERTICAL_LANES)
+        .ok_or(BoxFilterError::SizeOverflow)?;
+    let scratch_len = shape.row_len.max(vertical_scratch_len);
+    let mut scratch = allocate_f32(scratch_len)?;
+
+    for _ in 0..iterations {
+        if cancelled() {
+            return Err(CancellableBoxFilterError::Cancelled);
+        }
+        for row in buffer.chunks_exact_mut(shape.row_len) {
+            if cancelled() {
+                return Err(CancellableBoxFilterError::Cancelled);
+            }
+            if blur_horizontal(
+                row,
+                width,
+                channel_count,
+                radius,
+                compensated,
+                &mut scratch[..shape.row_len],
+                Some(&cancelled),
+            ) {
+                return Err(CancellableBoxFilterError::Cancelled);
+            }
+        }
+        if blur_vertical(
+            buffer,
+            height,
+            shape.row_len,
+            radius,
+            compensated,
+            vertical_scratch_rows,
+            &mut scratch[..vertical_scratch_len],
+            Some(&cancelled),
+        ) {
+            return Err(CancellableBoxFilterError::Cancelled);
         }
     }
     Ok(())
@@ -224,10 +328,11 @@ pub fn box_mean_horizontal(
             radius,
             true,
             &mut scratch[..row_len],
+            None,
         );
     } else {
         let mut owned = allocate_f32(row_len)?;
-        blur_horizontal(buffer, width, channel_count, radius, true, &mut owned);
+        blur_horizontal(buffer, width, channel_count, radius, true, &mut owned, None);
     }
     Ok(())
 }
@@ -282,6 +387,7 @@ pub fn box_mean_vertical(
             true,
             scratch_rows,
             &mut scratch,
+            None,
         );
     }
     Ok(())
@@ -461,14 +567,21 @@ fn blur_horizontal(
     radius: usize,
     compensated: bool,
     scratch: &mut [f32],
-) {
+    cancellation: Option<&dyn Fn() -> bool>,
+) -> bool {
     let mut sum = [0.0_f32; MAX_CHANNELS];
     let mut correction = [0.0_f32; MAX_CHANNELS];
-    let initial_last = radius.min(width - 1);
-    let mut hits = initial_last + 1;
+    let mut hits = 0;
 
-    for x in 0..=initial_last {
+    // Match the retained `_blur_horizontal` exactly: the initial left half
+    // contains indices below `radius`; the first output loop adds the right
+    // half before writing the edge-normalized mean.
+    for x in 0..radius.min(width) {
+        if cancellation_requested(cancellation) {
+            return true;
+        }
         let offset = x * channels;
+        hits += 1;
         for channel in 0..channels {
             let value = buffer[offset + channel];
             scratch[offset + channel] = value;
@@ -481,42 +594,93 @@ fn blur_horizontal(
         }
     }
 
-    for x in 0..width {
-        let output = x * channels;
-        let scale = hits as f32;
+    let mut x = 0;
+    while x <= radius && x.checked_add(radius).is_some_and(|next| next < width) {
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        let next = x + radius;
+        let offset = next * channels;
+        hits += 1;
         for channel in 0..channels {
-            buffer[output + channel] = sum[channel] / scale;
+            let value = buffer[offset + channel];
+            scratch[offset + channel] = value;
+            add_value(
+                &mut sum[channel],
+                &mut correction[channel],
+                value,
+                compensated,
+            );
         }
-        if x + 1 == width {
-            break;
-        }
+        store_mean(buffer, x * channels, &sum, hits, channels);
+        x += 1;
+    }
 
-        if x >= radius {
-            let old = (x - radius) * channels;
-            hits -= 1;
-            for channel in 0..channels {
-                subtract_value(
-                    &mut sum[channel],
-                    &mut correction[channel],
-                    scratch[old + channel],
-                    compensated,
-                );
-            }
+    while x <= radius && x < width {
+        if cancellation_requested(cancellation) {
+            return true;
         }
-        if let Some(next) = next_window_sample(x, radius, width) {
-            let offset = next * channels;
-            hits += 1;
-            for channel in 0..channels {
-                let value = buffer[offset + channel];
-                scratch[offset + channel] = value;
-                add_value(
-                    &mut sum[channel],
-                    &mut correction[channel],
-                    value,
-                    compensated,
-                );
-            }
+        store_mean(buffer, x * channels, &sum, hits, channels);
+        x += 1;
+    }
+
+    while x.checked_add(radius).is_some_and(|next| next < width) {
+        if cancellation_requested(cancellation) {
+            return true;
         }
+        let old = (x - radius - 1) * channels;
+        let next = x + radius;
+        let next_offset = next * channels;
+        for channel in 0..channels {
+            subtract_value(
+                &mut sum[channel],
+                &mut correction[channel],
+                scratch[old + channel],
+                compensated,
+            );
+            let value = buffer[next_offset + channel];
+            scratch[next_offset + channel] = value;
+            add_value(
+                &mut sum[channel],
+                &mut correction[channel],
+                value,
+                compensated,
+            );
+        }
+        store_mean(buffer, x * channels, &sum, hits, channels);
+        x += 1;
+    }
+
+    while x < width {
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        let old = (x - radius - 1) * channels;
+        hits -= 1;
+        for channel in 0..channels {
+            subtract_value(
+                &mut sum[channel],
+                &mut correction[channel],
+                scratch[old + channel],
+                compensated,
+            );
+        }
+        store_mean(buffer, x * channels, &sum, hits, channels);
+        x += 1;
+    }
+    false
+}
+
+fn store_mean(
+    buffer: &mut [f32],
+    offset: usize,
+    sum: &[f32; MAX_CHANNELS],
+    hits: usize,
+    channels: usize,
+) {
+    let scale = hits as f32;
+    for channel in 0..channels {
+        buffer[offset + channel] = sum[channel] / scale;
     }
 }
 
@@ -552,6 +716,7 @@ fn blur_horizontal_rows(
                 radius,
                 compensated,
                 &mut scratch[..row_len],
+                None,
             );
         }
         return;
@@ -567,7 +732,8 @@ fn blur_horizontal_rows(
         {
             let _worker = scope.spawn(move || {
                 for row in rows.chunks_exact_mut(row_len) {
-                    blur_horizontal(row, width, channels, radius, compensated, scratch);
+                    let _ =
+                        blur_horizontal(row, width, channels, radius, compensated, scratch, None);
                 }
             });
         }
@@ -597,10 +763,14 @@ fn blur_vertical(
     compensated: bool,
     scratch_rows: usize,
     scratch: &mut [f32],
-) {
+    cancellation: Option<&dyn Fn() -> bool>,
+) -> bool {
     let mut column = 0;
     while column + MAX_VERTICAL_LANES <= stride {
-        blur_vertical_lanes::<MAX_VERTICAL_LANES>(
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        if blur_vertical_lanes::<MAX_VERTICAL_LANES>(
             buffer,
             height,
             stride,
@@ -609,11 +779,17 @@ fn blur_vertical(
             compensated,
             scratch_rows,
             scratch,
-        );
+            cancellation,
+        ) {
+            return true;
+        }
         column += MAX_VERTICAL_LANES;
     }
     while column + 4 <= stride {
-        blur_vertical_lanes::<4>(
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        if blur_vertical_lanes::<4>(
             buffer,
             height,
             stride,
@@ -622,11 +798,17 @@ fn blur_vertical(
             compensated,
             scratch_rows,
             scratch,
-        );
+            cancellation,
+        ) {
+            return true;
+        }
         column += 4;
     }
     while column < stride {
-        blur_vertical_lanes::<1>(
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        if blur_vertical_lanes::<1>(
             buffer,
             height,
             stride,
@@ -635,9 +817,13 @@ fn blur_vertical(
             compensated,
             scratch_rows,
             scratch,
-        );
+            cancellation,
+        ) {
+            return true;
+        }
         column += 1;
     }
+    false
 }
 
 #[allow(
@@ -761,13 +947,13 @@ fn blur_vertical_lanes_to<const LANES: usize>(
     radius: usize,
     compensated: bool,
 ) {
-    let initial_last = radius.min(height - 1);
-    let mut hits = initial_last + 1;
+    let mut hits = 0;
     let mut sum = [0.0_f32; LANES];
     let mut correction = [0.0_f32; LANES];
 
-    for y in 0..=initial_last {
+    for y in 0..radius.min(height) {
         let input = y * source_stride + source_column;
+        hits += 1;
         for lane in 0..LANES {
             add_value(
                 &mut sum[lane],
@@ -778,40 +964,74 @@ fn blur_vertical_lanes_to<const LANES: usize>(
         }
     }
 
-    for y in 0..height {
-        let destination = y * output_stride + output_column;
-        let scale = hits as f32;
+    let mut y = 0;
+    while y <= radius && y.checked_add(radius).is_some_and(|next| next < height) {
+        let next = y + radius;
+        let incoming = next * source_stride + source_column;
+        hits += 1;
         for lane in 0..LANES {
-            output[destination + lane] = sum[lane] / scale;
+            add_value(
+                &mut sum[lane],
+                &mut correction[lane],
+                source[incoming + lane],
+                compensated,
+            );
         }
-        if y + 1 == height {
-            break;
-        }
+        store_mean_lanes(output, y * output_stride + output_column, &sum, hits);
+        y += 1;
+    }
 
-        if y >= radius {
-            hits -= 1;
-            let outgoing = (y - radius) * source_stride + source_column;
-            for lane in 0..LANES {
-                subtract_value(
-                    &mut sum[lane],
-                    &mut correction[lane],
-                    source[outgoing + lane],
-                    compensated,
-                );
-            }
+    while y <= radius && y < height {
+        store_mean_lanes(output, y * output_stride + output_column, &sum, hits);
+        y += 1;
+    }
+
+    while y.checked_add(radius).is_some_and(|next| next < height) {
+        let outgoing = (y - radius - 1) * source_stride + source_column;
+        let incoming = (y + radius) * source_stride + source_column;
+        for lane in 0..LANES {
+            subtract_value(
+                &mut sum[lane],
+                &mut correction[lane],
+                source[outgoing + lane],
+                compensated,
+            );
+            add_value(
+                &mut sum[lane],
+                &mut correction[lane],
+                source[incoming + lane],
+                compensated,
+            );
         }
-        if let Some(next) = next_window_sample(y, radius, height) {
-            hits += 1;
-            let incoming = next * source_stride + source_column;
-            for lane in 0..LANES {
-                add_value(
-                    &mut sum[lane],
-                    &mut correction[lane],
-                    source[incoming + lane],
-                    compensated,
-                );
-            }
+        store_mean_lanes(output, y * output_stride + output_column, &sum, hits);
+        y += 1;
+    }
+
+    while y < height {
+        let outgoing = (y - radius - 1) * source_stride + source_column;
+        hits -= 1;
+        for lane in 0..LANES {
+            subtract_value(
+                &mut sum[lane],
+                &mut correction[lane],
+                source[outgoing + lane],
+                compensated,
+            );
         }
+        store_mean_lanes(output, y * output_stride + output_column, &sum, hits);
+        y += 1;
+    }
+}
+
+fn store_mean_lanes<const LANES: usize>(
+    output: &mut [f32],
+    offset: usize,
+    sum: &[f32; LANES],
+    hits: usize,
+) {
+    let scale = hits as f32;
+    for lane in 0..LANES {
+        output[offset + lane] = sum[lane] / scale;
     }
 }
 
@@ -858,16 +1078,20 @@ fn blur_vertical_lanes<const LANES: usize>(
     compensated: bool,
     scratch_rows: usize,
     scratch: &mut [f32],
-) {
-    let initial_last = radius.min(height - 1);
-    let mut hits = initial_last + 1;
+    cancellation: Option<&dyn Fn() -> bool>,
+) -> bool {
+    let mut hits = 0;
     let mut sum = [0.0_f32; LANES];
     let mut correction = [0.0_f32; LANES];
 
-    for y in 0..=initial_last {
+    for y in 0..radius.min(height) {
+        if cancellation_requested(cancellation) {
+            return true;
+        }
         let input = y * stride + column;
         let scratch_row = vertical_scratch_row(y, height, scratch_rows);
         let cached = scratch_row * LANES;
+        hits += 1;
         for lane in 0..LANES {
             let value = buffer[input + lane];
             scratch[cached + lane] = value;
@@ -875,41 +1099,87 @@ fn blur_vertical_lanes<const LANES: usize>(
         }
     }
 
-    for y in 0..height {
-        let output = y * stride + column;
-        let scale = hits as f32;
+    let mut y = 0;
+    while y <= radius && y.checked_add(radius).is_some_and(|next| next < height) {
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        let next = y + radius;
+        let input = next * stride + column;
+        let scratch_row = vertical_scratch_row(next, height, scratch_rows);
+        let cached = scratch_row * LANES;
+        hits += 1;
         for lane in 0..LANES {
-            buffer[output + lane] = sum[lane] / scale;
+            let value = buffer[input + lane];
+            scratch[cached + lane] = value;
+            add_value(&mut sum[lane], &mut correction[lane], value, compensated);
         }
-        if y + 1 == height {
-            break;
-        }
+        store_mean_in_place(buffer, y * stride + column, &sum, hits);
+        y += 1;
+    }
 
-        if y >= radius {
-            hits -= 1;
-            let outgoing = y - radius;
-            let scratch_row = vertical_scratch_row(outgoing, height, scratch_rows);
-            let cached = scratch_row * LANES;
-            for lane in 0..LANES {
-                subtract_value(
-                    &mut sum[lane],
-                    &mut correction[lane],
-                    scratch[cached + lane],
-                    compensated,
-                );
-            }
+    while y <= radius && y < height {
+        if cancellation_requested(cancellation) {
+            return true;
         }
-        if let Some(next) = next_window_sample(y, radius, height) {
-            let input = next * stride + column;
-            let scratch_row = vertical_scratch_row(next, height, scratch_rows);
-            let cached = scratch_row * LANES;
-            hits += 1;
-            for lane in 0..LANES {
-                let value = buffer[input + lane];
-                scratch[cached + lane] = value;
-                add_value(&mut sum[lane], &mut correction[lane], value, compensated);
-            }
+        store_mean_in_place(buffer, y * stride + column, &sum, hits);
+        y += 1;
+    }
+
+    while y.checked_add(radius).is_some_and(|next| next < height) {
+        if cancellation_requested(cancellation) {
+            return true;
         }
+        let outgoing = y - radius - 1;
+        let outgoing_scratch = vertical_scratch_row(outgoing, height, scratch_rows) * LANES;
+        let next = y + radius;
+        let input = next * stride + column;
+        let incoming_scratch = vertical_scratch_row(next, height, scratch_rows) * LANES;
+        for lane in 0..LANES {
+            subtract_value(
+                &mut sum[lane],
+                &mut correction[lane],
+                scratch[outgoing_scratch + lane],
+                compensated,
+            );
+            let value = buffer[input + lane];
+            scratch[incoming_scratch + lane] = value;
+            add_value(&mut sum[lane], &mut correction[lane], value, compensated);
+        }
+        store_mean_in_place(buffer, y * stride + column, &sum, hits);
+        y += 1;
+    }
+
+    while y < height {
+        if cancellation_requested(cancellation) {
+            return true;
+        }
+        let outgoing = y - radius - 1;
+        let cached = vertical_scratch_row(outgoing, height, scratch_rows) * LANES;
+        hits -= 1;
+        for lane in 0..LANES {
+            subtract_value(
+                &mut sum[lane],
+                &mut correction[lane],
+                scratch[cached + lane],
+                compensated,
+            );
+        }
+        store_mean_in_place(buffer, y * stride + column, &sum, hits);
+        y += 1;
+    }
+    false
+}
+
+fn store_mean_in_place<const LANES: usize>(
+    buffer: &mut [f32],
+    offset: usize,
+    sum: &[f32; LANES],
+    hits: usize,
+) {
+    let scale = hits as f32;
+    for lane in 0..LANES {
+        buffer[offset + lane] = sum[lane] / scale;
     }
 }
 
@@ -921,11 +1191,9 @@ fn vertical_scratch_row(row: usize, height: usize, scratch_rows: usize) -> usize
     }
 }
 
-fn next_window_sample(center: usize, radius: usize, length: usize) -> Option<usize> {
-    center
-        .checked_add(radius)
-        .and_then(|index| index.checked_add(1))
-        .filter(|&index| index < length)
+#[inline]
+fn cancellation_requested(cancellation: Option<&dyn Fn() -> bool>) -> bool {
+    cancellation.is_some_and(|check| check())
 }
 
 fn add_value(sum: &mut f32, correction: &mut f32, value: f32, compensated: bool) {

@@ -37,7 +37,7 @@
 
 ## Git and delivery
 
-- Use `/Users/cgas/Documents/RustTable/RustTable` as the canonical integration checkout for migration development. Up to three temporary Git worktrees may be active concurrently for independent worker batches; never create more than three.
+- Use `/Users/cgas/Documents/RustTable/RustTable` as the canonical integration checkout for migration development. Any number of temporary Git worktrees may be active concurrently when batches have exclusive ownership and host capacity supports them; clean completed worktrees before broad repository gates.
 - Work on the long-lived `codex/file-by-file-migration` branch. Keep `main` protected from direct commits.
 - Commit coherent source-file ports as they complete. Open a ready-for-review PR only for a meaningful migration milestone, then squash-merge it.
 - GitHub issues track major milestones and concrete defects discovered during faithful ports. Do not create abstraction-first backlogs, one issue per trivial step, artificial PR batches, or priority-driven work that skips source order.
@@ -46,7 +46,7 @@
 
 ## Agent orchestration
 
-- The canonical integration checkout owns `codex/file-by-file-migration`, delivery, and the single active milestone PR. Up to three temporary Git worktrees may be active concurrently for independent implementation, diagnostics, tests, or review.
+- The canonical integration checkout owns `codex/file-by-file-migration`, delivery, and the single active milestone PR. Use as many temporary Git worktrees/workflows as independent implementation, diagnostics, tests, review, and subsystem lanes require, bounded by available host capacity rather than a fixed count.
 - Each worker worktree has exclusive file ownership. Never assign the same writable file to two worktrees; keep exhaustive-match registries, pixelpipe dispatch, app composition, and other shared hubs with one integration owner in the canonical checkout.
 - Workers may analyze, test, review, edit, and commit only their assigned paths. The orchestrator inspects and integrates those scoped changes, runs final validation in the canonical checkout, and owns all push and PR actions.
 - Give agents exact Darktable and Rust paths. Require findings about implemented-but-incorrect behavior; do not report functionality that is merely unported.

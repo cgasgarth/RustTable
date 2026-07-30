@@ -324,7 +324,7 @@ async fn unavailable_backend_falls_back_atomically_with_diagnostic() {
 }
 
 #[tokio::test]
-async fn zero_opacity_bilateral_routes_directly_to_canonical_cpu() {
+async fn zero_opacity_bilateral_keeps_the_analysis_full_frame_barrier() {
     let mut config = GpuRuntimeConfig::default();
     config.policy.backends.clear();
     let runtime = GpuRuntime::initialize(config)
