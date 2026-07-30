@@ -1,12 +1,13 @@
 #![allow(clippy::all, clippy::pedantic)]
 
 use flate2::read::ZlibDecoder;
+use rusttable_color::IccColorSpace;
 use rusttable_image::{ColorEncoding, DecodeLimits, ImageDimensions, ImageInputError};
 use sha2::{Digest, Sha256};
 use std::io::Read;
 
 use super::types::{
-    PngAnimation, PngBitDepth, PngChunk, PngChunkInventory, PngColorType, PngDecodeError,
+    PngAnimation, PngBitDepth, PngChunk, PngChunkInventory, PngCicp, PngColorType, PngDecodeError,
     PngDecodeLimits, PngHeader, PngMetadataInventory, PngPhysicalResolution, PngProfileInventory,
     PngTextInventory,
 };
@@ -133,7 +134,12 @@ pub(crate) fn parse(
             .ok_or_else(|| PngDecodeError::Malformed("chunk precedes IHDR".to_owned()))?;
         let bd = bit_depth.expect("color type implies depth");
         if kind == *b"IEND" {
-            if !data.is_empty() || !seen_idat && !saw_fdat && !saw_actl {
+            if saw_iend {
+                return Err(PngDecodeError::Malformed(
+                    "trailing data follows IEND".to_owned(),
+                ));
+            }
+            if !data.is_empty() || (!seen_idat && !saw_fdat && !saw_actl) {
                 return Err(PngDecodeError::Malformed(
                     "IEND is empty and follows image data".to_owned(),
                 ));
@@ -313,6 +319,22 @@ pub(crate) fn parse(
             }
             srgb_intent = Some(data[0]);
             metadata.srgb_intent = srgb_intent;
+        } else if kind == *b"cICP" {
+            // Darktable's native loader asks for cICP before falling back to
+            // ICC. Preserve even unsupported matrix/range combinations so a
+            // color-management caller can make the same fail-closed choice.
+            check_singleton(&mut singleton, kind)?;
+            if data.len() != 4 {
+                return Err(PngDecodeError::Malformed(
+                    "cICP must be four bytes".to_owned(),
+                ));
+            }
+            metadata.cicp = Some(PngCicp {
+                color_primaries: data[0],
+                transfer_characteristics: data[1],
+                matrix_coefficients: data[2],
+                full_range: data[3],
+            });
         } else if kind == *b"iCCP" {
             check_singleton(&mut singleton, kind)?;
             let (keyword, compressed) = split_nul(data, "iCCP")?;
@@ -325,7 +347,21 @@ pub(crate) fn parse(
             if profile.is_empty() {
                 return Err(PngDecodeError::Malformed("empty iCCP profile".to_owned()));
             }
-            let source_color = crate::source_color::embedded_icc(&profile).map_err(|error| {
+            // Validate the complete ICC container before source-color choice,
+            // but retain profiles whose transform model is valid and not
+            // representable by the matrix projection. A valid cICP chunk must
+            // be able to take precedence over such a profile later.
+            let expected_color_space = match ct {
+                PngColorType::Grayscale | PngColorType::GrayscaleAlpha => IccColorSpace::Gray,
+                PngColorType::Indexed | PngColorType::Rgb | PngColorType::Rgba => {
+                    IccColorSpace::Rgb
+                }
+            };
+            let source_color = crate::source_color::embedded_icc_profile_authoritative(
+                &profile,
+                expected_color_space,
+            )
+            .map_err(|error| {
                 PngDecodeError::Malformed(format!("invalid embedded ICC profile: {error}"))
             })?;
             let id = source_color
@@ -352,16 +388,43 @@ pub(crate) fn parse(
             });
         } else if kind == *b"tEXt" || kind == *b"zTXt" || kind == *b"iTXt" {
             let (keyword, text_data) = split_nul(data, "text")?;
-            let compressed =
-                kind == *b"zTXt" || (kind == *b"iTXt" && text_data.first() == Some(&1));
-            if kind == *b"zTXt" && (text_data.first() != Some(&0) || text_data.len() < 2) {
-                return Err(PngDecodeError::Malformed(
-                    "invalid zTXt compression".to_owned(),
-                ));
-            }
-            if kind == *b"iTXt" && text_data.len() < 2 {
-                return Err(PngDecodeError::Malformed("invalid iTXt fields".to_owned()));
-            }
+            let compressed = if kind == *b"zTXt" {
+                if text_data.first() != Some(&0) || text_data.len() < 2 {
+                    return Err(PngDecodeError::Malformed(
+                        "invalid zTXt compression".to_owned(),
+                    ));
+                }
+                // Validate compressed text even though the inventory does not
+                // retain private text values.
+                let _ = bounded_zlib(&text_data[1..], limits.max_metadata_bytes)?;
+                true
+            } else if kind == *b"iTXt" {
+                let compression_flag = *text_data
+                    .first()
+                    .ok_or_else(|| PngDecodeError::Malformed("invalid iTXt fields".to_owned()))?;
+                let compression_method = *text_data
+                    .get(1)
+                    .ok_or_else(|| PngDecodeError::Malformed("invalid iTXt fields".to_owned()))?;
+                if compression_flag > 1 || compression_method != 0 {
+                    return Err(PngDecodeError::Malformed(
+                        "invalid iTXt compression".to_owned(),
+                    ));
+                }
+                let (_language, translated_and_text) = split_nul_allow_empty(&text_data[2..])
+                    .ok_or_else(|| {
+                        PngDecodeError::Malformed("invalid iTXt language tag".to_owned())
+                    })?;
+                let (_translated_keyword, text) = split_nul_allow_empty(translated_and_text)
+                    .ok_or_else(|| {
+                        PngDecodeError::Malformed("invalid iTXt translated keyword".to_owned())
+                    })?;
+                if compression_flag == 1 {
+                    let _ = bounded_zlib(text, limits.max_metadata_bytes)?;
+                }
+                compression_flag == 1
+            } else {
+                false
+            };
             let keyword = String::from_utf8(keyword.to_vec()).map_err(|_| {
                 PngDecodeError::Malformed("PNG text keyword is not UTF-8/ASCII".to_owned())
             })?;
@@ -496,7 +559,9 @@ pub(crate) fn parse(
             "sRGB and iCCP profiles are mutually exclusive".to_owned(),
         ));
     }
-    let encoding = if icc_profile.is_some() {
+    let encoding = if let Some(encoding) = metadata.cicp.and_then(PngCicp::color_encoding) {
+        encoding
+    } else if icc_profile.is_some() {
         ColorEncoding::External(icc_profile.expect("profile exists").profile_id)
     } else if srgb_intent.is_some() {
         ColorEncoding::Srgb
@@ -749,6 +814,13 @@ fn split_nul<'a>(data: &'a [u8], label: &str) -> Result<(&'a [u8], &'a [u8]), Pn
     }
     Ok((&data[..index], &data[index + 1..]))
 }
+
+fn split_nul_allow_empty(data: &[u8]) -> Option<(&[u8], &[u8])> {
+    data.iter()
+        .position(|byte| *byte == 0)
+        .map(|index| (&data[..index], &data[index + 1..]))
+}
+
 fn bounded_zlib(data: &[u8], limit: u64) -> Result<Vec<u8>, PngDecodeError> {
     let max = usize::try_from(limit).map_err(|_| arithmetic())?;
     let decoder = ZlibDecoder::new(data);

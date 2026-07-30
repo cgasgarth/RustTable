@@ -1,4 +1,4 @@
-use rusttable_color::{Primaries, TransferFunction, WhitePoint};
+use rusttable_color::{IccColorSpace, Primaries, TransferFunction, WhitePoint};
 use rusttable_image::{
     DecodeLimits, DecodeReceipt, DecodedFrame, DecodedImage, DecoderDescriptor, DecoderIdentity,
     ImageInputError, ImageProbe, InputFormat, SourceColor, SourceColorEvidence,
@@ -692,9 +692,39 @@ fn png_source_color(
     header: &crate::png::PngHeader,
 ) -> Result<(SourceColor, Option<Vec<u8>>), ImageInputError> {
     let metadata = &header.metadata;
+    if let Some(cicp) = metadata.cicp
+        && let Some(source_color) = crate::source_color::embedded_cicp(
+            cicp.color_primaries,
+            cicp.transfer_characteristics,
+            cicp.matrix_coefficients,
+            cicp.full_range,
+        )
+        .map_err(|error| source_color_error(InputFormat::Png, error))?
+    {
+        // cICP controls interpretation, while the bounded iCCP payload remains
+        // independently available for downstream color-management consumers.
+        return Ok((
+            source_color,
+            metadata
+                .icc_profile
+                .as_ref()
+                .map(|profile| profile.data.clone()),
+        ));
+    }
     if let Some(profile) = &metadata.icc_profile {
-        let source_color = crate::source_color::embedded_icc(&profile.data)
-            .map_err(|error| source_color_error(InputFormat::Png, error))?;
+        let expected_color_space = match header.color_type {
+            crate::png::PngColorType::Grayscale | crate::png::PngColorType::GrayscaleAlpha => {
+                IccColorSpace::Gray
+            }
+            crate::png::PngColorType::Indexed
+            | crate::png::PngColorType::Rgb
+            | crate::png::PngColorType::Rgba => IccColorSpace::Rgb,
+        };
+        let source_color = crate::source_color::embedded_icc_profile_authoritative(
+            &profile.data,
+            expected_color_space,
+        )
+        .map_err(|error| source_color_error(InputFormat::Png, error))?;
         return Ok((source_color, Some(profile.data.clone())));
     }
     if metadata.srgb_intent.is_some() {

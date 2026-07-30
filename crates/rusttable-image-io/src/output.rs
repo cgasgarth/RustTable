@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use image::codecs::jpeg::JpegEncoder;
-use image::codecs::png::PngEncoder;
 use image::codecs::tiff::TiffEncoder;
 use image::{ExtendedColorType, ImageEncoder};
 use rusttable_image::{
@@ -16,6 +15,8 @@ use rusttable_metadata::{
     CanonicalExifOutput, MetadataImageOutput, MetadataImageOutputError, MetadataOutput,
     MetadataOutputLimits,
 };
+
+use crate::png::{PngEncodeError, PngEncodeOptions, PngEncoder, PngPixelData};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -218,14 +219,7 @@ fn encode(
 ) -> Result<Vec<u8>, ImageOutputError> {
     let mut writer = LimitedWriter::new(limits.max_encoded_bytes());
     let result = match options {
-        OutputOptions::Png => PngEncoder::new(&mut writer)
-            .write_image(
-                image.pixels(),
-                image.dimensions().width(),
-                image.dimensions().height(),
-                ExtendedColorType::Rgba8,
-            )
-            .map_err(|error| (OutputFormat::Png, error)),
+        OutputOptions::Png => return encode_png(image, limits),
         OutputOptions::Jpeg { quality } => {
             let rgb = rgba_to_opaque_rgb(image, quality)?;
             JpegEncoder::new_with_quality(&mut writer, quality.get())
@@ -255,6 +249,38 @@ fn encode(
         });
     }
     Ok(writer.bytes)
+}
+
+fn encode_png(image: &DecodedImage, limits: OutputLimits) -> Result<Vec<u8>, ImageOutputError> {
+    let pixels = PngPixelData::RgbaU8 {
+        dimensions: image.dimensions(),
+        samples: image.pixels().to_owned(),
+    };
+    PngEncoder::new()
+        .encode(
+            &pixels,
+            PngEncodeOptions::new(5, limits.max_encoded_bytes()),
+        )
+        .map_err(|error| map_png_encode_error(&error))
+}
+
+fn map_png_encode_error(error: &PngEncodeError) -> ImageOutputError {
+    match error {
+        PngEncodeError::OutputTooLarge { actual, limit } => {
+            ImageOutputError::EncodedOutputTooLarge {
+                limit: *limit,
+                actual: *actual,
+            }
+        }
+        PngEncodeError::AllocationFailure => ImageOutputError::AllocationFailure,
+        PngEncodeError::InvalidCompression { .. }
+        | PngEncodeError::InvalidLimit
+        | PngEncodeError::ArithmeticOverflow
+        | PngEncodeError::SampleCount { .. }
+        | PngEncodeError::Compression(_) => ImageOutputError::EncodeFailure {
+            format: OutputFormat::Png,
+        },
+    }
 }
 
 fn image_output_error(source: ImageOutputError) -> MetadataImageOutputError {

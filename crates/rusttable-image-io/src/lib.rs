@@ -41,7 +41,7 @@ pub use openexr::{
 };
 pub use output::FileImageOutput;
 pub use png::{
-    PNG_BACKEND_ID, PngAnimation, PngBitDepth, PngChunk, PngChunkInventory, PngColorType,
+    PNG_BACKEND_ID, PngAnimation, PngBitDepth, PngChunk, PngChunkInventory, PngCicp, PngColorType,
     PngDecodeError, PngDecodeLimits, PngDecodeMode, PngDecodeReceipt, PngDecodeRequest,
     PngDecodeResult, PngDecoder, PngHeader, PngMetadataInventory, PngPhysicalResolution,
     PngPixelData, PngProfileInventory, PngSampleLayout, PngTextInventory,

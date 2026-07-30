@@ -1,6 +1,7 @@
 use crate::{
     AlphaMode, ByteOrder, ChannelLayout, DecodeLimits, ImageDescriptor, InputFormat, Orientation,
-    OwnedImage, PixelFormat, RawMosaicSource, Roi, SampleType, SourceColor, StorageLayout,
+    OwnedImage, PixelFormat, RawMosaicSource, Roi, SampleType, SourceColor, SourceColorEvidence,
+    StorageLayout,
 };
 use sha2::{Digest, Sha256};
 
@@ -227,17 +228,26 @@ impl DecodedFrame {
 
     /// Retains the exact embedded ICC payload after validating its identity.
     ///
+    /// A container-level source declaration can independently select the pixel
+    /// interpretation while retaining an ICC payload for later color-management
+    /// consumers. In that case the declaration's synthetic profile identity is
+    /// intentionally different from the embedded profile's identity; the PNG
+    /// parser has already validated and bounded that independent payload.
+    ///
     /// # Errors
     ///
-    /// Returns an error when the source-color contract is not ICC-backed or
-    /// the payload does not match the retained profile identity.
+    /// Returns an error when the source-color contract is not profile-backed or
+    /// the payload does not match the retained profile identity, except for
+    /// independently retained container metadata.
     pub fn with_embedded_icc(mut self, bytes: Vec<u8>) -> Result<Self, DecodeError> {
         let Some(profile) = self.receipt.source_color().profile() else {
             return Err(DecodeError::InvalidSourceColor);
         };
-        if profile.size() != u64::try_from(bytes.len()).unwrap_or(u64::MAX)
-            || profile.sha256() != <[u8; 32]>::from(Sha256::digest(&bytes))
-        {
+        let matches_profile = profile.size() == u64::try_from(bytes.len()).unwrap_or(u64::MAX)
+            && profile.sha256() == <[u8; 32]>::from(Sha256::digest(&bytes));
+        let independently_retained = self.receipt.source_color().evidence()
+            == SourceColorEvidence::EmbeddedContainerMetadata;
+        if !matches_profile && !independently_retained {
             return Err(DecodeError::InvalidSourceColor);
         }
         self.embedded_icc = Some(bytes);

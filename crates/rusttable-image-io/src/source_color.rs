@@ -13,6 +13,7 @@ pub(crate) enum SourceColorParseError {
     InvalidIcc,
     UnsupportedIcc,
     InvalidChromaticities,
+    InvalidCicp,
 }
 
 pub(crate) fn embedded_icc(bytes: &[u8]) -> Result<SourceColor, SourceColorParseError> {
@@ -75,6 +76,70 @@ pub(crate) fn embedded_chromaticities(
     .map_err(|_| SourceColorParseError::InvalidIcc)?;
     SourceColor::external(id, primaries, transfer, evidence)
         .map_err(|_| SourceColorParseError::InvalidChromaticities)
+}
+
+/// Resolves a PNG cICP declaration when it describes full-range RGB samples.
+///
+/// PNG stores the H.273 colour-primaries, transfer-characteristics, matrix-
+/// coefficients, and full-range flag as four bytes. Matrix-coded or
+/// narrow-range declarations are valid PNG metadata, but this RGB decoder must
+/// leave them available for the next source-color candidate instead of
+/// pretending to interpret YUV sample values.
+///
+/// # Errors
+///
+/// Returns an error when the range flag is not a valid PNG cICP value or when
+/// the supported declaration cannot be represented as matrix source evidence.
+pub(crate) fn embedded_cicp(
+    color_primaries: u8,
+    transfer_characteristics: u8,
+    matrix_coefficients: u8,
+    full_range: u8,
+) -> Result<Option<SourceColor>, SourceColorParseError> {
+    if full_range > 1 {
+        return Err(SourceColorParseError::InvalidCicp);
+    }
+    if matrix_coefficients != 0 || full_range != 1 {
+        return Ok(None);
+    }
+    let (primaries, transfer) = match color_primaries {
+        1 => {
+            let transfer = match transfer_characteristics {
+                1 | 6 | 14 | 15 => TransferFunction::Rec709,
+                8 => TransferFunction::Linear,
+                13 => TransferFunction::Srgb,
+                _ => return Ok(None),
+            };
+            (Primaries::srgb(), transfer)
+        }
+        9 => {
+            let transfer = match transfer_characteristics {
+                8 => TransferFunction::Linear,
+                16 => TransferFunction::Pq,
+                18 => TransferFunction::Hlg,
+                _ => return Ok(None),
+            };
+            (Primaries::rec2020(), transfer)
+        }
+        12 => {
+            let transfer = match transfer_characteristics {
+                13 => TransferFunction::Srgb,
+                16 => TransferFunction::Pq,
+                18 => TransferFunction::Hlg,
+                _ => return Ok(None),
+            };
+            (Primaries::display_p3(), transfer)
+        }
+        // Unspecified and XYZ-coded pixels do not have a supported RGB source
+        // color contract, even though linear XYZ is valid for other decoders.
+        _ => return Ok(None),
+    };
+    embedded_chromaticities(
+        primaries,
+        transfer,
+        SourceColorEvidence::EmbeddedContainerMetadata,
+    )
+    .map(Some)
 }
 
 struct IccMatrixProfile {
@@ -322,6 +387,7 @@ impl std::fmt::Display for SourceColorParseError {
             Self::InvalidIcc => "embedded ICC profile is malformed",
             Self::UnsupportedIcc => "embedded ICC profile uses an unsupported structure",
             Self::InvalidChromaticities => "embedded chromaticities are invalid",
+            Self::InvalidCicp => "embedded cICP metadata is malformed",
         })
     }
 }
@@ -368,6 +434,52 @@ mod tests {
             SourceColorEvidence::EmbeddedChromaticities
         );
         assert!(source.profile().is_some());
+    }
+
+    #[test]
+    fn full_range_rec2020_cicp_keeps_container_metadata_evidence() {
+        let source = embedded_cicp(9, 16, 0, 1)
+            .expect("valid cICP")
+            .expect("supported cICP");
+
+        assert_eq!(source.primaries(), Some(Primaries::rec2020()));
+        assert_eq!(source.transfer(), Some(TransferFunction::Pq));
+        assert_eq!(
+            source.evidence(),
+            SourceColorEvidence::EmbeddedContainerMetadata
+        );
+        assert!(source.profile().is_some());
+    }
+
+    #[test]
+    fn rec2020_rejects_rec709_bit_depth_transfer_codes() {
+        assert_eq!(embedded_cicp(9, 14, 0, 1), Ok(None));
+        assert_eq!(embedded_cicp(9, 15, 0, 1), Ok(None));
+    }
+
+    #[test]
+    fn rec709_accepts_native_bit_depth_transfer_aliases() {
+        for transfer in [14, 15] {
+            let source = embedded_cicp(1, transfer, 0, 1)
+                .expect("valid cICP")
+                .expect("supported Rec.709 cICP");
+            assert_eq!(source.primaries(), Some(Primaries::srgb()));
+            assert_eq!(source.transfer(), Some(TransferFunction::Rec709));
+        }
+    }
+
+    #[test]
+    fn unsupported_cicp_sample_model_is_left_for_the_next_candidate() {
+        assert_eq!(embedded_cicp(9, 14, 1, 1), Ok(None));
+        assert_eq!(embedded_cicp(9, 14, 0, 0), Ok(None));
+    }
+
+    #[test]
+    fn malformed_cicp_range_is_rejected() {
+        assert_eq!(
+            embedded_cicp(9, 14, 0, 2),
+            Err(SourceColorParseError::InvalidCicp)
+        );
     }
 
     #[test]

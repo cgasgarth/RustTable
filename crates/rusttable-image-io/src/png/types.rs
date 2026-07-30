@@ -254,6 +254,36 @@ pub struct PngPhysicalResolution {
     pub unit_is_meter: bool,
 }
 
+/// Color encoding declaration from the PNG cICP chunk.
+///
+/// The native PNG loader gives a valid RGB/full-range cICP declaration
+/// precedence over an embedded ICC profile. Unsupported combinations remain
+/// available as raw metadata so a later color-management seam can make the
+/// same decision without guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PngCicp {
+    pub color_primaries: u8,
+    pub transfer_characteristics: u8,
+    pub matrix_coefficients: u8,
+    pub full_range: u8,
+}
+
+impl PngCicp {
+    #[must_use]
+    pub const fn color_encoding(self) -> Option<rusttable_image::ColorEncoding> {
+        if self.matrix_coefficients != 0 || self.full_range != 1 {
+            return None;
+        }
+        match (self.color_primaries, self.transfer_characteristics) {
+            (1, 13) => Some(rusttable_image::ColorEncoding::SrgbD65),
+            (1, 8) => Some(rusttable_image::ColorEncoding::LinearSrgbD65),
+            (9, 8) => Some(rusttable_image::ColorEncoding::LinearRec2020D65),
+            (12, 13) => Some(rusttable_image::ColorEncoding::DisplayP3D65),
+            _ => None,
+        }
+    }
+}
+
 /// ICC profile inventory; bytes are content-addressed and never interpreted for conversion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PngProfileInventory {
@@ -269,6 +299,7 @@ pub struct PngMetadataInventory {
     pub exif_bytes: u64,
     pub exif_sha256: Option<[u8; 32]>,
     pub xmp_chunks: u32,
+    pub cicp: Option<PngCicp>,
     pub icc_profile: Option<PngProfileInventory>,
     pub srgb_intent: Option<u8>,
     pub gamma: Option<u32>,
@@ -529,6 +560,7 @@ pub struct PngDecodeReceipt {
     pub chunk_count: u32,
     pub decompressed_bytes: u64,
     pub animation: Option<PngAnimation>,
+    pub mode: PngDecodeMode,
     pub header_only: bool,
 }
 
