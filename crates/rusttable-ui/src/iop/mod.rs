@@ -8,6 +8,7 @@ pub(crate) mod controls;
 pub mod crop;
 pub(crate) mod exposure;
 pub(crate) mod modules;
+pub mod soften;
 pub mod velvia;
 pub mod vibrance;
 

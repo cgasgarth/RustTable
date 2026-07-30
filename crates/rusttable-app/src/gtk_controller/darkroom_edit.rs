@@ -12,10 +12,11 @@ use rusttable_ui::iop::bloom::{BLOOM_MODULE_ID, BloomEditorState, BloomGtkState}
 use rusttable_ui::iop::colorcorrection::{COLORCORRECTION_MODULE_ID, ColorCorrectionGridState};
 use rusttable_ui::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID;
 use rusttable_ui::iop::colorzones::{COLORZONES_MODULE_ID, ColorZonesGtkState};
+use rusttable_ui::iop::soften::{SOFTEN_MODULE_ID, SoftenEditorState, SoftenGtkState};
 use rusttable_ui::presentation::{DarkroomControlKind, DarkroomControlValue};
 use rusttable_ui::{
-    DarkroomModuleAction, DarkroomModuleError, DarkroomModuleViewModel, DarkroomModulesViewModel,
-    reference_modules,
+    DarkroomModuleAction, DarkroomModuleAvailability, DarkroomModuleError, DarkroomModuleViewModel,
+    DarkroomModulesViewModel, reference_modules,
 };
 
 use rusttable_core::{PhotoId, Revision};
@@ -466,6 +467,62 @@ fn project_edit_with_preferences(
             }
             continue;
         }
+        if template.id() == SOFTEN_MODULE_ID {
+            let operations = edit
+                .operations()
+                .filter(|operation| operation_matches_module(operation, SOFTEN_MODULE_ID))
+                .collect::<Vec<_>>();
+            if operations.is_empty() {
+                let state = SoftenGtkState::new(
+                    materialized_operation_id(edit, "rusttable.soften"),
+                    edit.revision(),
+                    SoftenEditorState::default(),
+                    false,
+                    template.availability().is_supported(),
+                    true,
+                );
+                projected.push(template.with_soften_editor_state(state));
+                continue;
+            }
+            // The native Soften descriptor is not multi-instance. Preserve any
+            // imported extra rows as unavailable opaque rows instead of making
+            // them look like editable instances or dropping their identity.
+            let instance_count = operations.len();
+            for (instance_sequence, operation) in operations.into_iter().enumerate() {
+                let module = template.clone().with_operation_instance(
+                    operation.id(),
+                    instance_sequence,
+                    instance_count,
+                );
+                if instance_sequence != 0 {
+                    projected.push(opaque_pending_soften_module(
+                        module,
+                        operation,
+                        edit.revision(),
+                    ));
+                    continue;
+                }
+                let Ok(parameters) = soften_parameters(operation) else {
+                    projected.push(opaque_pending_soften_module(
+                        module,
+                        operation,
+                        edit.revision(),
+                    ));
+                    continue;
+                };
+                let state = SoftenGtkState::new(
+                    operation.id(),
+                    edit.revision(),
+                    SoftenEditorState::new(parameters)
+                        .map_err(|error| persistence_error(error.to_string()))?,
+                    operation.is_enabled() && template.availability().is_supported(),
+                    template.availability().is_supported(),
+                    false,
+                );
+                projected.push(module.with_soften_editor_state(state));
+            }
+            continue;
+        }
         if template.id() == COLORRECONSTRUCTION_MODULE_ID {
             let operations = edit
                 .operations()
@@ -613,6 +670,52 @@ fn bloom_parameters(
             config.strength(),
         ),
     )
+}
+
+fn soften_parameters(
+    operation: &Operation,
+) -> Result<rusttable_processing::operations::soften::SoftenParametersV1, DarkroomModuleError> {
+    let compiled = rusttable_processing::ProcessingOperation::compile(operation)
+        .map_err(|error| persistence_error(error.to_string()))?;
+    let rusttable_processing::ProcessingOperationKind::Soften { config } = compiled.kind() else {
+        return Err(persistence_error(
+            "Soften operation compiled to a different kind",
+        ));
+    };
+    Ok(
+        rusttable_processing::operations::soften::SoftenParametersV1::new(
+            config.size(),
+            config.saturation(),
+            config.brightness(),
+            config.amount(),
+        ),
+    )
+}
+
+fn opaque_pending_soften_module(
+    module: DarkroomModuleViewModel,
+    operation: &Operation,
+    revision: Revision,
+) -> DarkroomModuleViewModel {
+    let module = module.with_soften_custom_editor();
+    let module = match soften_parameters(operation)
+        .ok()
+        .and_then(|parameters| SoftenEditorState::new(parameters).ok())
+    {
+        Some(editor) => module.with_soften_editor_state(SoftenGtkState::new(
+            operation.id(),
+            revision,
+            editor,
+            operation.is_enabled(),
+            false,
+            false,
+        )),
+        None => module,
+    };
+    module.with_availability(DarkroomModuleAvailability::Unsupported {
+        reason: "blend, mask, or multi-instance Soften history remains opaque and pending"
+            .to_owned(),
+    })
 }
 
 fn resolve_action_target(
@@ -1068,7 +1171,7 @@ fn rewrite_target_operation(
         DarkroomModuleAction::ColorCorrectionGrid { .. }
         | DarkroomModuleAction::ColorCorrectionResetParameters { .. }
         | DarkroomModuleAction::Control { .. }
-            if module.id() == COLORCORRECTION_MODULE_ID =>
+            if module.id() == COLORCORRECTION_MODULE_ID || module.id() == SOFTEN_MODULE_ID =>
         {
             module.enabled()
         }
@@ -1085,6 +1188,32 @@ fn rewrite_target_operation(
         .parameters()
         .map(|(name, value)| (name.clone(), value.clone()))
         .collect::<Vec<_>>();
+    if module.id() == SOFTEN_MODULE_ID {
+        let Some(state) = module.soften_editor_state() else {
+            return Err(persistence_error(
+                "Soften module has no source-shaped editor state",
+            ));
+        };
+        for (name, replacement) in [
+            ("size", state.editor().size()),
+            ("saturation", state.editor().saturation()),
+            ("brightness", state.editor().brightness()),
+            ("amount", state.editor().amount()),
+        ] {
+            let Some((_, value)) = parameters
+                .iter_mut()
+                .find(|(parameter, _)| parameter.as_str() == name)
+            else {
+                return Err(persistence_error(format!(
+                    "Soften operation is missing {name}"
+                )));
+            };
+            *value =
+                ParameterValue::Scalar(FiniteF64::new(f64::from(replacement)).map_err(|_| {
+                    persistence_error(format!("Soften parameter {name} must be finite"))
+                })?);
+        }
+    }
     for control in module.controls().controls() {
         let Some((_, value)) = parameters.iter_mut().find(|(name, _)| {
             control_parameter_id(module.id(), name.as_str()) == control.id().as_str()

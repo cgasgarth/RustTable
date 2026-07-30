@@ -42,7 +42,7 @@ pub fn bloom_descriptor() -> OperationDescriptor {
 
 #[must_use]
 pub fn soften_descriptor() -> OperationDescriptor {
-    effect_descriptor(
+    let mut descriptor = effect_descriptor(
         "soften",
         "rusttable.soften",
         vec![
@@ -54,8 +54,31 @@ pub fn soften_descriptor() -> OperationDescriptor {
         "operation.soften",
         "soften",
         "display-linear",
-        rgb_effect_io(),
-    )
+        soften_effect_io(),
+    );
+    // src/iop/soften.c advertises style inclusion, blending, and the native
+    // neighborhood tiling callback. It is not a full-image analysis module.
+    descriptor.flags = OperationFlags::STYLE_ELIGIBLE
+        .insert(OperationFlags::HISTORY_VISIBLE)
+        .insert(OperationFlags::TILEABLE)
+        .insert(OperationFlags::DETERMINISTIC_CPU)
+        .insert(OperationFlags::MASKS)
+        .insert(OperationFlags::BLENDING);
+    descriptor.roi = RoiKind::Neighborhood;
+    descriptor.tiling = TilingContract {
+        // The exact overlap is committed-parameter and scale dependent; the
+        // pixelpipe asks ProcessingOperation for the resolved value.
+        overlap_pixels: 0,
+        alignment_pixels: 1,
+        minimum_tile_edge: 1,
+        preferred_tile_edge: 256,
+        temporary_multiplier_milli: 2100,
+        input_multiplier_milli: 1000,
+        output_multiplier_milli: 1000,
+    };
+    descriptor.mask_blend.consumes_mask = true;
+    descriptor.mask_blend.analysis = false;
+    descriptor
 }
 
 fn effect_descriptor(
@@ -148,10 +171,10 @@ fn scalar_with_unit(
     }
 }
 
-fn rgb_effect_io() -> InputOutputContract {
+fn soften_effect_io() -> InputOutputContract {
     let image = ImagePredicate {
-        channels: 3,
-        alpha: AlphaPolicy::Preserve,
+        channels: 4,
+        alpha: AlphaPolicy::Replace,
         encodings: vec![ColorEncoding::LinearSrgbD65],
         nonfinite: NonFinitePolicy::Reject,
     };

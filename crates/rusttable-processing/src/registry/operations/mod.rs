@@ -1034,15 +1034,20 @@ pub fn bloom_definition() -> OperationDefinition {
 }
 
 pub fn soften_definition() -> OperationDefinition {
-    full_image_definition(
+    geometry_definition(
         soften_descriptor(),
         prepare_soften,
         &[
             "iop.soften.params.v1",
             "iop.soften.cpu",
             "iop.soften.convolution",
-            "iop.soften.alpha-preserve",
+            "iop.soften.roi-scale",
+            "iop.soften.alpha-blend",
+            "iop.soften.gpu-unavailable",
+            "iop.soften.import-pending-blend-mask-instance",
         ],
+        RoiKind::Neighborhood,
+        std::iter::empty(),
     )
 }
 

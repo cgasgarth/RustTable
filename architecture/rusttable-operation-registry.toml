@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "c86c3f08684106850aa35bc7603a0b8394b199a96097502a709493d5b07f8819"
+snapshot_hash = "e67f6d2078c3117810be56bbd1a673a36e4818ae2badcad4d8956c3e4c9981d1"
 
 [[operation]]
 rust_id = "rusttable.ashift"

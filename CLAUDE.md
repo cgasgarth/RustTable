@@ -95,13 +95,13 @@ Do not build a separate automation framework or survey external UI-driving ecosy
 
 ## Model-aware workflows
 
-Use workflows to advance one dependency-ready milestone at a time while keeping shared-file ownership explicit. One active PR constrains delivery, not implementation concurrency: use the canonical checkout for integration and delivery, up to three temporary worker worktrees for independent batches, then converge through one integration owner.
+Use workflows to advance one dependency-ready milestone at a time while keeping shared-file ownership explicit. One active PR constrains delivery, not implementation concurrency: use the canonical checkout for integration and delivery, and fan out as many temporary worker worktrees/workflows as independent ownership and host capacity support, then converge through one integration owner.
 
 - Before implementation fan-out, produce a source-responsibility inventory covering native functions and constants, Rust callers, ownership/lifetime boundaries, behavior-preserving tests, writable file ownership, and explicit deferred responsibilities.
 - Run source/caller/test research in parallel by responsibility.
-- Parallelize non-overlapping leaf modules, focused tests/contracts, GPU work, UI/editor work, and compiler-diagnostic repair batches where dependencies permit; use the three-worktree cap rather than serializing independent work.
+- Parallelize non-overlapping leaf modules, focused tests/contracts, GPU work, UI/editor work, app/persistence, catalog/import, render/export, pixelpipe infrastructure, and compiler-diagnostic repair batches wherever dependencies permit; do not impose an artificial worktree cap when ownership and host capacity allow more workers.
 - Keep implementation and adversarial verification context-independent: reviewers inspect source evidence and the actual worktree/diff, try to refute behavioral equivalence, and do not inherit the implementer's rationale as fact.
-- Treat compiler diagnostics as a refreshed integration work queue. The orchestrator captures a fresh focused diagnostic snapshot in the canonical checkout, partitions errors by exclusive crate/file ownership, dispatches at most three worker worktrees, and refreshes diagnostics after each mutation batch before assigning the next queue. Never assign agents from stale diagnostics.
+- Treat compiler diagnostics as a refreshed integration work queue. The orchestrator captures a fresh focused diagnostic snapshot in the canonical checkout, partitions errors by exclusive crate/file ownership, dispatches one worker per non-overlapping queue item subject only to available worker capacity, and refreshes diagnostics after each mutation batch before assigning the next queue. Never assign agents from stale diagnostics.
 - Use Luna at medium effort for source research and independent constant/format/order verification.
 - Use Luna at xhigh effort for well-scoped, mechanical implementations and focused tests.
 - Use Luna at medium effort for targeted adversarial review passes. Review only the changed responsibility and explicit acceptance boundaries; return concise findings rather than broad audits or review panels.

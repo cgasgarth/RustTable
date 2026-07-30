@@ -5,6 +5,6 @@ mod history;
 pub use history::{
     DarktableHistoryDecodeFinding, DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode,
     DecodedColorContrastHistoryStep, DecodedColorCorrectionHistoryStep,
-    DecodedColorZonesHistoryStep, DecodedSharpenHistoryStep, DecodedVelviaHistoryStep,
-    DecodedVibranceHistoryStep, decode_history_step,
+    DecodedColorZonesHistoryStep, DecodedSharpenHistoryStep, DecodedSoftenHistoryStep,
+    DecodedVelviaHistoryStep, DecodedVibranceHistoryStep, decode_history_step,
 };
