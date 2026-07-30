@@ -1,0 +1,22 @@
+schema_version = 3
+composition_root = "app"
+
+[[packages]]
+name = "app"
+manifest = "crates/app/Cargo.toml"
+role = "composition-root"
+integration_owner = "app"
+
+[[packages]]
+name = "core"
+manifest = "crates/core/Cargo.toml"
+role = "tooling"
+integration_owner = "core"
+
+[[edges]]
+from = "app"
+to = "core"
+
+[[edges]]
+from = "core"
+to = "app"

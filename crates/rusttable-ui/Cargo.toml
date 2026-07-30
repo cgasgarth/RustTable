@@ -1,0 +1,80 @@
+[package]
+name = "rusttable-ui"
+description = "GTK4 UI components and presentation models for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+gtk4.workspace = true
+rusttable-color.workspace = true
+rusttable-camera.workspace = true
+rusttable-i18n.workspace = true
+rusttable-display-profile.workspace = true
+rusttable-core.workspace = true
+rusttable-input.workspace = true
+rusttable-processing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+glib-build-tools.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2.workspace = true
+objc2-app-kit.workspace = true
+
+[[test]]
+name = "exposure_gtk_boundary"
+path = "tests/exposure_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "darkroom_left_rail_smoke"
+path = "tests/darkroom_left_rail_smoke.rs"
+harness = false
+
+[[test]]
+name = "bauhaus_slider_input_gtk_boundary"
+path = "tests/bauhaus_slider_input_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "neural_restore_strength_gtk_boundary"
+path = "tests/neural_restore_strength_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "velvia_gtk_boundary"
+path = "tests/velvia_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "colorcontrast_gtk_boundary"
+path = "tests/colorcontrast_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "colorcorrection_gtk_boundary"
+path = "tests/colorcorrection_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "colorzones_gtk_boundary"
+path = "tests/colorzones_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "bloom_gtk_boundary"
+path = "tests/bloom_gtk_boundary.rs"
+harness = false
+
+[[test]]
+name = "vibrance_gtk_boundary"
+path = "tests/vibrance_gtk_boundary.rs"
+harness = false
+
+[lints]
+workspace = true

@@ -1,0 +1,36 @@
+version = 1
+issue = 233
+reference_repository = "darktable-org/darktable"
+reference_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+rust_owner = "rusttable-image-io::raw"
+policy = "safe Rust and rawler only; preserve responsibilities without copying, compiling, linking, or invoking darktable/RawSpeed/LibRaw code"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio.c"
+responsibility = "signature registry, specific-before-generic loader ordering, and terminal failure precedence"
+rust_path = "crates/rusttable-image-io/src/raw/probe.rs"
+rust_symbol = "RawContainerRegistry"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_rawspeed.cc"
+responsibility = "camera capability lookup and sensor sample/metadata publication"
+rust_path = "crates/rusttable-image-io/src/raw/adapter.rs"
+rust_symbol = "RawlerRawDecoder"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_libraw.c"
+responsibility = "explicit unsupported camera, compression, and layout outcomes"
+rust_path = "crates/rusttable-image-io/src/raw/types.rs"
+rust_symbol = "RawCapabilityError"
+
+[[mapping]]
+upstream_path = "src/imageio/imageio_dng.c"
+responsibility = "DNG active/crop/masked areas, levels, matrices, white balance, and opcode evidence"
+rust_path = "crates/rusttable-image-io/src/raw/adapter.rs"
+rust_symbol = "convert_frame"
+
+[[mapping]]
+upstream_path = "src/common/image.h"
+responsibility = "owned orientation, camera identity, crop, CFA, level, and color facts consumed downstream"
+rust_path = "crates/rusttable-image-io/src/raw/types.rs"
+rust_symbol = "RawFrame"

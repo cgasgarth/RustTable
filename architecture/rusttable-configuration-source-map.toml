@@ -1,0 +1,47 @@
+schema = "rusttable.configuration-source-map.v1"
+issue = 179
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+
+[[entry]]
+id = "typed-accessor-contract"
+upstream_path = "src/control/conf.h"
+upstream_symbol = "dt_conf_get_bool"
+rust_path = "crates/rusttable-core/src/config/model.rs"
+status = "redesigned"
+
+[[entry]]
+id = "configuration-initialization"
+upstream_path = "src/control/conf.c"
+upstream_symbol = "dt_conf_init"
+rust_path = "crates/rusttable-core/src/config/service.rs"
+status = "redesigned"
+
+[[entry]]
+id = "configuration-default-inventory"
+upstream_path = "data/darktableconfig.xml.in"
+upstream_symbol = "processing/opencl sections"
+rust_path = "crates/rusttable-core/src/config/model.rs"
+status = "redesigned"
+
+[[entry]]
+id = "configuration-path"
+upstream_path = "src/common/file_location.c"
+upstream_symbol = "dt_loc_get_user_config_dir"
+rust_path = "crates/rusttable-app/src/configuration/mod.rs"
+status = "redesigned"
+
+[[entry]]
+id = "resource-limits"
+upstream_path = "src/common/resource_limits.c"
+upstream_symbol = "dt_set_rlimits"
+rust_path = "crates/rusttable-core/src/config/service.rs"
+status = "excluded"
+reason = "RustTable resolves typed limits; process-global native limits are not configuration state."
+
+[[entry]]
+id = "gpu-initialization"
+upstream_path = "src/common/opencl.c"
+upstream_symbol = "dt_opencl_init"
+rust_path = "crates/rusttable-core/src/config/service.rs"
+status = "redesigned"

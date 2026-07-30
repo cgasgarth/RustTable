@@ -1,0 +1,2 @@
+scenario = "git-submodule"
+expected = "immutable git source is vendored as one locked package"

@@ -1,0 +1,2 @@
+scenario = "path-dependency-escape"
+expected = "workspace metadata remains inside the repository"

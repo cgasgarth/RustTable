@@ -1,0 +1,6 @@
+[build]
+# Keep Cargo's host-detected parallelism; do not set a fixed `build.jobs` cap.
+warnings = "deny"
+
+[alias]
+xtask = "run --quiet --package xtask --"

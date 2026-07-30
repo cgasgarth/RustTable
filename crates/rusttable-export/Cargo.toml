@@ -1,0 +1,37 @@
+[package]
+name = "rusttable-export"
+description = "Deterministic logical export artifact planning for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+avif-parse = "=2.1.0"
+exr.workspace = true
+mozjpeg-rs.workspace = true
+flate2.workspace = true
+pdf-writer.workspace = true
+postcard.workspace = true
+png.workspace = true
+redb.workspace = true
+rusttable-color.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+rusttable-image-io.workspace = true
+rusttable-import.workspace = true
+rusttable-metadata.workspace = true
+rusttable-render.workspace = true
+rusttable-jxl-native.workspace = true
+rusttable-jpeg2000-native.workspace = true
+rusttable-avif-native.workspace = true
+rusttable-heif-native.workspace = true
+rusttable-webp-native.workspace = true
+rusttable-pixelpipe.workspace = true
+sha2.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+tiff.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "rusttable-catalog-store"
+description = "Transactional embedded persistence adapter for RustTable import records."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+postcard.workspace = true
+redb.workspace = true
+sha2.workspace = true
+rusttable-catalog.workspace = true
+rusttable-core.workspace = true
+rusttable-export.workspace = true
+rusttable-image.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

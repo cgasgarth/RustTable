@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:RDF>
+    <rdf:Description
+        xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"
+        xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
+        xmlns:vendor="urn:example:vendor">
+      <dc:title><rdf:Alt>
+        <rdf:li xml:lang="x-default">A title</rdf:li>
+        <rdf:li xml:lang="fr-FR">Un titre</rdf:li>
+      </rdf:Alt></dc:title>
+      <dc:subject><rdf:Bag><rdf:li>rust</rdf:li><rdf:li>metadata</rdf:li></rdf:Bag></dc:subject>
+      <dc:creator><rdf:Seq><rdf:li>Ada Lovelace</rdf:li></rdf:Seq></dc:creator>
+      <photoshop:Rating>5</photoshop:Rating>
+      <lr:hierarchicalSubject><rdf:Bag><rdf:li>Places|Chicago</rdf:li></rdf:Bag></lr:hierarchicalSubject>
+      <vendor:opaque vendor:qualifier="kept">value</vendor:opaque>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>

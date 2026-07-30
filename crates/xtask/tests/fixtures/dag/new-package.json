@@ -1,0 +1,9 @@
+{
+  "workspace_root": ".",
+  "workspace_members": ["app-id", "extra-id"],
+  "packages": [
+    {"name":"app","id":"app-id","manifest_path":"crates/app/Cargo.toml","dependencies":[],"features":{}},
+    {"name":"extra","id":"extra-id","manifest_path":"crates/extra/Cargo.toml","dependencies":[],"features":{}}
+  ],
+  "resolve":{"nodes":[{"id":"app-id","deps":[]},{"id":"extra-id","deps":[]}]}
+}

@@ -1,0 +1,35 @@
+[package]
+name = "rusttable-image-io"
+description = "Bounded pure-Rust JPEG, JPEG XL, PNG, TIFF, BigTIFF, WebP, and OpenEXR file input/output for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+exr.workspace = true
+flate2.workspace = true
+half.workspace = true
+image.workspace = true
+image-webp.workspace = true
+jpeg-decoder.workspace = true
+jxl-oxide.workspace = true
+png.workspace = true
+postcard.workspace = true
+resvg.workspace = true
+rawler.workspace = true
+rusttable-color.workspace = true
+rusttable-image.workspace = true
+rusttable-metadata.workspace = true
+sha2.workspace = true
+tiff.workspace = true
+serde.workspace = true
+toml.workspace = true
+usvg.workspace = true
+
+[dev-dependencies]
+rusttable-testkit.workspace = true
+tiff.workspace = true
+
+[lints]
+workspace = true

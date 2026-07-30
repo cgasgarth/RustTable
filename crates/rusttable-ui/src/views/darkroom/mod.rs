@@ -1,0 +1,1097 @@
+//! Darktable-shaped GTK4 darkroom composition.
+
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use gtk4::prelude::*;
+use rusttable_core::{PhotoId, Revision};
+use rusttable_display_profile::{DisplayProfileReceipt, DisplayProfileSnapshot};
+
+use crate::iop::colorzones::{ColorZonesGtkActionHandler, ColorZonesGtkPreferencesHandler};
+use crate::iop::modules::{
+    DarkroomCustomEditorMounts, DarkroomModuleActionHandler, DarkroomModuleGroup,
+    DarkroomModuleViewModel, DarkroomModulesViewModel, reference_modules,
+};
+mod interaction;
+mod panel_widgets;
+pub(crate) mod status;
+mod surfaces;
+mod viewport;
+pub(super) use crate::gui::{DARKROOM_GEOMETRY, ThemeRole, apply_theme_role};
+use crate::iop::exposure::ExposurePanel;
+use crate::libs::histogram::{HistogramData, HistogramError, HistogramSample};
+use crate::presentation::{
+    DarkroomControlValue, DarkroomHistoryViewModel, DarkroomPanelActionHandler,
+    DarkroomPanelProjection, DarkroomPanelTarget, DarkroomSnapshotsViewModel, PhotoDetailViewModel,
+    Rgba8PreviewMetadata,
+};
+use crate::raw_denoise::{RawDenoiseAction, RawDenoisePanel, RawDenoiseViewModel};
+use crate::rgb_denoise::{RgbDenoiseAction, RgbDenoisePanel, RgbDenoiseViewModel};
+use crate::viewport_presentation::{
+    DarkroomViewportCommand, DarkroomViewportState, ViewportGeneration,
+};
+use crate::widgets::preview::PhotoPreview;
+use crate::{MaskManagerAction, MaskManagerPanel, MaskManagerSnapshot};
+use crate::{MultiscaleRetouchAction, MultiscaleRetouchPanel, MultiscaleRetouchSnapshot};
+use interaction::{
+    FilmstripState, HistogramView, install_filmstrip_keyboard, sync_filmstrip_buttons,
+};
+use panel_widgets::{ImplementedModulePanel, left_panel, render_typed_modules_into, right_panel};
+use status::DarkroomStatusSurface;
+pub(super) use viewport::chrome_toggle;
+use viewport::{ViewportControls, darkroom_page, sync_viewport_controls};
+
+use crate::libs::profiles::diagnostics::{
+    ProfileDiagnosticRequest, ProfileDiagnosticSurface, project_profile_diagnostic,
+};
+
+/// Stable widget identifiers for the initial darkroom surface.
+pub const DARKROOM_WIDGET_IDS: [&str; 25] = [
+    "darkroom-page",
+    "darkroom-toolbar-top",
+    "darkroom-photo-preview",
+    "darkroom-toolbar-bottom",
+    "darkroom-left-panel",
+    "darkroom-navigation",
+    "darkroom-snapshots",
+    "darkroom-snapshots-actions",
+    "darkroom-history",
+    "darkroom-history-actions",
+    "darkroom-image-information",
+    "darkroom-image-information-actions",
+    "darkroom-right-panel",
+    "darkroom-histogram",
+    "darkroom-module-groups",
+    "darkroom-module-search",
+    "darkroom-left-module-scroll",
+    "darkroom-right-module-scroll",
+    "darkroom-right-modules",
+    "exposure",
+    "darkroom-left-panel-toggle",
+    "darkroom-right-panel-toggle",
+    "darkroom-filmstrip-toggle",
+    "darkroom-status-bar",
+    "darkroom-job-status",
+];
+
+/// Focus order for layout controls that collapse darkroom regions in place.
+pub const DARKROOM_LAYOUT_FOCUS_ORDER: [&str; 3] = [
+    "darkroom-left-panel-toggle",
+    "darkroom-right-panel-toggle",
+    "darkroom-filmstrip-toggle",
+];
+
+/// Side and bottom regions that can be collapsed without changing the selected edit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DarkroomPanelVisibility {
+    Left,
+    Right,
+    Filmstrip,
+}
+
+/// Typed layout intent emitted by the darkroom chrome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DarkroomPanelVisibilityAction {
+    panel: DarkroomPanelVisibility,
+    visible: bool,
+}
+
+impl DarkroomPanelVisibilityAction {
+    #[must_use]
+    pub const fn new(panel: DarkroomPanelVisibility, visible: bool) -> Self {
+        Self { panel, visible }
+    }
+
+    #[must_use]
+    pub const fn panel(self) -> DarkroomPanelVisibility {
+        self.panel
+    }
+
+    #[must_use]
+    pub const fn visible(self) -> bool {
+        self.visible
+    }
+}
+
+/// Stable left-to-right focus order for the darkroom rail controls.
+pub const DARKROOM_RAIL_FOCUS_ORDER: [&str; 15] = [
+    "darkroom-navigation",
+    "darkroom-image-information",
+    "darkroom-history",
+    "darkroom-snapshots",
+    "darkroom-module-search",
+    "group-active",
+    "group-favorites",
+    "group-basic",
+    "group-tone",
+    "group-color",
+    "group-correct",
+    "group-effects",
+    "group-grading",
+    "group-technical",
+    "group-deprecated",
+];
+
+/// Stable identifiers for the searchable, grouped module-stack controls.
+pub const DARKROOM_MODULE_WIDGET_IDS: [&str; 9] = [
+    "darkroom-module-search",
+    "group-active",
+    "group-favorites",
+    "group-technical",
+    "group-grading",
+    "group-deprecated",
+    "exposure-presets",
+    "exposure-reset",
+    "exposure-multi",
+];
+
+type DarkroomModuleGroupHandler = Box<dyn Fn(DarkroomModuleGroup)>;
+pub(super) type DarkroomPanelVisibilityHandler = Box<dyn Fn(DarkroomPanelVisibilityAction)>;
+type DarkroomFilmstripHandler = Box<dyn Fn(PhotoId, ViewportGeneration)>;
+
+/// Stable identifiers for the darkroom viewport controls and filmstrip boundary.
+pub const DARKROOM_VIEWPORT_WIDGET_IDS: [&str; 14] = [
+    "darkroom-viewport",
+    "darkroom-soft-proof",
+    "darkroom-gamut-check",
+    "darkroom-zoom",
+    "darkroom-fit",
+    "darkroom-before-after",
+    "darkroom-viewport-projection",
+    "darkroom-viewport-overlay",
+    "darkroom-overlay-before",
+    "darkroom-overlay-soft-proof",
+    "darkroom-overlay-gamut",
+    "darkroom-overlay-histogram-sample",
+    "darkroom-filmstrip-boundary",
+    "darkroom-image-canvas",
+];
+
+/// Focus order for all controls introduced by the darkroom viewport batch.
+pub const DARKROOM_VIEWPORT_FOCUS_ORDER: [&str; 4] = [
+    "darkroom-soft-proof",
+    "darkroom-gamut-check",
+    "darkroom-zoom",
+    "darkroom-before-after",
+];
+
+/// Application-owned receiver for viewport commands. The orchestrator supplies the renderer or
+/// controller; the GTK view only emits typed, generation-tagged intent.
+pub type DarkroomViewportActionHandler = Box<dyn Fn(DarkroomViewportCommand)>;
+
+/// Native GTK widgets owned by the darkroom view.
+#[derive(Clone)]
+pub struct DarkroomView {
+    page: gtk4::Box,
+    preview: PhotoPreview,
+    viewport_state: Rc<RefCell<DarkroomViewportState>>,
+    viewport_controls: ViewportControls,
+    viewport_handler: Rc<RefCell<Option<DarkroomViewportActionHandler>>>,
+    left_panel: gtk4::Box,
+    left_modules: gtk4::Box,
+    right_panel: gtk4::Box,
+    right_modules: gtk4::Box,
+    exposure: ExposurePanel,
+    rgb_denoise: RgbDenoisePanel,
+    raw_denoise: RawDenoisePanel,
+    mask_manager: MaskManagerPanel,
+    multiscale_retouch: MultiscaleRetouchPanel,
+    implemented_modules: Vec<ImplementedModulePanel>,
+    rail_status: DarkroomRailStatus,
+    histogram: HistogramView,
+    histogram_generation: Rc<Cell<Option<ViewportGeneration>>>,
+    module_search: gtk4::SearchEntry,
+    module_group: Rc<Cell<DarkroomModuleGroup>>,
+    module_group_handler: Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
+    typed_modules: Rc<RefCell<Option<DarkroomModulesViewModel>>>,
+    module_revision: Rc<RefCell<Revision>>,
+    module_action_handler: Rc<RefCell<Option<DarkroomModuleActionHandler>>>,
+    custom_editor_mounts: DarkroomCustomEditorMounts,
+    filmstrip_state: Rc<RefCell<FilmstripState>>,
+    filmstrip_handler: Rc<RefCell<Option<DarkroomFilmstripHandler>>>,
+    filmstrip_widget: Rc<RefCell<Option<gtk4::FlowBox>>>,
+    filmstrip_keyboard_installed: Rc<Cell<bool>>,
+    profile_diagnostic: ProfileDiagnosticSurface,
+    status_surface: DarkroomStatusSurface,
+    left_panel_visible: Rc<Cell<bool>>,
+    right_panel_visible: Rc<Cell<bool>>,
+    filmstrip_visible: Rc<Cell<bool>>,
+    panel_visibility_handler: Rc<RefCell<Option<DarkroomPanelVisibilityHandler>>>,
+}
+
+impl DarkroomView {
+    /// Builds the initial Darktable darkroom around the immutable preview boundary.
+    #[must_use]
+    pub fn new(panel_width: i32) -> Self {
+        debug_assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.len(), 15);
+        debug_assert_eq!(DARKROOM_MODULE_WIDGET_IDS.len(), 9);
+        let preview = PhotoPreview::new();
+        let viewport_state = Rc::new(RefCell::new(DarkroomViewportState::default()));
+        let viewport_handler = Rc::new(RefCell::new(None));
+        let left_panel_visible = Rc::new(Cell::new(true));
+        let right_panel_visible = Rc::new(Cell::new(true));
+        let filmstrip_visible = Rc::new(Cell::new(true));
+        let panel_visibility_handler = Rc::new(RefCell::new(None));
+        let (page, viewport_controls, status_surface) = darkroom_page(
+            &preview,
+            &viewport_state,
+            &viewport_handler,
+            &left_panel_visible,
+            &right_panel_visible,
+            &filmstrip_visible,
+            &panel_visibility_handler,
+        );
+        let profile_diagnostic =
+            ProfileDiagnosticSurface::new("darkroom-profile-diagnostic", "Darkroom profile status");
+        status_surface.append(profile_diagnostic.widget());
+        let (left_panel, left_modules, rail_status) = left_panel(panel_width);
+        let (
+            right_panel,
+            right_modules,
+            exposure,
+            rgb_denoise,
+            raw_denoise,
+            mask_manager,
+            multiscale_retouch,
+            implemented_modules,
+            histogram,
+            module_search,
+            module_group,
+            module_group_handler,
+        ) = right_panel(panel_width);
+        let histogram = HistogramView::new(histogram);
+        let histogram_generation = Rc::new(Cell::new(None));
+        let typed_modules = Rc::new(RefCell::new(reference_modules().ok()));
+        let module_revision = Rc::new(RefCell::new(Revision::ZERO));
+        let module_action_handler = Rc::new(RefCell::new(None));
+        let custom_editor_mounts = DarkroomCustomEditorMounts::default();
+        let filmstrip_state = Rc::new(RefCell::new(FilmstripState::default()));
+        let filmstrip_handler = Rc::new(RefCell::new(None));
+        let filmstrip_widget = Rc::new(RefCell::new(None));
+        let filmstrip_keyboard_installed = Rc::new(Cell::new(false));
+        let view = Self {
+            page,
+            preview,
+            viewport_state,
+            viewport_controls,
+            viewport_handler,
+            left_panel,
+            left_modules,
+            right_panel,
+            right_modules,
+            exposure,
+            rgb_denoise,
+            raw_denoise,
+            mask_manager,
+            multiscale_retouch,
+            implemented_modules,
+            rail_status,
+            histogram,
+            histogram_generation,
+            module_search,
+            module_group,
+            module_group_handler,
+            typed_modules,
+            module_revision,
+            module_action_handler,
+            custom_editor_mounts,
+            filmstrip_state,
+            filmstrip_handler,
+            filmstrip_widget,
+            filmstrip_keyboard_installed,
+            profile_diagnostic,
+            status_surface,
+            left_panel_visible,
+            right_panel_visible,
+            filmstrip_visible,
+            panel_visibility_handler,
+        };
+        let overlay_controls = view.viewport_controls.clone();
+        view.histogram.connect_sample(move |sample| {
+            overlay_controls.set_histogram_sample(sample);
+        });
+        view.install_module_search();
+        view.render_typed_modules();
+        view
+    }
+
+    #[must_use]
+    pub fn page(&self) -> &gtk4::Box {
+        &self.page
+    }
+
+    /// Invalidates the center projection and scopes after either side rail is
+    /// resized. Darktable redraws the center from the newly allocated panel
+    /// bounds; keeping this explicit prevents a stale histogram/viewport
+    /// surface while a Paned handle is dragged.
+    pub(crate) fn refresh_geometry(&self) {
+        self.page.queue_resize();
+        self.page.queue_draw();
+        self.preview.widget().queue_resize();
+        self.preview.widget().queue_draw();
+        self.histogram.refresh_geometry();
+    }
+
+    #[must_use]
+    pub fn left_panel_visible(&self) -> bool {
+        self.left_panel_visible.get()
+    }
+
+    #[must_use]
+    pub fn right_panel_visible(&self) -> bool {
+        self.right_panel_visible.get()
+    }
+
+    #[must_use]
+    pub fn filmstrip_visible(&self) -> bool {
+        self.filmstrip_visible.get()
+    }
+
+    /// Connects darkroom-local panel toggles to the shell's layout owner.
+    pub fn connect_panel_visibility<F>(&self, handler: F)
+    where
+        F: Fn(DarkroomPanelVisibilityAction) + 'static,
+    {
+        self.panel_visibility_handler
+            .replace(Some(Box::new(handler)));
+    }
+
+    pub(crate) fn set_panel_visibility(&self, panel: DarkroomPanelVisibility, visible: bool) {
+        self.viewport_controls.set_panel_visible(panel, visible);
+    }
+
+    /// Projects the selected edit into the darkroom status row.
+    pub fn set_status(&self, text: &str) {
+        self.status_surface.set_status(text);
+    }
+
+    /// Projects an existing export/background-job status without owning export work.
+    pub fn set_background_job_status(&self, text: &str) {
+        self.status_surface.set_job_status(text);
+    }
+
+    #[must_use]
+    pub fn preview(&self) -> &PhotoPreview {
+        &self.preview
+    }
+
+    /// Returns the current display-free viewport state.
+    #[must_use]
+    pub fn viewport_state(&self) -> DarkroomViewportState {
+        *self.viewport_state.borrow()
+    }
+
+    /// Starts a new generation for the selected catalog photo/edit projection.
+    pub fn set_viewport_selection(
+        &self,
+        photo_id: PhotoId,
+        edit_revision: Revision,
+        generation: ViewportGeneration,
+    ) {
+        self.viewport_state
+            .borrow_mut()
+            .select(photo_id, edit_revision, generation);
+        self.status_surface.set_revision(edit_revision);
+        self.filmstrip_state.borrow_mut().set_generation(generation);
+        self.histogram_generation.set(Some(generation));
+        self.histogram.loading(generation);
+        self.viewport_controls.clear_histogram_sample();
+        self.rail_status.navigation.set_loading();
+        self.sync_viewport_projection();
+    }
+
+    /// Updates the selected viewport's edit revision after the completed render is validated.
+    pub fn set_viewport_edit_revision(
+        &self,
+        edit_revision: Revision,
+        generation: ViewportGeneration,
+    ) {
+        if self
+            .viewport_state
+            .borrow_mut()
+            .set_edit_revision(edit_revision, generation)
+        {
+            self.status_surface.set_revision(edit_revision);
+            self.sync_viewport_projection();
+        }
+    }
+
+    /// Restores truthful no-photo state and resets transient viewport controls.
+    pub fn clear_viewport_selection(&self) {
+        self.viewport_state.borrow_mut().clear_selection();
+        self.filmstrip_state.borrow_mut().clear_selection();
+        self.histogram_generation.set(None);
+        self.histogram.clear();
+        self.viewport_controls.clear_histogram_sample();
+        self.rail_status.navigation.set_unavailable();
+        self.sync_viewport_projection();
+    }
+
+    /// Connects typed toolbar and navigation commands to the application orchestrator.
+    pub fn connect_viewport_action<F>(&self, handler: F)
+    where
+        F: Fn(DarkroomViewportCommand) + 'static,
+    {
+        self.viewport_handler.replace(Some(Box::new(handler)));
+    }
+
+    /// Reapplies the current projection after the orchestrator installs a new texture.
+    pub fn sync_viewport_projection(&self) {
+        sync_viewport_controls(&self.viewport_controls, &self.preview, &self.viewport_state);
+        self.rail_status
+            .navigation
+            .sync_viewport(*self.viewport_state.borrow());
+    }
+
+    /// Installs the bounded thumbnail generated alongside the selected preview.
+    ///
+    /// # Errors
+    ///
+    /// Returns a texture adaptation error if GTK cannot represent the validated thumbnail.
+    pub fn set_navigation_preview(
+        &self,
+        metadata: &Rgba8PreviewMetadata,
+    ) -> Result<(), crate::widgets::preview::PhotoPreviewTextureError> {
+        self.rail_status.navigation.set_rgba8(metadata)
+    }
+
+    pub(crate) fn set_navigation_preview_loading(&self) {
+        self.rail_status.navigation.set_loading();
+    }
+
+    pub(crate) fn set_navigation_preview_unavailable(&self) {
+        self.rail_status.navigation.set_unavailable();
+    }
+
+    pub(crate) fn set_navigation_preview_failed(&self) {
+        self.rail_status.navigation.set_failed();
+    }
+
+    /// Projects the same typed profile decision used by the header into the darkroom status row.
+    pub(crate) fn set_profile_diagnostic_state(
+        &self,
+        snapshot: Option<&DisplayProfileSnapshot>,
+        receipt: Option<DisplayProfileReceipt>,
+        request: ProfileDiagnosticRequest,
+    ) {
+        let projection = project_profile_diagnostic(snapshot, receipt, request);
+        self.profile_diagnostic.set_projection(&projection);
+    }
+
+    /// Publishes validated RGB histogram bins without coupling GTK to the pixelpipe.
+    ///
+    /// Returns `false` for malformed, non-finite, negative, mismatched, or oversized input and
+    /// leaves the visible surface in the explicit unavailable state.
+    #[must_use]
+    pub fn set_histogram(&self, red: &[f32], green: &[f32], blue: &[f32]) -> bool {
+        let state = self.viewport_state.borrow();
+        let Some(generation) = state.photo_id().map(|_| state.generation()) else {
+            self.histogram.clear();
+            return false;
+        };
+        self.set_histogram_for_generation(red, green, blue, generation)
+    }
+
+    /// Publishes histogram bins only for the currently selected viewport generation.
+    #[must_use]
+    pub fn set_histogram_for_generation(
+        &self,
+        red: &[f32],
+        green: &[f32],
+        blue: &[f32],
+        generation: ViewportGeneration,
+    ) -> bool {
+        if self.histogram_generation.get() != Some(generation) {
+            self.histogram
+                .stale(self.viewport_state.borrow().generation(), generation);
+            return false;
+        }
+        let Some(data) = HistogramData::from_rgb_bin_values(red, green, blue) else {
+            self.histogram.failure(
+                generation,
+                HistogramError::IncorrectSampleLength {
+                    expected: red.len(),
+                    actual: green.len().max(blue.len()),
+                },
+            );
+            return false;
+        };
+        self.histogram.set_data(generation, data);
+        true
+    }
+
+    /// Publishes the worker-computed histogram result for the selected preview generation.
+    #[must_use]
+    pub fn set_histogram_result(
+        &self,
+        generation: ViewportGeneration,
+        result: Result<HistogramData, HistogramError>,
+    ) -> bool {
+        if self.histogram_generation.get() != Some(generation) {
+            self.histogram
+                .stale(self.viewport_state.borrow().generation(), generation);
+            return false;
+        }
+        match result {
+            Ok(data) => self.histogram.set_data(generation, data),
+            Err(error) => self.histogram.failure(generation, error),
+        }
+        true
+    }
+
+    /// Returns the histogram sample currently selected by a click in the right rail.
+    #[must_use]
+    pub fn histogram_sample(&self) -> Option<HistogramSample> {
+        self.histogram.selected_sample()
+    }
+
+    /// Returns whether a rendered histogram is currently available for the selected preview.
+    #[must_use]
+    pub fn histogram_available(&self) -> bool {
+        self.histogram.is_ready()
+    }
+
+    /// Reconciles the filmstrip order and selected photo with a new viewport generation.
+    pub fn set_filmstrip_items(
+        &self,
+        photo_ids: impl IntoIterator<Item = PhotoId>,
+        selected: Option<PhotoId>,
+        generation: ViewportGeneration,
+    ) {
+        self.filmstrip_state
+            .borrow_mut()
+            .set_items(photo_ids, selected, generation);
+        self.sync_filmstrip_selection();
+    }
+
+    /// Returns the selected filmstrip photo, if the selection is still in the ordered strip.
+    #[must_use]
+    pub fn filmstrip_selection(&self) -> Option<PhotoId> {
+        self.filmstrip_state.borrow().selected()
+    }
+
+    /// Connects filmstrip selection to the application-owned photo/detail controller.
+    pub fn connect_filmstrip_selection<F>(&self, handler: F)
+    where
+        F: Fn(PhotoId, ViewportGeneration) + 'static,
+    {
+        self.filmstrip_handler.replace(Some(Box::new(handler)));
+    }
+
+    /// Attaches darkroom keyboard and click routing to the shell-owned filmstrip `FlowBox`.
+    ///
+    /// The existing filmstrip remains the single visual owner. This method only adds a
+    /// generation-tagged darkroom selection boundary and synchronizes its selected styling.
+    pub fn install_filmstrip_interaction(&self, filmstrip: &gtk4::FlowBox) {
+        self.filmstrip_widget.replace(Some(filmstrip.clone()));
+        let current = self.filmstrip_state.borrow();
+        let selected = current.selected();
+        let generation = current.generation();
+        drop(current);
+        self.filmstrip_state.borrow_mut().set_items(
+            interaction::filmstrip_ids(filmstrip),
+            selected,
+            generation,
+        );
+        if !self.filmstrip_keyboard_installed.replace(true) {
+            install_filmstrip_keyboard(
+                filmstrip,
+                &self.filmstrip_state,
+                &self.internal_filmstrip_handler(),
+            );
+        }
+        self.sync_filmstrip_selection();
+    }
+
+    /// Mirrors the shell-owned click route into darkroom state without adding a
+    /// second click controller to the same filmstrip buttons.
+    #[must_use]
+    pub fn select_filmstrip_photo(&self, photo_id: PhotoId) -> bool {
+        let selected = self.filmstrip_state.borrow_mut().select(photo_id).is_some();
+        if selected {
+            self.sync_filmstrip_selection();
+        }
+        selected
+    }
+
+    fn internal_filmstrip_handler(&self) -> interaction::FilmstripHandler {
+        let handler = Rc::clone(&self.filmstrip_handler);
+        let filmstrip = Rc::clone(&self.filmstrip_widget);
+        Rc::new(RefCell::new(Some(Box::new(move |selection| {
+            if let Some(filmstrip) = filmstrip.borrow().as_ref() {
+                sync_filmstrip_buttons(filmstrip, Some(selection.photo_id));
+            }
+            if let Some(handler) = handler.borrow().as_ref() {
+                handler(selection.photo_id, selection.generation);
+            }
+        }))))
+    }
+
+    fn sync_filmstrip_selection(&self) {
+        if let Some(filmstrip) = self.filmstrip_widget.borrow().as_ref() {
+            sync_filmstrip_buttons(filmstrip, self.filmstrip_selection());
+        }
+    }
+
+    #[must_use]
+    pub fn left_panel(&self) -> &gtk4::Box {
+        &self.left_panel
+    }
+
+    #[must_use]
+    pub fn left_modules(&self) -> &gtk4::Box {
+        &self.left_modules
+    }
+
+    #[must_use]
+    pub fn right_panel(&self) -> &gtk4::Box {
+        &self.right_panel
+    }
+
+    #[must_use]
+    pub fn right_modules(&self) -> &gtk4::Box {
+        &self.right_modules
+    }
+
+    /// Installs a controller-owned typed module stack in both side rails.
+    ///
+    /// The snapshot is copied so a later controller update cannot invalidate
+    /// GTK callbacks. Mounted callbacks share the current controller revision so
+    /// coalesced slider edits remain valid without replacing their live widgets.
+    pub fn set_module_stack(
+        &self,
+        modules: &DarkroomModulesViewModel,
+        action_handler: Option<DarkroomModuleActionHandler>,
+    ) {
+        self.module_revision.replace(module_stack_revision(modules));
+        self.typed_modules.replace(Some(modules.clone()));
+        if let Some(exposure) = modules.module("exposure") {
+            let exposure_ev = exposure
+                .controls()
+                .control("exposure-stops")
+                .and_then(|control| match control.value() {
+                    DarkroomControlValue::Slider(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or(0.0);
+            let black_level = exposure
+                .controls()
+                .control("exposure-black")
+                .and_then(|control| match control.value() {
+                    DarkroomControlValue::Slider(value) => Some(value),
+                    _ => None,
+                })
+                .unwrap_or(0.0);
+            let _ = self.exposure.set_module_projection(
+                exposure.revision(),
+                exposure.enabled(),
+                exposure.expanded(),
+                exposure_ev,
+                black_level,
+            );
+            self.exposure
+                .set_module_action_handler(action_handler.clone(), exposure.revision());
+        } else {
+            self.exposure
+                .set_module_action_handler(None, Revision::ZERO);
+        }
+        self.module_action_handler.replace(action_handler);
+        self.custom_editor_mounts.reconcile(modules);
+        self.render_typed_modules();
+    }
+
+    /// Installs the source-specific Color Zones persistence handler used by every
+    /// exact operation instance mounted in the production module rail.
+    pub fn set_colorzones_action_handler(&self, handler: Option<ColorZonesGtkActionHandler>) {
+        self.custom_editor_mounts.set_colorzones_handler(handler);
+    }
+
+    /// Installs the source-specific Color Zones durable presentation-state handler.
+    pub fn set_colorzones_preferences_handler(
+        &self,
+        handler: Option<ColorZonesGtkPreferencesHandler>,
+    ) {
+        self.custom_editor_mounts
+            .set_colorzones_preferences_handler(handler);
+    }
+
+    /// Reconciles a non-structural processing edit without replacing mounted controls.
+    ///
+    /// Slider callbacks already hold the changed value locally. Updating the
+    /// controller-owned snapshot and the shared edit revision keeps every live
+    /// panel current while preserving an active drag, popup, or smooth scroll.
+    pub fn update_module_stack_snapshot(
+        &self,
+        modules: &DarkroomModulesViewModel,
+        revision: Revision,
+    ) {
+        let custom_structure_changed =
+            self.typed_modules.borrow().as_ref().is_some_and(|current| {
+                custom_editor_mount_structure(current) != custom_editor_mount_structure(modules)
+            });
+        self.typed_modules.replace(Some(modules.clone()));
+        self.module_revision.replace(revision);
+        self.exposure.set_module_revision(revision);
+        self.custom_editor_mounts.reconcile(modules);
+        if custom_structure_changed {
+            // Materialization and instance lifecycle replace only common panel
+            // chrome. The retained custom leaf is reparented intact, preserving
+            // its DrawingAreas and controllers.
+            self.render_typed_modules();
+        }
+    }
+
+    /// Returns the searchable module entry for shell-level focus and tests.
+    #[must_use]
+    pub fn module_search(&self) -> &gtk4::SearchEntry {
+        &self.module_search
+    }
+
+    #[must_use]
+    pub fn exposure(&self) -> &ExposurePanel {
+        &self.exposure
+    }
+
+    #[must_use]
+    pub fn mask_manager(&self) -> &MaskManagerPanel {
+        &self.mask_manager
+    }
+
+    #[must_use]
+    pub fn multiscale_retouch(&self) -> &MultiscaleRetouchPanel {
+        &self.multiscale_retouch
+    }
+
+    pub fn set_mask_manager_state(&self, state: &MaskManagerSnapshot) {
+        self.mask_manager.set_state(state);
+    }
+
+    pub fn connect_mask_manager_action<F>(&self, handler: F)
+    where
+        F: Fn(MaskManagerAction) + 'static,
+    {
+        self.mask_manager.connect_action(handler);
+    }
+
+    pub fn set_multiscale_retouch_state(&self, state: &MultiscaleRetouchSnapshot) {
+        self.multiscale_retouch.set_state(state);
+    }
+
+    pub fn connect_multiscale_retouch_action<F>(&self, handler: F)
+    where
+        F: Fn(MultiscaleRetouchAction) + 'static,
+    {
+        self.multiscale_retouch.connect_action(handler);
+    }
+
+    pub(crate) fn module_group_state(&self) -> Rc<Cell<DarkroomModuleGroup>> {
+        Rc::clone(&self.module_group)
+    }
+
+    pub(crate) fn connect_module_group<F>(&self, handler: F)
+    where
+        F: Fn(DarkroomModuleGroup) + 'static,
+    {
+        let typed_modules = Rc::clone(&self.typed_modules);
+        let module_revision = Rc::clone(&self.module_revision);
+        let module_action_handler = Rc::clone(&self.module_action_handler);
+        let custom_editor_mounts = self.custom_editor_mounts.clone();
+        let left_modules = self.left_modules.clone();
+        let right_modules = self.right_modules.clone();
+        let implemented_modules = self.implemented_modules.clone();
+        let search = self.module_search.clone();
+        self.module_group_handler
+            .replace(Some(Box::new(move |group| {
+                render_typed_modules_into(
+                    &left_modules,
+                    &right_modules,
+                    &implemented_modules,
+                    &typed_modules,
+                    &module_action_handler,
+                    &module_revision,
+                    &custom_editor_mounts,
+                    group,
+                    search.text().as_str(),
+                );
+                handler(group);
+            })));
+    }
+
+    fn render_typed_modules(&self) {
+        render_typed_modules_into(
+            &self.left_modules,
+            &self.right_modules,
+            &self.implemented_modules,
+            &self.typed_modules,
+            &self.module_action_handler,
+            &self.module_revision,
+            &self.custom_editor_mounts,
+            self.module_group.get(),
+            self.module_search.text().as_str(),
+        );
+    }
+
+    fn install_module_search(&self) {
+        let typed_modules = Rc::clone(&self.typed_modules);
+        let module_revision = Rc::clone(&self.module_revision);
+        let module_action_handler = Rc::clone(&self.module_action_handler);
+        let custom_editor_mounts = self.custom_editor_mounts.clone();
+        let left_modules = self.left_modules.clone();
+        let right_modules = self.right_modules.clone();
+        let implemented_modules = self.implemented_modules.clone();
+        let group = Rc::clone(&self.module_group);
+        self.module_search.connect_search_changed(move |search| {
+            render_typed_modules_into(
+                &left_modules,
+                &right_modules,
+                &implemented_modules,
+                &typed_modules,
+                &module_action_handler,
+                &module_revision,
+                &custom_editor_mounts,
+                group.get(),
+                search.text().as_str(),
+            );
+        });
+    }
+
+    /// Projects RGB denoise service state into the darkroom processing rail.
+    pub fn set_rgb_denoise_state(&self, state: &RgbDenoiseViewModel) {
+        self.rgb_denoise.set_state(state);
+    }
+
+    /// Connects RGB denoise controls to the application-owned service controller.
+    pub fn connect_rgb_denoise_action<F>(&self, handler: F)
+    where
+        F: Fn(RgbDenoiseAction) + 'static,
+    {
+        self.rgb_denoise.connect_action(handler);
+    }
+
+    /// Projects RAW denoise service state into the darkroom processing rail.
+    pub fn set_raw_denoise_state(&self, state: &RawDenoiseViewModel) {
+        self.raw_denoise.set_state(state);
+    }
+
+    /// Connects RAW denoise controls to the application-owned service controller.
+    pub fn connect_raw_denoise_action<F>(&self, handler: F)
+    where
+        F: Fn(RawDenoiseAction) + 'static,
+    {
+        self.raw_denoise.connect_action(handler);
+    }
+
+    /// Projects a selected image into the side-rail states without inventing unavailable data.
+    pub fn set_detail(&self, detail: &PhotoDetailViewModel) {
+        let viewport = self.viewport_state.borrow();
+        self.status_surface
+            .set_detail(detail, viewport.edit_revision().unwrap_or(Revision::ZERO));
+        let target = DarkroomPanelTarget::new(
+            detail.id(),
+            viewport.generation(),
+            viewport.edit_revision().unwrap_or(Revision::ZERO),
+        );
+        self.rail_status.set_detail(detail, target);
+        self.set_history_projection(
+            &DarkroomPanelProjection::<DarkroomHistoryViewModel>::empty(),
+            None,
+        );
+        self.set_snapshots_projection(
+            &DarkroomPanelProjection::<DarkroomSnapshotsViewModel>::empty(),
+            None,
+        );
+    }
+
+    /// Projects the controller-owned snapshot state into the left rail.
+    pub fn set_snapshots_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomSnapshotsViewModel>,
+        handler: Option<DarkroomPanelActionHandler>,
+    ) {
+        self.rail_status
+            .set_snapshots_projection(projection, handler);
+    }
+
+    /// Projects the controller-owned edit history into the left rail.
+    pub fn set_history_projection(
+        &self,
+        projection: &DarkroomPanelProjection<DarkroomHistoryViewModel>,
+        handler: Option<DarkroomPanelActionHandler>,
+    ) {
+        self.rail_status.set_history_projection(projection, handler);
+    }
+
+    /// Restores the explicit no-selection state of every side-rail surface.
+    pub fn clear_detail(&self) {
+        self.rail_status.navigation.set_unavailable();
+        self.rail_status.clear_detail();
+        self.status_surface.clear_detail();
+        self.histogram_generation.set(None);
+        self.histogram.clear();
+        self.viewport_controls.clear_histogram_sample();
+        self.preview.clear_selection();
+    }
+}
+
+fn module_stack_revision(modules: &DarkroomModulesViewModel) -> Revision {
+    modules
+        .left_modules()
+        .chain(modules.right_modules())
+        .map(DarkroomModuleViewModel::revision)
+        .max()
+        .unwrap_or(Revision::ZERO)
+}
+
+fn custom_editor_mount_structure(
+    modules: &DarkroomModulesViewModel,
+) -> Vec<(&str, Option<rusttable_core::OperationId>, usize)> {
+    [
+        crate::iop::colorreconstruct::COLORRECONSTRUCTION_MODULE_ID,
+        crate::iop::colorzones::COLORZONES_MODULE_ID,
+    ]
+    .into_iter()
+    .flat_map(|module_id| {
+        modules
+            .instances(module_id)
+            .map(move |module| (module_id, module.operation_id(), module.instance_count()))
+    })
+    .collect()
+}
+
+#[derive(Clone)]
+struct DarkroomRailStatus {
+    navigation: panel_widgets::NavigationPreview,
+    snapshots_body: gtk4::Box,
+    history_body: gtk4::Box,
+    image_information_body: gtk4::Box,
+}
+
+type DarkroomPanelBuild = (
+    gtk4::Box,
+    gtk4::Box,
+    ExposurePanel,
+    RgbDenoisePanel,
+    RawDenoisePanel,
+    MaskManagerPanel,
+    MultiscaleRetouchPanel,
+    Vec<ImplementedModulePanel>,
+    gtk4::Stack,
+    gtk4::SearchEntry,
+    Rc<Cell<DarkroomModuleGroup>>,
+    Rc<RefCell<Option<DarkroomModuleGroupHandler>>>,
+);
+
+#[cfg(test)]
+mod tests {
+    use rusttable_core::{OperationId, OperationOpacity, Revision};
+
+    use super::{
+        DARKROOM_MODULE_WIDGET_IDS, DARKROOM_RAIL_FOCUS_ORDER, DARKROOM_VIEWPORT_FOCUS_ORDER,
+        DARKROOM_VIEWPORT_WIDGET_IDS, DARKROOM_WIDGET_IDS, DarkroomModuleGroup,
+    };
+    use crate::gtk_shell::DARKROOM_OPERATION_FOCUS_ORDER;
+    use crate::iop::colorzones::{ColorZonesEditorState, ColorZonesGtkState};
+
+    #[test]
+    fn darkroom_contract_has_stable_unique_roles_and_initial_exposure() {
+        let unique = DARKROOM_WIDGET_IDS
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(unique.len(), DARKROOM_WIDGET_IDS.len());
+        assert_eq!(DARKROOM_WIDGET_IDS[0], "darkroom-page");
+        assert_eq!(DARKROOM_WIDGET_IDS.last(), Some(&"darkroom-job-status"));
+        assert!(DARKROOM_WIDGET_IDS.contains(&"exposure"));
+        assert!(DARKROOM_WIDGET_IDS.contains(&"darkroom-left-module-scroll"));
+        assert!(DARKROOM_WIDGET_IDS.contains(&"darkroom-right-module-scroll"));
+        assert_eq!(DARKROOM_OPERATION_FOCUS_ORDER[0], "module-disclosure");
+        assert_eq!(
+            DARKROOM_OPERATION_FOCUS_ORDER.last(),
+            Some(&"module-control")
+        );
+        assert_eq!(DARKROOM_RAIL_FOCUS_ORDER[0], "darkroom-navigation");
+        assert_eq!(DARKROOM_RAIL_FOCUS_ORDER.last(), Some(&"group-deprecated"));
+        assert_eq!(DARKROOM_MODULE_WIDGET_IDS[0], "darkroom-module-search");
+        assert_eq!(DARKROOM_MODULE_WIDGET_IDS.last(), Some(&"exposure-multi"));
+        assert_eq!(
+            DARKROOM_MODULE_WIDGET_IDS
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            DARKROOM_MODULE_WIDGET_IDS.len()
+        );
+    }
+
+    #[test]
+    fn viewport_controls_have_unique_accessible_focus_contract() {
+        let unique = DARKROOM_VIEWPORT_WIDGET_IDS
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(unique.len(), DARKROOM_VIEWPORT_WIDGET_IDS.len());
+        assert_eq!(DARKROOM_VIEWPORT_FOCUS_ORDER[0], "darkroom-soft-proof");
+        assert!(
+            DARKROOM_VIEWPORT_FOCUS_ORDER
+                .iter()
+                .all(|id| unique.contains(id))
+        );
+    }
+
+    #[test]
+    fn module_groups_have_stable_semantics_and_truthful_filtering() {
+        let modules = crate::reference_modules().expect("registry modules");
+        let exposure = modules.module("exposure").expect("exposure");
+        let lens = modules.module("lenscorrection").expect("lens correction");
+        let grading = modules.module("graduatednd").expect("graduated ND");
+        let grain = modules.module("grain").expect("grain");
+        let hidden = modules.module("finalscale").expect("hidden final scale");
+        assert!(DarkroomModuleGroup::Active.matches(exposure));
+        assert!(DarkroomModuleGroup::Technical.matches(lens));
+        assert!(DarkroomModuleGroup::Grading.matches(grading));
+        assert!(grain.is_style_eligible());
+        assert!(!DarkroomModuleGroup::Favorites.matches(grain));
+        assert!(DarkroomModuleGroup::Favorites.matches(&grain.clone().with_favorite(true)));
+        assert!(!DarkroomModuleGroup::Technical.matches(exposure));
+        assert!(!DarkroomModuleGroup::Correct.matches(hidden));
+    }
+
+    #[test]
+    fn colorzones_custom_payload_preserves_exact_editor_projection() {
+        let operation_id = OperationId::new(0xc020).expect("operation ID");
+        let revision = Revision::from_u64(12);
+        let opacity = OperationOpacity::new(0.73).expect("opacity");
+        let state = ColorZonesGtkState::new(
+            operation_id,
+            revision,
+            ColorZonesEditorState::default(),
+            true,
+            opacity,
+            false,
+            false,
+        );
+        let colorzones = crate::reference_modules()
+            .expect("registry modules")
+            .module("colorzones")
+            .expect("Color Zones")
+            .clone()
+            .with_operation_instance(operation_id, 0, 1)
+            .with_colorzones_editor_state(state.clone());
+
+        assert!(DarkroomModuleGroup::Color.matches(&colorzones));
+        assert!(DarkroomModuleGroup::Grading.matches(&colorzones));
+        assert_eq!(colorzones.operation_id(), Some(operation_id));
+        assert_eq!(colorzones.revision(), revision);
+        assert!(colorzones.enabled());
+        assert_eq!(colorzones.controls().controls().len(), 0);
+        let projected = colorzones
+            .colorzones_editor_state()
+            .expect("custom editor payload");
+        assert_eq!(projected.operation_id(), operation_id);
+        assert_eq!(projected.revision(), revision);
+        assert_eq!(projected.opacity(), opacity);
+        assert!(projected.enabled());
+        assert!(!projected.sensitive());
+        assert!(!projected.materialization_required());
+        assert_eq!(projected, &state);
+    }
+}

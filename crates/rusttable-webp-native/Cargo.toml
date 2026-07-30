@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-webp-native"
+description = "Safe RustTable boundary for the pinned WebP encoder and muxer."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+webpx.workspace = true
+
+[lints]
+workspace = true

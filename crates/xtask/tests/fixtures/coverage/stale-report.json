@@ -1,0 +1,13 @@
+{
+  "schema": "rusttable.coverage-report.v1",
+  "source_sha": "0000000000000000000000000000000000000000000000000000000000000000",
+  "toolchain": "beta-2026-07-17",
+  "rustc": "rustc 1.98.0-beta.4",
+  "llvm_cov": "cargo-llvm-cov 0.6.16",
+  "llvm_version": "22.1.8",
+  "target": "x86_64-unknown-linux-gnu",
+  "features": ["all-features"],
+  "lcov_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "source_files": ["crates/rusttable-core/src/lib.rs"],
+  "packages": []
+}

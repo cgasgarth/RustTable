@@ -1,0 +1,9 @@
+{
+  "workspace_root": ".",
+  "workspace_members": ["app-id", "testkit-id"],
+  "packages": [
+    {"name":"app","id":"app-id","manifest_path":"crates/app/Cargo.toml","dependencies":[{"name":"testkit","package":null,"kind":"dev","target":null,"optional":false}],"features":{}},
+    {"name":"testkit","id":"testkit-id","manifest_path":"crates/testkit/Cargo.toml","dependencies":[],"features":{}}
+  ],
+  "resolve":{"nodes":[{"id":"app-id","deps":[{"name":"testkit","pkg":"testkit-id","dep_kinds":[{"kind":"dev","target":null}]}]},{"id":"testkit-id","deps":[]}]}
+}

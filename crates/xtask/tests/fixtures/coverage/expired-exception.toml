@@ -1,0 +1,23 @@
+schema = "rusttable.coverage-policy.v1"
+toolchain = "beta-2026-07-17"
+cargo_llvm_cov_version = "0.6.16"
+llvm_version = "22.1.8"
+target = "x86_64-unknown-linux-gnu"
+features = ["all-features"]
+generated_markers = ["// rusttable:coverage-generated"]
+
+[exclusions]
+packages = ["xtask", "rusttable-testkit"]
+paths = []
+
+[[packages]]
+name = "rusttable-core"
+line_floor = 50.0
+baseline_line = 50.0
+max_drop = 5.0
+
+[[exceptions]]
+package = "rusttable-core"
+expires = "2000-01-01"
+reason = "missing branch fixture"
+follow_up_issue = 176

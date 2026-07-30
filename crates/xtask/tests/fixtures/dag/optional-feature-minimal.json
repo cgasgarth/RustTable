@@ -1,0 +1,9 @@
+{
+  "workspace_root": ".",
+  "workspace_members": ["app-id", "core-id"],
+  "packages": [
+    {"name":"app","id":"app-id","manifest_path":"crates/app/Cargo.toml","dependencies":[{"name":"core","package":null,"kind":null,"target":null,"optional":true}],"features":{"default":["dep:core"]}},
+    {"name":"core","id":"core-id","manifest_path":"crates/core/Cargo.toml","dependencies":[],"features":{}}
+  ],
+  "resolve":{"nodes":[{"id":"app-id","deps":[]},{"id":"core-id","deps":[]}]}
+}

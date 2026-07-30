@@ -1,0 +1,17 @@
+TN:
+SF:C:\workspace\RustTable\crates\rusttable-core\src\lib.rs
+FN:1,product_name
+FNDA:1,product_name
+FNF:1
+FNH:1
+DA:1,1
+DA:2,0
+DA:2,1
+DA:3,0
+LF:3
+LH:2
+BRDA:2,0,0,0
+BRDA:2,0,1,-
+BRF:2
+BRH:0
+end_of_record

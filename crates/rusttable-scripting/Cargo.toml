@@ -1,0 +1,25 @@
+[package]
+name = "rusttable-scripting"
+description = "Bounded Lua 5.4 and Wasmtime Component Model scripting hosts for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[features]
+default = ["lua54-vendored"]
+lua54-vendored = ["mlua/lua54", "mlua/vendored"]
+lua54-system = ["mlua/lua54"]
+
+[dependencies]
+futures.workspace = true
+mlua.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+wasmtime.workspace = true
+wasmtime-wasi.workspace = true
+
+[lints]
+workspace = true

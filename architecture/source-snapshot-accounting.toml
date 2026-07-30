@@ -1,0 +1,40 @@
+# Issue #223: every path-reopening responsibility is assigned to a snapshot
+# boundary or explicitly recorded as later migration debt.
+schema_version = 1
+issue = 223
+rust_boundary = "rusttable-import::SourceSnapshot"
+
+[[call_site]]
+upstream_file = "src/common/image.h"
+upstream_symbol = "dt_image_t::filename"
+responsibility = "source-path identity carried by an image"
+rust_owner = "rusttable-import::SourceSnapshot::path"
+status = "replaced"
+
+[[call_site]]
+upstream_file = "src/common/film.h"
+upstream_symbol = "dt_film_t"
+responsibility = "catalog grouping of source paths"
+rust_owner = "rusttable-import::SourceSnapshotReader"
+status = "replaced"
+
+[[call_site]]
+upstream_file = "src/imageio/imageio_common.h"
+upstream_symbol = "dt_imageio_open"
+responsibility = "decoder source opening and bounded reads"
+rust_owner = "rusttable-import::SourceSnapshot::{read_exact_at,open_reader}"
+status = "replaced"
+
+[[call_site]]
+upstream_file = "src/common/mipmap_cache.h"
+upstream_symbol = "dt_mipmap_cache_get"
+responsibility = "source-backed preview acquisition"
+rust_owner = "rusttable-import::SourceSnapshotSequentialReader"
+status = "replaced"
+
+[[call_site]]
+upstream_file = "src/common/exif.cc"
+upstream_symbol = "dt_exif_read"
+responsibility = "metadata source reads"
+rust_owner = "rusttable-import::SourceSnapshot::open_reader"
+status = "replaced"

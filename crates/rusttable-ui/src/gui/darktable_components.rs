@@ -1,0 +1,397 @@
+//! Small, concrete GTK building blocks shared by the Darktable workspaces.
+//!
+//! These helpers intentionally describe Darktable chrome rather than a generic
+//! widget framework.  Keeping the spacing, sizing, and semantic classes here
+//! makes the lighttable and darkroom rails look like one application while
+//! preserving each subsystem's module ownership.
+
+use gtk4::prelude::*;
+
+use crate::bauhaus::slider_input::{BauhausSlider, SliderInputSpec, attach as attach_slider_input};
+
+use super::{
+    DARKTABLE_COLORS, DARKTABLE_DESKTOP_SPEC, DARKTABLE_UI_TOKENS, ThemeRole, apply_theme_role,
+};
+
+pub(crate) const CONTROL_GAP: i32 = DARKTABLE_UI_TOKENS.controls.control_gap;
+pub(crate) const MODULE_GAP: i32 = DARKTABLE_UI_TOKENS.controls.module_gap;
+pub(crate) const MODULE_ROW_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.module_row_height;
+pub(crate) const TOOLBAR_HEIGHT: i32 = DARKTABLE_UI_TOKENS.controls.toolbar_height;
+pub(crate) const RAIL_SCROLLBAR_RESERVE: i32 = DARKTABLE_UI_TOKENS.controls.rail_scrollbar_reserve;
+const MODULE_CONTROL_MIN_WIDTH: i32 = DARKTABLE_UI_TOKENS.controls.module_control_min_width;
+const MODULE_TITLE_LABEL_MIN_WIDTH: i32 = 52;
+const MODULE_HEADER_BUTTON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_button_size;
+const MODULE_HEADER_ICON_SIZE: i32 = DARKTABLE_UI_TOKENS.controls.module_header_icon_size;
+
+fn rail_content_width(width: i32) -> i32 {
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    width.max(minimum).saturating_sub(RAIL_SCROLLBAR_RESERVE)
+}
+
+pub(crate) fn toolbar(id: &str, role: ThemeRole) -> gtk4::Box {
+    let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
+    toolbar.set_widget_name(id);
+    toolbar.set_height_request(TOOLBAR_HEIGHT);
+    toolbar.set_hexpand(true);
+    toolbar.set_valign(gtk4::Align::Center);
+    toolbar.add_css_class("dt_toolbar");
+    apply_theme_role(&toolbar, role);
+    toolbar
+}
+
+pub(crate) fn module_expander(
+    id: &str,
+    title: &str,
+    expanded: bool,
+    child: Option<&impl IsA<gtk4::Widget>>,
+) -> gtk4::Expander {
+    let module_widget = gtk4::Expander::builder()
+        .label(title)
+        .expanded(expanded)
+        .build();
+    if let Some(child) = child {
+        module_widget.set_child(Some(child));
+    }
+    module_widget.set_widget_name(id);
+    module_widget.set_focusable(true);
+    module_widget.add_css_class("dt_module_expander");
+    apply_theme_role(&module_widget, ThemeRole::Module);
+    module_widget
+}
+
+pub(crate) fn module_title(id: &str, title: &str) -> gtk4::Box {
+    let title_row = module_title_row(id);
+    title_row.append(&module_title_label(id, title));
+    let action_button = module_action_button(
+        &format!("{id}-actions"),
+        "Presets and module menu unavailable",
+    );
+    action_button.set_visible(true);
+    title_row.append(&action_button);
+    title_row
+}
+
+/// Source-owned processing-module header projected from `src/develop/imageop.c`.
+///
+/// The preset affordance is deliberately absent until preset application is
+/// implemented. The returned controls retain enable/reset routing ownership in
+/// the image-operation module builder.
+pub(crate) struct ImageOperationModuleHeader {
+    pub(crate) widget: gtk4::Box,
+    pub(crate) enabled: gtk4::CheckButton,
+    pub(crate) icon_slot: gtk4::Box,
+    pub(crate) reset: Option<gtk4::Button>,
+}
+
+pub(crate) fn image_operation_module_header(
+    id: &str,
+    operation: &str,
+    title: &str,
+    supports_multi_instance: bool,
+    resettable: bool,
+) -> ImageOperationModuleHeader {
+    let header = module_title_row(id);
+    header.set_spacing(0);
+    header.add_css_class("dt_module_header");
+
+    let enabled = gtk4::CheckButton::new();
+    enabled.set_widget_name(&format!("{id}-enabled"));
+    enabled.set_size_request(MODULE_HEADER_BUTTON_SIZE, MODULE_HEADER_BUTTON_SIZE);
+    enabled.set_focusable(true);
+    enabled.add_css_class("dt_module_action");
+    enabled.update_property(&[gtk4::accessible::Property::Label("Enable module")]);
+    header.append(&enabled);
+
+    let icon_slot = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    icon_slot.set_widget_name(&format!("iop-panel-icon-{operation}"));
+    icon_slot.set_size_request(MODULE_HEADER_ICON_SIZE, MODULE_HEADER_ICON_SIZE);
+    icon_slot.set_halign(gtk4::Align::Center);
+    icon_slot.set_valign(gtk4::Align::Center);
+    icon_slot.set_focusable(false);
+    icon_slot.set_can_target(false);
+    icon_slot.add_css_class("dt_icon");
+    header.append(&icon_slot);
+
+    header.append(&module_title_label(id, title));
+
+    let instance_name = gtk4::Label::new(None);
+    instance_name.set_widget_name(&format!("{id}-instance-name"));
+    instance_name.set_halign(gtk4::Align::Start);
+    instance_name.set_valign(gtk4::Align::Baseline);
+    instance_name.set_xalign(0.0);
+    instance_name.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
+    instance_name.add_css_class("dt_module_instance_name");
+    header.append(&instance_name);
+
+    if supports_multi_instance {
+        let action = module_action_button(&format!("{id}-actions"), "Multiple instance actions");
+        action.set_visible(true);
+        header.append(&action);
+    }
+
+    let reset = resettable.then(|| {
+        let reset = module_header_button(
+            &format!("{id}-reset"),
+            "edit-undo-symbolic",
+            "Reset module to defaults",
+        );
+        reset.set_focusable(true);
+        reset.set_sensitive(true);
+        reset.set_tooltip_text(Some("reset parameters"));
+        header.append(&reset);
+        reset
+    });
+
+    ImageOperationModuleHeader {
+        widget: header,
+        enabled,
+        icon_slot,
+        reset,
+    }
+}
+
+fn module_title_row(id: &str) -> gtk4::Box {
+    let title_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 1);
+    title_row.set_widget_name(&format!("{id}-title"));
+    title_row.set_hexpand(true);
+    title_row.set_halign(gtk4::Align::Fill);
+    title_row.set_valign(gtk4::Align::Center);
+    title_row.set_visible(true);
+    title_row.add_css_class("dt_darkroom_section_title");
+    title_row
+}
+
+fn module_title_label(id: &str, title: &str) -> gtk4::Label {
+    let title_label = gtk4::Label::new(Some(title));
+    title_label.set_widget_name(&format!("{id}-label"));
+    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_valign(gtk4::Align::Center);
+    title_label.set_width_request(MODULE_TITLE_LABEL_MIN_WIDTH);
+    title_label.set_hexpand(true);
+    title_label.set_visible(true);
+    title_label.set_width_chars(1);
+    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    let escaped_title = gtk4::glib::markup_escape_text(title);
+    let [red, green, blue, _] = DARKTABLE_COLORS.module_label.rgba();
+    title_label.set_markup(&format!(
+        "<span foreground=\"#{red:02x}{green:02x}{blue:02x}\">{escaped_title}</span>"
+    ));
+    title_label.add_css_class("dt_darkroom_section_label");
+    title_label
+}
+
+pub(crate) fn module_row<W: IsA<gtk4::Widget>>(label: &str, widget: &W) -> gtk4::Box {
+    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
+    row.set_height_request(MODULE_ROW_HEIGHT);
+    row.set_width_request(0);
+    row.set_hexpand(true);
+    row.add_css_class("dt_module_row");
+    let label_widget = gtk4::Label::new(Some(label));
+    label_widget.set_halign(gtk4::Align::Start);
+    label_widget.set_hexpand(true);
+    label_widget.set_width_chars(1);
+    label_widget.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    row.append(&label_widget);
+    row.append(widget);
+    row
+}
+
+pub(crate) fn scale_row(
+    label: &str,
+    scale: &BauhausSlider,
+    value: &gtk4::Label,
+    unit: &str,
+) -> gtk4::Box {
+    let row = gtk4::Box::new(gtk4::Orientation::Vertical, MODULE_GAP);
+    row.set_width_request(0);
+    row.set_hexpand(true);
+    row.add_css_class("dt_module_row");
+    let heading = gtk4::Box::new(gtk4::Orientation::Horizontal, CONTROL_GAP);
+    let label_text = if unit.is_empty() {
+        label.to_owned()
+    } else {
+        format!("{label} ({unit})")
+    };
+    let label_widget = gtk4::Label::new(Some(&label_text));
+    label_widget.set_halign(gtk4::Align::Start);
+    label_widget.set_hexpand(true);
+    heading.append(&label_widget);
+    heading.append(value);
+    row.append(&heading);
+    row.append(scale.widget());
+    row
+}
+
+pub(crate) fn button(id: &str, label: &str) -> gtk4::Button {
+    let button = gtk4::Button::with_label(label);
+    button.set_widget_name(id);
+    button.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    button.add_css_class("dt_button");
+    button.set_focus_on_click(false);
+    button
+}
+
+pub(crate) fn toggle_button(id: &str, label: &str) -> gtk4::ToggleButton {
+    let button = gtk4::ToggleButton::with_label(label);
+    button.set_widget_name(id);
+    button.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    button.add_css_class("dt_button");
+    button.set_focus_on_click(false);
+    button
+}
+
+/// Disabled until the owning module exposes an action handler, but retained in
+/// the title row so rail geometry matches Darktable's action affordance slot.
+pub(crate) fn module_action_button(id: &str, accessible_name: &str) -> gtk4::Button {
+    module_header_button(id, "open-menu-symbolic", accessible_name)
+}
+
+fn module_header_button(id: &str, icon_name: &str, accessible_name: &str) -> gtk4::Button {
+    let button = gtk4::Button::new();
+    button.set_widget_name(id);
+    button.set_size_request(MODULE_HEADER_BUTTON_SIZE, MODULE_HEADER_BUTTON_SIZE);
+    button.set_focusable(false);
+    button.set_sensitive(false);
+    button.add_css_class("dt_module_action");
+    let icon = gtk4::Image::from_icon_name(icon_name);
+    icon.set_pixel_size(MODULE_HEADER_ICON_SIZE);
+    button.set_child(Some(&icon));
+    button.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
+    button.set_tooltip_text(Some(accessible_name));
+    button
+}
+
+pub(crate) fn dropdown(id: &str, values: &[&str]) -> gtk4::DropDown {
+    let dropdown = gtk4::DropDown::from_strings(values);
+    dropdown.set_widget_name(id);
+    dropdown.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    dropdown.set_width_request(MODULE_CONTROL_MIN_WIDTH);
+    dropdown.set_hexpand(true);
+    dropdown.add_css_class("dt_field");
+    dropdown
+}
+
+pub(crate) fn slider(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    step: f64,
+    draw_value: bool,
+) -> BauhausSlider {
+    slider_with_input_spec(
+        id,
+        minimum,
+        maximum,
+        step,
+        draw_value,
+        SliderInputSpec::IDENTITY,
+    )
+}
+
+pub(crate) fn slider_with_input_spec(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    step: f64,
+    draw_value: bool,
+    input_spec: SliderInputSpec,
+) -> BauhausSlider {
+    let slider = styled_scale(id, minimum, maximum, step, draw_value);
+    attach_slider_input(slider, input_spec)
+}
+
+/// Builds a styled plain scale for provisional descriptor-driven controls.
+///
+/// Generic processing descriptors do not yet carry Darktable's presentation
+/// curve, soft range, digits, or formatting metadata, so they must not expose
+/// the source-specific Bauhaus fine-tune popup until that mapping exists.
+pub(crate) fn provisional_scale(
+    id: &str,
+    minimum: f64,
+    maximum: f64,
+    step: f64,
+    draw_value: bool,
+) -> gtk4::Scale {
+    styled_scale(id, minimum, maximum, step, draw_value)
+}
+
+fn styled_scale(id: &str, minimum: f64, maximum: f64, step: f64, draw_value: bool) -> gtk4::Scale {
+    let slider = gtk4::Scale::with_range(gtk4::Orientation::Horizontal, minimum, maximum, step);
+    slider.set_widget_name(id);
+    slider.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    slider.set_width_request(MODULE_CONTROL_MIN_WIDTH);
+    slider.set_hexpand(true);
+    slider.set_draw_value(draw_value);
+    slider.add_css_class("dt_slider");
+    slider
+}
+
+pub(crate) fn switch(id: &str) -> gtk4::Switch {
+    let control = gtk4::Switch::new();
+    control.set_widget_name(id);
+    control.set_height_request(DARKTABLE_UI_TOKENS.controls.control_height);
+    control.set_valign(gtk4::Align::Center);
+    control.add_css_class("dt_switch");
+    control
+}
+
+pub(crate) fn rail(id: &str, _width: i32, accessible_name: &str) -> gtk4::Box {
+    let panel = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    panel.set_widget_name(id);
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    // The enclosing Paned owns the initial and persisted rail width. Requesting
+    // that width here makes GTK keep allocating the child at its startup size
+    // after the divider is dragged narrower.
+    panel.set_size_request(minimum, -1);
+    panel.set_hexpand(false);
+    panel.set_vexpand(true);
+    panel.set_halign(gtk4::Align::Fill);
+    panel.set_valign(gtk4::Align::Fill);
+    panel.set_accessible_role(gtk4::AccessibleRole::Group);
+    panel.update_property(&[gtk4::accessible::Property::Label(accessible_name)]);
+    panel.add_css_class("dt_rail");
+    apply_theme_role(&panel, ThemeRole::Panel);
+    panel
+}
+
+pub(crate) fn rail_scroll<W: IsA<gtk4::Widget>>(
+    child: &W,
+    _width: i32,
+    id: &str,
+) -> gtk4::ScrolledWindow {
+    let scroll = gtk4::ScrolledWindow::builder()
+        .child(child)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+    scroll.set_widget_name(id);
+    // Darktable side panels scroll vertically only. Letting a wide module
+    // enable horizontal scrolling also steals a row of vertical rail space.
+    scroll.set_policy(gtk4::PolicyType::Never, gtk4::PolicyType::Automatic);
+    scroll.set_overlay_scrolling(false);
+    let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+    scroll.set_min_content_width(rail_content_width(minimum));
+    scroll.set_propagate_natural_width(false);
+    scroll.set_propagate_natural_height(false);
+    scroll.add_css_class("dt_rail_scroll");
+    child.set_width_request(0);
+    child.set_hexpand(true);
+    child.set_margin_bottom(MODULE_GAP);
+    scroll
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DARKTABLE_DESKTOP_SPEC, RAIL_SCROLLBAR_RESERVE, rail_content_width};
+
+    #[test]
+    fn rail_content_reserves_only_the_vertical_scrollbar() {
+        let minimum = i32::from(DARKTABLE_DESKTOP_SPEC.layout.side_panel_widths.minimum_px);
+
+        assert_eq!(
+            rail_content_width(minimum - 1),
+            minimum - RAIL_SCROLLBAR_RESERVE
+        );
+        assert_eq!(rail_content_width(180), 180 - RAIL_SCROLLBAR_RESERVE);
+    }
+}

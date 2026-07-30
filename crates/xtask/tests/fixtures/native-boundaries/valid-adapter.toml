@@ -1,0 +1,3 @@
+adapter_crate = "rusttable-lua-native"
+callback_model = "panic-free and bounded"
+unsafe_surface = "opaque handle only"

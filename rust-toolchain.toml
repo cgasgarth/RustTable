@@ -1,0 +1,4 @@
+[toolchain]
+channel = "beta-2026-07-17"
+components = ["clippy", "rust-docs", "rust-src", "rustfmt", "llvm-tools-preview"]
+profile = "minimal"

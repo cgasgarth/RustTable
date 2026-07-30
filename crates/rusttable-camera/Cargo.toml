@@ -1,0 +1,10 @@
+[package]
+name = "rusttable-camera"
+description = "Camera capture and import boundary contracts for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

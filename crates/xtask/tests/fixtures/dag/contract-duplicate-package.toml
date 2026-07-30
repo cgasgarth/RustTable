@@ -1,0 +1,14 @@
+schema_version = 3
+composition_root = "app"
+
+[[packages]]
+name = "app"
+manifest = "crates/app/Cargo.toml"
+role = "composition-root"
+integration_owner = "app"
+
+[[packages]]
+name = "app"
+manifest = "crates/app-copy/Cargo.toml"
+role = "product"
+integration_owner = "app"

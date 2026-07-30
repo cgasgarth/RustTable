@@ -1,0 +1,347 @@
+use rusttable_core::Operation;
+
+use super::{
+    OperationCompileError, ProcessingOperation, ProcessingOperationKind, compile_opacity,
+    invalid_parameters, parameter_f32, parameter_integer, parameter_u32, reject_unexpected,
+};
+use crate::operations::{
+    clipping::{ClippingConfig, ClippingParametersV5},
+    enlargecanvas::{CanvasColor, EnlargeCanvasConfig},
+    finalscale::{
+        FinalScaleConfig, FinalScaleKernel, RenderQuality, RenderQualityKind, RenderSizeRequest,
+    },
+    lenscorrection::{LensCorrectionConfig, LensCorrectionParametersV1},
+    perspective::{PerspectiveConfig, PerspectiveParametersV5},
+    rasterfile::{RasterFileChannelMode, RasterFileParametersV1},
+    scalepixels::ScalePixelsConfig,
+};
+
+const SCALEPIXELS_PARAMETERS: [&str; 1] = ["pixel_aspect_ratio"];
+const CLIPPING_PARAMETERS: [&str; 21] = [
+    "angle",
+    "cx",
+    "cy",
+    "cw",
+    "ch",
+    "k_h",
+    "k_v",
+    "kxa",
+    "kya",
+    "kxb",
+    "kyb",
+    "kxc",
+    "kyc",
+    "kxd",
+    "kyd",
+    "k_type",
+    "k_sym",
+    "k_apply",
+    "crop_auto",
+    "ratio_n",
+    "ratio_d",
+];
+const RASTERFILE_PARAMETERS: [&str; 3] = ["mode", "filename", "filename2"];
+
+pub(crate) fn compile_scalepixels(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &SCALEPIXELS_PARAMETERS)?;
+    let ratio = parameter_f32(operation, "pixel_aspect_ratio", 1.0)?;
+    let config =
+        ScalePixelsConfig::new(ratio).map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::ScalePixels { config },
+    })
+}
+
+const FINALSCALE_PARAMETERS: [&str; 12] = [
+    "mode",
+    "width",
+    "height",
+    "edge",
+    "megapixels",
+    "width_mm",
+    "height_mm",
+    "dpi",
+    "pipeline_scale",
+    "allow_upscale",
+    "kernel",
+    "quality",
+];
+const ENLARGECANVAS_PARAMETERS: [&str; 5] = [
+    "percent_left",
+    "percent_right",
+    "percent_top",
+    "percent_bottom",
+    "color",
+];
+const PERSPECTIVE_PARAMETERS: [&str; 14] = [
+    "rotation",
+    "lensshift_v",
+    "lensshift_h",
+    "shear",
+    "focal_length",
+    "crop_factor",
+    "orthocorr",
+    "aspect",
+    "mode",
+    "crop_mode",
+    "crop_left",
+    "crop_right",
+    "crop_top",
+    "crop_bottom",
+];
+const LENSCORRECTION_PARAMETERS: [&str; 8] = [
+    "method",
+    "modify_flags",
+    "mode",
+    "scale",
+    "crop_factor",
+    "focal_length",
+    "aperture",
+    "distance",
+];
+
+pub(crate) fn compile_clipping(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    super::reject_unexpected(operation, &CLIPPING_PARAMETERS)?;
+    let parameters = ClippingParametersV5 {
+        angle: super::parameter_f32(operation, "angle", 0.0)?,
+        cx: super::parameter_f32(operation, "cx", 0.0)?,
+        cy: super::parameter_f32(operation, "cy", 0.0)?,
+        cw: super::parameter_f32(operation, "cw", 1.0)?,
+        ch: super::parameter_f32(operation, "ch", 1.0)?,
+        k_h: super::parameter_f32(operation, "k_h", 0.0)?,
+        k_v: super::parameter_f32(operation, "k_v", 0.0)?,
+        kxa: super::parameter_f32(operation, "kxa", 0.2)?,
+        kya: super::parameter_f32(operation, "kya", 0.2)?,
+        kxb: super::parameter_f32(operation, "kxb", 0.8)?,
+        kyb: super::parameter_f32(operation, "kyb", 0.2)?,
+        kxc: super::parameter_f32(operation, "kxc", 0.8)?,
+        kyc: super::parameter_f32(operation, "kyc", 0.8)?,
+        kxd: super::parameter_f32(operation, "kxd", 0.2)?,
+        kyd: super::parameter_f32(operation, "kyd", 0.8)?,
+        k_type: super::parameter_integer(operation, "k_type", 0.0)?,
+        k_sym: super::parameter_integer(operation, "k_sym", 0.0)?,
+        k_apply: super::parameter_integer(operation, "k_apply", 0.0)?,
+        crop_auto: super::parameter_bool(operation, "crop_auto")?,
+        ratio_n: super::parameter_integer(operation, "ratio_n", -1.0)?,
+        ratio_d: super::parameter_integer(operation, "ratio_d", -1.0)?,
+    };
+    let config = ClippingConfig::new(parameters)
+        .map_err(|error| super::invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: super::compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Clipping { config },
+    })
+}
+
+pub(crate) fn compile_rasterfile(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    super::reject_unexpected(operation, &RASTERFILE_PARAMETERS)?;
+    let mode = RasterFileChannelMode::new(
+        u8::try_from(super::parameter_integer(operation, "mode", 7.0)?).map_err(|_| {
+            super::invalid_parameters(operation, "rasterfile channel mode is out of range")
+        })?,
+    )
+    .map_err(|error| super::invalid_parameters(operation, error))?;
+    let path = super::optional_parameter_text(operation, "filename")?.unwrap_or_default();
+    let file = super::optional_parameter_text(operation, "filename2")?.unwrap_or_default();
+    let config = RasterFileParametersV1::new(mode, path.as_bytes(), file.as_bytes())
+        .map_err(|error| super::invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: super::compile_opacity(operation)?,
+        kind: ProcessingOperationKind::RasterFile {
+            config: Box::new(config),
+        },
+    })
+}
+
+pub(crate) fn compile_finalscale(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &FINALSCALE_PARAMETERS)?;
+    let mode = parameter_integer(operation, "mode", 0.0)?;
+    let request = match mode {
+        0 => RenderSizeRequest::Original,
+        1 => RenderSizeRequest::exact(
+            parameter_u32(operation, "width", 1)?,
+            parameter_u32(operation, "height", 1)?,
+        ),
+        2 => RenderSizeRequest::fit_within(
+            parameter_u32(operation, "width", 1)?,
+            parameter_u32(operation, "height", 1)?,
+        ),
+        3 => RenderSizeRequest::long_edge(parameter_u32(operation, "edge", 1)?),
+        4 => RenderSizeRequest::short_edge(parameter_u32(operation, "edge", 1)?),
+        5 => RenderSizeRequest::megapixels(parameter_f32(operation, "megapixels", 1.0)?)
+            .map_err(|error| invalid_parameters(operation, error))?,
+        6 => RenderSizeRequest::print(
+            parameter_f32(operation, "width_mm", 210.0)?,
+            parameter_f32(operation, "height_mm", 297.0)?,
+            parameter_f32(operation, "dpi", 300.0)?,
+        )
+        .map_err(|error| invalid_parameters(operation, error))?,
+        7 => RenderSizeRequest::pipeline_scale(parameter_f32(operation, "pipeline_scale", 1.0)?)
+            .map_err(|error| invalid_parameters(operation, error))?,
+        _ => return Err(invalid_parameters(operation, "finalscale mode is invalid")),
+    };
+    let kernel = match parameter_integer(operation, "kernel", 1.0)? {
+        0 => FinalScaleKernel::Nearest,
+        1 => FinalScaleKernel::Bilinear,
+        2 => FinalScaleKernel::Bicubic,
+        3 => FinalScaleKernel::Lanczos,
+        _ => {
+            return Err(invalid_parameters(
+                operation,
+                "finalscale kernel is invalid",
+            ));
+        }
+    };
+    let quality_kind = match parameter_integer(operation, "quality", 2.0)? {
+        0 => RenderQualityKind::Preview,
+        1 => RenderQualityKind::Thumbnail,
+        2 => RenderQualityKind::ImageFinal,
+        3 => RenderQualityKind::Export,
+        4 => RenderQualityKind::Print,
+        _ => {
+            return Err(invalid_parameters(
+                operation,
+                "finalscale quality is invalid",
+            ));
+        }
+    };
+    let config = FinalScaleConfig::new(request)
+        .with_quality(RenderQuality::new(quality_kind, kernel))
+        .with_upscale(parameter_integer(operation, "allow_upscale", 0.0)? != 0);
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::FinalScale { config },
+    })
+}
+
+pub(crate) fn compile_enlargecanvas(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &ENLARGECANVAS_PARAMETERS)?;
+    let color = parameter_u32(operation, "color", 0)?;
+    let config = EnlargeCanvasConfig::new(
+        parameter_f32(operation, "percent_left", 0.0)?,
+        parameter_f32(operation, "percent_right", 0.0)?,
+        parameter_f32(operation, "percent_top", 0.0)?,
+        parameter_f32(operation, "percent_bottom", 0.0)?,
+        CanvasColor::try_from(color).map_err(|error| invalid_parameters(operation, error))?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::EnlargeCanvas { config },
+    })
+}
+
+pub(crate) fn compile_perspective(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &PERSPECTIVE_PARAMETERS)?;
+    let parameters = PerspectiveParametersV5 {
+        rotation: parameter_f32(operation, "rotation", 0.0)?,
+        lensshift_v: parameter_f32(operation, "lensshift_v", 0.0)?,
+        lensshift_h: parameter_f32(operation, "lensshift_h", 0.0)?,
+        shear: parameter_f32(operation, "shear", 0.0)?,
+        focal_length: parameter_f32(operation, "focal_length", 50.0)?,
+        crop_factor: parameter_f32(operation, "crop_factor", 1.0)?,
+        orthocorr: parameter_f32(operation, "orthocorr", 0.0)?,
+        aspect: parameter_f32(operation, "aspect", 1.0)?,
+        mode: parameter_integer(operation, "mode", 0.0)?,
+        crop_mode: parameter_integer(operation, "crop_mode", 0.0)?,
+        crop_left: parameter_f32(operation, "crop_left", 0.0)?,
+        crop_right: parameter_f32(operation, "crop_right", 1.0)?,
+        crop_top: parameter_f32(operation, "crop_top", 0.0)?,
+        crop_bottom: parameter_f32(operation, "crop_bottom", 1.0)?,
+        ..Default::default()
+    };
+    let config = PerspectiveConfig::from_parameters(parameters)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::Perspective { config },
+    })
+}
+
+pub(crate) fn compile_lenscorrection(
+    operation: &Operation,
+) -> Result<ProcessingOperation, OperationCompileError> {
+    reject_unexpected(operation, &LENSCORRECTION_PARAMETERS)?;
+    let mut parameters = LensCorrectionParametersV1::new(
+        "",
+        "",
+        parameter_f32(operation, "focal_length", 50.0)?,
+        parameter_f32(operation, "aperture", 8.0)?,
+    )
+    .map_err(|error| invalid_parameters(operation, error))?;
+    parameters.method = match parameter_integer(operation, "method", 0.0)? {
+        0 => crate::operations::lenscorrection::LensCorrectionMethod::Lensfun,
+        1 => crate::operations::lenscorrection::LensCorrectionMethod::OnlyVignetting,
+        value => {
+            return Err(invalid_parameters(
+                operation,
+                format!("lens correction method {value} is invalid"),
+            ));
+        }
+    };
+    parameters.modify_flags = match parameter_integer(operation, "modify_flags", 7.0)? {
+        0 => crate::operations::lenscorrection::CorrectionFlags::empty(),
+        1 => crate::operations::lenscorrection::CorrectionFlags::DISTORTION,
+        2 => crate::operations::lenscorrection::CorrectionFlags::TCA,
+        3 => crate::operations::lenscorrection::CorrectionFlags::ALL
+            .without(crate::operations::lenscorrection::CorrectionFlags::VIGNETTING),
+        4 => crate::operations::lenscorrection::CorrectionFlags::VIGNETTING,
+        5 => crate::operations::lenscorrection::CorrectionFlags::ALL
+            .without(crate::operations::lenscorrection::CorrectionFlags::TCA),
+        6 => crate::operations::lenscorrection::CorrectionFlags::ALL
+            .without(crate::operations::lenscorrection::CorrectionFlags::DISTORTION),
+        7 => crate::operations::lenscorrection::CorrectionFlags::ALL,
+        value => {
+            return Err(invalid_parameters(
+                operation,
+                format!("lens correction flags {value} are invalid"),
+            ));
+        }
+    };
+    parameters.mode = match parameter_integer(operation, "mode", 0.0)? {
+        0 => crate::operations::lenscorrection::LensCorrectionMode::Correct,
+        1 => crate::operations::lenscorrection::LensCorrectionMode::Distort,
+        value => {
+            return Err(invalid_parameters(
+                operation,
+                format!("lens correction mode {value} is invalid"),
+            ));
+        }
+    };
+    parameters.scale = parameter_f32(operation, "scale", 1.0)?;
+    parameters.crop_factor = parameter_f32(operation, "crop_factor", 1.0)?;
+    parameters.distance = parameter_f32(operation, "distance", 1000.0)?;
+    let config = LensCorrectionConfig::new(parameters)
+        .map_err(|error| invalid_parameters(operation, error))?;
+    Ok(ProcessingOperation {
+        operation_id: operation.id(),
+        enabled: operation.is_enabled(),
+        opacity: compile_opacity(operation)?,
+        kind: ProcessingOperationKind::LensCorrection { config },
+    })
+}

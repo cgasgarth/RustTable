@@ -1,0 +1,51 @@
+[package]
+name = "rusttable-app"
+description = "GTK4 application shell for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+directories.workspace = true
+futures.workspace = true
+gtk4.workspace = true
+rusttable-catalog.workspace = true
+rusttable-catalog-store.workspace = true
+rusttable-diagnostics.workspace = true
+rusttable-display-profile.workspace = true
+rusttable-export.workspace = true
+rusttable-gpu.workspace = true
+rusttable-core.workspace = true
+rusttable-color.workspace = true
+rusttable-image.workspace = true
+rusttable-image-io.workspace = true
+rusttable-input.workspace = true
+rusttable-i18n.workspace = true
+rusttable-import.workspace = true
+rusttable-metadata.workspace = true
+rusttable-pixelpipe.workspace = true
+rusttable-processing.workspace = true
+rusttable-render.workspace = true
+rusttable-scripting.workspace = true
+rusttable-ui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rusttable-testkit.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2.workspace = true
+objc2-app-kit.workspace = true
+
+[[test]]
+name = "darkroom_shell_runtime_smoke"
+path = "tests/darkroom_shell_runtime_smoke.rs"
+harness = false
+
+[lints]
+workspace = true

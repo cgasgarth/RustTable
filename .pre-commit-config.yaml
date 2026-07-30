@@ -1,0 +1,13 @@
+repos:
+  - repo: local
+    hooks:
+      - id: protect-protected-branches
+        name: Protect main and master branches
+        entry: bash .githooks/pre-commit-guard
+        language: system
+        pass_filenames: false
+      - id: rusttable-check
+        name: RustTable complete local gate
+        entry: bash scripts/dev/precommit-check.sh
+        language: system
+        pass_filenames: false

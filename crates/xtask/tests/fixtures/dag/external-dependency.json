@@ -1,0 +1,9 @@
+{
+  "workspace_root": ".",
+  "workspace_members": ["app-id"],
+  "packages": [
+    {"name":"app","id":"app-id","manifest_path":"crates\\app\\Cargo.toml","dependencies":[{"name":"database","package":"redb","kind":null,"target":null,"optional":false}],"features":{}},
+    {"name":"redb","id":"registry+https://github.com/rust-lang/crates.io-index#redb@4.1.0","source":"registry+https://github.com/rust-lang/crates.io-index","manifest_path":"crates\\redb\\Cargo.toml","dependencies":[],"features":{}}
+  ],
+  "resolve":{"nodes":[{"id":"app-id","deps":[{"name":"database","pkg":"registry+https://github.com/rust-lang/crates.io-index#redb@4.1.0","dep_kinds":[{"kind":null,"target":null}]}]}]}
+}

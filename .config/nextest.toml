@@ -1,0 +1,29 @@
+# RustTable's checked-in nextest policy. Keep the profiles explicit so local and
+# hosted runs do not inherit changes from nextest's embedded defaults.
+
+[store]
+dir = "target/nextest"
+
+[profile.default]
+default-filter = "all()"
+fail-fast = true
+retries = 0
+flaky-result = "fail"
+test-threads = "num-cpus"
+slow-timeout = { period = "60s", terminate-after = 5, grace-period = "10s", on-timeout = "fail" }
+status-level = "pass"
+final-status-level = "fail"
+failure-output = "immediate-final"
+success-output = "never"
+
+[profile.ci]
+inherits = "default"
+fail-fast = false
+status-level = "slow"
+final-status-level = "slow"
+
+[profile.ci.junit]
+path = "junit.xml"
+report-name = "rusttable-ci"
+store-success-output = false
+store-failure-output = true

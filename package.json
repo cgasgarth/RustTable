@@ -1,0 +1,20 @@
+{
+  "name": "rusttable-tooling",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "install:computer-use": "bun scripts/dev/install-computer-use-app.ts",
+    "screenshot:ui-review": "bash scripts/dev/capture-ui-screenshots.sh",
+    "test:screenshot-ui-review": "bash scripts/dev/capture-ui-screenshots.test.sh",
+    "test:computer-use": "bun test scripts/dev/computer-use-app-install.test.ts scripts/dev/rusttable-app-bundle.test.ts",
+    "test:precommit-check": "bash scripts/dev/test-precommit-check.sh",
+    "test:darktable-ui-smoke": "bash scripts/dev/darktable-ui-smoke.sh",
+    "test:doctor": "bash scripts/dev/test-doctor.sh",
+    "test:macos-artifact-identity": "bun test scripts/macos-artifact-identity.test.ts",
+    "test:macos-computer-use-smoke": "bash scripts/test-macos-computer-use-smoke.sh",
+    "smoke:macos-computer-use": "bash scripts/macos-computer-use-smoke.sh",
+    "test:linux-artifact-identity": "bun test scripts/linux-artifact-identity.test.ts",
+    "test:linux-distribution-smoke": "bash scripts/test-linux-distribution-smoke.sh",
+    "test:platform-support": "bun test scripts/platform-support.test.ts"
+  }
+}

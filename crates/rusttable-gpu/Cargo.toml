@@ -1,0 +1,21 @@
+[package]
+name = "rusttable-gpu"
+description = "GPU execution boundary contracts for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+naga.workspace = true
+postcard.workspace = true
+rusttable-color.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+serde.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+wgpu.workspace = true
+
+[lints]
+workspace = true

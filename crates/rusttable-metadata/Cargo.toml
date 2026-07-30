@@ -1,0 +1,18 @@
+[package]
+name = "rusttable-metadata"
+description = "Bounded canonical metadata extraction for RustTable image inputs."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kamadak-exif.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+roxmltree.workspace = true
+sha2.workspace = true
+unicode-normalization.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "rusttable-sqlite-native"
+description = "Typed, explicit Darktable SQLite migration row and query boundary."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true

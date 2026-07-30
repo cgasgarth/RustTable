@@ -1,0 +1,17 @@
+[package]
+name = "rusttable-compat"
+description = "Compatibility boundary contracts for RustTable integrations."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+md5.workspace = true
+rusttable-sqlite-native.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

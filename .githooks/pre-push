@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+# The complete local pre-commit gate is authoritative; post-merge checks may extend it.

@@ -1,0 +1,59 @@
+[graph]
+all-features = true
+
+[advisories]
+# wayland-scanner uses quick-xml only at compile time to parse trusted protocol
+# definitions. Its current 0.31.10 release pins quick-xml 0.39, so the runtime
+# denial-of-service advisories cannot be reached by RustTable. Remove these
+# exceptions as soon as wayland-scanner accepts quick-xml 0.41 or newer.
+ignore = [
+    { id = "RUSTSEC-2026-0194", reason = "build-only parser for trusted Wayland protocol XML" },
+    { id = "RUSTSEC-2026-0195", reason = "build-only parser for trusted Wayland protocol XML" },
+    { id = "RUSTSEC-2023-0089", reason = "transitive Wasmtime/postcard dependency with no safe upgrade" },
+    { id = "RUSTSEC-2024-0436", reason = "transitive rav1e proc-macro dependency with no safe upgrade" },
+    { id = "RUSTSEC-2026-0192", reason = "transitive usvg font parser required by the bounded SVG watermark renderer; no safe upgrade is available" },
+    { id = "RUSTSEC-2026-0206", reason = "transitive usvg text shaper required by the bounded SVG watermark renderer; no safe upgrade is available" },
+]
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "GPL-2.0-only",
+    "GPL-3.0-or-later",
+    "ISC",
+    "LGPL-2.1-or-later",
+    "LGPL-2.1",
+    "MIT",
+    "MPL-2.0",
+    "NCSA",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+# OpenSSL introduces a platform-dependent native cryptography supply chain;
+# RustTable requires a reviewed Rust-native alternative when TLS is needed.
+deny = [
+    { crate = "openssl", reason = "use a reviewed Rust-native cryptography implementation" },
+    { crate = "openssl-sys", reason = "use a reviewed Rust-native cryptography implementation" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

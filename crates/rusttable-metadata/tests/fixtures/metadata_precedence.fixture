@@ -1,0 +1,6 @@
+# case|embedded XMP|sidecar XMP assertion|effective caption|conflict
+equal|Same caption|Same caption|Same caption|false
+conflict|Embedded caption|Sidecar caption|Sidecar caption|true
+sidecar-before|Embedded caption|First sidecar caption|First sidecar caption|true
+sidecar-after|Embedded caption|Second sidecar caption|Second sidecar caption|true
+clear|Embedded caption|<clear>|Embedded caption|true

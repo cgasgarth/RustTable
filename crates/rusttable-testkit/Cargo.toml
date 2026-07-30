@@ -1,0 +1,19 @@
+[package]
+name = "rusttable-testkit"
+description = "Deterministic, bounded, privacy-safe fixture validation for RustTable tests."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flate2.workspace = true
+process-wrap.workspace = true
+rusttable-core.workspace = true
+serde.workspace = true
+sha2.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+{
+  "workspace_root": ".",
+  "workspace_members": ["app-id", "renamed-core-id"],
+  "packages": [
+    {"name":"app","id":"app-id","manifest_path":"crates/app/Cargo.toml","dependencies":[{"name":"core","package":"renamed-core","kind":null,"target":null,"optional":false}],"features":{}},
+    {"name":"renamed-core","id":"renamed-core-id","manifest_path":"crates/core/Cargo.toml","dependencies":[],"features":{}}
+  ],
+  "resolve":{"nodes":[{"id":"app-id","deps":[{"name":"core","pkg":"renamed-core-id","dep_kinds":[{"kind":null,"target":null}]}]},{"id":"renamed-core-id","deps":[]}]}
+}

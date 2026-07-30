@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-heif-native"
+description = "Safe RustTable boundary for the pinned libheif HEVC encoder."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+libheif-rs.workspace = true
+
+[lints]
+workspace = true

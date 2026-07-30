@@ -1,0 +1,12 @@
+version = 1
+governed_roots = ["fixtures/external-cache"]
+
+[limits]
+max_file_bytes = 1073741824
+max_total_bytes = 4294967296
+max_decompressed_bytes = 1073741824
+max_compression_ratio = 100
+
+# Large corpora are referenced by SHA-256 and verified from a populated local
+# cache. Network fetches and licensing/attribution fields are intentionally out
+# of scope for this manifest.

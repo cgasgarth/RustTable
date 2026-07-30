@@ -1,0 +1,1 @@
+int legacy_native_fixture(void) { return 0; }

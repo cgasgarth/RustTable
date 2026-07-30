@@ -1,0 +1,17 @@
+[package]
+name = "rusttable-parity"
+description = "Pinned darktable operation and history compatibility data."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+rusttable-testkit.workspace = true
+serde.workspace = true
+sha2.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

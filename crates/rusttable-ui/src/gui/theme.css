@@ -1,0 +1,1323 @@
+/* RustTable's compact GTK4 transcription of Darktable's elegant-grey theme. */
+
+/* Source `graph_overlay` is `@grey_50`; paint callbacks resolve it by name. */
+@define-color graph_overlay #777777;
+
+* {
+  color: {{foreground}};
+  font-family: "Roboto Light", "Roboto",
+               "Segoe UI",
+               "SF Pro Display Light", "SF Pro Display",
+               "Ubuntu Light", "Ubuntu", "IPAPGothic",
+               "Cantarell",
+               "Arial Unicode MS",
+               sans-serif;
+  font-feature-settings: "tnum";
+  font-size: {{base_font_pt}}pt;
+  font-weight: normal;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  background-image: none;
+  box-shadow: none;
+  outline-style: none;
+  text-shadow: none;
+}
+
+window,
+#header,
+.dt_shell,
+.dt_header,
+.dt_panel {
+  background-color: {{background}};
+  color: {{foreground}};
+}
+
+#header {
+  min-height: {{header_content_height}}px;
+  padding: 0 3px;
+  border-bottom: 1px solid {{border}};
+}
+
+#header-left,
+#header-center,
+#header-right,
+.dt_view_switcher {
+  background-color: transparent;
+}
+
+#header-left {
+  min-width: 140px;
+  padding: 0 7px 0 2px;
+  margin: 0;
+}
+
+#rusttable-aperture-mark {
+  min-width: 20px;
+  min-height: 20px;
+}
+
+.dt_brand_title {
+  color: {{foreground}};
+  font-size: {{heading_font_pt}}pt;
+  font-weight: 500;
+}
+
+.dt_brand_version {
+  color: {{foreground}};
+  font-size: {{micro_font_pt}}pt;
+}
+
+#header-center {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+#header-right {
+  min-width: 0;
+  margin: 0;
+  padding: 0 2px 0 4px;
+}
+
+.dt_view_switcher {
+  margin: 0;
+  padding: 0 4px;
+}
+
+.dt_view_switcher button {
+  min-height: 24px;
+  min-width: 68px;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+  font-size: {{heading_font_pt}}pt;
+}
+
+.dt_mode_separator {
+  color: {{border}};
+}
+
+.dt_view_switcher button.active {
+  color: #ffffffff;
+  font-weight: bold;
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.dt_toolbar button,
+.dt_button,
+.dt_export_action,
+button,
+entry,
+dropdown,
+spinbutton,
+textview {
+  min-height: {{control_height}}px;
+  padding: 1px;
+  border: 1px solid {{button_border}};
+  border-radius: 2px;
+  background-color: {{button_background}};
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+/* Keep source check indicators compact without imposing button/control metrics. */
+checkbutton check {
+  min-width: 0;
+  min-height: 0;
+  margin: 0.07em 0.4em 0.07em 0.07em;
+  padding: 1px;
+  border: 1px solid {{button_border}};
+  border-radius: 0.21em;
+  background-color: alpha({{foreground}}, 0.09);
+}
+
+checkbutton check:checked {
+  background-color: #919191ff;
+  color: #ffffffff;
+}
+
+/* Darktable notebook tab and header spacing. */
+notebook tab label {
+  padding: 0.28em 0.07em;
+  border-bottom: 0.1em solid transparent;
+  color: shade(#ffffffff, 0.75);
+}
+
+notebook tab:hover label {
+  border-bottom-color: shade(#ffffffff, 0.7);
+  color: shade(#ffffffff, 0.9);
+}
+
+notebook tab:checked label {
+  border-bottom-color: #ffffffff;
+  color: #ffffffff;
+}
+
+notebook header {
+  margin-bottom: 0.42em;
+}
+
+.dt_view_switcher button:hover,
+.dt_toolbar button:hover,
+button:hover,
+.dt_button:hover {
+  background-color: {{button_hover_overlay}};
+  border-color: transparent;
+  color: #ffffffff;
+}
+
+button:disabled,
+checkbutton check:disabled,
+entry:disabled,
+dropdown:disabled,
+spinbutton:disabled,
+textview:disabled {
+  background-color: transparent;
+  border-color: {{disabled_button_border}};
+  color: {{disabled_foreground}};
+}
+
+button:disabled:hover,
+.dt_button:disabled:hover {
+  background-color: transparent;
+  border-color: {{disabled_button_border}};
+  color: {{disabled_foreground}};
+}
+
+.dt_view_switcher button:checked,
+.dt_view_switcher .active {
+  background-color: transparent;
+  color: #ffffffff;
+  border-bottom-color: #b9b9b9ff;
+}
+
+#left-panel,
+#right-panel {
+  min-width: {{rail_min_width}}px;
+  background-color: {{background}};
+  border: 0;
+}
+
+/* Shared Darktable component geometry.  The rails stay bounded while their
+ * inner scrollers absorb long module contents; the center is never asked to
+ * size itself from an expanded module's natural width. */
+.dt_rail {
+  min-width: {{rail_min_width}}px;
+  background-color: {{background}};
+}
+
+.dt_module_expander,
+.dt_module_group {
+  min-width: 0;
+  margin: 0 0 1px 0;
+  padding: 0;
+  background-color: {{module_background}};
+  border-bottom: 1px solid {{border}};
+}
+
+.dt_module_expander > title,
+.dt_module_group > title,
+.dt_module_expander > box > title,
+.dt_module_group > box > title {
+  min-height: {{module_title_height}}px;
+  padding: 0 0.14em 0.14em 0.45em;
+  font-size: 1.1em;
+  font-weight: normal;
+}
+
+/* GTK4 renders the disclosure arrow and label as siblings in the title box.
+ * Keep them in one compact hit target instead of letting title padding push the
+ * text away from the arrow at narrow rail widths. */
+.dt_module_expander > title > arrow,
+.dt_module_group > title > arrow,
+.dt_module_expander > box > title > expander,
+.dt_module_group > box > title > expander {
+  min-width: {{module_header_button_size}}px;
+  min-height: {{module_header_button_size}}px;
+  margin: 0.07em;
+}
+
+.dt_module_expander > title > label,
+.dt_module_group > title > label {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.dt_module_expander > title > box,
+.dt_module_group > title > box {
+  min-width: 0;
+  min-height: {{module_title_height}}px;
+  padding: 0;
+}
+
+.dt_module_expander > title > box > label,
+.dt_module_group > title > box > label {
+  min-width: 0;
+  padding: 0;
+}
+
+.dt_module_action {
+  min-width: {{module_header_button_size}}px;
+  min-height: {{module_header_button_size}}px;
+  padding: 0;
+  margin: 0.07em;
+  border: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+.dt_module_action:disabled {
+  color: {{disabled_foreground}};
+  background-color: transparent;
+  border-color: transparent;
+}
+
+.dt_module_action image {
+  -gtk-icon-size: {{module_header_icon_size}}px;
+}
+
+.dt_darkroom_section_title {
+  min-width: 0;
+  min-height: {{module_title_height}}px;
+  padding: 0 2px;
+  color: {{foreground}};
+  background-color: transparent;
+}
+
+.dt_module_expander > title > .dt_darkroom_section_title,
+.dt_module_group > title > .dt_darkroom_section_title {
+  min-width: 0;
+  min-height: {{module_title_height}}px;
+  padding: 0;
+}
+
+.dt_darkroom_section_label {
+  min-width: 0;
+  padding: 0;
+  color: {{module_label}};
+  font-size: 1.1em;
+  font-weight: normal;
+}
+
+.dt_module_expander > title > .dt_darkroom_section_title > .dt_darkroom_section_label,
+.dt_module_group > title > .dt_darkroom_section_title > .dt_darkroom_section_label {
+  min-width: 0;
+  padding: 0;
+  color: {{module_label}};
+}
+
+.dt_module_expander > box,
+.dt_module_group > box {
+  min-width: 0;
+  padding: {{module_gap}}px {{module_padding}}px {{module_padding}}px;
+}
+
+.dt_module_row {
+  min-width: 0;
+  min-height: {{module_row_height}}px;
+  padding: 0;
+}
+
+.dt_module_row label {
+  min-width: 0;
+  font-size: 1em;
+}
+
+.dt_module_expander > box > box > button.selected,
+#history-entries button.selected {
+  border-left: 2px solid {{active_image_marker}};
+  color: {{active_image_marker}};
+  font-weight: bold;
+}
+
+.dt_module_row scale,
+.dt_module_row dropdown,
+.dt_module_row switch,
+.dt_module_row entry {
+  min-width: 0;
+  min-height: {{control_height}}px;
+}
+
+.dt_module_row scale {
+  margin: 0 2px;
+}
+
+.dt_bauhaus {
+  min-width: 0;
+}
+
+.dt_bauhaus_anchor {
+  min-width: 1px;
+  min-height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+}
+
+menubutton.dt_bauhaus_anchor > button {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+menubutton.dt_bauhaus_anchor .dt_bauhaus_anchor_content {
+  min-width: 1px;
+  min-height: 1px;
+}
+
+popover.dt_bauhaus_popup {
+  padding: 0.42em;
+  border: 1px solid {{border}};
+  border-radius: 2px;
+  background-color: {{button_background}};
+}
+
+popover.dt_bauhaus_popup .dt_bauhaus_numeric_text {
+  padding: 0.42em;
+  font-size: 3em;
+}
+
+popover.dt_bauhaus_popup .dt_bauhaus_current_value {
+  padding: 0.42em;
+}
+
+.dt_field,
+.dt_module_row dropdown {
+  min-width: 48px;
+  padding: 0 3px;
+  background-color: {{active_field_background}};
+}
+
+.dt_button {
+  min-height: {{control_height}}px;
+  min-width: 0;
+  padding: 1px 5px;
+}
+
+#left-panel {
+  border-right: 1px solid {{border}};
+}
+
+#right-panel {
+  border-left: 1px solid {{border}};
+}
+
+.dt_panel_slot {
+  padding: 0;
+}
+
+#left-center,
+#left-bottom {
+  min-width: {{rail_min_width}}px;
+}
+
+#left-module-scroll {
+  min-width: {{rail_min_width}}px;
+  background-color: {{background}};
+}
+
+#left-panel expander {
+  margin: 0;
+  padding: 2px 4px;
+  min-width: 142px;
+  background-image: none;
+  box-shadow: none;
+}
+
+#left-panel expander > title {
+  min-height: {{module_title_height}}px;
+  padding: 0;
+}
+
+#left-panel expander > box {
+  padding: 3px 0 5px 12px;
+}
+
+.dt_rail_separator,
+.dt_toolbar_separator {
+  min-height: 1px;
+  min-width: 1px;
+  background-color: {{border}};
+}
+
+.dt_toolbar_separator {
+  min-height: 18px;
+  background-color: {{border}};
+}
+
+#collection-controls,
+#collection-rule,
+#collection-search-row,
+#collection-property,
+#collection-search {
+  min-width: 0;
+}
+
+#left-panel entry,
+#left-panel dropdown,
+#left-panel button {
+  min-width: 0;
+  background-image: none;
+  box-shadow: none;
+}
+
+#collection-property,
+#collection-search-row {
+  margin-right: 2px;
+}
+
+#collection-clear {
+  min-width: 24px;
+  padding: 0;
+}
+
+#collection-status {
+  min-height: {{status_height}}px;
+  padding: 2px 0;
+}
+
+.dt_collection_status {
+  color: {{foreground}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_background_jobs {
+  min-height: {{status_height}}px;
+  padding: 1px 6px;
+  font-size: {{compact_font_pt}}pt;
+  border-top: 1px solid {{border}};
+}
+
+#workspace,
+#center-workspace,
+.dt_workspace,
+.dt_darkroom_canvas {
+  background-color: {{darkroom_canvas}};
+  color: {{foreground}};
+}
+
+#lighttable-grid,
+.dt_lighttable {
+  background-color: {{lighttable_canvas}};
+  color: {{foreground}};
+}
+
+#lighttable-grid {
+  padding: 6px;
+}
+
+#lighttable-page {
+  min-width: 0;
+  min-height: 0;
+  background-color: {{lighttable_canvas}};
+}
+
+#lighttable-collection-toolbar {
+  min-height: {{toolbar_height}}px;
+  margin: 0;
+  padding: 0.14em 0.28em;
+  border-bottom: 1px solid {{border}};
+}
+
+#lighttable-layout-controls {
+  margin-left: 6px;
+}
+
+#lighttable-layout-mode-group button,
+#lighttable-zoom-controls button {
+  min-width: 28px;
+  min-height: {{control_height}}px;
+  padding: 0 5px;
+  background-color: transparent;
+  color: {{foreground}};
+}
+
+#lighttable-layout-mode-group button:checked {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+}
+
+#lighttable-zoom-columns {
+  min-width: 34px;
+  padding: 0 5px;
+  border: 1px solid {{border}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_segmented_group button {
+  margin: 0;
+  border-radius: 0;
+  border-right-width: 0;
+}
+
+.dt_segmented_group button:last-child {
+  border-right-width: 1px;
+}
+
+#lighttable-grid.dt_culling_surface {
+  padding: 6px 8px;
+}
+
+#lighttable-grid.dt_culling_surface > flowboxchild {
+  margin: 0;
+}
+
+button.dt_preview_card,
+button.dt_preview_card:hover,
+button.dt_preview_card.dt_selected,
+.dt_preview_card {
+  margin: 0;
+  padding: 0;
+  border: 1px solid #d4d4d4ff;
+  border-radius: 0;
+  background-color: #989898ff;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+.dt_preview_card .dt_thumbnail_surface {
+  border: 0;
+  background-color: #989898ff;
+}
+
+#lighttable-grid > flowboxchild {
+  margin: 3px;
+  padding: 0;
+}
+
+.dt_empty_state {
+  min-width: 38em;
+  min-height: 14em;
+  font-size: {{base_font_pt}}pt;
+  color: {{foreground}};
+}
+
+#empty-collection-state {
+  background-color: transparent;
+}
+
+#empty-collection-state label {
+  color: {{foreground}};
+}
+
+.dt_empty_state .dt_empty_heading {
+  color: {{hovered_thumbnail}};
+  font-weight: bold;
+}
+
+.dt_module_group,
+.dt_module,
+.dt_module_panel,
+expander {
+  margin: 0 0 1px 0;
+  padding: 0;
+  background-color: {{module_background}};
+  color: {{foreground}};
+  border-bottom: 1px solid {{border}};
+}
+
+.dt_module_group:hover,
+expander:hover {
+  background-color: {{button_background}};
+}
+
+.dt_section_label,
+.dt_section_expander,
+.dt_module_group > title {
+  min-height: {{module_title_height}}px;
+  padding: 0.14em 0;
+  color: {{section_label}};
+  background-color: transparent;
+  font-weight: bold;
+}
+
+.dt_toolbar {
+  min-height: {{toolbar_height}}px;
+  padding: 0.14em 0.28em;
+  background-color: {{background}};
+  color: {{foreground}};
+}
+
+#lighttable-collection-toolbar {
+  min-height: {{lighttable_toolbar_height}}px;
+  padding: 0.14em 0.28em;
+  background-color: {{background}};
+  border-bottom: 1px solid {{border}};
+}
+
+#center-bottom {
+  min-height: 22px;
+  padding: 0 4px;
+  background-color: {{background}};
+  border-bottom: 1px solid {{border}};
+}
+
+#lighttable-collection-toolbar entry,
+#lighttable-collection-toolbar dropdown,
+.dt_filter_button,
+#center-bottom button {
+  min-height: {{control_height}}px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 1px;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+#lighttable-collection-toolbar entry {
+  min-width: 70px;
+}
+
+#lighttable-filter-property,
+#lighttable-sort {
+  min-width: 82px;
+}
+
+#lighttable-selection-count,
+#display-profile-status {
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_import_actions > button {
+  min-width: 0;
+  padding-left: 2px;
+  padding-right: 2px;
+  font-size: {{compact_font_pt}}pt;
+}
+
+#darkroom-profile-diagnostic {
+  min-width: 0;
+  min-height: {{status_height}}px;
+  margin: 0 4px;
+  padding: 1px 4px;
+  border-left: 1px solid {{border}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+#darkroom-profile-diagnostic label {
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_profile_diagnostic.profile-diagnostic-ready {
+  color: #65c466ff;
+}
+
+.dt_profile_diagnostic.profile-diagnostic-missing,
+.dt_profile_diagnostic.profile-diagnostic-unsupported,
+.dt_profile_diagnostic.profile-diagnostic-ambiguous,
+.dt_profile_diagnostic.profile-diagnostic-range-mismatch,
+.dt_profile_diagnostic.profile-diagnostic-fallback,
+.dt_profile_diagnostic.profile-diagnostic-stale {
+  color: #ffbb00ff;
+}
+
+#lighttable-toolbar-separator-filter-labels,
+#lighttable-toolbar-separator-labels-rating,
+#lighttable-toolbar-separator-rating-sort,
+#lighttable-toolbar-separator-count-reset {
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+#lighttable-footer-organization {
+  margin-left: 0;
+}
+
+#lighttable-toolbar-separator-footer-rating-labels {
+  margin: 2px 3px;
+}
+
+.dt_filter_button {
+  min-width: 14px;
+  padding: 0 1px;
+}
+
+#lighttable-color-0, .dt_color_red { color: #d94b45ff; }
+#lighttable-color-1, .dt_color_yellow { color: #d0a933ff; }
+#lighttable-color-2, .dt_color_green { color: #4b9f58ff; }
+#lighttable-color-3, .dt_color_blue { color: #4c7fb4ff; }
+#lighttable-color-4, .dt_color_purple { color: #8f5aa8ff; }
+
+.dt_filter_button.dt_selected {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+}
+
+.dt_header_icon {
+  min-width: {{toolbar_button_size}}px;
+  min-height: {{toolbar_button_size}}px;
+  padding: 0;
+  font-size: {{base_font_pt}}pt;
+}
+
+#lighttable-collection-toolbar button:hover,
+.dt_filter_button:hover,
+#center-bottom button:hover {
+  background-color: {{hovered_thumbnail}};
+  color: {{background}};
+}
+
+entry,
+dropdown,
+spinbutton,
+.dt_field {
+  min-height: 1.6em;
+  background-color: {{active_field_background}};
+  color: {{foreground}};
+  border: 1px solid {{border}};
+  border-radius: 2px;
+}
+
+#bottom-filmstrip,
+#filmstrip,
+.dt_filmstrip {
+  min-height: 64px;
+  background-color: {{filmstrip_background}};
+  color: {{foreground}};
+  border-top: 0;
+}
+
+.dt_photo_card,
+#lighttable-photo-card,
+#filmstrip-photo {
+  padding: 0;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
+  border: 1px solid {{lighttable_canvas}};
+  border-radius: 1px;
+}
+
+.dt_thumbnail_image {
+  min-width: {{card_min_width}}px;
+  min-height: 7em;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
+}
+
+.dt_thumbnail_surface {
+  background-color: {{thumbnail_background}};
+  border: 1px solid {{border}};
+}
+
+.dt_thumbnail_placeholder {
+  color: {{foreground}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+#photo-thumbnail {
+  min-width: 220px;
+  min-height: 146px;
+}
+
+#photo-organization {
+  min-height: {{card_metadata_height}}px;
+  padding: 0 2px;
+  font-size: {{compact_font_pt}}pt;
+}
+
+#bottom #photo-thumbnail {
+  min-width: 92px;
+  min-height: 62px;
+}
+
+.dt_photo_card:hover,
+#lighttable-photo-card:hover,
+#filmstrip-photo:hover {
+  background-color: {{hovered_thumbnail}};
+  color: {{background}};
+}
+
+.dt_photo_card.dt_selected,
+#lighttable-photo-card.dt_selected,
+#filmstrip-photo.dt_selected,
+.dt_selected {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+  border-color: {{active_image_marker}};
+}
+
+button:focus-visible,
+entry:focus-visible,
+dropdown:focus-visible,
+scale:focus-visible {
+  outline: 1px solid {{hovered_thumbnail}};
+  outline-offset: -1px;
+}
+
+#darkroom-left-panel,
+#darkroom-right-panel {
+  min-width: {{rail_min_width}}px;
+  background-color: {{background}};
+}
+
+#darkroom-page {
+  min-width: 320px;
+  min-height: 0;
+}
+
+#darkroom-viewport {
+  min-width: 0;
+  min-height: 260px;
+}
+
+#darkroom-left-panel {
+  border-right: 1px solid {{border}};
+}
+
+#darkroom-right-panel {
+  border-left: 1px solid {{border}};
+}
+
+.dt_edge_toggle,
+.dt_edge_toggle:hover {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: #f4f4f4ff;
+  font-size: 8px;
+}
+
+.dt_edge_toggle_vertical {
+  min-width: {{outer_border_width}}px;
+  min-height: 28px;
+}
+
+.dt_edge_toggle_horizontal {
+  min-width: 28px;
+  min-height: {{outer_border_width}}px;
+}
+
+#darkroom-left-panel expander,
+#darkroom-right-panel expander {
+  margin: 0;
+  padding: 1px 3px;
+  border-bottom: 1px solid {{border}};
+  background-color: {{module_background}};
+}
+
+#darkroom-left-panel expander > title,
+#darkroom-right-panel expander > title {
+  min-height: {{module_title_height}}px;
+  padding: 0;
+  font-weight: bold;
+}
+
+#darkroom-left-panel expander > title > arrow,
+#darkroom-right-panel expander > title > arrow {
+  min-width: 14px;
+  margin-right: 3px;
+  color: {{foreground}};
+}
+
+#darkroom-left-panel expander > box,
+#darkroom-right-panel expander > box {
+  padding: 3px 2px 4px 10px;
+}
+
+#right-panel {
+  min-width: {{rail_min_width}}px;
+}
+
+#right-panel expander {
+  margin: 0;
+  padding: 2px 4px;
+  min-width: 0;
+  background-image: none;
+  box-shadow: none;
+}
+
+#right-panel expander > title {
+  min-height: {{module_title_height}}px;
+  padding: 0;
+}
+
+#right-panel expander > box {
+  padding: 3px 0 5px 12px;
+}
+
+#right-panel #export {
+  min-width: 0;
+  padding: 0;
+}
+
+#right-panel #export > title {
+  min-height: {{module_title_height}}px;
+  padding: 1px 4px;
+}
+
+#right-panel #export > box {
+  min-width: 0;
+  padding: 3px 4px 4px;
+}
+
+#export-rail-content {
+  min-width: 0;
+  padding: 0;
+}
+
+.dt_export_row {
+  min-height: {{module_row_height}}px;
+  padding: 1px 0;
+}
+
+.dt_export_label {
+  font-size: {{compact_font_pt}}pt;
+  color: {{section_label}};
+}
+
+#export-destination,
+#export-format,
+#export-size,
+#export-custom-size {
+  min-width: 76px;
+}
+
+#export-destination-row,
+#export-format-row,
+#export-size-row,
+#export-custom-size-row {
+  margin-right: 2px;
+}
+
+#export-actions {
+  margin-top: 1px;
+}
+
+#export-actions button {
+  min-height: {{control_height}}px;
+  min-width: 0;
+  padding: 1px 4px;
+}
+
+#rendered-png-status {
+  min-height: {{status_height}}px;
+  padding-top: 2px;
+  font-size: {{compact_font_pt}}pt;
+}
+
+#rendered-png-progress {
+  min-height: 10px;
+}
+
+.dt_darkroom_module_header {
+  min-height: {{module_title_height}}px;
+  padding: 0.5em;
+  border: 0;
+  border-bottom: 1px solid {{border}};
+  border-radius: 0;
+  background-color: {{module_background}};
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+.dt_darkroom_module_header label {
+  color: {{module_label}};
+  font-size: 1.1em;
+  font-weight: normal;
+}
+
+.dt_darkroom_module_header button {
+  min-width: {{module_header_button_size}}px;
+  min-height: {{module_header_button_size}}px;
+  margin: 0.07em;
+  padding: 0;
+}
+
+.dt_module_header checkbutton:checked,
+.dt_darkroom_module_header checkbutton:checked {
+  color: {{active_image_marker}};
+}
+
+.dt_module_header checkbutton:checked check,
+.dt_darkroom_module_header checkbutton:checked check {
+  background-color: {{active_image_marker}};
+  border-color: {{active_image_marker}};
+}
+
+.dt_module_row {
+  min-height: {{module_row_height}}px;
+  padding: 0;
+}
+
+.dt_module_row label {
+  font-size: 1em;
+}
+
+.dt_module_row switch,
+.dt_module_row dropdown,
+.dt_module_row scale {
+  min-height: {{control_height}}px;
+  min-width: 0;
+}
+
+.dt_rail_scroll,
+.dt_rail_scroll viewport,
+.dt_rail_scroll .dt_module_expander {
+  min-width: 0;
+}
+
+/* Source Color Zones wrapper metric; its drawing-area child expands into it. */
+#iop-bottom-bar {
+  min-height: 1.2em;
+}
+
+#darkroom-histogram {
+  min-height: {{histogram_min_height}}px;
+  min-width: 0;
+  background: linear-gradient(to top, #5e5e5eff, #777777ff);
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-filmstrip-boundary {
+  min-height: 1px;
+  background-color: #5e5e5eff;
+  color: #5e5e5eff;
+  border: 0;
+}
+
+#darkroom-module-groups {
+  min-height: {{toolbar_height}}px;
+  padding: 0.14em 0.28em;
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-module-groups button,
+.dt_darkroom_toolbar button {
+  min-height: {{toolbar_button_size}}px;
+  min-width: {{toolbar_button_size}}px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: {{foreground}};
+}
+
+#darkroom-module-groups button:checked,
+#darkroom-toolbar-bottom button:checked {
+  background-color: {{active_field_background}};
+  color: {{foreground}};
+}
+
+.dt_symbolic_glyph {
+  color: {{foreground}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_darkroom_toolbar {
+  min-height: {{toolbar_height}}px;
+  min-width: 0;
+  padding: 0.14em 0.28em;
+  background-color: {{background}};
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-toolbar-top {
+  border-bottom: 1px solid {{border}};
+}
+
+#darkroom-toolbar-top button:checked {
+  background-color: {{selected_thumbnail}};
+  color: {{background}};
+}
+
+#darkroom-toolbar-bottom {
+  min-height: {{status_height}}px;
+  padding: 0 3px;
+  background-color: transparent;
+  border: 0;
+}
+
+#darkroom-status-bar {
+  min-height: {{status_height}}px;
+  padding: 0 5px;
+  background-color: {{background}};
+  border-top: 1px solid {{border}};
+  color: {{foreground}};
+}
+
+#darkroom-status-bar label {
+  font-size: {{compact_font_pt}}pt;
+}
+
+#darkroom-job-status {
+  padding-left: 8px;
+  border-left: 1px solid {{border}};
+}
+
+#darkroom-photo-preview,
+#darkroom-preview-overlay,
+#darkroom-preview-canvas-frame {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background-color: {{darkroom_canvas}};
+}
+
+#darkroom-viewport-overlay {
+  padding: 4px;
+}
+
+.darkroom_viewport_badge {
+  padding: 2px 5px;
+  background-color: #181818dd;
+  border: 1px solid {{border}};
+  color: {{foreground}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.darkroom_viewport_badge.warning {
+  color: #f0c36bff;
+}
+
+#darkroom-preview-header,
+#darkroom-preview-facts {
+  min-height: 20px;
+  padding: 2px 5px;
+  margin: 0;
+  background-color: {{background}};
+}
+
+#darkroom-preview-title {
+  font-size: {{base_font_pt}}pt;
+  font-weight: bold;
+}
+
+.dt_thumbnail_surface {
+  background-color: {{thumbnail_background}};
+}
+
+.dt_thumbnail_placeholder {
+  color: {{foreground}};
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_thumbnail_indicators {
+  margin: 3px;
+  padding: 1px 3px;
+  background-color: #202020cc;
+  border-radius: 2px;
+}
+
+.dt_thumbnail_indicators label {
+  color: #eeeeeeff;
+  font-size: {{micro_font_pt}}pt;
+  font-weight: bold;
+}
+
+#lighttable-grid {
+  padding: 6px;
+}
+
+.dt_photo_card {
+  margin: 2px;
+  border-radius: 3px;
+  box-shadow: 0 1px 2px #00000066;
+}
+
+.dt_filmstrip_item {
+  margin: 2px 1px;
+  border: 1px solid transparent;
+  border-radius: 1px;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
+  box-shadow: none;
+}
+
+.dt_filmstrip_item.dt_selected {
+  border-color: #eeeeeeff;
+  background-color: {{thumbnail_background}};
+  color: {{foreground}};
+  box-shadow: none;
+}
+
+.dt_filmstrip_item .dt_thumbnail_surface {
+  border: 0;
+}
+
+.dt_filmstrip_selection_pointer {
+  min-width: 18px;
+  min-height: 8px;
+}
+
+.dt_filmstrip_format {
+  margin: 2px;
+  padding: 0 2px;
+  background-color: #111111cc;
+  color: #eeeeeeff;
+  font-size: {{micro_font_pt}}pt;
+  font-weight: bold;
+}
+
+.dt_filmstrip_metadata {
+  min-height: 14px;
+  padding: 1px 3px;
+  background-color: #111111cc;
+  color: #dededeff;
+  font-size: {{compact_font_pt}}pt;
+}
+
+.dt_filmstrip_color_tag {
+  font-size: {{micro_font_pt}}pt;
+}
+
+.dt_color_red { color: #d3483fff; }
+.dt_color_yellow { color: #d8bd45ff; }
+.dt_color_green { color: #69a952ff; }
+.dt_color_blue { color: #4d83bdff; }
+.dt_color_purple { color: #9b63b5ff; }
+
+.dt_placeholder,
+.dim-label {
+  color: #dededeff;
+}
+
+scrollbar slider {
+  background-color: {{scrollbar_inactive}};
+  border: 0.1em solid transparent;
+}
+
+scrollbar.horizontal slider {
+  min-width: 1em;
+  min-height: 0.45em;
+}
+
+scrollbar.vertical slider {
+  min-width: 0.45em;
+  min-height: 1em;
+}
+
+scrollbar slider:hover {
+  background-color: {{scrollbar_active}};
+}
+
+scrollbar {
+  min-width: 0.5em;
+  min-height: 0.5em;
+  margin: 0.07em;
+  border-color: {{scrollbar_background}};
+  border-radius: 0.42em;
+  background-color: {{scrollbar_background}};
+}

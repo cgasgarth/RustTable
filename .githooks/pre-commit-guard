@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$branch" in
+  main|master)
+    printf 'Commit blocked on protected branch %s. Create a branch and use a GitHub PR with squash merge.\n' "$branch" >&2
+    exit 1
+    ;;
+esac

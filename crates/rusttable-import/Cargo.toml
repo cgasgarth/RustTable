@@ -1,0 +1,26 @@
+[package]
+name = "rusttable-import"
+description = "Bounded single-snapshot image inspection and catalog registration."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rusttable-catalog.workspace = true
+rusttable-compat.workspace = true
+rusttable-core.workspace = true
+rusttable-image.workspace = true
+rusttable-metadata.workspace = true
+rusttable-processing.workspace = true
+same-file.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rusttable-catalog-store.workspace = true
+rusttable-image-io.workspace = true
+rusttable-sqlite-native.workspace = true
+
+[lints]
+workspace = true

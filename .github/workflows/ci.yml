@@ -1,380 +1,138 @@
 name: CI
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
-
 on:
   push:
-    branches:
-      - master
-      - darktable-**
-    paths-ignore:
-        - "po/**"
-        - "packaging/**"
-        - "data/latex/**"
-        - "data/lua/**"
-        - "data/pixmaps/**"
-        - "data/pswp/**"
-        - "data/style/**"
-        - "data/themes/**"
-        - "data/watermarks/**"
-        - "tools/*"
-        - "**.md"
-        - ".github/ISSUE_TEMPLATE/*"
-        - ".github/workflows/nightly.yml"
-  pull_request:
-    branches:
-      - master
-    paths-ignore:
-        - "po/**"
-        - "packaging/**"
-        - "data/latex/**"
-        - "data/lua/**"
-        - "data/pixmaps/**"
-        - "data/pswp/**"
-        - "data/style/**"
-        - "data/themes/**"
-        - "data/watermarks/**"
-        - "tools/*"
-        - "**.md"
-        - ".github/ISSUE_TEMPLATE/*"
-        - ".github/workflows/nightly.yml"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  NEXTEST_VERSION: "0.9.140"
+
 jobs:
+  linux:
+    name: Linux / fmt, Clippy, product data
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends libgtk-4-dev libnuma-dev nasm
+          dpkg-query -W -f='${Status}\n' libnuma-dev | grep -Fx 'install ok installed'
+          nasm --version
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-linux-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Verify generated operations
+        run: cargo xtask codegen operations --check
+      - name: Verify fixture corpus
+        run: cargo xtask fixtures verify
 
-  Linux:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
-    name: Linux_${{ matrix.distro }}_${{ matrix.compiler.compiler }}_${{ matrix.btype }}
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ matrix.distro }}
-      options: --tmpfs /tmp:exec --tmpfs /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}:exec
+  tests:
+    name: ${{ matrix.platform }} / nextest shard ${{ matrix.shard }}/2
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        distro:
-          - "ubuntu:26.04"
-        compiler:
-          - { compiler: GNU16,  CC: gcc-16,   CXX: g++-16,     packages: gcc-16 g++-16 }
-          - { compiler: LLVM22, CC: clang-22, CXX: clang++-22, packages: clang-22 libomp-22-dev llvm-22-dev libc++-22-dev libc++abi1 lld-22 clang-tools-22 mlir-22-tools libmlir-22-dev}
-        btype:
-          - Release
-        target:
-          - skiptest
-        generator:
-          - Ninja
-        eco: [-DDONT_USE_INTERNAL_LIBRAW=ON]
+        platform: [Linux, macOS, Windows]
+        shard: [1, 2]
         include:
-          # We want one run in CI to be Debug to make sure the Debug build isn't broken
-          - distro: "ubuntu:26.04"
-            btype: Debug
-            compiler: { compiler: GNU16, CC: gcc-16, CXX: g++-16, packages: gcc-16 g++-16 }
-            target: skiptest
-            generator: Ninja
-            eco: -DDONT_USE_INTERNAL_LIBRAW=OFF
-    env:
-      DISTRO: ${{ matrix.distro }}
-      CC: ${{ matrix.compiler.CC }}
-      CXX: ${{ matrix.compiler.CXX }}
-      SRC_DIR: ${{ github.workspace }}/src
-      BUILD_DIR: ${{ github.workspace }}/build
-      INSTALL_PREFIX: ${{ github.workspace }}/install
-      ECO: ${{ matrix.eco }}
-      CMAKE_BUILD_TYPE: ${{ matrix.btype }}
-      GENERATOR: ${{ matrix.generator }}
-      TARGET: ${{ matrix.target }}
-      DARKTABLE_CLI: ${{ github.workspace }}/install/bin/darktable-cli
-      DEBIAN_FRONTEND: noninteractive
+          - platform: Linux
+            runner: ubuntu-24.04
+          - platform: macOS
+            runner: macos-15
+          - platform: Windows
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
     steps:
-      - name: Select fallback Ubuntu mirror if requested
-        if: startsWith(github.ref_name, 'azure-')
-        # Sometimes the default Ubuntu mirror is unreliable under overload
-        # and CI fails because of this. We can use a special branch name
-        # prefix to switch the mirror to the one on Azure. Always using the
-        # Azure is not a solution as it can also fail from time to time.
-        run: |
-          sed -i 's/archive\.ubuntu/azure\.archive\.ubuntu/' /etc/apt/sources.list.d/ubuntu.sources
-      - name: Update base packages
-        timeout-minutes: 15
-        run: |
-          set -xe
-          rm -rf /var/lib/apt/lists/*
-          apt-get --yes update
-          apt-get --yes install eatmydata
-          eatmydata apt-get --yes upgrade
-      - name: Install compiler ${{ matrix.compiler.compiler }}
-        run: |
-          eatmydata apt-get --yes install ${{ matrix.compiler.packages }}
-      - name: Install Base Dependencies
-        run: |
-          eatmydata apt-get --yes install \
-            build-essential \
-            cmake \
-            appstream-util \
-            desktop-file-utils \
-            gettext \
-            git \
-            gdb \
-            intltool \
-            libarchive-dev \
-            libatk1.0-dev \
-            libavif-dev \
-            libcairo2-dev \
-            libcolord-dev \
-            libcolord-gtk-dev \
-            libcups2-dev \
-            libcurl4-gnutls-dev \
-            libexiv2-dev \
-            libgdk-pixbuf-2.0-dev \
-            libglib2.0-dev \
-            libgmic-dev \
-            libgphoto2-dev \
-            libgraphicsmagick1-dev \
-            libgtk-3-dev \
-            libheif-dev \
-            libjpeg-dev \
-            libjson-glib-dev \
-            liblcms2-dev \
-            liblensfun-dev \
-            liblua5.4-dev \
-            libonnxruntime-dev \
-            libopenexr-dev \
-            libopenjp2-7-dev \
-            libosmgpsmap-1.0-dev \
-            libpango1.0-dev \
-            libpng-dev \
-            libportmidi-dev \
-            libpotrace-dev \
-            libpugixml-dev \
-            libraw-dev \
-            librsvg2-dev \
-            libsaxon-java \
-            libsdl2-dev \
-            libsecret-1-dev \
-            libsqlite3-dev \
-            libtiff5-dev \
-            libwebp-dev \
-            libx11-dev \
-            libxml2-dev \
-            libxml2-utils \
-            ninja-build \
-            perl \
-            po4a \
-            python3-jsonschema \
-            xsltproc \
-            zlib1g-dev;
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          submodules: false
-          path: src
-          fetch-depth: 1
-      - name: Get only those submodules that are needed for build
+          persist-credentials: false
+      - name: Install Linux native dependencies
+        if: matrix.platform == 'Linux'
         run: |
-          cd src
-          git submodule init
-          git config submodule.src/tests/integration.update none
-          git submodule update
-          cd -
-      - name: Build and Install
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends libgtk-4-dev libnuma-dev nasm
+          dpkg-query -W -f='${Status}\n' libnuma-dev | grep -Fx 'install ok installed'
+          nasm --version
+      - name: Install macOS native dependencies
+        if: matrix.platform == 'macOS'
+        run: brew install gtk4
+      - name: Install Windows native dependencies
+        if: matrix.platform == 'Windows'
+        shell: pwsh
         run: |
-          cmake -E make_directory "${BUILD_DIR}";
-          cmake -E make_directory "${INSTALL_PREFIX}";
-          ./src/.ci/ci-script.sh;
-      - name: Check if it runs
-        run: |
-          ${INSTALL_PREFIX}/bin/darktable --version || true
-          ${INSTALL_PREFIX}/bin/darktable-cli \
-                 --width 1000 --height 1000 \
-                 --hq true --apply-custom-presets false \
-                 "${SRC_DIR}/data/pixmaps/256x256/darktable.png" \
-                 output.png \
-                 --core --disable-opencl --conf host_memory_limit=8192 \
-                 --conf worker_threads=4 -t 4 \
-                 --conf plugins/lighttable/export/force_lcms2=FALSE \
-                 --conf plugins/lighttable/export/iccintent=0
-
-  Windows:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
-    name: Windows_${{ matrix.msystem }}_${{ matrix.btype }}
-    runs-on: windows-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        btype:
-          - Release
-        msystem:
-          #- CLANG64
-          - UCRT64
-        target:
-          - skiptest
-        generator:
-          - Ninja
-        eco: [-DDONT_USE_INTERNAL_LIBRAW=ON]
-    defaults:
-      run:
-        shell: msys2 {0}
-    env:
-      SRC_DIR: ${{ github.workspace }}/src
-      BUILD_DIR: ${{ github.workspace }}/build
-      INSTALL_PREFIX: ${{ github.workspace }}/install
-      ECO: ${{ matrix.eco }}
-      CMAKE_BUILD_TYPE: ${{ matrix.btype }}
-      TARGET: ${{ matrix.target }}
-      GENERATOR: ${{ matrix.generator }}
-    steps:
-      - uses: msys2/setup-msys2@v2
+          $env:VCPKG_ROOT = 'C:\vcpkg'
+          "VCPKG_ROOT=$env:VCPKG_ROOT" >> $env:GITHUB_ENV
+          & "$env:VCPKG_ROOT\vcpkg.exe" install libheif:x64-windows-static-md
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
-          msystem: ${{ matrix.msystem }}
-          install: >-
-            git
-            intltool
-            po4a
-          pacboy: >-
-            cc:p
-            cmake:p
-            libxslt:p
-            ninja:p
-            nsis:p
-            python-jsonschema:p
-            curl:p
-            drmingw:p
-            exiv2:p
-            gcc-libs:p
-            gettext:p
-            gmic:p
-            graphicsmagick:p
-            gtk3:p
-            icu:p
-            imath:p
-            iso-codes:p
-            lcms2:p
-            lensfun:p
-            libarchive:p
-            libavif:p
-            libgphoto2:p
-            libheif:p
-            libjpeg-turbo:p
-            libjxl:p
-            libpng:p
-            libraw:p
-            librsvg:p
-            libsecret:p
-            libtiff:p
-            libwebp:p
-            libxml2:p
-            lua54:p
-            omp:p
-            openexr:p
-            openjpeg2:p
-            osm-gps-map:p
-            portmidi:p
-            potrace:p
-            pugixml:p
-            SDL2:p
-            sqlite3:p
-            zlib:p
-          update: true
-      - run: git config --global core.autocrlf input
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: rust-nextest-${{ matrix.platform }}-${{ env.NEXTEST_VERSION }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain
+      - name: Check workspace
+        run: cargo check --workspace --all-targets --all-features --locked
+      - name: Install pinned cargo-nextest
         shell: bash
-      - uses: actions/checkout@v7
+        run: |
+          if ! cargo nextest --version 2>/dev/null | grep -Fxq "cargo-nextest ${NEXTEST_VERSION}"; then
+            cargo install cargo-nextest --version "${NEXTEST_VERSION}" --locked
+          fi
+          test "$(cargo nextest --version)" = "cargo-nextest ${NEXTEST_VERSION}"
+      - name: Run nextest shard
+        run: cargo nextest run --workspace --all-features --locked --profile ci --partition "hash:${{ matrix.shard }}/2"
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          submodules: false
-          path: src
-          fetch-depth: 1
-      - name: Get only those submodules that are needed for build
-        run: |
-          cd src
-          git submodule init
-          git config submodule.src/tests/integration.update none
-          git submodule update
-          cd -
-      - name: Build and Install
-        run: |
-          cmake -E make_directory "${BUILD_DIR}"
-          cmake -E make_directory "${INSTALL_PREFIX}"
-          $(cygpath ${SRC_DIR})/.ci/ci-script.sh
-      - name: Check if it runs
-        run: |
-          $(cygpath ${INSTALL_PREFIX})/bin/darktable.exe --version || true
-          $(cygpath ${INSTALL_PREFIX})/bin/darktable-cli.exe --version || true
-          echo "Testing RUN!"
-          $(cygpath ${INSTALL_PREFIX})/bin/darktable-cli.exe \
-                 --width 1000 --height 1000 \
-                 --hq true --apply-custom-presets false \
-                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/darktable.png \
-                 output.png \
-                 --core --disable-opencl --conf host_memory_limit=8192 \
-                 --conf worker_threads=4 -t 4 \
-                 --conf plugins/lighttable/export/force_lcms2=FALSE \
-                 --conf plugins/lighttable/export/iccintent=0
+          name: rusttable-nextest-${{ matrix.platform }}-shard-${{ matrix.shard }}-${{ github.sha }}
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
 
-  macOS:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
-    name: macOS_${{ matrix.build.os }}_${{ matrix.compiler.compiler }}_${{ matrix.build.xcode }}_${{ matrix.btype }}
-    runs-on: ${{ matrix.build.os }}
-    strategy:
-      fail-fast: true
-      matrix:
-        build:
-          - { os: macos-15, xcode: 26.3, deployment: 15.0 } # AppleClang 17, arm64
-        compiler:
-          - { compiler: XCode,   CC: cc, CXX: c++ }
-        btype: [ Release ]
-        target:
-          - skiptest
-        generator:
-          - Ninja
-        eco: [-DDONT_USE_INTERNAL_LIBRAW=ON -DUSE_GRAPHICSMAGICK=OFF -DUSE_IMAGEMAGICK=ON]
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.build.xcode }}.app/Contents/Developer
-      CC: ${{ matrix.compiler.CC }}
-      CXX: ${{ matrix.compiler.CXX }}
-      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.build.deployment }}
-      SRC_DIR: ${{ github.workspace }}/src
-      BUILD_DIR: ${{ github.workspace }}/build
-      INSTALL_PREFIX: ${{ github.workspace }}/install
-      ECO: ${{ matrix.eco }}
-      CMAKE_BUILD_TYPE: ${{ matrix.btype }}
-      GENERATOR: ${{ matrix.generator }}
-      TARGET: ${{ matrix.target }}
+  dependencies:
+    name: Dependencies / advisories, licenses, sources
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          submodules: false
-          path: src
-          fetch-depth: 1
-      - name: Get only those submodules that are needed for build
+          persist-credentials: false
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: rust-dependencies-deny-0.19.8-${{ hashFiles('Cargo.lock', 'deny.toml') }}
+      - name: Install standard dependency tools
+        shell: bash
         run: |
-          cd src
-          git submodule init
-          git config submodule.src/tests/integration.update none
-          git submodule update
-          cd -
-      - name: Install Base Dependencies
-        run: |
-          brew update > /dev/null || true
-          cd src/.ci
-          export HOMEBREW_NO_INSTALL_UPGRADE=1
-          brew bundle --verbose || true
-      - name: Build and Install
-        run: |
-          cmake -E make_directory "${BUILD_DIR}";
-          cmake -E make_directory "${INSTALL_PREFIX}";
-          ./src/.ci/ci-script.sh;
-      - name: Check if it runs
-        run: |
-          ${INSTALL_PREFIX}/bin/darktable --version || true
-          ${INSTALL_PREFIX}/bin/darktable-cli \
-                 --width 1000 --height 1000 \
-                 --hq true --apply-custom-presets false \
-                 "${SRC_DIR}/data/pixmaps/256x256/darktable.png" \
-                 output.png \
-                 --core --disable-opencl --conf host_memory_limit=8192 \
-                 --conf worker_threads=4 -t 4 \
-                 --conf plugins/lighttable/export/force_lcms2=FALSE \
-                 --conf plugins/lighttable/export/iccintent=0
+          cargo deny --version 2>/dev/null | grep -F '0.19.8' ||
+            cargo install cargo-deny --version 0.19.8 --locked
+      - name: Check advisories, licenses, and sources
+        run: cargo deny check --hide-inclusion-graph advisories bans licenses sources

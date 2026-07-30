@@ -1,0 +1,46 @@
+schema = "rusttable.gpu-source-map.v1"
+repository = "darktable-org/darktable"
+commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
+issue = 290
+
+[[responsibility]]
+id = "opencl-manager"
+upstream_path = "src/common/opencl.c"
+upstream_symbol = "dt_opencl_init/dt_opencl_cleanup"
+rust_path = "crates/rusttable-gpu/src/runtime.rs"
+owner = "issue-290"
+
+[[responsibility]]
+id = "opencl-device-state"
+upstream_path = "src/common/opencl.h"
+upstream_symbol = "dt_opencl_t/dt_opencl_device_t"
+rust_path = "crates/rusttable-gpu/src/contracts.rs"
+owner = "issue-290"
+
+[[responsibility]]
+id = "dynamic-loader"
+upstream_path = "src/common/dlopencl.c"
+upstream_symbol = "dt_dlopencl_init"
+rust_path = "crates/rusttable-gpu/src/runtime.rs"
+owner = "issue-290"
+
+[[responsibility]]
+id = "driver-policy"
+upstream_path = "src/common/opencl_drivers_blacklist.h"
+upstream_symbol = "_opencl_check_driver_blacklist"
+rust_path = "crates/rusttable-gpu/src/contracts.rs"
+owner = "issue-290"
+
+[[responsibility]]
+id = "pipeline-capability-boundary"
+upstream_path = "src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_opencl"
+rust_path = "crates/rusttable-gpu/src/contracts.rs"
+owner = "issue-290"
+
+[[responsibility]]
+id = "kernel-registry"
+upstream_path = "data/kernels/programs.conf"
+upstream_symbol = "basic"
+rust_path = "crates/rusttable-gpu/src/cache.rs"
+owner = "issue-290"

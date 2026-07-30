@@ -1,2 +1,17 @@
-rawspeed/           @LebedevRI
-*rawspeed*          @LebedevRI
+# RustTable currently has one maintainer; keep high-impact changes visible.
+/crates/ @cgasgarth
+/Cargo.toml @cgasgarth
+/Cargo.lock @cgasgarth
+/rust-toolchain.toml @cgasgarth
+/architecture/ @cgasgarth
+/.github/workflows/ @cgasgarth
+/.github/dependabot.yml @cgasgarth
+/scripts/ @cgasgarth
+/package.json @cgasgarth
+/bun.lock @cgasgarth
+
+# Security-sensitive runtime boundaries.
+/crates/rusttable-scripting/ @cgasgarth
+/crates/rusttable-plugin-api/ @cgasgarth
+/crates/rusttable-diagnostics/ @cgasgarth
+/crates/rusttable-testkit/src/reference/ @cgasgarth

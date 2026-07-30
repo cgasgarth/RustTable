@@ -1,0 +1,2 @@
+// rusttable:coverage-generated
+pub fn generated_fixture() {}

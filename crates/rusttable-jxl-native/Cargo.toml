@@ -1,0 +1,13 @@
+[package]
+name = "rusttable-jxl-native"
+description = "Safe RustTable boundary for the pinned JPEG XL reference encoder."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+jpegxl-rs.workspace = true
+
+[lints]
+workspace = true

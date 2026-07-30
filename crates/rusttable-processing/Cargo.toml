@@ -1,0 +1,30 @@
+[package]
+name = "rusttable-processing"
+description = "Compiled operation data for the RustTable processing pipeline."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+postcard.workspace = true
+rusttable-masks.workspace = true
+rusttable-core.workspace = true
+rusttable-color.workspace = true
+rusttable-image.workspace = true
+rusttable-image-io.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[[bench]]
+name = "performance_budgets"
+harness = false
+bench = false
+test = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+png.workspace = true

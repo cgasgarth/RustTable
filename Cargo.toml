@@ -1,0 +1,162 @@
+[workspace]
+members = [
+    "crates/rusttable-app",
+    "crates/rusttable-ai",
+    "crates/rusttable-ai-native",
+    "crates/rusttable-camera",
+    "crates/rusttable-catalog",
+    "crates/rusttable-core",
+    "crates/rusttable-color",
+    "crates/rusttable-compat",
+    "crates/rusttable-export",
+    "crates/rusttable-catalog-store",
+    "crates/rusttable-sqlite-native",
+    "crates/rusttable-diagnostics",
+    "crates/rusttable-display-profile",
+    "crates/rusttable-gpu",
+    "crates/rusttable-image",
+    "crates/rusttable-image-io",
+    "crates/rusttable-jxl-native",
+    "crates/rusttable-jpeg2000-native",
+    "crates/rusttable-avif-native",
+    "crates/rusttable-heif-native",
+    "crates/rusttable-input",
+    "crates/rusttable-i18n",
+    "crates/rusttable-metadata",
+    "crates/rusttable-masks",
+    "crates/rusttable-import",
+    "crates/rusttable-pixelpipe",
+    "crates/rusttable-plugin-api",
+    "crates/rusttable-processing",
+    "crates/rusttable-render",
+    "crates/rusttable-scripting",
+    "crates/rusttable-simd",
+    "crates/rusttable-testkit",
+    "crates/rusttable-ui",
+    "crates/rusttable-webp-native",
+    "crates/rusttable-parity",
+    "crates/xtask",
+]
+resolver = "3"
+
+# Keep Cargo's release defaults explicit where they affect numerical codegen.
+# Architecture/target features remain baseline-only and are verified by xtask.
+[profile.release]
+opt-level = 3
+lto = false
+codegen-units = 16
+panic = "unwind"
+overflow-checks = false
+debug-assertions = false
+debug = 0
+strip = "none"
+
+[workspace.package]
+edition = "2024"
+license = "GPL-3.0-or-later"
+rust-version = "1.98"
+version = "0.1.0"
+
+[workspace.dependencies]
+clap = { version = "=4.6.1", features = ["derive"] }
+directories = "=6.0.0"
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+exr = { version = "=1.74.2", default-features = false }
+pdf-writer = "=0.15.0"
+futures = "=0.3.32"
+gtk4 = { version = "=0.11.4", features = ["v4_10"] }
+glib-build-tools = "=0.22.8"
+half = "=2.7.1"
+fluent-bundle = "=0.16.0"
+fluent-syntax = "=0.12.0"
+objc2 = "=0.6.4"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSApplication", "NSResponder", "NSRunningApplication"] }
+fixed_decimal = "=0.7.2"
+icu_collator = "=2.2.0"
+icu_datetime = "=2.2.0"
+icu_decimal = "=2.2.0"
+icu_list = "=2.2.0"
+icu_locale = "=2.2.0"
+icu_plurals = "=2.2.0"
+image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png", "tiff"] }
+image-webp = "=0.2.4"
+jpeg-decoder = { version = "=0.3.2", default-features = false, features = ["platform_independent"] }
+jxl-oxide = { version = "=0.12.6", default-features = false, features = ["rayon"] }
+resvg = { version = "=0.47.0", default-features = false, features = ["raster-images"] }
+rawler = "=0.7.2"
+libheif-rs = { version = "=2.7.0", default-features = false, features = ["v1_21", "embedded-libheif"] }
+avif-parse = "=2.1.0"
+ravif = { version = "=0.13.0", default-features = false, features = ["asm", "threading"] }
+jpegxl-rs = { version = "=0.15.0", default-features = false, features = ["vendored"] }
+dicom-toolkit-jpeg2000 = { version = "=0.5.0", default-features = false, features = ["std"] }
+mozjpeg-rs = { version = "=0.9.2", default-features = false }
+png = "=0.18.1"
+kamadak-exif = { version = "=0.6.1", default-features = false }
+md5 = "=0.8.1"
+mlua = { version = "=0.11.4", default-features = false, features = ["async", "serialize"] }
+naga = { version = "=30.0.0", default-features = false, features = ["wgsl-in"] }
+postcard = { version = "=1.1.3", features = ["alloc"] }
+process-wrap = { version = "=9.1.0", default-features = false, features = ["std", "process-session", "job-object", "creation-flags", "kill-on-drop"] }
+redb = "=4.1.0"
+rand = "=0.10.2"
+rusttable-app = { path = "crates/rusttable-app", version = "=0.1.0" }
+rusttable-ai = { path = "crates/rusttable-ai", version = "=0.1.0" }
+rusttable-ai-native = { path = "crates/rusttable-ai-native", version = "=0.1.0" }
+rusttable-camera = { path = "crates/rusttable-camera", version = "=0.1.0" }
+rusttable-catalog = { path = "crates/rusttable-catalog", version = "=0.1.0" }
+rusttable-catalog-store = { path = "crates/rusttable-catalog-store", version = "=0.1.0" }
+rusttable-sqlite-native = { path = "crates/rusttable-sqlite-native", version = "=0.1.0" }
+rusttable-color = { path = "crates/rusttable-color", version = "=0.1.0" }
+rusttable-compat = { path = "crates/rusttable-compat", version = "=0.1.0" }
+rusttable-core = { path = "crates/rusttable-core", version = "=0.1.0" }
+rusttable-diagnostics = { path = "crates/rusttable-diagnostics", version = "=0.1.0" }
+rusttable-display-profile = { path = "crates/rusttable-display-profile", version = "=0.1.0" }
+rusttable-export = { path = "crates/rusttable-export", version = "=0.1.0" }
+rusttable-gpu = { path = "crates/rusttable-gpu", version = "=0.1.0" }
+rusttable-image = { path = "crates/rusttable-image", version = "=0.1.0" }
+rusttable-image-io = { path = "crates/rusttable-image-io", version = "=0.1.0" }
+rusttable-jxl-native = { path = "crates/rusttable-jxl-native", version = "=0.1.0" }
+rusttable-jpeg2000-native = { path = "crates/rusttable-jpeg2000-native", version = "=0.1.0" }
+rusttable-avif-native = { path = "crates/rusttable-avif-native", version = "=0.1.0" }
+rusttable-heif-native = { path = "crates/rusttable-heif-native", version = "=0.1.0" }
+rusttable-input = { path = "crates/rusttable-input", version = "=0.1.0" }
+rusttable-i18n = { path = "crates/rusttable-i18n", version = "=0.1.0" }
+rusttable-import = { path = "crates/rusttable-import", version = "=0.1.0" }
+rusttable-masks = { path = "crates/rusttable-masks", version = "=0.1.0" }
+rusttable-metadata = { path = "crates/rusttable-metadata", version = "=0.1.0" }
+rusttable-parity = { path = "crates/rusttable-parity", version = "=0.1.0" }
+rusttable-pixelpipe = { path = "crates/rusttable-pixelpipe", version = "=0.1.0" }
+rusttable-plugin-api = { path = "crates/rusttable-plugin-api", version = "=0.1.0" }
+rusttable-processing = { path = "crates/rusttable-processing", version = "=0.1.0" }
+rusttable-render = { path = "crates/rusttable-render", version = "=0.1.0" }
+rusttable-scripting = { path = "crates/rusttable-scripting", version = "=0.1.0" }
+rusttable-simd = { path = "crates/rusttable-simd", version = "=0.1.0" }
+rusttable-testkit = { path = "crates/rusttable-testkit", version = "=0.1.0" }
+rusttable-ui = { path = "crates/rusttable-ui", version = "=0.1.0" }
+rusttable-webp-native = { path = "crates/rusttable-webp-native", version = "=0.1.0" }
+webpx = { version = "=0.4.0", default-features = false, features = ["decode", "encode", "std", "icc"] }
+same-file = "=1.0.6"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+sha2 = { version = "=0.10.9", default-features = false }
+zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
+tiff = { version = "=0.11.3", default-features = false, features = ["deflate", "jpeg", "lzw", "zstd"] }
+tracing = "=0.1.44"
+tokio = { version = "=1.51.1", features = ["macros", "rt", "time"] }
+toml = "=0.9.12"
+unicode-normalization = { package = "unicode-normalization-alignments", version = "=0.1.12" }
+roxmltree = "=0.21.1"
+usvg = { version = "=0.47.0", default-features = false, features = ["text"] }
+wasmtime = { version = "=46.0.1", default-features = false, features = ["async", "component-model", "component-model-async", "cranelift", "runtime", "wat"] }
+wasmtime-wasi = { version = "=46.0.1", default-features = false, features = ["p2"] }
+wgpu = { version = "=30.0.0", default-features = false, features = ["dx12", "gles", "metal", "vulkan", "wgsl"] }
+xtask = { path = "crates/xtask", version = "=0.1.0" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+too_many_lines = "allow"

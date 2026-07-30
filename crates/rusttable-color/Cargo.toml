@@ -1,0 +1,17 @@
+[package]
+name = "rusttable-color"
+description = "Typed color-space, profile, and transform-plan contracts for RustTable."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+md5.workspace = true
+postcard.workspace = true
+rusttable-core.workspace = true
+serde.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

@@ -1,33 +1,36 @@
-# Contributing to darktable
+# Contributing to RustTable
 
-The darktable project welcomes contributions:
+RustTable is a safe Rust 2024 and GTK4/gtk-rs rewrite of Darktable. The pinned native implementation remains unchanged in this repository as a non-built porting oracle, and the separate Darktable checkout is the runnable reference.
 
-* [Code](https://www.darktable.org/development/)
-* [Documentation](https://www.darktable.org/resources/)
-* Testing (and any backtraces if you happen to crash darktable)
-* Translations
-* [Camera profiles](https://www.darktable.org/resources/camera-support/).
-* Tutorials, screencasts, etc.
+## Prepare the single checkout
 
-See the [darktable development page](https://www.darktable.org/development/) for
-more information.
+Use `/Users/cgas/Documents/RustTable/RustTable` and create or switch to the long-lived `codex/file-by-file-migration` branch before implementation. Do not create Git worktrees.
 
-## Code
+```sh
+git config core.hooksPath .githooks
+bash scripts/dev/doctor.sh
+```
 
-Before you spend a lot of time working on a new feature, it's always best to
-discuss your proposed changes with us first. The best place to do that is in
-our dev support [matrix channel](https://matrix.to/#/#darktable-dev:matrix.org), 
-or just create a Github Issue (Make sure to check back to answer follow up questions).
-This will dramatically improve your chances of having your code merged, especially if we think you'll
-hang around to maintain it.
+## Port one complete responsibility
 
-For more places to discuss darktable, [see here for more information](https://www.darktable.org/contact/). 
+- Follow `TASK.md` and `AGENTS.md`; select the next dependency-ready Darktable file in source order.
+- Read the complete source, coupled declarations, callers, tests, constants, assets, CSS, and GTK construction before implementing.
+- Write source-derived tests, port the full responsibility into the matching nested Rust path, and route production callers to it.
+- Keep unsafe code forbidden and preserve observable behavior with Rust, GTK4/GLib, and established crates.
+- Do not edit, compile, link, FFI-call, or ship the retained native oracle.
+- Delete a retained source file only after its Rust replacement is complete, verified, used in production, and no retained dependency still needs it.
 
-### Coding style
+## Validate and submit
 
-We like our code to be properly formatted, and we have a well-defined coding style that is enforced at
-PR review time.
+Run the complete local commit gate:
 
-See the [Coding Style](https://github.com/darktable-org/darktable/wiki/Developer's-guide#coding-style)
-section in the [Developer's Guide](https://github.com/darktable-org/darktable/wiki/Developer's-guide)
-on our GitHub wiki.
+```sh
+cargo xtask check --parallel
+```
+
+The commit gate must not activate, raise, or switch desktop applications. Foreground visual review
+and real Command-Q validation are separate, explicit workflows:
+`bun run screenshot:ui-review -- --allow-foreground` and
+`bun run smoke:macos-computer-use -- --allow-foreground`.
+
+Commit coherent file ports directly on `codex/file-by-file-migration`. Open a ready-for-review PR only for a meaningful migration milestone; explain why and how, list exact source-to-Rust mappings, record validation and known unported dependencies, then squash merge.
