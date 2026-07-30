@@ -12,9 +12,9 @@ use rusttable_image_io::{
 };
 use rusttable_pixelpipe::{
     CancellationScope, CancellationStage, CpuPixelpipeError, CpuPixelpipeOutputMode,
-    CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, PixelpipeExecutionResult,
-    PixelpipeExecutionService, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
-    RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
+    CpuPixelpipeScaleContext, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError,
+    PixelpipeExecutionResult, PixelpipeExecutionService, RgbaF32ColorEncoding, RgbaF32Descriptor,
+    RgbaF32Image, RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
 };
 use rusttable_processing::{
     CompiledOperationGraph, DemosaicAlgorithm, FiniteF32, LinearRgb, RasterDimensions,
@@ -368,9 +368,15 @@ fn prepare_frame(
             .collect(),
     )
     .map_err(PreviewError::PixelpipeInput)?;
+    // Processing runs at the decoded source/intermediate dimensions; preview
+    // fitting happens only after this full-output snapshot. The native ROI and
+    // piece scales are therefore both exactly one for this production route.
+    let scale_context =
+        CpuPixelpipeScaleContext::new(1.0, 1.0).map_err(PreviewError::PixelpipeSnapshot)?;
     let snapshot =
         CpuPixelpipeSnapshot::try_new(pixelpipe_input, graph, CpuPixelpipeOutputMode::FullExport)
-            .map_err(PreviewError::PixelpipeSnapshot)?;
+            .map_err(PreviewError::PixelpipeSnapshot)?
+            .with_scale_context(scale_context);
     let result =
         execute_production_snapshot(&snapshot, cancellation).map_err(PreviewError::Pixelpipe)?;
     let pixels = result

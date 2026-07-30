@@ -732,6 +732,11 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             pixels.copy_from_slice(&candidate);
             Ok(())
         }
+        ProcessingOperationKind::Sharpen { .. } => Err(EvaluationError::OperationExecution {
+            step_index,
+            operation_id,
+            reason: "Sharpen requires the pixelpipe Lab D50 neighborhood route".to_owned(),
+        }),
         ProcessingOperationKind::Shadhi { config } => {
             let candidate = apply_shadhi_with_cancellation(
                 *config,

@@ -6,8 +6,8 @@ use crate::evaluate::{
     evaluate_steps_with_frame_and_masks_with_cancellation, graph_has_frame_geometry,
 };
 use crate::{
-    CompiledOperationGraph, EvaluationError, LinearRgb, OperationMaskSet, RasterDimensions,
-    WorkingRgbImage,
+    CompiledOperationGraph, EvaluationError, LinearRgb, OperationGraphNode, OperationMaskSet,
+    RasterDimensions, WorkingRgbImage,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -401,6 +401,45 @@ pub fn evaluate_graph_with_basicadj_plans_and_masks_with_cancellation<F: Fn() ->
             })
         }
     }
+}
+
+/// Evaluates one authored graph node against an explicit working frame.
+///
+/// This stage boundary lets the pixelpipe interleave source-colorspace
+/// neighborhood operations with ordinary registered CPU nodes without
+/// duplicating their equations, opacity, masks, or frame transitions.
+///
+/// # Errors
+///
+/// Returns the node's typed evaluation failure. Terminal publication nodes are
+/// rejected because a later neighborhood stage could not legally consume them.
+pub fn evaluate_graph_node_with_context_and_cancellation<F: Fn() -> bool>(
+    node: &OperationGraphNode,
+    input: &WorkingRgbImage,
+    plans: Option<&BasicAdjPlanSet>,
+    masks: Option<&OperationMaskSet>,
+    cancelled: F,
+) -> Result<WorkingRgbImage, EvaluationError> {
+    let (pixels, frame, terminal) = evaluate_steps_with_frame_and_masks_with_cancellation(
+        std::iter::once((node.pipeline_step_index(), node.prepared())),
+        input.pixel_slice(),
+        input.dimensions(),
+        0,
+        input.frame(),
+        plans,
+        masks,
+        cancelled,
+    )?;
+    if let Some(output) = terminal {
+        return Err(EvaluationError::TerminalOutputRequiresTypedPublication {
+            encoding: output.descriptor().encoding(),
+        });
+    }
+    Ok(WorkingRgbImage::from_validated_parts_with_frame(
+        input.dimensions(),
+        pixels,
+        frame,
+    ))
 }
 
 /// Evaluates one validated contiguous row window with global diagnostics.

@@ -7,7 +7,8 @@ use sha2::{Digest, Sha256};
 const BASICADJ_SNAPSHOT_KIND_TAG: u8 = 21;
 const CLIPPING_SNAPSHOT_KIND_TAG: u8 = 29;
 const COLORZONES_SNAPSHOT_KIND_TAG: u8 = 30;
-const SNAPSHOT_KIND_TAGS: [u8; 31] = [
+const SHARPEN_SNAPSHOT_KIND_TAG: u8 = 31;
+const SNAPSHOT_KIND_TAGS: [u8; 32] = [
     0,
     1,
     2,
@@ -39,6 +40,7 @@ const SNAPSHOT_KIND_TAGS: [u8; 31] = [
     28,
     CLIPPING_SNAPSHOT_KIND_TAG,
     COLORZONES_SNAPSHOT_KIND_TAG,
+    SHARPEN_SNAPSHOT_KIND_TAG,
 ];
 const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
 
@@ -83,12 +85,59 @@ impl fmt::Debug for CpuPixelpipeSnapshotIdentity {
     }
 }
 
+/// Immutable scale values used by native ROI-dependent operation planning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CpuPixelpipeScaleContext {
+    roi_scale: rusttable_processing::FiniteF32,
+    piece_iscale: rusttable_processing::FiniteF32,
+}
+
+impl CpuPixelpipeScaleContext {
+    /// Creates a finite, positive equivalent of Darktable's
+    /// `roi_in->scale` and `piece->iscale` pair.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CpuPixelpipeSnapshotError::InvalidScaleContext`] when either
+    /// value is non-finite, zero, or negative.
+    pub fn new(roi_scale: f32, piece_iscale: f32) -> Result<Self, CpuPixelpipeSnapshotError> {
+        let roi_scale = rusttable_processing::FiniteF32::new(roi_scale)
+            .map_err(|_| CpuPixelpipeSnapshotError::InvalidScaleContext)?;
+        let piece_iscale = rusttable_processing::FiniteF32::new(piece_iscale)
+            .map_err(|_| CpuPixelpipeSnapshotError::InvalidScaleContext)?;
+        if roi_scale.get() <= 0.0 || piece_iscale.get() <= 0.0 {
+            return Err(CpuPixelpipeSnapshotError::InvalidScaleContext);
+        }
+        Ok(Self {
+            roi_scale,
+            piece_iscale,
+        })
+    }
+
+    #[must_use]
+    pub const fn roi_scale(self) -> f32 {
+        self.roi_scale.get()
+    }
+
+    #[must_use]
+    pub const fn piece_iscale(self) -> f32 {
+        self.piece_iscale.get()
+    }
+}
+
+impl Default for CpuPixelpipeScaleContext {
+    fn default() -> Self {
+        Self::new(1.0, 1.0).expect("unit scale context is valid")
+    }
+}
+
 /// A fully detached, immutable input to the canonical CPU pixelpipe.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CpuPixelpipeSnapshot {
     input: RgbaF32Image,
     graph: CompiledOperationGraph,
     output_mode: CpuPixelpipeOutputMode,
+    scale_context: CpuPixelpipeScaleContext,
     mask_graph: Option<MaskGraph>,
     mask_store: Option<RasterMaskStore>,
     identity: CpuPixelpipeSnapshotIdentity,
@@ -106,6 +155,7 @@ impl CpuPixelpipeSnapshot {
             input,
             graph,
             output_mode,
+            scale_context: CpuPixelpipeScaleContext::default(),
             mask_graph: None,
             mask_store: None,
             identity: CpuPixelpipeSnapshotIdentity([0; 32]),
@@ -157,6 +207,19 @@ impl CpuPixelpipeSnapshot {
         self.output_mode
     }
 
+    #[must_use]
+    pub const fn scale_context(&self) -> CpuPixelpipeScaleContext {
+        self.scale_context
+    }
+
+    /// Attaches immutable native ROI scale context and refreshes snapshot identity.
+    #[must_use]
+    pub fn with_scale_context(mut self, context: CpuPixelpipeScaleContext) -> Self {
+        self.scale_context = context;
+        self.refresh_identity();
+        self
+    }
+
     /// Attaches the immutable mask graph used by CPU evaluation.
     #[must_use]
     pub fn with_mask_graph(mut self, graph: MaskGraph) -> Self {
@@ -198,6 +261,7 @@ impl CpuPixelpipeSnapshot {
             &self.input,
             &self.graph,
             self.output_mode,
+            self.scale_context,
             self.mask_graph.as_ref(),
             self.mask_store.as_ref(),
         );
@@ -208,6 +272,7 @@ impl CpuPixelpipeSnapshot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpuPixelpipeSnapshotError {
     UnsupportedInputEncoding { actual: RgbaF32ColorEncoding },
+    InvalidScaleContext,
 }
 
 impl fmt::Display for CpuPixelpipeSnapshotError {
@@ -217,6 +282,8 @@ impl fmt::Display for CpuPixelpipeSnapshotError {
                 formatter,
                 "CPU pixelpipe snapshot does not accept {actual:?} input"
             ),
+            Self::InvalidScaleContext => formatter
+                .write_str("CPU pixelpipe ROI scale and piece iscale must be finite and positive"),
         }
     }
 }
@@ -227,11 +294,12 @@ fn snapshot_identity(
     input: &RgbaF32Image,
     graph: &CompiledOperationGraph,
     output_mode: CpuPixelpipeOutputMode,
+    scale_context: CpuPixelpipeScaleContext,
     mask_graph: Option<&MaskGraph>,
     mask_store: Option<&RasterMaskStore>,
 ) -> CpuPixelpipeSnapshotIdentity {
     let mut hasher = Sha256::new();
-    hasher.update(b"rusttable.cpu-pixelpipe.snapshot.v2");
+    hasher.update(b"rusttable.cpu-pixelpipe.snapshot.v3");
     hasher.update(input.source_identity().as_bytes());
     hasher.update(input.descriptor().dimensions().width().to_le_bytes());
     hasher.update(input.descriptor().dimensions().height().to_le_bytes());
@@ -239,6 +307,8 @@ fn snapshot_identity(
     write_source_color(&mut hasher, input.descriptor().source_color());
     hasher.update([input.descriptor().source_orientation() as u8]);
     hasher.update([mode_tag(output_mode)]);
+    hasher.update(scale_context.roi_scale().to_bits().to_le_bytes());
+    hasher.update(scale_context.piece_iscale().to_bits().to_le_bytes());
     if let Some(mask_graph) = mask_graph {
         hasher.update([1]);
         hasher.update(mask_graph.identity());
@@ -592,6 +662,10 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
                     hasher.update(point.y().to_bits().to_le_bytes());
                 }
             }
+        }
+        ProcessingOperationKind::Sharpen { config } => {
+            hasher.update([SHARPEN_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
         }
         _ => unreachable!("core operation routed to the core snapshot writer"),
     }

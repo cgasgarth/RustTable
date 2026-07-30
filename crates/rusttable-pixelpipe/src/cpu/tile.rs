@@ -39,6 +39,63 @@ pub(super) fn assemble_tile(
     Ok(())
 }
 
+pub(super) fn assemble_tile_crop(
+    assembled: &mut [RgbaF32Pixel],
+    output_descriptor: RgbaF32Descriptor,
+    output_tile: crate::CpuPixelpipeTile,
+    expanded_output: &RgbaF32Image,
+    crop_x: u32,
+    crop_y: u32,
+) -> Result<(), CpuPixelpipeError> {
+    let expanded_dimensions = expanded_output.descriptor().dimensions();
+    let crop_end_x = crop_x.checked_add(output_tile.dimensions().width()).ok_or(
+        CpuPixelpipeError::TileAssembly {
+            source: CpuTileAssemblyError::PixelIndexOverflow,
+        },
+    )?;
+    let crop_end_y = crop_y
+        .checked_add(output_tile.dimensions().height())
+        .ok_or(CpuPixelpipeError::TileAssembly {
+            source: CpuTileAssemblyError::PixelIndexOverflow,
+        })?;
+    if crop_end_x > expanded_dimensions.width() || crop_end_y > expanded_dimensions.height() {
+        return Err(CpuPixelpipeError::TileAssembly {
+            source: CpuTileAssemblyError::TileOutputDimensionsMismatch,
+        });
+    }
+    for local_y in 0..output_tile.dimensions().height() {
+        let output_y =
+            output_tile
+                .origin_y()
+                .checked_add(local_y)
+                .ok_or(CpuPixelpipeError::TileAssembly {
+                    source: CpuTileAssemblyError::PixelIndexOverflow,
+                })?;
+        let destination_start = pixel_index(output_descriptor, output_tile.origin_x(), output_y)?;
+        let destination_end = checked_row_end(destination_start, output_tile.dimensions().width())?;
+        let destination = assembled
+            .get_mut(destination_start..destination_end)
+            .ok_or(CpuPixelpipeError::TileAssembly {
+                source: CpuTileAssemblyError::DestinationRowOutsideOutput,
+            })?;
+        let source_y = crop_y
+            .checked_add(local_y)
+            .ok_or(CpuPixelpipeError::TileAssembly {
+                source: CpuTileAssemblyError::PixelIndexOverflow,
+            })?;
+        let source_start = pixel_index(expanded_output.descriptor(), crop_x, source_y)?;
+        let source_end = checked_row_end(source_start, output_tile.dimensions().width())?;
+        let source = expanded_output
+            .pixels()
+            .get(source_start..source_end)
+            .ok_or(CpuPixelpipeError::TileAssembly {
+                source: CpuTileAssemblyError::SourceRowOutsideInput,
+            })?;
+        destination.copy_from_slice(source);
+    }
+    Ok(())
+}
+
 pub(super) fn tile_pixel_count(tile: crate::CpuPixelpipeTile) -> Result<usize, CpuPixelpipeError> {
     usize::try_from(tile.dimensions().pixel_count()).map_err(|_| CpuPixelpipeError::TileAssembly {
         source: CpuTileAssemblyError::PixelIndexExceedsPlatform {

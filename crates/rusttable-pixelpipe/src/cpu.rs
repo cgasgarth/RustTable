@@ -15,8 +15,9 @@ use rusttable_processing::{
     ColorCorrectionPlan, ColorZonesPixel, EvaluationError, FiniteF32, LinearRgb, OperationMaskSet,
     OperationMaskSetError, ProcessingOperation, RasterDimensions, SourceRgb, SourceRgbImage,
     SrgbChannel, VibrancePixel, VibrancePlan, WorkingRgbImage, convert_working_to_linear_srgb,
-    encode_working_to_srgb, evaluate_graph_with_basicadj_plans_and_masks_with_cancellation,
-    prepare_basicadj_plans, prepare_basicadj_plans_with_cancellation, to_linear_srgb,
+    encode_working_to_srgb, evaluate_graph_node_with_context_and_cancellation,
+    evaluate_graph_with_basicadj_plans_and_masks_with_cancellation, prepare_basicadj_plans,
+    prepare_basicadj_plans_with_cancellation, to_linear_srgb,
 };
 
 use crate::frame::{execute_frame_image, has_frame_geometry};
@@ -31,7 +32,7 @@ mod mask;
 mod tile;
 
 use mask::{crop_masks, resolve_masks};
-use tile::{assemble_tile, checked_row_end, pixel_index, tile_pixel_count};
+use tile::{assemble_tile, assemble_tile_crop, checked_row_end, pixel_index, tile_pixel_count};
 
 /// The typed presentation boundary requested from a CPU pixelpipe execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -148,7 +149,10 @@ impl CpuPixelpipeExecutor {
             ));
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
+        let plans = if preserve_inert_lab
+            || is_pure_lab_chain(request, request.input())
+            || !has_active_basicadj(request)
+        {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans(request)?
@@ -198,7 +202,10 @@ impl CpuPixelpipeExecutor {
             ));
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
+        let plans = if preserve_inert_lab
+            || is_pure_lab_chain(request, request.input())
+            || !has_active_basicadj(request)
+        {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans_with_cancellation(request, scope)?
@@ -244,12 +251,16 @@ impl CpuPixelpipeExecutor {
             return self.execute(request);
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
+        let plans = if preserve_inert_lab
+            || is_pure_lab_chain(request, request.input())
+            || !has_active_basicadj(request)
+        {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans(request)?
         };
         let masks = resolve_masks(request)?;
+        let neighborhood_overlap = neighborhood_overlap(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -262,10 +273,15 @@ impl CpuPixelpipeExecutor {
                 .ok_or(CpuPixelpipeError::TileAssembly {
                     source: CpuTileAssemblyError::TileUnavailable,
                 })?;
-            let tile_input = tile_input(request.input(), tile)?;
+            let neighborhood_tile = expand_tile(
+                request.input().descriptor().dimensions(),
+                tile,
+                neighborhood_overlap,
+            )?;
+            let tile_input = tile_input(request.input(), neighborhood_tile.input)?;
             let tile_masks = masks
                 .as_ref()
-                .map(|set| crop_masks(set, tile))
+                .map(|set| crop_masks(set, neighborhood_tile.input))
                 .transpose()?;
             let (tile_output, _) = Self::execute_image(
                 request,
@@ -274,12 +290,23 @@ impl CpuPixelpipeExecutor {
                 &plans,
                 tile_masks.as_ref(),
             )?;
-            assemble_tile(
-                &mut assembled,
-                request.input().descriptor(),
-                tile,
-                &tile_output,
-            )?;
+            if neighborhood_overlap == 0 {
+                assemble_tile(
+                    &mut assembled,
+                    request.input().descriptor(),
+                    tile,
+                    &tile_output,
+                )?;
+            } else {
+                assemble_tile_crop(
+                    &mut assembled,
+                    request.input().descriptor(),
+                    tile,
+                    &tile_output,
+                    neighborhood_tile.crop_x,
+                    neighborhood_tile.crop_y,
+                )?;
+            }
         }
 
         let output_descriptor = output_descriptor(
@@ -324,12 +351,16 @@ impl CpuPixelpipeExecutor {
             return Ok(result);
         }
         let preserve_inert_lab = preserves_inert_lab_input(request, request.input());
-        let plans = if preserve_inert_lab || is_lab_point_chain(request, request.input()) {
+        let plans = if preserve_inert_lab
+            || is_pure_lab_chain(request, request.input())
+            || !has_active_basicadj(request)
+        {
             BasicAdjPlanSet::default()
         } else {
             Self::prepare_plans_with_cancellation(request, scope)?
         };
         let masks = resolve_masks(request)?;
+        let neighborhood_overlap = neighborhood_overlap(request)?;
         let grid = tile_plan
             .grid_for(request.input().descriptor().dimensions())
             .map_err(|source| CpuPixelpipeError::TilePlan { source })?;
@@ -346,10 +377,15 @@ impl CpuPixelpipeExecutor {
                 .ok_or(CpuPixelpipeError::TileAssembly {
                     source: CpuTileAssemblyError::TileUnavailable,
                 })?;
-            let tile_input = tile_input(request.input(), tile)?;
+            let neighborhood_tile = expand_tile(
+                request.input().descriptor().dimensions(),
+                tile,
+                neighborhood_overlap,
+            )?;
+            let tile_input = tile_input(request.input(), neighborhood_tile.input)?;
             let tile_masks = masks
                 .as_ref()
-                .map(|set| crop_masks(set, tile))
+                .map(|set| crop_masks(set, neighborhood_tile.input))
                 .transpose()?;
             let (tile_output, _) = Self::execute_image_with_cancellation(
                 request,
@@ -359,12 +395,23 @@ impl CpuPixelpipeExecutor {
                 tile_masks.as_ref(),
                 Some(scope),
             )?;
-            assemble_tile(
-                &mut assembled,
-                request.input().descriptor(),
-                tile,
-                &tile_output,
-            )?;
+            if neighborhood_overlap == 0 {
+                assemble_tile(
+                    &mut assembled,
+                    request.input().descriptor(),
+                    tile,
+                    &tile_output,
+                )?;
+            } else {
+                assemble_tile_crop(
+                    &mut assembled,
+                    request.input().descriptor(),
+                    tile,
+                    &tile_output,
+                    neighborhood_tile.crop_x,
+                    neighborhood_tile.crop_y,
+                )?;
+            }
         }
         scope
             .child(CancellationStage::Publication)
@@ -422,7 +469,7 @@ impl CpuPixelpipeExecutor {
         }
 
         if is_lab_point_chain(request, input) {
-            return execute_lab_point_chain(request, input, masks, node_scope.as_ref());
+            return execute_lab_point_chain(request, input, plans, masks, node_scope.as_ref());
         }
 
         if let Some(node) = request.graph().nodes().find(|node| {
@@ -575,72 +622,203 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
     if !input_supported {
         return false;
     }
-    let mut has_active_lab_point = false;
+    let mut has_active_lab_operation = false;
+    let mut has_active_sharpen = false;
+    let mut all_active_operations_are_lab = true;
     for node in request.graph().nodes() {
         let operation = node.operation();
         if !operation_is_semantically_active(operation) {
             continue;
         }
-        if !matches!(
+        let is_lab_operation = matches!(
             operation.kind(),
             rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
                 | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
+                | rusttable_processing::ProcessingOperationKind::Sharpen { .. }
                 | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
-        ) {
-            return false;
-        }
-        has_active_lab_point = true;
+        );
+        has_active_lab_operation |= is_lab_operation;
+        has_active_sharpen |= matches!(
+            operation.kind(),
+            rusttable_processing::ProcessingOperationKind::Sharpen { .. }
+        );
+        all_active_operations_are_lab &= is_lab_operation;
     }
-    has_active_lab_point
+    has_active_sharpen || (has_active_lab_operation && all_active_operations_are_lab)
+}
+
+fn is_pure_lab_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
+    is_lab_point_chain(request, input)
+        && request.graph().nodes().all(|node| {
+            !operation_is_semantically_active(node.operation())
+                || matches!(
+                    node.operation().kind(),
+                    rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
+                        | rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+                        | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+                        | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
+                        | rusttable_processing::ProcessingOperationKind::Sharpen { .. }
+                        | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
+                )
+        })
+}
+
+fn has_active_basicadj(request: &CpuPixelpipeSnapshot) -> bool {
+    request.graph().nodes().any(|node| {
+        operation_is_semantically_active(node.operation())
+            && matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::BasicAdj { .. }
+            )
+    })
+}
+
+fn operation_uses_lab_stage(kind: &rusttable_processing::ProcessingOperationKind) -> bool {
+    matches!(
+        kind,
+        rusttable_processing::ProcessingOperationKind::ColorCorrection { .. }
+            | rusttable_processing::ProcessingOperationKind::ColorContrast { .. }
+            | rusttable_processing::ProcessingOperationKind::ColorReconstruction { .. }
+            | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
+            | rusttable_processing::ProcessingOperationKind::Sharpen { .. }
+            | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
+    )
+}
+
+fn lab_input_channels(
+    input: &RgbaF32Image,
+    scope: Option<&CancellationScope>,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    let required = input
+        .pixels()
+        .len()
+        .saturating_mul(std::mem::size_of::<[f32; 4]>());
+    let mut lab = Vec::new();
+    lab.try_reserve_exact(input.pixels().len()).map_err(|_| {
+        CpuPixelpipeError::SourceColorPlan(format!("Lab stage could not allocate {required} bytes"))
+    })?;
+    for (pixel_index, pixel) in input.pixels().iter().enumerate() {
+        if pixel_index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        lab.push([pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]);
+    }
+    Ok(lab)
+}
+
+fn working_to_lab_channels(
+    working: &WorkingRgbImage,
+    input: &RgbaF32Image,
+    scope: Option<&CancellationScope>,
+    boundary: &str,
+) -> Result<Vec<[f32; 4]>, CpuPixelpipeError> {
+    let to_lab = color_transform(
+        working.frame().encoding(),
+        rusttable_color::ColorEncoding::LabD50,
+    )?;
+    let required = input
+        .pixels()
+        .len()
+        .saturating_mul(std::mem::size_of::<[f32; 4]>());
+    let mut lab = Vec::new();
+    lab.try_reserve_exact(input.pixels().len()).map_err(|_| {
+        CpuPixelpipeError::SourceColorPlan(format!("Lab stage could not allocate {required} bytes"))
+    })?;
+    for (pixel_index, (rgb, source)) in working.pixels().zip(input.pixels()).enumerate() {
+        if pixel_index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let channels = to_lab
+            .apply_rgb(
+                [rgb.red().get(), rgb.green().get(), rgb.blue().get()],
+                || scope.is_some_and(|scope| scope.check().is_err()),
+            )
+            .map_err(|error| lab_point_transform_error(boundary, pixel_index, error, scope))?;
+        lab.push([channels[0], channels[1], channels[2], source.alpha()]);
+    }
+    Ok(lab)
 }
 
 fn execute_lab_point_chain(
     request: &CpuPixelpipeSnapshot,
     input: &RgbaF32Image,
+    plans: &BasicAdjPlanSet,
     masks: Option<&OperationMaskSet>,
     scope: Option<&CancellationScope>,
 ) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
-    let rgb_boundary;
-    let mut output = if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
+    let first_active_lab_node = request
+        .graph()
+        .nodes()
+        .find(|node| {
+            operation_is_semantically_active(node.operation())
+                && operation_uses_lab_stage(node.operation().kind())
+        })
+        .map(rusttable_processing::OperationGraphNode::index);
+    let has_leading_rgb_stage = first_active_lab_node.is_some_and(|first_lab| {
+        request.graph().nodes().any(|node| {
+            node.index().get() < first_lab.get()
+                && operation_is_semantically_active(node.operation())
+        })
+    });
+
+    let mut rgb_boundary;
+    let mut output = if has_leading_rgb_stage {
+        let first_lab = first_active_lab_node.expect("a leading stage requires a later Lab node");
+        let mut working = to_linear_working(input)?;
+        for node in request
+            .graph()
+            .nodes()
+            .take_while(|node| node.index().get() < first_lab.get())
+        {
+            if !operation_is_semantically_active(node.operation()) {
+                continue;
+            }
+            working = evaluate_graph_node_with_context_and_cancellation(
+                node,
+                &working,
+                Some(plans),
+                masks,
+                || scope.is_some_and(|scope| scope.check().is_err()),
+            )
+            .map_err(|source| cancellable_evaluation_error(source, scope))?;
+        }
+        let lab = working_to_lab_channels(&working, input, scope, "RGB-to-Lab stage ingress")?;
+        rgb_boundary = Some((
+            color_transform(
+                rusttable_color::ColorEncoding::LabD50,
+                working.frame().encoding(),
+            )?,
+            working.frame(),
+        ));
+        lab
+    } else if input.descriptor().color_encoding() == RgbaF32ColorEncoding::LabD50 {
         rgb_boundary = None;
-        input
-            .pixels()
-            .iter()
-            .map(|pixel| [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()])
-            .collect::<Vec<_>>()
+        lab_input_channels(input, scope)?
     } else {
         let working = to_linear_working(input)?;
-        let to_lab = color_transform(
-            working.frame().encoding(),
-            rusttable_color::ColorEncoding::LabD50,
-        )?;
-        let from_lab = color_transform(
-            rusttable_color::ColorEncoding::LabD50,
-            working.frame().encoding(),
-        )?;
-        let lab = working
-            .pixels()
-            .zip(input.pixels())
-            .enumerate()
-            .map(|(pixel_index, (rgb, source))| {
-                let channels = to_lab
-                    .apply_rgb(
-                        [rgb.red().get(), rgb.green().get(), rgb.blue().get()],
-                        || scope.is_some_and(|scope| scope.check().is_err()),
-                    )
-                    .map_err(|error| {
-                        lab_point_transform_error("RGB-to-Lab ingress", pixel_index, error, scope)
-                    })?;
-                Ok([channels[0], channels[1], channels[2], source.alpha()])
-            })
-            .collect::<Result<Vec<_>, CpuPixelpipeError>>()?;
-        rgb_boundary = Some((from_lab, working.frame()));
+        let lab = working_to_lab_channels(&working, input, scope, "RGB-to-Lab ingress")?;
+        rgb_boundary = Some((
+            color_transform(
+                rusttable_color::ColorEncoding::LabD50,
+                working.frame().encoding(),
+            )?,
+            working.frame(),
+        ));
         lab
     };
     let mut diagnostics = Vec::new();
     for node in request.graph().nodes() {
+        if has_leading_rgb_stage
+            && first_active_lab_node.is_some_and(|first_lab| node.index().get() < first_lab.get())
+        {
+            continue;
+        }
         if let Some(scope) = scope {
             scope.check().map_err(CpuPixelpipeError::Cancelled)?;
         }
@@ -696,6 +874,20 @@ fn execute_lab_point_chain(
             }
             continue;
         }
+        if let rusttable_processing::ProcessingOperationKind::Sharpen { config } = operation.kind()
+        {
+            execute_sharpen_lab(
+                *config,
+                &mut output,
+                dimensions,
+                request.scale_context(),
+                mask,
+                opacity,
+                node,
+                scope,
+            )?;
+            continue;
+        }
         output = match operation.kind() {
             rusttable_processing::ProcessingOperationKind::ColorCorrection { config } => {
                 let input = output
@@ -745,9 +937,20 @@ fn execute_lab_point_chain(
                 };
                 result.into_iter().map(VibrancePixel::channels).collect()
             }
-            _ => unreachable!(
-                "active nodes in a Lab point chain are registered Lab point operations"
-            ),
+            _ => {
+                let frame = rgb_boundary.as_ref().map_or_else(
+                    rusttable_processing::WorkingFrameDescriptor::srgb,
+                    |(_, frame)| *frame,
+                );
+                let (pixels, frame) = execute_registered_rgb_stage(
+                    node, &output, dimensions, frame, plans, masks, scope,
+                )?;
+                rgb_boundary = Some((
+                    color_transform(rusttable_color::ColorEncoding::LabD50, frame.encoding())?,
+                    frame,
+                ));
+                pixels
+            }
         };
     }
     if let Some(scope) = scope {
@@ -810,6 +1013,197 @@ fn execute_lab_point_chain(
     RgbaF32Image::new(descriptor, pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
         .map(|image| (image, diagnostics))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_registered_rgb_stage(
+    node: &rusttable_processing::OperationGraphNode,
+    lab: &[[f32; 4]],
+    dimensions: RasterDimensions,
+    frame: rusttable_processing::WorkingFrameDescriptor,
+    plans: &BasicAdjPlanSet,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<(Vec<[f32; 4]>, rusttable_processing::WorkingFrameDescriptor), CpuPixelpipeError> {
+    let to_rgb = color_transform(rusttable_color::ColorEncoding::LabD50, frame.encoding())?;
+    let required = lab.len().saturating_mul(std::mem::size_of::<LinearRgb>());
+    let mut rgb = Vec::new();
+    rgb.try_reserve_exact(lab.len())
+        .map_err(|_| registered_stage_allocation_error(node, required))?;
+    for (pixel_index, channels) in lab.iter().enumerate() {
+        if pixel_index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let channels = to_rgb
+            .apply_rgb([channels[0], channels[1], channels[2]], || {
+                scope.is_some_and(|scope| scope.check().is_err())
+            })
+            .map_err(|error| {
+                lab_point_transform_error("Lab-to-RGB stage transition", pixel_index, error, scope)
+            })?;
+        rgb.push(LinearRgb::new(
+            FiniteF32::new(channels[0]).map_err(|_| {
+                CpuPixelpipeError::SourceColorPlan(format!(
+                    "registered RGB stage produced non-finite red at pixel {pixel_index}"
+                ))
+            })?,
+            FiniteF32::new(channels[1]).map_err(|_| {
+                CpuPixelpipeError::SourceColorPlan(format!(
+                    "registered RGB stage produced non-finite green at pixel {pixel_index}"
+                ))
+            })?,
+            FiniteF32::new(channels[2]).map_err(|_| {
+                CpuPixelpipeError::SourceColorPlan(format!(
+                    "registered RGB stage produced non-finite blue at pixel {pixel_index}"
+                ))
+            })?,
+        ));
+    }
+    let working = WorkingRgbImage::new_with_frame(dimensions, rgb, frame)
+        .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    let evaluated = evaluate_graph_node_with_context_and_cancellation(
+        node,
+        &working,
+        Some(plans),
+        masks,
+        || scope.is_some_and(|scope| scope.check().is_err()),
+    )
+    .map_err(|source| cancellable_evaluation_error(source, scope))?;
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+
+    let to_lab = color_transform(
+        evaluated.frame().encoding(),
+        rusttable_color::ColorEncoding::LabD50,
+    )?;
+    let required = lab.len().saturating_mul(std::mem::size_of::<[f32; 4]>());
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(lab.len())
+        .map_err(|_| registered_stage_allocation_error(node, required))?;
+    for (pixel_index, (rgb, source)) in evaluated.pixels().zip(lab).enumerate() {
+        if pixel_index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let channels = to_lab
+            .apply_rgb(
+                [rgb.red().get(), rgb.green().get(), rgb.blue().get()],
+                || scope.is_some_and(|scope| scope.check().is_err()),
+            )
+            .map_err(|error| {
+                lab_point_transform_error("RGB-to-Lab stage transition", pixel_index, error, scope)
+            })?;
+        output.push([channels[0], channels[1], channels[2], source[3]]);
+    }
+    Ok((output, evaluated.frame()))
+}
+
+fn registered_stage_allocation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    required: usize,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: format!("registered RGB stage could not allocate {required} bytes"),
+        },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_sharpen_lab(
+    config: rusttable_processing::operations::sharpen::SharpenConfig,
+    output: &mut [[f32; 4]],
+    dimensions: RasterDimensions,
+    scale: crate::CpuPixelpipeScaleContext,
+    mask: Option<&[f32]>,
+    opacity: f32,
+    node: &rusttable_processing::OperationGraphNode,
+    scope: Option<&CancellationScope>,
+) -> Result<(), CpuPixelpipeError> {
+    let required = output.len().saturating_mul(std::mem::size_of::<
+        rusttable_processing::operations::sharpen::SharpenPixel,
+    >());
+    let mut input = Vec::new();
+    input.try_reserve_exact(output.len()).map_err(|_| {
+        sharpen_evaluation_error(
+            node,
+            rusttable_processing::operations::OperationExecutionError::AllocationFailed {
+                required,
+            },
+            scope,
+        )
+    })?;
+    let width = usize::try_from(dimensions.width()).expect("validated raster width fits usize");
+    for (row, channels) in output.chunks(width).enumerate() {
+        if let Some(scope) = scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        debug_assert!(row < usize::try_from(dimensions.height()).expect("height fits usize"));
+        input.extend(
+            channels
+                .iter()
+                .copied()
+                .map(rusttable_processing::operations::sharpen::SharpenPixel::from_channels),
+        );
+    }
+    let plan = rusttable_processing::operations::sharpen::SharpenPlan::new(
+        config,
+        dimensions,
+        scale.roi_scale(),
+        scale.piece_iscale(),
+    )
+    .map_err(|error| sharpen_evaluation_error(node, error, scope))?;
+    let candidate = plan
+        .execute_with_cancel(&input, || scope.is_some_and(|scope| scope.check().is_err()))
+        .map_err(|error| sharpen_evaluation_error(node, error, scope))?;
+    for (row, (output_row, candidate_row)) in output
+        .chunks_mut(width)
+        .zip(candidate.chunks(width))
+        .enumerate()
+    {
+        if let Some(scope) = scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let start = row * width;
+        for (column, (destination, candidate)) in
+            output_row.iter_mut().zip(candidate_row).enumerate()
+        {
+            let index = start + column;
+            let coverage = mask.map_or(opacity, |values| values[index] * opacity);
+            let source_lightness = destination[0];
+            destination[0] = source_lightness * (1.0 - coverage) + candidate.lightness() * coverage;
+        }
+    }
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    Ok(())
+}
+
+fn sharpen_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: rusttable_processing::operations::OperationExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if source == rusttable_processing::operations::OperationExecutionError::Cancelled
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
 }
 
 const COLORZONES_CANCELLATION_CHUNK_PIXELS: usize = 1_024;
@@ -1182,6 +1576,73 @@ fn execute_clahe_image(
     }
     RgbaF32Image::new(descriptor, output_pixels)
         .map_err(|source| CpuPixelpipeError::OutputBoundary { source })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NeighborhoodTile {
+    input: crate::CpuPixelpipeTile,
+    crop_x: u32,
+    crop_y: u32,
+}
+
+fn neighborhood_overlap(request: &CpuPixelpipeSnapshot) -> Result<u32, CpuPixelpipeError> {
+    let scale = request.scale_context();
+    let mut overlap = 0_u32;
+    for node in request.graph().nodes() {
+        let operation = node.operation();
+        if !operation_is_semantically_active(operation) {
+            continue;
+        }
+        let node_overlap = operation
+            .neighborhood_overlap_pixels(scale.roi_scale(), scale.piece_iscale())
+            .map_err(|error| CpuPixelpipeError::Evaluation {
+                source: EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: operation.operation_id(),
+                    reason: error.to_string(),
+                },
+            })?;
+        overlap = overlap
+            .checked_add(node_overlap)
+            .ok_or(CpuPixelpipeError::TileAssembly {
+                source: CpuTileAssemblyError::PixelIndexOverflow,
+            })?;
+    }
+    Ok(overlap)
+}
+
+fn expand_tile(
+    full: RasterDimensions,
+    output: crate::CpuPixelpipeTile,
+    overlap: u32,
+) -> Result<NeighborhoodTile, CpuPixelpipeError> {
+    let output_end_x = output
+        .origin_x()
+        .checked_add(output.dimensions().width())
+        .ok_or(CpuPixelpipeError::TileAssembly {
+            source: CpuTileAssemblyError::PixelIndexOverflow,
+        })?;
+    let output_end_y = output
+        .origin_y()
+        .checked_add(output.dimensions().height())
+        .ok_or(CpuPixelpipeError::TileAssembly {
+            source: CpuTileAssemblyError::PixelIndexOverflow,
+        })?;
+    let input_x = output.origin_x().saturating_sub(overlap);
+    let input_y = output.origin_y().saturating_sub(overlap);
+    let input_end_x = output_end_x.saturating_add(overlap).min(full.width());
+    let input_end_y = output_end_y.saturating_add(overlap).min(full.height());
+    let dimensions =
+        RasterDimensions::new(input_end_x - input_x, input_end_y - input_y).map_err(|_| {
+            CpuPixelpipeError::TileAssembly {
+                source: CpuTileAssemblyError::TileUnavailable,
+            }
+        })?;
+    Ok(NeighborhoodTile {
+        input: crate::CpuPixelpipeTile::from_parts(input_x, input_y, dimensions),
+        crop_x: output.origin_x() - input_x,
+        crop_y: output.origin_y() - input_y,
+    })
 }
 
 pub(crate) fn requires_full_frame_execution(request: &CpuPixelpipeSnapshot) -> bool {

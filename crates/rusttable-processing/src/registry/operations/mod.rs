@@ -9,9 +9,10 @@ mod clipping;
 mod liquify;
 mod rasterfile;
 use super::{
-    CpuFactory, CpuPrepare, ExecutionBackend, FactoryError, GpuBinding, ImplementationIdentity,
-    MigrationBinding, OperationCapability, OperationDefinition, OperationUiAvailability,
-    PreparedCpuOperation, REGISTRY_BUILD_ID, REGISTRY_SCHEMA, RegistryValidationError, RoiKind,
+    CpuFactory, CpuPrepare, DefinitionAvailability, ExecutionBackend, FactoryError, GpuBinding,
+    ImplementationIdentity, MigrationBinding, OperationCapability, OperationDefinition,
+    OperationUiAvailability, PreparedCpuOperation, REGISTRY_BUILD_ID, REGISTRY_SCHEMA,
+    RegistryValidationError, RoiKind,
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
@@ -20,8 +21,8 @@ use crate::descriptor::{
     exposure_descriptor, finalscale_descriptor, flip_descriptor, graduatednd_descriptor,
     grain_descriptor, invert_descriptor, linear_offset_descriptor, relight_descriptor,
     rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor,
-    soften_descriptor, temperature_descriptor, velvia_descriptor, vibrance_descriptor,
-    vignette_descriptor,
+    sharpen_descriptor, soften_descriptor, temperature_descriptor, velvia_descriptor,
+    vibrance_descriptor, vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -279,6 +280,17 @@ fn prepare_colorcontrast(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_colorcontrast(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_sharpen(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_sharpen(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -674,6 +686,30 @@ pub fn vibrance_definition() -> OperationDefinition {
         std::iter::empty(),
         Some(gpu),
     )
+}
+
+pub fn sharpen_definition() -> OperationDefinition {
+    geometry_definition(
+        sharpen_descriptor(),
+        prepare_sharpen,
+        &[
+            "iop.sharpen.params.v1",
+            "iop.sharpen.cpu.lab-d50-usm",
+            "iop.sharpen.cpu.dynamic-neighborhood-overlap",
+            "iop.sharpen.opacity-mask-reconstruction",
+            "iop.sharpen.alpha-preserve",
+            "iop.sharpen.preset.raw-only-native-bytes",
+            "iop.sharpen.order.v30-35",
+        ],
+        RoiKind::Neighborhood,
+        std::iter::empty(),
+    )
+    .with_availability(DefinitionAvailability::Unavailable {
+        reason: "the CPU/Lab backend is executable, but imported blend/mask and multi-instance history materialization remains blocked".to_owned(),
+    })
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "the source-shaped Sharpen editor and edit routing are not ported".to_owned(),
+    })
 }
 
 pub fn colorcontrast_definition() -> OperationDefinition {
@@ -1163,6 +1199,7 @@ macro_rules! builtin_operations {
             $crate::registry::rgb_gain_definition,
             $crate::registry::invert_definition,
             $crate::registry::defringe_definition,
+            $crate::registry::sharpen_definition,
             $crate::registry::clahe_definition,
             $crate::registry::dither_definition,
             $crate::registry::grain_definition,

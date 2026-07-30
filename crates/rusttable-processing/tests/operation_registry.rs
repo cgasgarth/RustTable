@@ -293,7 +293,7 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
         .collect::<Vec<_>>();
     assert_eq!(ids.len(), builtin_registry().definitions().len());
     assert_eq!(
-        &ids[..8],
+        &ids[..9],
         [
             "exposure",
             "basicadj",
@@ -301,11 +301,69 @@ fn operation_registry_preserves_darktable_declaration_order_for_ui_projections()
             "rgbgain",
             "invert",
             "defringe",
+            "sharpen",
             "clahe",
             "dither"
         ]
     );
     assert_eq!(ids.last(), Some(&"colorout"));
+}
+
+#[test]
+fn sharpen_registry_is_cpu_only_lab_neighborhood_and_ui_unavailable() {
+    let registry = builtin_registry();
+    let definition = registry
+        .definition("rusttable.sharpen")
+        .expect("Sharpen registry seam");
+    let descriptor = definition.descriptor();
+    assert_eq!(descriptor.id.compatibility_name, "sharpen");
+    assert_eq!(descriptor.id.schema_version, 1);
+    assert_eq!(
+        descriptor
+            .parameters
+            .iter()
+            .map(|parameter| parameter.id.as_str())
+            .collect::<Vec<_>>(),
+        ["radius", "amount", "threshold"]
+    );
+    assert_eq!(
+        descriptor.roi,
+        rusttable_processing::descriptor::RoiKind::Neighborhood
+    );
+    assert_eq!(descriptor.tiling.overlap_pixels, 0);
+    assert_eq!(
+        descriptor.io.input.encodings,
+        [rusttable_color::ColorEncoding::LabD50]
+    );
+    assert!(definition.cpu().is_some());
+    assert!(definition.gpu().is_none());
+    assert!(!definition.availability().is_available());
+    assert!(!definition.ui_availability().is_usable());
+    assert!(
+        definition
+            .evidence_ids()
+            .contains(&"iop.sharpen.cpu.dynamic-neighborhood-overlap".to_owned())
+    );
+    assert!(
+        registry
+            .capability(
+                "rusttable.sharpen",
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                rusttable_color::ColorEncoding::LabD50,
+                Some("full"),
+            )
+            .is_some_and(|capability| !capability.available)
+    );
+    assert!(
+        registry
+            .capability(
+                "rusttable.sharpen",
+                &rusttable_processing::DeviceCapabilitySnapshot::cpu_only(),
+                rusttable_color::ColorEncoding::LinearSrgbD65,
+                Some("full"),
+            )
+            .is_some_and(|capability| !capability.available)
+    );
 }
 
 #[test]

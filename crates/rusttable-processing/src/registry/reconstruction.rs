@@ -74,6 +74,9 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
             crate::descriptor::vibrance_descriptor().id
         }
         crate::ProcessingOperationKind::Shadhi { .. } => crate::descriptor::shadhi_descriptor().id,
+        crate::ProcessingOperationKind::Sharpen { .. } => {
+            crate::descriptor::sharpen_descriptor().id
+        }
         crate::ProcessingOperationKind::Vignette { .. } => {
             crate::descriptor::vignette_descriptor().id
         }

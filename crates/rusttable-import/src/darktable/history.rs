@@ -17,6 +17,10 @@
 
 use std::{fmt, mem::size_of};
 
+pub use rusttable_compat::sharpen::DecodedSharpenHistoryStep;
+use rusttable_compat::sharpen::{
+    SharpenHistoryDecodeFindingCode, SharpenHistoryStepDecode, decode_sharpen_history_step,
+};
 use rusttable_compat::{CompatHistoryStep, EnabledState};
 use rusttable_processing::operations::bloom::{BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory};
 use rusttable_processing::operations::colorcontrast::{
@@ -50,6 +54,7 @@ const COLORCORRECTION_COMPATIBILITY_NAME: &str = "colorcorrection";
 const COLORRECONSTRUCTION_COMPATIBILITY_NAME: &str = "colorreconstruct";
 const CROP_COMPATIBILITY_NAME: &str = "crop";
 const COLORZONES_COMPATIBILITY_NAME: &str = "colorzones";
+const SHARPEN_COMPATIBILITY_NAME: &str = "sharpen";
 const VELVIA_COMPATIBILITY_NAME: &str = "velvia";
 
 const COLORRECONSTRUCTION_V1_PARAMETER_BYTES: usize = 3 * size_of::<f32>();
@@ -252,7 +257,7 @@ pub struct DecodedColorZonesHistoryStep {
 }
 
 /// Typed-but-pending result or a byte-preserving unsupported row.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DarktableHistoryStepDecode {
     /// Bloom v1 core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
@@ -275,6 +280,9 @@ pub enum DarktableHistoryStepDecode {
     /// Color Zones core parameters are decoded and migrated to canonical v5,
     /// while blend/mask semantics remain explicitly non-executable.
     ColorZonesPendingBlend(Box<DecodedColorZonesHistoryStep>),
+    /// Sharpen v1 core parameters are decoded, while the complete blend/mask
+    /// and multi-instance row remains byte-preserved and non-executable.
+    SharpenPendingBlend(DecodedSharpenHistoryStep),
     /// Velvia core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     VelviaPendingBlend(DecodedVelviaHistoryStep),
@@ -308,6 +316,7 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
         Some(CROP_COMPATIBILITY_NAME) => decode_crop_history_step(step),
         Some(ENLARGECANVAS_COMPATIBILITY_NAME) => decode_enlargecanvas_history_step(step),
         Some(COLORZONES_COMPATIBILITY_NAME) => decode_colorzones_history_step(step),
+        Some(SHARPEN_COMPATIBILITY_NAME) => decode_sharpen_import_history_step(step),
         Some(VELVIA_COMPATIBILITY_NAME) => decode_velvia_history_step(step),
         Some(VIBRANCE_COMPATIBILITY_NAME) => decode_vibrance_history_step(step),
         _ => preserved(
@@ -799,6 +808,42 @@ fn decode_colorcontrast_history_step(step: &CompatHistoryStep) -> DarktableHisto
             ),
         },
     })
+}
+
+fn decode_sharpen_import_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    match decode_sharpen_history_step(step) {
+        SharpenHistoryStepDecode::SharpenPendingBlend(decoded) => {
+            DarktableHistoryStepDecode::SharpenPendingBlend(decoded)
+        }
+        SharpenHistoryStepDecode::Preserved { source, finding } => {
+            DarktableHistoryStepDecode::Preserved {
+                source,
+                finding: DarktableHistoryDecodeFinding {
+                    code: match finding.code {
+                        SharpenHistoryDecodeFindingCode::MissingModuleVersion => {
+                            DarktableHistoryDecodeFindingCode::MissingModuleVersion
+                        }
+                        SharpenHistoryDecodeFindingCode::InvalidModuleVersion => {
+                            DarktableHistoryDecodeFindingCode::InvalidModuleVersion
+                        }
+                        SharpenHistoryDecodeFindingCode::UnsupportedParameterVersion => {
+                            DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion
+                        }
+                        SharpenHistoryDecodeFindingCode::InvalidOperationParameters => {
+                            DarktableHistoryDecodeFindingCode::InvalidOperationParameters
+                        }
+                        SharpenHistoryDecodeFindingCode::InvalidEnabledState => {
+                            DarktableHistoryDecodeFindingCode::InvalidEnabledState
+                        }
+                        SharpenHistoryDecodeFindingCode::OpaqueBlendSemantics => {
+                            DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+                        }
+                    },
+                    detail: finding.detail,
+                },
+            }
+        }
+    }
 }
 
 fn decode_velvia_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {

@@ -128,7 +128,10 @@ pub use scheduler::model::{
     SchedulerPublicationTarget, SchedulerReceipt, ShutdownMode, TaskError, TaskFailure, TaskId,
     TaskSpec, TaskState, WorkUnitBoundary,
 };
-pub use snapshot::{CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError, CpuPixelpipeSnapshotIdentity};
+pub use snapshot::{
+    CpuPixelpipeScaleContext, CpuPixelpipeSnapshot, CpuPixelpipeSnapshotError,
+    CpuPixelpipeSnapshotIdentity,
+};
 pub use tiling::geometry::{
     EdgeOverlap, GeometryError, RoiChain, RoiStage, ScaleRatio, TileAlignment, TileRect,
 };
