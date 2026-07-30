@@ -615,7 +615,10 @@ fn resolve_values(
     brightness = (0.25 * brightness.max(0.0)).clamp(-100.0, 100.0);
     let mut contrast = (midgray * 100.0 * (1.1 - octile_spread)).clamp(0.0, 100.0) / 100.0;
 
-    let mut white_clip_gamma = gamma2(white_clip as f32 * correction) as f32;
+    // Native `whiteclipg` stays double through the gamma correction. The
+    // histogram guard below is also source-significant: C converts its
+    // computed threshold to `int` before comparing it with `whiteclipg`.
+    let mut white_clip_gamma = gamma2(white_clip as f32 * correction);
     let mut gamma_average = 0.0_f32;
     let increment = correction * (1_i32 << HISTOGRAM_COMPRESSION) as f32;
     let mut value = 0.0_f32;
@@ -625,13 +628,13 @@ fn resolve_values(
     }
     gamma_average /= sum;
     if black < gamma_average {
-        let max_white_clip = (gamma_average - black) * 4.0 / 3.0 + black;
-        if white_clip_gamma < max_white_clip {
-            white_clip_gamma = max_white_clip;
+        let max_white_clip = ((gamma_average - black) * 4.0 / 3.0 + black) as i32;
+        if white_clip_gamma < f64::from(max_white_clip) {
+            white_clip_gamma = f64::from(max_white_clip);
         }
     }
-    white_clip_gamma = igamma2(white_clip_gamma) as f32;
-    black /= white_clip_gamma;
+    white_clip_gamma = igamma2(white_clip_gamma);
+    black = (f64::from(black) / white_clip_gamma) as f32;
     exposure = exposure.clamp(-5.0, 12.0);
     brightness = brightness.clamp(-100.0, 100.0);
     contrast = contrast.clamp(0.0, 1.0);
@@ -694,8 +697,7 @@ fn gamma2(value: f32) -> f64 {
     }
 }
 
-fn igamma2(value: f32) -> f64 {
-    let value = f64::from(value);
+fn igamma2(value: f64) -> f64 {
     if value <= 0.03928 {
         value / 12.92
     } else {
@@ -780,7 +782,7 @@ fn analysis_identity(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BasicAdjAutoControls, BasicAdjParametersV2};
+    use crate::{BasicAdjAutoControls, BasicAdjParametersV2, FiniteF32};
 
     fn pixel(value: f32) -> LinearRgb {
         LinearRgb::new(
@@ -818,5 +820,60 @@ mod tests {
         });
         assert_eq!(result, Err(BasicAdjAnalysisError::Cancelled));
         assert!(polls.get() >= 2);
+    }
+
+    #[test]
+    fn hdr_mixed_histogram_uses_native_integer_white_clip_guard() {
+        // The last bucket deliberately uses HDR values while the other buckets
+        // retain mixed linear values. This puts native `maxwhiteclip` at 146,
+        // with the untruncated threshold at 146.7 and `whiteclipg` at 146.4.
+        let buckets = [
+            (2_usize, 671_usize),
+            (3363, 1243),
+            (5397, 1575),
+            (6734, 1659),
+            (7891, 409),
+            (8191, 1916),
+        ];
+        let channel_count: usize = buckets.iter().map(|(_, count)| count).sum();
+        assert_eq!(channel_count % 3, 0);
+        let mut channels = Vec::with_capacity(channel_count);
+        for (bin, count) in buckets {
+            let value = if bin == BASICADJ_HISTOGRAM_BINS - 1 {
+                2.0
+            } else {
+                (bin as f32 + 0.5) / BASICADJ_HISTOGRAM_BINS as f32
+            };
+            for _ in 0..count {
+                channels.push(value);
+            }
+        }
+        let pixels: Vec<_> = channels
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|rgb| {
+                LinearRgb::new(
+                    FiniteF32::new(rgb[0]).expect("finite red"),
+                    FiniteF32::new(rgb[1]).expect("finite green"),
+                    FiniteF32::new(rgb[2]).expect("finite blue"),
+                )
+            })
+            .collect();
+        let dimensions = RasterDimensions::new(pixels.len() as u32, 1).expect("dimensions");
+        let config = BasicAdjConfig::defaults().with_auto_controls(BasicAdjAutoControls::all());
+        let raster = BasicAdjAnalysisRaster::new(dimensions, &pixels, None).expect("raster");
+        let result = BasicAdjAnalysisPlan::analyze(config, raster).expect("analysis");
+
+        let values = result.resolved_values();
+        assert_eq!(result.sample_count(), 7473);
+        assert_eq!(result.histogram()[2], 671);
+        assert_eq!(result.histogram()[BASICADJ_HISTOGRAM_BINS - 1], 1916);
+        assert_eq!(values.black_point().to_bits(), 0x3623_dc29);
+        assert_eq!(values.exposure().to_bits(), 0x400a_773c);
+        assert_eq!(values.brightness().to_bits(), 0x3f30_a853);
+        assert_eq!(values.contrast().to_bits(), 0x3e26_272e);
+        assert_eq!(values.hlcompr().to_bits(), 0);
+        assert_eq!(values.hlcomprthresh().to_bits(), 0);
     }
 }
