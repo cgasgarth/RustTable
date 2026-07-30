@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use flate2::{Compression, write::ZlibEncoder};
+use rusttable_image_io::png::{PngEncodeOptions, PngEncoder};
 use rusttable_image_io::{
     PngBitDepth, PngColorType, PngDecodeError, PngDecodeLimits, PngDecodeRequest, PngDecoder,
     PngPixelData, RawByteSource, RawCancellationToken, RawSourceError,
@@ -309,6 +310,248 @@ fn enforces_output_and_chunk_limits_before_publication() {
             ..
         })
     ));
+}
+
+#[test]
+fn preserves_cicp_precedence_and_bounded_metadata_inventory() {
+    let source = png_with_chunks(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[
+            (*b"cICP", vec![1, 13, 0, 1]),
+            (*b"gAMA", 45_455_u32.to_be_bytes().to_vec()),
+            (*b"pHYs", vec![0, 0, 1, 44, 0, 0, 2, 88, 1]),
+            (*b"tEXt", b"Comment\0PNG metadata".to_vec()),
+            (*b"iTXt", b"XML:com.adobe.xmp\0\0\0\0\0<xmp/>".to_vec()),
+        ],
+        &[vec![9, 8, 7]],
+        false,
+    );
+    let header = PngDecoder::new()
+        .inspect_bytes(&source, limits(4096))
+        .expect("metadata PNG");
+    assert_eq!(
+        header.color_encoding,
+        rusttable_image::ColorEncoding::SrgbD65
+    );
+    assert_eq!(
+        header.metadata.cicp,
+        Some(rusttable_image_io::png::PngCicp {
+            color_primaries: 1,
+            transfer_characteristics: 13,
+            matrix_coefficients: 0,
+            full_range: 1,
+        })
+    );
+    assert_eq!(header.metadata.gamma, Some(45_455));
+    assert_eq!(
+        header.metadata.physical_resolution,
+        Some(rusttable_image_io::PngPhysicalResolution {
+            x_pixels_per_unit: 300,
+            y_pixels_per_unit: 600,
+            unit_is_meter: true,
+        })
+    );
+    assert_eq!(header.metadata.xmp_chunks, 1);
+    assert_eq!(header.metadata.text.len(), 2);
+}
+
+#[test]
+fn validates_cicp_supported_unsupported_malformed_and_duplicate_forms() {
+    let unsupported = png_with_chunks(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[(*b"cICP", vec![9, 14, 0, 1])],
+        &[vec![1, 2, 3]],
+        false,
+    );
+    let header = PngDecoder::new()
+        .inspect_bytes(&unsupported, limits(4096))
+        .expect("structurally valid unsupported cICP");
+    assert_eq!(
+        header.metadata.cicp,
+        Some(rusttable_image_io::PngCicp {
+            color_primaries: 9,
+            transfer_characteristics: 14,
+            matrix_coefficients: 0,
+            full_range: 1,
+        })
+    );
+    assert_eq!(
+        header.color_encoding,
+        rusttable_image::ColorEncoding::Unspecified
+    );
+
+    let malformed = png_with_chunks(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[(*b"cICP", vec![9, 16, 0])],
+        &[vec![1, 2, 3]],
+        false,
+    );
+    assert!(matches!(
+        PngDecoder::new().inspect_bytes(&malformed, limits(4096)),
+        Err(PngDecodeError::Malformed(message)) if message.contains("cICP")
+    ));
+
+    let duplicate = png_with_chunks(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[(*b"cICP", vec![1, 13, 0, 1]), (*b"cICP", vec![1, 13, 0, 1])],
+        &[vec![1, 2, 3]],
+        false,
+    );
+    assert!(matches!(
+        PngDecoder::new().inspect_bytes(&duplicate, limits(4096)),
+        Err(PngDecodeError::Malformed(message)) if message.contains("duplicate cICP")
+    ));
+}
+
+#[test]
+fn rejects_truncation_duplicate_iend_and_invalid_compressed_text() {
+    let source = png(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[vec![1, 2, 3]],
+    );
+    let mut truncated = source.clone();
+    truncated.pop();
+    assert!(matches!(
+        PngDecoder::new().inspect_bytes(&truncated, limits(4096)),
+        Err(PngDecodeError::Malformed(message)) if message.contains("truncated")
+    ));
+
+    let mut duplicate = source.clone();
+    chunk(&mut duplicate, *b"IEND", &[]);
+    assert!(matches!(
+        PngDecoder::new().inspect_bytes(&duplicate, limits(4096)),
+        Err(PngDecodeError::Malformed(message)) if message.contains("IEND")
+    ));
+
+    let invalid_itxt = png_with_chunks(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[(*b"iTXt", b"keyword\0\0\x01\0\0text".to_vec())],
+        &[vec![1, 2, 3]],
+        false,
+    );
+    assert!(matches!(
+        PngDecoder::new().inspect_bytes(&invalid_itxt, limits(4096)),
+        Err(PngDecodeError::Malformed(message)) if message.contains("iTXt compression")
+    ));
+
+    let malformed_compressed_text = png_with_chunks(
+        1,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[(*b"zTXt", b"keyword\0\0not-zlib".to_vec())],
+        &[vec![1, 2, 3]],
+        false,
+    );
+    assert!(matches!(
+        PngDecoder::new().inspect_bytes(&malformed_compressed_text, limits(4096)),
+        Err(PngDecodeError::Malformed(message)) if message.contains("decompression")
+    ));
+}
+
+#[test]
+fn deterministic_encoder_round_trips_channel_order_and_16_bit_endianness() {
+    let pixels = PngPixelData::RgbaU16 {
+        dimensions: rusttable_image::ImageDimensions::new(2, 1).expect("dimensions"),
+        samples: vec![0x1234, 0xabcd, 1, 0xfffe, 0, 0x8001, 0x7fff, 0x0102],
+    };
+    let options = PngEncodeOptions::new(5, 4096);
+    let first = PngEncoder::new().encode(&pixels, options).expect("encode");
+    let second = PngEncoder::new().encode(&pixels, options).expect("encode");
+    assert_eq!(first, second);
+    let decoded = PngDecoder::new()
+        .decode_bytes(&first, &PngDecodeRequest::new(limits(4096)))
+        .expect("round trip");
+    assert_eq!(decoded.header.color_type, PngColorType::Rgba);
+    assert_eq!(decoded.header.bit_depth, PngBitDepth::Sixteen);
+    assert_eq!(decoded.pixels, Some(pixels));
+}
+
+#[test]
+fn encoder_rejects_sample_mismatch_and_bounded_output() {
+    let pixels = PngPixelData::RgbU8 {
+        dimensions: rusttable_image::ImageDimensions::new(2, 1).expect("dimensions"),
+        samples: vec![1, 2, 3],
+    };
+    assert!(matches!(
+        PngEncoder::new().encode(&pixels, PngEncodeOptions::default()),
+        Err(rusttable_image_io::png::PngEncodeError::SampleCount { .. })
+    ));
+    let valid = PngPixelData::RgbU8 {
+        dimensions: rusttable_image::ImageDimensions::new(1, 1).expect("dimensions"),
+        samples: vec![1, 2, 3],
+    };
+    assert!(matches!(
+        PngEncoder::new().encode(&valid, PngEncodeOptions::new(5, 20)),
+        Err(rusttable_image_io::png::PngEncodeError::OutputTooLarge { .. })
+    ));
+}
+
+#[test]
+fn encoded_limit_bounds_the_completed_png_not_raw_scanlines() {
+    let pixels = PngPixelData::RgbaU8 {
+        dimensions: rusttable_image::ImageDimensions::new(64, 64).expect("dimensions"),
+        samples: vec![0; 64 * 64 * 4],
+    };
+    let encoded = PngEncoder::new()
+        .encode(&pixels, PngEncodeOptions::default())
+        .expect("compressible PNG");
+    let raw_scanlines = 64 * (1 + 64 * 4);
+    let final_size = u64::try_from(encoded.len()).expect("encoded size");
+    assert!(u64::try_from(raw_scanlines).expect("raw size") > final_size);
+
+    let exact = PngEncoder::new()
+        .encode(&pixels, PngEncodeOptions::new(5, final_size))
+        .expect("exact final-size limit");
+    assert_eq!(exact, encoded);
+    assert!(matches!(
+        PngEncoder::new().encode(
+            &pixels,
+            PngEncodeOptions::new(5, final_size - 1),
+        ),
+        Err(rusttable_image_io::png::PngEncodeError::OutputTooLarge {
+            actual,
+            limit,
+        }) if actual == final_size && limit == final_size - 1
+    ));
+}
+
+#[test]
+fn thumbnail_mode_has_a_truthful_full_source_fallback() {
+    let source = png(
+        2,
+        1,
+        PngColorType::Rgb,
+        PngBitDepth::Eight,
+        &[vec![1, 2, 3, 4, 5, 6]],
+    );
+    let result = PngDecoder::new()
+        .decode_bytes(&source, &PngDecodeRequest::new(limits(4096)).thumbnail())
+        .expect("thumbnail fallback");
+    assert_eq!(
+        result.receipt.mode,
+        rusttable_image_io::PngDecodeMode::Thumbnail
+    );
+    assert_eq!(result.header.dimensions.width(), 2);
+    assert!(result.pixels.is_some());
 }
 
 #[test]

@@ -96,6 +96,7 @@ impl PngDecoder {
                 .map_err(|_| PngDecodeError::Input(ImageInputError::ArithmeticOverflow))?,
             decompressed_bytes: header.chunks.decompressed_data_bytes,
             animation: header.animation,
+            mode: request.mode,
             header_only,
         };
         Ok(PngDecodeResult {
@@ -207,7 +208,63 @@ fn decode_pixels(
             "backend changed PNG sample format".to_owned(),
         ));
     }
+    let expected_backend_bytes = packed_data_bytes(
+        parsed.dimensions.width(),
+        parsed.dimensions.height(),
+        parsed.header.color_type,
+        parsed.header.bit_depth,
+        parsed.header.interlaced,
+    )?;
+    let actual_backend_bytes = u64::try_from(info.buffer_size()).map_err(|_| arithmetic())?;
+    if actual_backend_bytes != expected_backend_bytes {
+        return Err(PngDecodeError::Malformed(
+            "backend output size differs from validated PNG layout".to_owned(),
+        ));
+    }
     convert_samples(&output[..info.buffer_size()], parsed)
+}
+
+fn packed_data_bytes(
+    width: u32,
+    height: u32,
+    color: PngColorType,
+    depth: PngBitDepth,
+    interlaced: bool,
+) -> Result<u64, PngDecodeError> {
+    let row = |row_width: u32| -> Result<u64, PngDecodeError> {
+        u64::from(row_width)
+            .checked_mul(u64::from(color.channels()))
+            .and_then(|bits| bits.checked_mul(u64::from(depth.bits())))
+            .map(|bits| bits.div_ceil(8))
+            .ok_or_else(arithmetic)
+    };
+    if !interlaced {
+        return row(width)?
+            .checked_mul(u64::from(height))
+            .ok_or_else(arithmetic);
+    }
+    let x_starts = [0_u32, 4, 0, 2, 0, 1, 0];
+    let y_starts = [0_u32, 0, 4, 0, 2, 0, 1];
+    let x_steps = [8_u32, 8, 4, 4, 2, 2, 1];
+    let y_steps = [8_u32, 8, 8, 4, 4, 2, 2];
+    let mut total = 0_u64;
+    for pass in 0..7 {
+        let pass_width = width.saturating_sub(x_starts[pass]).div_ceil(x_steps[pass]);
+        let pass_height = height
+            .saturating_sub(y_starts[pass])
+            .div_ceil(y_steps[pass]);
+        if pass_width == 0 || pass_height == 0 {
+            continue;
+        }
+        total = total
+            .checked_add(
+                row(pass_width)?
+                    .checked_mul(u64::from(pass_height))
+                    .ok_or_else(arithmetic)?,
+            )
+            .ok_or_else(arithmetic)?;
+    }
+    Ok(total)
 }
 
 fn convert_samples(output: &[u8], parsed: &ParsedPng) -> Result<PngPixelData, PngDecodeError> {
