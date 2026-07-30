@@ -1037,24 +1037,32 @@ fn validate_journal(
     revisions: &BTreeMap<HistoryRevisionId, HistoryRevision>,
     branches: &BTreeMap<HistoryBranchId, HistoryBranch>,
 ) -> Result<(), HistoryError> {
-    if journal.iter().enumerate().any(|(index, entry)| {
-        entry.sequence() == 0
+    let mut journal_revisions = BTreeSet::new();
+    for (index, entry) in journal.iter().enumerate() {
+        let valid_restore_reference = entry.restore_from().is_none_or(|revision| {
+            revisions.contains_key(&revision) && journal_revisions.contains(&revision)
+        });
+        let valid_revision = entry.revision().is_none_or(|revision| {
+            revisions.contains_key(&revision) && entry.after().revision() == Some(revision)
+        });
+        if entry.sequence() == 0
             || entry.sequence() > commit_sequence
             || (index > 0 && journal[index - 1].sequence() >= entry.sequence())
-            || entry.revision().is_some_and(|revision| {
-                !revisions.contains_key(&revision) || entry.after().revision() != Some(revision)
-            })
+            || !valid_revision
             || !cursor_matches_graph(entry.before(), branches, revisions)
             || !cursor_matches_graph(entry.after(), branches, revisions)
-            || entry
-                .restore_from()
-                .is_some_and(|revision| !revisions.contains_key(&revision))
+            || !valid_restore_reference
             || !entry.provenance().is_valid()
-    }) {
-        Err(HistoryError::InvalidPersistedState)
-    } else {
-        Ok(())
+        {
+            return Err(HistoryError::InvalidPersistedState);
+        }
+        if let Some(revision) = entry.revision()
+            && !journal_revisions.insert(revision)
+        {
+            return Err(HistoryError::InvalidPersistedState);
+        }
     }
+    Ok(())
 }
 
 fn cursor_matches_graph(

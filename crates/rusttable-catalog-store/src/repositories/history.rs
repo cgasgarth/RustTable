@@ -134,6 +134,23 @@ pub(crate) fn stage_history_commit(
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
+    let old_revision_ids = old_keys
+        .iter()
+        .map(|key| {
+            decode_revision_key(key)
+                .map(|(_, revision)| revision)
+                .map_err(|()| HistoryRepositoryError::CorruptPersistedData)
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    let retained_revision_ids = snapshot
+        .revisions()
+        .iter()
+        .map(HistoryRevision::id)
+        .collect::<BTreeSet<_>>();
+    let removed_revision_ids = old_revision_ids
+        .difference(&retained_revision_ids)
+        .copied()
+        .collect::<BTreeSet<_>>();
     for old_key in old_keys {
         revisions
             .remove(old_key.as_slice())
@@ -145,6 +162,9 @@ pub(crate) fn stage_history_commit(
             .map_err(|_| HistoryRepositoryError::Unavailable)?;
     }
     drop(revisions);
+    if !removed_revision_ids.is_empty() {
+        invalidate_removed_revision_snapshots(transaction, photo_id, &removed_revision_ids)?;
+    }
 
     let (counts, expected_blobs) = collect_persisted_blobs(transaction)?;
     let mut blobs = transaction
@@ -217,6 +237,47 @@ pub(crate) fn stage_history_commit(
         .map_err(|_| HistoryRepositoryError::Unavailable)
 }
 
+fn invalidate_removed_revision_snapshots(
+    transaction: &WriteTransaction,
+    photo_id: PhotoId,
+    removed_revisions: &BTreeSet<HistoryRevisionId>,
+) -> Result<(), HistoryRepositoryError> {
+    let mut snapshots = transaction
+        .open_table(schema::HISTORY_SNAPSHOTS_TABLE)
+        .map_err(|_| HistoryRepositoryError::Unavailable)?;
+    let keys_to_remove = snapshots
+        .iter()
+        .map_err(|_| HistoryRepositoryError::Unavailable)?
+        .map(|entry| {
+            let (key, value) = entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+            let (stored_photo_id, snapshot_id) = decode_snapshot_key(key.value())
+                .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+            if stored_photo_id != photo_id {
+                return Ok(None);
+            }
+            let snapshot = crate::history_snapshot_codec::decode(value.value())
+                .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+            if snapshot.photo_id() != stored_photo_id || snapshot.snapshot_id() != snapshot_id {
+                return Err(HistoryRepositoryError::CorruptPersistedData);
+            }
+            Ok(snapshot
+                .revisions()
+                .iter()
+                .any(|revision| removed_revisions.contains(&revision.id()))
+                .then(|| key.value().to_vec()))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    for key in keys_to_remove {
+        snapshots
+            .remove(key.as_slice())
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+    }
+    Ok(())
+}
+
 fn collect_persisted_blobs(
     transaction: &redb::WriteTransaction,
 ) -> Result<(BlobCounts, BlobRecords), HistoryRepositoryError> {
@@ -283,6 +344,120 @@ fn verify_blob_refs(
     }
 }
 
+fn load_state_from_tables<S, R, B, F>(
+    states: &S,
+    revisions_table: &R,
+    blobs_table: &B,
+    refs_table: &F,
+    photo_id: PhotoId,
+) -> Result<Option<HistoryState>, HistoryRepositoryError>
+where
+    S: ReadableTable<&'static [u8], &'static [u8]>,
+    R: ReadableTable<&'static [u8], &'static [u8]>,
+    B: ReadableTable<&'static [u8], &'static [u8]>,
+    F: ReadableTable<&'static [u8], &'static [u8]>,
+{
+    let key = photo_id.get().to_be_bytes();
+    let Some(meta) = states
+        .get(key.as_slice())
+        .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
+    else {
+        return Ok(None);
+    };
+    let decoded = crate::history_codec::decode_meta(meta.value())
+        .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+    if decoded.photo_id != photo_id {
+        return Err(HistoryRepositoryError::CorruptPersistedData);
+    }
+    let mut revisions = Vec::new();
+    let mut expected_refs = BlobCounts::new();
+    let mut expected_blob_keys = BTreeSet::new();
+    for entry in revisions_table
+        .iter()
+        .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
+    {
+        let (revision_key, value) =
+            entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+        let (revision_photo_id, revision_id) = decode_revision_key(revision_key.value())
+            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+        let revision = crate::history_codec::decode_revision(value.value())
+            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+        if revision.id() != revision_id || revision.payload().edit().photo_id() != revision_photo_id
+        {
+            return Err(HistoryRepositoryError::CorruptPersistedData);
+        }
+        for (blob_key, bytes) in canonical_blob_records(&revision)? {
+            expected_blob_keys.insert(blob_key);
+            let count = expected_refs.entry(blob_key).or_default();
+            *count = count
+                .checked_add(1)
+                .ok_or(HistoryRepositoryError::CorruptPersistedData)?;
+            let stored = blobs_table
+                .get(blob_key.as_slice())
+                .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
+                .ok_or(HistoryRepositoryError::CorruptPersistedData)?;
+            if stored.value() != bytes.as_slice() {
+                return Err(HistoryRepositoryError::CorruptPersistedData);
+            }
+        }
+        if revision_photo_id == photo_id {
+            revisions.push(revision);
+        }
+    }
+    let refcounts = refs_table
+        .iter()
+        .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
+        .map(|entry| {
+            let (key, value) = entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+            let key: [u8; 43] = key
+                .value()
+                .try_into()
+                .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+            let count = u64::from_be_bytes(
+                value
+                    .value()
+                    .try_into()
+                    .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?,
+            );
+            Ok::<_, HistoryRepositoryError>((key, count))
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+    verify_blob_refs(&refcounts, &expected_refs)?;
+    for entry in blobs_table
+        .iter()
+        .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
+    {
+        let (key, _) = entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+        let key: [u8; 43] = key
+            .value()
+            .try_into()
+            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+        decode_blob_key(&key).map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+        if !expected_blob_keys.contains(&key) {
+            return Err(HistoryRepositoryError::CorruptPersistedData);
+        }
+    }
+    revisions.sort_by_key(HistoryRevision::id);
+    let snapshot = HistoryStateSnapshot::from_parts_with_journal(
+        decoded.photo_id,
+        decoded.version,
+        decoded.commit_sequence,
+        decoded.next_revision_id,
+        decoded.next_branch_id,
+        decoded.next_snapshot_id,
+        decoded.active_branch,
+        revisions,
+        decoded.branches,
+        decoded.snapshots,
+        decoded.evidence,
+        decoded.journal,
+        decoded.provenance,
+    );
+    HistoryState::restore(snapshot)
+        .map(Some)
+        .map_err(|_| HistoryRepositoryError::CorruptPersistedData)
+}
+
 impl HistoryRepository for RedbHistoryRepository {
     #[allow(
         clippy::too_many_lines,
@@ -296,114 +471,16 @@ impl HistoryRepository for RedbHistoryRepository {
         let states = transaction
             .open_table(HISTORY_STATE_TABLE)
             .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-        let key = self.photo_id.get().to_be_bytes();
-        let Some(meta) = states
-            .get(key.as_slice())
-            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
-        else {
-            return Ok(None);
-        };
-        let decoded = crate::history_codec::decode_meta(meta.value())
-            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
-        if decoded.photo_id != self.photo_id {
-            return Err(HistoryRepositoryError::CorruptPersistedData);
-        }
-        let revisions_table = transaction
+        let revisions = transaction
             .open_table(HISTORY_REVISIONS_TABLE)
             .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-        let blobs_table = transaction
+        let blobs = transaction
             .open_table(HISTORY_BLOBS_TABLE)
             .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-        let refs_table = transaction
+        let refs = transaction
             .open_table(HISTORY_BLOB_REFS_TABLE)
             .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-        let mut revisions = Vec::new();
-        let mut expected_refs = BlobCounts::new();
-        let mut expected_blob_keys = BTreeSet::new();
-        for entry in revisions_table
-            .iter()
-            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
-        {
-            let (revision_key, value) =
-                entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-            let (photo_id, revision_id) = decode_revision_key(revision_key.value())
-                .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
-            let revision = crate::history_codec::decode_revision(value.value())
-                .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
-            if revision.id() != revision_id || revision.payload().edit().photo_id() != photo_id {
-                return Err(HistoryRepositoryError::CorruptPersistedData);
-            }
-            for (blob_key, bytes) in canonical_blob_records(&revision)? {
-                expected_blob_keys.insert(blob_key);
-                let count = expected_refs.entry(blob_key).or_default();
-                *count = count
-                    .checked_add(1)
-                    .ok_or(HistoryRepositoryError::CorruptPersistedData)?;
-                let stored = blobs_table
-                    .get(blob_key.as_slice())
-                    .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
-                    .ok_or(HistoryRepositoryError::CorruptPersistedData)?;
-                if stored.value() != bytes.as_slice() {
-                    return Err(HistoryRepositoryError::CorruptPersistedData);
-                }
-            }
-            if photo_id == self.photo_id {
-                revisions.push(revision);
-            }
-        }
-        let refcounts = refs_table
-            .iter()
-            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
-            .map(|entry| {
-                let (key, value) =
-                    entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-                let key: [u8; 43] = key
-                    .value()
-                    .try_into()
-                    .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-                let count = u64::from_be_bytes(
-                    value
-                        .value()
-                        .try_into()
-                        .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?,
-                );
-                Ok::<_, HistoryRepositoryError>((key, count))
-            })
-            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
-        verify_blob_refs(&refcounts, &expected_refs)?;
-        for entry in blobs_table
-            .iter()
-            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
-        {
-            let (key, _) = entry.map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-            let key: [u8; 43] = key
-                .value()
-                .try_into()
-                .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
-            decode_blob_key(&key).map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
-            if !expected_blob_keys.contains(&key) {
-                return Err(HistoryRepositoryError::CorruptPersistedData);
-            }
-        }
-        revisions.sort_by_key(HistoryRevision::id);
-        let snapshot = HistoryStateSnapshot::from_parts_with_journal(
-            decoded.photo_id,
-            decoded.version,
-            decoded.commit_sequence,
-            decoded.next_revision_id,
-            decoded.next_branch_id,
-            decoded.next_snapshot_id,
-            decoded.active_branch,
-            revisions,
-            decoded.branches,
-            decoded.snapshots,
-            decoded.evidence,
-            decoded.journal,
-            decoded.provenance,
-        );
-        HistoryState::restore(snapshot)
-            .map(Some)
-            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)
+        load_state_from_tables(&states, &revisions, &blobs, &refs, self.photo_id)
     }
 
     fn commit(
@@ -471,7 +548,25 @@ impl HistorySnapshotRepository for RedbHistoryRepository {
         if snapshot.photo_id() != self.photo_id {
             return Err(HistoryRepositoryError::CorruptPersistedData);
         }
-        match self.load()? {
+        let encoded = crate::history_snapshot_codec::encode(snapshot)
+            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let states = transaction
+            .open_table(HISTORY_STATE_TABLE)
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let revisions = transaction
+            .open_table(HISTORY_REVISIONS_TABLE)
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let blobs = transaction
+            .open_table(HISTORY_BLOBS_TABLE)
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let refs = transaction
+            .open_table(HISTORY_BLOB_REFS_TABLE)
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        match load_state_from_tables(&states, &revisions, &blobs, &refs, self.photo_id)? {
             Some(state) if !snapshot.matches_current_graph(&state) => {
                 return Err(HistoryRepositoryError::CorruptPersistedData);
             }
@@ -480,12 +575,10 @@ impl HistorySnapshotRepository for RedbHistoryRepository {
             }
             _ => {}
         }
-        let encoded = crate::history_snapshot_codec::encode(snapshot)
-            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
-        let transaction = self
-            .database
-            .begin_write()
-            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        drop(states);
+        drop(revisions);
+        drop(blobs);
+        drop(refs);
         let key = snapshot_key(self.photo_id, snapshot.snapshot_id());
         let mut snapshots = transaction
             .open_table(schema::HISTORY_SNAPSHOTS_TABLE)
@@ -706,6 +799,18 @@ fn decode_revision_key(bytes: &[u8]) -> Result<(PhotoId, HistoryRevisionId), ()>
         HistoryRevisionId::new(u64::from_be_bytes(bytes[16..].try_into().map_err(|_| ())?))
             .ok_or(())?;
     Ok((photo_id, revision_id))
+}
+
+fn decode_snapshot_key(bytes: &[u8]) -> Result<(PhotoId, HistorySnapshotId), ()> {
+    if bytes.len() != 24 {
+        return Err(());
+    }
+    let photo_id =
+        PhotoId::new(u128::from_be_bytes(bytes[..16].try_into().map_err(|_| ())?)).ok_or(())?;
+    let snapshot_id =
+        HistorySnapshotId::new(u64::from_be_bytes(bytes[16..].try_into().map_err(|_| ())?))
+            .ok_or(())?;
+    Ok((photo_id, snapshot_id))
 }
 
 fn blob_key(id: ContentBlobId) -> [u8; 43] {

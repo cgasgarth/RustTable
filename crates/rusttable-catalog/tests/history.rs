@@ -397,6 +397,56 @@ fn persisted_journal_rejects_dangling_cursor_restore_and_provenance_references()
 }
 
 #[test]
+fn persisted_journal_restore_references_must_be_prior_revisions() {
+    let mut state = HistoryState::new(PhotoId::new(7).unwrap());
+    let first = append(&mut state, 1, HistoryOperationKind::Parameter);
+    let second = append(&mut state, 2, HistoryOperationKind::Parameter);
+    let main = main_branch();
+    let persisted = state.persistence_snapshot();
+    let before = HistoryCursor::new(main, None);
+    let after = HistoryCursor::new(main, HistoryRevisionId::new(first));
+
+    for restore_from in [first, second] {
+        let journal = vec![HistoryJournalEntry::new(
+            1,
+            HistoryOperationKind::Reset,
+            Some(HistoryRevisionId::new(first).unwrap()),
+            before,
+            after,
+            Some(HistoryRevisionId::new(restore_from).unwrap()),
+            HistoryProvenance::native(),
+        )];
+        assert_eq!(
+            HistoryState::restore(rebuild(
+                &state,
+                persisted.branches().to_vec(),
+                persisted.snapshots().to_vec(),
+                journal,
+                persisted.provenance().clone(),
+            )),
+            Err(HistoryError::InvalidPersistedState)
+        );
+    }
+
+    state
+        .apply(
+            state.version(),
+            HistoryCommand::Restore {
+                source: HistoryRevisionId::new(first).unwrap(),
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .journal()
+            .last()
+            .and_then(HistoryJournalEntry::restore_from),
+        Some(HistoryRevisionId::new(first).unwrap())
+    );
+    assert!(HistoryState::restore(state.persistence_snapshot()).is_ok());
+}
+
+#[test]
 fn branch_deletion_and_pruning_leave_restartable_journal_and_provenance() {
     let mut state = HistoryState::new(PhotoId::new(7).unwrap());
     append(&mut state, 1, HistoryOperationKind::Parameter);

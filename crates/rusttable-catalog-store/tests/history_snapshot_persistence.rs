@@ -2,9 +2,9 @@ mod support;
 
 use redb::{Database, ReadableTable, TableDefinition};
 use rusttable_catalog::{
-    HistoryApplyOutcome, HistoryCommand, HistoryOperationKind, HistoryOperationSummary,
-    HistoryPayload, HistoryRepository, HistoryRepositoryError, HistoryRevisionId,
-    HistorySnapshotDocument, HistorySnapshotId, HistorySnapshotOperation,
+    HistoryApplyOutcome, HistoryBranchId, HistoryCommand, HistoryOperationKind,
+    HistoryOperationSummary, HistoryPayload, HistoryRepository, HistoryRepositoryError,
+    HistoryRevisionId, HistorySnapshotDocument, HistorySnapshotId, HistorySnapshotOperation,
     HistorySnapshotRepository, HistoryState, HistoryVersion,
 };
 use rusttable_catalog_store::RedbHistoryRepository;
@@ -128,6 +128,103 @@ fn persisted_snapshot_preserves_cursor_order_filter_and_hash_after_restart() {
         .expect("snapshot after restart");
     assert_eq!(recovered, original);
     assert_eq!(recovered.stable_hash(), original.stable_hash());
+    support::remove(&path);
+}
+
+#[test]
+fn pruning_history_commit_invalidates_durable_snapshots_before_restart() {
+    let path = support::temp_path("history-snapshot-prune-restart");
+    let photo = PhotoId::new(7).expect("photo ID");
+    let mut state = HistoryState::new(photo);
+    state
+        .apply(
+            state.version(),
+            HistoryCommand::Append {
+                payload: payload(1, 11, "exposure.base", true),
+            },
+        )
+        .expect("base revision");
+    let base = state.active_cursor();
+    let branch = match state
+        .apply(
+            state.version(),
+            HistoryCommand::CreateBranch {
+                name: "temporary".to_owned(),
+                from: Some(base),
+            },
+        )
+        .expect("branch")
+    {
+        HistoryApplyOutcome::BranchCreated { branch } => branch,
+        outcome => panic!("unexpected branch outcome: {outcome:?}"),
+    };
+    let removed_revision = match state
+        .apply(
+            state.version(),
+            HistoryCommand::Append {
+                payload: payload(2, 12, "color.balance", true),
+            },
+        )
+        .expect("branch revision")
+    {
+        HistoryApplyOutcome::Appended { revision } => revision,
+        outcome => panic!("unexpected append outcome: {outcome:?}"),
+    };
+    let branch_state = state.clone();
+    let branch_ref = branch_state
+        .branch(branch_state.active_branch_id())
+        .expect("active branch");
+    let snapshot = HistorySnapshotDocument::capture(
+        photo,
+        HistorySnapshotId::new(17).expect("snapshot ID"),
+        branch_ref,
+        &branch_state.revisions().cloned().collect::<Vec<_>>(),
+    )
+    .expect("snapshot");
+
+    {
+        let mut repository = RedbHistoryRepository::open(&path, photo).expect("repository");
+        repository
+            .commit(HistoryVersion::ZERO, &state)
+            .expect("history state");
+        repository
+            .store_snapshot(&snapshot)
+            .expect("store snapshot");
+        assert_eq!(
+            repository
+                .load_snapshot(snapshot.snapshot_id())
+                .expect("load snapshot"),
+            Some(snapshot.clone())
+        );
+
+        state
+            .apply(
+                state.version(),
+                HistoryCommand::SwitchBranch {
+                    branch: HistoryBranchId::new(1).expect("main branch"),
+                },
+            )
+            .expect("switch branch");
+        state
+            .apply(state.version(), HistoryCommand::DeleteBranch { branch })
+            .expect("delete branch");
+        state
+            .apply(state.version(), HistoryCommand::PruneOrphans)
+            .expect("prune");
+        assert!(state.revision(removed_revision).is_none());
+        repository
+            .commit(branch_state.version(), &state)
+            .expect("pruned history state");
+    }
+
+    let repository = RedbHistoryRepository::open(&path, photo).expect("reopen");
+    assert!(repository.load().expect("load history").is_some());
+    assert_eq!(
+        repository
+            .load_snapshot(snapshot.snapshot_id())
+            .expect("load snapshot after restart"),
+        None
+    );
     support::remove(&path);
 }
 
