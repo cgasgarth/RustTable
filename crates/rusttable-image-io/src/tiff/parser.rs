@@ -330,7 +330,12 @@ impl Parser<'_> {
         validate_sample(bits_per_sample[0], sample_formats[0])?;
 
         let photometric = photometric(self.single_u16(entries, TAG_PHOTOMETRIC, "Photometric")?)?;
-        if samples_per_pixel < photometric.color_samples() {
+        if samples_per_pixel < photometric.color_samples()
+            && !matches!(
+                photometric,
+                TiffPhotometric::CieLab | TiffPhotometric::IccLab
+            )
+        {
             return Err(malformed(
                 "SamplesPerPixel is smaller than photometric channels",
             ));
@@ -344,7 +349,10 @@ impl Parser<'_> {
             value => return Err(unsupported("planar configuration", u64::from(value))),
         };
         let orientation = orientation(self.single_u16_default(entries, TAG_ORIENTATION, 1)?)?;
-        let alpha = self.alpha(entries, samples_per_pixel - photometric.color_samples())?;
+        let alpha = self.alpha(
+            entries,
+            samples_per_pixel.saturating_sub(photometric.color_samples()),
+        )?;
         let chunks = self.chunks(entries, dimensions, samples_per_pixel, storage)?;
 
         let bytes_per_sample = u64::from(bits_per_sample[0].div_ceil(8).max(1));
@@ -785,7 +793,10 @@ fn validate_predictor(
 
 fn sample_format(value: u64) -> Result<TiffSampleFormat, TiffDecodeError> {
     match value {
-        1 => Ok(TiffSampleFormat::Unsigned),
+        // TIFF 6.0 says undefined data is read as unsigned integer data when
+        // no more specific interpretation is available, as does the native
+        // loader's SAMPLEFORMAT_VOID normalization.
+        1 | 4 => Ok(TiffSampleFormat::Unsigned),
         2 => Ok(TiffSampleFormat::Signed),
         3 => Ok(TiffSampleFormat::Float),
         _ => Err(unsupported("sample format", value)),

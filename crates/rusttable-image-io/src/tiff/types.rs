@@ -26,6 +26,25 @@ pub enum TiffSampleFormat {
     Float,
 }
 
+/// The sample formats accepted by the native TIFF scanline leaf.
+///
+/// This mirrors the dispatch order in Darktable's `imageio_tiff.c`: unsigned
+/// 8/16-bit samples, IEEE binary16 samples, and IEEE binary32 samples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TiffNativeSampleFormat {
+    Unsigned8,
+    Unsigned16,
+    HalfFloat16,
+    Float32,
+}
+
+impl TiffNativeSampleFormat {
+    #[must_use]
+    pub const fn is_hdr(self) -> bool {
+        matches!(self, Self::HalfFloat16 | Self::Float32)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TiffPhotometric {
     WhiteIsZero,
@@ -167,6 +186,65 @@ pub struct TiffPage {
     pub metadata: TiffMetadataInventory,
 }
 
+impl TiffPage {
+    /// Applies the native `imageio_tiff.c` format gate without invoking a
+    /// generic decoder or a color-management owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unsupported-format error when the retained native leaf would
+    /// hand this page to the fallback loader or has no scanline reader for it.
+    pub fn native_sample_format(&self) -> Result<TiffNativeSampleFormat, TiffDecodeError> {
+        if self.chunks.kind == TiffChunkKind::Tiles {
+            return Err(TiffDecodeError::Unsupported {
+                feature: "tiled TIFF",
+                value: 1,
+            });
+        }
+        match self.photometric {
+            TiffPhotometric::Cmyk => {
+                return Err(TiffDecodeError::Unsupported {
+                    feature: "CMYK photometric",
+                    value: 5,
+                });
+            }
+            TiffPhotometric::Palette => {
+                return Err(TiffDecodeError::Unsupported {
+                    feature: "palette photometric",
+                    value: 3,
+                });
+            }
+            _ => {}
+        }
+        if self.samples_per_pixel > 1 && self.storage != TiffStorageLayout::Chunky {
+            return Err(TiffDecodeError::Unsupported {
+                feature: "non-chunky planar configuration",
+                value: 2,
+            });
+        }
+        let bits = self
+            .bits_per_sample
+            .first()
+            .copied()
+            .ok_or_else(|| TiffDecodeError::Malformed("missing BitsPerSample".to_owned()))?;
+        let format = self
+            .sample_formats
+            .first()
+            .copied()
+            .ok_or_else(|| TiffDecodeError::Malformed("missing SampleFormat".to_owned()))?;
+        match (bits, format) {
+            (8, TiffSampleFormat::Unsigned) => Ok(TiffNativeSampleFormat::Unsigned8),
+            (16, TiffSampleFormat::Unsigned) => Ok(TiffNativeSampleFormat::Unsigned16),
+            (16, TiffSampleFormat::Float) => Ok(TiffNativeSampleFormat::HalfFloat16),
+            (32, TiffSampleFormat::Float) => Ok(TiffNativeSampleFormat::Float32),
+            _ => Err(TiffDecodeError::Unsupported {
+                feature: "native TIFF sample format",
+                value: u64::from(bits),
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TiffHeader {
     pub container: TiffContainer,
@@ -238,6 +316,24 @@ impl TiffPixelData {
         u64::try_from(self.samples.len())
             .unwrap_or(u64::MAX)
             .saturating_mul(u64::try_from(self.samples.bytes_per_sample()).unwrap_or(u64::MAX))
+    }
+}
+
+/// Native TIFF loader output: four floating-point channels per pixel.
+///
+/// The fourth channel is deliberately spare data and is always zero, matching
+/// the retained scanline readers rather than the generic RGBA adapter.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TiffNativeRaster {
+    pub dimensions: ImageDimensions,
+    pub pixels: Vec<f32>,
+    pub sample_format: TiffNativeSampleFormat,
+}
+
+impl TiffNativeRaster {
+    #[must_use]
+    pub fn is_hdr(&self) -> bool {
+        self.sample_format.is_hdr()
     }
 }
 

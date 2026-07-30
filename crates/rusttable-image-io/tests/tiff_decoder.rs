@@ -2,12 +2,13 @@ use std::io::Cursor;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusttable_image::{DecodeLimits, Orientation, Roi};
+use rusttable_image_io::tiff::{TiffNativeSampleFormat, half_bits_to_f32};
 use rusttable_image_io::{
     ImageDecoderRegistry, RawByteSource, RawCancellationToken, RawSourceError, TIFF_BACKEND_ID,
     TiffChunkKind, TiffContainer, TiffDecodeError, TiffDecodeLimits, TiffDecodeRequest,
-    TiffDecoder, TiffSampleData,
+    TiffDecoder, TiffPhotometric, TiffSampleData, TiffSampleFormat, TiffStorageLayout,
 };
-use tiff::encoder::colortype::{Gray8, Gray16, Gray32, Gray32Float, GrayI16, RGBA8};
+use tiff::encoder::colortype::{Gray8, Gray16, Gray32, Gray32Float, GrayI16, RGB8, RGBA8};
 use tiff::encoder::{Compression, DeflateLevel, Predictor, TiffEncoder};
 use tiff::tags::Tag;
 
@@ -54,6 +55,110 @@ fn decode(bytes: &[u8]) -> rusttable_image_io::TiffDecodeResult {
     TiffDecoder::new()
         .decode_bytes(bytes, &TiffDecodeRequest::new(limits()))
         .expect("TIFF decodes")
+}
+
+fn decode_native(bytes: &[u8]) -> rusttable_image_io::tiff::TiffNativeRaster {
+    TiffDecoder::new()
+        .decode_native_bytes(bytes, &TiffDecodeRequest::new(limits()))
+        .expect("native TIFF decodes")
+}
+
+fn rgb8(width: u32, height: u32, samples: &[u8]) -> Vec<u8> {
+    let mut cursor = Cursor::new(Vec::new());
+    TiffEncoder::new(&mut cursor)
+        .expect("encoder")
+        .write_image::<RGB8>(width, height, samples)
+        .expect("RGB data");
+    cursor.into_inner()
+}
+
+fn rgba8(width: u32, height: u32, samples: &[u8]) -> Vec<u8> {
+    let mut cursor = Cursor::new(Vec::new());
+    TiffEncoder::new(&mut cursor)
+        .expect("encoder")
+        .write_image::<RGBA8>(width, height, samples)
+        .expect("RGBA data");
+    cursor.into_inner()
+}
+
+fn gray32_float(width: u32, height: u32, samples: &[f32]) -> Vec<u8> {
+    let mut cursor = Cursor::new(Vec::new());
+    TiffEncoder::new(&mut cursor)
+        .expect("encoder")
+        .write_image::<Gray32Float>(width, height, samples)
+        .expect("float data");
+    cursor.into_inner()
+}
+
+fn gray16(width: u32, height: u32, samples: &[u16]) -> Vec<u8> {
+    let mut cursor = Cursor::new(Vec::new());
+    TiffEncoder::new(&mut cursor)
+        .expect("encoder")
+        .write_image::<Gray16>(width, height, samples)
+        .expect("16-bit data");
+    cursor.into_inner()
+}
+
+fn patch_short_tag(bytes: &mut [u8], wanted: u16, value: u16) {
+    assert_eq!(&bytes[..2], b"II", "test helper expects little-endian TIFF");
+    let ifd = u32::from_le_bytes(bytes[4..8].try_into().expect("IFD offset")) as usize;
+    let count = u16::from_le_bytes(bytes[ifd..ifd + 2].try_into().expect("IFD count"));
+    for index in 0..usize::from(count) {
+        let entry = ifd + 2 + index * 12;
+        let tag = u16::from_le_bytes(bytes[entry..entry + 2].try_into().expect("tag"));
+        if tag == wanted {
+            assert_eq!(
+                u16::from_le_bytes(bytes[entry + 2..entry + 4].try_into().expect("type")),
+                3,
+                "test tag should be SHORT",
+            );
+            bytes[entry + 8..entry + 10].copy_from_slice(&value.to_le_bytes());
+            return;
+        }
+    }
+    panic!("tag {wanted} is absent");
+}
+
+fn half_float_tiff(samples: &[u16]) -> Vec<u8> {
+    let ifd_offset = 8_u32;
+    let entry_count = 10_u16;
+    let data_offset = usize::try_from(ifd_offset).expect("IFD offset fits")
+        + 2
+        + usize::from(entry_count) * 12
+        + 4;
+    let mut bytes = vec![0_u8; data_offset + samples.len() * 2];
+    bytes[..2].copy_from_slice(b"II");
+    bytes[2..4].copy_from_slice(&42_u16.to_le_bytes());
+    bytes[4..8].copy_from_slice(&ifd_offset.to_le_bytes());
+    bytes[8..10].copy_from_slice(&entry_count.to_le_bytes());
+    let mut entry = 10;
+    let mut write_entry = |tag: u16, field_type: u16, value: u32| {
+        bytes[entry..entry + 2].copy_from_slice(&tag.to_le_bytes());
+        bytes[entry + 2..entry + 4].copy_from_slice(&field_type.to_le_bytes());
+        bytes[entry + 4..entry + 8].copy_from_slice(&1_u32.to_le_bytes());
+        bytes[entry + 8..entry + 12].copy_from_slice(&value.to_le_bytes());
+        entry += 12;
+    };
+    write_entry(256, 3, u32::try_from(samples.len()).expect("width"));
+    write_entry(257, 3, 1);
+    write_entry(258, 3, 16);
+    write_entry(259, 3, 1);
+    write_entry(262, 3, 1);
+    write_entry(273, 4, u32::try_from(data_offset).expect("sample offset"));
+    write_entry(277, 3, 1);
+    write_entry(278, 3, 1);
+    write_entry(
+        279,
+        4,
+        u32::try_from(samples.len() * 2).expect("sample bytes"),
+    );
+    write_entry(339, 3, 3);
+    bytes[entry..entry + 4].copy_from_slice(&0_u32.to_le_bytes());
+    for (index, sample) in samples.iter().copied().enumerate() {
+        let offset = data_offset + index * 2;
+        bytes[offset..offset + 2].copy_from_slice(&sample.to_le_bytes());
+    }
+    bytes
 }
 
 #[test]
@@ -335,4 +440,186 @@ impl RawByteSource for ChangingSource {
         buffer.copy_from_slice(source);
         Ok(())
     }
+}
+
+#[test]
+fn native_scanline_output_is_four_float_channels_with_spare_alpha() {
+    let native = decode_native(&rgb8(2, 1, &[255, 0, 128, 0, 64, 255]));
+
+    assert_eq!(native.sample_format, TiffNativeSampleFormat::Unsigned8);
+    assert!(!native.is_hdr());
+    assert_eq!(native.pixels[3].to_bits(), 0.0_f32.to_bits());
+    assert_eq!(native.pixels[7].to_bits(), 0.0_f32.to_bits());
+    assert!((native.pixels[0] - 1.0).abs() < f32::EPSILON);
+    assert!((native.pixels[2] - (128.0 / 255.0)).abs() < f32::EPSILON);
+    assert!((native.pixels[5] - (64.0 / 255.0)).abs() < f32::EPSILON);
+}
+
+#[test]
+fn native_reader_replicates_gray_and_only_inverts_8_bit_white_is_zero() {
+    let mut white_is_zero = gray8(2, 1, &[0, 255], Compression::Uncompressed, Predictor::None);
+    patch_short_tag(&mut white_is_zero, 262, 0);
+    let native = decode_native(&white_is_zero);
+
+    assert_eq!(native.pixels, vec![1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn native_float32_classifies_hdr_and_preserves_stored_values() {
+    let native = decode_native(&gray32_float(2, 1, &[-1.25, 42.0]));
+
+    assert_eq!(native.sample_format, TiffNativeSampleFormat::Float32);
+    assert!(native.is_hdr());
+    assert_eq!(
+        native.pixels,
+        vec![-1.25, -1.25, -1.25, 0.0, 42.0, 42.0, 42.0, 0.0]
+    );
+}
+
+#[test]
+fn native_uint16_scales_to_float_and_is_ldr() {
+    let native = decode_native(&gray16(2, 1, &[0, u16::MAX]));
+
+    assert_eq!(native.sample_format, TiffNativeSampleFormat::Unsigned16);
+    assert!(!native.is_hdr());
+    assert!(native.pixels[0].abs() < f32::EPSILON);
+    assert!((native.pixels[4] - 1.0).abs() < f32::EPSILON);
+    assert!(native.pixels[3].abs() < f32::EPSILON);
+    assert!(native.pixels[7].abs() < f32::EPSILON);
+}
+
+#[test]
+fn native_half_fallback_preserves_zero_subnormal_infinity_nan_and_sign() {
+    let patterns = [
+        0x0000, 0x8000, 0x0001, 0x8001, 0x3c00, 0xbc00, 0x7c00, 0xfc00, 0x7e00, 0xfe00,
+    ];
+    for bits in patterns {
+        let actual = half_bits_to_f32(bits);
+        let expected = half::f16::from_bits(bits).to_f32();
+        assert_eq!(
+            actual.to_bits(),
+            expected.to_bits(),
+            "half pattern {bits:#06x}"
+        );
+    }
+
+    let native = decode_native(&half_float_tiff(&[0x0000, 0x3c00, 0x7c00, 0x7e00]));
+    assert_eq!(native.sample_format, TiffNativeSampleFormat::HalfFloat16);
+    assert!(native.is_hdr());
+    assert_eq!(native.pixels[0].to_bits(), 0.0_f32.to_bits());
+    assert!((native.pixels[4] - 1.0).abs() < f32::EPSILON);
+    assert!(native.pixels[8].is_infinite());
+    assert!(native.pixels[12].is_nan());
+    assert!(
+        native
+            .pixels
+            .chunks(4)
+            .all(|pixel| pixel[3].to_bits() == 0.0_f32.to_bits())
+    );
+}
+
+#[test]
+fn native_format_gate_matches_tiff_loader_fallback_matrix() {
+    let page = decode(&gray8(
+        1,
+        1,
+        &[17],
+        Compression::Uncompressed,
+        Predictor::None,
+    ))
+    .page;
+    assert_eq!(
+        page.native_sample_format()
+            .expect("8-bit unsigned is native"),
+        TiffNativeSampleFormat::Unsigned8
+    );
+
+    let mut tiled = page.clone();
+    tiled.chunks.kind = TiffChunkKind::Tiles;
+    assert!(matches!(
+        tiled.native_sample_format(),
+        Err(TiffDecodeError::Unsupported {
+            feature: "tiled TIFF",
+            value: 1
+        })
+    ));
+
+    for (photometric, value) in [(TiffPhotometric::Palette, 3), (TiffPhotometric::Cmyk, 5)] {
+        let mut unsupported = page.clone();
+        unsupported.photometric = photometric;
+        assert!(matches!(
+            unsupported.native_sample_format(),
+            Err(TiffDecodeError::Unsupported { feature: _, value: actual }) if actual == value
+        ));
+    }
+
+    let mut planar = page.clone();
+    planar.samples_per_pixel = 2;
+    planar.storage = TiffStorageLayout::Planar;
+    assert!(matches!(
+        planar.native_sample_format(),
+        Err(TiffDecodeError::Unsupported {
+            feature: "non-chunky planar configuration",
+            value: 2
+        })
+    ));
+
+    for bits in [1, 2, 4, 32] {
+        let mut unsupported = page.clone();
+        unsupported.bits_per_sample[0] = bits;
+        assert!(matches!(
+            unsupported.native_sample_format(),
+            Err(TiffDecodeError::Unsupported { feature: "native TIFF sample format", value }) if value == u64::from(bits)
+        ));
+    }
+    let mut signed = page.clone();
+    signed.sample_formats[0] = TiffSampleFormat::Signed;
+    assert!(matches!(
+        signed.native_sample_format(),
+        Err(TiffDecodeError::Unsupported {
+            feature: "native TIFF sample format",
+            value: 8
+        })
+    ));
+}
+
+#[test]
+fn sampleformat_void_is_normalized_to_unsigned_for_native_dispatch() {
+    let mut bytes = gray8(1, 1, &[17], Compression::Uncompressed, Predictor::None);
+    patch_short_tag(&mut bytes, 339, 4);
+    let page = decode(&bytes).page;
+
+    assert_eq!(page.sample_formats, vec![TiffSampleFormat::Unsigned]);
+    assert_eq!(
+        decode_native(&bytes).sample_format,
+        TiffNativeSampleFormat::Unsigned8
+    );
+}
+
+#[test]
+fn native_lab_conversion_remains_fail_closed_until_color_owner_exists() {
+    let mut bytes = gray8(1, 1, &[17], Compression::Uncompressed, Predictor::None);
+    patch_short_tag(&mut bytes, 262, 8);
+
+    assert!(matches!(
+        TiffDecoder::new().decode_native_bytes(&bytes, &TiffDecodeRequest::new(limits())),
+        Err(TiffDecodeError::Unsupported {
+            feature: "Lab color conversion",
+            value: 8
+        })
+    ));
+}
+
+#[test]
+fn native_alpha_is_discarded_into_the_spare_channel() {
+    let native = decode_native(&rgba8(1, 1, &[10, 20, 30, 255]));
+
+    let expected = [10.0_f32 / 255.0, 20.0 / 255.0, 30.0 / 255.0];
+    assert!(
+        native.pixels[..3]
+            .iter()
+            .zip(expected)
+            .all(|(actual, expected)| (actual - expected).abs() < f32::EPSILON)
+    );
+    assert_eq!(native.pixels[3].to_bits(), 0.0_f32.to_bits());
 }
