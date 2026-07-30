@@ -1,0 +1,66 @@
+schema = "rusttable.basicadj-compat-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf5"
+
+[[responsibility]]
+id = "native-v1-parameter-layout"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "dt_iop_basicadj_params_v1_t"
+rust_path = "crates/rusttable-compat/src/basicadj.rs"
+source_lines = "117-129"
+status = "implemented"
+evidence = "The legacy payload is nine little-endian f32 values with the preserve-colors int in its declared position: exactly 40 bytes."
+
+[[responsibility]]
+id = "native-v2-parameter-layout"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "dt_iop_basicadj_params_t and dt_iop_basicadj_params_v2_t"
+rust_path = "crates/rusttable-compat/src/basicadj.rs"
+source_lines = "98-113"
+status = "implemented"
+evidence = "The current payload retains the five leading f32 values and enum, then stores middle_grey, brightness, saturation, vibrance, and clip for exactly 44 bytes."
+
+[[responsibility]]
+id = "v1-to-v2-migration"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "legacy_params"
+rust_path = "crates/rusttable-compat/src/basicadj.rs"
+source_lines = "115-149"
+status = "implemented"
+evidence = "Migration copies every v1 field, writes vibrance as the native neutral zero, changes the version to 2, and does not clamp finite values."
+
+[[responsibility]]
+id = "checked-pending-history-row"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "flags and commit_params"
+rust_path = "crates/rusttable-compat/src/basicadj.rs"
+source_lines = "178-180,541-570"
+status = "implemented"
+evidence = "Known finite cores retain the exact source row, enabled state, operation bytes, blend/mask bytes, multi-instance metadata, ordering, and identity while returning an explicit pending-blend blocker."
+
+[[responsibility]]
+id = "operation-local-import-leaf"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "name"
+rust_path = "crates/rusttable-import/src/darktable/basicadj.rs"
+source_lines = "159-162"
+status = "implemented"
+evidence = "The operation-local import leaf exposes the typed compatibility decoder and aliases without mutating exhaustive shared dispatch."
+
+[[responsibility]]
+id = "native-fixtures-and-regressions"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "parameter declarations and legacy_params"
+rust_path = "crates/rusttable-compat/tests/basicadj.rs"
+source_lines = "98-149"
+status = "implemented"
+evidence = "Exact 40-byte and 44-byte native fixtures cover field order, defaults, migration, finite outliers, malformed/nonfinite/invalid inputs, byte preservation, opaque metadata, and pending status."
+
+[[responsibility]]
+id = "history-dispatch-registration"
+upstream_path = "src/iop/basicadj.c"
+upstream_symbol = "name"
+rust_path = "crates/rusttable-import/src/darktable/history.rs"
+source_lines = "159-162"
+status = "deferred"
+deferred_reason = "The shared exhaustive history dispatcher and its aggregate result enum are owned by the integration lane; this lane intentionally provides only the operation-local leaf and tests."
