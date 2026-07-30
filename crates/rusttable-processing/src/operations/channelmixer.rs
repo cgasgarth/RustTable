@@ -653,9 +653,9 @@ impl ChannelMixerPlan {
         Ok(output)
     }
 
-    /// Applies Darktable's bounded RGB normal blend. The fourth output lane is
-    /// local coverage, not source image alpha; the unblended point path above
-    /// is the alpha-preserving API.
+    /// Applies Darktable's NORMAL2 RGB blend without clamping. The fourth
+    /// output lane is local coverage, not source image alpha; the unblended
+    /// point path above is the alpha-preserving API.
     #[must_use]
     pub fn execute_normal_blend(
         &self,
@@ -673,10 +673,12 @@ impl ChannelMixerPlan {
                 let coverage = mask.map_or(opacity, |values| values[index] * opacity);
                 let source = source.channels();
                 let candidate = candidate.channels();
+                // Native _blend_normal_unbounded evaluates direct weighted
+                // products in source-then-output order; NORMAL2 does not clamp.
                 ChannelMixerPixel::new(
-                    clamp_simd(source[0] * (1.0 - coverage) + candidate[0] * coverage),
-                    clamp_simd(source[1] * (1.0 - coverage) + candidate[1] * coverage),
-                    clamp_simd(source[2] * (1.0 - coverage) + candidate[2] * coverage),
+                    source[0] * (1.0 - coverage) + candidate[0] * coverage,
+                    source[1] * (1.0 - coverage) + candidate[1] * coverage,
+                    source[2] * (1.0 - coverage) + candidate[2] * coverage,
                     coverage,
                 )
             })
@@ -705,10 +707,12 @@ impl ChannelMixerPlan {
                 let coverage = mask.map_or(opacity, |values| values[index] * opacity);
                 let source = source.channels();
                 let candidate = candidate.channels();
+                // Native _blend_normal_unbounded evaluates direct weighted
+                // products in source-then-output order; NORMAL2 does not clamp.
                 ChannelMixerPixel::new(
-                    clamp_simd(source[0] * (1.0 - coverage) + candidate[0] * coverage),
-                    clamp_simd(source[1] * (1.0 - coverage) + candidate[1] * coverage),
-                    clamp_simd(source[2] * (1.0 - coverage) + candidate[2] * coverage),
+                    source[0] * (1.0 - coverage) + candidate[0] * coverage,
+                    source[1] * (1.0 - coverage) + candidate[1] * coverage,
+                    source[2] * (1.0 - coverage) + candidate[2] * coverage,
                     coverage,
                 )
             })
@@ -1331,11 +1335,46 @@ mod tests {
     }
 
     #[test]
-    fn bounded_normal_blend_uses_mask_coverage_in_alpha() {
+    fn normal2_uses_direct_weighted_products_and_preserves_coverage() {
+        let mut parameters = ChannelMixerParametersV2::defaults();
+        parameters.red[RED] = 0.0;
+        parameters.green[RED] = 1.0;
+        let plan = ChannelMixerPlan::new(
+            ChannelMixerConfig::try_from(parameters).expect("finite parameters"),
+        );
+        let source = ChannelMixerPixel::new(0.1, 0.9, 0.4, 0.9);
+        let output = plan.execute_normal_blend(&[source], Some(&[0.2]), 0.5)[0];
+
+        // Native _blend_normal_unbounded uses a*(1-mask)+b*mask in source
+        // order. The direct products and delta-first reconstruction differ by
+        // one f32 word for this source-derived vector.
+        let expected = 0.1_f32 * (1.0_f32 - 0.1_f32) + 0.9_f32 * 0.1_f32;
+        let delta_first = 0.1_f32 + (0.9_f32 - 0.1_f32) * 0.1_f32;
+        assert_ne!(expected.to_bits(), delta_first.to_bits());
+        assert_eq!(output.red().to_bits(), expected.to_bits());
+        assert_eq!(
+            output.green().to_bits(),
+            (0.9_f32 * (1.0_f32 - 0.1_f32) + 0.9_f32 * 0.1_f32).to_bits()
+        );
+        assert_eq!(
+            output.blue().to_bits(),
+            (0.4_f32 * (1.0_f32 - 0.1_f32) + 0.4_f32 * 0.1_f32).to_bits()
+        );
+        assert_eq!(output.alpha().to_bits(), 0.1_f32.to_bits());
+    }
+
+    #[test]
+    fn normal2_does_not_clamp_negative_or_hdr_results() {
         let plan = ChannelMixerPlan::new(ChannelMixerConfig::defaults());
-        let source = ChannelMixerPixel::new(0.0, 0.2, 0.4, 0.9);
-        let output = plan.execute_normal_blend(&[source], Some(&[0.5]), 0.5)[0];
-        assert_eq!(output.channels(), [0.0, 0.2, 0.4, 0.25]);
+        let negative = plan.execute_normal_blend(
+            &[ChannelMixerPixel::new(-0.5, -0.25, -0.75, 1.0)],
+            None,
+            0.5,
+        )[0];
+        let hdr =
+            plan.execute_normal_blend(&[ChannelMixerPixel::new(2.0, 1.5, 4.0, 1.0)], None, 0.5)[0];
+        assert_eq!(negative.channels(), [-0.25, -0.125, -0.375, 0.5]);
+        assert_eq!(hdr.channels(), [2.0, 1.5, 4.0, 0.5]);
     }
 
     #[test]

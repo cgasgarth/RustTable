@@ -17,6 +17,25 @@ const CHANNELMIXER_V2_NATIVE_LE: &[u8; CHANNELMIXER_V2_PARAMETER_BYTES] =
     include_bytes!("../../../fixtures/corpus/assets/operation-channelmixer-params-v2.bin");
 
 #[test]
+fn native_abi_sizes_match_source_layout_and_fixture_contracts() {
+    // channelmixer.c declares three float[7] rows for v1 and appends the
+    // four-byte int enum for v2; the include_bytes! array types above also
+    // make either fixture size drift a compile-time failure.
+    assert_eq!(CHANNELMIXER_OUTPUT_CHANNELS, 7);
+    assert_eq!(CHANNELMIXER_MATRIX_VALUES, 21);
+    assert_eq!(CHANNELMIXER_V1_PARAMETER_BYTES, 84);
+    assert_eq!(CHANNELMIXER_V2_PARAMETER_BYTES, 88);
+    assert_eq!(
+        CHANNELMIXER_V1_NATIVE_LE.len(),
+        CHANNELMIXER_V1_PARAMETER_BYTES
+    );
+    assert_eq!(
+        CHANNELMIXER_V2_NATIVE_LE.len(),
+        CHANNELMIXER_V2_PARAMETER_BYTES
+    );
+}
+
+#[test]
 fn native_v1_fixture_covers_all_21_values_in_row_order() {
     let parameters = ChannelMixerParametersV1::from_native_le(CHANNELMIXER_V1_NATIVE_LE)
         .expect("source-derived Channel Mixer v1 fixture is valid");

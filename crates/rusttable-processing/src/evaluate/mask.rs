@@ -17,6 +17,7 @@ impl<'a> OperationMaskRoute<'a> {
                 | ProcessingOperationKind::ColorContrast { .. }
                 | ProcessingOperationKind::ColorCorrection { .. }
                 | ProcessingOperationKind::ColorZones { .. }
+                | ProcessingOperationKind::ChannelMixer { .. }
                 | ProcessingOperationKind::Sharpen { .. }
                 | ProcessingOperationKind::Vibrance { .. }
                 | ProcessingOperationKind::Shadhi { .. }

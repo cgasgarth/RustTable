@@ -186,6 +186,52 @@ fn native_modes_execute_with_exact_mode_selection_and_alpha_preservation() {
 }
 
 #[test]
+fn production_normal2_routes_opacity_and_mask_as_direct_weighted_products() {
+    let mut parameters = identity_parameters();
+    parameters.red[3] = 0.0;
+    parameters.green[3] = 1.0;
+    let operation = channel_mixer_operation(106, true, 0.5, parameters);
+    let edit = Edit::from_parts(
+        EditId::new(106).expect("edit ID"),
+        PhotoId::new(107).expect("photo ID"),
+        Revision::ZERO,
+        Revision::from_u64(1),
+        [operation],
+    )
+    .expect("edit");
+    let graph = CompiledOperationGraph::compile(&edit).expect("graph");
+    let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
+    let input = WorkingRgbImage::new(dimensions, vec![pixel(0.1, 0.9, 0.4)]).expect("input");
+    let masks = OperationMaskSet::from_entries([(
+        OperationId::new(106).expect("mask operation ID"),
+        MaskRaster::new(1, 1, vec![0.2]).expect("mask"),
+    )])
+    .expect("mask set");
+    let output = evaluate_graph_at_frame_boundaries_with_masks(
+        &graph,
+        &input,
+        &[1.0],
+        FrameBoundaryOptions::new(FrameBoundaryMode::Preview),
+        Some(&masks),
+        || false,
+    )
+    .expect("masked Channel Mixer graph");
+    let actual = output.image().pixel_slice()[0];
+    let expected = 0.1_f32 * (1.0_f32 - 0.1_f32) + 0.9_f32 * 0.1_f32;
+    let delta_first = 0.1_f32 + (0.9_f32 - 0.1_f32) * 0.1_f32;
+    assert_ne!(expected.to_bits(), delta_first.to_bits());
+    assert_eq!(actual.red().get().to_bits(), expected.to_bits());
+    assert_eq!(
+        actual.green().get().to_bits(),
+        (0.9_f32 * (1.0_f32 - 0.1_f32) + 0.9_f32 * 0.1_f32).to_bits()
+    );
+    assert_eq!(
+        actual.blue().get().to_bits(),
+        (0.4_f32 * (1.0_f32 - 0.1_f32) + 0.4_f32 * 0.1_f32).to_bits()
+    );
+}
+
+#[test]
 fn mixed_graph_routes_opacity_mask_and_disabled_nodes_through_cpu() {
     let mut swap = identity_parameters();
     swap.red[3] = 0.0;

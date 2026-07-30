@@ -736,8 +736,16 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                     )
                 })
                 .collect::<Vec<_>>();
+            // Native NORMAL2 combines opacity and the conditional mask in one
+            // direct weighted blend. Do not route this operation through the
+            // generic delta-first reconstruction or post-operation mask blend.
             let candidate = plan
-                .execute_with_cancellation(&rgba, &cancelled)
+                .execute_normal_blend_with_cancellation(
+                    &rgba,
+                    mask_route.native_values(),
+                    opacity,
+                    &cancelled,
+                )
                 .map_err(|error| match error {
                     crate::operations::channelmixer::ChannelMixerExecutionError::Cancelled => {
                         EvaluationError::Cancelled {
@@ -774,14 +782,8 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                 })
                 .collect::<Result<Vec<_>, OperationExecutionError>>()
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
-            apply_reconstruction(
-                pixels,
-                &candidate,
-                opacity,
-                step_index,
-                operation_id,
-                pixel_index_offset,
-            )
+            pixels.copy_from_slice(&candidate);
+            Ok(())
         }
         ProcessingOperationKind::ColorContrast { config } => {
             let candidate =

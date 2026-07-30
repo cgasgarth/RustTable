@@ -55,7 +55,7 @@ upstream_symbol = "process, commit_params, init"
 rust_path = "crates/rusttable-processing and crates/rusttable-pixelpipe"
 source_lines = "228-384,386-419"
 status = "implemented"
-evidence = "The registered CPU evaluator executes all four native modes through the shared RGB reconstruction and mask route, preserves alpha at the pixelpipe boundary, records matrix and algorithm bits in snapshot identity, and keeps GPU qualification explicitly unavailable."
+evidence = "The registered CPU evaluator executes all four native modes with source-specific NORMAL2 direct weighted blending, combines opacity with the mask before blending, preserves alpha at the pixelpipe boundary, records matrix and algorithm bits in snapshot identity, and keeps GPU qualification explicitly unavailable."
 
 [[responsibility]]
 id = "source-shaped-ui"
