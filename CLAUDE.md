@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Read `AGENTS.md` and `TASK.md` completely before migration work. They define the source baseline, completion criteria, branch policy, validation gate, and delivery loop. Read `docs/migration-workflow-lessons.md` before authoring a milestone workflow; it records concrete prior failures and prevention checks.
 
-- Use `/Users/cgas/Documents/RustTable/RustTable` as the canonical integration checkout on `codex/file-by-file-migration`. Up to three temporary worker worktrees may be active concurrently; never create more than three, and never use them for independent delivery branches or PRs.
+- Use `/Users/cgas/Documents/RustTable/RustTable` as the canonical integration checkout on the active migration branch. Any number of temporary worker worktrees/workflows may be active concurrently when each has exclusive ownership and host capacity supports it; never use worker worktrees for independent delivery branches or PRs.
 - The repository default branch and pull-request base are `main`; target `main` for migration PRs and do not use the stale `master` branch as the base.
 - `src/`, retained native build files, and the sibling `../Darktable` checkout are read-only porting oracles. Never modify them or compile, link, ship, or FFI-call retained C/C++/OpenCL code.
 - Use Cargo for RustTable. Do not run root `build.sh` or CMake.
 - Treat Rust code predating strict-reset commit `a5a039af2319275c11455888e9fb02ee0288916f` as provisional unless a later strict milestone explicitly re-inspected and validated the matching native responsibility.
 - Port responsibilities directly from source. Preserve constants, formats, ordering, state transitions, failures, processing semantics, and UI composition; do not substitute plausible behavior.
-- Keep one meaningful milestone PR active at a time. Complete local validation, open and squash-merge it, sync `main`, then continue without waiting for user check-ins.
+- Keep one meaningful milestone PR active at a time, but keep implementation continuously queued: as a lane reaches integration or review, start the next dependency-ready source audit and exclusive leaf work without waiting idle. Complete local validation, open and squash-merge the current PR, sync `main`, then continue the queued stream without waiting for user check-ins; stop only when the user explicitly asks.
 - Never claim a complete native-file port or delete retained source until every `TASK.md` completion criterion and remaining native dependency permits it.
 
 ## Development commands
@@ -96,7 +96,7 @@ Do not build a separate automation framework or survey external UI-driving ecosy
 
 ## Model-aware workflows
 
-Use workflows to advance one dependency-ready milestone at a time while keeping shared-file ownership explicit. One active PR constrains delivery, not implementation concurrency: use the canonical checkout for integration and delivery, and fan out as many temporary worker worktrees/workflows as independent ownership and host capacity support, then converge through one integration owner.
+Use workflows to maintain a rolling stream of dependency-ready migration work while keeping shared-file ownership explicit. One active PR constrains delivery, not implementation concurrency: keep source audits, leaf ports, focused contracts, diagnostics, and adversarial reviews running in parallel wherever dependencies permit; use the canonical checkout for integration and delivery, and fan out as many temporary worker worktrees/workflows as independent ownership and host capacity support, then converge through one integration owner. Do not leave the migration idle between milestones; stop only on an explicit user request or a genuine repository/environment blocker that requires user input.
 
 - Before implementation fan-out, produce a source-responsibility inventory covering native functions and constants, Rust callers, ownership/lifetime boundaries, behavior-preserving tests, writable file ownership, and explicit deferred responsibilities.
 - Run source/caller/test research in parallel by responsibility.
