@@ -722,6 +722,67 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
                 pixel_index_offset,
             )
         }
+        ProcessingOperationKind::ChannelMixer { config } => {
+            let plan = crate::operations::channelmixer::ChannelMixerPlan::new(*config);
+            let rgba = pixels
+                .iter()
+                .copied()
+                .map(|pixel| {
+                    crate::operations::channelmixer::ChannelMixerPixel::new(
+                        pixel.red().get(),
+                        pixel.green().get(),
+                        pixel.blue().get(),
+                        1.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let candidate = plan
+                .execute_with_cancellation(&rgba, &cancelled)
+                .map_err(|error| match error {
+                    crate::operations::channelmixer::ChannelMixerExecutionError::Cancelled => {
+                        EvaluationError::Cancelled {
+                            step_index,
+                            operation_id,
+                        }
+                    }
+                })?;
+            let candidate = candidate
+                .into_iter()
+                .enumerate()
+                .map(|(index, pixel)| {
+                    let channels = pixel.channels();
+                    Ok(LinearRgb::new(
+                        FiniteF32::new(channels[0]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Red,
+                            }
+                        })?,
+                        FiniteF32::new(channels[1]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Green,
+                            }
+                        })?,
+                        FiniteF32::new(channels[2]).map_err(|_| {
+                            OperationExecutionError::NonFiniteResult {
+                                pixel: index,
+                                channel: RgbChannel::Blue,
+                            }
+                        })?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, OperationExecutionError>>()
+                .map_err(|error| operation_error(step_index, operation_id, error))?;
+            apply_reconstruction(
+                pixels,
+                &candidate,
+                opacity,
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )
+        }
         ProcessingOperationKind::ColorContrast { config } => {
             let candidate =
                 apply_colorcontrast(*config, pixels, *frame, mask_route.native_values(), opacity)

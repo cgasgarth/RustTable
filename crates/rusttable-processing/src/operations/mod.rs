@@ -9,6 +9,7 @@ pub mod basicadj;
 pub mod bloom;
 pub mod borders;
 pub mod censorize;
+pub mod channelmixer;
 pub mod clahe;
 pub mod clipping;
 pub mod colorcontrast;

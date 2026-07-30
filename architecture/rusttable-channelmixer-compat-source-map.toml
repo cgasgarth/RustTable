@@ -1,0 +1,67 @@
+schema = "rusttable.channelmixer-compat-source-map.v1"
+issue = 1023
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf5"
+
+[[responsibility]]
+id = "native-v1-parameter-layout"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "dt_iop_channelmixer_params_v1_t"
+rust_path = "crates/rusttable-compat/src/channelmixer.rs"
+source_lines = "178-185"
+status = "implemented"
+evidence = "Three contiguous float[7] rows are decoded as 84 little-endian bytes in red, green, blue declaration order."
+
+[[responsibility]]
+id = "native-v2-parameter-layout"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "dt_iop_channelmixer_params_t"
+rust_path = "crates/rusttable-compat/src/channelmixer.rs"
+source_lines = "80-90,166-176"
+status = "implemented"
+evidence = "The current payload preserves all 21 matrix values and appends the four-byte algorithm enum for an 88-byte layout."
+
+[[responsibility]]
+id = "v1-to-v2-migration"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "legacy_params"
+rust_path = "crates/rusttable-compat/src/channelmixer.rs"
+source_lines = "178-223"
+status = "implemented"
+evidence = "Migration zeroes the destination, selects algorithm v1, always copies HSL and gray, and copies RGB only when all legacy gray coefficients compare equal to zero."
+
+[[responsibility]]
+id = "typed-history-pending-row"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "commit_params and init"
+rust_path = "crates/rusttable-compat/src/channelmixer.rs"
+source_lines = "498-596"
+status = "implemented"
+evidence = "Typed core rows retain enabled state, native bytes, source ordering fields, instance identity, and opaque blend/mask metadata while returning an explicit pending-blend blocker."
+
+[[responsibility]]
+id = "history-dispatch-registration"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "name"
+rust_path = "crates/rusttable-import/src/darktable/history.rs"
+source_lines = "120-123"
+status = "implemented"
+evidence = "Production dispatch now routes known Channel Mixer cores to the typed pending-blend decoder and preserves unknown or malformed rows byte-for-byte; import remains non-executable when blend/mask or instance semantics are opaque."
+
+[[responsibility]]
+id = "processing-core"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "process, commit_params, init"
+rust_path = "crates/rusttable-processing and crates/rusttable-pixelpipe"
+source_lines = "228-384,386-419"
+status = "implemented"
+evidence = "The registered CPU evaluator executes all four native modes through the shared RGB reconstruction and mask route, preserves alpha at the pixelpipe boundary, records matrix and algorithm bits in snapshot identity, and keeps GPU qualification explicitly unavailable."
+
+[[responsibility]]
+id = "source-shaped-ui"
+upstream_path = "src/iop/channelmixer.c"
+upstream_symbol = "gui_init, init_presets"
+rust_path = "crates/rusttable-ui"
+source_lines = "598-752"
+status = "deferred"
+deferred_reason = "The source-shaped GTK leaf and production reference projection are present for boundary testing, but production edit mounting and durable action persistence remain fail-closed."

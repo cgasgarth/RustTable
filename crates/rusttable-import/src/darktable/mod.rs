@@ -4,7 +4,8 @@ mod history;
 
 pub use history::{
     DarktableHistoryDecodeFinding, DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode,
-    DecodedColorContrastHistoryStep, DecodedColorCorrectionHistoryStep,
-    DecodedColorZonesHistoryStep, DecodedSharpenHistoryStep, DecodedSoftenHistoryStep,
-    DecodedVelviaHistoryStep, DecodedVibranceHistoryStep, decode_history_step,
+    DecodedChannelMixerHistoryStep, DecodedColorContrastHistoryStep,
+    DecodedColorCorrectionHistoryStep, DecodedColorZonesHistoryStep, DecodedSharpenHistoryStep,
+    DecodedSoftenHistoryStep, DecodedVelviaHistoryStep, DecodedVibranceHistoryStep,
+    decode_history_step,
 };

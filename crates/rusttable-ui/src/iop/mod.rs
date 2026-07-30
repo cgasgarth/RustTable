@@ -1,5 +1,6 @@
 pub(crate) mod actions;
 pub mod bloom;
+pub mod channelmixer;
 pub mod colorcontrast;
 pub mod colorcorrection;
 pub mod colorreconstruct;

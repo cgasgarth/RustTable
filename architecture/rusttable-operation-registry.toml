@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "e67f6d2078c3117810be56bbd1a673a36e4818ae2badcad4d8956c3e4c9981d1"
+snapshot_hash = "9f473e5aca5ecc9d4627549c457704015a33d89bdecda45371073279f41b6b10"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -39,6 +39,14 @@ rust_id = "rusttable.censorize"
 compatibility_name = "censorize"
 descriptor_version = 1
 parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.channelmixer"
+compatibility_name = "channelmixer"
+descriptor_version = 2
+parameter_version = 2
 implementation_version = 1
 status = "available"
 

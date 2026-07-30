@@ -45,15 +45,16 @@ pub use color::{
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
-    basicadj_descriptor, bloom_descriptor, censorize_descriptor, clahe_descriptor,
-    clipping_descriptor, color_reconstruction_descriptor, colorcorrection_descriptor,
-    colorin_descriptor, colorzones_descriptor, crop_descriptor, defringe_descriptor,
-    dither_descriptor, enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor,
-    flip_descriptor, graduatednd_descriptor, grain_descriptor, highlights_descriptor,
-    invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor, liquify_descriptor,
-    mask_manager_descriptor, perspective_descriptor, primaries_descriptor, retouch_descriptor,
-    rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor, soften_descriptor,
-    temperature_descriptor, velvia_descriptor, vibrance_descriptor, vignette_descriptor,
+    basicadj_descriptor, bloom_descriptor, censorize_descriptor, channelmixer_descriptor,
+    clahe_descriptor, clipping_descriptor, color_reconstruction_descriptor,
+    colorcorrection_descriptor, colorin_descriptor, colorzones_descriptor, crop_descriptor,
+    defringe_descriptor, dither_descriptor, enlargecanvas_descriptor, exposure_descriptor,
+    finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
+    highlights_descriptor, invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
+    liquify_descriptor, mask_manager_descriptor, perspective_descriptor, primaries_descriptor,
+    retouch_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    soften_descriptor, temperature_descriptor, velvia_descriptor, vibrance_descriptor,
+    vignette_descriptor,
 };
 pub use evaluate::{
     BasicAdjPlanSet, BlendArithmeticStage, DistortionBorderMode, DistortionInterpolation,
@@ -99,6 +100,15 @@ pub use operations::censorize::{
     CensorizeConfig, CensorizeExecutionError, CensorizeHistory, CensorizeMask,
     CensorizeParameterError, CensorizeParametersV1, CensorizePixel, CensorizePlan,
     CensorizeReceipt, CensorizeRng, CensorizeStages, gaussian_noise, splitmix32, xoshiro128plus,
+};
+pub use operations::channelmixer::{
+    CHANNEL_MIXER_COMPATIBILITY_ID, CHANNEL_MIXER_GUI_MAX, CHANNEL_MIXER_GUI_MIN,
+    CHANNEL_MIXER_PARAMETER_MAX, CHANNEL_MIXER_PARAMETER_MIN, CHANNEL_MIXER_RUST_ID,
+    CHANNEL_MIXER_SCHEMA_VERSION, CHANNEL_MIXER_V1_PARAMETER_BYTES,
+    CHANNEL_MIXER_V2_PARAMETER_BYTES, ChannelMixerAlgorithm, ChannelMixerCodecError,
+    ChannelMixerConfig, ChannelMixerExecutionError, ChannelMixerHistory, ChannelMixerOperationMode,
+    ChannelMixerParameterError, ChannelMixerParametersV1, ChannelMixerParametersV2,
+    ChannelMixerPixel, ChannelMixerPlan, migrate_v1_to_v2 as migrate_channelmixer_v1_to_v2,
 };
 pub use operations::clahe::{
     CLAHE_ALIAS, CLAHE_BINS, CLAHE_COMPATIBILITY_ID, CLAHE_HISTOGRAM_ENTRIES,

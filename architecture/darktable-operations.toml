@@ -5079,8 +5079,8 @@ kernels = ["lowpass_mix"]
 name = "channelmixer"
 reference_path = "src/iop/channelmixer.c"
 module_version = 2
-parameter_size = 16
-parameter_layout_hash = "0c6cb8df7815de03ebd74a8e86766e37e0a4f129ac601f46e73eb6a2d303fbb1"
+parameter_size = 88
+parameter_layout_hash = "a73fafce2ca050c9a793a65d30055bf2004c0415a0540d6c083343d0e8fe166a"
 default_enabled = false
 default_order = 106
 group = "color"
@@ -5124,28 +5124,164 @@ tolerance_class = "LegacyGpu"
 
 [[operations.parameter_versions]]
 version = 1
-byte_size = 224
-layout_hash = "de9e0ded3d97d874a2a1d4947d4a9406fa69ed9a216457194d3eba44aac0108d"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 84
+layout_hash = "bf475015610ac5744012623d0004140d04a8e20ce9903ab87502353c90e30b0c"
+decoder = "rusttable.channelmixer.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.channelmixer.params.v1"
-abi_layouts = []
 target_codecs = []
 
 [operations.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/channelmixer.c"
-line_start = 181
-line_end = 181
-reason = "explicit parameter layout declaration"
+line_start = 81
+line_end = 87
+reason = "the legacy history payload contains the three declared float[7] rows"
 reviewer = "cgasgarth"
 evidence_hash = "0a46c961e802f4ca52efaf48080e456c50432b2f2f9e0a523baa9bf3884a8ffb"
 
+[[operations.parameter_versions.abi_layouts]]
+target = "x86_64-unknown-linux-gnu"
+c_abi_model = "x86_64-unknown-linux-gnu"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 84
+alignment = 4
+layout_hash = "bf475015610ac5744012623d0004140d04a8e20ce9903ab87502353c90e30b0c"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "red"
+type_name = "float[7]"
+array_extent = 7
+offset = 0
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts]]
+target = "aarch64-apple-darwin"
+c_abi_model = "aarch64-apple-darwin"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 84
+alignment = 4
+layout_hash = "6027be8240db4ba3784210ef39775c7452369fdc4c795c05cebd87bb1f0e417c"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "red"
+type_name = "float[7]"
+array_extent = 7
+offset = 0
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts]]
+target = "x86_64-pc-windows-msvc"
+c_abi_model = "x86_64-pc-windows-msvc"
+endianness = "little"
+pointer_width = 64
+padding = []
+total_size = 84
+alignment = 4
+layout_hash = "fde304bb16822301011c9a56f6e284bda0df711e183bed4a52e676be95192412"
+difference_from = []
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "red"
+type_name = "float[7]"
+array_extent = 7
+offset = 0
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[operations.parameter_versions.codec]
+byte_size = 84
+decoder = "rusttable.channelmixer.decode.v1"
+encoder = "rusttable.channelmixer.encode.v1"
+byte_order = "little"
+preserves_padding = true
+format = "darktable.iop.channelmixer.v1"
+
+[[operations.parameter_versions.codec.fields]]
+name = "red"
+kind = "f32"
+offset = 0
+size = 28
+array_extent = 7
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "green"
+kind = "f32"
+offset = 28
+size = 28
+array_extent = 7
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "blue"
+kind = "f32"
+offset = 56
+size = 28
+array_extent = 7
+enum_values = []
+
 [[operations.parameter_versions]]
 version = 2
-byte_size = 16
-layout_hash = "9bd4a7a2d3f336f4bbec3335b35ff7fa3c7a4fb32e5188d54da9f391f05b7439"
-decoder = "generated.bytes.decode.v2"
+byte_size = 88
+layout_hash = "a73fafce2ca050c9a793a65d30055bf2004c0415a0540d6c083343d0e8fe166a"
+decoder = "rusttable.channelmixer.decode.v2"
 opaque_blocking = false
 fixture_id = "operation.channelmixer.params.v2"
 target_codecs = []
@@ -5153,9 +5289,9 @@ target_codecs = []
 [operations.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/channelmixer.c"
-line_start = 53
-line_end = 53
-reason = "explicit parameter layout declaration"
+line_start = 81
+line_end = 91
+reason = "the current history payload appends the four-byte algorithm enum to the three rows"
 reviewer = "cgasgarth"
 evidence_hash = "56d67fc57b1a59443a05c8d6a9ff2b307b7cd216a81030aa25eb9312afa32a93"
 
@@ -5165,18 +5301,42 @@ c_abi_model = "x86_64-unknown-linux-gnu"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 16
-alignment = 1
-layout_hash = "0c6cb8df7815de03ebd74a8e86766e37e0a4f129ac601f46e73eb6a2d303fbb1"
+total_size = 88
+alignment = 4
+layout_hash = "a73fafce2ca050c9a793a65d30055bf2004c0415a0540d6c083343d0e8fe166a"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[16]"
-array_extent = 16
+name = "red"
+type_name = "float[7]"
+array_extent = 7
 offset = 0
-size = 16
-alignment = 1
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "algorithm_version"
+type_name = "_channelmixer_algorithm_t"
+enum_identity = "_channelmixer_algorithm_t"
+offset = 84
+size = 4
+alignment = 4
 
 [[operations.parameter_versions.abi_layouts]]
 target = "aarch64-apple-darwin"
@@ -5184,18 +5344,42 @@ c_abi_model = "aarch64-apple-darwin"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 16
-alignment = 1
-layout_hash = "2aa38e41282ba8dfeb5b11d8142ee00232803a6473fb96ca72b035621320c236"
+total_size = 88
+alignment = 4
+layout_hash = "82ff6b846e63e36c6cab012569f4f628f2ca5f433eaf7bdada4d8c0be7c036c5"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[16]"
-array_extent = 16
+name = "red"
+type_name = "float[7]"
+array_extent = 7
 offset = 0
-size = 16
-alignment = 1
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "algorithm_version"
+type_name = "_channelmixer_algorithm_t"
+enum_identity = "_channelmixer_algorithm_t"
+offset = 84
+size = 4
+alignment = 4
 
 [[operations.parameter_versions.abi_layouts]]
 target = "x86_64-pc-windows-msvc"
@@ -5203,34 +5387,89 @@ c_abi_model = "x86_64-pc-windows-msvc"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 16
-alignment = 1
-layout_hash = "58a86f5f96c84dc255ab437d8435173585b3b90f35cefdec9ea64c1669124bc8"
+total_size = 88
+alignment = 4
+layout_hash = "a169d0ae9704f0661378900916fd01f7b86a94aa32a86952a11abc2403d0bb25"
 difference_from = []
 
 [[operations.parameter_versions.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[16]"
-array_extent = 16
+name = "red"
+type_name = "float[7]"
+array_extent = 7
 offset = 0
-size = 16
-alignment = 1
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.parameter_versions.abi_layouts.fields]]
+name = "algorithm_version"
+type_name = "_channelmixer_algorithm_t"
+enum_identity = "_channelmixer_algorithm_t"
+offset = 84
+size = 4
+alignment = 4
 
 [operations.parameter_versions.codec]
-byte_size = 16
-decoder = "generated.bytes.decode.v2"
-encoder = "generated.bytes.encode.v2"
+byte_size = 88
+decoder = "rusttable.channelmixer.decode.v2"
+encoder = "rusttable.channelmixer.encode.v2"
 byte_order = "little"
 preserves_padding = true
-format = "rusttable.operation.v1"
+format = "darktable.iop.channelmixer.v2"
 
 [[operations.parameter_versions.codec.fields]]
-name = "raw"
-kind = "bytes"
+name = "red"
+kind = "f32"
 offset = 0
-size = 16
-array_extent = 16
+size = 28
+array_extent = 7
 enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "green"
+kind = "f32"
+offset = 28
+size = 28
+array_extent = 7
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "blue"
+kind = "f32"
+offset = 56
+size = 28
+array_extent = 7
+enum_values = []
+
+[[operations.parameter_versions.codec.fields]]
+name = "algorithm_version"
+kind = "enum_i32"
+offset = 84
+size = 4
+array_extent = 1
+
+[[operations.parameter_versions.codec.fields.enum_values]]
+name = "CHANNEL_MIXER_VERSION_1"
+value = 0
+
+[[operations.parameter_versions.codec.fields.enum_values]]
+name = "CHANNEL_MIXER_VERSION_2"
+value = 1
 
 [[operations.migrations]]
 from_version = 1
@@ -5303,18 +5542,42 @@ c_abi_model = "x86_64-unknown-linux-gnu"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 16
-alignment = 1
-layout_hash = "0c6cb8df7815de03ebd74a8e86766e37e0a4f129ac601f46e73eb6a2d303fbb1"
+total_size = 88
+alignment = 4
+layout_hash = "a73fafce2ca050c9a793a65d30055bf2004c0415a0540d6c083343d0e8fe166a"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[16]"
-array_extent = 16
+name = "red"
+type_name = "float[7]"
+array_extent = 7
 offset = 0
-size = 16
-alignment = 1
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "algorithm_version"
+type_name = "_channelmixer_algorithm_t"
+enum_identity = "_channelmixer_algorithm_t"
+offset = 84
+size = 4
+alignment = 4
 
 [[operations.abi_layouts]]
 target = "aarch64-apple-darwin"
@@ -5322,18 +5585,42 @@ c_abi_model = "aarch64-apple-darwin"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 16
-alignment = 1
-layout_hash = "2aa38e41282ba8dfeb5b11d8142ee00232803a6473fb96ca72b035621320c236"
+total_size = 88
+alignment = 4
+layout_hash = "82ff6b846e63e36c6cab012569f4f628f2ca5f433eaf7bdada4d8c0be7c036c5"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[16]"
-array_extent = 16
+name = "red"
+type_name = "float[7]"
+array_extent = 7
 offset = 0
-size = 16
-alignment = 1
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "algorithm_version"
+type_name = "_channelmixer_algorithm_t"
+enum_identity = "_channelmixer_algorithm_t"
+offset = 84
+size = 4
+alignment = 4
 
 [[operations.abi_layouts]]
 target = "x86_64-pc-windows-msvc"
@@ -5341,34 +5628,89 @@ c_abi_model = "x86_64-pc-windows-msvc"
 endianness = "little"
 pointer_width = 64
 padding = []
-total_size = 16
-alignment = 1
-layout_hash = "58a86f5f96c84dc255ab437d8435173585b3b90f35cefdec9ea64c1669124bc8"
+total_size = 88
+alignment = 4
+layout_hash = "a169d0ae9704f0661378900916fd01f7b86a94aa32a86952a11abc2403d0bb25"
 difference_from = []
 
 [[operations.abi_layouts.fields]]
-name = "raw"
-type_name = "uint8_t[16]"
-array_extent = 16
+name = "red"
+type_name = "float[7]"
+array_extent = 7
 offset = 0
-size = 16
-alignment = 1
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "green"
+type_name = "float[7]"
+array_extent = 7
+offset = 28
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "blue"
+type_name = "float[7]"
+array_extent = 7
+offset = 56
+size = 28
+alignment = 4
+
+[[operations.abi_layouts.fields]]
+name = "algorithm_version"
+type_name = "_channelmixer_algorithm_t"
+enum_identity = "_channelmixer_algorithm_t"
+offset = 84
+size = 4
+alignment = 4
 
 [operations.codec]
-byte_size = 16
-decoder = "generated.bytes.decode.v2"
-encoder = "generated.bytes.encode.v2"
+byte_size = 88
+decoder = "rusttable.channelmixer.decode.v2"
+encoder = "rusttable.channelmixer.encode.v2"
 byte_order = "little"
 preserves_padding = true
-format = "rusttable.operation.v1"
+format = "darktable.iop.channelmixer.v2"
 
 [[operations.codec.fields]]
-name = "raw"
-kind = "bytes"
+name = "red"
+kind = "f32"
 offset = 0
-size = 16
-array_extent = 16
+size = 28
+array_extent = 7
 enum_values = []
+
+[[operations.codec.fields]]
+name = "green"
+kind = "f32"
+offset = 28
+size = 28
+array_extent = 7
+enum_values = []
+
+[[operations.codec.fields]]
+name = "blue"
+kind = "f32"
+offset = 56
+size = 28
+array_extent = 7
+enum_values = []
+
+[[operations.codec.fields]]
+name = "algorithm_version"
+kind = "enum_i32"
+offset = 84
+size = 4
+array_extent = 1
+
+[[operations.codec.fields.enum_values]]
+name = "CHANNEL_MIXER_VERSION_1"
+value = 0
+
+[[operations.codec.fields.enum_values]]
+name = "CHANNEL_MIXER_VERSION_2"
+value = 1
 
 [operations.color_contract.input]
 mode = "unconditional"

@@ -653,6 +653,32 @@ source = "rusttable-test"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-import::darktable-history"
 [[fixtures]]
+id = "corpus.operation.channelmixer-params-v1"
+path = "fixtures/corpus/assets/operation-channelmixer-params-v1.bin"
+size = 84
+sha256 = "442a4702ebb14bc871ddb560def224e4e56936abd5cf4ea29499791af8c0cb09"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-compat", "rusttable-import"]
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-compat::channelmixer"
+[[fixtures]]
+id = "corpus.operation.channelmixer-params-v2"
+path = "fixtures/corpus/assets/operation-channelmixer-params-v2.bin"
+size = 88
+sha256 = "468133f674d436402cdfee42b1812a81bcd89e4840b1835728a6fdc5476a6a65"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-compat", "rusttable-import"]
+artifact_class = "valid-binary"
+format = "binary"
+source = "rusttable-test"
+generator = "rusttable-fixture-tools"
+parser = "rusttable-compat::channelmixer"
+[[fixtures]]
 id = "corpus.operation.soften-params-v1"
 path = "fixtures/corpus/assets/operation-soften-params-v1.bin"
 size = 16
