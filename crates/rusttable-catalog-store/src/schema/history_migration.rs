@@ -5,7 +5,8 @@ use rusttable_catalog::{CanonicalPayload, ContentBlobId, ContentBlobKind, Reposi
 use rusttable_core::PhotoId;
 
 use super::{
-    HISTORY_BLOB_REFS_TABLE, HISTORY_BLOBS_TABLE, HISTORY_REVISIONS_TABLE, HISTORY_STATE_TABLE,
+    HISTORY_BLOB_REFS_TABLE, HISTORY_BLOBS_TABLE, HISTORY_REVISIONS_TABLE, HISTORY_SNAPSHOTS_TABLE,
+    HISTORY_STATE_TABLE, SCHEMA_TABLE, VERSION_KEY,
 };
 
 type BlobKey = [u8; 43];
@@ -30,7 +31,49 @@ pub(super) fn open_history_tables(
     transaction
         .open_table(HISTORY_BLOB_REFS_TABLE)
         .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_SNAPSHOTS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
     Ok(())
+}
+
+pub(super) fn ensure_snapshot_table(database: &redb::Database) -> Result<(), RepositoryError> {
+    let transaction = database
+        .begin_write()
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_SNAPSHOTS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .commit()
+        .map_err(|_| RepositoryError::CommitFailure)
+}
+
+pub(super) fn migrate_to_v16(database: &redb::Database) -> Result<(), RepositoryError> {
+    let transaction = database
+        .begin_write()
+        .map_err(|_| RepositoryError::Unavailable)?;
+    transaction
+        .open_table(HISTORY_SNAPSHOTS_TABLE)
+        .map_err(|_| RepositoryError::Unavailable)?;
+    let mut schema = transaction
+        .open_table(SCHEMA_TABLE)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?;
+    let version = schema
+        .get(VERSION_KEY)
+        .map_err(|_| RepositoryError::CorruptPersistedData)?
+        .ok_or(RepositoryError::CorruptPersistedData)?;
+    if version.value() != [15] {
+        return Err(RepositoryError::CorruptPersistedData);
+    }
+    drop(version);
+    schema
+        .insert(VERSION_KEY, &[super::CURRENT_SCHEMA_VERSION][..])
+        .map_err(|_| RepositoryError::Unavailable)?;
+    drop(schema);
+    transaction
+        .commit()
+        .map_err(|_| RepositoryError::CommitFailure)
 }
 
 struct HistoryGraph {

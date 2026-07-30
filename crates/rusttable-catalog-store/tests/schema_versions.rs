@@ -20,6 +20,8 @@ const VIRTUAL_COPIES: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_virtual_copies");
 const VIRTUAL_COPY_STATE: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("rusttable_virtual_copy_state");
+const HISTORY_SNAPSHOTS: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("rusttable_history_snapshots");
 const VERSION_KEY: &[u8] = b"schema-version";
 
 fn write_version(path: &Path, version: &[u8]) {
@@ -146,6 +148,28 @@ fn schema_v13_migration_adds_photo_group_tables() {
     assert!(transaction.open_table(PHOTO_GROUP_MEMBERS).is_ok());
     assert!(transaction.open_table(VIRTUAL_COPIES).is_ok());
     assert!(transaction.open_table(VIRTUAL_COPY_STATE).is_ok());
+    assert_eq!(
+        transaction
+            .open_table(SCHEMA)
+            .unwrap()
+            .get(VERSION_KEY)
+            .unwrap()
+            .unwrap()
+            .value(),
+        &[CURRENT_SCHEMA_VERSION]
+    );
+    support::remove(&path);
+}
+
+#[test]
+fn schema_v15_migration_adds_history_snapshot_table() {
+    let path = support::temp_path("schema-v15-history-snapshots");
+    write_version(&path, &[15]);
+    let repository = RedbImportRepository::open(&path).unwrap();
+    drop(repository);
+    let database = Database::open(&path).unwrap();
+    let transaction = database.begin_read().unwrap();
+    assert!(transaction.open_table(HISTORY_SNAPSHOTS).is_ok());
     assert_eq!(
         transaction
             .open_table(SCHEMA)

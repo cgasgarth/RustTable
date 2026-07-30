@@ -4,6 +4,7 @@ mod error;
 mod import;
 mod query;
 mod repository;
+mod snapshot;
 mod state;
 mod types;
 
@@ -21,6 +22,12 @@ pub use query::{
 };
 pub use repository::{
     DurableHistoryError, DurableHistoryService, HistoryRepository, HistoryRepositoryError,
+    HistorySnapshotRepository,
+};
+pub use snapshot::{
+    HISTORY_SNAPSHOT_SCHEMA_VERSION, HistorySnapshotBuildError, HistorySnapshotDecodeError,
+    HistorySnapshotDocument, HistorySnapshotOperation, HistorySnapshotRevision,
+    HistorySnapshotSerializationError, MAX_HISTORY_SNAPSHOT_BYTES,
 };
 pub use state::{HistoryApplyOutcome, HistoryState};
 pub use types::{

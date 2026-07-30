@@ -463,6 +463,17 @@ impl HistoryProvenance {
             source_id: source_id.into(),
         }
     }
+
+    pub(crate) fn is_valid(&self) -> bool {
+        match self {
+            Self::Native => true,
+            Self::Darktable { source_id, .. } | Self::RustTable { source_id, .. } => {
+                !source_id.is_empty()
+                    && source_id.len() <= 256
+                    && !source_id.chars().any(char::is_control)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -6,7 +6,8 @@ use redb::{Database, ReadableDatabase, ReadableTable, WriteTransaction};
 use rusttable_catalog::{
     CanonicalPayload, ContentBlobId, ContentBlobKind, HistoryInvariantReport, HistoryPage,
     HistoryPageRequest, HistoryRepository, HistoryRepositoryError, HistoryRevision,
-    HistoryRevisionId, HistoryState, HistoryStateSnapshot, HistoryVersion, RepositoryError,
+    HistoryRevisionId, HistorySnapshotDocument, HistorySnapshotId, HistorySnapshotRepository,
+    HistoryState, HistoryStateSnapshot, HistoryVersion, RepositoryError,
 };
 use rusttable_core::PhotoId;
 
@@ -19,11 +20,13 @@ type BlobKey = [u8; 43];
 type BlobCounts = BTreeMap<BlobKey, u64>;
 type BlobRecords = BTreeMap<BlobKey, Vec<u8>>;
 type CanonicalBlobRecord = (BlobKey, Vec<u8>);
+type BeforeCommitHook = Arc<dyn Fn() -> Result<(), HistoryRepositoryError> + Send + Sync>;
 
 /// Transactional redb persistence for one photo's immutable edit-history graph.
 pub struct RedbHistoryRepository {
     database: Arc<Database>,
     photo_id: PhotoId,
+    before_commit: Option<BeforeCommitHook>,
 }
 
 impl RedbHistoryRepository {
@@ -33,14 +36,40 @@ impl RedbHistoryRepository {
     ///
     /// Returns a typed schema, availability, or corruption error.
     pub fn open(path: &Path, photo_id: PhotoId) -> Result<Self, HistoryRepositoryError> {
+        Self::open_with_hook(path, photo_id, None)
+    }
+
+    /// Opens the repository with a pre-commit failure seam for rollback tests.
+    #[doc(hidden)]
+    pub fn open_with_before_commit_hook<F>(
+        path: &Path,
+        photo_id: PhotoId,
+        hook: F,
+    ) -> Result<Self, HistoryRepositoryError>
+    where
+        F: Fn() -> Result<(), HistoryRepositoryError> + Send + Sync + 'static,
+    {
+        Self::open_with_hook(path, photo_id, Some(Arc::new(hook)))
+    }
+
+    fn open_with_hook(
+        path: &Path,
+        photo_id: PhotoId,
+        before_commit: Option<BeforeCommitHook>,
+    ) -> Result<Self, HistoryRepositoryError> {
         Ok(Self {
             database: schema::open(path).map_err(|error| map_schema_error(&error))?,
             photo_id,
+            before_commit,
         })
     }
 
     pub(crate) fn from_database(database: Arc<Database>, photo_id: PhotoId) -> Self {
-        Self { database, photo_id }
+        Self {
+            database,
+            photo_id,
+            before_commit: None,
+        }
     }
 }
 
@@ -390,6 +419,108 @@ impl HistoryRepository for RedbHistoryRepository {
             .begin_write()
             .map_err(|_| HistoryRepositoryError::Unavailable)?;
         stage_history_commit(&transaction, self.photo_id, expected, state)?;
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| HistoryRepositoryError::CommitFailure)
+    }
+}
+
+impl HistorySnapshotRepository for RedbHistoryRepository {
+    fn load_snapshot(
+        &self,
+        snapshot_id: HistorySnapshotId,
+    ) -> Result<Option<HistorySnapshotDocument>, HistoryRepositoryError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let snapshots = transaction
+            .open_table(schema::HISTORY_SNAPSHOTS_TABLE)
+            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?;
+        let key = snapshot_key(self.photo_id, snapshot_id);
+        let Some(value) = snapshots
+            .get(key.as_slice())
+            .map_err(|_| HistoryRepositoryError::CorruptPersistedData)?
+        else {
+            return Ok(None);
+        };
+        let snapshot = crate::history_snapshot_codec::decode(value.value())
+            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+        if snapshot.photo_id() != self.photo_id || snapshot.snapshot_id() != snapshot_id {
+            return Err(HistoryRepositoryError::CorruptPersistedData);
+        }
+        match self.load()? {
+            Some(state) if !snapshot.matches_current_graph(&state) => {
+                return Err(HistoryRepositoryError::CorruptPersistedData);
+            }
+            None if snapshot.history_end() != 0 => {
+                return Err(HistoryRepositoryError::CorruptPersistedData);
+            }
+            _ => {}
+        }
+        Ok(Some(snapshot))
+    }
+
+    fn store_snapshot(
+        &mut self,
+        snapshot: &HistorySnapshotDocument,
+    ) -> Result<(), HistoryRepositoryError> {
+        if snapshot.photo_id() != self.photo_id {
+            return Err(HistoryRepositoryError::CorruptPersistedData);
+        }
+        match self.load()? {
+            Some(state) if !snapshot.matches_current_graph(&state) => {
+                return Err(HistoryRepositoryError::CorruptPersistedData);
+            }
+            None if snapshot.history_end() != 0 => {
+                return Err(HistoryRepositoryError::CorruptPersistedData);
+            }
+            _ => {}
+        }
+        let encoded = crate::history_snapshot_codec::encode(snapshot)
+            .map_err(|()| HistoryRepositoryError::CorruptPersistedData)?;
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let key = snapshot_key(self.photo_id, snapshot.snapshot_id());
+        let mut snapshots = transaction
+            .open_table(schema::HISTORY_SNAPSHOTS_TABLE)
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        snapshots
+            .insert(key.as_slice(), encoded.as_slice())
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        drop(snapshots);
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| HistoryRepositoryError::CommitFailure)
+    }
+
+    fn clear_snapshot(
+        &mut self,
+        snapshot_id: HistorySnapshotId,
+    ) -> Result<(), HistoryRepositoryError> {
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        let key = snapshot_key(self.photo_id, snapshot_id);
+        let mut snapshots = transaction
+            .open_table(schema::HISTORY_SNAPSHOTS_TABLE)
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        snapshots
+            .remove(key.as_slice())
+            .map_err(|_| HistoryRepositoryError::Unavailable)?;
+        drop(snapshots);
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
         transaction
             .commit()
             .map_err(|_| HistoryRepositoryError::CommitFailure)
@@ -549,6 +680,13 @@ impl RedbHistoryRepository {
         }
         Ok(output)
     }
+}
+
+fn snapshot_key(photo_id: PhotoId, snapshot: HistorySnapshotId) -> [u8; 24] {
+    let mut key = [0; 24];
+    key[..16].copy_from_slice(&photo_id.get().to_be_bytes());
+    key[16..].copy_from_slice(&snapshot.get().to_be_bytes());
+    key
 }
 
 fn revision_key(photo_id: PhotoId, revision: HistoryRevisionId) -> [u8; 24] {

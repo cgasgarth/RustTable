@@ -1,6 +1,8 @@
 use rusttable_catalog::{
-    BranchTransferPolicy, HistoryApplyOutcome, HistoryCommand, HistoryComparisonPair, HistoryError,
-    HistoryOperationKind, HistoryOperationSummary, HistoryPayload, HistoryState,
+    BranchTransferPolicy, HistoryApplyOutcome, HistoryBranch, HistoryCommand,
+    HistoryComparisonPair, HistoryCursor, HistoryError, HistoryJournalEntry, HistoryOperationKind,
+    HistoryOperationSummary, HistoryPayload, HistoryProvenance, HistoryRevisionId, HistoryState,
+    HistoryStateSnapshot,
 };
 use rusttable_core::{Edit, EditId, PhotoId};
 
@@ -36,6 +38,31 @@ fn append(state: &mut HistoryState, id: u128, kind: HistoryOperationKind) -> u64
         panic!("append outcome")
     };
     revision.get()
+}
+
+fn rebuild(
+    state: &HistoryState,
+    branches: Vec<HistoryBranch>,
+    snapshots: Vec<rusttable_catalog::HistorySnapshot>,
+    journal: Vec<HistoryJournalEntry>,
+    provenance: std::collections::BTreeMap<HistoryRevisionId, HistoryProvenance>,
+) -> HistoryStateSnapshot {
+    let persisted = state.persistence_snapshot();
+    HistoryStateSnapshot::from_parts_with_journal(
+        persisted.photo_id(),
+        persisted.version(),
+        persisted.commit_sequence(),
+        persisted.next_revision_id(),
+        persisted.next_branch_id(),
+        persisted.next_snapshot_id(),
+        persisted.active_branch(),
+        persisted.revisions().to_vec(),
+        branches,
+        snapshots,
+        persisted.evidence().to_vec(),
+        journal,
+        provenance,
+    )
 }
 
 #[test]
@@ -247,4 +274,190 @@ fn stale_history_commands_are_rejected_before_mutation() {
     );
     assert!(matches!(result, Err(HistoryError::VersionConflict { .. })));
     assert_eq!(state, before);
+}
+
+#[test]
+fn persisted_graph_rejects_empty_cursors_and_invalid_branch_origins() {
+    let mut state = HistoryState::new(PhotoId::new(7).unwrap());
+    let first = append(&mut state, 1, HistoryOperationKind::Parameter);
+    let main = rusttable_catalog::HistoryBranchId::new(1).unwrap();
+    let mut branches = state.branches().cloned().collect::<Vec<_>>();
+    branches[0] = HistoryBranch::from_parts(
+        main,
+        "main".to_owned(),
+        None,
+        vec![HistoryRevisionId::new(first).unwrap()],
+        None,
+        Vec::new(),
+    );
+    assert_eq!(
+        HistoryState::restore(rebuild(
+            &state,
+            branches,
+            Vec::new(),
+            state.journal().cloned().collect(),
+            state.persistence_snapshot().provenance().clone(),
+        )),
+        Err(HistoryError::InvalidPersistedState)
+    );
+
+    let persisted = state.persistence_snapshot();
+    let empty_cursor_snapshot = rusttable_catalog::HistorySnapshot::from_parts(
+        rusttable_catalog::HistorySnapshotId::new(1).unwrap(),
+        "empty-cursor".to_owned(),
+        HistoryCursor::new(main, None),
+    );
+    assert_eq!(
+        HistoryState::restore(rebuild(
+            &state,
+            persisted.branches().to_vec(),
+            vec![empty_cursor_snapshot],
+            persisted.journal().to_vec(),
+            persisted.provenance().clone(),
+        )),
+        Err(HistoryError::InvalidPersistedState)
+    );
+
+    state
+        .apply(
+            state.version(),
+            HistoryCommand::CreateBranch {
+                name: "experiment".to_owned(),
+                from: Some(state.active_cursor()),
+            },
+        )
+        .unwrap();
+    let branch_id = state.active_branch_id();
+    let mut branches = state.branches().cloned().collect::<Vec<_>>();
+    let branch = branches
+        .iter_mut()
+        .find(|branch| branch.id() == branch_id)
+        .unwrap();
+    *branch = HistoryBranch::from_parts(
+        branch.id(),
+        branch.name().to_owned(),
+        HistoryRevisionId::new(99),
+        branch.lineage().to_vec(),
+        branch.cursor(),
+        branch.redo().to_vec(),
+    );
+    assert_eq!(
+        HistoryState::restore(rebuild(
+            &state,
+            branches,
+            Vec::new(),
+            state.journal().cloned().collect(),
+            state.persistence_snapshot().provenance().clone(),
+        )),
+        Err(HistoryError::InvalidPersistedState)
+    );
+}
+
+#[test]
+fn persisted_journal_rejects_dangling_cursor_restore_and_provenance_references() {
+    let mut state = HistoryState::new(PhotoId::new(7).unwrap());
+    let first = append(&mut state, 1, HistoryOperationKind::Parameter);
+    let main = rusttable_catalog::HistoryBranchId::new(1).unwrap();
+    let persisted = state.persistence_snapshot();
+    let corrupt_journal = vec![HistoryJournalEntry::new(
+        1,
+        HistoryOperationKind::Parameter,
+        Some(HistoryRevisionId::new(first).unwrap()),
+        HistoryCursor::new(main, HistoryRevisionId::new(99)),
+        HistoryCursor::new(main, HistoryRevisionId::new(first)),
+        HistoryRevisionId::new(99),
+        HistoryProvenance::native(),
+    )];
+    assert_eq!(
+        HistoryState::restore(rebuild(
+            &state,
+            persisted.branches().to_vec(),
+            persisted.snapshots().to_vec(),
+            corrupt_journal,
+            persisted.provenance().clone(),
+        )),
+        Err(HistoryError::InvalidPersistedState)
+    );
+
+    let mut provenance = persisted.provenance().clone();
+    provenance.insert(
+        HistoryRevisionId::new(99).unwrap(),
+        HistoryProvenance::native(),
+    );
+    assert_eq!(
+        HistoryState::restore(rebuild(
+            &state,
+            persisted.branches().to_vec(),
+            persisted.snapshots().to_vec(),
+            persisted.journal().to_vec(),
+            provenance,
+        )),
+        Err(HistoryError::InvalidPersistedState)
+    );
+}
+
+#[test]
+fn branch_deletion_and_pruning_leave_restartable_journal_and_provenance() {
+    let mut state = HistoryState::new(PhotoId::new(7).unwrap());
+    append(&mut state, 1, HistoryOperationKind::Parameter);
+    let base = state.active_cursor();
+    let branch = match state
+        .apply(
+            state.version(),
+            HistoryCommand::CreateBranch {
+                name: "experiment".to_owned(),
+                from: Some(base),
+            },
+        )
+        .unwrap()
+    {
+        HistoryApplyOutcome::BranchCreated { branch } => branch,
+        outcome => panic!("unexpected branch outcome: {outcome:?}"),
+    };
+    let orphaned = append(&mut state, 2, HistoryOperationKind::Mask);
+    state
+        .apply(
+            state.version(),
+            HistoryCommand::SwitchBranch {
+                branch: main_branch(),
+            },
+        )
+        .unwrap();
+    let persisted = state.persistence_snapshot();
+    let mut provenance = persisted.provenance().clone();
+    provenance.insert(
+        HistoryRevisionId::new(orphaned).unwrap(),
+        HistoryProvenance::darktable(1, "branch-row"),
+    );
+    let seeded = rebuild(
+        &state,
+        persisted.branches().to_vec(),
+        persisted.snapshots().to_vec(),
+        persisted.journal().to_vec(),
+        provenance,
+    );
+    state = HistoryState::restore(seeded).unwrap();
+
+    state
+        .apply(state.version(), HistoryCommand::DeleteBranch { branch })
+        .unwrap();
+    state
+        .apply(state.version(), HistoryCommand::PruneOrphans)
+        .unwrap();
+
+    assert!(
+        state
+            .provenance(HistoryRevisionId::new(orphaned).unwrap())
+            .is_none()
+    );
+    assert!(
+        state
+            .journal()
+            .all(|entry| { entry.before().branch() != branch && entry.after().branch() != branch })
+    );
+    assert!(HistoryState::restore(state.persistence_snapshot()).is_ok());
+}
+
+fn main_branch() -> rusttable_catalog::HistoryBranchId {
+    rusttable_catalog::HistoryBranchId::new(1).unwrap()
 }
