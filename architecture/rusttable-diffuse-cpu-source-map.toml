@@ -1,0 +1,81 @@
+schema = "rusttable.diffuse-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+status = "bounded-leaf"
+
+[[responsibility]]
+id = "parameter-abi-and-migration"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "dt_iop_diffuse_params_t;legacy_params"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cpu-plan-and-publication"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "process"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cpu-tiling-contract"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "tiling_callback"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "wavelet-decomposition"
+upstream_path = "src/common/bspline.h"
+upstream_symbol = "decompose_2D_Bspline;equivalent_sigma_at_step;num_steps_to_reach_equivalent_sigma"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/wavelets.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cache-friendly-row-order"
+upstream_path = "src/common/dwt.h"
+upstream_symbol = "dwt_interleave_rows"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/wavelets.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "heat-pde-solver"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "find_gradients;rotation_matrix_isophote;rotation_matrix_gradient;build_matrix;isotrope_laplacian;compute_kernel;heat_PDE_diffusion"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/pde.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "mask-and-deterministic-inpaint"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "build_mask;inpaint_mask"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/inpaint.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "deterministic-random-stream"
+upstream_path = "src/develop/noise_generator.h"
+upstream_symbol = "splitmix32;xoshiro128plus;gaussian_noise"
+rust_path = "crates/rusttable-processing/src/operations/diffuse/inpaint.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "opencl-pde-kernel"
+upstream_path = "data/kernels/diffuse.cl"
+upstream_symbol = "diffuse_pde;build_mask;inpaint_mask"
+rust_path = "deferred: shared GPU and shader ownership"
+status = "deferred"
+
+[[responsibility]]
+id = "opencl-wavelet-kernels"
+upstream_path = "data/kernels/bspline.cl"
+upstream_symbol = "blur_2D_Bspline_horizontal;blur_2D_Bspline_vertical;wavelets_detail_level"
+rust_path = "deferred: shared GPU and shader ownership"
+status = "deferred"
+
+[[responsibility]]
+id = "production-routing"
+upstream_path = "src/iop/diffuse.c"
+upstream_symbol = "process_cl;init_global;gui_init"
+rust_path = "deferred: registry,pixelpipe,GPU,UI,history-import integration owners"
+status = "deferred"
