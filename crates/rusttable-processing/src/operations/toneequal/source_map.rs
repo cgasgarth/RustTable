@@ -38,7 +38,7 @@ pub const RESPONSIBILITIES: &[Responsibility] = &[
     Responsibility {
         native_symbol: "process",
         source: "src/iop/toneequal.c",
-        status: "ported bounded CPU RGBA execution, alpha preservation, cancellation, and publication",
+        status: "ported bounded CPU RGBA execution with native four-lane correction and explicit mask alpha copy, cancellation, and publication",
     },
     Responsibility {
         native_symbol: "modify_roi_in",

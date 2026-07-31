@@ -8,10 +8,10 @@
 mod toneequal;
 
 use toneequal::{
-    BLENDING_DEFAULT, CHANNELS, DEFAULT_V2_FIXTURE, DetailsFilter, LUT_ENTRIES, LuminanceMethod,
-    PARAMETER_BYTES, PARAMETER_VERSION, ToneEqualizerHistory, ToneEqualizerOutputMode,
-    ToneEqualizerParametersV2, ToneEqualizerPixel, ToneEqualizerPlan, ToneEqualizerTile,
-    ToneEqualizerTileContract,
+    BLENDING_DEFAULT, CHANNELS, DEFAULT_V2_FIXTURE, DetailsFilter, LUT_ENTRIES, LUT_RESOLUTION,
+    LuminanceMethod, PARAMETER_BYTES, PARAMETER_VERSION, ToneEqualizerHistory,
+    ToneEqualizerOutputMode, ToneEqualizerParametersV2, ToneEqualizerPixel, ToneEqualizerPlan,
+    ToneEqualizerTile, ToneEqualizerTileContract,
 };
 
 fn no_filter_parameters(method: LuminanceMethod) -> ToneEqualizerParametersV2 {
@@ -166,22 +166,57 @@ fn guided_and_eigf_use_source_leaf_not_identity_fallback() {
                 || false,
             )
             .unwrap();
-        assert!(
-            result
-                .pixels
-                .iter()
-                .zip(input.iter())
-                .any(
-                    |(output, source)| (output.channels()[0] - source.channels()[0]).abs() > 1.0e-4
-                )
-        );
-        assert!(
-            result
-                .pixels
-                .iter()
-                .all(|pixel| (pixel.channels()[3] - 0.8).abs() < 1.0e-6)
-        );
+        let mut correction_changed_alpha = false;
+        for (output, source) in result.pixels.iter().zip(input.iter()) {
+            let output_channels = output.channels();
+            let source_channels = source.channels();
+            let correction = output_channels[0] / source_channels[0];
+            assert!((output_channels[3] - source_channels[3] * correction).abs() < 1.0e-6);
+            correction_changed_alpha |= (output_channels[3] - source_channels[3]).abs() > 1.0e-4;
+        }
+        assert!(correction_changed_alpha);
     }
+}
+
+#[test]
+fn correction_scales_non_unit_alpha_across_native_four_lanes() {
+    let parameters = ToneEqualizerParametersV2::from_values(
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        5.0,
+        std::f32::consts::SQRT_2,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        DetailsFilter::None,
+        LuminanceMethod::Mean,
+        1,
+    );
+    let input = [ToneEqualizerPixel::new(0.25, 0.25, 0.25, 0.42)];
+    let plan = ToneEqualizerPlan::new(parameters).unwrap();
+    let result = plan
+        .execute_with_cancel(
+            &input,
+            1,
+            1,
+            1.0,
+            ToneEqualizerOutputMode::Corrected,
+            || false,
+        )
+        .unwrap();
+
+    let lut_index = 6 * LUT_RESOLUTION;
+    let correction = plan.correction_lut()[lut_index];
+    assert!((correction - 1.0).abs() > 0.1);
+    assert_eq!(
+        result.pixels[0].channels(),
+        [
+            0.25 * correction,
+            0.25 * correction,
+            0.25 * correction,
+            0.42 * correction
+        ]
+    );
 }
 
 #[test]

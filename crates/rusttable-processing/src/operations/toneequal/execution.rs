@@ -255,11 +255,13 @@ impl ToneEqualizerPlan {
                     let lut_index = ((exposure - MIN_EV) * super::parameters::LUT_RESOLUTION as f32)
                         .round() as usize;
                     let correction = self.correction_lut[lut_index];
+                    // Native for_each_channel uses four lanes in the normal build;
+                    // correction therefore applies to RGBA, not RGB with conventionally preserved alpha.
                     [
                         source[0] * correction,
                         source[1] * correction,
                         source[2] * correction,
-                        source[3],
+                        source[3] * correction,
                     ]
                 }
                 ToneEqualizerOutputMode::LuminanceMask => {
