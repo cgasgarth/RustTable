@@ -83,7 +83,7 @@ upstream_symbol = "dt_Lab_to_XYZ; lab_f_inv"
 rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
 source_lines = "142-205"
 status = "implemented"
-evidence = "The D50 white point, epsilon branch, padded zero coefficients, and four-lane helper boundary are covered by exact bit fixtures."
+evidence = "The D50 white point, strict epsilon branch, padded zero coefficients, and native signed-zero fourth lane are covered by exact bit fixtures."
 
 [[responsibility]]
 id = "prophoto-matrix-conversion"
@@ -92,7 +92,7 @@ upstream_symbol = "dt_apply_transposed_color_matrix; dt_XYZ_to_prophotorgb; dt_p
 rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
 source_lines = "119-140,146-179,437-461,582-597"
 status = "implemented"
-evidence = "The D50 ProPhoto matrices use padded zero fourth coefficients and the Rust boundary asserts the exact fourth-lane result."
+evidence = "The D50 ProPhoto matrices execute all four native lanes, including signed-zero results from padded zero coefficients, with exact positive and negative fixtures."
 
 [[responsibility]]
 id = "four-lane-pixel-contract"
@@ -101,7 +101,7 @@ upstream_symbol = "dt_aligned_pixel_t; DT_PIXEL_SIMD_CHANNELS; for_each_channel;
 rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
 source_lines = "58-71,83-113"
 status = "implemented"
-evidence = "Native CPU output is modeled as a four-lane pixel and the padded spare lane is published as zero, not copied from input alpha."
+evidence = "Native CPU intermediates and output are modeled as four lanes without copying input alpha; ordinary finite output is zero while signed-zero and non-finite behavior is retained."
 
 [[responsibility]]
 id = "vector-log-exp-approximation"
@@ -110,7 +110,7 @@ upstream_symbol = "dt_vector_log2; dt_vector_exp2; dt_vector_round; dt_vector_po
 rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
 source_lines = "513-525,527-641,653-663,721-729"
 status = "implemented"
-evidence = "The scalar approximation preserves the native bit-shaped polynomial and ARM roundf() ties-away-from-zero; exact tie inputs 0, 1, -2, 3, and -4 are regression vectors."
+evidence = "Four-lane log/exp/pow preserve the native bit-shaped polynomials and ARM roundf() ties-away-from-zero; exact tie inputs 0, 1, -2, 3, and -4 plus scalar cbrtf vectors are regression fixtures."
 
 [[responsibility]]
 id = "native-cpu-output-write"

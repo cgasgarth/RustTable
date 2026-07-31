@@ -172,9 +172,9 @@ impl FilmicPlan {
 
     /// Executes an independent, zero-overlap tile.
     ///
-    /// The native CPU leaf writes all four lanes.  Its padded fourth lane is a
-    /// zero spare value; preserving an input alpha here would diverge from the
-    /// CPU path (the native `OpenCL` path is intentionally unavailable).
+    /// The native CPU leaf writes all four lanes.  Its padded fourth lane is
+    /// produced by the native arithmetic (zero for ordinary finite pixels),
+    /// not copied from input alpha; the native `OpenCL` path is unavailable.
     ///
     /// Cancellation polling and budget-aware fallible allocation are deliberately
     /// deferred to the pixelpipe seam; this leaf is not a direct production route.
@@ -196,12 +196,7 @@ impl FilmicPlan {
     fn process(&self, pixel: FilmicPixel) -> FilmicPixel {
         let input = pixel.channels;
         let xyz = lab_d50_to_xyz(input);
-        let input_rgb_with_spare = xyz_d50_to_prophoto_rgb(xyz);
-        let mut input_rgb = [
-            input_rgb_with_spare[0],
-            input_rgb_with_spare[1],
-            input_rgb_with_spare[2],
-        ];
+        let mut input_rgb = xyz_d50_to_prophoto_rgb(xyz);
 
         let desaturate = self.global_saturation != 100.0_f32;
         let saturation = self.global_saturation / 100.0_f32;
@@ -217,12 +212,12 @@ impl FilmicPlan {
         }
 
         if self.preserve_color {
-            let maximum = max3(input_rgb);
-            let ratios = [
-                input_rgb[0] / maximum,
-                input_rgb[1] / maximum,
-                input_rgb[2] / maximum,
-            ];
+            // `dt_vector_channel_max()` deliberately ignores the padded lane.
+            let maximum = max_rgb(input_rgb);
+            let mut ratios = [0.0_f32; 4];
+            for channel in 0..4 {
+                ratios[channel] = input_rgb[channel] / maximum;
+            }
             let mut mapped = maximum / self.grey_source;
             mapped = if mapped > EPS {
                 (fastlog2(mapped) - self.black_source) * self.inverse_dynamic_range
@@ -233,19 +228,20 @@ impl FilmicPlan {
             let index = lut_index(mapped);
             mapped = self.table[index];
             concavity = self.grad_2[index];
-            rgb = [ratios[0] * mapped, ratios[1] * mapped, ratios[2] * mapped];
+            rgb = [
+                ratios[0] * mapped,
+                ratios[1] * mapped,
+                ratios[2] * mapped,
+                ratios[3] * mapped,
+            ];
             luma = mapped;
         } else {
             for channel in &mut input_rgb {
                 *channel /= self.grey_source;
             }
-            let log_rgb = [
-                vector_log2(input_rgb[0]),
-                vector_log2(input_rgb[1]),
-                vector_log2(input_rgb[2]),
-            ];
-            let mut mapped = [0.0_f32; 3];
-            for channel in 0..3 {
+            let log_rgb = input_rgb.map(vector_log2);
+            let mut mapped = [0.0_f32; 4];
+            for channel in 0..4 {
                 mapped[channel] = if input_rgb[channel] > EPS {
                     (log_rgb[channel] - self.black_source) * self.inverse_dynamic_range
                 } else {
@@ -255,11 +251,7 @@ impl FilmicPlan {
             }
             let xyz_luma = prophoto_to_xyz_luma(mapped);
             concavity = self.grad_2[lut_index(xyz_luma)];
-            rgb = [
-                self.table[lut_index(mapped[0])],
-                self.table[lut_index(mapped[1])],
-                self.table[lut_index(mapped[2])],
-            ];
+            rgb = mapped.map(|value| self.table[lut_index(value)]);
             luma = prophoto_to_xyz_luma(rgb);
         }
 
@@ -267,58 +259,85 @@ impl FilmicPlan {
             *channel = clamp(luma + concavity * (*channel - luma), 0.0_f32, 1.0_f32);
         }
         let powered = vector_pow(rgb, self.output_power);
-        let result = prophoto_rgb_to_lab([powered[0], powered[1], powered[2], 0.0_f32]);
+        let result = prophoto_rgb_to_lab(powered);
         FilmicPixel::from_channels(result)
     }
 }
 
 pub fn lab_d50_to_xyz(lab: [f32; 4]) -> [f32; 4] {
-    let fy = (lab[0] + 16.0_f32) * (1.0_f32 / 116.0_f32);
-    let fx = (lab[1] + 0.0_f32) * (1.0_f32 / 500.0_f32) + fy;
-    let fz = (lab[2] + 0.0_f32) * (-1.0_f32 / 200.0_f32) + fy;
-    [
-        0.9642_f32 * lab_f_inv(fx),
-        lab_f_inv(fy),
-        0.8249_f32 * lab_f_inv(fz),
+    // This is the source's four-lane `dt_Lab_to_XYZ()` ordering, including the
+    // padded lane.  In particular, zero coefficients must participate in the
+    // arithmetic so signed zero and non-finite values are not discarded.
+    let f = [lab[1], lab[0], lab[2], lab[3]];
+    let offset = [0.0_f32, 16.0_f32, 0.0_f32, 0.0_f32];
+    let coeff = [
+        1.0_f32 / 500.0_f32,
+        1.0_f32 / 116.0_f32,
+        -1.0_f32 / 200.0_f32,
         0.0_f32,
-    ]
+    ];
+    let add_coeff = [1.0_f32, 0.0_f32, 1.0_f32, 0.0_f32];
+    let mut scaled = [0.0_f32; 4];
+    for channel in 0..4 {
+        scaled[channel] = (f[channel] + offset[channel]) * coeff[channel];
+    }
+    let mut inv = [0.0_f32; 4];
+    for channel in 0..4 {
+        inv[channel] = lab_f_inv(scaled[channel] + scaled[1] * add_coeff[channel]);
+    }
+    let d50 = [0.9642_f32, 1.0_f32, 0.8249_f32, 0.0_f32];
+    std::array::from_fn(|channel| d50[channel] * inv[channel])
 }
 
 pub fn prophoto_rgb_to_lab(rgb: [f32; 4]) -> [f32; 4] {
-    let xyz = [
-        0.7976749_f32 * rgb[0] + 0.1351917_f32 * rgb[1] + 0.0313534_f32 * rgb[2],
-        0.2880402_f32 * rgb[0] + 0.7118741_f32 * rgb[1] + 0.0000857_f32 * rgb[2],
-        0.8252100_f32 * rgb[2],
-        0.0_f32,
+    let rgb_to_xyz = [
+        [0.7976749_f32, 0.2880402_f32, 0.0_f32, 0.0_f32],
+        [0.1351917_f32, 0.7118741_f32, 0.0_f32, 0.0_f32],
+        [0.0313534_f32, 0.0000857_f32, 0.8252100_f32, 0.0_f32],
     ];
-    xyz_to_lab(xyz)
+    xyz_d50_to_lab(apply_transposed_color_matrix(rgb, rgb_to_xyz))
 }
 
-fn xyz_to_lab(xyz: [f32; 4]) -> [f32; 4] {
-    let x = xyz[0] * (1.0_f32 / 0.9642_f32);
-    let y = xyz[1] * 1.0_f32;
-    let z = xyz[2] * (1.0_f32 / 0.8249_f32);
-    let fx = lab_f(x);
-    let fy = lab_f(y);
-    let fz = lab_f(z);
-    [
-        116.0_f32 * fy - 16.0_f32,
-        500.0_f32 * (fx - fy),
-        -200.0_f32 * (fz - fy),
-        0.0_f32,
-    ]
+pub fn xyz_d50_to_lab(xyz: [f32; 4]) -> [f32; 4] {
+    let d50_inv = [1.0_f32 / 0.9642_f32, 1.0_f32, 1.0_f32 / 0.8249_f32, 0.0_f32];
+    let epsilon = 216.0_f32 / 24389.0_f32;
+    let kappa = 24389.0_f32 / 27.0_f32;
+    let mut f = [0.0_f32; 4];
+    for channel in 0..4 {
+        let x = xyz[channel] * d50_inv[channel];
+        f[channel] = if x > epsilon {
+            x.cbrt()
+        } else {
+            (kappa * x + 16.0_f32) / 116.0_f32
+        };
+    }
+    let tmp1 = [f[1], f[0], f[2], f[3]];
+    let tmp2 = [0.0_f32, f[1], f[1], 0.0_f32];
+    let coeff = [116.0_f32, 500.0_f32, -200.0_f32, 0.0_f32];
+    let offset = [16.0_f32, 0.0_f32, 0.0_f32, 0.0_f32];
+    std::array::from_fn(|channel| {
+        (coeff[channel] * (tmp1[channel] - tmp2[channel])) - offset[channel]
+    })
 }
 
 pub fn xyz_d50_to_prophoto_rgb(xyz: [f32; 4]) -> [f32; 4] {
-    [
-        1.3459433_f32 * xyz[0] - 0.2556075_f32 * xyz[1] - 0.0511118_f32 * xyz[2],
-        -0.5445989_f32 * xyz[0] + 1.5081673_f32 * xyz[1] + 0.0205351_f32 * xyz[2],
-        1.2118128_f32 * xyz[2],
-        0.0_f32,
-    ]
+    let xyz_to_rgb = [
+        [1.3459433_f32, -0.5445989_f32, 0.0_f32, 0.0_f32],
+        [-0.2556075_f32, 1.5081673_f32, 0.0_f32, 0.0_f32],
+        [-0.0511118_f32, 0.0205351_f32, 1.2118128_f32, 0.0_f32],
+    ];
+    apply_transposed_color_matrix(xyz, xyz_to_rgb)
 }
 
-fn prophoto_to_xyz_luma(rgb: [f32; 3]) -> f32 {
+fn apply_transposed_color_matrix(input: [f32; 4], matrix: [[f32; 4]; 3]) -> [f32; 4] {
+    std::array::from_fn(|channel| {
+        matrix[0][channel] * input[0]
+            + matrix[1][channel] * input[1]
+            + matrix[2][channel] * input[2]
+    })
+}
+
+fn prophoto_to_xyz_luma(rgb: [f32; 4]) -> f32 {
     0.1351917_f32 * rgb[0] + 0.7118741_f32 * rgb[1] + 0.0000857_f32 * rgb[2]
 }
 
@@ -343,7 +362,7 @@ fn lab_f(value: f32) -> f32 {
 }
 
 #[inline]
-fn max3(values: [f32; 3]) -> f32 {
+fn max_rgb(values: [f32; 4]) -> f32 {
     let first = if values[0] > values[1] {
         values[0]
     } else {
@@ -395,12 +414,8 @@ pub fn vector_log2(value: f32) -> f32 {
 }
 
 #[inline]
-fn vector_pow(value: [f32; 3], power: f32) -> [f32; 3] {
-    [
-        vector_exp2(vector_log2(value[0]) * power),
-        vector_exp2(vector_log2(value[1]) * power),
-        vector_exp2(vector_log2(value[2]) * power),
-    ]
+fn vector_pow(value: [f32; 4], power: f32) -> [f32; 4] {
+    value.map(|channel| vector_exp2(vector_log2(channel) * power))
 }
 
 /// Degree-four `dt_vector_exp2()` approximation with native ARM scalar rounding.
@@ -427,3 +442,42 @@ fn round_away_from_zero(value: f32) -> f32 {
 
 // Keep this assertion next to the source-sized LUT contract.
 const _: () = assert!(LUT_SIZE == 0x10000);
+
+#[cfg(test)]
+mod tests {
+    use super::{lab_f, max_rgb};
+
+    #[test]
+    fn channel_max_matches_native_rgb_only_selection() {
+        assert_eq!(max_rgb([0.25, 0.5, 0.75, 100.0]), 0.75);
+    }
+
+    #[test]
+    fn scalar_cbrtf_vectors_use_the_native_f32_cube_root() {
+        // `dt_XYZ_to_Lab()` calls scalar cbrtf() above epsilon.  These values
+        // exercise both exact and non-integral source-derived cube roots.
+        let fixtures = [
+            (0.25_f32, 0x3f21_4518),
+            (0.5_f32, 0x3f4b_2ff5),
+            (1.0_f32, 0x3f80_0000),
+            (2.0_f32, 0x3fa1_4518),
+            (10.0_f32, 0x4009_e242),
+            (216.0_f32 / 24389.0_f32, 0x3e53_dcb1),
+            ((216.0_f32 / 24389.0_f32).next_up(), 0x3e53_dcb1),
+        ];
+        for (value, expected_bits) in fixtures {
+            assert_eq!(lab_f(value).to_bits(), expected_bits);
+        }
+        let epsilon = 216.0_f32 / 24389.0_f32;
+        let epsilon_bits = epsilon.to_bits();
+        let boundary = [
+            (f32::from_bits(epsilon_bits - 1), 0x3e53_dcb1),
+            (epsilon, 0x3e53_dcb1),
+            (f32::from_bits(epsilon_bits + 1), 0x3e53_dcb1),
+            (f32::from_bits(epsilon_bits + 2), 0x3e53_dcb2),
+        ];
+        for (value, expected_bits) in boundary {
+            assert_eq!(lab_f(value).to_bits(), expected_bits);
+        }
+    }
+}

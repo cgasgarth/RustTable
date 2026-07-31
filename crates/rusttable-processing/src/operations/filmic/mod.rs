@@ -37,7 +37,8 @@ pub use curve::{
 pub use descriptor::{FilmicDescriptor, descriptor as filmic_descriptor};
 pub use execution::{
     EPS as FILMIC_EPS, FilmicPixel, FilmicPlan, FilmicPlanError, fastlog2, lab_d50_to_xyz,
-    lut_index, prophoto_rgb_to_lab, vector_exp2, vector_log2, xyz_d50_to_prophoto_rgb,
+    lut_index, prophoto_rgb_to_lab, vector_exp2, vector_log2, xyz_d50_to_lab,
+    xyz_d50_to_prophoto_rgb,
 };
 
 /// Compatibility identifier used by native history records.

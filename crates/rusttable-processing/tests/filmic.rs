@@ -21,7 +21,7 @@ use filmic::{
     FilmicParametersV1, FilmicParametersV2, FilmicParametersV3, FilmicPixel, FilmicPlan,
     FilmicPlanError, derive_filmic_nodes, fastlog2, filmic_descriptor, lab_d50_to_xyz, lut_index,
     migrate_filmic_v1_to_v3, migrate_filmic_v2_to_v3, prophoto_rgb_to_lab, vector_exp2,
-    xyz_d50_to_prophoto_rgb,
+    xyz_d50_to_lab, xyz_d50_to_prophoto_rgb,
 };
 
 fn v1() -> FilmicParametersV1 {
@@ -264,11 +264,15 @@ fn preserve_color_and_global_desaturation_are_distinct_paths_and_zero_spare_lane
 fn exact_lab_d50_prophoto_boundaries_include_the_padded_matrix_lane() {
     assert_eq!(
         lab_d50_to_xyz([0.0, 0.0, 0.0, 0.37]).map(f32::to_bits),
-        [0x0000_0000, 0x0000_0000, 0x0000_0000, 0x0000_0000]
+        [0x0000_0000, 0x0000_0000, 0x0000_0000, 0x8000_0000]
     );
     assert_eq!(
         lab_d50_to_xyz([100.0, 0.0, 0.0, 0.37]).map(f32::to_bits),
-        [0x3f76_d5d0, 0x3f80_0000, 0x3f53_2ca5, 0x0000_0000]
+        [0x3f76_d5d0, 0x3f80_0000, 0x3f53_2ca5, 0x8000_0000]
+    );
+    assert_eq!(
+        lab_d50_to_xyz([100.0, 0.0, 0.0, -0.0]).map(f32::to_bits),
+        [0x3f76_d5d0, 0x3f80_0000, 0x3f53_2ca5, 0x8000_0000]
     );
 
     assert_eq!(
@@ -276,9 +280,37 @@ fn exact_lab_d50_prophoto_boundaries_include_the_padded_matrix_lane() {
         [0x3f7f_ff47, 0x3f80_0025, 0x3f7f_e762, 0x0000_0000]
     );
     assert_eq!(
+        xyz_d50_to_prophoto_rgb([-0.9642, -1.0, -0.8249, 0.37]).map(f32::to_bits),
+        [0xbf7f_ff47, 0xbf80_0025, 0xbf7f_e762, 0x8000_0000]
+    );
+    assert_eq!(
         prophoto_rgb_to_lab([1.0, 1.0, 1.0, 0.37]).map(f32::to_bits),
         [0x42c8_0000, 0x3b62_9000, 0xbccd_4600, 0x0000_0000]
     );
+}
+
+#[test]
+fn neutral_lab_forward_conversion_pins_strict_epsilon_at_l8() {
+    let l8 = 8.0_f32.to_bits();
+    let expected = [0x3c0b_e8cd, 0x3c11_1aa6, 0x3bef_648a, 0x8000_0000];
+    for lightness in [
+        f32::from_bits(l8 - 1),
+        f32::from_bits(l8),
+        f32::from_bits(l8 + 1),
+    ] {
+        assert_eq!(
+            lab_d50_to_xyz([lightness, 0.0, 0.0, 0.37]).map(f32::to_bits),
+            expected,
+            "L={lightness:?}"
+        );
+    }
+
+    let epsilon = 216.0_f32 / 24389.0_f32;
+    let expected_lab = [0x4100_0000, 0x0000_0000, 0x8000_0000, 0x0000_0000];
+    for value in [epsilon.next_down(), epsilon, epsilon.next_up()] {
+        let xyz = [0.9642_f32 * value, value, 0.8249_f32 * value, 0.37];
+        assert_eq!(xyz_d50_to_lab(xyz).map(f32::to_bits), expected_lab);
+    }
 }
 
 #[test]
