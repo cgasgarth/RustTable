@@ -206,6 +206,31 @@ pub fn box_mean(
     Ok(())
 }
 
+/// Returns the checked byte size of the scratch allocation used by
+/// [`box_mean_with_cancel`].
+///
+/// This mirrors the retained `_alloc_scratch_space` calculation for the
+/// sequential cancellable path: one row of horizontal samples or the bounded
+/// circular vertical window, whichever is larger. Zero is returned when the
+/// cancellable helper returns before allocating because no iterations or no
+/// radius were requested.
+///
+/// # Errors
+///
+/// Returns an unsupported-channel, invalid-dimension, or checked-size error.
+pub fn box_mean_with_cancel_scratch_bytes(
+    height: usize,
+    width: usize,
+    channels: u32,
+    radius: usize,
+    iterations: u32,
+) -> Result<usize, BoxFilterError> {
+    let (scratch_len, _) = cancellable_scratch_layout(height, width, channels, radius, iterations)?;
+    scratch_len
+        .checked_mul(size_of::<f32>())
+        .ok_or(BoxFilterError::SizeOverflow)
+}
+
 /// Applies a cancellable in-place separable box mean.
 ///
 /// Cancellation is polled at scanline boundaries and throughout each scanline.
@@ -240,11 +265,11 @@ pub fn box_mean_with_cancel<F: Fn() -> bool>(
     // one well-defined order and the arithmetic remains the retained
     // scanline/column order. The ordinary entry point retains its parallel
     // cache-aware implementation above.
-    let vertical_scratch_rows = vertical_scratch_rows(height, radius);
+    let (scratch_len, vertical_scratch_rows) =
+        cancellable_scratch_layout(height, width, channels, radius, iterations)?;
     let vertical_scratch_len = vertical_scratch_rows
         .checked_mul(MAX_VERTICAL_LANES)
         .ok_or(BoxFilterError::SizeOverflow)?;
-    let scratch_len = shape.row_len.max(vertical_scratch_len);
     let mut scratch = allocate_f32(scratch_len)?;
 
     for _ in 0..iterations {
@@ -749,6 +774,29 @@ fn vertical_scratch_rows(height: usize, radius: usize) -> usize {
         .checked_next_power_of_two()
         .unwrap_or(height)
         .min(height)
+}
+
+fn cancellable_scratch_layout(
+    height: usize,
+    width: usize,
+    channels: u32,
+    radius: usize,
+    iterations: u32,
+) -> Result<(usize, usize), BoxFilterError> {
+    let (channel_count, _) = decode_mean_channels(channels)?;
+    validate_dimensions(height, width)?;
+    if iterations == 0 || radius == 0 {
+        return Ok((0, 0));
+    }
+
+    let row_len = width
+        .checked_mul(channel_count)
+        .ok_or(BoxFilterError::SizeOverflow)?;
+    let vertical_scratch_rows = vertical_scratch_rows(height, radius);
+    let vertical_scratch_len = vertical_scratch_rows
+        .checked_mul(MAX_VERTICAL_LANES)
+        .ok_or(BoxFilterError::SizeOverflow)?;
+    Ok((row_len.max(vertical_scratch_len), vertical_scratch_rows))
 }
 
 #[allow(

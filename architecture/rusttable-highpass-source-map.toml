@@ -1,0 +1,55 @@
+schema = "rusttable.highpass-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-history-bytes"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_highpass_params_t", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cpu-lab-invert-box-mix"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = ["process", "_blend"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "ordinary-eight-pass-box-filter"
+upstream_path = "src/common/box_filters.h"
+upstream_symbols = ["BOX_ITERATIONS"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+status = "implemented"
+notes = "The highpass leaf owns the fixed eight-pass invocation and contract; shared box-filter arithmetic is mapped below."
+
+[[responsibility]]
+id = "ordinary-box-filter-arithmetic"
+upstream_path = "src/common/box_filters.cc"
+upstream_symbols = ["_blur_horizontal", "_blur_vertical", "_box_mean"]
+rust_path = "crates/rusttable-processing/src/common/box_filters.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "scaled-radius-and-tiling"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = ["MAX_RADIUS", "tiling_callback"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "gpu-kernel-contract"
+upstream_path = "data/kernels/highpass.cl"
+upstream_symbols = ["highpass_invert", "highpass_hblur", "highpass_vblur", "highpass_mix"]
+rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+status = "implemented"
+notes = "Program identity and CPU/GPU fourth-channel and blur differences are documented; executable GPU binding remains deferred."
+
+[[responsibility]]
+id = "operation-integration"
+upstream_path = "src/iop/highpass.c"
+upstream_symbols = ["flags", "default_colorspace", "process", "gui_init"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs"
+status = "deferred"
+notes = "Registry, descriptor, snapshot, pixelpipe, blending, import/history routing, stale capability metadata, and GTK ownership are outside the operation-local lane."
