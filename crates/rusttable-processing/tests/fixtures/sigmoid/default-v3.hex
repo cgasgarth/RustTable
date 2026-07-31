@@ -1,0 +1,6 @@
+schema=sigmoid.v3
+payload_bytes=56
+payload_hex=0000c03f000000000000c8426c09793c000000000000c8420000000000000000000000000000000000000000000000000000000000000000
+field_order=middle_grey_contrast,contrast_skewness,display_white_target,display_black_target,color_processing,hue_preservation,red_inset,red_rotation,green_inset,green_rotation,blue_inset,blue_rotation,purity,base_primaries
+migration_edges=[(1,3),(2,3)]
+cpu_output_bits=[[1043564490,1050433347,1059759804,1040187392],[1010793712,1055942552,1061895119,1048576000],[1056050843,3171032336,1048395022,1056964608],[1064084440,1049480264,3166904614,1063256064]]
