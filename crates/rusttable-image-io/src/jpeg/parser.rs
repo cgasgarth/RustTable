@@ -1,14 +1,16 @@
+// Source lineage: src/imageio/imageio_jpeg.c and src/imageio/imageio_jpeg.h.
+// This leaf keeps the bounded JPEG marker/header responsibility in safe Rust.
+
 use rusttable_image::{
     DecodeLimits, ImageDimensions, ImageInputError, InputFormat, Orientation,
     UnsupportedImageFeature,
 };
 
 use super::types::{
-    JpegCodingProcess, JpegComponentModel, JpegHeader, JpegMetadataSegment, JpegSampling, JpegSof,
+    JPEG_METADATA_MAX_BYTES, JPEG_METADATA_MAX_ITEMS, JpegCodingProcess, JpegComponentModel,
+    JpegHeader, JpegMetadataSegment, JpegSampling, JpegSof,
 };
 
-const MAX_METADATA_ITEMS: usize = 64;
-const MAX_METADATA_BYTES: usize = 8 * 1024 * 1024;
 const MAX_SCANS: u16 = 1024;
 
 /// Parses only the deterministic header prefix needed by a registry probe.
@@ -160,7 +162,9 @@ fn parse(
                     metadata_bytes = metadata_bytes
                         .checked_add(segment.len())
                         .ok_or(ImageInputError::ArithmeticOverflow)?;
-                    if metadata.len() >= MAX_METADATA_ITEMS || metadata_bytes > MAX_METADATA_BYTES {
+                    if metadata.len() == JPEG_METADATA_MAX_ITEMS
+                        || metadata_bytes > JPEG_METADATA_MAX_BYTES
+                    {
                         return Err(malformed("JPEG metadata inventory exceeds its bound"));
                     }
                     metadata.push(JpegMetadataSegment {
@@ -178,9 +182,6 @@ fn parse(
                 let (_, end) = read_segment(bytes, &mut cursor, budgeted)?;
                 cursor = end;
             }
-        }
-        if !in_entropy && pending_marker.is_none() {
-            skip_marker_padding(bytes, &mut cursor);
         }
     }
 
@@ -396,26 +397,25 @@ fn next_entropy_marker(bytes: &[u8], cursor: &mut usize) -> Result<u8, ImageInpu
 }
 
 fn read_marker(bytes: &[u8], cursor: &mut usize) -> Result<u8, ImageInputError> {
-    if bytes.get(*cursor) != Some(&0xff) {
-        return Err(malformed("JPEG marker prefix is missing"));
-    }
-    while bytes.get(*cursor) == Some(&0xff) {
+    // libjpeg's next_marker() discards non-FF bytes between marker segments,
+    // including an FF00 pair, before returning the next real marker.
+    loop {
+        while bytes.get(*cursor) != Some(&0xff) {
+            if *cursor == bytes.len() {
+                return Err(malformed("truncated JPEG marker"));
+            }
+            *cursor += 1;
+        }
+        while bytes.get(*cursor) == Some(&0xff) {
+            *cursor += 1;
+        }
+        let marker = *bytes
+            .get(*cursor)
+            .ok_or_else(|| malformed("truncated JPEG marker"))?;
         *cursor += 1;
-    }
-    let marker = *bytes
-        .get(*cursor)
-        .ok_or_else(|| malformed("truncated JPEG marker"))?;
-    *cursor += 1;
-    if marker == 0 {
-        return Err(malformed("JPEG stuffed byte appears outside entropy data"));
-    }
-    Ok(marker)
-}
-
-fn skip_marker_padding(bytes: &[u8], cursor: &mut usize) {
-    let start = *cursor;
-    while (*cursor).saturating_sub(start) < 8 && bytes.get(*cursor) != Some(&0xff) {
-        *cursor += 1;
+        if marker != 0 {
+            return Ok(marker);
+        }
     }
 }
 
@@ -537,7 +537,7 @@ fn read_u32(bytes: &[u8], offset: usize, little: bool) -> Option<u32> {
 }
 
 fn is_metadata_marker(marker: u8) -> bool {
-    matches!(marker, 0xe1 | 0xe2 | 0xee | 0xfe)
+    matches!(marker, 0xe1 | 0xe2)
 }
 
 fn enforce_limits(

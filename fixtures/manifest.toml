@@ -79,8 +79,8 @@ parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.rgb-jpeg"
 path = "crates/rusttable-image-io/tests/fixtures/rgb-2x1.jpg.b64"
-size = 445
-sha256 = "3cdb0dbb451fe7a4a5abdb52d6046e9f68248e2a59d8008e3ef225f7b076f2ec"
+size = 441
+sha256 = "293b96ac8d6b15bdc299a5cf6835bf1e246924cd8900e62f0c20073f138cffd9"
 media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
@@ -92,8 +92,8 @@ parser = "rusttable-image-io"
 [[fixtures]]
 id = "image-io.progressive-jpeg"
 path = "crates/rusttable-image-io/tests/fixtures/progressive-2x1.jpg.b64"
-size = 730
-sha256 = "6d11455c24865b54f6479e7f34a151c9a9f21f89d11d3c9c7d3c0fbaff48ae09"
+size = 726
+sha256 = "910c3fac6b09d4d236a5b358c2b2ed8bf88a73c7931cf3746d24e819ca9e78be"
 media_type = "application/octet-stream"
 privacy = "synthetic"
 consumers = ["rusttable-image-io"]
@@ -103,6 +103,36 @@ format = "base64"
 source = "rusttable-image-io-fixture"
 generator = "rusttable-fixture-tools"
 parser = "rusttable-image-io"
+[[fixtures]]
+id = "image-io.cmyk-jpeg"
+path = "crates/rusttable-image-io/tests/fixtures/cmyk-1x1.jpg.b64"
+size = 881
+sha256 = "949f3798c8f31b3c63e3e5df9fb3f314dac4dcc7ccb87258bd8bca114f14ddbb"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+consuming_issue_ranges = ["#225"]
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "jpeg-encoder-0.7.0"
+parser = "rusttable-image-io"
+
+[[fixtures]]
+id = "image-io.ycck-jpeg"
+path = "crates/rusttable-image-io/tests/fixtures/ycck-1x1.jpg.b64"
+size = 869
+sha256 = "c0d48ea2d3c3e65d0a6ab73ae4288f4b3003cd8472410fb8c1620ad7ae83ee09"
+media_type = "application/octet-stream"
+privacy = "synthetic"
+consumers = ["rusttable-image-io"]
+consuming_issue_ranges = ["#225"]
+artifact_class = "valid-binary"
+format = "base64"
+source = "rusttable-image-io-fixture"
+generator = "jpeg-encoder-0.7.0"
+parser = "rusttable-image-io"
+
 [[fixtures]]
 id = "image-io.jpeg-xl-bare"
 path = "crates/rusttable-image-io/tests/fixtures/lossless-4x3.jxl.b64"

@@ -11,6 +11,6 @@ pub use decode::{
 pub(crate) use parser::probe_bounded;
 pub use parser::{inspect, probe};
 pub use types::{
-    JPEG_PROBE_BUDGET_BYTES, JpegCodingProcess, JpegComponentModel, JpegHeader,
-    JpegMetadataSegment, JpegPixelData, JpegSampling, JpegSof,
+    JPEG_METADATA_MAX_BYTES, JPEG_METADATA_MAX_ITEMS, JPEG_PROBE_BUDGET_BYTES, JpegCodingProcess,
+    JpegComponentModel, JpegHeader, JpegMetadataSegment, JpegPixelData, JpegSampling, JpegSof,
 };

@@ -1,3 +1,6 @@
+// Source lineage: src/imageio/imageio_jpeg.c and src/imageio/imageio_jpeg.h.
+// This leaf owns bounded JPEG decode, opaque RGBA publication, and fail-closed cleanup.
+
 use std::io::Cursor;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
@@ -250,6 +253,17 @@ fn decode_pixels(
     if header.precision != 8 {
         return Err(JpegDecodeError::Input(unsupported(
             UnsupportedImageFeature::BitDepth,
+        )));
+    }
+    if matches!(
+        header.components,
+        JpegComponentModel::Cmyk | JpegComponentModel::Ycck
+    ) {
+        // The native leaf requests JCS_EXT_RGBX from libjpeg. libjpeg rejects
+        // CMYK/YCCK-to-RGB conversion, so do not publish the backend's raw
+        // four-plane samples as if they were native RGB output.
+        return Err(JpegDecodeError::Input(unsupported(
+            UnsupportedImageFeature::ColorModel,
         )));
     }
     let max = usize::try_from(request.limits.max_decoded_bytes)
