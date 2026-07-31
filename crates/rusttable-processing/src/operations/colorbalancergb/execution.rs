@@ -258,23 +258,25 @@ impl ColorBalanceRgbCoefficients {
             shadows,
             midtones,
             highlights,
+            // Lane 3 carries the native global control through this compact
+            // grading plan; lanes 0..=2 remain shadow/midtone/highlight.
             chroma: [
                 v1.chroma_shadows,
                 v1.chroma_midtones,
                 v1.chroma_highlights,
-                0.0,
+                v1.chroma_global,
             ],
             saturation: [
                 v1.saturation_shadows,
                 v1.saturation_midtones,
                 v1.saturation_highlights,
-                0.0,
+                v1.saturation_global,
             ],
             brilliance: [
                 v2.brilliance_shadows,
                 v2.brilliance_midtones,
                 v2.brilliance_highlights,
-                0.0,
+                v2.brilliance_global,
             ],
             vibrance: v4.vibrance,
             contrast: 1.0 + v4.contrast,
@@ -513,15 +515,18 @@ impl ColorBalanceRgbPlan {
             return Err(ColorBalanceRgbExecutionError::Cancelled);
         }
         let coefficients = ColorBalanceRgbCoefficients::commit(config);
+        // The native process matrix includes XYZ-D65 → LMS-D65, while the
+        // gamut LUTs sample XYZ-D65 directly before their perceptual transform.
+        let xyz_d65_input_matrix = math::xyz_d65_input_matrix(profile.input_rgb_to_xyz_d50());
         let input_matrix = math::input_matrix(profile.input_rgb_to_xyz_d50());
         let output_matrix = math::output_matrix(profile.output_xyz_d50_to_rgb());
         let gamut_lut = match coefficients.saturation_formula {
             ColorBalanceRgbSaturationFormula::JzAzBz => {
-                build_jz_gamut_lut(input_matrix, &mut cancelled)
+                build_jz_gamut_lut(xyz_d65_input_matrix, &mut cancelled)
                     .map_err(|()| ColorBalanceRgbExecutionError::Cancelled)?
             }
             ColorBalanceRgbSaturationFormula::DarktableUcs2022 => {
-                build_ucs_gamut_lut(input_matrix, &mut cancelled)
+                build_ucs_gamut_lut(xyz_d65_input_matrix, &mut cancelled)
                     .map_err(|()| ColorBalanceRgbExecutionError::Cancelled)?
             }
         };

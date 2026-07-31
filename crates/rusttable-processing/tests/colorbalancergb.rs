@@ -244,7 +244,8 @@ fn internal_masks_and_commit_coefficients_follow_native_order() {
 
 #[test]
 fn profile_conversion_uses_cat16_and_jzazbz_not_generic_rgb_math() {
-    let adapted = math::input_matrix(ColorBalanceRgbProfile::identity().input_rgb_to_xyz_d50());
+    let adapted =
+        math::xyz_d65_input_matrix(ColorBalanceRgbProfile::identity().input_rgb_to_xyz_d50());
     assert_ne!(adapted, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
     let xyz = math::apply(adapted, [0.25, 0.5, 0.75]);
     let jab = math::xyz_to_jzazbz([xyz[0], xyz[1], xyz[2], 0.0]);
@@ -258,6 +259,56 @@ fn profile_conversion_uses_cat16_and_jzazbz_not_generic_rgb_math() {
     );
     let back = math::xyy_to_xyz(math::ucs_jch_to_xyy(ucs, math::y_to_ucs_lstar(1.0)));
     assert!(back.into_iter().all(f32::is_finite));
+}
+
+#[test]
+fn native_process_input_matrix_includes_xyz_to_lms_in_commit_order() {
+    let identity = ColorBalanceRgbProfile::identity();
+    let process_matrix = math::input_matrix(identity.input_rgb_to_xyz_d50());
+    assert_eq!(
+        process_matrix,
+        [
+            [0.24974132, 0.85491127, -0.030628867],
+            [-0.39667058, 1.2010254, 0.119133756],
+            [0.06435915, -0.07092515, 0.7309533],
+        ]
+    );
+    assert_ne!(
+        process_matrix,
+        math::xyz_d65_input_matrix(identity.input_rgb_to_xyz_d50())
+    );
+    assert_eq!(
+        math::apply(process_matrix, [0.25, 0.5, 0.75]),
+        [0.4669193, 0.5906954, 0.5288422]
+    );
+}
+
+#[test]
+fn native_global_grading_controls_reach_each_plan_lane_and_cpu_process() {
+    let mut v1 = ColorBalanceRgbParametersV1::defaults();
+    v1.chroma_global = 0.2;
+    v1.saturation_global = 0.2;
+    let v2 = ColorBalanceRgbParametersV2::new(v1, [0.2, 0.0, 0.0, 0.0]);
+    let v3 = ColorBalanceRgbParametersV3::new(v2, 0.1845);
+    let parameters = ColorBalanceRgbParametersV5::new(
+        ColorBalanceRgbParametersV4::new(v3, 0.0, 0.1845, 0.0),
+        ColorBalanceRgbSaturationFormula::DarktableUcs2022,
+    );
+    let config = ColorBalanceRgbConfig::new(parameters).unwrap();
+    let coefficients = colorbalancergb::ColorBalanceRgbCoefficients::commit(config);
+    assert_eq!(coefficients.chroma[3], 0.2);
+    assert_eq!(coefficients.saturation[3], 0.2);
+    assert_eq!(coefficients.brilliance[3], 0.2);
+
+    let neutral = ColorBalanceRgbConfig::defaults();
+    let global_plan = ColorBalanceRgbPlan::new(config, ColorBalanceRgbProfile::identity()).unwrap();
+    let neutral_plan =
+        ColorBalanceRgbPlan::new(neutral, ColorBalanceRgbProfile::identity()).unwrap();
+    let dimensions = RasterDimensions::new(1, 1).unwrap();
+    let input = [[0.35, 0.25, 0.15, 0.0]];
+    let global_output = global_plan.execute(dimensions, &input).unwrap();
+    let neutral_output = neutral_plan.execute(dimensions, &input).unwrap();
+    assert_ne!(global_output, neutral_output);
 }
 
 #[test]

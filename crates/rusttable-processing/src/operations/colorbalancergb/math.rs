@@ -55,9 +55,12 @@ pub fn matrix_mul(left: Matrix3, right: Matrix3) -> Matrix3 {
     let mut result = [[0.0; 3]; 3];
     for row in 0..3 {
         for column in 0..3 {
-            result[row][column] = left[row][0] * right[0][column]
-                + left[row][1] * right[1][column]
-                + left[row][2] * right[2][column];
+            // Keep the native dt_colormatrix_mul accumulation order: each
+            // product is added to the f32 accumulator before the next one.
+            let mut value = left[row][0] * right[0][column];
+            value += left[row][1] * right[1][column];
+            value += left[row][2] * right[2][column];
+            result[row][column] = value;
         }
     }
     result
@@ -78,9 +81,22 @@ pub fn apply_pixel(matrix: Matrix3, input: Pixel) -> Pixel {
     [values[0], values[1], values[2], 0.0]
 }
 
+/// Native profile RGB → XYZ D65 composition used by gamut-LUT sampling.
+#[must_use]
+pub fn xyz_d65_input_matrix(profile_input_rgb_to_xyz_d50: Matrix3) -> Matrix3 {
+    matrix_mul(XYZ_D50_TO_D65_CAT16, profile_input_rgb_to_xyz_d50)
+}
+
+/// Native process input composition from `colorbalancergb.c:615-616`.
+///
+/// The CAT16 result is composed with the CIE 2006 XYZ-D65 → LMS-D65 matrix
+/// before per-pixel evaluation, matching the native f32 accumulation order.
 #[must_use]
 pub fn input_matrix(profile_input_rgb_to_xyz_d50: Matrix3) -> Matrix3 {
-    matrix_mul(XYZ_D50_TO_D65_CAT16, profile_input_rgb_to_xyz_d50)
+    matrix_mul(
+        XYZ_D65_TO_LMS_2006_D65,
+        xyz_d65_input_matrix(profile_input_rgb_to_xyz_d50),
+    )
 }
 
 #[must_use]
