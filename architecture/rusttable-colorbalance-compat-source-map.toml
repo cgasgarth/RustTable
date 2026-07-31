@@ -1,0 +1,129 @@
+schema = "rusttable.colorbalance-compat-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "colorbalance"
+rust_id = "rusttable.colorbalance"
+production_registration = "deferred until shared operation, history, pixelpipe, and UI seams are complete"
+
+[[responsibility]]
+id = "native-parameter-abi"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(3)", "dt_iop_colorbalance_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/codec.rs"
+status = "replaced"
+notes = "v1/v2/v3 are explicit little-endian payloads; unknown versions remain opaque and non-executable"
+
+[[responsibility]]
+id = "native-history-migration"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/codec.rs"
+status = "replaced"
+notes = "v1 and v2 migrate directly to v3 with native defaults and no invented intermediate edges"
+
+[[responsibility]]
+id = "commit-derived-curves"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/execution.rs"
+status = "replaced"
+notes = "ProPhoto D50 luminance correction is applied independently to lift, gamma, and gain in both corrected modes; legacy copies arrays"
+
+[[responsibility]]
+id = "scalar-cpu-legacy"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["_process_legacy"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/execution.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "scalar-cpu-lgg"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["_process_lgg"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/execution.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "scalar-cpu-sop"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["_process_sop"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/execution.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "d50-prophoto-math"
+upstream_path = "src/common/colorspaces_inline_conversions.h"
+upstream_symbols = ["dt_Lab_to_XYZ", "dt_XYZ_to_Lab", "dt_XYZ_to_prophotorgb", "dt_prophotorgb_to_XYZ"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/math.rs"
+status = "replaced"
+notes = "Native D50 0.9642/1.0/0.8249 constants and hardcoded ProPhoto matrices are local until shared color-boundary qualification"
+
+[[responsibility]]
+id = "approximate-powers"
+upstream_path = "src/common/math.h"
+upstream_symbols = ["dt_vector_log2", "dt_vector_exp2", "dt_vector_powf"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/math.rs"
+status = "replaced"
+notes = "Scalar f32 degree-five log and degree-four exp approximation; not a GPU parity claim"
+
+[[responsibility]]
+id = "normal-mask-blend"
+upstream_path = "src/develop/blends/blendif_lab.c"
+upstream_symbols = ["_blend_normal_unbounded"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/execution.rs"
+status = "bounded-leaf"
+notes = "Lab channels are normalized by [1/100, 1/128, 1/128], interpolated in normalized space, rescaled, and published with local coverage; arbitrary imported blend-if state is deferred"
+
+[[responsibility]]
+id = "operation-local-descriptor"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["flags", "default_colorspace", "dt_iop_colorbalance_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/mod.rs"
+status = "bounded-leaf"
+notes = "Descriptor records CPU/full-frame scheduler and mask contracts; the leaf's private bounded chunks are not a tileability claim, and UI/GPU capability remains unavailable"
+
+[[responsibility]]
+id = "native-opencl-reference"
+upstream_path = "data/kernels/extended.cl"
+upstream_symbols = ["colorbalance", "colorbalance_lgg", "colorbalance_cdl"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalance/execution.rs"
+status = "deferred"
+notes = "Native kernels are read-only evidence; Rust GPU shaders, relaxed-math parity, thresholds, and alpha behavior are not qualified"
+
+[[responsibility]]
+id = "shared-operation-export"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["name", "flags", "process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs"
+status = "deferred"
+notes = "Integration owner must register the module, reconstruction, snapshot identity, and fail-closed availability"
+
+[[responsibility]]
+id = "history-dispatch"
+upstream_path = "src/develop/history.c"
+upstream_symbols = ["operation-name dispatch"]
+rust_path = "crates/rusttable-import/src/darktable/history.rs"
+status = "deferred"
+notes = "Durable history materialization is not part of this leaf"
+
+[[responsibility]]
+id = "lab-alpha-pixelpipe-boundary"
+upstream_path = "src/iop/colorbalance.c"
+rust_path = "crates/rusttable-pixelpipe/src"
+status = "deferred"
+notes = "Native CPU conversion zeroes lane four while generic blending publishes coverage; Rust must preserve straight alpha outside the Lab operation buffer"
+
+[[responsibility]]
+id = "gpu-capability"
+upstream_path = "data/kernels/extended.cl"
+rust_path = "crates/rusttable-gpu/src"
+status = "deferred"
+notes = "Leaf advertises no GPU tier"
+
+[[responsibility]]
+id = "ui-presets-optimizers"
+upstream_path = "src/iop/colorbalance.c"
+upstream_symbols = ["gui_init", "init_presets", "apply_autoluma", "apply_autocolor"]
+rust_path = "crates/rusttable-ui/src"
+status = "deferred"
+notes = "UI, presets, picker state, and auto luma/color optimizer state remain unavailable"
