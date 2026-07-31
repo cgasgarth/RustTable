@@ -1,0 +1,10 @@
+source=src/iop/tonecurve.c
+version=5
+payload_bytes=520
+node_counts=[2,3,3]
+curve_types=[2,2,2]
+autoscale=3
+preset=0
+unbound_ab=1
+preserve_colors=3
+channel_order=[L,a,b]

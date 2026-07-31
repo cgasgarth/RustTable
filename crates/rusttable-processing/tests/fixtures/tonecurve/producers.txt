@@ -1,0 +1,11 @@
+producer=src/chart/main.c
+function=encode_tonecurve
+version=4
+payload_bytes=516
+mapping=three curves, counts, types, autoscale, preset, unbound_ab; preserve_colors absent
+
+producer=src/develop/lightroom.c
+function=Lightroom tonecurve import
+version=3
+payload_bytes=512
+mapping=three curves, counts, types, autoscale, preset; unbound_ab and preserve_colors absent
