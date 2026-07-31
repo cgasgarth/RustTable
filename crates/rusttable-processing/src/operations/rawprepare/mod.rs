@@ -141,7 +141,9 @@ pub fn rawprepare_descriptor() -> OperationDescriptor {
         },
         io: InputOutputContract {
             input: ImagePredicate {
-                channels: 4,
+                // Bayer/X-Trans raw-u16x1 and raw-f32x1 enter as one sensor
+                // plane; the four-lane sraw-f32x4 branch is output-shaped.
+                channels: 1,
                 alpha: AlphaPolicy::Ignore,
                 encodings: vec![ColorEncoding::Unspecified],
                 nonfinite: NonFinitePolicy::Reject,

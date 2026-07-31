@@ -291,7 +291,7 @@ fn valid_bayer_gain_maps_apply_bilinear_gain_and_malformed_maps_fail_closed() {
 }
 
 #[test]
-fn gain_map_coordinates_use_scaled_tile_dimensions() {
+fn gain_map_coordinates_use_scaled_full_buffer_dimensions_across_tiles() {
     let plan_dimensions = RasterDimensions::new(8, 8).expect("plan dimensions");
     let maps = (0..4)
         .map(|filter| {
@@ -322,22 +322,49 @@ fn gain_map_coordinates_use_scaled_tile_dimensions() {
     let parameters =
         RawPrepareParametersV2::new(0, 0, 0, 0, [0; 4], 1000, RawPrepareFlatField::Embedded);
     let plan = RawPreparePlan::new(&metadata, &parameters).expect("gain-map plan");
-    let tile = rawprepare::RawPrepareTile::new(
-        RasterDimensions::new(4, 4).expect("scaled input"),
+
+    let scaled_full_input = RasterDimensions::new(4, 4).expect("scaled full input");
+    let full_tile = rawprepare::RawPrepareTile::new_with_full_input(
+        scaled_full_input,
+        scaled_full_input,
         0,
         0,
-        RasterDimensions::new(4, 4).expect("scaled output"),
+        scaled_full_input,
         1.0,
         1.0,
         crop,
     )
-    .expect("scaled tile");
+    .expect("scaled full tile");
+    let full_output = plan
+        .execute_u16(&[1000; 16], full_tile, || false)
+        .expect("full-frame execute");
+    let tile = rawprepare::RawPrepareTile::new_with_full_input(
+        RasterDimensions::new(2, 2).expect("tile input"),
+        scaled_full_input,
+        2,
+        2,
+        RasterDimensions::new(2, 2).expect("tile output"),
+        1.0,
+        1.0,
+        crop,
+    )
+    .expect("non-origin tile");
     let output = plan
-        .execute_u16(&[1000; 16], tile, || false)
+        .execute_u16(&[1000; 4], tile, || false)
         .expect("execute");
-    // x=3 maps to 0.75 on the current 4-pixel input tile, not 0.375 on
-    // the unscaled 8-pixel plan dimensions.
-    assert!((output[3] - 2.5).abs() < 1e-6);
+
+    for y in 0..2 {
+        for x in 0..2 {
+            let tile_index = y * 2 + x;
+            let full_index = (y + 2) * 4 + x + 2;
+            assert!((output[tile_index] - full_output[full_index]).abs() < 1e-6);
+        }
+    }
+    // The non-origin tile uses the full scaled 4-pixel buffer for
+    // interpolation: global x=2 maps to 0.5, giving a gain of 2 rather than
+    // the tile-local coordinate 1.0 and gain 3.
+    assert!((output[0] - 2.0).abs() < 1e-6);
+    assert!((output[1] - 2.5).abs() < 1e-6);
 }
 
 #[test]
@@ -411,18 +438,19 @@ fn descriptor_and_capabilities_do_not_overclaim_integration() {
     let descriptor = rawprepare_descriptor();
     descriptor.validate().expect("descriptor");
     assert_eq!(descriptor.id.rust_id, RAWPREPARE_RUST_ID);
-    assert_eq!(descriptor.io.input.channels, 4);
+    assert_eq!(descriptor.io.input.channels, 1);
     assert_eq!(descriptor.io.output.channels, 4);
     assert_eq!(
         descriptor.capability.required_features,
         vec!["raw-image-metadata".to_owned()]
     );
-    assert!(
-        descriptor
-            .capability
-            .required_formats
-            .iter()
-            .any(|format| format == "sraw-f32x4")
+    assert_eq!(
+        descriptor.capability.required_formats,
+        vec![
+            "raw-u16x1".to_owned(),
+            "raw-f32x1".to_owned(),
+            "sraw-f32x4".to_owned(),
+        ]
     );
     let capabilities = capabilities();
     assert!(capabilities.cpu);

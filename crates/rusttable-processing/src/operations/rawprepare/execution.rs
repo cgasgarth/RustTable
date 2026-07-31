@@ -333,11 +333,14 @@ impl Default for RawPrepareTiling {
 }
 
 /// The source `modify_roi_*` contract for one output tile. `input` is the
-/// row-major buffer supplied by the upstream operation; `output` uses the
-/// global output coordinates used by `_BL` and gain-map interpolation.
+/// row-major buffer supplied by the upstream operation; `full_input` is the
+/// exact scaled `piece->buf_in` dimensions used by gain-map coordinates;
+/// `output` uses the global output coordinates used by `_BL` and gain-map
+/// interpolation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RawPrepareTile {
     input: RasterDimensions,
+    full_input: RasterDimensions,
     output_x: u32,
     output_y: u32,
     output: RasterDimensions,
@@ -346,6 +349,8 @@ pub struct RawPrepareTile {
 }
 
 impl RawPrepareTile {
+    /// Creates a full-buffer tile where the supplied input dimensions are also
+    /// the scaled full input dimensions.
     pub fn new(
         input: RasterDimensions,
         output_x: u32,
@@ -355,6 +360,33 @@ impl RawPrepareTile {
         piece_scale: f32,
         crop: RawPrepareCrop,
     ) -> Result<Self, RawPrepareError> {
+        Self::new_with_full_input(
+            input,
+            input,
+            output_x,
+            output_y,
+            output,
+            roi_in_scale,
+            piece_scale,
+            crop,
+        )
+    }
+
+    /// Creates a tile with the exact scaled full input dimensions from
+    /// `piece->buf_in`, separate from this tile's local input ROI.
+    pub fn new_with_full_input(
+        input: RasterDimensions,
+        full_input: RasterDimensions,
+        output_x: u32,
+        output_y: u32,
+        output: RasterDimensions,
+        roi_in_scale: f32,
+        piece_scale: f32,
+        crop: RawPrepareCrop,
+    ) -> Result<Self, RawPrepareError> {
+        if input.width() > full_input.width() || input.height() > full_input.height() {
+            return Err(RawPrepareError::FullInputDimensionsTooSmall);
+        }
         let crop_x = scaled_crop(crop.left, roi_in_scale, piece_scale)?;
         let crop_y = scaled_crop(crop.top, roi_in_scale, piece_scale)?;
         let required_width = crop_x
@@ -368,6 +400,7 @@ impl RawPrepareTile {
         }
         Ok(Self {
             input,
+            full_input,
             output_x,
             output_y,
             output,
@@ -379,6 +412,11 @@ impl RawPrepareTile {
     #[must_use]
     pub const fn input(&self) -> RasterDimensions {
         self.input
+    }
+
+    #[must_use]
+    pub const fn full_input(&self) -> RasterDimensions {
+        self.full_input
     }
 
     #[must_use]
@@ -946,6 +984,7 @@ pub enum RawPrepareError {
     GainMapArithmeticOverflow,
     RoiArithmeticOverflow,
     InputRoiTooSmall,
+    FullInputDimensionsTooSmall,
     OutputRoiOutOfBounds,
     InputLengthMismatch { expected: u64, actual: usize },
     InputKindMismatch,
@@ -983,6 +1022,9 @@ impl fmt::Display for RawPrepareError {
                 formatter.write_str("rawprepare ROI arithmetic overflowed")
             }
             Self::InputRoiTooSmall => formatter.write_str("rawprepare input ROI is too small"),
+            Self::FullInputDimensionsTooSmall => {
+                formatter.write_str("rawprepare full input dimensions are too small")
+            }
             Self::OutputRoiOutOfBounds => {
                 formatter.write_str("rawprepare output ROI is out of bounds")
             }
@@ -1128,8 +1170,8 @@ fn gain_map_gain(
         .ok_or(RawPrepareError::UnsupportedGainMaps)?;
     let map_width = map.map_points_h;
     let map_height = map.map_points_v;
-    let image_to_rel_x = 1.0 / f64::from(tile.input.width());
-    let image_to_rel_y = 1.0 / f64::from(tile.input.height());
+    let image_to_rel_x = 1.0 / f64::from(tile.full_input.width());
+    let image_to_rel_y = 1.0 / f64::from(tile.full_input.height());
     let rel_to_map_x = 1.0 / map.map_spacing_h;
     let rel_to_map_y = 1.0 / map.map_spacing_v;
     let map_x = (((f64::from(tile.output_x + tile.crop_x + x) * image_to_rel_x)
