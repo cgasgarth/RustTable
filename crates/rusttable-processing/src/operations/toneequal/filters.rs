@@ -458,7 +458,7 @@ fn eigf_variance_analysis(
 ) -> Result<(), FilterError> {
     let elements = width * height;
     let mut input = alloc_f32(elements * 4)?;
-    let mut mins = [f32::MAX; 4];
+    let mut mins = [10_000_000.0_f32; 4];
     let mut maxs = [0.0_f32; 4];
     for index in 0..elements {
         if index % 1024 == 0 && cancelled() {
@@ -501,7 +501,7 @@ fn eigf_variance_analysis_no_mask(
 ) -> Result<(), FilterError> {
     let elements = width * height;
     let mut input = alloc_f32(elements * 2)?;
-    let mut mins = [f32::MAX; 2];
+    let mut mins = [10_000_000.0_f32; 2];
     let mut maxs = [0.0_f32; 2];
     for index in 0..elements {
         if index % 1024 == 0 && cancelled() {
@@ -712,4 +712,30 @@ pub(crate) enum FilterError {
     AllocationFailed { elements: usize },
     InvalidDimensions,
     Cancelled,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FilterError, eigf_variance_analysis_no_mask};
+
+    #[test]
+    fn eigf_hdr_channel_minima_use_native_floor() -> Result<(), FilterError> {
+        let guide = [20_000_000.0_f32, 40_000_000.0, 60_000_000.0, 80_000_000.0];
+        let mut output = [0.0_f32; 8];
+        eigf_variance_analysis_no_mask(&guide, &mut output, 2, 2, 1.0, &mut || false)?;
+        let expected = [
+            0x4c0e_b91a,
+            0x57bb_5a98,
+            0x4c2e_bb1f,
+            0x57bb_5a90,
+            0x4c4e_bd23,
+            0x57bb_5a90,
+            0x4c6e_bf28,
+            0x57bb_5a88,
+        ];
+        for (actual, expected) in output.into_iter().zip(expected) {
+            assert_eq!(actual.to_bits(), expected);
+        }
+        Ok(())
+    }
 }

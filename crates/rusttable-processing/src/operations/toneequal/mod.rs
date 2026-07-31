@@ -46,9 +46,9 @@ pub use execution::{
 };
 pub use math::{CENTERS_OPS, CENTERS_PARAMS, compute_channel_gains, default_contrast_fulcrum};
 pub use parameters::{
-    CHANNELS, CONTRAST_FULCRUM, DetailsFilter, LEGACY_V1_BYTES, LUT_ENTRIES, LUT_RESOLUTION,
-    LuminanceMethod, MAX_EV, MIN_EV, MIN_FLOAT, PARAMETER_BYTES, PARAMETER_VERSION, PIXEL_CHANNELS,
-    ParameterError, ToneEqualizerParametersV2,
+    BLENDING_DEFAULT, CHANNELS, CONTRAST_FULCRUM, DetailsFilter, LEGACY_V1_BYTES, LUT_ENTRIES,
+    LUT_RESOLUTION, LuminanceMethod, MAX_EV, MIN_EV, MIN_FLOAT, PARAMETER_BYTES, PARAMETER_VERSION,
+    PIXEL_CHANNELS, ParameterError, ToneEqualizerParametersV2,
 };
 
 /// Operation-local source fixture used by focused ABI tests.

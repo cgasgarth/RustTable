@@ -8,9 +8,10 @@
 mod toneequal;
 
 use toneequal::{
-    CHANNELS, DEFAULT_V2_FIXTURE, DetailsFilter, LUT_ENTRIES, LuminanceMethod, PARAMETER_BYTES,
-    PARAMETER_VERSION, ToneEqualizerHistory, ToneEqualizerOutputMode, ToneEqualizerParametersV2,
-    ToneEqualizerPixel, ToneEqualizerPlan, ToneEqualizerTile, ToneEqualizerTileContract,
+    BLENDING_DEFAULT, CHANNELS, DEFAULT_V2_FIXTURE, DetailsFilter, LUT_ENTRIES, LuminanceMethod,
+    PARAMETER_BYTES, PARAMETER_VERSION, ToneEqualizerHistory, ToneEqualizerOutputMode,
+    ToneEqualizerParametersV2, ToneEqualizerPixel, ToneEqualizerPlan, ToneEqualizerTile,
+    ToneEqualizerTileContract,
 };
 
 fn no_filter_parameters(method: LuminanceMethod) -> ToneEqualizerParametersV2 {
@@ -37,6 +38,11 @@ fn fixture_and_native_v2_offsets_are_explicit() {
 
     let parameters = ToneEqualizerParametersV2::default();
     let bytes = parameters.to_bytes();
+    assert_eq!(parameters.blending, BLENDING_DEFAULT);
+    assert_eq!(
+        f32::from_le_bytes(bytes[36..40].try_into().unwrap()),
+        BLENDING_DEFAULT
+    );
     assert_eq!(bytes.len(), PARAMETER_BYTES);
     assert_eq!(i32::from_le_bytes(bytes[60..64].try_into().unwrap()), 4);
     assert_eq!(i32::from_le_bytes(bytes[64..68].try_into().unwrap()), 4);

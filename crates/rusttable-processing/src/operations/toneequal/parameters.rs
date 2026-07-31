@@ -16,6 +16,7 @@ pub const MIN_EV: f32 = -8.0;
 pub const MAX_EV: f32 = 0.0;
 pub const MIN_FLOAT: f32 = 0.000_015_258_789_062_5;
 pub const CONTRAST_FULCRUM: f32 = 0.0625;
+pub const BLENDING_DEFAULT: f32 = 5.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
@@ -112,9 +113,7 @@ impl Default for ToneEqualizerParametersV2 {
             highlights: 0.0,
             whites: 0.0,
             speculars: 0.0,
-            // No `$DEFAULT` is present for blending in the native source;
-            // C introspection therefore supplies its zero value.
-            blending: 0.0,
+            blending: BLENDING_DEFAULT,
             smoothing: std::f32::consts::SQRT_2,
             feathering: 1.0,
             quantization: 0.0,
