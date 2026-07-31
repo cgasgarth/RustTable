@@ -1,4 +1,9 @@
-#![allow(clippy::cast_precision_loss, clippy::float_cmp, clippy::similar_names)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    clippy::similar_names
+)]
 
 #[path = "../src/operations/lut3d/mod.rs"]
 mod lut3d;
@@ -199,6 +204,28 @@ fn cube_reader_preserves_comments_domains_and_r_fastest_order() {
         Lut3d::from_file(Path::new("missing.cube")),
         Err(Lut3dParseError::Io(_))
     ));
+}
+
+#[test]
+fn cube_reader_uses_native_double_rounding_before_f32_storage() {
+    let midpoint_adjacent = "1.0000000596046448";
+    // Direct f32 parsing rounds this decimal above the midpoint, while the
+    // native double intermediate rounds to the midpoint before f32 storage.
+    assert_eq!(
+        midpoint_adjacent.parse::<f32>().unwrap().to_bits(),
+        0x3f80_0001
+    );
+    assert_eq!(
+        (midpoint_adjacent.parse::<f64>().unwrap() as f32).to_bits(),
+        0x3f80_0000
+    );
+
+    let mut contents = format!("LUT_3D_SIZE 2\n{midpoint_adjacent} 0 0\n");
+    for _ in 1..8 {
+        contents.push_str("0 0 0\n");
+    }
+    let lut = Lut3d::parse_cube(&contents).unwrap();
+    assert_eq!(lut.values()[0][0].to_bits(), 0x3f80_0000);
 }
 
 #[test]

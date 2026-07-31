@@ -14,7 +14,7 @@ status = "replaced"
 [[responsibility]]
 id = "cube-reader"
 upstream_path = "src/iop/lut3d.c"
-upstream_symbol = "_parse_cube_line / _calculate_clut_cube"
+upstream_symbol = "_dt_atof / _parse_cube_line / _calculate_clut_cube"
 rust_path = "crates/rusttable-processing/src/operations/lut3d/parser.rs"
 status = "bounded_safe_leaf"
 

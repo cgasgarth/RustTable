@@ -295,8 +295,22 @@ fn parse_float(token: &str, line: usize) -> Result<f32, Lut3dParseError> {
         .map_err(|_| Lut3dParseError::MalformedNumber { line })
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn parse_sample(token: &str, line: usize) -> Result<f32, Lut3dParseError> {
-    let value = parse_float(token, line)?;
+    // Native `_dt_atof` accumulates into a double before the cube value is
+    // narrowed to float by the destination buffer.  Keep that intermediate
+    // precision so decimal values near an f32 rounding midpoint follow the
+    // native conversion rather than Rust's direct f32 parser.
+    let parsed = token
+        .parse::<f64>()
+        .map_err(|_| Lut3dParseError::MalformedNumber { line })?;
+    let value = parsed as f32;
+    // Preserve the existing fail-closed behavior for finite values that
+    // overflow the f32 representation while retaining the native handling of
+    // explicit non-finite tokens below.
+    if parsed.is_finite() && !value.is_finite() {
+        return Err(Lut3dParseError::MalformedNumber { line });
+    }
     if !value.is_finite() {
         return Err(Lut3dParseError::NonFiniteSample(line));
     }
