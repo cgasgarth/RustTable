@@ -1,0 +1,82 @@
+schema = "rusttable.operation-source-map.v1"
+operation = "lut3d"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+status = "bounded_cpu_leaf_unregistered"
+
+[[responsibility]]
+id = "parameter-abi-v1-v2-v3"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "dt_iop_lut3d_params_t / legacy_params"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/codec.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "cube-reader"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "_parse_cube_line / _calculate_clut_cube"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/parser.rs"
+status = "bounded_safe_leaf"
+
+[[responsibility]]
+id = "three-dl-reader"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "_parse_cube_line / _calculate_clut_3dl"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/parser.rs"
+status = "bounded_safe_leaf"
+
+[[responsibility]]
+id = "interpolation"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "_correct_pixel_tetrahedral / _correct_pixel_trilinear / _correct_pixel_pyramid"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/interpolation.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "gpu-equation-reference"
+upstream_path = "data/kernels/lut3d.cl"
+upstream_symbol = "lut3d_tetrahedral / lut3d_trilinear / lut3d_pyramid"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/interpolation.rs"
+status = "cpu_parity_reference_only"
+
+[[responsibility]]
+id = "profile-gated-cpu-execution"
+upstream_path = "src/common/iop_profile.c"
+upstream_symbol = "dt_ioppr_transform_image_colorspace_rgb / profile matrix path"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/profile.rs"
+status = "explicit_context_only"
+
+[[responsibility]]
+id = "transactional-cpu-execution"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "process"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/execution.rs"
+status = "bounded_leaf_only"
+
+[[deferred]]
+id = "hald-png"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "_calculate_clut_haldclut"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/parser.rs"
+status = "requires_png_decoder_boundary_and_dimension_validation"
+
+[[deferred]]
+id = "compressed-gmic-gmz"
+upstream_path = "src/iop/lut3dgmic.cpp"
+upstream_symbol = "lut3d_decompress_clut / lut3d_get_cached_clut / lut3d_read_gmz"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/mod.rs"
+status = "explicitly_unavailable"
+
+[[deferred]]
+id = "profile-construction-and-icc"
+upstream_path = "src/common/colorspaces.c"
+upstream_symbol = "dt_colorspaces_create_*_profile / matrix and tone-curve extraction"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/profile.rs"
+status = "requires_shared_profile_context"
+
+[[deferred]]
+id = "operation-integration"
+upstream_path = "src/iop/lut3d.c"
+upstream_symbol = "module descriptor / process_cl / commit_params / gui_init"
+rust_path = "crates/rusttable-processing/src/operations/lut3d/mod.rs"
+status = "registry_history_ui_pixelpipe_gpu_unavailable"
