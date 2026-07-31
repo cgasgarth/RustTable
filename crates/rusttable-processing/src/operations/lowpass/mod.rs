@@ -638,6 +638,34 @@ impl fmt::Display for LowpassError {
 }
 impl std::error::Error for LowpassError {}
 
+/// Controls the operation-local filter-initialization fault seam.
+///
+/// Darktable's native `process` receives a caller-owned destination. If
+/// `dt_gaussian_init` or `dt_bilateral_init` returns null, it copies the input
+/// ROI to that destination and returns successfully. The destination API uses
+/// these modes to make that boundary deterministic in tests and in backend
+/// fault-injection checks. The `Vec` API intentionally has no copy-through
+/// destination and remains fail-closed on allocation errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LowpassAllocationMode {
+    Normal,
+    FailGaussianInitialization,
+    FailBilateralInitialization,
+}
+
+impl LowpassAllocationMode {
+    const fn fails_for(self, algorithm: LowpassAlgorithm) -> bool {
+        matches!(
+            (self, algorithm),
+            (Self::FailGaussianInitialization, LowpassAlgorithm::Gaussian)
+                | (
+                    Self::FailBilateralInitialization,
+                    LowpassAlgorithm::Bilateral
+                )
+        )
+    }
+}
+
 /// CPU capabilities are deliberately fail-closed. The native tiling formula is
 /// retained as `overlap_pixels`, but the pixelpipe tiling contract is unavailable
 /// until a shared owner supplies factors, buffers, and frame/tile publication.
@@ -797,14 +825,86 @@ impl LowpassPlan {
         self.execute_with_cancel(input, || false)
     }
 
+    /// Execute into a caller-owned destination, matching native copy-through
+    /// publication when a filter cannot be initialized.
+    pub fn execute_into(
+        &self,
+        input: &[[f32; 4]],
+        output: &mut [[f32; 4]],
+    ) -> Result<(), LowpassError> {
+        self.execute_into_with_cancel(input, output, || false)
+    }
+
+    /// Execute into a caller-owned destination without publishing partial
+    /// filter or curve results when cancellation or another error occurs.
+    pub fn execute_into_with_cancel<F: FnMut() -> bool>(
+        &self,
+        input: &[[f32; 4]],
+        output: &mut [[f32; 4]],
+        cancelled: F,
+    ) -> Result<(), LowpassError> {
+        self.execute_into_with_cancel_and_allocation_mode(
+            input,
+            output,
+            LowpassAllocationMode::Normal,
+            cancelled,
+        )
+    }
+
+    /// Execute into a caller-owned destination with a deterministic
+    /// filter-initialization failure seam.
+    ///
+    /// `FailGaussianInitialization` and `FailBilateralInitialization` model
+    /// native `dt_gaussian_init` and `dt_bilateral_init` returning null. In
+    /// either matching case the input is copied byte-for-byte to `output` and
+    /// the call succeeds. This seam is operation-local so tests do not need to
+    /// alter global allocation state.
+    pub fn execute_into_with_cancel_and_allocation_mode<F: FnMut() -> bool>(
+        &self,
+        input: &[[f32; 4]],
+        output: &mut [[f32; 4]],
+        allocation_mode: LowpassAllocationMode,
+        mut cancelled: F,
+    ) -> Result<(), LowpassError> {
+        let expected = pixel_count(self.dimensions)?;
+        if output.len() != expected {
+            return Err(LowpassError::DimensionsMismatch {
+                expected,
+                actual: output.len(),
+            });
+        }
+        self.validate_input(input, &mut cancelled)?;
+        match self.execute_validated(input, &mut cancelled, allocation_mode, true)? {
+            LowpassValidatedOutput::Filtered(filtered) => output.copy_from_slice(&filtered),
+            LowpassValidatedOutput::CopyThrough => output.copy_from_slice(input),
+        }
+        Ok(())
+    }
+
     /// Allocation failures are fail-closed: unlike native's caller-owned
-    /// copy-through fallback, this Vec API cannot publish into a supplied
-    /// destination. No partial result is returned on any error.
+    /// copy-through fallback, this `Vec` API has no destination to publish to.
+    /// No partial result is returned on any error. Use [`Self::execute_into`]
+    /// when the caller owns the destination buffer and needs native
+    /// copy-through and publication semantics.
     pub fn execute_with_cancel<F: FnMut() -> bool>(
         &self,
         input: &[[f32; 4]],
         mut cancelled: F,
     ) -> Result<Vec<[f32; 4]>, LowpassError> {
+        self.validate_input(input, &mut cancelled)?;
+        match self.execute_validated(input, &mut cancelled, LowpassAllocationMode::Normal, false)? {
+            LowpassValidatedOutput::Filtered(filtered) => Ok(filtered),
+            LowpassValidatedOutput::CopyThrough => {
+                unreachable!("Vec execution never enables native copy-through")
+            }
+        }
+    }
+
+    fn validate_input<F: FnMut() -> bool>(
+        &self,
+        input: &[[f32; 4]],
+        cancelled: &mut F,
+    ) -> Result<(), LowpassError> {
         let expected = pixel_count(self.dimensions)?;
         let width = dimension_width(self.dimensions)?;
         if input.len() != expected {
@@ -826,23 +926,58 @@ impl LowpassPlan {
         if cancelled() {
             return Err(LowpassError::Cancelled);
         }
+        Ok(())
+    }
+
+    fn execute_validated<F: FnMut() -> bool>(
+        &self,
+        input: &[[f32; 4]],
+        cancelled: &mut F,
+        allocation_mode: LowpassAllocationMode,
+        allow_copy_through: bool,
+    ) -> Result<LowpassValidatedOutput, LowpassError> {
+        let expected = pixel_count(self.dimensions)?;
+        let width = dimension_width(self.dimensions)?;
         let bounds = if self.config.unbound != 0 {
             (UNBOUND_MIN, UNBOUND_MAX)
         } else {
             (LAB_MIN, LAB_MAX)
         };
+        if allocation_mode.fails_for(self.config.algorithm) {
+            return Ok(LowpassValidatedOutput::CopyThrough);
+        }
         let filtered = match self.config.algorithm {
-            LowpassAlgorithm::Gaussian => gaussian_blur(
+            LowpassAlgorithm::Gaussian => match gaussian_blur(
                 input,
                 self.dimensions,
                 self.sigma,
                 bounds.0,
                 bounds.1,
                 self.config.order,
-                &mut cancelled,
-            )?,
+                cancelled,
+            ) {
+                Ok(filtered) => filtered,
+                Err(error)
+                    if allow_copy_through
+                        && matches!(error, LowpassError::AllocationFailed { .. }) =>
+                {
+                    return Ok(LowpassValidatedOutput::CopyThrough);
+                }
+                Err(error) => return Err(error),
+            },
             LowpassAlgorithm::Bilateral => {
-                bilateral_blur(input, self.dimensions, self.sigma, &mut cancelled)?
+                match bilateral_blur_with_copy_through(
+                    input,
+                    self.dimensions,
+                    self.sigma,
+                    cancelled,
+                    allow_copy_through,
+                )? {
+                    LowpassValidatedOutput::Filtered(filtered) => filtered,
+                    LowpassValidatedOutput::CopyThrough => {
+                        return Ok(LowpassValidatedOutput::CopyThrough);
+                    }
+                }
             }
         };
         let mut output = Vec::new();
@@ -862,8 +997,14 @@ impl LowpassPlan {
             }
             output.push(result);
         }
-        Ok(output)
+        Ok(LowpassValidatedOutput::Filtered(output))
     }
+}
+
+#[derive(Debug, PartialEq)]
+enum LowpassValidatedOutput {
+    Filtered(Vec<[f32; 4]>),
+    CopyThrough,
 }
 
 fn dimension_width(dimensions: RasterDimensions) -> Result<usize, LowpassError> {
@@ -899,16 +1040,30 @@ fn required_memory(
     )
 }
 
-fn bilateral_blur<F: FnMut() -> bool>(
+fn bilateral_blur_with_copy_through<F: FnMut() -> bool>(
     input: &[[f32; 4]],
     dimensions: RasterDimensions,
     sigma: f32,
     cancelled: &mut F,
-) -> Result<Vec<[f32; 4]>, LowpassError> {
+    allow_copy_through: bool,
+) -> Result<LowpassValidatedOutput, LowpassError> {
     let width = dimension_width(dimensions)?;
     let height = dimension_height(dimensions)?;
-    let mut grid = BilateralGrid::new(width, height, sigma, LOWPASS_BILATERAL_RANGE_SIGMA)
-        .map_err(LowpassError::Bilateral)?;
+    let mut grid = match BilateralGrid::new(width, height, sigma, LOWPASS_BILATERAL_RANGE_SIGMA)
+        .map_err(LowpassError::Bilateral)
+    {
+        Ok(grid) => grid,
+        Err(error)
+            if allow_copy_through
+                && matches!(
+                    error,
+                    LowpassError::Bilateral(BilateralError::AllocationFailed { .. })
+                ) =>
+        {
+            return Ok(LowpassValidatedOutput::CopyThrough);
+        }
+        Err(error) => return Err(error),
+    };
     // The operation-level validation above is row-cancellable before entering
     // the shared helper. Its second scalar-lightness check is finite and bounded
     // by the committed memory budget; all expensive grid passes poll by row.
@@ -916,8 +1071,10 @@ fn bilateral_blur<F: FnMut() -> bool>(
         .map_err(map_bilateral_error)?;
     grid.blur_with_cancel(cancelled)
         .map_err(map_bilateral_error)?;
-    grid.slice_with_cancel(input, LOWPASS_BILATERAL_DETAIL, cancelled)
-        .map_err(map_bilateral_error)
+    let filtered = grid
+        .slice_with_cancel(input, LOWPASS_BILATERAL_DETAIL, cancelled)
+        .map_err(map_bilateral_error)?;
+    Ok(LowpassValidatedOutput::Filtered(filtered))
 }
 fn map_bilateral_error(error: BilateralError) -> LowpassError {
     match error {

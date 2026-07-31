@@ -9,9 +9,9 @@ mod lowpass;
 
 use lowpass::{
     GaussianOrder, LOWPASS_LEGACY_PARAMETER_BYTES, LOWPASS_MIGRATION_EDGES, LowpassAlgorithm,
-    LowpassCapabilities, LowpassCodecError, LowpassConfig, LowpassError, LowpassHistory,
-    LowpassMigrationError, LowpassParametersV1, LowpassParametersV2, LowpassParametersV3,
-    LowpassParametersV4, LowpassPlan,
+    LowpassAllocationMode, LowpassCapabilities, LowpassCodecError, LowpassConfig, LowpassError,
+    LowpassHistory, LowpassMigrationError, LowpassParametersV1, LowpassParametersV2,
+    LowpassParametersV3, LowpassParametersV4, LowpassPlan,
 };
 use rusttable_processing::{RasterDimensions, operations::ReconstructionBudget};
 
@@ -488,9 +488,64 @@ fn bilateral_geometry_and_plan_memory_use_are_source_shaped() {
 }
 
 #[test]
-fn cancellation_polls_validation_and_filter_rows_without_publishing() {
-    let input = vec![[50.0, 0.0, 0.0, 1.0]; 100 * 100];
-    let gaussian_plan = plan(
+fn filter_initialization_failure_copies_caller_owned_destination_through() {
+    let input = [[37.0, -9.0, 12.0, 0.25]];
+    for (algorithm, failure_mode) in [
+        (
+            LowpassAlgorithm::Gaussian,
+            LowpassAllocationMode::FailGaussianInitialization,
+        ),
+        (
+            LowpassAlgorithm::Bilateral,
+            LowpassAllocationMode::FailBilateralInitialization,
+        ),
+    ] {
+        let filter_plan = plan(
+            config(GaussianOrder::Zero, algorithm, 2.0, 1.0, 0.0, 1.0, 0),
+            1,
+            1,
+        );
+        let mut output = [[-100.0, 80.0, -60.0, 0.0]];
+        filter_plan
+            .execute_into_with_cancel_and_allocation_mode(&input, &mut output, failure_mode, || {
+                false
+            })
+            .expect("native initialization failure copies through");
+        assert_eq!(output[0][0].to_bits(), input[0][0].to_bits());
+        assert_eq!(output[0][1].to_bits(), input[0][1].to_bits());
+        assert_eq!(output[0][2].to_bits(), input[0][2].to_bits());
+        assert_eq!(output[0][3].to_bits(), input[0][3].to_bits());
+    }
+}
+
+fn assert_cancelled_without_destination_publication(
+    filter_plan: &LowpassPlan,
+    input: &[[f32; 4]],
+    cancel_after: usize,
+) -> usize {
+    let sentinel = [91.0, -82.0, 73.0, -64.0];
+    let mut output = vec![sentinel; input.len()];
+    let mut polls = 0;
+    assert_eq!(
+        filter_plan
+            .execute_into_with_cancel(input, &mut output, || {
+                polls += 1;
+                polls > cancel_after
+            })
+            .expect_err("filter cancellation"),
+        LowpassError::Cancelled
+    );
+    assert!(
+        output.iter().all(|sample| sample == &sentinel),
+        "cancellation must not publish a partial destination"
+    );
+    polls
+}
+
+#[test]
+fn cancellation_enters_gaussian_recursion_before_destination_publication() {
+    let input = vec![[50.0, 0.0, 0.0, 1.0]; 8 * 8];
+    let filter_plan = plan(
         config(
             GaussianOrder::Zero,
             LowpassAlgorithm::Gaussian,
@@ -500,25 +555,20 @@ fn cancellation_polls_validation_and_filter_rows_without_publishing() {
             1.0,
             0,
         ),
-        100,
-        100,
+        8,
+        8,
     );
-    let mut polls = 0;
-    assert_eq!(
-        gaussian_plan
-            .execute_with_cancel(&input, || {
-                polls += 1;
-                polls > 2
-            })
-            .expect_err("cancelled"),
-        LowpassError::Cancelled
-    );
+    let polls = assert_cancelled_without_destination_publication(&filter_plan, &input, 10);
     assert!(
-        polls <= 4,
-        "validation should not scan forever before polling: {polls}"
+        polls >= 11,
+        "validation must finish before Gaussian recursion"
     );
+}
 
-    let bilateral = plan(
+#[test]
+fn cancellation_enters_each_bilateral_stage_before_destination_publication() {
+    let input = vec![[50.0, 0.0, 0.0, 1.0]; 4 * 4];
+    let filter_plan = plan(
         config(
             GaussianOrder::Zero,
             LowpassAlgorithm::Bilateral,
@@ -528,18 +578,25 @@ fn cancellation_polls_validation_and_filter_rows_without_publishing() {
             1.0,
             0,
         ),
-        100,
-        100,
+        4,
+        4,
     );
-    let mut bilateral_polls = 0;
-    assert_eq!(
-        bilateral
-            .execute_with_cancel(&input, || {
-                bilateral_polls += 1;
-                bilateral_polls > 3
-            })
-            .expect_err("bilateral cancelled"),
-        LowpassError::Cancelled
+    let splat_polls = assert_cancelled_without_destination_publication(&filter_plan, &input, 6);
+    assert!(
+        splat_polls >= 7,
+        "cancellation must enter bilateral splatting"
+    );
+    let blur_polls = assert_cancelled_without_destination_publication(&filter_plan, &input, 10);
+    assert!(blur_polls >= 11, "cancellation must enter bilateral blur");
+    let slice_polls = assert_cancelled_without_destination_publication(&filter_plan, &input, 86);
+    assert!(
+        slice_polls >= 87,
+        "cancellation must enter bilateral slicing"
+    );
+    let curve_polls = assert_cancelled_without_destination_publication(&filter_plan, &input, 90);
+    assert!(
+        curve_polls >= 91,
+        "cancellation must enter lowpass curve mixing"
     );
 }
 

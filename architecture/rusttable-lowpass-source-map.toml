@@ -48,7 +48,7 @@ upstream_path = "src/iop/lowpass.c"
 upstream_symbols = ["process", "dt_gaussian_init", "dt_bilateral_init"]
 rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
 status = "implemented"
-notes = "Cancellation polls during validation and every filter row. Rust Vec execution is fail-closed on allocation failure rather than publishing native caller-owned copy-through output; this divergence is documented in the API."
+notes = "The caller-owned destination API copies the input ROI through when the operation-local Gaussian/bilateral initialization seam reports failure, matching native process behavior, and never publishes partial output on cancellation. The Vec API remains fail-closed because it has no caller-owned destination."
 
 [[responsibility]]
 id = "tiling-contract"
