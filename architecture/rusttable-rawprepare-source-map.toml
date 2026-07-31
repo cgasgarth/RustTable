@@ -1,0 +1,86 @@
+schema = "rusttable.rawprepare-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "rawprepare"
+rust_id = "rusttable.rawprepare"
+production_registration = "deferred until raw import metadata, history, pixelpipe, GPU, and UI seams are complete"
+
+[[responsibility]]
+id = "native-parameter-abi"
+upstream_path = "src/iop/rawprepare.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(2)", "dt_iop_rawprepare_params_t", "dt_iop_rawprepare_params_v1_t"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/codec.rs"
+status = "replaced"
+notes = "The source declarations are decoded little-endian at native offsets 0..32; v1 is 28 bytes including the white point at offset 24 and natural padding, while v2 is 32 bytes. History slots retain the repository manifest's 296-byte v1 and 40-byte v2 sizes; opaque tails are preserved and never interpreted."
+
+[[responsibility]]
+id = "legacy-migration"
+upstream_path = "src/iop/rawprepare.c"
+upstream_symbols = ["legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/codec.rs"
+status = "replaced"
+notes = "v1 copies only the native declaration into v2 and forces FLAT_FIELD_OFF; unknown versions remain opaque and non-executable."
+
+[[responsibility]]
+id = "raw-metadata-gating"
+upstream_path = "src/common/image.h; src/common/image.c; src/imageio/imageio_rawspeed.cc"
+upstream_symbols = ["DT_IMAGE_RAW", "DT_IMAGE_S_RAW", "DT_IMAGE_HDR", "dt_image_is_rawprepare_supported", "_image_is_normalized"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "bounded-leaf"
+notes = "The leaf consumes already-decoded dimensions, flags, sample layout, CFA, crop, levels, and optional gain maps. RAW Bayer/X-Trans is a 1-channel mosaic and SRAW is a 4-channel float buffer; the mutually exclusive flag/layout branches are validated and impossible RAW|SRAW combinations fail closed. Missing raw flags, normalized float inputs, and unknown layouts fail closed; no decoder or camera table is invented."
+
+[[responsibility]]
+id = "crop-and-level-commit"
+upstream_path = "src/iop/rawprepare.c"
+upstream_symbols = ["_image_set_rawcrops", "commit_params", "output_format"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "bounded-leaf"
+notes = "Crop validity retains the native nonnegative and less-than-half-dimension rule. Bayer uses separate four-filter black levels; four-channel input uses the native HDR/UINT16_MAX normalizer and publishes the rounded average black level plus white point."
+
+[[responsibility]]
+id = "bayer-xtrans-cfa"
+upstream_path = "src/iop/rawprepare.c; src/imageio/imageio_rawspeed.cc"
+upstream_symbols = ["_BL", "_adjust_xtrans_filters", "dt_rawspeed_crop_dcraw_filters"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "bounded-leaf"
+notes = "The operation preserves the four-filter parity index, exposes cropped Bayer phase, and rotates the six-by-six X-Trans table by the source crop. Numeric dcraw filter encoding is kept at the metadata boundary rather than reconstructed from an unavailable RawSpeed helper."
+
+[[responsibility]]
+id = "cpu-raster"
+upstream_path = "src/iop/rawprepare.c"
+upstream_symbols = ["process"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "replaced"
+notes = "u16 and unnormalized f32 single-plane branches, plus the pre-downsampled four-channel f32 branch, retain source row-major indexing, unclipped residuals, per-filter/per-channel normalization, and checked output publication."
+
+[[responsibility]]
+id = "gainmaps"
+upstream_path = "src/iop/rawprepare.c; src/common/dng_opcode.h"
+upstream_symbols = ["_check_gain_maps", "dt_dng_gain_map_t", "rawprepare_1f_gainmap"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "bounded-leaf"
+notes = "Only four full-image, one-plane, two-pixel CFA-spaced maps with a common finite interpolation grid are accepted. They are applied to Bayer single-plane CPU execution using the exact scaled full piece input dimensions, not a local tile's dimensions; malformed or non-Bayer gain maps are not guessed into use."
+
+[[responsibility]]
+id = "tiling-memory-cancellation"
+upstream_path = "src/iop/rawprepare.c; src/develop/tiling.h"
+upstream_symbols = ["IOP_FLAGS_ALLOW_TILING", "IOP_FLAGS_TILING_FULL_ROI", "modify_roi_in", "modify_roi_out"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "bounded-leaf"
+notes = "Zero-overlap, one-alignment, 1.0 input/output/temporary multipliers match the pointwise native process. The Rust executor checks output allocation against a caller budget, polls at row boundaries, and never publishes partial output."
+
+[[responsibility]]
+id = "alpha-and-detail-mask"
+upstream_path = "src/iop/rawprepare.c; data/kernels/basic.cl"
+upstream_symbols = ["process", "rawprepare_4f", "dt_dev_write_scharr_mask"]
+rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
+status = "bounded-leaf"
+notes = "Native CPU four-channel processing normalizes all four lanes; the retained OpenCL kernel preserves .w, so GPU alpha behavior is recorded as deferred rather than falsely unified. Detail-mask Scharr publication remains a shared pixelpipe dependency."
+
+[[responsibility]]
+id = "shared-integration"
+upstream_path = "src/iop/rawprepare.c"
+upstream_symbols = ["name", "flags", "process", "commit_params", "gui_init", "init_presets"]
+rust_path = "crates/rusttable-processing/src/{operations/mod.rs,registry,raw_pipeline.rs}"
+status = "deferred"
+notes = "This milestone does not edit operation registries, pixelpipe/import/image hubs, history materialization, GPU shaders, or GTK. CPU capability is leaf-local only. The operation-local descriptor exposes the truthful RAW 1->1 branch; SRAW 4->4 remains a deferred preparation-union seam because the shared ImagePredicate cannot encode a disjunction."

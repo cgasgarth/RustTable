@@ -604,7 +604,7 @@ impl WasmtimeHost {
 
     fn cache_key(&self, package: &ExtensionPackage) -> CacheKey {
         CacheKey {
-            wasmtime: "46.0.1".to_owned(),
+            wasmtime: "46.0.2".to_owned(),
             target: self.config.target.clone(),
             engine_config: digest(
                 b"async|component-model|component-model-async|fuel|epoch|no-backtrace",
