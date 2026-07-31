@@ -1,0 +1,11 @@
+source=src/iop/toneequal.c
+version=2
+payload_bytes=72
+legacy_v1_bytes=64
+exposure_channels=[noise,ultra_deep_blacks,deep_blacks,blacks,shadows,midtones,highlights,whites,speculars]
+centers_params=[-8,-7,-6,-5,-4,-3,-2,-1,0]
+centers_ops=[-8,-48/7,-40/7,-32/7,-24/7,-16/7,-8/7,0]
+lut_entries=80001
+working_colorspace=RGB_scene_linear
+corrected_output_alpha=scale_all_four_lanes
+mask_display_output_alpha=preserve_input

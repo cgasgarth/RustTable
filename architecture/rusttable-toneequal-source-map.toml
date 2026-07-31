@@ -1,0 +1,91 @@
+schema = "rusttable.toneequal-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-migration"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_toneequalizer_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/{parameters.rs,codec.rs}"
+status = "implemented"
+notes = "Current v2 is the declaration-order 72-byte payload: 15 f32 values followed by details, method, and iterations as four-byte C integers. Native v1 is 64 bytes and migrates directly to v2 with smoothing=sqrt(2) and quantization=0; the old method/iterations order is adapted exactly."
+
+[[responsibility]]
+id = "tone-curve-equations"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["gaussian_denom", "gaussian_func", "build_interpolation_matrix", "pseudo_solve", "compute_correction_lut", "apply_toneequalizer"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/math.rs"
+status = "implemented"
+notes = "Preserves [-8,0] EV centers, eight radial Gaussian basis functions for nine user channels, A' A Cholesky least-squares, correction clamp [0.25,4], 10000-sample-per-EV LUT, log2 clamp, and round-to-index lookup."
+
+[[responsibility]]
+id = "luminance-estimators"
+upstream_path = "src/common/luminance_mask.h"
+upstream_symbols = ["pixel_rgb_mean", "pixel_rgb_lightness", "pixel_rgb_value", "pixel_rgb_norm_1", "pixel_rgb_norm_2", "pixel_rgb_norm_power", "pixel_rgb_geomean", "luminance_mask"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/execution.rs"
+status = "implemented"
+notes = "Uses the native RGB mean, HSL lightness, RGB max, L1, Euclidean, cubic-over-square power norm, and absolute geometric mean. Exposure and contrast are applied in scene-linear RGB; no profile or camera-RGB-to-XYZ transform is performed by tone equalizer."
+
+[[responsibility]]
+id = "guided-filter-detail-modes"
+upstream_path = "src/common/fast_guided_filter.h"
+upstream_symbols = ["interpolate_bilinear", "variance_analyse", "quantize", "fast_surface_blur"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/filters.rs"
+status = "implemented"
+notes = "Owns the source sampling coordinates, truncated box-window boundaries, quantization in log2 space, radius/4 downsample scale, a/b variance model, intermediate linear diffusion, geomean option, and full-resolution publication. The existing generic Rust blur is intentionally not used."
+
+[[responsibility]]
+id = "exposure-independent-guided-filter"
+upstream_path = "src/common/eigf.h"
+upstream_symbols = ["eigf_variance_analysis", "eigf_variance_analysis_no_mask", "eigf_blending", "eigf_blending_no_mask", "fast_eigf_surface_blur"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/filters.rs"
+status = "implemented"
+notes = "Preserves sigma clamp [1,4] for downsampling, ds_sigma, recursive Gaussian statistics, normalized variance/covariance, no-mask specialization, quantized mask path, final linear/geomean blend, and iteration ordering."
+
+[[responsibility]]
+id = "recursive-gaussian-helper"
+upstream_path = "src/common/gaussian.c"
+upstream_symbols = ["_compute_gauss_params", "dt_gaussian_init", "dt_gaussian_blur"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/filters.rs"
+status = "implemented"
+notes = "Implements order-zero coefficients, clamped vertical forward/backward pass followed by clamped horizontal forward/backward pass for two- and four-channel EIGF statistics. OpenCL paths remain unavailable."
+
+[[responsibility]]
+id = "allocation-cancellation-publication"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["toneeq_process", "compute_luminance_mask", "dt_alloc_align_float", "dt_free_align"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/{filters.rs,execution.rs}"
+status = "implemented"
+notes = "Fallible temporary Vec reservations and a caller-provided cancellation poll keep all intermediate state private; no partial output is returned. Safe Rust copies through with an input_format_problem flag when the native four-channel precondition is unavailable."
+
+[[responsibility]]
+id = "alpha-and-mask-output"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["apply_toneequalizer", "display_luminance_mask"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/execution.rs"
+status = "implemented"
+notes = "Corrected output follows native for_each_channel behavior and scales all four RGBA lanes, including non-unit alpha. Mask-display output uses sqrt(clamp((mask-2^-8)/(1-2^-8),0,1)) and explicitly preserves the input alpha, matching native display_luminance_mask."
+
+[[responsibility]]
+id = "roi-radius-and-tiling"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["modify_roi_in", "dt_iop_roi_t"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/execution.rs"
+status = "deferred"
+notes = "Native modify_roi_in derives radius from p.blending/100, max(iwidth,iheight), and roi scale but exposes no tone-equalizer tiling callback. The bounded leaf records the exact radius and rejects independent tiles, because EIGF recursive Gaussian state is not reproducible from a finite halo. Pixelpipe ROI padding/overlap ownership remains deferred."
+
+[[responsibility]]
+id = "color-space-profile-and-alpha-contract"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["default_colorspace", "description", "process"]
+rust_path = "crates/rusttable-processing/src/operations/toneequal/execution.rs"
+status = "implemented"
+notes = "The native module declares IOP_CS_RGB and linear RGB scene-referred behavior, consumes no profile matrices, and has no color conversion helper. GPU, GTK, masks/blending integration, and production routing are explicitly unavailable rather than approximated."
+
+[[responsibility]]
+id = "operation-integration"
+upstream_path = "src/iop/toneequal.c"
+upstream_symbols = ["flags", "init_presets", "gui_init", "process_cl", "gui_cleanup"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs"
+status = "deferred"
+notes = "Registry, descriptor/history hubs, pixelpipe dispatch, GPU/OpenCL, outer masks/blending, presets, UI, cache ownership, and retained native deletion are outside this leaf's writable paths."
