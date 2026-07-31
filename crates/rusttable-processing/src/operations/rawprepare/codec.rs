@@ -1,11 +1,12 @@
 //! Exact parameter bytes and the one retained `rawprepare.c` migration.
 //!
 //! Direct source lineage: `src/iop/rawprepare.c:38-55` and
-//! `src/iop/rawprepare.c:121-163`.  The C declarations have a 24-byte v1
-//! native struct and a 32-byte v2 native struct on the supported ABIs.  The
-//! repository's operation manifest carries those payloads in 296-byte and
-//! 40-byte history slots respectively; the slot tails are retained verbatim
-//! and are never interpreted as camera data.
+//! `src/iop/rawprepare.c:121-163`.  The C declarations have a 28-byte v1
+//! native struct (including the white point at offset 24 and natural padding)
+//! and a 32-byte v2 native struct on the supported ABIs.  The repository's
+//! operation manifest carries those payloads in 296-byte and 40-byte history
+//! slots respectively; the slot tails are retained verbatim and are never
+//! interpreted as camera data.
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -18,7 +19,7 @@ use std::fmt;
 
 pub const RAWPREPARE_COMPATIBILITY_ID: &str = "rawprepare";
 pub const RAWPREPARE_INTROSPECTION_VERSION: u16 = 2;
-pub const RAWPREPARE_NATIVE_V1_PARAMETER_BYTES: usize = 24;
+pub const RAWPREPARE_NATIVE_V1_PARAMETER_BYTES: usize = 28;
 pub const RAWPREPARE_NATIVE_V2_PARAMETER_BYTES: usize = 32;
 pub const RAWPREPARE_HISTORY_V1_PARAMETER_BYTES: usize = 296;
 pub const RAWPREPARE_HISTORY_V2_PARAMETER_BYTES: usize = 40;

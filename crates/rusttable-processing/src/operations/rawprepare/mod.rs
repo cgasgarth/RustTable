@@ -127,10 +127,7 @@ pub fn rawprepare_descriptor() -> OperationDescriptor {
         capability: CapabilityContract {
             cpu_supported: true,
             gpu_tier: None,
-            required_features: vec![
-                "raw-image-metadata".to_owned(),
-                "bayer-or-xtrans-cfa".to_owned(),
-            ],
+            required_features: vec!["raw-image-metadata".to_owned()],
             required_formats: vec![
                 "raw-u16x1".to_owned(),
                 "raw-f32x1".to_owned(),
@@ -144,13 +141,13 @@ pub fn rawprepare_descriptor() -> OperationDescriptor {
         },
         io: InputOutputContract {
             input: ImagePredicate {
-                channels: 1,
+                channels: 4,
                 alpha: AlphaPolicy::Ignore,
                 encodings: vec![ColorEncoding::Unspecified],
                 nonfinite: NonFinitePolicy::Reject,
             },
             output: ImagePredicate {
-                channels: 1,
+                channels: 4,
                 alpha: AlphaPolicy::Ignore,
                 encodings: vec![ColorEncoding::Unspecified],
                 nonfinite: NonFinitePolicy::Reject,

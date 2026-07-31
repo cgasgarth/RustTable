@@ -17,6 +17,7 @@ use rawprepare::codec::{
     RAWPREPARE_HISTORY_V1_PARAMETER_BYTES, RAWPREPARE_HISTORY_V2_PARAMETER_BYTES,
     RAWPREPARE_NATIVE_V1_PARAMETER_BYTES, RAWPREPARE_NATIVE_V2_PARAMETER_BYTES,
     RawPrepareFlatField, RawPrepareHistory, RawPrepareParametersV1, RawPrepareParametersV2,
+    migrate_native_v1_to_v2,
 };
 use rawprepare::execution::{
     DT_IMAGE_HDR, DT_IMAGE_RAW, DT_IMAGE_S_RAW, RawPrepareCfa, RawPrepareCrop, RawPrepareError,
@@ -28,6 +29,7 @@ use rusttable_processing::RasterDimensions;
 
 fn fixture(name: &str) -> Vec<u8> {
     let source = match name {
+        "v1" => include_str!("fixtures/rawprepare/v1.hex"),
         "v2" => include_str!("fixtures/rawprepare/v2.hex"),
         _ => panic!("unknown rawprepare fixture"),
     };
@@ -70,7 +72,7 @@ fn bayer_metadata(
 
 #[test]
 fn native_and_history_abi_sizes_are_distinct_and_v2_tail_round_trips() {
-    assert_eq!(RAWPREPARE_NATIVE_V1_PARAMETER_BYTES, 24);
+    assert_eq!(RAWPREPARE_NATIVE_V1_PARAMETER_BYTES, 28);
     assert_eq!(RAWPREPARE_NATIVE_V2_PARAMETER_BYTES, 32);
     assert_eq!(RAWPREPARE_HISTORY_V1_PARAMETER_BYTES, 296);
     assert_eq!(RAWPREPARE_HISTORY_V2_PARAMETER_BYTES, 40);
@@ -93,16 +95,23 @@ fn native_and_history_abi_sizes_are_distinct_and_v2_tail_round_trips() {
 
 #[test]
 fn v1_migration_copies_native_fields_and_forces_flat_field_off() {
+    let native_bytes: [u8; RAWPREPARE_NATIVE_V1_PARAMETER_BYTES] =
+        fixture("v1").try_into().expect("native v1 fixture size");
+    let native = RawPrepareParametersV1::from_native_bytes(&native_bytes).expect("native v1");
+    assert!(RawPrepareParametersV1::from_bytes(&native_bytes[..24]).is_err());
+    assert_eq!(native.raw_white_point(), 777);
+    assert_eq!(native.to_native_bytes(), native_bytes);
+
+    let migrated_native = migrate_native_v1_to_v2(&native_bytes).expect("native migration");
+    let migrated_native =
+        RawPrepareParametersV2::from_native_bytes(&migrated_native).expect("native v2");
+    assert_eq!(migrated_native.left(), -5);
+    assert_eq!(migrated_native.raw_black_level_separate(), [11, 22, 33, 44]);
+    assert_eq!(migrated_native.raw_white_point(), 777);
+    assert_eq!(migrated_native.flat_field(), RawPrepareFlatField::Off);
+
     let mut v1_bytes = vec![0_u8; RAWPREPARE_HISTORY_V1_PARAMETER_BYTES];
-    v1_bytes[0..4].copy_from_slice(&(-5_i32).to_le_bytes());
-    v1_bytes[4..8].copy_from_slice(&2_i32.to_le_bytes());
-    v1_bytes[8..12].copy_from_slice(&3_i32.to_le_bytes());
-    v1_bytes[12..16].copy_from_slice(&4_i32.to_le_bytes());
-    for (index, value) in [11_u16, 22, 33, 44].into_iter().enumerate() {
-        let offset = 16 + index * 2;
-        v1_bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
-    }
-    v1_bytes[24..26].copy_from_slice(&777_u16.to_le_bytes());
+    v1_bytes[..native_bytes.len()].copy_from_slice(&native_bytes);
     v1_bytes[280..].fill(0xa5);
     let history = RawPrepareHistory::decode(1, &v1_bytes).expect("v1 history");
     let migrated = history.migrate_to_v2().expect("migration");
@@ -207,6 +216,29 @@ fn four_channel_cpu_path_normalizes_fourth_lane_in_source_order() {
 }
 
 #[test]
+fn four_channel_hdr_normalized_inputs_fail_closed_before_cpu_normalization() {
+    let dimensions = RasterDimensions::new(2, 2).expect("dimensions");
+    let crop = RawPrepareCrop::new(0, 0, 0, 0);
+    let parameters = params(crop, [0; 4], 1000);
+    for raw_white_point in [1, 0x3F80_0000] {
+        let metadata = RawPrepareImageMetadata::new(
+            dimensions,
+            DT_IMAGE_S_RAW | DT_IMAGE_HDR,
+            RawPrepareSampleFormat::F32,
+            4,
+            RawPrepareCfa::None,
+            crop,
+            [0; 4],
+            raw_white_point,
+        );
+        assert!(matches!(
+            RawPreparePlan::new(&metadata, &parameters),
+            Err(RawPrepareError::AlreadyNormalized)
+        ));
+    }
+}
+
+#[test]
 fn valid_bayer_gain_maps_apply_bilinear_gain_and_malformed_maps_fail_closed() {
     let dimensions = RasterDimensions::new(4, 4).expect("dimensions");
     let maps = (0..4)
@@ -256,6 +288,56 @@ fn valid_bayer_gain_maps_apply_bilinear_gain_and_malformed_maps_fail_closed() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn gain_map_coordinates_use_scaled_tile_dimensions() {
+    let plan_dimensions = RasterDimensions::new(8, 8).expect("plan dimensions");
+    let maps = (0..4)
+        .map(|filter| {
+            RawPrepareGainMap::new(
+                (filter >> 1) as u32,
+                (filter & 1) as u32,
+                8,
+                8,
+                2,
+                2,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                vec![1.0, 3.0, 1.0, 3.0],
+            )
+        })
+        .collect::<Vec<_>>();
+    let crop = RawPrepareCrop::new(0, 0, 0, 0);
+    let metadata = bayer_metadata(
+        plan_dimensions,
+        DT_IMAGE_RAW,
+        RawPrepareSampleFormat::U16,
+        1,
+        crop,
+    )
+    .with_gain_maps(maps);
+    let parameters =
+        RawPrepareParametersV2::new(0, 0, 0, 0, [0; 4], 1000, RawPrepareFlatField::Embedded);
+    let plan = RawPreparePlan::new(&metadata, &parameters).expect("gain-map plan");
+    let tile = rawprepare::RawPrepareTile::new(
+        RasterDimensions::new(4, 4).expect("scaled input"),
+        0,
+        0,
+        RasterDimensions::new(4, 4).expect("scaled output"),
+        1.0,
+        1.0,
+        crop,
+    )
+    .expect("scaled tile");
+    let output = plan
+        .execute_u16(&[1000; 16], tile, || false)
+        .expect("execute");
+    // x=3 maps to 0.75 on the current 4-pixel input tile, not 0.375 on
+    // the unscaled 8-pixel plan dimensions.
+    assert!((output[3] - 2.5).abs() < 1e-6);
 }
 
 #[test]
@@ -329,6 +411,19 @@ fn descriptor_and_capabilities_do_not_overclaim_integration() {
     let descriptor = rawprepare_descriptor();
     descriptor.validate().expect("descriptor");
     assert_eq!(descriptor.id.rust_id, RAWPREPARE_RUST_ID);
+    assert_eq!(descriptor.io.input.channels, 4);
+    assert_eq!(descriptor.io.output.channels, 4);
+    assert_eq!(
+        descriptor.capability.required_features,
+        vec!["raw-image-metadata".to_owned()]
+    );
+    assert!(
+        descriptor
+            .capability
+            .required_formats
+            .iter()
+            .any(|format| format == "sraw-f32x4")
+    );
     let capabilities = capabilities();
     assert!(capabilities.cpu);
     assert!(!capabilities.gpu);

@@ -876,7 +876,7 @@ impl RawPreparePlan {
                 let filter = black_level_index(&self.crop, tile, x, y);
                 let mut value = (value - self.sub[filter]) / self.div[filter];
                 if let Some(gain_maps) = &self.gain_maps {
-                    value *= gain_map_gain(gain_maps, tile, x, y, self.dimensions, filter)?;
+                    value *= gain_map_gain(gain_maps, tile, x, y, filter)?;
                 }
                 if !value.is_finite() {
                     return Err(RawPrepareError::NonFiniteOutput { index: out_index });
@@ -1038,6 +1038,11 @@ fn classify_input(
         && metadata.sample_format == RawPrepareSampleFormat::F32
         && metadata.cfa == RawPrepareCfa::None
     {
+        if metadata.flags & DT_IMAGE_HDR == DT_IMAGE_HDR
+            && (metadata.raw_white_point == 1 || metadata.raw_white_point == 0x3F80_0000)
+        {
+            return Err(RawPrepareError::AlreadyNormalized);
+        }
         return Ok(RawPrepareInputKind::FourChannelF32);
     }
     Err(if metadata.cfa.is_mosaic() {
@@ -1115,7 +1120,6 @@ fn gain_map_gain(
     tile: RawPrepareTile,
     x: u32,
     y: u32,
-    dimensions: RasterDimensions,
     filter: usize,
 ) -> Result<f32, RawPrepareError> {
     let map = maps
@@ -1124,8 +1128,8 @@ fn gain_map_gain(
         .ok_or(RawPrepareError::UnsupportedGainMaps)?;
     let map_width = map.map_points_h;
     let map_height = map.map_points_v;
-    let image_to_rel_x = 1.0 / f64::from(dimensions.width());
-    let image_to_rel_y = 1.0 / f64::from(dimensions.height());
+    let image_to_rel_x = 1.0 / f64::from(tile.input.width());
+    let image_to_rel_y = 1.0 / f64::from(tile.input.height());
     let rel_to_map_x = 1.0 / map.map_spacing_h;
     let rel_to_map_y = 1.0 / map.map_spacing_v;
     let map_x = (((f64::from(tile.output_x + tile.crop_x + x) * image_to_rel_x)

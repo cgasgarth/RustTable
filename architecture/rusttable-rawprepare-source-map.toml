@@ -11,7 +11,7 @@ upstream_path = "src/iop/rawprepare.c"
 upstream_symbols = ["DT_MODULE_INTROSPECTION(2)", "dt_iop_rawprepare_params_t", "dt_iop_rawprepare_params_v1_t"]
 rust_path = "crates/rusttable-processing/src/operations/rawprepare/codec.rs"
 status = "replaced"
-notes = "The source declarations are decoded little-endian at native offsets 0..32. History slots retain the repository manifest's 296-byte v1 and 40-byte v2 sizes; opaque tails are preserved and never interpreted."
+notes = "The source declarations are decoded little-endian at native offsets 0..32; v1 is 28 bytes including the white point at offset 24 and natural padding, while v2 is 32 bytes. History slots retain the repository manifest's 296-byte v1 and 40-byte v2 sizes; opaque tails are preserved and never interpreted."
 
 [[responsibility]]
 id = "legacy-migration"
