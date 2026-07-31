@@ -67,6 +67,16 @@ cargo xtask check --parallel
 
 Use `cargo xtask <command> --help` before invoking unfamiliar contract, fixture, shader, reference, or distribution subcommands. Let Cargo choose host parallelism.
 
+## Worktree and build-artifact hygiene
+
+- Cargo `target/` directories are disposable build artifacts, not migration evidence. Never preserve them merely because a source worktree is being parked.
+- After a worker or workflow reports completion, verify that no live `claude`, `cargo`, `rustc`, `clippy`, `rust-analyzer`, test, or hook process references the worktree. Then remove only that inactive worktree's `target/` directory before parking it.
+- Never remove, move, or clean a `.claude/worktrees/wf_*` directory while it is locked, listed as active, or referenced by a live process. Wait for the workflow completion notification and preserve dirty source worktrees until their changes are reviewed or explicitly discarded.
+- Do not run `cargo clean` or remove `target/` in the canonical checkout or any active worker worktree. Rebuilding is acceptable only after a worktree is confirmed inactive.
+- Park source-bearing candidates and their branches when they may be needed for review or restacking, but do not automatically delete those worktrees or branches. Clean their build artifacts instead.
+- Use `git worktree list --porcelain` and a process-path check before cleanup; use `git worktree prune --dry-run` before pruning stale administrative metadata. Pruning must never be used to discard a live or source-bearing worktree.
+- Treat Rust Analyzer diagnostics that reference an actively rebuilding worker target as potentially stale until that target finishes; do not delete or rebuild that target during the active workflow.
+
 ## Runtime architecture
 
 The main dependency flow is:
@@ -103,9 +113,7 @@ Use workflows to maintain a rolling stream of dependency-ready migration work wh
 - Parallelize non-overlapping leaf modules, focused tests/contracts, GPU work, UI/editor work, app/persistence, catalog/import, render/export, pixelpipe infrastructure, and compiler-diagnostic repair batches wherever dependencies permit; do not impose an artificial worktree cap when ownership and host capacity allow more workers.
 - Keep implementation and adversarial verification context-independent: reviewers inspect source evidence and the actual worktree/diff, try to refute behavioral equivalence, and do not inherit the implementer's rationale as fact.
 - Treat compiler diagnostics as a refreshed integration work queue. The orchestrator captures a fresh focused diagnostic snapshot in the canonical checkout, partitions errors by exclusive crate/file ownership, dispatches one worker per non-overlapping queue item subject only to available worker capacity, and refreshes diagnostics after each mutation batch before assigning the next queue. Never assign agents from stale diagnostics.
-- Use Luna at medium effort for source research and independent constant/format/order verification.
-- Use Luna at xhigh effort for well-scoped, mechanical implementations and focused tests.
-- Use Luna at medium effort for targeted adversarial review passes. Review only the changed responsibility and explicit acceptance boundaries; return concise findings rather than broad audits or review panels.
+- Use Luna at max effort for workflow source research, independent constant/format/order verification, well-scoped implementations, focused tests, and targeted adversarial review passes. Reviewers should stay within the changed responsibility and explicit acceptance boundaries and return concise findings rather than broad audits or review panels.
 - Use Sol at high effort for cross-crate problem solving, shared pixelpipe/GPU/state integration, and GTK UI work.
 - Assign one writer at a time to exhaustive-match and integration hubs in the canonical checkout. Every worker worktree must have exclusive writable paths; inspect each worktree diff before integrating and reject overlapping ownership.
 - Worker commands have a hard two-minute budget. Workers may run only focused checks expected to finish inside it, must stop commands that cross it, and must report remaining validation to the orchestrator instead of blocking dependent stages.
