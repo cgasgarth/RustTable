@@ -1,0 +1,74 @@
+schema = "rusttable.sigmoid-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-migrations"
+upstream_path = "src/iop/sigmoid.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_sigmoid_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/mod.rs"
+status = "implemented"
+notes = "Native v1 and v2 copy directly into zero-initialized v3 fields; future versions remain opaque."
+
+[[responsibility]]
+id = "scene-display-transfer-commit"
+upstream_path = "src/iop/sigmoid.c; src/common/math.h"
+upstream_symbols = ["_generalized_loglogistic_sigmoid", "commit_params", "dt_isnan"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/mod.rs"
+status = "implemented"
+notes = "Preserves the stable log-logistic equation, slope calibration, display targets, contrast skewness, and native f32 operation order."
+
+[[responsibility]]
+id = "rgb-ratio-cpu"
+upstream_path = "src/iop/sigmoid.c"
+upstream_symbols = ["_desaturate_negative_values", "_pixel_channel_order", "process_loglogistic_rgb_ratio"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "per-channel-hue-cpu"
+upstream_path = "src/iop/sigmoid.c"
+upstream_symbols = ["_preserve_hue_and_energy", "process_loglogistic_per_channel"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/mod.rs"
+status = "implemented"
+notes = "Purity, inset, rotation, and hue-preservation behavior remain source-shaped; sigmoid has no separate generic gamma or offset parameters."
+
+[[responsibility]]
+id = "profile-and-custom-primaries"
+upstream_path = "src/iop/sigmoid.c; src/common/custom_primaries.c; src/common/colorspaces.c; src/common/matrices.c; src/common/dttypes.h"
+upstream_symbols = ["_calculate_adjusted_primaries", "dt_rotate_and_scale_primary", "dt_make_transposed_matrices_from_primaries_and_whitepoint", "mat3SSEinv", "dt_apply_transposed_color_matrix"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/mod.rs"
+status = "implemented"
+notes = "SigmoidProfile accepts native transposed matrix-shaper data and also derives the built-in sRGB, Adobe RGB, Display P3, and Rec2020 profiles from the retained primaries."
+
+[[responsibility]]
+id = "alpha-and-cancellation"
+upstream_path = "src/iop/sigmoid.c"
+upstream_symbols = ["process", "process_loglogistic_rgb_ratio", "process_loglogistic_per_channel"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/mod.rs"
+status = "implemented"
+notes = "The native fourth channel is copied unchanged; cancellation is an additive Rust publication boundary and never returns partial output."
+
+[[responsibility]]
+id = "gpu-kernel"
+upstream_path = "data/kernels/sigmoid.cl"
+upstream_symbols = ["sigmoid_loglogistic_per_channel", "sigmoid_loglogistic_rgb_ratio"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/source_map.rs"
+status = "deferred"
+notes = "This leaf does not edit or claim the retained OpenCL program."
+
+[[responsibility]]
+id = "gtk-presets-and-ui"
+upstream_path = "src/iop/sigmoid.c"
+upstream_symbols = ["init_presets", "gui_changed", "gui_update", "gui_init"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/source_map.rs"
+status = "deferred"
+notes = "UI, presets, and workflow auto-application require shared registry, history, and GTK ownership."
+
+[[responsibility]]
+id = "production-routing"
+upstream_path = "src/iop/sigmoid.c and processing integration hubs"
+upstream_symbols = ["flags", "default_colorspace", "process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/sigmoid/source_map.rs"
+status = "deferred"
+notes = "Registry, history materialization, pixelpipe dispatch, masks, outer blending, and app routing are outside the bounded leaf ownership."
