@@ -828,14 +828,26 @@ impl DiffusePlan {
     ) -> Result<(), DiffuseExecutionError> {
         for (scale, high_frequency) in high.iter_mut().enumerate() {
             let multiplier = 1_usize << scale;
-            wavelets::decompose_2d_bspline(
-                input,
-                high_frequency,
-                &mut low[scale % 2],
-                self.dimensions,
-                multiplier,
-                &mut *cancelled,
-            )?;
+            if scale == 0 {
+                wavelets::decompose_2d_bspline(
+                    input,
+                    high_frequency,
+                    &mut low[0],
+                    self.dimensions,
+                    multiplier,
+                    &mut *cancelled,
+                )?;
+            } else {
+                let (input_low, output_low) = two_low_buffers(low, (scale - 1) % 2, scale % 2);
+                wavelets::decompose_2d_bspline(
+                    input_low,
+                    high_frequency,
+                    output_low,
+                    self.dimensions,
+                    multiplier,
+                    &mut *cancelled,
+                )?;
+            }
         }
 
         let residual_index = (self.scales - 1) % 2;
