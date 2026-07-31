@@ -17,6 +17,7 @@ use lut3d::{
 
 const IDENTITY_CUBE: &str = include_str!("fixtures/lut3d/identity_2.cube");
 const BLUE_FAST_3DL: &str = include_str!("fixtures/lut3d/blue_fast_4.3dl");
+const BLUE_FAST_5_3DL: &str = include_str!("fixtures/lut3d/blue_fast_5_header_tail.3dl");
 
 fn identity_profile() -> Lut3dProfileContext {
     Lut3dProfileContext::from_builtin(
@@ -247,9 +248,16 @@ fn three_dl_reader_remaps_blue_fast_records_and_normalizes() {
     );
 
     assert!(matches!(
-        Lut3d::parse_3dl("0 64 100 511\n"),
+        Lut3d::parse_3dl("0 64 100 100\n"),
         Err(Lut3dParseError::InvalidMaximum(100))
     ));
+    let level_five = Lut3d::parse_3dl(BLUE_FAST_5_3DL).unwrap();
+    assert_eq!(level_five.level(), 5);
+    let normalizer = 1.0 / 255.0;
+    assert_eq!(level_five.values()[1], [64.0 * normalizer, 0.0, 0.0]);
+    assert_eq!(level_five.values()[5], [0.0, 64.0 * normalizer, 0.0]);
+    assert_eq!(level_five.values()[25], [0.0, 0.0, 64.0 * normalizer]);
+    assert_eq!(level_five.values()[124], [255.0 * normalizer; 3]);
     assert!(Lut3d::parse_3dl("0 128 255\n").is_err());
     assert!(Lut3d::parse_3dl("0 128 255 511\n-1 0 0\n").is_err());
     assert!(Lut3d::parse_3dl("0 128 255 511\nnope 0 0\n").is_err());
@@ -483,8 +491,19 @@ fn compressed_and_unimplemented_surfaces_remain_unavailable() {
     };
     let lut = Lut3d::parse_cube(IDENTITY_CUBE).unwrap();
     assert!(matches!(
-        Lut3dPlan::from_parameters(lut, &params),
+        Lut3dPlan::from_parameters(lut.clone(), &params),
         Err(Lut3dExecutionError::CompressedLutUnsupported)
+    ));
+    let malformed_params = Lut3dParameters {
+        nb_keypoints: -1,
+        ..Lut3dParameters::default()
+    };
+    let malformed_payload = malformed_params.to_bytes();
+    let malformed_history = Lut3dHistory::decode(LUT3D_SCHEMA_VERSION, &malformed_payload).unwrap();
+    assert_eq!(malformed_history.payload(), malformed_payload.to_vec());
+    assert!(matches!(
+        Lut3dPlan::from_parameters(lut, malformed_history.current().unwrap()),
+        Err(Lut3dExecutionError::InvalidCompressedKeypointCount(-1))
     ));
     assert!(matches!(
         Lut3d::parse_3dl("0 128 255 511\n0 0 0\n"),

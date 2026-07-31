@@ -58,6 +58,11 @@ impl Lut3dPlan {
         lut: Lut3d,
         parameters: &Lut3dParameters,
     ) -> Result<Self, Lut3dExecutionError> {
+        if parameters.nb_keypoints < 0 {
+            return Err(Lut3dExecutionError::InvalidCompressedKeypointCount(
+                parameters.nb_keypoints,
+            ));
+        }
         if parameters.nb_keypoints > 0 {
             return Err(Lut3dExecutionError::CompressedLutUnsupported);
         }
@@ -184,6 +189,7 @@ pub enum Lut3dExecutionError {
         index: usize,
         channel: usize,
     },
+    InvalidCompressedKeypointCount(i32),
     CompressedLutUnsupported,
     AllocationFailure,
     Cancelled,
@@ -216,6 +222,12 @@ impl fmt::Display for Lut3dExecutionError {
                 write!(
                     formatter,
                     "LUT3D input pixel {index} channel {channel} is non-finite"
+                )
+            }
+            Self::InvalidCompressedKeypointCount(count) => {
+                write!(
+                    formatter,
+                    "compressed LUT keypoint count {count} is invalid"
                 )
             }
             Self::CompressedLutUnsupported => {

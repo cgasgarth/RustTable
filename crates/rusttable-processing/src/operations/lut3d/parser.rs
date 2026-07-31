@@ -181,7 +181,7 @@ impl Lut3d {
             return Err(Lut3dParseError::InvalidHeader(header_line));
         }
         let minimum = parse_integer(header_tokens[0], header_line)?;
-        let maximum = parse_integer(header_tokens[2], header_line)?;
+        let maximum = parse_integer(header_tokens[header_tokens.len() - 1], header_line)?;
         if minimum < 0 || maximum < 0 || maximum <= minimum {
             return Err(Lut3dParseError::InvalidHeader(header_line));
         }
