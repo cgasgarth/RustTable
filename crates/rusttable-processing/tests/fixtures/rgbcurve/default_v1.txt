@@ -1,0 +1,17 @@
+# Source-derived RGB Curve fixture: native init() after default initialization.
+version=1
+payload_bytes=516
+nodes_offset=0
+node_counts_offset=480
+curve_types_offset=492
+autoscale_offset=504
+compensate_middle_grey_offset=508
+preserve_colors_offset=512
+node0_xy=0x00000000,0x00000000
+node1_xy=0x0000803f,0x0000803f
+active_node_count=2,2,2
+curve_type=2,2,2
+autoscale=0
+compensate_middle_grey=0
+preserve_colors=1
+runtime_initial_table_value=0.0

@@ -1,0 +1,8 @@
+# Darktable lowpass source fixture: width=3 height=2, four f32 Lab channels.
+# L a b alpha
+0.0 0.0 0.0 0.10
+100.0 128.0 -128.0 0.20
+50.0 20.0 -30.0 0.30
+75.0 -160.0 160.0 0.40
+25.0 40.0 -50.0 0.50
+90.0 -60.0 70.0 0.60

@@ -1,0 +1,75 @@
+schema = "rusttable.lowpass-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-direct-migrations"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_lowpass_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "implemented"
+notes = "v1/v2/v3 use exact 16/20/24-byte C prefixes and migrate directly to v4; v4 is 28 bytes."
+
+[[responsibility]]
+id = "legacy-metadata-conflict"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["dt_iop_lowpass_params_v1_t", "dt_iop_lowpass_params_v2_t", "dt_iop_lowpass_params_v3_t"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "deferred"
+notes = "Current shared compatibility metadata declares 216/312/424-byte v1/v2/v3 opaque payloads. No authoritative blobs prove those lengths contain the C prefixes, so the leaf preserves those sizes opaque and does not claim import/materialization compatibility. Shared metadata repair remains outside this leaf."
+
+[[responsibility]]
+id = "gaussian-recursive-filter"
+upstream_path = "src/common/gaussian.c"
+upstream_symbols = ["_compute_gauss_params", "dt_gaussian_init", "dt_gaussian_blur_4c"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "implemented"
+notes = "Preserves order 0/1/2 coefficients, four-channel bounds, vertical then horizontal recursive passes, and source alpha replacement."
+
+[[responsibility]]
+id = "bilateral-grid-filter"
+upstream_path = "src/common/bilateral.c"
+upstream_symbols = ["dt_bilateral_grid_size", "dt_bilateral_splat", "dt_bilateral_blur", "dt_bilateral_slice"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "implemented"
+notes = "Uses the shared Rust x/y/L grid helper with sigma_r=100 and detail=-1; a/b/alpha remain source channels."
+
+[[responsibility]]
+id = "curves-and-chroma"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["commit_params", "process"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "implemented"
+notes = "Contrast LUT precedes brightness LUT; out-of-range lightness uses source exponential extrapolation; saturation is bounded by Lab limits and unbound by f32 limits."
+
+[[responsibility]]
+id = "allocation-and-cancellation-contract"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["process", "dt_gaussian_init", "dt_bilateral_init"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "implemented"
+notes = "The caller-owned destination API copies the input ROI through when the operation-local Gaussian/bilateral initialization seam reports failure, matching native process behavior, and never publishes partial output on cancellation. The Vec API remains fail-closed because it has no caller-owned destination."
+
+[[responsibility]]
+id = "tiling-contract"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["tiling_callback"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "deferred"
+notes = "The leaf exposes native overlap information but advertises tiling unavailable until the pixelpipe owner supplies algorithm-dependent factors, maxbuf, budget, alignment, and publication integration."
+
+[[responsibility]]
+id = "gpu-execution"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["process_cl"]
+rust_path = "crates/rusttable-processing/src/operations/lowpass/mod.rs"
+status = "deferred"
+notes = "OpenCL Gaussian/bilateral and lowpass_mix execution remains with the GPU owner."
+
+[[responsibility]]
+id = "operation-integration"
+upstream_path = "src/iop/lowpass.c"
+upstream_symbols = ["flags", "default_colorspace", "process", "gui_init", "init_presets"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs"
+status = "deferred"
+notes = "Registry, descriptor, snapshot identity, history import/materialization, pixelpipe CPU routing, frame/tile blending and masks, GTK controls, and preset ownership are intentionally not edited by this leaf."
