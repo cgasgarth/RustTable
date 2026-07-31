@@ -64,7 +64,7 @@ upstream_path = "src/iop/toneequal.c"
 upstream_symbols = ["apply_toneequalizer", "display_luminance_mask"]
 rust_path = "crates/rusttable-processing/src/operations/toneequal/execution.rs"
 status = "implemented"
-notes = "Correction follows native for_each_channel behavior over all four RGBA lanes, including non-unit alpha. Mask display uses sqrt(clamp((mask-2^-8)/(1-2^-8),0,1)); native then explicitly copies input alpha, which the safe publication candidate preserves."
+notes = "Corrected output follows native for_each_channel behavior and scales all four RGBA lanes, including non-unit alpha. Mask-display output uses sqrt(clamp((mask-2^-8)/(1-2^-8),0,1)) and explicitly preserves the input alpha, matching native display_luminance_mask."
 
 [[responsibility]]
 id = "roi-radius-and-tiling"

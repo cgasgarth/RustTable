@@ -32,6 +32,13 @@ fn no_filter_parameters(method: LuminanceMethod) -> ToneEqualizerParametersV2 {
 #[test]
 fn fixture_and_native_v2_offsets_are_explicit() {
     assert!(DEFAULT_V2_FIXTURE.contains("payload_bytes=72"));
+    assert!(DEFAULT_V2_FIXTURE.contains("corrected_output_alpha=scale_all_four_lanes"));
+    assert!(DEFAULT_V2_FIXTURE.contains("mask_display_output_alpha=preserve_input"));
+    assert!(
+        !DEFAULT_V2_FIXTURE
+            .lines()
+            .any(|line| line == "alpha=preserve")
+    );
     assert_eq!(PARAMETER_BYTES, 72);
     assert_eq!(LUT_ENTRIES, 80_001);
     assert_eq!(PARAMETER_VERSION, 2);
