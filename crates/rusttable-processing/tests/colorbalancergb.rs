@@ -125,6 +125,21 @@ fn native_abi_sizes_and_v5_formula_order_are_explicit() {
 }
 
 #[test]
+fn native_module_default_matches_descriptor_and_codec() {
+    let expected = ColorBalanceRgbSaturationFormula::DarktableUcs2022;
+    assert_eq!(
+        ColorBalanceRgbParametersV5::defaults().saturation_formula,
+        expected
+    );
+
+    let descriptor = colorbalancergb_descriptor();
+    assert_eq!(
+        descriptor.parameters[32].default,
+        ParameterDefault::Enum("darktable-ucs-2022".to_owned())
+    );
+}
+
+#[test]
 fn history_round_trips_all_native_versions_and_migrates_exact_defaults() {
     let v1 = v1_sample();
     let v2 = ColorBalanceRgbParametersV2::new(v1, [0.1, -0.2, 0.15, -0.05]);

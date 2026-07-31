@@ -452,8 +452,8 @@ impl ColorBalanceRgbParametersV5 {
 
     #[must_use]
     pub const fn defaults() -> Self {
-        // `init_presets` initializes the usable current defaults.  The
-        // migration-only default_v5 seed is exposed separately below.
+        // Native metadata declares enum=1 as the module default.  The named
+        // JzAzBz preset in `init_presets` is distinct from this default.
         Self::new(
             ColorBalanceRgbParametersV4::new(
                 ColorBalanceRgbParametersV3::new(
@@ -467,7 +467,7 @@ impl ColorBalanceRgbParametersV5 {
                 0.1845,
                 0.0,
             ),
-            ColorBalanceRgbSaturationFormula::JzAzBz,
+            ColorBalanceRgbSaturationFormula::DarktableUcs2022,
         )
     }
 
