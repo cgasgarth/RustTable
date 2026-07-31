@@ -7,9 +7,10 @@ use tiff::decoder::{Decoder, DecodingResult, Limits};
 
 use super::parser::parse;
 use super::types::{
-    TIFF_BACKEND_ID, TiffAlphaSample, TiffByteOrder, TiffContainer, TiffDecodeError,
-    TiffDecodeLimits, TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult,
-    TiffHeader, TiffPage, TiffPhotometric, TiffPixelData, TiffSampleData, TiffStorageLayout,
+    TIFF_BACKEND_ID, TiffByteOrder, TiffContainer, TiffDecodeError, TiffDecodeLimits,
+    TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult, TiffHeader,
+    TiffNativeRaster, TiffNativeSampleFormat, TiffPage, TiffPhotometric, TiffPixelData,
+    TiffSampleData, TiffSampleFormat, TiffStorageLayout,
 };
 use crate::raw::{RawByteSource, RawSourceError, SliceRawSource};
 
@@ -48,6 +49,52 @@ impl TiffDecoder {
         request: &TiffDecodeRequest,
     ) -> Result<TiffDecodeResult, TiffDecodeError> {
         self.decode_source(&SliceRawSource::new(bytes), request)
+    }
+
+    /// Decodes the non-color-managed native scanline responsibility.
+    ///
+    /// This is the bounded leaf equivalent of the integer, half-float, and
+    /// float readers in Darktable's `src/imageio/imageio_tiff.c`. It performs
+    /// the native fail-closed format gate, emits four float channels, and
+    /// leaves Lab conversion to the separate color-management owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unsupported error for tiled, palette, CMYK, unsupported
+    /// sample, or Lab pages, and otherwise propagates the normal TIFF errors.
+    pub fn decode_native_bytes(
+        &self,
+        bytes: &[u8],
+        request: &TiffDecodeRequest,
+    ) -> Result<TiffNativeRaster, TiffDecodeError> {
+        check_cancel(request)?;
+        let header = self.inspect_bytes(bytes, request.limits)?;
+        let page_index = request.page.unwrap_or(header.default_page);
+        let page = header
+            .pages
+            .get(page_index)
+            .ok_or(TiffDecodeError::InvalidPage(page_index))?;
+        let sample_format = page.native_sample_format()?;
+        if matches!(
+            page.photometric,
+            TiffPhotometric::CieLab | TiffPhotometric::IccLab
+        ) {
+            return Err(TiffDecodeError::Unsupported {
+                feature: "Lab color conversion",
+                value: match page.photometric {
+                    TiffPhotometric::CieLab => 8,
+                    TiffPhotometric::IccLab => 9,
+                    _ => unreachable!("Lab photometric was checked"),
+                },
+            });
+        }
+        let result = self.decode_bytes(bytes, request)?;
+        let pixels = result.pixels.ok_or_else(|| {
+            TiffDecodeError::Malformed("native TIFF decode returned no pixels".to_owned())
+        })?;
+        let raster = native_raster(&result.page, &pixels, sample_format)?;
+        check_cancel(request)?;
+        Ok(raster)
     }
 
     /// Copies bounded random-access bytes and rejects cancellation or source mutation.
@@ -123,6 +170,29 @@ pub(crate) fn is_tiff_signature(bytes: &[u8]) -> bool {
     )
 }
 
+/// Converts an IEEE binary16 bit pattern using the exact native fallback.
+///
+/// The retained C loader uses this path when Imath is unavailable. Keeping the
+/// bit-level conversion here also makes special values independent of the
+/// backend's optional half implementation.
+#[must_use]
+pub fn half_bits_to_f32(h: u16) -> f32 {
+    let magic = f32::from_bits(113 << 23);
+    let shifted_exp = 0x7c00_u32 << 13;
+    let mut bits = u32::from(h & 0x7fff) << 13;
+    let exponent = shifted_exp & bits;
+    bits = bits.wrapping_add((127 - 15) << 23);
+    if exponent == shifted_exp {
+        bits = bits.wrapping_add((128 - 16) << 23);
+    } else if exponent == 0 {
+        bits = bits.wrapping_add(1 << 23);
+        let mut value = f32::from_bits(bits);
+        value -= magic;
+        bits = value.to_bits();
+    }
+    f32::from_bits(bits | (u32::from(h & 0x8000) << 16))
+}
+
 pub(crate) fn decode_tiff_probe(
     bytes: &[u8],
     limits: DecodeLimits,
@@ -134,29 +204,6 @@ pub(crate) fn decode_tiff_probe(
         InputFormat::Tiff,
         header.default_page().dimensions,
     ))
-}
-
-pub(crate) fn decode_legacy_rgba8(
-    bytes: &[u8],
-    limits: DecodeLimits,
-) -> Result<
-    (
-        rusttable_image::ImageDimensions,
-        rusttable_image::Orientation,
-        Vec<u8>,
-    ),
-    ImageInputError,
-> {
-    let request = TiffDecodeRequest::new(TiffDecodeLimits::from_common(limits));
-    let result = TiffDecoder::new()
-        .decode_bytes(bytes, &request)
-        .map_err(map_error)?;
-    let pixels = result
-        .pixels
-        .as_ref()
-        .ok_or_else(|| malformed_input("TIFF full decode returned no samples"))?;
-    let rgba = to_rgba8(pixels, &result.page)?;
-    Ok((pixels.dimensions, result.page.orientation, rgba))
 }
 
 fn decode_page(
@@ -262,6 +309,16 @@ fn backend_source(
             value,
         )?;
     }
+    if page.sample_formats.first() == Some(&TiffSampleFormat::Unsigned) {
+        patch_optional_short_tag(
+            &mut source,
+            header.container,
+            header.byte_order,
+            page.ifd_offset,
+            339,
+            1,
+        )?;
+    }
     Ok(source)
 }
 
@@ -300,6 +357,159 @@ fn patch_short_tag(
     Err(TiffDecodeError::Malformed(
         "selected IFD lost PhotometricInterpretation".to_owned(),
     ))
+}
+
+fn patch_optional_short_tag(
+    bytes: &mut [u8],
+    container: TiffContainer,
+    order: TiffByteOrder,
+    ifd_offset: u64,
+    wanted: u16,
+    value: u16,
+) -> Result<(), TiffDecodeError> {
+    let start = to_usize(ifd_offset)?;
+    let (count, count_bytes, entry_bytes, inline_bytes, value_offset) = match container {
+        TiffContainer::Classic => (
+            u64::from(read_u16(bytes, start, order)?),
+            2_usize,
+            12_usize,
+            4_u64,
+            8_usize,
+        ),
+        TiffContainer::BigTiff => (read_u64(bytes, start, order)?, 8, 20, 8, 12),
+    };
+    for index in 0..to_usize(count)? {
+        let entry = start
+            .checked_add(count_bytes)
+            .and_then(|current| current.checked_add(index.checked_mul(entry_bytes)?))
+            .ok_or(TiffDecodeError::ArithmeticOverflow)?;
+        if read_u16(bytes, entry, order)? != wanted {
+            continue;
+        }
+        if read_u16(bytes, entry + 2, order)? != 3 {
+            return Err(TiffDecodeError::Malformed(
+                "SampleFormat is not SHORT".to_owned(),
+            ));
+        }
+        let value_count = match container {
+            TiffContainer::Classic => u64::from(read_u32(bytes, entry + 4, order)?),
+            TiffContainer::BigTiff => read_u64(bytes, entry + 4, order)?,
+        };
+        let value_bytes = value_count
+            .checked_mul(2)
+            .ok_or(TiffDecodeError::ArithmeticOverflow)?;
+        let value_start = if value_bytes <= inline_bytes {
+            entry
+                .checked_add(value_offset)
+                .ok_or(TiffDecodeError::ArithmeticOverflow)?
+        } else {
+            let offset = match container {
+                TiffContainer::Classic => u64::from(read_u32(bytes, entry + value_offset, order)?),
+                TiffContainer::BigTiff => read_u64(bytes, entry + value_offset, order)?,
+            };
+            to_usize(offset)?
+        };
+        for value_index in 0..to_usize(value_count)? {
+            let offset = value_start
+                .checked_add(
+                    value_index
+                        .checked_mul(2)
+                        .ok_or(TiffDecodeError::ArithmeticOverflow)?,
+                )
+                .ok_or(TiffDecodeError::ArithmeticOverflow)?;
+            write_u16(bytes, offset, value, order)?;
+        }
+        return Ok(());
+    }
+    Ok(())
+}
+
+fn native_raster(
+    page: &TiffPage,
+    pixels: &TiffPixelData,
+    sample_format: TiffNativeSampleFormat,
+) -> Result<TiffNativeRaster, TiffDecodeError> {
+    let pixel_count = usize::try_from(
+        pixels
+            .dimensions
+            .pixel_count()
+            .map_err(|_| TiffDecodeError::ArithmeticOverflow)?,
+    )
+    .map_err(|_| TiffDecodeError::ArithmeticOverflow)?;
+    let output_len = pixel_count
+        .checked_mul(4)
+        .ok_or(TiffDecodeError::ArithmeticOverflow)?;
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(output_len)
+        .map_err(|_| TiffDecodeError::AllocationFailure)?;
+    let samples_per_pixel = usize::from(page.samples_per_pixel);
+    for pixel in 0..pixel_count {
+        let first_index = native_sample_index(pixels, pixel_count, pixel, 0)?;
+        let mut red = native_sample(&pixels.samples, first_index, sample_format)?;
+        if sample_format == TiffNativeSampleFormat::Unsigned8
+            && page.photometric == TiffPhotometric::WhiteIsZero
+        {
+            red = 1.0 - red;
+        }
+        let (green, blue) = if samples_per_pixel < 3 {
+            (red, red)
+        } else {
+            let green_index = native_sample_index(pixels, pixel_count, pixel, 1)?;
+            let blue_index = native_sample_index(pixels, pixel_count, pixel, 2)?;
+            (
+                native_sample(&pixels.samples, green_index, sample_format)?,
+                native_sample(&pixels.samples, blue_index, sample_format)?,
+            )
+        };
+        output.extend_from_slice(&[red, green, blue, 0.0]);
+    }
+    Ok(TiffNativeRaster {
+        dimensions: pixels.dimensions,
+        pixels: output,
+        sample_format,
+    })
+}
+
+fn native_sample_index(
+    pixels: &TiffPixelData,
+    pixel_count: usize,
+    pixel: usize,
+    channel: usize,
+) -> Result<usize, TiffDecodeError> {
+    match pixels.storage {
+        TiffStorageLayout::Chunky => pixel
+            .checked_mul(usize::from(pixels.samples_per_pixel))
+            .and_then(|index| index.checked_add(channel))
+            .ok_or(TiffDecodeError::ArithmeticOverflow),
+        TiffStorageLayout::Planar => channel
+            .checked_mul(pixel_count)
+            .and_then(|index| index.checked_add(pixel))
+            .ok_or(TiffDecodeError::ArithmeticOverflow),
+    }
+}
+
+fn native_sample(
+    samples: &TiffSampleData,
+    index: usize,
+    sample_format: TiffNativeSampleFormat,
+) -> Result<f32, TiffDecodeError> {
+    match (sample_format, samples) {
+        (TiffNativeSampleFormat::Unsigned8, TiffSampleData::U8(values)) => values
+            .get(index)
+            .map(|value| f32::from(*value) * (1.0 / 255.0)),
+        (TiffNativeSampleFormat::Unsigned16, TiffSampleData::U16(values)) => values
+            .get(index)
+            .map(|value| f32::from(*value) * (1.0 / 65_535.0)),
+        (TiffNativeSampleFormat::HalfFloat16, TiffSampleData::F16(values)) => {
+            values.get(index).map(|value| half_bits_to_f32(*value))
+        }
+        (TiffNativeSampleFormat::Float32, TiffSampleData::F32(values)) => {
+            values.get(index).copied()
+        }
+        _ => None,
+    }
+    .ok_or_else(|| TiffDecodeError::Malformed("native TIFF sample buffer mismatch".to_owned()))
 }
 
 fn crop(mut pixels: TiffPixelData, roi: Roi) -> Result<TiffPixelData, TiffDecodeError> {
@@ -408,103 +618,6 @@ fn crop_values<T: Copy>(
         }
     }
     Ok(output)
-}
-
-fn to_rgba8(pixels: &TiffPixelData, page: &TiffPage) -> Result<Vec<u8>, ImageInputError> {
-    if page.alpha.contains(&TiffAlphaSample::Premultiplied) {
-        return Err(malformed_input(
-            "legacy RGBA8 cannot represent premultiplied TIFF alpha",
-        ));
-    }
-    if !matches!(
-        page.photometric,
-        TiffPhotometric::WhiteIsZero
-            | TiffPhotometric::BlackIsZero
-            | TiffPhotometric::Palette
-            | TiffPhotometric::Rgb
-    ) {
-        return Err(malformed_input(
-            "legacy RGBA8 requires explicit TIFF color conversion",
-        ));
-    }
-    let pixel_count = usize::try_from(
-        pixels
-            .dimensions
-            .pixel_count()
-            .map_err(|_| ImageInputError::ArithmeticOverflow)?,
-    )
-    .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    let mut output = Vec::new();
-    output
-        .try_reserve_exact(
-            pixel_count
-                .checked_mul(4)
-                .ok_or(ImageInputError::ArithmeticOverflow)?,
-        )
-        .map_err(|_| ImageInputError::AllocationFailure)?;
-    for pixel in 0..pixel_count {
-        let sample = |channel| sample_u8(pixels, pixel_count, pixel, channel);
-        let alpha_channel = usize::from(page.photometric.color_samples());
-        let alpha = if page.alpha.is_empty() {
-            255
-        } else {
-            sample(alpha_channel)?
-        };
-        let rgb = match page.photometric {
-            TiffPhotometric::WhiteIsZero => {
-                let gray = 255 - sample(0)?;
-                [gray, gray, gray]
-            }
-            TiffPhotometric::BlackIsZero => {
-                let gray = sample(0)?;
-                [gray, gray, gray]
-            }
-            TiffPhotometric::Rgb => [sample(0)?, sample(1)?, sample(2)?],
-            TiffPhotometric::Palette => {
-                let index = usize::from(sample(0)?);
-                let map = page
-                    .color_map
-                    .as_ref()
-                    .ok_or_else(|| malformed_input("palette has no ColorMap"))?;
-                let entries = map.len() / 3;
-                if index >= entries {
-                    return Err(malformed_input("palette sample is out of range"));
-                }
-                [
-                    (map[index] >> 8) as u8,
-                    (map[entries + index] >> 8) as u8,
-                    (map[2 * entries + index] >> 8) as u8,
-                ]
-            }
-            _ => unreachable!("photometric was checked above"),
-        };
-        output.extend_from_slice(&[rgb[0], rgb[1], rgb[2], alpha]);
-    }
-    Ok(output)
-}
-
-fn sample_u8(
-    pixels: &TiffPixelData,
-    pixel_count: usize,
-    pixel: usize,
-    channel: usize,
-) -> Result<u8, ImageInputError> {
-    let index = match pixels.storage {
-        TiffStorageLayout::Chunky => pixel
-            .checked_mul(usize::from(pixels.samples_per_pixel))
-            .and_then(|current| current.checked_add(channel)),
-        TiffStorageLayout::Planar => channel
-            .checked_mul(pixel_count)
-            .and_then(|current| current.checked_add(pixel)),
-    }
-    .ok_or(ImageInputError::ArithmeticOverflow)?;
-    match &pixels.samples {
-        TiffSampleData::U8(values) => values.get(index).copied(),
-        TiffSampleData::U16(values) => values.get(index).map(|value| (value >> 8) as u8),
-        TiffSampleData::U32(values) => values.get(index).map(|value| (value >> 24) as u8),
-        _ => None,
-    }
-    .ok_or_else(|| malformed_input("legacy RGBA8 requires unsigned integer samples"))
 }
 
 fn logical_bytes(page: &TiffPage) -> Result<u64, TiffDecodeError> {
@@ -665,6 +778,23 @@ fn read_u16(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<u16, Ti
     Ok(match order {
         TiffByteOrder::Little => u16::from_le_bytes(value),
         TiffByteOrder::Big => u16::from_be_bytes(value),
+    })
+}
+
+fn read_u32(bytes: &[u8], offset: usize, order: TiffByteOrder) -> Result<u32, TiffDecodeError> {
+    let value: [u8; 4] = bytes
+        .get(
+            offset
+                ..offset
+                    .checked_add(4)
+                    .ok_or(TiffDecodeError::ArithmeticOverflow)?,
+        )
+        .ok_or_else(|| TiffDecodeError::Malformed("TIFF value is truncated".to_owned()))?
+        .try_into()
+        .map_err(|_| TiffDecodeError::Malformed("TIFF value is truncated".to_owned()))?;
+    Ok(match order {
+        TiffByteOrder::Little => u32::from_le_bytes(value),
+        TiffByteOrder::Big => u32::from_be_bytes(value),
     })
 }
 

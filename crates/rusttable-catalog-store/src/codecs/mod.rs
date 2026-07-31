@@ -10,6 +10,7 @@ use rusttable_core::{
 };
 use rusttable_image::{ImageDimensions, ImageProbe, InputFormat};
 
+pub(crate) mod collection;
 pub(crate) mod history_snapshot;
 
 const RECORD_FORMAT_VERSION: u8 = 1;

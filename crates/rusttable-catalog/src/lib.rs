@@ -34,7 +34,10 @@ pub use collections::{
     CollectionError, CollectionField, CollectionId, CollectionProvenance, CollectionQuery,
     CollectionRepository, CollectionRepositoryError, CollectionSort, CollectionState,
     CollectionValidationError, CollectionViewDefinition, GroupCollapsePolicy, MAX_RECENT_QUERIES,
-    RecentQuery, SavedCollection,
+    NATIVE_COLLECTION_MAX_RULES, NATIVE_COLLECTION_MODE_AND, NATIVE_COLLECTION_MODE_AND_NOT,
+    NATIVE_COLLECTION_MODE_OR, NativeCollectionError, NativeCollectionHistoryEntry,
+    NativeCollectionMode, NativeCollectionRule, NativeCollectionRules, NativeCollectionSortRule,
+    NativeCollectionSorts, RecentQuery, SavedCollection, save_native_collection_history,
 };
 pub use command::{CatalogChangeEvent, CatalogCommand};
 pub use develop::{DevelopInput, DevelopInputError, DevelopSelection};

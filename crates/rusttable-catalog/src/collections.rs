@@ -13,6 +13,339 @@ const MAX_NAME_BYTES: usize = 128;
 const MAX_DESCRIPTION_BYTES: usize = 4_096;
 pub const MAX_RECENT_QUERIES: usize = 50;
 
+// Direct source mapping: src/common/collection.h, src/common/collection.c, and
+// src/libs/collect.h. These lossless records are persistence preparation only;
+// query compilation and the configuration adapter remain deferred.
+pub const NATIVE_COLLECTION_MAX_RULES: usize = 10;
+pub const NATIVE_COLLECTION_MODE_AND: i32 = 0;
+pub const NATIVE_COLLECTION_MODE_OR: i32 = 1;
+pub const NATIVE_COLLECTION_MODE_AND_NOT: i32 = 2;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeCollectionRule {
+    mode: i32,
+    item: i32,
+    off: i32,
+    top: i32,
+    value: Vec<u8>,
+}
+
+impl NativeCollectionRule {
+    #[must_use]
+    pub fn collect(mode: i32, item: i32, value: impl Into<Vec<u8>>) -> Self {
+        Self {
+            mode,
+            item,
+            off: 0,
+            top: 0,
+            value: value.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn filtering(mode: i32, item: i32, off: i32, top: i32, value: impl Into<Vec<u8>>) -> Self {
+        Self {
+            mode,
+            item,
+            off,
+            top,
+            value: value.into(),
+        }
+    }
+
+    #[must_use]
+    pub const fn mode(&self) -> i32 {
+        self.mode
+    }
+
+    #[must_use]
+    pub const fn item(&self) -> i32 {
+        self.item
+    }
+
+    #[must_use]
+    pub const fn off(&self) -> i32 {
+        self.off
+    }
+
+    #[must_use]
+    pub const fn top(&self) -> i32 {
+        self.top
+    }
+
+    #[must_use]
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+
+    #[must_use]
+    pub fn with_value(&self, value: impl Into<Vec<u8>>) -> Self {
+        Self {
+            value: value.into(),
+            ..self.clone()
+        }
+    }
+
+    #[must_use]
+    pub const fn mode_kind(&self) -> NativeCollectionMode {
+        match self.mode {
+            NATIVE_COLLECTION_MODE_AND => NativeCollectionMode::And,
+            NATIVE_COLLECTION_MODE_OR => NativeCollectionMode::Or,
+            NATIVE_COLLECTION_MODE_AND_NOT => NativeCollectionMode::AndNot,
+            mode => NativeCollectionMode::Unknown(mode),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NativeCollectionMode {
+    And,
+    Or,
+    AndNot,
+    Unknown(i32),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeCollectionRules {
+    filtering: bool,
+    num_rules: i32,
+    rules: Vec<NativeCollectionRule>,
+}
+
+impl NativeCollectionRules {
+    pub fn new(
+        filtering: bool,
+        rules: Vec<NativeCollectionRule>,
+    ) -> Result<Self, NativeCollectionError> {
+        let num_rules =
+            i32::try_from(rules.len()).map_err(|_| NativeCollectionError::RuleCountOverflow)?;
+        Self::from_parts(filtering, num_rules, rules)
+    }
+
+    pub fn from_parts(
+        filtering: bool,
+        num_rules: i32,
+        rules: Vec<NativeCollectionRule>,
+    ) -> Result<Self, NativeCollectionError> {
+        if num_rules < 0 && !rules.is_empty() {
+            return Err(NativeCollectionError::RulePrefixExceedsDeclaredCount);
+        }
+        if num_rules >= 0 {
+            let declared =
+                usize::try_from(num_rules).map_err(|_| NativeCollectionError::RuleCountOverflow)?;
+            if declared > rules.len() {
+                return Err(NativeCollectionError::RulePrefixExceedsDeclaredCount);
+            }
+        }
+        Ok(Self {
+            filtering,
+            num_rules,
+            rules,
+        })
+    }
+
+    pub fn collect(rules: Vec<NativeCollectionRule>) -> Result<Self, NativeCollectionError> {
+        Self::new(false, rules)
+    }
+
+    pub fn filtering(rules: Vec<NativeCollectionRule>) -> Result<Self, NativeCollectionError> {
+        Self::new(true, rules)
+    }
+
+    #[must_use]
+    pub const fn filtering_mode(&self) -> bool {
+        self.filtering
+    }
+
+    #[must_use]
+    pub const fn num_rules(&self) -> i32 {
+        self.num_rules
+    }
+
+    #[must_use]
+    pub fn rules(&self) -> &[NativeCollectionRule] {
+        &self.rules
+    }
+
+    /// Returns the ordered, bounded input that the native query builder consumes.
+    ///
+    /// This deliberately does not produce SQL or claim that an unknown property is
+    /// executable. It only preserves the native bounds, order, modes, and disabled
+    /// filtering rules for the later configuration/query integration seam.
+    #[must_use]
+    pub fn query_rules(&self) -> Vec<NativeCollectionRule> {
+        let count = if self.filtering {
+            self.num_rules.clamp(0, 10)
+        } else {
+            self.num_rules.clamp(1, 10)
+        };
+        let count = usize::try_from(count).unwrap_or_default();
+        let mut rules = self.rules.iter().take(count).cloned().collect::<Vec<_>>();
+        if !self.filtering && rules.is_empty() && count != 0 {
+            rules.push(NativeCollectionRule::collect(
+                NATIVE_COLLECTION_MODE_AND,
+                0,
+                b"%".to_vec(),
+            ));
+        }
+        if self.filtering {
+            rules = rules
+                .iter()
+                .map(|rule| {
+                    if rule.off != 0 {
+                        rule.with_value(Vec::new())
+                    } else {
+                        rule.clone()
+                    }
+                })
+                .collect();
+        }
+        rules
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeCollectionSortRule {
+    sort_id: i32,
+    sort_order: i32,
+}
+
+impl NativeCollectionSortRule {
+    #[must_use]
+    pub const fn new(sort_id: i32, sort_order: i32) -> Self {
+        Self {
+            sort_id,
+            sort_order,
+        }
+    }
+
+    #[must_use]
+    pub const fn sort_id(&self) -> i32 {
+        self.sort_id
+    }
+
+    #[must_use]
+    pub const fn sort_order(&self) -> i32 {
+        self.sort_order
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NativeCollectionSorts {
+    num_sort: i32,
+    rules: Vec<NativeCollectionSortRule>,
+}
+
+impl NativeCollectionSorts {
+    pub fn new(rules: Vec<NativeCollectionSortRule>) -> Result<Self, NativeCollectionError> {
+        let num_sort =
+            i32::try_from(rules.len()).map_err(|_| NativeCollectionError::SortCountOverflow)?;
+        Self::from_parts(num_sort, rules)
+    }
+
+    pub fn from_parts(
+        num_sort: i32,
+        rules: Vec<NativeCollectionSortRule>,
+    ) -> Result<Self, NativeCollectionError> {
+        if num_sort < 0 && !rules.is_empty() {
+            return Err(NativeCollectionError::SortPrefixExceedsDeclaredCount);
+        }
+        if num_sort >= 0 {
+            let declared =
+                usize::try_from(num_sort).map_err(|_| NativeCollectionError::SortCountOverflow)?;
+            if declared > rules.len() {
+                return Err(NativeCollectionError::SortPrefixExceedsDeclaredCount);
+            }
+        }
+        Ok(Self { num_sort, rules })
+    }
+
+    #[must_use]
+    pub const fn num_sort(&self) -> i32 {
+        self.num_sort
+    }
+
+    #[must_use]
+    pub fn rules(&self) -> &[NativeCollectionSortRule] {
+        &self.rules
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NativeCollectionError {
+    RuleCountOverflow,
+    SortCountOverflow,
+    RulePrefixExceedsDeclaredCount,
+    SortPrefixExceedsDeclaredCount,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeCollectionHistoryEntry {
+    query: Vec<u8>,
+    position: i32,
+}
+
+impl NativeCollectionHistoryEntry {
+    #[must_use]
+    pub fn new(query: impl Into<Vec<u8>>, position: i32) -> Self {
+        Self {
+            query: query.into(),
+            position,
+        }
+    }
+
+    #[must_use]
+    pub fn query(&self) -> &[u8] {
+        &self.query
+    }
+
+    #[must_use]
+    pub const fn position(&self) -> i32 {
+        self.position
+    }
+}
+
+/// Applies `dt_collection_history_save`'s duplicate removal and backward shift
+/// to configuration-like slots without touching any application or UI state.
+#[must_use]
+pub fn save_native_collection_history(
+    entries: &[NativeCollectionHistoryEntry],
+    current: impl Into<Vec<u8>>,
+    history_max: usize,
+    recent_max_items: usize,
+) -> Vec<NativeCollectionHistoryEntry> {
+    let current = current.into();
+    let limit = history_max.max(recent_max_items);
+    let slot_count = limit.max(1);
+    let mut result = entries.iter().take(slot_count).cloned().collect::<Vec<_>>();
+    result.resize_with(slot_count, || {
+        NativeCollectionHistoryEntry::new(Vec::new(), 0)
+    });
+
+    if result[0].query == current {
+        return result;
+    }
+
+    let mut move_count = 0_usize;
+    for index in 1..limit {
+        if result[index].query == current {
+            move_count += 1;
+            result[index].query.clear();
+        } else if move_count > 0 {
+            let query = std::mem::take(&mut result[index].query);
+            let position = result[index].position;
+            result[index - move_count].query = query;
+            result[index - move_count].position = position;
+        }
+    }
+
+    for index in (0..limit.saturating_sub(1)).rev() {
+        result[index + 1] = result[index].clone();
+    }
+    result[0].query = current;
+    result
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct CollectionId(u128);

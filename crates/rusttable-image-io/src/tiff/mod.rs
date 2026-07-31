@@ -4,13 +4,14 @@ mod decode;
 mod parser;
 mod types;
 
-pub use decode::TiffDecoder;
+pub use decode::{TiffDecoder, half_bits_to_f32};
 pub use types::{
     TIFF_BACKEND_ID, TiffAlphaSample, TiffByteOrder, TiffChunkKind, TiffChunkLayout,
     TiffCompression, TiffContainer, TiffDataLocation, TiffDecodeError, TiffDecodeLimits,
     TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult, TiffDngMatrix,
-    TiffDngMetadata, TiffHeader, TiffMetadataInventory, TiffPage, TiffPhotometric, TiffPixelData,
-    TiffPredictor, TiffSampleData, TiffSampleFormat, TiffStorageLayout,
+    TiffDngMetadata, TiffHeader, TiffMetadataInventory, TiffNativeRaster, TiffNativeSampleFormat,
+    TiffPage, TiffPhotometric, TiffPixelData, TiffPredictor, TiffSampleData, TiffSampleFormat,
+    TiffStorageLayout,
 };
 
-pub(crate) use decode::{decode_legacy_rgba8, decode_tiff_probe, is_tiff_signature};
+pub(crate) use decode::{decode_tiff_probe, is_tiff_signature};
