@@ -97,7 +97,7 @@ pub fn colorharmonizer_descriptor() -> OperationDescriptor {
                 COLORHARMONIZER_DEFAULT_PULL_WIDTH,
                 2,
             ),
-            vector("custom_hue", 4, 0.0, 1.0, vec![0.0; 4], 1),
+            vector("custom_hue", 4, 0.0, 1.0, vec![0.0, 0.25, 0.5, 0.75], 1),
             integer(
                 "num_custom_nodes",
                 2,

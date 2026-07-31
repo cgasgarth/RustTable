@@ -441,7 +441,7 @@ impl ColorHarmonizerPlan {
             });
         }
         profile.validate()?;
-        validate_pixels(input)?;
+        validate_pixels(input, dimensions.width, &mut cancelled)?;
         if cancelled() {
             return Err(ColorHarmonizerExecutionError::Cancelled);
         }
@@ -549,8 +549,18 @@ impl ColorHarmonizerPlan {
     }
 }
 
-fn validate_pixels(input: &[[f32; 4]]) -> Result<(), ColorHarmonizerExecutionError> {
+fn validate_pixels<F>(
+    input: &[[f32; 4]],
+    width: usize,
+    cancelled: &mut F,
+) -> Result<(), ColorHarmonizerExecutionError>
+where
+    F: FnMut() -> bool,
+{
     for (index, pixel) in input.iter().enumerate() {
+        if index % width == 0 && cancelled() {
+            return Err(ColorHarmonizerExecutionError::Cancelled);
+        }
         for (channel, value) in pixel.iter().enumerate() {
             if !value.is_finite() {
                 return Err(ColorHarmonizerExecutionError::NonFiniteInput { index, channel });

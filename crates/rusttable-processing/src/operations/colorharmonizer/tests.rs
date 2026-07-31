@@ -466,6 +466,42 @@ fn cpu_path_is_full_frame_cancellation_safe_and_preserves_alpha_bits() {
 }
 
 #[test]
+fn validation_cancellation_precedes_trailing_nonfinite_pixel() {
+    let plan = ColorHarmonizerPlan::new(ColorHarmonizerConfig::defaults());
+    let dimensions = FrameDimensions::new(1_000, 100).unwrap();
+    let mut input = vec![[0.0_f32; 4]; dimensions.pixels()];
+    input[dimensions.pixels() - 1][0] = f32::NAN;
+    let polls = Cell::new(0);
+
+    let result =
+        plan.execute_with_cancellation(&input, dimensions, identity_profile(), 1.0, 1.0, || {
+            polls.set(polls.get() + 1);
+            true
+        });
+
+    assert_eq!(result, Err(ColorHarmonizerExecutionError::Cancelled));
+    assert_eq!(polls.get(), 1);
+}
+
+#[test]
+fn validation_without_cancellation_reports_trailing_nonfinite_pixel() {
+    let plan = ColorHarmonizerPlan::new(ColorHarmonizerConfig::defaults());
+    let dimensions = FrameDimensions::new(1_000, 100).unwrap();
+    let mut input = vec![[0.0_f32; 4]; dimensions.pixels()];
+    input[dimensions.pixels() - 1][0] = f32::NAN;
+    let result =
+        plan.execute_with_cancellation(&input, dimensions, identity_profile(), 1.0, 1.0, || false);
+
+    assert_eq!(
+        result,
+        Err(ColorHarmonizerExecutionError::NonFiniteInput {
+            index: dimensions.pixels() - 1,
+            channel: 0,
+        })
+    );
+}
+
+#[test]
 fn negative_rgb_is_clamped_before_ucs_and_hdr_and_unclipped_outputs_are_retained() {
     let mut parameters = ColorHarmonizerParametersV1::defaults();
     parameters.pull_strength = 1.0;
@@ -570,6 +606,10 @@ fn descriptor_keeps_operation_unavailable_without_generic_blend_or_ui() {
     assert_eq!(descriptor.parameters[6].id, "num_custom_nodes");
     assert_eq!(descriptor.parameters[7].id, "node_saturation");
     assert_eq!(descriptor.parameters[8].id, "smoothing");
+    assert_eq!(
+        &descriptor.parameters[5].default,
+        &crate::descriptor::ParameterDefault::Vector(vec![0.0, 0.25, 0.5, 0.75])
+    );
     assert_eq!(descriptor.parameters[1].precision, 1);
     assert_eq!(descriptor.parameters[5].precision, 1);
     assert_eq!(descriptor.parameters[6].precision, 0);
