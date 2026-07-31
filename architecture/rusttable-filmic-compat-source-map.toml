@@ -1,0 +1,178 @@
+schema = "rusttable.filmic-compat-source-map.v1"
+# Operation-local lineage for the bounded legacy filmic CPU leaf.  The pinned
+# source metadata is kept even though retained files are a read-only oracle.
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf5"
+
+[operation]
+compatibility_id = "filmic"
+rust_id = "rusttable.filmic"
+native_module_version = 3
+native_boundary = "lab-d50"
+default_enabled = false
+
+[sources]
+module = "src/iop/filmic.c"
+color_conversions = "src/common/colorspaces_inline_conversions.h"
+types = "src/common/dttypes.h"
+math = "src/common/math.h"
+imageop = "src/develop/imageop.h"
+draw = "src/gui/draw.h"
+curve = "src/common/curve_tools.c"
+curve_header = "src/common/curve_tools.h"
+opencl = "data/kernels/filmic.cl"
+
+[abi]
+v1_bytes = 52
+v2_bytes = 56
+v3_bytes = 60
+migration = "v1/v2 direct to v3; global_saturation defaults to 100; v1 preserve_color defaults to 0"
+
+[capabilities]
+cpu = true
+gpu_tier = "none"
+deterministic_gpu = false
+identity_roi = true
+overlap_pixels = 0
+operation_mask_input = false
+operation_mask_output = false
+fallback_to_cpu = false
+shared_registry = false
+ui = "unavailable"
+
+[[responsibility]]
+id = "native-parameter-layout"
+upstream_path = "src/iop/filmic.c"
+upstream_symbol = "dt_iop_filmic_params_v1_t; dt_iop_filmic_params_v2_t; dt_iop_filmic_params_t"
+rust_path = "crates/rusttable-processing/src/operations/filmic/codec.rs"
+source_lines = "80-97,190-207,211-271"
+status = "implemented"
+evidence = "The Rust codecs preserve native declaration order and exact 52/56/60-byte little-endian layouts."
+
+[[responsibility]]
+id = "native-history-migration"
+upstream_path = "src/iop/filmic.c"
+upstream_symbol = "legacy_params"
+rust_path = "crates/rusttable-processing/src/operations/filmic/codec.rs"
+source_lines = "183-298"
+status = "implemented"
+evidence = "v1 and v2 are written directly to v3; v1 supplies global_saturation=100 and preserve_color=0, while v2 supplies global_saturation=100."
+
+[[responsibility]]
+id = "curve-node-and-lut-derivation"
+upstream_path = "src/iop/filmic.c"
+upstream_symbol = "compute_curve_lut; commit_params"
+rust_path = "crates/rusttable-processing/src/operations/filmic/curve.rs"
+source_lines = "968-1177,1179-1244"
+status = "implemented"
+evidence = "The source node-loss branches, interpolator dispatch, 65536-entry table, and 65536-entry concavity window are retained."
+
+[[responsibility]]
+id = "curve-sampling-helper"
+upstream_path = "src/gui/draw.h;src/common/curve_tools.c;src/common/curve_tools.h"
+upstream_symbol = "dt_draw_curve_calc_values; CurveDataSample; CurveDataSampleV2; CurveDataSampleV2Periodic"
+rust_path = "crates/rusttable-processing/src/operations/filmic/curve.rs"
+source_lines = "src/gui/draw.h:355-420;src/common/curve_tools.c:657-670;src/common/curve_tools.h:89-98"
+status = "implemented"
+evidence = "LUT construction follows dt_draw_curve_calc_values() rather than substituting a generic interpolation path."
+
+[[responsibility]]
+id = "lab-d50-forward-conversion"
+upstream_path = "src/common/colorspaces_inline_conversions.h"
+upstream_symbol = "dt_Lab_to_XYZ; lab_f_inv"
+rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
+source_lines = "142-205"
+status = "implemented"
+evidence = "The D50 white point, epsilon branch, padded zero coefficients, and four-lane helper boundary are covered by exact bit fixtures."
+
+[[responsibility]]
+id = "prophoto-matrix-conversion"
+upstream_path = "src/common/colorspaces_inline_conversions.h"
+upstream_symbol = "dt_apply_transposed_color_matrix; dt_XYZ_to_prophotorgb; dt_prophotorgb_to_XYZ; dt_XYZ_to_Lab; dt_prophotorgb_to_Lab"
+rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
+source_lines = "119-140,146-179,437-461,582-597"
+status = "implemented"
+evidence = "The D50 ProPhoto matrices use padded zero fourth coefficients and the Rust boundary asserts the exact fourth-lane result."
+
+[[responsibility]]
+id = "four-lane-pixel-contract"
+upstream_path = "src/common/dttypes.h"
+upstream_symbol = "dt_aligned_pixel_t; DT_PIXEL_SIMD_CHANNELS; for_each_channel; for_four_channels"
+rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
+source_lines = "58-71,83-113"
+status = "implemented"
+evidence = "Native CPU output is modeled as a four-lane pixel and the padded spare lane is published as zero, not copied from input alpha."
+
+[[responsibility]]
+id = "vector-log-exp-approximation"
+upstream_path = "src/common/math.h"
+upstream_symbol = "dt_vector_log2; dt_vector_exp2; dt_vector_round; dt_vector_powf; dt_vector_channel_max"
+rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
+source_lines = "513-525,527-641,653-663,721-729"
+status = "implemented"
+evidence = "The scalar approximation preserves the native bit-shaped polynomial and ARM roundf() ties-away-from-zero; exact tie inputs 0, 1, -2, 3, and -4 are regression vectors."
+
+[[responsibility]]
+id = "native-cpu-output-write"
+upstream_path = "src/develop/imageop.h;src/iop/filmic.c"
+upstream_symbol = "copy_pixel_nontemporal; _process_pixel; process"
+rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
+source_lines = "src/develop/imageop.h:602-623;src/iop/filmic.c:395-548"
+status = "implemented"
+evidence = "The leaf models native CPU's four-lane output write and does not claim OpenCL alpha behavior."
+
+[[responsibility]]
+id = "pixelpipe-routing"
+upstream_path = "src/develop/pixelpipe_hb.c;src/develop/pixelpipe_hb.h"
+upstream_symbol = "dt_dev_pixelpipe_process; dt_dev_pixelpipe_process_no_gamma"
+rust_path = "crates/rusttable-pixelpipe"
+source_lines = "src/develop/pixelpipe_hb.c:2951-3075;src/develop/pixelpipe_hb.h:403-412"
+status = "deferred"
+deferred_reason = "This operation-local leaf is not registered or routed through the shared pixelpipe; no complete production execution route is claimed."
+
+[[responsibility]]
+id = "gpu-opencl"
+upstream_path = "src/iop/filmic.c;data/kernels/filmic.cl"
+upstream_symbol = "process_cl; filmic kernel"
+rust_path = "crates/rusttable-pixelpipe"
+source_lines = "src/iop/filmic.c:550-590"
+status = "deferred"
+deferred_reason = "The OpenCL path is intentionally unavailable; gpu_tier remains none and fallback_to_cpu remains false."
+
+[[responsibility]]
+id = "gui-and-edit-routing"
+upstream_path = "src/iop/filmic.c;src/gui/draw.h"
+upstream_symbol = "gui_init; init_presets; dt_draw_curve_calc_values"
+rust_path = "crates/rusttable-ui;crates/rusttable-app;crates/rusttable-processing/src/operations"
+source_lines = "src/iop/filmic.c:300-393,1343-1664;src/gui/draw.h:409-420"
+status = "deferred"
+deferred_reason = "The GTK controls, curve widget, action persistence, and shared registry projection are not owned by this leaf; ui remains unavailable and no shared registration is added."
+
+[[responsibility]]
+id = "cancellation-polling"
+upstream_path = "src/control/jobs.c;src/develop/pixelpipe_hb.c"
+upstream_symbol = "dt_control_job_cancel; dt_dev_pixelpipe_process"
+rust_path = "crates/rusttable-processing/src/operations/filmic/execution.rs"
+source_lines = "src/control/jobs.c:211-228;src/develop/pixelpipe_hb.c:3055-3075"
+rust_lines = "crates/rusttable-processing/src/operations/filmic/execution.rs:170-190"
+status = "deferred"
+deferred_reason = "execute_tile()/execute() do not poll cancellation; bounded cancellation and publication gates belong to the pixelpipe integration seam before direct registration."
+
+[[responsibility]]
+id = "budgeted-allocation"
+upstream_path = "src/develop/tiling.c;src/develop/pixelpipe_hb.c"
+upstream_symbol = "_default_process_tiling_ptp; _default_process_tiling_roi; dt_dev_pixelpipe_process"
+rust_path = "crates/rusttable-processing/src/operations/filmic/{curve.rs,execution.rs}"
+source_lines = "src/develop/tiling.c:570-708,828-1094;src/develop/pixelpipe_hb.c:3055-3075"
+rust_lines = "crates/rusttable-processing/src/operations/filmic/curve.rs:142-166;crates/rusttable-processing/src/operations/filmic/execution.rs:129-142,174-186"
+status = "deferred"
+deferred_reason = "LUT/output Vec allocations are infallible and the leaf has no budget admission or bounded fallible allocation; pixelpipe must own this seam before direct registration."
+
+[[responsibility]]
+id = "shared-registration-and-history-import"
+upstream_path = "src/iop/filmic.c;src/develop/imageop.h"
+upstream_symbol = "name; process; dt_iop_module_t"
+rust_path = "crates/rusttable-processing/src/operations.rs;crates/rusttable-import;crates/rusttable-pixelpipe"
+source_lines = "src/iop/filmic.c:156-181,502-548;src/develop/imageop.h:169-302"
+status = "deferred"
+deferred_reason = "No shared registry, imported-history materialization, blend/mask route, or production caller is added by this CPU-only leaf."
