@@ -14,6 +14,7 @@ pub mod clahe;
 pub mod clipping;
 pub mod colorcontrast;
 pub mod colorcorrection;
+pub mod colorharmonizer;
 pub mod colorin;
 pub mod colorout;
 pub mod colorreconstruction;
