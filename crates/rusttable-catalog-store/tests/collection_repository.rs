@@ -5,7 +5,8 @@ use rusttable_catalog::{
     ActiveLibraryView, ActiveLighttableProperty, ActiveLighttableSort,
     ActiveLighttableSortDirection, ActiveLighttableState, CollectionCommand, CollectionQuery,
     CollectionRepository, CollectionRepositoryError, CollectionSort, CollectionViewDefinition,
-    GroupCollapsePolicy, SavedCollection,
+    GroupCollapsePolicy, NativeCollectionRule, NativeCollectionRules, NativeCollectionSortRule,
+    NativeCollectionSorts, SavedCollection,
 };
 use rusttable_catalog_store::RedbCollectionRepository;
 
@@ -151,5 +152,86 @@ fn active_lighttable_commit_failure_keeps_the_previous_payload() {
             .expect("load previous state"),
         first
     );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn native_collection_and_sort_payloads_reopen_with_exact_records_and_counts() {
+    let path = path();
+    let rules = NativeCollectionRules::collect(vec![
+        NativeCollectionRule::collect(0, 4, b"folder".to_vec()),
+        NativeCollectionRule::collect(1, 5, b"holiday".to_vec()),
+    ])
+    .expect("collection rules");
+    let sorts = NativeCollectionSorts::new(vec![
+        NativeCollectionSortRule::new(0, 0),
+        NativeCollectionSortRule::new(1, 1),
+    ])
+    .expect("collection sorts");
+
+    {
+        let repository = RedbCollectionRepository::open(&path).expect("open");
+        repository
+            .persist_native_collection_rules(&rules)
+            .expect("persist collection rules");
+        repository
+            .persist_native_collection_sorts(&sorts)
+            .expect("persist collection sorts");
+    }
+
+    let repository = RedbCollectionRepository::open(&path).expect("reopen");
+    let restored_rules = repository
+        .load_native_collection_rules(false)
+        .expect("load collection rules")
+        .expect("collection rules payload");
+    let restored_sorts = repository
+        .load_native_collection_sorts()
+        .expect("load collection sorts")
+        .expect("collection sorts payload");
+    assert_eq!(restored_rules, rules);
+    assert_eq!(restored_rules.num_rules(), 2);
+    assert_eq!(restored_sorts, sorts);
+    assert_eq!(restored_sorts.num_sort(), 2);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn native_collection_commit_failure_keeps_the_previous_payload() {
+    let path = path();
+    let first = NativeCollectionRules::collect(vec![NativeCollectionRule::collect(
+        0,
+        1,
+        b"before".to_vec(),
+    )])
+    .expect("first rules");
+    let second = NativeCollectionRules::collect(vec![NativeCollectionRule::collect(
+        1,
+        2,
+        b"after".to_vec(),
+    )])
+    .expect("second rules");
+
+    let repository = RedbCollectionRepository::open(&path).expect("open");
+    repository
+        .persist_native_collection_rules(&first)
+        .expect("persist initial rules");
+    drop(repository);
+
+    let failing = RedbCollectionRepository::open_with_before_commit_hook(&path, || {
+        Err(CollectionRepositoryError::CommitFailed)
+    })
+    .expect("open failing repository");
+    assert_eq!(
+        failing.persist_native_collection_rules(&second),
+        Err(CollectionRepositoryError::CommitFailed)
+    );
+    drop(failing);
+
+    let repository = RedbCollectionRepository::open(&path).expect("reopen");
+    let restored = repository
+        .load_native_collection_rules(false)
+        .expect("load previous rules")
+        .expect("native rules");
+    assert_eq!(restored, first);
     let _ = std::fs::remove_file(path);
 }

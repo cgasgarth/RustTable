@@ -8,14 +8,19 @@ use rusttable_catalog::{
     ActiveLibraryView, ActiveLighttableProperty, ActiveLighttableSort,
     ActiveLighttableSortDirection, ActiveLighttableState, CollectionCommand, CollectionField,
     CollectionQuery, CollectionRepository, CollectionRepositoryError, CollectionSort,
-    CollectionState, SavedCollection,
+    CollectionState, NativeCollectionRules, NativeCollectionSorts, SavedCollection,
 };
 use sha2::{Digest, Sha256};
 
 use crate::schema;
 
+// Native collection payloads map the source configuration persistence in
+// src/common/collection.c without routing it into the application query hub.
 const STATE_KEY: &[u8] = b"state";
 const ACTIVE_LIGHTTABLE_STATE_KEY: &[u8] = b"active-lighttable-v1";
+const NATIVE_COLLECTION_RULES_KEY: &[u8] = b"native-collection-rules-v1";
+const NATIVE_FILTERING_RULES_KEY: &[u8] = b"native-filtering-rules-v1";
+const NATIVE_COLLECTION_SORTS_KEY: &[u8] = b"native-collection-sorts-v1";
 
 type BeforeCommitHook = Arc<dyn Fn() -> Result<(), CollectionRepositoryError> + Send + Sync>;
 
@@ -48,6 +53,96 @@ impl RedbCollectionRepository {
             database,
             before_commit: Some(Arc::new(hook)),
         })
+    }
+
+    /// Encodes native collect or filtering records without applying them to an app query.
+    #[must_use]
+    pub fn encode_native_collection_rules(rules: &NativeCollectionRules) -> Vec<u8> {
+        crate::codecs::collection::encode_rules(rules)
+    }
+
+    /// Decodes native collect or filtering records with source-compatible prefix truncation.
+    #[must_use]
+    pub fn decode_native_collection_rules(filtering: bool, bytes: &[u8]) -> NativeCollectionRules {
+        crate::codecs::collection::decode_rules(filtering, bytes)
+    }
+
+    /// Encodes native sort records in their stored order.
+    #[must_use]
+    pub fn encode_native_collection_sorts(sorts: &NativeCollectionSorts) -> Vec<u8> {
+        crate::codecs::collection::encode_sorts(sorts)
+    }
+
+    /// Decodes native sort records with source-compatible prefix truncation.
+    #[must_use]
+    pub fn decode_native_collection_sorts(bytes: &[u8]) -> NativeCollectionSorts {
+        crate::codecs::collection::decode_sorts(bytes)
+    }
+
+    /// Computes the source-compatible native-endian MD5 rule checksum.
+    #[must_use]
+    pub fn native_collection_checksum(rules: &NativeCollectionRules) -> [u8; 16] {
+        crate::codecs::collection::checksum(rules)
+    }
+
+    /// Returns the source-compatible lowercase hexadecimal rule checksum.
+    #[must_use]
+    pub fn native_collection_checksum_hex(rules: &NativeCollectionRules) -> String {
+        crate::codecs::collection::checksum_hex(rules)
+    }
+
+    /// Loads persisted native records from the isolated collection leaf.
+    pub fn load_native_collection_rules(
+        &self,
+        filtering: bool,
+    ) -> Result<Option<NativeCollectionRules>, CollectionRepositoryError> {
+        let key = if filtering {
+            NATIVE_FILTERING_RULES_KEY
+        } else {
+            NATIVE_COLLECTION_RULES_KEY
+        };
+        let Some(bytes) = self.load_native_payload(key)? else {
+            return Ok(None);
+        };
+        let rules = crate::codecs::collection::decode_rules(filtering, &bytes);
+        if rules.filtering_mode() != filtering {
+            return Err(CollectionRepositoryError::Corrupt);
+        }
+        Ok(Some(rules))
+    }
+
+    /// Persists native collect or filtering records atomically in the collection table.
+    pub fn persist_native_collection_rules(
+        &self,
+        rules: &NativeCollectionRules,
+    ) -> Result<(), CollectionRepositoryError> {
+        let key = if rules.filtering_mode() {
+            NATIVE_FILTERING_RULES_KEY
+        } else {
+            NATIVE_COLLECTION_RULES_KEY
+        };
+        self.commit_native_payload(key, &crate::codecs::collection::encode_rules(rules))
+    }
+
+    /// Loads persisted native sort records from the isolated collection leaf.
+    pub fn load_native_collection_sorts(
+        &self,
+    ) -> Result<Option<NativeCollectionSorts>, CollectionRepositoryError> {
+        let Some(bytes) = self.load_native_payload(NATIVE_COLLECTION_SORTS_KEY)? else {
+            return Ok(None);
+        };
+        Ok(Some(crate::codecs::collection::decode_sorts(&bytes)))
+    }
+
+    /// Persists native sort records atomically in the collection table.
+    pub fn persist_native_collection_sorts(
+        &self,
+        sorts: &NativeCollectionSorts,
+    ) -> Result<(), CollectionRepositoryError> {
+        self.commit_native_payload(
+            NATIVE_COLLECTION_SORTS_KEY,
+            &crate::codecs::collection::encode_sorts(sorts),
+        )
     }
 
     /// Rechecks the state and all derived indexes without changing the catalog.
@@ -184,6 +279,48 @@ impl RedbCollectionRepository {
                 .map_err(|_| CollectionRepositoryError::Unavailable)?;
             integrity
                 .insert(state.revision().to_be_bytes().as_slice(), digest.as_slice())
+                .map_err(|_| CollectionRepositoryError::Unavailable)?;
+        }
+        if let Some(hook) = &self.before_commit {
+            hook()?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| CollectionRepositoryError::CommitFailed)
+    }
+
+    fn load_native_payload(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<Vec<u8>>, CollectionRepositoryError> {
+        let transaction = self
+            .database
+            .begin_read()
+            .map_err(|_| CollectionRepositoryError::Unavailable)?;
+        let table = transaction
+            .open_table(schema::COLLECTION_STATE_TABLE)
+            .map_err(|_| CollectionRepositoryError::Corrupt)?;
+        table
+            .get(key)
+            .map_err(|_| CollectionRepositoryError::Corrupt)
+            .map(|value| value.map(|value| value.value().to_vec()))
+    }
+
+    fn commit_native_payload(
+        &self,
+        key: &[u8],
+        payload: &[u8],
+    ) -> Result<(), CollectionRepositoryError> {
+        let transaction = self
+            .database
+            .begin_write()
+            .map_err(|_| CollectionRepositoryError::Unavailable)?;
+        {
+            let mut table = transaction
+                .open_table(schema::COLLECTION_STATE_TABLE)
+                .map_err(|_| CollectionRepositoryError::Unavailable)?;
+            table
+                .insert(key, payload)
                 .map_err(|_| CollectionRepositoryError::Unavailable)?;
         }
         if let Some(hook) = &self.before_commit {
