@@ -24,12 +24,14 @@ use super::{OperationExecutionError, ReconstructionBudget};
 #[cfg(not(test))]
 use crate::common::box_filters::{
     BOX_ITERATIONS, BoxFilterError, CancellableBoxFilterError, box_mean_with_cancel,
+    box_mean_with_cancel_scratch_bytes,
 };
 #[cfg(not(test))]
 use crate::{FiniteF32, RasterDimensions, RgbChannel};
 #[cfg(test)]
 use rusttable_processing::common::box_filters::{
     BOX_ITERATIONS, BoxFilterError, CancellableBoxFilterError, box_mean_with_cancel,
+    box_mean_with_cancel_scratch_bytes,
 };
 #[cfg(test)]
 use rusttable_processing::operations::{OperationExecutionError, ReconstructionBudget};
@@ -316,7 +318,9 @@ impl HighpassPlan {
     ) -> Result<Self, OperationExecutionError> {
         let radius = resolve_radius(config.sharpness(), roi_scale, piece_scale)?;
         let pixel_count = dimensions_pixel_count(dimensions)?;
-        check_budget(pixel_count)?;
+        let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
+        let height = usize::try_from(dimensions.height()).expect("validated height fits usize");
+        check_budget(pixel_count, height, width, radius)?;
         Ok(Self {
             config,
             dimensions,
@@ -422,13 +426,13 @@ impl HighpassPlan {
                 actual: input.len(),
             });
         }
-        check_budget(expected)?;
+        let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
+        let height = usize::try_from(dimensions.height()).expect("validated height fits usize");
+        check_budget(expected, height, width, self.radius)?;
         if cancelled() {
             return Err(OperationExecutionError::Cancelled);
         }
 
-        let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
-        let height = usize::try_from(dimensions.height()).expect("validated height fits usize");
         let mut blurred = try_reserve::<f32>(expected)?;
         for (index, pixel) in input.iter().enumerate() {
             if index % width == 0 && cancelled() {
@@ -469,7 +473,10 @@ impl HighpassPlan {
                 return Err(OperationExecutionError::Cancelled);
             }
             let lightness = (blurred_lightness + pixel.lightness()) - 100.0_f32;
-            let output_lightness = clamp_lab((lightness * contrast_scale) + 50.0_f32);
+            // `_blend` receives `contrast_scale` as double, so the native
+            // multiply/add stay in f64 until CLAMP's result is stored as float.
+            let output_lightness =
+                clamp_lab(f64::from(lightness) * f64::from(contrast_scale) + 50.0_f64);
             output.push(HighpassPixel::new(output_lightness, 0.0, 0.0, 0.0));
         }
         Ok(output)
@@ -485,14 +492,28 @@ fn dimensions_pixel_count(dimensions: RasterDimensions) -> Result<usize, Operati
     })
 }
 
-fn check_budget(pixel_count: usize) -> Result<(), OperationExecutionError> {
-    let bytes_per_pixel = std::mem::size_of::<HighpassPixel>() + std::mem::size_of::<f32>();
-    let required = pixel_count.checked_mul(bytes_per_pixel).ok_or(
-        OperationExecutionError::MemoryBudgetExceeded {
+fn check_budget(
+    pixel_count: usize,
+    height: usize,
+    width: usize,
+    radius: u32,
+) -> Result<(), OperationExecutionError> {
+    let scratch_bytes = box_mean_with_cancel_scratch_bytes(
+        height,
+        width,
+        1,
+        usize::try_from(radius).expect("highpass radius is bounded"),
+        BOX_ITERATIONS,
+    )
+    .map_err(|error| box_filter_error(CancellableBoxFilterError::Filter(error)))?;
+    let required = pixel_count
+        .checked_mul(std::mem::size_of::<HighpassPixel>())
+        .and_then(|bytes| bytes.checked_add(pixel_count.checked_mul(std::mem::size_of::<f32>())?))
+        .and_then(|bytes| bytes.checked_add(scratch_bytes))
+        .ok_or(OperationExecutionError::MemoryBudgetExceeded {
             required: usize::MAX,
             budget: ReconstructionBudget::default().maximum_bytes(),
-        },
-    )?;
+        })?;
     if required <= ReconstructionBudget::default().maximum_bytes() {
         Ok(())
     } else {
@@ -573,9 +594,13 @@ fn lclip(value: f32) -> f32 {
     clippy::manual_clamp,
     reason = "native CLAMPS maps NaN to the low bound instead of returning NaN"
 )]
-fn clamp_lab(value: f32) -> f32 {
-    if value >= 0.0_f32 {
-        if value <= 100.0_f32 { value } else { 100.0_f32 }
+fn clamp_lab(value: f64) -> f32 {
+    if value >= 0.0_f64 {
+        if value <= 100.0_f64 {
+            value as f32
+        } else {
+            100.0_f32
+        }
     } else {
         0.0_f32
     }

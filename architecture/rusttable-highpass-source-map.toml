@@ -19,15 +19,16 @@ status = "implemented"
 [[responsibility]]
 id = "ordinary-eight-pass-box-filter"
 upstream_path = "src/common/box_filters.h"
-upstream_symbols = ["BOX_ITERATIONS", "dt_box_mean"]
+upstream_symbols = ["BOX_ITERATIONS"]
 rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
 status = "implemented"
+notes = "The highpass leaf owns the fixed eight-pass invocation and contract; shared box-filter arithmetic is mapped below."
 
 [[responsibility]]
 id = "ordinary-box-filter-arithmetic"
 upstream_path = "src/common/box_filters.cc"
 upstream_symbols = ["_blur_horizontal", "_blur_vertical", "_box_mean"]
-rust_path = "crates/rusttable-processing/src/operations/highpass.rs"
+rust_path = "crates/rusttable-processing/src/common/box_filters.rs"
 status = "implemented"
 
 [[responsibility]]

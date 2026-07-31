@@ -16,7 +16,7 @@ use highpass::{
     HighpassParameterError, HighpassParametersV1, HighpassPixel, HighpassPlan,
 };
 use rusttable_processing::RasterDimensions;
-use rusttable_processing::common::box_filters::{BOX_ITERATIONS, box_mean_with_cancel};
+use rusttable_processing::common::box_filters::BOX_ITERATIONS;
 use rusttable_processing::operations::OperationExecutionError;
 
 fn dimensions(width: u32, height: u32) -> RasterDimensions {
@@ -139,6 +139,23 @@ fn radius_uses_native_truncation_thresholds_and_scaled_ceil_cap() {
 }
 
 #[test]
+fn plan_budget_includes_blurred_output_and_cancellable_scratch_buffers() {
+    let config = HighpassConfig::new(50.0, 50.0).expect("config");
+    let within = dimensions(22_369_621, 1);
+    HighpassPlan::new(config, within).expect("conservative total remains within 512 MiB");
+
+    let over = HighpassPlan::new(config, dimensions(22_369_622, 1))
+        .expect_err("conservative total exceeds 512 MiB");
+    assert_eq!(
+        over,
+        OperationExecutionError::MemoryBudgetExceeded {
+            required: 536_870_928,
+            budget: 512 * 1024 * 1024,
+        }
+    );
+}
+
+#[test]
 fn tiling_keeps_native_factors_and_radius_zero_still_overlaps_three_pixels() {
     let zero = HighpassConfig::new(-1.0, 50.0).expect("zero-radius config");
     let tiling = HighpassPlan::tiling(zero, 1.0, 1.0).expect("zero-radius tiling");
@@ -180,20 +197,27 @@ fn cpu_leaf_matches_eight_ordinary_box_passes_and_zeroes_lab_chroma_and_fourth()
     assert_eq!(plan.radius(), 1);
     let output = plan.execute(&input, dimensions).expect("highpass");
 
-    let mut expected_blur = input
-        .iter()
-        .map(|pixel| {
-            let lightness = pixel.lightness();
-            100.0_f32 - lightness.clamp(0.0_f32, 100.0_f32)
-        })
-        .collect::<Vec<_>>();
-    box_mean_with_cancel(&mut expected_blur, 3, 4, 1, 1, BOX_ITERATIONS, || false)
-        .expect("native box mean");
+    assert_eq!(BOX_ITERATIONS, 8);
+    let expected_blur = scalar_box_mean(
+        input
+            .iter()
+            .map(|pixel| {
+                let lightness = pixel.lightness();
+                let clipped = lightness.clamp(0.0_f32, 100.0_f32);
+                100.0_f32 - clipped
+            })
+            .collect(),
+        3,
+        4,
+        1,
+    );
     let contrast_scale = (50.0_f32 / 100.0_f32) * 7.5_f32 * 0.5_f32;
     for (actual, (input, blurred)) in output.iter().zip(input.iter().zip(expected_blur)) {
-        let expected = ((blurred + input.lightness()) - 100.0_f32) * contrast_scale + 50.0_f32;
-        let expected = if expected >= 0.0 {
-            if expected <= 100.0 { expected } else { 100.0 }
+        let blend = f64::from((blurred + input.lightness()) - 100.0_f32)
+            * f64::from(contrast_scale)
+            + 50.0_f64;
+        let expected = if blend >= 0.0 {
+            if blend <= 100.0 { blend as f32 } else { 100.0 }
         } else {
             0.0
         };
@@ -202,6 +226,25 @@ fn cpu_leaf_matches_eight_ordinary_box_passes_and_zeroes_lab_chroma_and_fourth()
         assert_eq!(actual.b().to_bits(), 0.0_f32.to_bits());
         assert_eq!(actual.fourth().to_bits(), 0.0_f32.to_bits());
     }
+}
+
+#[test]
+fn final_blend_matches_native_double_precision_before_float_store() {
+    let dimensions = dimensions(1, 1);
+    // The native case is L = -178.00401306152344, encoded as this f32.
+    let input = [HighpassPixel::new(
+        f32::from_bits(0xc332_0107),
+        0.0,
+        0.0,
+        0.0,
+    )];
+    let plan = HighpassPlan::new(HighpassConfig::new(-1.0, 1.0).expect("config"), dimensions)
+        .expect("zero-radius plan");
+    let output = plan.execute(&input, dimensions).expect("highpass");
+
+    // Native `_blend` stores 0x422d4ca5; f32 multiply/add arithmetic yields
+    // the adjacent 0x422d4ca6 candidate.
+    assert_eq!(output[0].lightness().to_bits(), 0x422d_4ca5);
 }
 
 #[test]
@@ -259,6 +302,117 @@ fn expanded_tile_uses_the_committed_radius_and_matches_a_same_shape_scalar_leaf(
     assert_eq!(expanded, independent);
 }
 
+fn scalar_box_mean(mut values: Vec<f32>, height: usize, width: usize, radius: usize) -> Vec<f32> {
+    for _ in 0..BOX_ITERATIONS {
+        for row in values.chunks_exact_mut(width).take(height) {
+            scalar_horizontal(row, radius);
+        }
+        scalar_vertical(&mut values, height, width, radius);
+    }
+    values
+}
+
+fn scalar_horizontal(row: &mut [f32], radius: usize) {
+    if radius == 0 {
+        return;
+    }
+    let width = row.len();
+    let source = row.to_vec();
+    let mut scratch = vec![0.0_f32; width];
+    let mut sum = 0.0_f32;
+    let mut hits = 0_usize;
+
+    for x in 0..radius.min(width) {
+        hits += 1;
+        scratch[x] = source[x];
+        sum += source[x];
+    }
+
+    let mut x = 0;
+    while x <= radius && x + radius < width {
+        let next = x + radius;
+        hits += 1;
+        scratch[next] = source[next];
+        sum += source[next];
+        row[x] = sum / hits as f32;
+        x += 1;
+    }
+    while x <= radius && x < width {
+        row[x] = sum / hits as f32;
+        x += 1;
+    }
+    while x + radius < width {
+        let outgoing = x - radius - 1;
+        let next = x + radius;
+        sum -= scratch[outgoing];
+        scratch[next] = source[next];
+        sum += source[next];
+        row[x] = sum / hits as f32;
+        x += 1;
+    }
+    while x < width {
+        let outgoing = x - radius - 1;
+        hits -= 1;
+        sum -= scratch[outgoing];
+        row[x] = sum / hits as f32;
+        x += 1;
+    }
+}
+
+fn scalar_vertical(values: &mut [f32], height: usize, width: usize, radius: usize) {
+    if radius == 0 {
+        return;
+    }
+    let source = values.to_vec();
+    let mut mask = 1;
+    let mut window = radius * 2 + 1;
+    while window > 1 {
+        mask = (mask << 1) | 1;
+        window >>= 1;
+    }
+
+    for column in 0..width {
+        let mut scratch = vec![0.0_f32; mask + 1];
+        let mut sum = 0.0_f32;
+        let mut hits = 0_usize;
+        for y in 0..radius.min(height) {
+            hits += 1;
+            scratch[y & mask] = source[y * width + column];
+            sum += source[y * width + column];
+        }
+
+        let mut y = 0;
+        while y <= radius && y + radius < height {
+            let next = y + radius;
+            hits += 1;
+            scratch[next & mask] = source[next * width + column];
+            sum += source[next * width + column];
+            values[y * width + column] = sum / hits as f32;
+            y += 1;
+        }
+        while y <= radius && y < height {
+            values[y * width + column] = sum / hits as f32;
+            y += 1;
+        }
+        while y + radius < height {
+            let outgoing = y - radius - 1;
+            let next = y + radius;
+            sum -= scratch[outgoing & mask];
+            scratch[next & mask] = source[next * width + column];
+            sum += source[next * width + column];
+            values[y * width + column] = sum / hits as f32;
+            y += 1;
+        }
+        while y < height {
+            let outgoing = y - radius - 1;
+            hits -= 1;
+            sum -= scratch[outgoing & mask];
+            values[y * width + column] = sum / hits as f32;
+            y += 1;
+        }
+    }
+}
+
 #[test]
 fn cancellation_shape_and_nonfinite_errors_publish_no_partial_output() {
     let frame_dimensions = dimensions(8, 8);
@@ -273,11 +427,14 @@ fn cancellation_shape_and_nonfinite_errors_publish_no_partial_output() {
         .execute_with_cancel(&input, frame_dimensions, || {
             let next = polls.get() + 1;
             polls.set(next);
-            next > 3
+            // Poll fourteen permits the first horizontal edge output to
+            // mutate the private blur buffer; poll fifteen cancels inside
+            // that scanline.
+            next > 14
         })
-        .expect_err("mid-operation cancellation");
+        .expect_err("mid-scanline cancellation");
     assert_eq!(error, OperationExecutionError::Cancelled);
-    assert!(polls.get() > 3);
+    assert!(polls.get() > 14);
     assert!(
         input
             .iter()
