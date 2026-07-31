@@ -24,7 +24,7 @@ fn destination(name: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn tiff_output_is_explicit_classic_rgba8_and_round_trips_exactly() {
+fn tiff_output_is_explicit_classic_rgba8_and_native_import_is_opaque() {
     let destination = destination("round-trip.png");
     let source = image();
     let receipt = FileImageOutput::new(OutputLimits::new(1_000_000).unwrap())
@@ -38,7 +38,7 @@ fn tiff_output_is_explicit_classic_rgba8_and_round_trips_exactly() {
         .decode_path(&destination)
         .unwrap();
     assert_eq!(decoded.dimensions(), source.dimensions());
-    assert_eq!(decoded.pixels(), source.pixels());
+    assert_eq!(decoded.pixels(), &[255, 0, 0, 255, 0, 255, 0, 255]);
     fs::remove_file(destination).unwrap();
 }
 

@@ -17,8 +17,8 @@ use crate::openexr::{
 use crate::png::{decode_png_probe, is_png_signature};
 use crate::raw::{decode_raw, decode_raw_frame as decode_native_raw_frame, is_raw, probe_raw};
 use crate::tiff::{
-    TiffDecodeRequest, TiffPhotometric, TiffSampleData, TiffStorageLayout,
-    decode_legacy_rgba8 as decode_tiff_rgba8, decode_tiff_probe, is_tiff_signature,
+    TiffDecodeError, TiffDecodeLimits, TiffDecodeRequest, TiffDecoder, TiffNativeRaster,
+    TiffNativeSampleFormat, TiffPage, decode_tiff_probe, is_tiff_signature,
 };
 use crate::webp::{
     decode_legacy_rgba8 as decode_webp, decode_webp_frame, decode_webp_probe, is_webp_signature,
@@ -489,26 +489,14 @@ fn decode_exr_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, 
 }
 
 fn decode_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, ImageInputError> {
-    let (dimensions, orientation, pixels) = decode_tiff_rgba8(bytes, limits)?;
-    let result = crate::tiff::TiffDecoder::new()
-        .decode_bytes(
-            bytes,
-            &TiffDecodeRequest::new(crate::tiff::TiffDecodeLimits::from_common(limits)),
-        )
-        .map_err(|error| source_color_error(InputFormat::Tiff, error))?;
-    let samples = result
-        .pixels
-        .as_ref()
-        .ok_or_else(|| ImageInputError::MalformedInput {
-            format: InputFormat::Tiff,
-            message: "TIFF full decode returned no typed pixels".to_owned(),
-        })?;
-    let (source_color, _) = tiff_source_color(bytes, &result.page, &samples.samples)?;
+    let (native, page) = decode_native_tiff(bytes, limits)?;
+    let (source_color, _) = tiff_source_color(bytes, &page, native.sample_format)?;
+    let pixels = native_rgba8(&native)?;
     DecodedImage::new_with_source_orientation(
-        dimensions,
+        native.dimensions,
         pixels,
         source_color.encoding(),
-        orientation,
+        page.orientation,
     )
     .map_err(|error| match error {
         rusttable_image::DecodedImageError::ArithmeticOverflow => {
@@ -521,82 +509,21 @@ fn decode_tiff(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, Image
 }
 
 fn decode_tiff_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, ImageInputError> {
-    let result = crate::tiff::TiffDecoder::new()
-        .decode_bytes(
-            bytes,
-            &TiffDecodeRequest::new(crate::tiff::TiffDecodeLimits::from_common(limits)),
-        )
-        .map_err(|error| ImageInputError::MalformedInput {
-            format: InputFormat::Tiff,
-            message: error.to_string(),
-        })?;
-    let pixels = result
+    let (native, page) = decode_native_tiff(bytes, limits)?;
+    let (source_color, icc) = tiff_source_color(bytes, &page, native.sample_format)?;
+    // The native scanline leaf always emits RGB plus one spare float channel.
+    // Preserve all four interleaved values without deriving TIFF alpha from it.
+    let format = rusttable_image::PixelFormat::canonical_rgba_f32();
+    let sample_bytes = native
         .pixels
-        .ok_or_else(|| ImageInputError::MalformedInput {
-            format: InputFormat::Tiff,
-            message: "TIFF full decode returned no typed pixels".to_owned(),
-        })?;
-    let (source_color, icc) = tiff_source_color(bytes, &result.page, &pixels.samples)?;
-    let sample_type = match &pixels.samples {
-        TiffSampleData::U8(_) => rusttable_image::SampleType::U8,
-        TiffSampleData::U16(_) => rusttable_image::SampleType::U16,
-        TiffSampleData::F16(_) => rusttable_image::SampleType::F16,
-        TiffSampleData::F32(_) => rusttable_image::SampleType::F32,
-        _ => {
-            return Err(ImageInputError::UnsupportedFeature {
-                format: InputFormat::Tiff,
-                reason: rusttable_image::UnsupportedImageFeature::SampleFormat,
-            });
-        }
-    };
-    let channels = match result.page.photometric {
-        TiffPhotometric::WhiteIsZero | TiffPhotometric::BlackIsZero => {
-            rusttable_image::ChannelLayout::Gray
-        }
-        TiffPhotometric::Rgb => {
-            if result.page.alpha.is_empty() {
-                rusttable_image::ChannelLayout::Rgb
-            } else {
-                rusttable_image::ChannelLayout::Rgba
-            }
-        }
-        _ => {
-            return Err(ImageInputError::UnsupportedFeature {
-                format: InputFormat::Tiff,
-                reason: rusttable_image::UnsupportedImageFeature::ColorModel,
-            });
-        }
-    };
-    let alpha = if channels.channels() == 4 {
-        rusttable_image::AlphaMode::Straight
-    } else {
-        rusttable_image::AlphaMode::None
-    };
-    let format = rusttable_image::PixelFormat::new(
-        sample_type,
-        channels,
-        alpha,
-        rusttable_image::ByteOrder::Native,
-        match pixels.storage {
-            TiffStorageLayout::Chunky => rusttable_image::StorageLayout::Interleaved,
-            TiffStorageLayout::Planar => {
-                return Err(ImageInputError::UnsupportedFeature {
-                    format: InputFormat::Tiff,
-                    reason: rusttable_image::UnsupportedImageFeature::PlanarConfiguration,
-                });
-            }
-        },
-    )
-    .map_err(|_| ImageInputError::MalformedInput {
-        format: InputFormat::Tiff,
-        message: "invalid TIFF channel format".to_owned(),
-    })?;
-    let sample_bytes = tiff_sample_bytes(pixels.samples);
+        .iter()
+        .flat_map(|value| value.to_ne_bytes())
+        .collect();
     let image = owned_image(
-        pixels.dimensions,
+        native.dimensions,
         format,
         source_color,
-        result.page.orientation,
+        page.orientation,
         sample_bytes,
     )?;
     frame(bytes, InputFormat::Tiff, image, source_color, icc)
@@ -606,17 +533,110 @@ fn decode_raw_frame(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedFrame, 
     decode_native_raw_frame(bytes, limits)
 }
 
-fn tiff_sample_bytes(samples: TiffSampleData) -> Vec<u8> {
-    match samples {
-        TiffSampleData::U8(values) => values,
-        TiffSampleData::U16(values) | TiffSampleData::F16(values) => {
-            values.into_iter().flat_map(u16::to_ne_bytes).collect()
+fn decode_native_tiff(
+    bytes: &[u8],
+    limits: DecodeLimits,
+) -> Result<(TiffNativeRaster, TiffPage), ImageInputError> {
+    let limits = TiffDecodeLimits::from_common(limits);
+    let request = TiffDecodeRequest::new(limits);
+    let decoder = TiffDecoder::new();
+    let header = decoder
+        .inspect_bytes(bytes, limits)
+        .map_err(tiff_decode_error)?;
+    let page = header.default_page().clone();
+    let native = decoder
+        .decode_native_bytes(bytes, &request)
+        .map_err(tiff_decode_error)?;
+    Ok((native, page))
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "native RGB values are clamped and rounded before the legacy u8 projection"
+)]
+fn native_rgba8(raster: &TiffNativeRaster) -> Result<Vec<u8>, ImageInputError> {
+    let pixel_count = usize::try_from(
+        raster
+            .dimensions
+            .pixel_count()
+            .map_err(|_| ImageInputError::ArithmeticOverflow)?,
+    )
+    .map_err(|_| ImageInputError::ArithmeticOverflow)?;
+    let expected_samples = pixel_count
+        .checked_mul(4)
+        .ok_or(ImageInputError::ArithmeticOverflow)?;
+    if raster.pixels.len() != expected_samples {
+        return Err(ImageInputError::DecodedBufferInvariant {
+            expected: u64::try_from(expected_samples).unwrap_or(u64::MAX),
+            actual: u64::try_from(raster.pixels.len()).unwrap_or(u64::MAX),
+        });
+    }
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(
+            pixel_count
+                .checked_mul(4)
+                .ok_or(ImageInputError::ArithmeticOverflow)?,
+        )
+        .map_err(|_| ImageInputError::AllocationFailure)?;
+    for pixel in raster.pixels.as_chunks::<4>().0 {
+        output.extend_from_slice(&[
+            quantize_native(pixel[0]),
+            quantize_native(pixel[1]),
+            quantize_native(pixel[2]),
+            255,
+        ]);
+    }
+    Ok(output)
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the value is rounded and clamped to the complete u8 domain before quantization"
+)]
+fn quantize_native(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+fn tiff_decode_error(error: TiffDecodeError) -> ImageInputError {
+    match error {
+        TiffDecodeError::Source(crate::raw::RawSourceError::TooLarge { actual, limit }) => {
+            ImageInputError::SourceTooLarge { actual, limit }
         }
-        TiffSampleData::F32(values) => values.into_iter().flat_map(f32::to_ne_bytes).collect(),
-        TiffSampleData::U32(values) => values.into_iter().flat_map(u32::to_ne_bytes).collect(),
-        TiffSampleData::I8(values) => values.into_iter().map(i8::cast_unsigned).collect(),
-        TiffSampleData::I16(values) => values.into_iter().flat_map(i16::to_ne_bytes).collect(),
-        TiffSampleData::I32(values) => values.into_iter().flat_map(i32::to_ne_bytes).collect(),
+        TiffDecodeError::Limit {
+            kind: "width",
+            actual,
+            limit,
+        } => ImageInputError::WidthLimit {
+            actual: u32::try_from(actual).unwrap_or(u32::MAX),
+            limit: u32::try_from(limit).unwrap_or(u32::MAX),
+        },
+        TiffDecodeError::Limit {
+            kind: "height",
+            actual,
+            limit,
+        } => ImageInputError::HeightLimit {
+            actual: u32::try_from(actual).unwrap_or(u32::MAX),
+            limit: u32::try_from(limit).unwrap_or(u32::MAX),
+        },
+        TiffDecodeError::Limit {
+            kind: "pixel count",
+            actual,
+            limit,
+        } => ImageInputError::PixelLimit { actual, limit },
+        TiffDecodeError::Limit {
+            kind: "decoded bytes",
+            actual,
+            limit,
+        } => ImageInputError::DecodedByteLimit { actual, limit },
+        TiffDecodeError::ArithmeticOverflow => ImageInputError::ArithmeticOverflow,
+        TiffDecodeError::AllocationFailure => ImageInputError::AllocationFailure,
+        other => ImageInputError::MalformedInput {
+            format: InputFormat::Tiff,
+            message: other.to_string(),
+        },
     }
 }
 
@@ -812,10 +832,10 @@ fn exr_source_color(
 
 fn tiff_source_color(
     bytes: &[u8],
-    page: &crate::tiff::TiffPage,
-    samples: &TiffSampleData,
+    page: &TiffPage,
+    sample_format: TiffNativeSampleFormat,
 ) -> Result<(SourceColor, Option<Vec<u8>>), ImageInputError> {
-    let fallback = if matches!(samples, TiffSampleData::F16(_) | TiffSampleData::F32(_)) {
+    let fallback = if sample_format.is_hdr() {
         SourceColorFallback::LinearRec709
     } else {
         SourceColorFallback::EncodedSrgb

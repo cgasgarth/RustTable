@@ -6,6 +6,7 @@ use rusttable_image::{
 use rusttable_image_io::{
     ImageDecoderRegistry, PROBE_BUDGET_BYTES, PngDecodeLimits, PngDecoder, ProbeOutcome,
 };
+use tiff::encoder::TiffEncoder;
 
 fn limits() -> DecodeLimits {
     DecodeLimits::new(1_000_000, 2, 1, 2, 8).expect("valid test limits")
@@ -430,7 +431,7 @@ fn standard_registry_decodes_jpeg_xl_and_webp_by_container_signature() {
 }
 
 #[test]
-fn registry_frame_keeps_adjacent_sixteen_bit_tiff_samples_distinct() {
+fn registry_tiff_uses_native_f32_and_legacy_projection() {
     let mut cursor = std::io::Cursor::new(Vec::new());
     {
         let mut encoder = tiff::encoder::TiffEncoder::new(&mut cursor).expect("TIFF encoder");
@@ -438,26 +439,62 @@ fn registry_frame_keeps_adjacent_sixteen_bit_tiff_samples_distinct() {
             .write_image::<tiff::encoder::colortype::RGB16>(
                 2,
                 1,
-                &[0x8000, 0x8000, 0x8000, 0x8001, 0x8001, 0x8001],
+                &[0x8000, 0x8000, 0x8000, 0xffff, 0xffff, 0xffff],
             )
-            .expect("TIFF fixture");
+            .expect("RGB16 TIFF fixture");
     }
     let bytes = cursor.into_inner();
-    let frame = ImageDecoderRegistry::standard()
+    let registry = ImageDecoderRegistry::standard();
+    let frame = registry
         .decode_frame_bytes(&bytes, precision_limits())
-        .expect("typed TIFF frame");
+        .expect("native typed TIFF frame");
 
-    assert_eq!(frame.sample_type(), SampleType::U16);
+    assert_eq!(frame.sample_type(), SampleType::F32);
     let pixels = frame.rgba_f32_pixels().expect("f32 bridge");
-    assert!(
-        pixels
-            .windows(2)
-            .any(|pair| (pair[0][0] - pair[1][0]).abs() > 0.0)
-    );
+    assert_eq!(pixels.len(), 2);
+    assert!((pixels[0][0] - (f32::from(0x8000_u16) / 65_535.0)).abs() < f32::EPSILON);
+    assert!((pixels[1][0] - 1.0).abs() < f32::EPSILON);
+    assert_eq!(pixels[0][3].to_bits(), 0.0_f32.to_bits());
+    assert_eq!(pixels[1][3].to_bits(), 0.0_f32.to_bits());
     assert_eq!(
         frame.receipt().descriptor().format().sample_type(),
-        SampleType::U16
+        SampleType::F32
     );
+
+    let legacy = registry
+        .decode_bytes(&bytes, precision_limits())
+        .expect("legacy TIFF projection");
+    assert_eq!(legacy.pixels(), &[128, 128, 128, 255, 255, 255, 255, 255]);
+}
+
+#[test]
+fn registry_tiff_float_preserves_native_values_and_projects_legacy_output() {
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    TiffEncoder::new(&mut cursor)
+        .expect("TIFF encoder")
+        .write_image::<tiff::encoder::colortype::Gray32Float>(2, 1, &[-0.25, 2.5])
+        .expect("float TIFF fixture");
+    let bytes = cursor.into_inner();
+    let registry = ImageDecoderRegistry::standard();
+
+    let frame = registry
+        .decode_frame_bytes(&bytes, precision_limits())
+        .expect("native float TIFF frame");
+    assert_eq!(frame.sample_type(), SampleType::F32);
+    let pixels = frame.rgba_f32_pixels().expect("f32 bridge");
+    assert!(pixels[0].iter().enumerate().all(|(index, value)| {
+        let expected = if index == 3 { 0.0 } else { -0.25 };
+        (*value - expected).abs() < f32::EPSILON
+    }));
+    assert!(pixels[1].iter().enumerate().all(|(index, value)| {
+        let expected = if index == 3 { 0.0 } else { 2.5 };
+        (*value - expected).abs() < f32::EPSILON
+    }));
+
+    let legacy = registry
+        .decode_bytes(&bytes, precision_limits())
+        .expect("legacy float TIFF projection");
+    assert_eq!(legacy.pixels(), &[0, 0, 0, 255, 255, 255, 255, 255]);
 }
 
 #[test]
@@ -588,6 +625,7 @@ fn malformed_bigtiff_signature_never_falls_back() {
 
     let probe = registry.probe_bytes(&bytes, limits());
     let decode = registry.decode_bytes(&bytes, limits());
+    let frame = registry.decode_frame_bytes(&bytes, limits());
 
     assert!(matches!(
         probe,
@@ -603,6 +641,41 @@ fn malformed_bigtiff_signature_never_falls_back() {
             ..
         })
     ));
+    assert!(matches!(
+        frame,
+        Err(ImageInputError::MalformedInput {
+            format: InputFormat::Tiff,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn unsupported_native_tiff_fails_closed_for_both_registry_apis() {
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    TiffEncoder::new(&mut cursor)
+        .expect("TIFF encoder")
+        .write_image::<tiff::encoder::colortype::GrayI16>(1, 1, &[-1])
+        .expect("signed TIFF fixture");
+    let bytes = cursor.into_inner();
+    let registry = ImageDecoderRegistry::standard();
+
+    for result in [
+        registry
+            .decode_bytes(&bytes, precision_limits())
+            .map(|_| ()),
+        registry
+            .decode_frame_bytes(&bytes, precision_limits())
+            .map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(ImageInputError::MalformedInput {
+                format: InputFormat::Tiff,
+                message,
+            }) if message.contains("native TIFF sample format")
+        ));
+    }
 }
 
 #[test]

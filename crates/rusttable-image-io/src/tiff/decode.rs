@@ -7,9 +7,9 @@ use tiff::decoder::{Decoder, DecodingResult, Limits};
 
 use super::parser::parse;
 use super::types::{
-    TIFF_BACKEND_ID, TiffAlphaSample, TiffByteOrder, TiffContainer, TiffDecodeError,
-    TiffDecodeLimits, TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult,
-    TiffHeader, TiffNativeRaster, TiffNativeSampleFormat, TiffPage, TiffPhotometric, TiffPixelData,
+    TIFF_BACKEND_ID, TiffByteOrder, TiffContainer, TiffDecodeError, TiffDecodeLimits,
+    TiffDecodeMode, TiffDecodeReceipt, TiffDecodeRequest, TiffDecodeResult, TiffHeader,
+    TiffNativeRaster, TiffNativeSampleFormat, TiffPage, TiffPhotometric, TiffPixelData,
     TiffSampleData, TiffSampleFormat, TiffStorageLayout,
 };
 use crate::raw::{RawByteSource, RawSourceError, SliceRawSource};
@@ -204,29 +204,6 @@ pub(crate) fn decode_tiff_probe(
         InputFormat::Tiff,
         header.default_page().dimensions,
     ))
-}
-
-pub(crate) fn decode_legacy_rgba8(
-    bytes: &[u8],
-    limits: DecodeLimits,
-) -> Result<
-    (
-        rusttable_image::ImageDimensions,
-        rusttable_image::Orientation,
-        Vec<u8>,
-    ),
-    ImageInputError,
-> {
-    let request = TiffDecodeRequest::new(TiffDecodeLimits::from_common(limits));
-    let result = TiffDecoder::new()
-        .decode_bytes(bytes, &request)
-        .map_err(map_error)?;
-    let pixels = result
-        .pixels
-        .as_ref()
-        .ok_or_else(|| malformed_input("TIFF full decode returned no samples"))?;
-    let rgba = to_rgba8(pixels, &result.page)?;
-    Ok((pixels.dimensions, result.page.orientation, rgba))
 }
 
 fn decode_page(
@@ -641,103 +618,6 @@ fn crop_values<T: Copy>(
         }
     }
     Ok(output)
-}
-
-fn to_rgba8(pixels: &TiffPixelData, page: &TiffPage) -> Result<Vec<u8>, ImageInputError> {
-    if page.alpha.contains(&TiffAlphaSample::Premultiplied) {
-        return Err(malformed_input(
-            "legacy RGBA8 cannot represent premultiplied TIFF alpha",
-        ));
-    }
-    if !matches!(
-        page.photometric,
-        TiffPhotometric::WhiteIsZero
-            | TiffPhotometric::BlackIsZero
-            | TiffPhotometric::Palette
-            | TiffPhotometric::Rgb
-    ) {
-        return Err(malformed_input(
-            "legacy RGBA8 requires explicit TIFF color conversion",
-        ));
-    }
-    let pixel_count = usize::try_from(
-        pixels
-            .dimensions
-            .pixel_count()
-            .map_err(|_| ImageInputError::ArithmeticOverflow)?,
-    )
-    .map_err(|_| ImageInputError::ArithmeticOverflow)?;
-    let mut output = Vec::new();
-    output
-        .try_reserve_exact(
-            pixel_count
-                .checked_mul(4)
-                .ok_or(ImageInputError::ArithmeticOverflow)?,
-        )
-        .map_err(|_| ImageInputError::AllocationFailure)?;
-    for pixel in 0..pixel_count {
-        let sample = |channel| sample_u8(pixels, pixel_count, pixel, channel);
-        let alpha_channel = usize::from(page.photometric.color_samples());
-        let alpha = if page.alpha.is_empty() {
-            255
-        } else {
-            sample(alpha_channel)?
-        };
-        let rgb = match page.photometric {
-            TiffPhotometric::WhiteIsZero => {
-                let gray = 255 - sample(0)?;
-                [gray, gray, gray]
-            }
-            TiffPhotometric::BlackIsZero => {
-                let gray = sample(0)?;
-                [gray, gray, gray]
-            }
-            TiffPhotometric::Rgb => [sample(0)?, sample(1)?, sample(2)?],
-            TiffPhotometric::Palette => {
-                let index = usize::from(sample(0)?);
-                let map = page
-                    .color_map
-                    .as_ref()
-                    .ok_or_else(|| malformed_input("palette has no ColorMap"))?;
-                let entries = map.len() / 3;
-                if index >= entries {
-                    return Err(malformed_input("palette sample is out of range"));
-                }
-                [
-                    (map[index] >> 8) as u8,
-                    (map[entries + index] >> 8) as u8,
-                    (map[2 * entries + index] >> 8) as u8,
-                ]
-            }
-            _ => unreachable!("photometric was checked above"),
-        };
-        output.extend_from_slice(&[rgb[0], rgb[1], rgb[2], alpha]);
-    }
-    Ok(output)
-}
-
-fn sample_u8(
-    pixels: &TiffPixelData,
-    pixel_count: usize,
-    pixel: usize,
-    channel: usize,
-) -> Result<u8, ImageInputError> {
-    let index = match pixels.storage {
-        TiffStorageLayout::Chunky => pixel
-            .checked_mul(usize::from(pixels.samples_per_pixel))
-            .and_then(|current| current.checked_add(channel)),
-        TiffStorageLayout::Planar => channel
-            .checked_mul(pixel_count)
-            .and_then(|current| current.checked_add(pixel)),
-    }
-    .ok_or(ImageInputError::ArithmeticOverflow)?;
-    match &pixels.samples {
-        TiffSampleData::U8(values) => values.get(index).copied(),
-        TiffSampleData::U16(values) => values.get(index).map(|value| (value >> 8) as u8),
-        TiffSampleData::U32(values) => values.get(index).map(|value| (value >> 24) as u8),
-        _ => None,
-    }
-    .ok_or_else(|| malformed_input("legacy RGBA8 requires unsigned integer samples"))
 }
 
 fn logical_bytes(page: &TiffPage) -> Result<u64, TiffDecodeError> {

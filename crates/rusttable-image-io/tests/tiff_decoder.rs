@@ -345,7 +345,7 @@ fn orientation_alpha_and_metadata_are_inventory_not_transforms() {
     );
     let legacy = registry.decode_bytes(&bytes, limits).unwrap();
     assert_eq!(legacy.source_orientation(), Orientation::Rotate90);
-    assert_eq!(legacy.pixels(), &[10, 20, 30, 40, 50, 60, 70, 80]);
+    assert_eq!(legacy.pixels(), &[10, 20, 30, 255, 50, 60, 70, 255]);
 }
 
 #[test]

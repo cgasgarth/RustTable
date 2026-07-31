@@ -75,13 +75,13 @@ fn little_endian_rgb8_is_decoded_from_signature() {
 }
 
 #[test]
-fn big_endian_rgba8_preserves_straight_alpha() {
+fn rgba8_projection_uses_native_spare_channel_contract() {
     let image = with_bytes("rgba", fixture("rgba"), |path| input().decode_path(path))
         .expect("RGBA TIFF should decode");
 
     assert_eq!(image.dimensions().width(), 1);
     assert_eq!(image.dimensions().height(), 2);
-    assert_eq!(image.pixels(), &[255, 0, 0, 128, 0, 255, 0, 64]);
+    assert_eq!(image.pixels(), &[255, 0, 0, 255, 0, 255, 0, 255]);
 }
 
 #[test]

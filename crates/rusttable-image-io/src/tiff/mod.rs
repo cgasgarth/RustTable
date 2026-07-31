@@ -14,4 +14,4 @@ pub use types::{
     TiffStorageLayout,
 };
 
-pub(crate) use decode::{decode_legacy_rgba8, decode_tiff_probe, is_tiff_signature};
+pub(crate) use decode::{decode_tiff_probe, is_tiff_signature};
