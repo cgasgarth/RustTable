@@ -1,0 +1,10 @@
+operation=monochrome
+version=2
+payload_bytes=16
+payload_hex=00000000000000000000004000000000
+default_fields=[a:0.0,b:0.0,size:2.0,highlights:0.0]
+legacy_v1_payload_bytes=12
+legacy_v1_payload_hex=000000000000000000000040
+migration=(1,2)
+red_filter_fields=[a:32.0,b:64.0,size:2.3,highlights:0.0]
+cpu_output_bits=[[1103310910,0,0,1040187392],[1111944171,0,0,1048576000],[1116869771,0,0,1056964608],[1120088126,0,0,1063256064]]

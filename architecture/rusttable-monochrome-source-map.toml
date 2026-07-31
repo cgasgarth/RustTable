@@ -1,0 +1,64 @@
+schema = "rusttable.monochrome-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-v1-migration"
+upstream_path = "src/iop/monochrome.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_monochrome_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "filter-envelope-and-fast-exp"
+upstream_path = "src/iop/monochrome.c; src/common/math.h"
+upstream_symbols = ["_color_filter", "_envelope", "dt_fast_expf"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "bilateral-cpu-pass"
+upstream_path = "src/iop/monochrome.c; src/common/bilateral.c; src/common/bilateral.h"
+upstream_symbols = ["process", "dt_bilateral_splat", "dt_bilateral_blur", "dt_bilateral_slice"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs; crates/rusttable-processing/src/common/bilateral.rs"
+status = "implemented"
+notes = "Uses the existing source-derived safe bilateral grid and publishes only a complete private output."
+
+[[responsibility]]
+id = "tiling"
+upstream_path = "src/iop/monochrome.c"
+upstream_symbols = ["tiling_callback"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "gpu-kernel"
+upstream_path = "data/kernels/basic.cl"
+upstream_symbols = ["monochrome_filter", "monochrome"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs"
+status = "deferred"
+notes = "The retained kernels are embedded in basic.cl and no executable Rust GPU binding is claimed."
+
+[[responsibility]]
+id = "requested-standalone-kernel"
+upstream_path = "data/kernels/monochrome.cl"
+upstream_symbols = []
+rust_path = "crates/rusttable-processing/src/operations/monochrome/source_map.rs"
+status = "deferred"
+notes = "No standalone monochrome.cl exists in the current retained tree; the source kernel is in basic.cl."
+
+[[responsibility]]
+id = "profile-panel-and-gui"
+upstream_path = "src/iop/monochrome.c; src/common/colorspaces.h"
+upstream_symbols = ["gui_init", "_monochrome_draw", "color_picker_apply"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs"
+status = "deferred"
+notes = "GTK, LittleCMS profile transforms, color picker, and presets remain unavailable."
+
+[[responsibility]]
+id = "production-integration"
+upstream_path = "src/iop/monochrome.c and processing integration hubs"
+upstream_symbols = ["flags", "default_colorspace", "process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/monochrome/mod.rs"
+status = "deferred"
+notes = "Registry, history materialization, pixelpipe routing, GPU dispatch, outer blending, and UI are outside this leaf's ownership."
