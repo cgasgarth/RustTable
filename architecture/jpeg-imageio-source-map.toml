@@ -1,0 +1,59 @@
+schema = "rusttable.jpeg-imageio-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+rust_owner = "rusttable-image-io::jpeg"
+policy = "safe Rust leaf only; preserve native JPEG marker, scanline, metadata, and fail-closed contracts without copying, compiling, linking, or invoking retained native code"
+
+[[responsibility]]
+id = "bounded-marker-and-header-parse"
+upstream_path = "src/imageio/imageio_jpeg.c;src/imageio/imageio_jpeg.h"
+upstream_symbol = "dt_imageio_jpeg_decompress_header; JPEG saved-marker setup"
+rust_path = "crates/rusttable-image-io/src/jpeg/parser.rs;crates/rusttable-image-io/src/jpeg/types.rs"
+rust_symbol = "probe; inspect; JpegHeader; JpegMetadataSegment"
+status = "ported"
+notes = "SOI, bounded 16-bit dimensions, SOF/sampling, restart interval, scan structure, Exif orientation, and ordered APP1 Exif/APP2 ICC payloads retain explicit item and byte limits; libjpeg-compatible non-FF/FF00 gaps before markers and post-EOI bytes are discarded, while other markers remain structurally parsed but are not inventoried."
+
+[[responsibility]]
+id = "entropy-and-scanline-decode"
+upstream_path = "src/imageio/imageio_jpeg.c"
+upstream_symbol = "dt_imageio_jpeg_decompress; decompress_plain; decompress_jsc"
+rust_path = "crates/rusttable-image-io/src/jpeg/decode.rs"
+rust_symbol = "JpegDecoder::decode_source; decode_pixels; to_rgba8"
+status = "ported"
+notes = "Validated baseline/progressive 8-bit RGB/YCC/gray decode publishes opaque RGBA-compatible bytes; CMYK/YCCK headers remain inspectable but full native RGB output rejects their unsupported color conversion before publication; allocation, backend, cancellation, source mutation, and output-size failures remain closed."
+
+[[responsibility]]
+id = "icc-marker-seam"
+upstream_path = "src/imageio/imageio_jpeg.c"
+upstream_symbol = "read_icc_profile; marker_is_icc"
+rust_path = "crates/rusttable-image-io/src/jpeg/parser.rs;crates/rusttable-image-io/src/registry.rs"
+rust_symbol = "JpegMetadataSegment::is_profile; jpeg_source_color"
+status = "partial"
+notes = "The leaf retains all ICC APP2 sequence payloads, including reordered and 255-marker inventories. Source-color reconstruction remains the shared registry seam and intentionally keeps the current strict malformed/incomplete ICC rejection rather than changing an excluded hub."
+
+[[responsibility]]
+id = "signature-selection"
+upstream_path = "src/imageio/imageio.c"
+upstream_symbol = "_magic_signatures JPEG entry; _find_signature"
+rust_path = "crates/rusttable-image-io/src/registry.rs"
+rust_symbol = "is_jpeg; ImageDecoderRegistry"
+status = "deferred"
+notes = "The shared registry currently owns signature selection and remains out of this exclusive leaf; native FF D8 FF exact matching and SOI-only selection behavior require that later hub change."
+
+[[responsibility]]
+id = "file-loader-and-cache-publication"
+upstream_path = "src/imageio/imageio_jpeg.c"
+upstream_symbol = "dt_imageio_open_jpeg"
+rust_path = "crates/rusttable-image-io/src/registry.rs"
+rust_symbol = "decode_jpeg; decode_jpeg_frame"
+status = "deferred"
+notes = "Registry/application routing and final image-cache publication are shared callers and are not edited by this leaf."
+
+[[responsibility]]
+id = "jpeg-encoding-and-export-settings"
+upstream_path = "src/imageio/imageio_jpeg.c;src/imageio/format/jpeg.c;src/imageio/imageio_jpeg.h"
+upstream_symbol = "dt_imageio_jpeg_compress; dt_imageio_jpeg_write*; write_image; quality/subsample GUI"
+rust_path = "crates/rusttable-export/src/encoders/jpeg.rs"
+rust_symbol = "excluded from image-jpeg-leaf"
+status = "deferred"
+notes = "Quality, subsampling, density, optimization, smoothing/DCT settings, ICC/Exif write-back, output cleanup, legacy parameters, and UI remain a later export/application seam."

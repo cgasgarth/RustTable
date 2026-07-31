@@ -1,3 +1,6 @@
+// Source lineage: src/imageio/imageio_jpeg.c and src/imageio/imageio_jpeg.h.
+// These types retain the native JPEG header, marker, and decoded-sample contracts.
+
 use std::fmt;
 
 use rusttable_image::{ImageDimensions, Orientation};
@@ -5,6 +8,15 @@ use rusttable_image::{ImageDimensions, Orientation};
 /// Maximum number of bytes scanned by the JPEG header parser when it is used
 /// as a registry probe.
 pub const JPEG_PROBE_BUDGET_BYTES: usize = 64 * 1024;
+
+/// Maximum number of APP1/APP2 marker payloads retained in a header.
+///
+/// The bound accommodates all 255 ICC sequence numbers plus one Exif marker
+/// while keeping the native saved-marker inventory finite.
+pub const JPEG_METADATA_MAX_ITEMS: usize = 256;
+
+/// Maximum total payload bytes retained in a header metadata inventory.
+pub const JPEG_METADATA_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JpegSof {
@@ -93,6 +105,10 @@ pub struct JpegSampling {
     pub quantization_table: u8,
 }
 
+/// An ordered, bounded APP1 Exif or APP2 ICC marker inventory item.
+///
+/// `offset` points at the marker prefix and `byte_length` is the marker payload
+/// length, matching the saved-marker data exposed by the native JPEG boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JpegMetadataSegment {
     pub marker: u8,
