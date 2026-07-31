@@ -1,0 +1,123 @@
+schema = "rusttable.colorbalancergb-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "colorbalancergb"
+rust_id = "rusttable.colorbalancergb"
+production_registration = "deferred until shared operation, history, pixelpipe, GPU, and UI seams are complete"
+
+[[responsibility]]
+id = "native-parameter-abi"
+upstream_path = "src/iop/colorbalancergb.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(5)", "dt_iop_colorbalancergb_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/codec.rs"
+status = "replaced"
+notes = "v1=96, v2=112, v3=116, v4=128, and v5=132 bytes; v5 appends the signed i32 saturation formula after 32 floats in declaration order."
+
+[[responsibility]]
+id = "native-history-migration"
+upstream_path = "src/iop/colorbalancergb.c"
+upstream_symbols = ["legacy_params", "default_v5"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/codec.rs"
+status = "replaced"
+notes = "Every retained version migrates directly to v5. v1 divides saturation_global by 100; v1-v4 migration branches overwrite the seed with JzAzBz, while the exact migration-only default_v5 seed is enum=1 with zero grey/contrast; unknown versions remain opaque and non-executable."
+
+[[responsibility]]
+id = "commit-coefficients-and-internal-masks"
+upstream_path = "src/iop/colorbalancergb.c"
+upstream_symbols = ["commit_params", "opacity_masks"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/execution.rs"
+status = "replaced"
+notes = "The -30 degree Yrg GUI shift, offset/slope/power coefficients, mask exponent, falloff weights, white/grey fulcrums, and source arithmetic order are retained."
+
+[[responsibility]]
+id = "profile-rgb-d50-d65"
+upstream_path = "src/iop/colorbalancergb.c; src/common/chromatic_adaptation.h"
+upstream_symbols = ["work_profile->matrix_in", "work_profile->matrix_out", "XYZ_D50_to_D65_CAT16", "XYZ_D65_to_D50_CAT16"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/{execution.rs,math.rs}"
+status = "replaced"
+notes = "The leaf requires explicit finite RGB->XYZ D50 and XYZ D50->RGB matrices and pre-multiplies CAT16 exactly as native CPU process does. ICC acquisition and TRC/profile routing are deferred."
+
+[[responsibility]]
+id = "filmlight-y-r-g"
+upstream_path = "src/common/colorspaces_inline_conversions.h"
+upstream_symbols = ["gradingRGB_to_LMS", "LMS_to_gradingRGB", "LMS_to_Yrg", "Yrg_to_LMS", "Yrg_to_Ych", "Ych_to_Yrg", "gamut_check_Yrg"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/math.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "jzazbz-perceptual-path"
+upstream_path = "src/common/colorspaces_inline_conversions.h; src/iop/colorbalancergb.c"
+upstream_symbols = ["dt_XYZ_2_JzAzBz", "dt_JzAzBz_2_XYZ", "DT_COLORBALANCE_SATURATION_JZAZBZ"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/math.rs; crates/rusttable-processing/src/operations/colorbalancergb/execution.rs"
+status = "replaced"
+notes = "Native fmaxf cone guards, Jz/Iz constants, eigenvector projection, LUT saturation soft clip, and L'M'S' chroma clipping are preserved; shared strict Jz APIs are not substituted."
+
+[[responsibility]]
+id = "darktable-ucs-2022-perceptual-path"
+upstream_path = "src/common/colorspaces_inline_conversions.h; src/common/darktable_ucs_22_helpers.h; src/iop/colorbalancergb.c"
+upstream_symbols = ["xyY_to_dt_UCS_JCH", "dt_UCS_JCH_to_xyY", "dt_UCS_HCB_to_JCH", "dt_UCS_JCH_to_HCB", "DT_COLORBALANCE_SATURATION_DTUCS"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/math.rs; crates/rusttable-processing/src/operations/colorbalancergb/execution.rs"
+status = "replaced"
+notes = "The native darktable UCS 2022 equations and HCB/HSB projection are operation-local; Lab is not an input path for this RGB operation."
+
+[[responsibility]]
+id = "gamut-lut-and-memory"
+upstream_path = "src/iop/colorbalancergb.c; src/common/darktable_ucs_22_helpers.h"
+upstream_symbols = ["STEPS", "LUT_ELEM", "commit_params", "dt_UCS_22_build_gamut_LUT"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/{math.rs,execution.rs}"
+status = "replaced"
+notes = "Jz uses the native 92^3 RGB sampler plus 5-tap circular smoothing; UCS uses the native 50*512 chromaticity boundary march. Cancellation and checked output Vec reservation prevent partial publication."
+
+[[responsibility]]
+id = "cpu-raster-tiling-cancellation"
+upstream_path = "src/iop/colorbalancergb.c"
+upstream_symbols = ["flags", "process"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/{mod.rs,execution.rs}"
+status = "bounded-leaf"
+notes = "Identity ROI, zero overlap, one-channel alignment, and 1.0 input/output/temporary multipliers match the operation's no-neighborhood CPU process. Cancellation is an explicit Rust publication boundary; native OpenMP/GPU scheduling is deferred."
+
+[[responsibility]]
+id = "alpha"
+upstream_path = "src/iop/colorbalancergb.c; data/kernels/extended.cl"
+upstream_symbols = ["process", "colorbalancergb"]
+rust_path = "crates/rusttable-processing/src/operations/colorbalancergb/execution.rs"
+status = "bounded-leaf"
+notes = "The native CPU matrix path writes the fourth lane through zero-padded RGB matrices, while the retained OpenCL path copies pix_in.w and mask preview forces 1.0. The standalone CPU leaf records NativeCpuFourthLaneZero; pixelpipe alpha policy remains deferred rather than pretending CPU/GPU parity."
+
+[[responsibility]]
+id = "external-mask-and-blending"
+upstream_path = "src/iop/colorbalancergb.c; src/develop/blend.c; src/develop/blends/*"
+upstream_symbols = ["IOP_FLAGS_SUPPORTS_BLENDING", "process"]
+rust_path = "crates/rusttable-pixelpipe/src"
+status = "deferred"
+notes = "Internal tonal opacity masks are ported. Outer mask coverage, blend-if channels, and publication ordering are not guessed in this leaf."
+
+[[responsibility]]
+id = "shared-operation-export"
+upstream_path = "src/iop/colorbalancergb.c"
+upstream_symbols = ["name", "flags", "process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/{operations/mod.rs,registry}"
+status = "deferred"
+notes = "The operation-local descriptor is evidence only; shared registries, evaluator dispatch, snapshot identity, and fail-closed production availability remain integration-owned."
+
+[[responsibility]]
+id = "gpu-capability"
+upstream_path = "data/kernels/extended.cl"
+upstream_symbols = ["colorbalancergb"]
+rust_path = "crates/rusttable-gpu/src"
+status = "deferred"
+notes = "No GPU tier or shader claim is made. The retained kernel is read-only evidence."
+
+[[responsibility]]
+id = "ui-presets-and-picker"
+upstream_path = "src/iop/colorbalancergb.c"
+upstream_symbols = ["gui_init", "gui_update", "gui_reset", "init_presets", "color_picker_apply"]
+rust_path = "crates/rusttable-ui/src"
+status = "deferred"
+
+[[responsibility]]
+id = "history-import"
+upstream_path = "src/develop/history.c"
+upstream_symbols = ["operation-name dispatch"]
+rust_path = "crates/rusttable-import/src"
+status = "deferred"
