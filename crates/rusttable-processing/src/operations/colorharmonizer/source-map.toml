@@ -1,0 +1,75 @@
+schema = "rusttable.operation-source-map.v1"
+operation = "colorharmonizer"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+status = "bounded_cpu_leaf_unregistered"
+
+[[responsibility]]
+id = "parameter-abi"
+upstream_path = "src/iop/colorharmonizer.c"
+upstream_symbol = "dt_iop_colorharmonizer_params_t"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/codec.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "harmony-geometry"
+upstream_path = "src/common/color_harmony.h"
+upstream_symbol = "dt_color_harmony_get_sector_angles"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/ucs.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "ryb-conversion"
+upstream_path = "src/common/color_ryb.h"
+upstream_symbol = "dt_rgb_hue_to_ryb_hue"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/ucs.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "darktable-ucs-jch"
+upstream_path = "src/common/colorspaces_inline_conversions.h"
+upstream_symbol = "xyY_to_dt_UCS_JCH / dt_UCS_JCH_to_xyY"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/ucs.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "cat16-adaptation"
+upstream_path = "src/common/chromatic_adaptation.h"
+upstream_symbol = "XYZ_D50_to_D65 / XYZ_D65_to_D50"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/execution.rs"
+status = "replaced"
+
+[[responsibility]]
+id = "full_frame_cpu"
+upstream_path = "src/iop/colorharmonizer.c"
+upstream_symbol = "process"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/execution.rs"
+status = "bounded_leaf_only"
+
+[[responsibility]]
+id = "recursive_gaussian_order_zero"
+upstream_path = "src/common/gaussian.c"
+upstream_symbol = "dt_gaussian_mean_blur / dt_gaussian_blur"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/execution.rs"
+status = "bounded_leaf_only"
+
+[[responsibility]]
+id = "descriptor_metadata"
+upstream_path = "src/iop/colorharmonizer.c"
+upstream_symbol = "name / flags / parameter declarations"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/descriptor.rs"
+status = "operation_local_unregistered"
+
+[[deferred]]
+id = "profile_matrix_execution_seam"
+upstream_path = "src/common/iop_profile.h"
+upstream_symbol = "dt_iop_order_iccprofile_info_t"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/execution.rs"
+status = "requires_shared_profile_context"
+
+[[deferred]]
+id = "operation_registry_evaluator_history_ui_gpu"
+upstream_path = "src/iop/colorharmonizer.c"
+upstream_symbol = "process_cl / gui_init / history and vectorscope callers"
+rust_path = "crates/rusttable-processing/src/operations/colorharmonizer/mod.rs"
+status = "explicitly_unavailable"
