@@ -58,3 +58,12 @@ upstream_path = "src/common/metadata_export.c"
 upstream_symbol = "XMP/EXIF/IPTC output"
 rust_path = "excluded from issue 211"
 status = "excluded"
+
+[[responsibility]]
+id = "export-metadata-configuration-codec"
+upstream_path = "src/common/metadata_export.c;src/common/metadata_export.h"
+upstream_symbol = "dt_lib_export_metadata_default_flags/dt_lib_export_metadata_get_conf/get_conf_flags/set_conf"
+rust_path = "crates/rusttable-export/src/metadata_policy.rs"
+rust_symbol = "NativeMetadataFlags/NativeMetadataExportConfig"
+status = "partial"
+scope = "source-faithful flags and SOH formula configuration codec only; native EXIF/IPTC/XMP/tag inclusion and production writeback remain excluded"

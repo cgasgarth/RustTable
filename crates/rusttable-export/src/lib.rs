@@ -38,7 +38,10 @@ pub use manifest::{
     ArtifactKind, CollisionGroup, DestinationCapabilities, ExportPlan, ExportPlanError,
     LogicalArtifact,
 };
-pub use metadata_policy::{MetadataAction, MetadataPolicy};
+pub use metadata_policy::{
+    MetadataAction, MetadataPolicy, NATIVE_METADATA_FLAGS_KEY, NATIVE_METADATA_FORMULA_KEY,
+    NativeMetadataExportConfig, NativeMetadataFlags,
+};
 pub use png::{
     CollisionPolicy, PngCollisionResult, PngExportLimits, PngExportLimitsError, PngExportReceipt,
     PngMetadataReceipt, PngPublishCompletion, PngPublishControl, PngPublishError,
