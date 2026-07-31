@@ -313,15 +313,23 @@ pub fn migrate_native_v1_to_v2(
 
 #[must_use]
 pub fn migrate_v1_to_v2(v1: &RawPrepareParametersV1) -> RawPrepareParametersV2 {
-    RawPrepareParametersV2::new(
-        v1.left(),
-        v1.top(),
-        v1.right(),
-        v1.bottom(),
-        v1.raw_black_level_separate(),
-        v1.raw_white_point(),
-        RawPrepareFlatField::Off,
-    )
+    // `legacy_params` uses `memcpy(sizeof *o)`, so the native v1 padding at
+    // offsets 26..27 is part of the migrated byte contract even though it has
+    // no named Rust field. Copy the complete native prefix before appending
+    // the v2 flat-field field rather than reconstructing named values.
+    let mut bytes = [0; RAWPREPARE_HISTORY_V2_PARAMETER_BYTES];
+    bytes[..RAWPREPARE_NATIVE_V1_PARAMETER_BYTES]
+        .copy_from_slice(&v1.bytes[..RAWPREPARE_NATIVE_V1_PARAMETER_BYTES]);
+    write_i32(
+        &mut bytes,
+        FLAT_FIELD_OFFSET,
+        RawPrepareFlatField::Off as i32,
+    );
+    debug_assert_eq!(
+        &bytes[..RAWPREPARE_NATIVE_V1_PARAMETER_BYTES],
+        &v1.bytes[..RAWPREPARE_NATIVE_V1_PARAMETER_BYTES]
+    );
+    RawPrepareParametersV2 { bytes }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

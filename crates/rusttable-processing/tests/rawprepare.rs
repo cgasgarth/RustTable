@@ -103,6 +103,14 @@ fn v1_migration_copies_native_fields_and_forces_flat_field_off() {
     assert_eq!(native.to_native_bytes(), native_bytes);
 
     let migrated_native = migrate_native_v1_to_v2(&native_bytes).expect("native migration");
+    assert_eq!(
+        migrated_native,
+        [
+            0xfb, 0xff, 0xff, 0xff, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00,
+            0x00, 0x00, 0x0b, 0x00, 0x16, 0x00, 0x21, 0x00, 0x2c, 0x00, 0x09, 0x03, 0xde, 0xad,
+            0x00, 0x00, 0x00, 0x00,
+        ]
+    );
     let migrated_native =
         RawPrepareParametersV2::from_native_bytes(&migrated_native).expect("native v2");
     assert_eq!(migrated_native.left(), -5);
@@ -236,6 +244,85 @@ fn four_channel_hdr_normalized_inputs_fail_closed_before_cpu_normalization() {
             Err(RawPrepareError::AlreadyNormalized)
         ));
     }
+}
+
+#[test]
+fn raw_and_sraw_layouts_follow_distinct_native_flag_branches() {
+    let dimensions = RasterDimensions::new(2, 2).expect("dimensions");
+    let crop = RawPrepareCrop::new(0, 0, 0, 0);
+    let parameters = params(crop, [0; 4], 1000);
+    let raw = bayer_metadata(
+        dimensions,
+        DT_IMAGE_RAW,
+        RawPrepareSampleFormat::U16,
+        1,
+        crop,
+    );
+    assert_eq!(
+        RawPreparePlan::new(&raw, &parameters)
+            .expect("RAW branch")
+            .input_kind(),
+        rawprepare::RawPrepareInputKind::MosaicU16
+    );
+
+    let sraw = RawPrepareImageMetadata::new(
+        dimensions,
+        DT_IMAGE_S_RAW,
+        RawPrepareSampleFormat::F32,
+        4,
+        RawPrepareCfa::None,
+        crop,
+        [0; 4],
+        1000,
+    );
+    assert_eq!(
+        RawPreparePlan::new(&sraw, &parameters)
+            .expect("SRAW branch")
+            .input_kind(),
+        rawprepare::RawPrepareInputKind::FourChannelF32
+    );
+
+    let impossible_flags = RawPrepareImageMetadata::new(
+        dimensions,
+        DT_IMAGE_RAW | DT_IMAGE_S_RAW,
+        RawPrepareSampleFormat::U16,
+        1,
+        RawPrepareCfa::bayer(0x1234, 0, 0),
+        crop,
+        [0; 4],
+        1000,
+    );
+    assert!(matches!(
+        RawPreparePlan::new(&impossible_flags, &parameters),
+        Err(RawPrepareError::UnsupportedLayout)
+    ));
+
+    let raw_flag_four_channel = RawPrepareImageMetadata::new(
+        dimensions,
+        DT_IMAGE_RAW,
+        RawPrepareSampleFormat::F32,
+        4,
+        RawPrepareCfa::None,
+        crop,
+        [0; 4],
+        1000,
+    );
+    assert!(matches!(
+        RawPreparePlan::new(&raw_flag_four_channel, &parameters),
+        Err(RawPrepareError::UnsupportedLayout)
+    ));
+
+    let sraw_flag_mosaic = bayer_metadata(
+        dimensions,
+        DT_IMAGE_S_RAW,
+        RawPrepareSampleFormat::U16,
+        1,
+        crop,
+    );
+    assert!(matches!(
+        RawPreparePlan::new(&sraw_flag_mosaic, &parameters),
+        Err(RawPrepareError::UnsupportedLayout)
+    ));
 }
 
 #[test]
@@ -438,19 +525,17 @@ fn descriptor_and_capabilities_do_not_overclaim_integration() {
     let descriptor = rawprepare_descriptor();
     descriptor.validate().expect("descriptor");
     assert_eq!(descriptor.id.rust_id, RAWPREPARE_RUST_ID);
+    // The scalar ImagePredicate is the truthful fail-closed RAW branch;
+    // SRAW's native 4->4 shape stays deferred until a union contract exists.
     assert_eq!(descriptor.io.input.channels, 1);
-    assert_eq!(descriptor.io.output.channels, 4);
+    assert_eq!(descriptor.io.output.channels, 1);
     assert_eq!(
         descriptor.capability.required_features,
         vec!["raw-image-metadata".to_owned()]
     );
     assert_eq!(
         descriptor.capability.required_formats,
-        vec![
-            "raw-u16x1".to_owned(),
-            "raw-f32x1".to_owned(),
-            "sraw-f32x4".to_owned(),
-        ]
+        vec!["raw-u16x1".to_owned(), "raw-f32x1".to_owned()]
     );
     let capabilities = capabilities();
     assert!(capabilities.cpu);

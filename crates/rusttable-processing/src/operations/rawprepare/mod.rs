@@ -128,11 +128,11 @@ pub fn rawprepare_descriptor() -> OperationDescriptor {
             cpu_supported: true,
             gpu_tier: None,
             required_features: vec!["raw-image-metadata".to_owned()],
-            required_formats: vec![
-                "raw-u16x1".to_owned(),
-                "raw-f32x1".to_owned(),
-                "sraw-f32x4".to_owned(),
-            ],
+            // This scalar descriptor advertises only the fail-closed RAW
+            // branch. The local executor also has the native SRAW 4-lane
+            // branch, but ImagePredicate cannot express the required 1->1
+            // OR 4->4 union without changing shared descriptor hubs.
+            required_formats: vec!["raw-u16x1".to_owned(), "raw-f32x1".to_owned()],
             deterministic_cpu: true,
             deterministic_gpu: false,
             fallback_to_cpu: false,
@@ -140,16 +140,21 @@ pub fn rawprepare_descriptor() -> OperationDescriptor {
             modes: vec!["preview".to_owned(), "full".to_owned(), "export".to_owned()],
         },
         io: InputOutputContract {
+            // Native default_input_format/default_output_format has two
+            // mutually exclusive shapes: true Bayer/X-Trans RAW is 1->1,
+            // while imageio_rawspeed's SRAW materialization is 4->4. The
+            // operation-local ImagePredicate has one channel count rather
+            // than a disjunction, so advertise the narrowest truthful RAW
+            // contract here. SRAW preparation remains an explicit deferred
+            // union seam; it must not be approximated as 1->4.
             input: ImagePredicate {
-                // Bayer/X-Trans raw-u16x1 and raw-f32x1 enter as one sensor
-                // plane; the four-lane sraw-f32x4 branch is output-shaped.
                 channels: 1,
                 alpha: AlphaPolicy::Ignore,
                 encodings: vec![ColorEncoding::Unspecified],
                 nonfinite: NonFinitePolicy::Reject,
             },
             output: ImagePredicate {
-                channels: 4,
+                channels: 1,
                 alpha: AlphaPolicy::Ignore,
                 encodings: vec![ColorEncoding::Unspecified],
                 nonfinite: NonFinitePolicy::Reject,

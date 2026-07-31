@@ -1058,12 +1058,26 @@ impl std::error::Error for RawPrepareError {}
 fn classify_input(
     metadata: &RawPrepareImageMetadata,
 ) -> Result<RawPrepareInputKind, RawPrepareError> {
-    if let RawPrepareCfa::Bayer { filters, .. } = metadata.cfa
-        && (filters == 0 || filters == 9)
-    {
-        return Err(RawPrepareError::UnsupportedCamera);
+    let is_raw = metadata.flags & DT_IMAGE_RAW == DT_IMAGE_RAW;
+    let is_sraw = metadata.flags & DT_IMAGE_S_RAW == DT_IMAGE_S_RAW;
+    match (is_raw, is_sraw) {
+        (false, false) => return Err(RawPrepareError::UnsupportedCamera),
+        // `imageio_rawspeed_sraw` explicitly clears DT_IMAGE_RAW before it
+        // publishes DT_IMAGE_S_RAW. No native image can legitimately enter
+        // both format branches.
+        (true, true) => return Err(RawPrepareError::UnsupportedLayout),
+        _ => {}
     }
-    if metadata.channels == 1 && metadata.cfa.is_mosaic() {
+
+    if is_raw {
+        if metadata.channels != 1 || !metadata.cfa.is_mosaic() {
+            return Err(RawPrepareError::UnsupportedLayout);
+        }
+        if let RawPrepareCfa::Bayer { filters, .. } = metadata.cfa
+            && (filters == 0 || filters == 9)
+        {
+            return Err(RawPrepareError::UnsupportedCamera);
+        }
         if metadata.sample_format == RawPrepareSampleFormat::F32
             && (metadata.flags & DT_IMAGE_HDR == 0
                 || metadata.raw_white_point == 1
@@ -1076,22 +1090,19 @@ fn classify_input(
             RawPrepareSampleFormat::F32 => RawPrepareInputKind::MosaicF32,
         });
     }
-    if metadata.channels == RAWPREPARE_CHANNELS as u8
-        && metadata.sample_format == RawPrepareSampleFormat::F32
-        && metadata.cfa == RawPrepareCfa::None
+
+    if metadata.channels != RAWPREPARE_CHANNELS as u8
+        || metadata.sample_format != RawPrepareSampleFormat::F32
+        || metadata.cfa != RawPrepareCfa::None
     {
-        if metadata.flags & DT_IMAGE_HDR == DT_IMAGE_HDR
-            && (metadata.raw_white_point == 1 || metadata.raw_white_point == 0x3F80_0000)
-        {
-            return Err(RawPrepareError::AlreadyNormalized);
-        }
-        return Ok(RawPrepareInputKind::FourChannelF32);
+        return Err(RawPrepareError::UnsupportedLayout);
     }
-    Err(if metadata.cfa.is_mosaic() {
-        RawPrepareError::UnsupportedLayout
-    } else {
-        RawPrepareError::UnsupportedCamera
-    })
+    if metadata.flags & DT_IMAGE_HDR == DT_IMAGE_HDR
+        && (metadata.raw_white_point == 1 || metadata.raw_white_point == 0x3F80_0000)
+    {
+        return Err(RawPrepareError::AlreadyNormalized);
+    }
+    Ok(RawPrepareInputKind::FourChannelF32)
 }
 
 fn cropped_dimensions(

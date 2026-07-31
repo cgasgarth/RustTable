@@ -27,7 +27,7 @@ upstream_path = "src/common/image.h; src/common/image.c; src/imageio/imageio_raw
 upstream_symbols = ["DT_IMAGE_RAW", "DT_IMAGE_S_RAW", "DT_IMAGE_HDR", "dt_image_is_rawprepare_supported", "_image_is_normalized"]
 rust_path = "crates/rusttable-processing/src/operations/rawprepare/execution.rs"
 status = "bounded-leaf"
-notes = "The leaf consumes already-decoded dimensions, flags, sample layout, CFA, crop, levels, and optional gain maps. Missing raw flags, normalized float inputs, and unknown layouts fail closed; no decoder or camera table is invented."
+notes = "The leaf consumes already-decoded dimensions, flags, sample layout, CFA, crop, levels, and optional gain maps. RAW Bayer/X-Trans is a 1-channel mosaic and SRAW is a 4-channel float buffer; the mutually exclusive flag/layout branches are validated and impossible RAW|SRAW combinations fail closed. Missing raw flags, normalized float inputs, and unknown layouts fail closed; no decoder or camera table is invented."
 
 [[responsibility]]
 id = "crop-and-level-commit"
@@ -83,4 +83,4 @@ upstream_path = "src/iop/rawprepare.c"
 upstream_symbols = ["name", "flags", "process", "commit_params", "gui_init", "init_presets"]
 rust_path = "crates/rusttable-processing/src/{operations/mod.rs,registry,raw_pipeline.rs}"
 status = "deferred"
-notes = "This milestone does not edit operation registries, pixelpipe/import/image hubs, history materialization, GPU shaders, or GTK. CPU capability is leaf-local only."
+notes = "This milestone does not edit operation registries, pixelpipe/import/image hubs, history materialization, GPU shaders, or GTK. CPU capability is leaf-local only. The operation-local descriptor exposes the truthful RAW 1->1 branch; SRAW 4->4 remains a deferred preparation-union seam because the shared ImagePredicate cannot encode a disjunction."

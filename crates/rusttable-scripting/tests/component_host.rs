@@ -165,7 +165,7 @@ fn extension_host_cache_rejects_substituted_artifacts() {
     let root = temp_root("cache");
     let cache = CompiledArtifactCache::new(&root).expect("cache");
     let key = CacheKey {
-        wasmtime: "46.0.1".to_owned(),
+        wasmtime: "46.0.2".to_owned(),
         target: "test".to_owned(),
         engine_config: "config".to_owned(),
         component: "sha256:component".to_owned(),
