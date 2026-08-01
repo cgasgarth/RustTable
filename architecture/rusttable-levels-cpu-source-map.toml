@@ -1,0 +1,59 @@
+schema = "rusttable.levels-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-history-migration"
+upstream_path = "src/iop/levels.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_levels_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/levels/codec.rs"
+status = "implemented"
+notes = "v1 is 3 floats plus int levels_preset (16 bytes); v2 is int mode, black/gray/white, and 3 manual levels (28 bytes). The native v1 migration ignores levels_preset and installs manual/0/50/100 defaults. Unknown versions remain opaque."
+
+[[responsibility]]
+id = "manual-and-automatic-histogram-resolution"
+upstream_path = "src/iop/levels.c"
+upstream_symbols = ["dt_iop_levels_compute_levels_manual", "dt_iop_levels_compute_levels_automatic"]
+rust_path = "crates/rusttable-processing/src/operations/levels/execution.rs"
+status = "implemented"
+notes = "The four-channel histogram layout uses L at bins[4 * i]. Manual scan uses 256 bins and / (4 * 256); automatic resolution uses the native 16384-bin percentile thresholds and -FLT_MAX marker. Both signed FLT_MAX sentinels are rejected before LUT construction when black, gray, or white remains unresolved. GUI hash/preview synchronization remains deferred."
+
+[[responsibility]]
+id = "lab-lightness-lut-and-contrast-preservation"
+upstream_path = "src/iop/levels.c"
+upstream_symbols = ["compute_lut", "process"]
+rust_path = "crates/rusttable-processing/src/operations/levels/execution.rs"
+status = "implemented"
+notes = "The CPU leaf keeps the native L/100 input, base-10 inverse-gamma, 0x10000 LUT without a 1.0 endpoint, fallback powf branch, 0.01 denominator guard, and a/b rescale. Alpha/spare is passed through because native CPU does not transform it; profile conversion is outside this leaf."
+
+[[responsibility]]
+id = "directly-coupled-opencl-contract"
+upstream_path = "data/kernels/basic.cl"
+upstream_symbols = ["levels"]
+rust_path = "crates/rusttable-processing/src/operations/levels/execution.rs"
+status = "deferred"
+notes = "The retained kernel's explicit high-end branch and LUT image binding are documented source evidence only; no GPU implementation or shader binding is added in this CPU-only lane."
+
+[[responsibility]]
+id = "pointwise-memory-cancellation-and-tiling"
+upstream_path = "src/iop/levels.c"
+upstream_symbols = ["process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/levels/execution.rs"
+status = "implemented"
+notes = "The plan admits LUT plus output memory, executes arbitrary pointwise tiles with zero overlap, polls cancellation at row boundaries, and never publishes partial output. Histogram request bits and pipeline ownership remain deferred."
+
+[[responsibility]]
+id = "operation-integration"
+upstream_path = "src/iop/levels.c"
+upstream_symbols = ["default_colorspace", "process"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs"
+status = "implemented"
+notes = "Typed registry/descriptor, v1/v2 history import, snapshot identity, Lab D50 CPU dispatch, zero-overlap tiling, and cancellation are integrated."
+
+[[responsibility]]
+id = "remaining-shared-capabilities"
+upstream_path = "src/iop/levels.c; data/kernels/basic.cl; shared blend and UI owners"
+upstream_symbols = ["flags", "process_cl", "gui_init", "commit_params_late"]
+rust_path = "crates/rusttable-processing/src/operations/levels/mod.rs"
+status = "deferred"
+notes = "GPU, imported masks/outer blending, GTK, and preview/full automatic-histogram synchronization remain explicitly unavailable rather than approximated."

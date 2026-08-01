@@ -1,0 +1,8 @@
+schema=colormapping.v1
+payload_bytes=16600
+field_order=flag,n,dominance,equalization,source_ihist,source_mean,source_var,source_weight,target_hist,target_mean,target_var,target_weight
+migration_edges=[]
+defaults=flag:0,n:3,dominance:100.0,equalization:50.0
+histogram_bins=2048
+clusters_max=5
+colorspace=Lab

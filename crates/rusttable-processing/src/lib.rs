@@ -16,6 +16,8 @@
 #![doc = "fn converts(source: &SourceRgbImage) { let _ = to_linear_srgb_from_display_p3(source); }"]
 #![doc = "```"]
 
+extern crate self as rusttable_processing;
+
 mod color;
 pub mod common;
 pub mod defringe_compatibility;
@@ -45,14 +47,15 @@ pub use color::{
 };
 pub use demosaic::{DemosaicAlgorithm, DemosaicError, DemosaicPlan, DemosaicedImage};
 pub use descriptor::{
-    basicadj_descriptor, bloom_descriptor, censorize_descriptor, channelmixer_descriptor,
-    clahe_descriptor, clipping_descriptor, color_reconstruction_descriptor,
-    colorcorrection_descriptor, colorin_descriptor, colorzones_descriptor, crop_descriptor,
-    defringe_descriptor, dither_descriptor, enlargecanvas_descriptor, exposure_descriptor,
-    finalscale_descriptor, flip_descriptor, graduatednd_descriptor, grain_descriptor,
-    highlights_descriptor, invert_descriptor, lenscorrection_descriptor, linear_offset_descriptor,
-    liquify_descriptor, mask_manager_descriptor, perspective_descriptor, primaries_descriptor,
-    retouch_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
+    agx_descriptor, basicadj_descriptor, bloom_descriptor, censorize_descriptor,
+    channelmixer_descriptor, clahe_descriptor, clipping_descriptor,
+    color_reconstruction_descriptor, colorcorrection_descriptor, colorin_descriptor,
+    colorzones_descriptor, crop_descriptor, defringe_descriptor, dither_descriptor,
+    enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
+    graduatednd_descriptor, grain_descriptor, highlights_descriptor, invert_descriptor,
+    lenscorrection_descriptor, levels_descriptor, linear_offset_descriptor, liquify_descriptor,
+    mask_manager_descriptor, perspective_descriptor, primaries_descriptor, retouch_descriptor,
+    rgb_gain_descriptor, rgblevels_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
     soften_descriptor, temperature_descriptor, velvia_descriptor, vibrance_descriptor,
     vignette_descriptor,
 };
@@ -77,6 +80,13 @@ pub use graph::{
 };
 pub use operation::{OperationCompileError, ProcessingOperation, ProcessingOperationKind};
 pub use operation_mask::{OperationMaskSet, OperationMaskSetError};
+pub use operations::agx::{
+    AGX_COMPATIBILITY_ID, AGX_PARAMETER_BYTES_V7, AGX_PARAMETER_FIELD_ORDER,
+    AGX_PARAMETER_LAYOUT_HASH, AGX_RUST_ID, AGX_SCHEMA_VERSION, AgxBasePrimaries, AgxCodecError,
+    AgxConfig, AgxExecutionError, AgxHistory, AgxParameterError, AgxParametersV7, AgxPixel,
+    AgxPlan, AgxPlanError, AgxProfile, AgxProfileError, AgxProfileResolutionError,
+    AgxToneMappingParameters, resolve_builtin_working_profile,
+};
 pub use operations::basicadj::analysis::{
     BASICADJ_HISTOGRAM_BINS, BASICADJ_HISTOGRAM_MAXIMUM, BASICADJ_HISTOGRAM_MINIMUM,
     BASICADJ_MAX_ANALYSIS_PIXELS, BasicAdjAnalysisError, BasicAdjAnalysisPlan,
@@ -137,7 +147,19 @@ pub use operations::colorcorrection::{
     ColorCorrectionParametersV1, ColorCorrectionPixel, ColorCorrectionPlan, ColorCorrectionPreset,
     ColorCorrectionPresetBlendColorSpace, presets as colorcorrection_presets,
 };
+pub use operations::colormapping::{
+    COLOR_MAPPING_COMPATIBILITY_ID, COLOR_MAPPING_PARAMETER_BYTES, COLOR_MAPPING_RUST_ID,
+    COLOR_MAPPING_SCHEMA_VERSION, ColorMappingCodecError, ColorMappingConfig,
+    ColorMappingExecutionError, ColorMappingHistory, ColorMappingParameterError,
+    ColorMappingParametersV1, ColorMappingPixel, ColorMappingPlan, ColorMappingPlanError,
+    ColorMappingTiling,
+};
 pub use operations::colorout::{TerminalOutputDescriptor, TerminalOutputFrame};
+pub use operations::colortransfer::{
+    COLORTRANSFER_COMPATIBILITY_ID, COLORTRANSFER_NATIVE_PARAMETER_BYTES, COLORTRANSFER_RUST_ID,
+    COLORTRANSFER_SCHEMA_VERSION, ColorTransferCodecError, ColorTransferFlag,
+    ColorTransferParameters, ColorTransferPixel, ColorTransferPlan, PointsRng,
+};
 pub use operations::colorzones::{
     COLORZONES_CHANNELS, COLORZONES_COMPATIBILITY_ID, COLORZONES_DEFAULT_ENABLED,
     COLORZONES_GPU_TIER, COLORZONES_LEGACY_BANDS, COLORZONES_LUT_RESOLUTION, COLORZONES_MAX_NODES,
@@ -164,6 +186,14 @@ pub use operations::defringe::{
     DefringePixel, DefringePlan, DefringeReceipt,
 };
 pub use operations::grain::{GrainGpuParameters, GrainPlan};
+pub use operations::levels::{
+    LEVELS_AUTO_HISTOGRAM_BINS, LEVELS_COMPATIBILITY_ID, LEVELS_DEFAULT_LEVELS, LEVELS_LUT_ENTRIES,
+    LEVELS_MANUAL_HISTOGRAM_BINS, LEVELS_PARAMETER_BYTES_V1, LEVELS_PARAMETER_BYTES_V2,
+    LEVELS_RUST_ID, LEVELS_SCHEMA_VERSION, LevelsCodecError, LevelsConfig, LevelsHistogram,
+    LevelsHistogramError, LevelsHistory, LevelsMode, LevelsParameterError, LevelsParametersV1,
+    LevelsParametersV2, LevelsPixel, LevelsPlan, LevelsTiling,
+    migrate_v1_to_v2 as migrate_levels_v1_to_v2,
+};
 pub use operations::liquify::{
     LIQUIFY_COMPATIBILITY_ID, LIQUIFY_PARAMETER_BYTES, LIQUIFY_SCHEMA_VERSION, LiquifyConfig,
     LiquifyExecution, LiquifyExecutionError, LiquifyGpuDispatch, LiquifyInterpolation, LiquifyNode,
@@ -189,6 +219,13 @@ pub use operations::retouch::{
     RETOUCH_MAX_SCALES, RETOUCH_SCHEMA_VERSION, RetouchAlgorithm, RetouchBlurType, RetouchConfig,
     RetouchConfigError, RetouchExecutionError, RetouchFillMode, RetouchForm, RetouchParameters,
     RetouchPixel, RetouchPlan, RetouchReceipt, RetouchScale,
+};
+pub use operations::rgblevels::{
+    RGBLEVELS_COMPATIBILITY_ID, RGBLEVELS_PARAMETER_BYTES, RGBLEVELS_RUST_ID,
+    RGBLEVELS_SCHEMA_VERSION, RgbLevelsAutoscale, RgbLevelsCodecError, RgbLevelsConfig,
+    RgbLevelsExecution, RgbLevelsExecutionError, RgbLevelsHistory, RgbLevelsParameterError,
+    RgbLevelsParametersV1, RgbLevelsPixel, RgbLevelsPlan, RgbLevelsPlanError,
+    RgbLevelsPreserveColors, RgbLevelsProfileError, RgbLevelsProfileEvidence,
 };
 pub use operations::shadhi::ShadhiBilateralRequest;
 pub use operations::spots::{

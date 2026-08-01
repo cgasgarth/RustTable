@@ -10,6 +10,68 @@ use sha2::{Digest, Sha256};
 
 use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel};
 
+/// Maximum native bytes encoded by one core text parameter.
+pub(crate) const NATIVE_PAYLOAD_CHUNK_BYTES: usize = 2_048;
+
+pub(crate) fn encode_native_payload_chunks(bytes: &[u8]) -> Vec<String> {
+    bytes
+        .chunks(NATIVE_PAYLOAD_CHUNK_BYTES)
+        .map(|chunk| {
+            let mut encoded = String::with_capacity(chunk.len() * 2);
+            for byte in chunk {
+                use std::fmt::Write as _;
+                write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
+            }
+            encoded
+        })
+        .collect()
+}
+
+pub(crate) fn decode_native_payload_chunks(
+    chunks: &[&str],
+    expected_bytes: usize,
+) -> Result<Vec<u8>, String> {
+    let encoded_bytes = chunks.iter().try_fold(0_usize, |total, chunk| {
+        if chunk.len() % 2 != 0 {
+            return Err("native payload chunks must contain even-length hexadecimal".to_owned());
+        }
+        total
+            .checked_add(chunk.len())
+            .ok_or_else(|| "native payload chunk length overflowed".to_owned())
+    })?;
+    if encoded_bytes != expected_bytes.saturating_mul(2) {
+        return Err(format!(
+            "native payload encodes {} bytes; expected {expected_bytes}",
+            encoded_bytes / 2
+        ));
+    }
+    let mut output = Vec::new();
+    output
+        .try_reserve_exact(expected_bytes)
+        .map_err(|_| format!("native payload could not allocate {expected_bytes} bytes"))?;
+    for chunk in chunks {
+        let (pairs, remainder) = chunk.as_bytes().as_chunks::<2>();
+        debug_assert!(remainder.is_empty());
+        for pair in pairs {
+            let high = hex_digit(pair[0])
+                .ok_or_else(|| "native payload contains non-hexadecimal text".to_owned())?;
+            let low = hex_digit(pair[1])
+                .ok_or_else(|| "native payload contains non-hexadecimal text".to_owned())?;
+            output.push((high << 4) | low);
+        }
+    }
+    Ok(output)
+}
+
+const fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 pub(crate) fn rgb_to_hsl(rgb: [f32; 3]) -> (f32, f32, f32) {
     let [red, green, blue] = rgb;
     let maximum = red.max(green).max(blue);

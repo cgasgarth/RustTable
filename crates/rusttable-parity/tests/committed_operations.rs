@@ -77,6 +77,74 @@ fn committed_operation_manifest_is_valid_and_pinned() {
 }
 
 #[test]
+fn larger_tonal_abi_overrides_are_typed_and_match_generated_contracts() {
+    let overrides_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
+    let overrides_source = fs::read_to_string(overrides_path).expect("read operation overrides");
+    let overrides: OperationOverridesFile =
+        toml::from_str(&overrides_source).expect("parse typed operation overrides");
+    let manifest_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/darktable-operations.toml");
+    let manifest_source = fs::read_to_string(manifest_path).expect("read operation manifest");
+    let manifest = parse_operation_manifest(&manifest_source).expect("parse operation manifest");
+
+    for (name, byte_size, decoder, fields) in [
+        (
+            "colormapping",
+            16_600,
+            "rusttable.colormapping.decode.v1",
+            12,
+        ),
+        (
+            "colortransfer",
+            8_280,
+            "rusttable.colortransfer.decode.v1",
+            5,
+        ),
+    ] {
+        let operation = overrides
+            .operation
+            .iter()
+            .find(|operation| operation.name == name)
+            .expect("tonal ABI override");
+        assert_eq!(operation.parameter_size, Some(byte_size));
+        assert_eq!(operation.parameter_decoder.as_deref(), Some(decoder));
+        let version = operation
+            .parameter_versions
+            .as_ref()
+            .and_then(|versions| versions.last())
+            .expect("current parameter version");
+        assert_eq!(version.byte_size, byte_size);
+        assert_eq!(version.abi_layouts.len(), 3);
+        assert!(version.abi_layouts.iter().all(|layout| {
+            layout.total_size == byte_size
+                && layout.alignment == 4
+                && layout.fields.len() == fields
+                && layout.fields.iter().all(|field| field.name != "raw")
+                && canonical_layout_hash(layout) == layout.layout_hash
+        }));
+        let codec = version.codec.as_ref().expect("typed native codec");
+        assert_eq!(codec.decoder, decoder);
+        assert_eq!(codec.byte_size, byte_size);
+        assert_eq!(codec.fields.len(), fields);
+
+        let generated = manifest
+            .operations
+            .iter()
+            .find(|operation| operation.name == name)
+            .expect("generated tonal operation");
+        assert_eq!(generated.parameter_size, byte_size);
+        let generated_version = generated
+            .parameter_versions
+            .last()
+            .expect("generated version");
+        assert_eq!(generated_version.decoder, decoder);
+        assert_eq!(generated_version.abi_layouts, version.abi_layouts);
+        assert_eq!(generated_version.codec.as_ref(), Some(codec));
+    }
+}
+
+#[test]
 fn bloom_codegen_override_matches_the_source_payload_and_contract() {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");

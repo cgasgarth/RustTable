@@ -28,6 +28,10 @@ path = "crates/rusttable-processing/src/operations/defringe/execution.rs"
 policy = "ExplicitFused"
 
 [[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
 path = "crates/rusttable-processing/src/operations/lenscorrection/execution.rs"
 policy = "ExplicitFused"
 

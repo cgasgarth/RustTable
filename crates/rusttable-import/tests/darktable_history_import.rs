@@ -5,6 +5,7 @@ use rusttable_compat::{
 use rusttable_import::darktable::{
     DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode, decode_history_step,
 };
+use rusttable_processing::operations::agx::{AgxConfig, AgxParametersV7};
 use rusttable_processing::operations::bloom::{
     BLOOM_PARAMETER_BYTES, BloomConfig, BloomParametersV1,
 };
@@ -14,8 +15,14 @@ use rusttable_processing::operations::colorcontrast::{
 use rusttable_processing::operations::colorcorrection::{
     ColorCorrectionConfig, ColorCorrectionParametersV1,
 };
+use rusttable_processing::operations::colormapping::{
+    COLOR_MAPPING_PARAMETER_BYTES, ColorMappingConfig, ColorMappingParametersV1,
+};
 use rusttable_processing::operations::colorreconstruction::{
     ColorReconstructionConfig, ColorReconstructionPrecedence,
+};
+use rusttable_processing::operations::colortransfer::{
+    COLORTRANSFER_NATIVE_PARAMETER_BYTES, ColorTransferParameters,
 };
 use rusttable_processing::operations::crop::{
     CROP_LEGACY_V1_BYTES, CROP_LEGACY_V2_BYTES, CROP_PARAMETER_BYTES, CropConfig,
@@ -24,6 +31,10 @@ use rusttable_processing::operations::crop::{
 use rusttable_processing::operations::enlargecanvas::{
     CanvasColor, ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasParametersV1,
 };
+use rusttable_processing::operations::levels::{
+    LevelsConfig, LevelsMode, LevelsParametersV1, LevelsParametersV2,
+};
+use rusttable_processing::operations::rgblevels::{RgbLevelsConfig, RgbLevelsParametersV1};
 use rusttable_processing::operations::velvia::{
     VelviaConfig, VelviaParametersV1, VelviaParametersV2,
 };
@@ -68,6 +79,174 @@ const VIBRANCE_V2_NATIVE_LE: [u8; 4] = [
 ];
 const ENLARGECANVAS_V1_NATIVE_LE: &[u8; ENLARGECANVAS_PARAMETER_BYTES] =
     include_bytes!("../../../fixtures/corpus/assets/operation-enlargecanvas-params-v1.bin");
+
+#[test]
+fn agx_v7_and_legacy_rows_materialize_canonical_typed_parameters() {
+    let parameters = AgxParametersV7::defaults();
+    let source = history_step(b"agx", Some(7), Some(1), parameters.to_bytes().to_vec());
+    let DarktableHistoryStepDecode::AgxPendingBlend(imported) = decode_history_step(&source) else {
+        panic!("canonical AgX v7 row must decode as typed pending blend");
+    };
+    assert_eq!(
+        imported.config,
+        AgxConfig::new(parameters).expect("defaults")
+    );
+    assert_eq!(imported.canonical_parameters, parameters.to_bytes());
+    assert!(!imported.migrated);
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+
+    let legacy = history_step(b"agx", Some(6), Some(0), vec![0xde, 0xad]);
+    let DarktableHistoryStepDecode::AgxPendingBlend(imported) = decode_history_step(&legacy) else {
+        panic!("pre-v7 AgX row must use the native scene-referred reset");
+    };
+    let expected = AgxParametersV7::scene_referred_defaults();
+    assert_eq!(imported.canonical_parameters, expected.to_bytes());
+    assert!(imported.migrated);
+    assert!(!imported.enabled);
+
+    let future = history_step(b"agx", Some(8), Some(1), vec![1, 2, 3]);
+    assert_preserved_exact(
+        &future,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+}
+
+#[test]
+fn levels_v1_and_v2_rows_materialize_the_exact_28_byte_current_abi() {
+    let v1 = LevelsParametersV1::new([0.125, 0.5, 0.875], 7);
+    let source = history_step(b"levels", Some(1), Some(1), v1.to_bytes().to_vec());
+    let DarktableHistoryStepDecode::LevelsPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("Levels v1 row must decode and migrate");
+    };
+    let expected =
+        LevelsParametersV2::new(LevelsMode::Manual, 0.0, 50.0, 100.0, [0.125, 0.5, 0.875]);
+    assert_eq!(imported.canonical_parameters, expected.to_bytes());
+    assert_eq!(
+        imported.config,
+        LevelsConfig::new(expected).expect("levels")
+    );
+    assert!(imported.migrated);
+
+    let v2 = LevelsParametersV2::defaults();
+    let source = history_step(b"levels", Some(2), Some(0), v2.to_bytes().to_vec());
+    let DarktableHistoryStepDecode::LevelsPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("Levels v2 row must decode");
+    };
+    assert_eq!(imported.canonical_parameters.len(), 28);
+    assert!(!imported.migrated);
+
+    let stale_opaque = history_step(b"levels", Some(3), Some(1), vec![0; 264]);
+    assert_preserved_exact(
+        &stale_opaque,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+}
+
+#[test]
+fn rgblevels_v1_materializes_the_exact_44_byte_native_payload() {
+    let parameters = RgbLevelsParametersV1::defaults();
+    let source = history_step(
+        b"rgblevels",
+        Some(1),
+        Some(1),
+        parameters.to_bytes().to_vec(),
+    );
+    let DarktableHistoryStepDecode::RgbLevelsPendingBlend(imported) = decode_history_step(&source)
+    else {
+        panic!("RGB Levels v1 row must decode as typed pending blend");
+    };
+    assert_eq!(imported.canonical_parameters.len(), 44);
+    assert_eq!(imported.canonical_parameters, parameters.to_bytes());
+    assert_eq!(
+        imported.config,
+        RgbLevelsConfig::new(parameters).expect("RGB Levels defaults")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+
+    let stale_20_byte = history_step(b"rgblevels", Some(1), Some(1), vec![0; 20]);
+    assert_preserved_exact(
+        &stale_20_byte,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+}
+
+#[test]
+fn colormapping_v1_materializes_the_exact_16600_byte_native_payload() {
+    let parameters = ColorMappingParametersV1::defaults();
+    let payload = parameters.to_bytes();
+    let source = history_step(b"colormapping", Some(1), Some(1), payload.clone());
+    let DarktableHistoryStepDecode::ColorMappingPendingBlend(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("Color Mapping v1 row must decode as typed pending blend");
+    };
+    assert_eq!(
+        imported.canonical_parameters.len(),
+        COLOR_MAPPING_PARAMETER_BYTES
+    );
+    assert_eq!(imported.canonical_parameters, payload);
+    assert_eq!(
+        *imported.config,
+        ColorMappingConfig::new(parameters).expect("Color Mapping defaults")
+    );
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics
+    );
+
+    let malformed = history_step(b"colormapping", Some(1), Some(1), vec![0; 332]);
+    assert_preserved_exact(
+        &malformed,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+    let future = history_step(b"colormapping", Some(2), Some(1), vec![1, 2, 3]);
+    assert_preserved_exact(
+        &future,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+}
+
+#[test]
+fn colortransfer_v1_materializes_the_exact_8280_byte_native_payload() {
+    let parameters = ColorTransferParameters::default();
+    let payload = parameters.to_bytes();
+    let source = history_step(b"colortransfer", Some(1), Some(0), payload.clone());
+    let DarktableHistoryStepDecode::ColorTransferPendingRuntime(imported) =
+        decode_history_step(&source)
+    else {
+        panic!("Color Transfer v1 row must decode as typed pending runtime state");
+    };
+    assert_eq!(
+        imported.canonical_parameters.len(),
+        COLORTRANSFER_NATIVE_PARAMETER_BYTES
+    );
+    assert_eq!(imported.canonical_parameters, payload);
+    assert_eq!(*imported.parameters, parameters);
+    assert!(!imported.enabled);
+    assert_eq!(
+        imported.execution_blocker.code,
+        DarktableHistoryDecodeFindingCode::DeferredRuntimeState
+    );
+
+    let stale = history_step(b"colortransfer", Some(1), Some(1), vec![0; 92]);
+    assert_preserved_exact(
+        &stale,
+        DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+    );
+    let future = history_step(b"colortransfer", Some(2), Some(1), vec![1, 2, 3]);
+    assert_preserved_exact(
+        &future,
+        DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+    );
+}
 
 #[test]
 fn bloom_v1_decodes_source_ordered_little_endian_fields_but_remains_pending_blend() {
@@ -1124,6 +1303,66 @@ fn production_manifest_uses_v30_native_order_across_colorcontrast_neighbors() {
             "bloom",
         ]
     );
+}
+
+#[test]
+fn production_manifest_orders_and_decodes_the_ready_tonal_set() {
+    let history = built_in_history(vec![
+        raw_history_row(
+            41,
+            0,
+            b"agx",
+            Some(7),
+            Some(1),
+            AgxParametersV7::defaults().to_bytes().to_vec(),
+        ),
+        raw_history_row(
+            42,
+            1,
+            b"rgblevels",
+            Some(1),
+            Some(1),
+            RgbLevelsParametersV1::defaults().to_bytes().to_vec(),
+        ),
+        raw_history_row(
+            43,
+            2,
+            b"levels",
+            Some(2),
+            Some(1),
+            LevelsParametersV2::defaults().to_bytes().to_vec(),
+        ),
+    ]);
+
+    assert!(history.order_proven);
+    assert_eq!(
+        ordered_operation_names(&history),
+        ["rgblevels", "agx", "levels"]
+    );
+    let ordered = history
+        .operation_order
+        .iter()
+        .map(|id| {
+            history
+                .steps
+                .iter()
+                .find(|step| step.instance_id == *id)
+                .expect("ordered tonal row")
+        })
+        .map(decode_history_step)
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        ordered[0],
+        DarktableHistoryStepDecode::RgbLevelsPendingBlend(_)
+    ));
+    assert!(matches!(
+        ordered[1],
+        DarktableHistoryStepDecode::AgxPendingBlend(_)
+    ));
+    assert!(matches!(
+        ordered[2],
+        DarktableHistoryStepDecode::LevelsPendingBlend(_)
+    ));
 }
 
 #[test]

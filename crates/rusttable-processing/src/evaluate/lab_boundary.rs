@@ -18,11 +18,16 @@ use crate::operations::colorcontrast::{
 use crate::operations::colorcorrection::{
     ColorCorrectionConfig, ColorCorrectionPixel, ColorCorrectionPlan,
 };
+use crate::operations::colormapping::{
+    ColorMappingConfig, ColorMappingExecutionError, ColorMappingPlan, ColorMappingPlanError,
+};
 use crate::operations::colorreconstruction::{ColorReconstructionConfig, ColorReconstructionPlan};
+use crate::operations::colortransfer::{ColorTransferParameters, ColorTransferPixel};
 use crate::operations::colorzones::{ColorZonesPixel, ColorZonesPlan};
 use crate::operations::defringe::{
     DefringeConfig, DefringeExecutionError, DefringePixel, DefringePlan,
 };
+use crate::operations::levels::{LevelsConfig, LevelsPixel, LevelsPlan};
 use crate::operations::relight::{RelightConfig, RelightPixel, RelightPlan};
 use crate::operations::shadhi::{
     ShadhiAlgorithm, ShadhiBilateralRequest, ShadhiConfig, ShadhiPixel, ShadhiPlan,
@@ -41,6 +46,10 @@ pub(crate) enum LabBoundaryError {
     Transform(TransformExecutionError),
     Bloom(crate::operations::OperationExecutionError),
     Defringe(DefringeExecutionError),
+    Levels(crate::operations::OperationExecutionError),
+    ColorMappingPlan(ColorMappingPlanError),
+    ColorMapping(ColorMappingExecutionError),
+    ColorTransfer(crate::operations::OperationExecutionError),
     Shadhi(crate::operations::OperationExecutionError),
     Relight(crate::operations::OperationExecutionError),
     ColorReconstruction(crate::operations::OperationExecutionError),
@@ -64,6 +73,16 @@ impl fmt::Display for LabBoundaryError {
             Self::Transform(error) => write!(formatter, "Lab boundary transform failed: {error}"),
             Self::Bloom(error) => write!(formatter, "Lab bloom operation failed: {error}"),
             Self::Defringe(error) => write!(formatter, "Lab operation failed: {error}"),
+            Self::Levels(error) => write!(formatter, "Lab Levels operation failed: {error}"),
+            Self::ColorMappingPlan(error) => {
+                write!(formatter, "Lab Color Mapping plan failed: {error}")
+            }
+            Self::ColorMapping(error) => {
+                write!(formatter, "Lab Color Mapping operation failed: {error}")
+            }
+            Self::ColorTransfer(error) => {
+                write!(formatter, "Lab Color Transfer operation failed: {error}")
+            }
             Self::Shadhi(error) => write!(formatter, "Lab shadhi operation failed: {error}"),
             Self::Relight(error) => write!(formatter, "Lab relight operation failed: {error}"),
             Self::ColorReconstruction(error) => {
@@ -119,6 +138,9 @@ impl LabBoundaryError {
             self,
             Self::Transform(TransformExecutionError::Cancelled)
                 | Self::Bloom(OperationExecutionError::Cancelled)
+                | Self::Levels(OperationExecutionError::Cancelled)
+                | Self::ColorMapping(ColorMappingExecutionError::Cancelled)
+                | Self::ColorTransfer(OperationExecutionError::Cancelled)
                 | Self::ColorReconstruction(OperationExecutionError::Cancelled)
                 | Self::Shadhi(OperationExecutionError::Cancelled)
         )
@@ -172,6 +194,158 @@ pub(crate) fn apply_bloom_with_cancellation<C: Fn() -> bool>(
             let green = finite(rgb[1], pixel, RgbChannel::Green)?;
             let blue = finite(rgb[2], pixel, RgbChannel::Blue)?;
             Ok(LinearRgb::new(red, green, blue))
+        })
+        .collect()
+}
+
+pub(crate) fn apply_levels_with_cancellation<C: Fn() -> bool>(
+    config: LevelsConfig,
+    pixels: &[LinearRgb],
+    dimensions: RasterDimensions,
+    source_encoding: ColorEncoding,
+    cancelled: C,
+) -> Result<Vec<LinearRgb>, LabBoundaryError> {
+    let to_lab = plan(source_encoding, ColorEncoding::LabD50)?;
+    let from_lab = plan(ColorEncoding::LabD50, source_encoding)?;
+    let lab_pixels = pixels
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let lab = to_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    &cancelled,
+                )
+                .map_err(LabBoundaryError::Transform)?;
+            if lab.iter().any(|channel| !channel.is_finite()) {
+                return Err(LabBoundaryError::NonFinite {
+                    pixel,
+                    channel: RgbChannel::Red,
+                });
+            }
+            Ok(LevelsPixel::new(lab[0], lab[1], lab[2], 1.0))
+        })
+        .collect::<Result<Vec<_>, LabBoundaryError>>()?;
+    let plan = LevelsPlan::new(config, dimensions, None).map_err(LabBoundaryError::Levels)?;
+    let lab_output = plan
+        .execute_with_cancel(&lab_pixels, &cancelled)
+        .map_err(LabBoundaryError::Levels)?;
+    lab_output
+        .into_iter()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let channels = value.channels();
+            let rgb = from_lab
+                .apply_rgb([channels[0], channels[1], channels[2]], &cancelled)
+                .map_err(LabBoundaryError::Transform)?;
+            Ok(LinearRgb::new(
+                finite(rgb[0], pixel, RgbChannel::Red)?,
+                finite(rgb[1], pixel, RgbChannel::Green)?,
+                finite(rgb[2], pixel, RgbChannel::Blue)?,
+            ))
+        })
+        .collect()
+}
+
+pub(crate) fn apply_colormapping_with_cancellation<C: Fn() -> bool>(
+    config: &ColorMappingConfig,
+    pixels: &[LinearRgb],
+    dimensions: RasterDimensions,
+    source_encoding: ColorEncoding,
+    cancelled: C,
+) -> Result<Vec<LinearRgb>, LabBoundaryError> {
+    let to_lab = plan(source_encoding, ColorEncoding::LabD50)?;
+    let from_lab = plan(ColorEncoding::LabD50, source_encoding)?;
+    let lab_pixels = pixels
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let lab = to_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    &cancelled,
+                )
+                .map_err(LabBoundaryError::Transform)?;
+            if lab.iter().any(|channel| !channel.is_finite()) {
+                return Err(LabBoundaryError::NonFinite {
+                    pixel,
+                    channel: RgbChannel::Red,
+                });
+            }
+            Ok([lab[0], lab[1], lab[2], 1.0])
+        })
+        .collect::<Result<Vec<_>, LabBoundaryError>>()?;
+    let plan = ColorMappingPlan::new_with_scale(config.clone(), dimensions, 1.0)
+        .map_err(LabBoundaryError::ColorMappingPlan)?;
+    let lab_output = plan
+        .execute_with_cancel(&lab_pixels, &cancelled)
+        .map_err(LabBoundaryError::ColorMapping)?;
+    lab_output
+        .into_iter()
+        .enumerate()
+        .map(|(pixel, channels)| {
+            let rgb = from_lab
+                .apply_rgb([channels[0], channels[1], channels[2]], &cancelled)
+                .map_err(LabBoundaryError::Transform)?;
+            Ok(LinearRgb::new(
+                finite(rgb[0], pixel, RgbChannel::Red)?,
+                finite(rgb[1], pixel, RgbChannel::Green)?,
+                finite(rgb[2], pixel, RgbChannel::Blue)?,
+            ))
+        })
+        .collect()
+}
+
+pub(crate) fn apply_colortransfer_with_cancellation<C: Fn() -> bool>(
+    parameters: &ColorTransferParameters,
+    pixels: &[LinearRgb],
+    dimensions: RasterDimensions,
+    source_encoding: ColorEncoding,
+    cancelled: C,
+) -> Result<Vec<LinearRgb>, LabBoundaryError> {
+    let to_lab = plan(source_encoding, ColorEncoding::LabD50)?;
+    let from_lab = plan(ColorEncoding::LabD50, source_encoding)?;
+    let lab_pixels = pixels
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let lab = to_lab
+                .apply_rgb(
+                    [value.red().get(), value.green().get(), value.blue().get()],
+                    &cancelled,
+                )
+                .map_err(LabBoundaryError::Transform)?;
+            if lab.iter().any(|channel| !channel.is_finite()) {
+                return Err(LabBoundaryError::NonFinite {
+                    pixel,
+                    channel: RgbChannel::Red,
+                });
+            }
+            Ok(ColorTransferPixel::new(lab[0], lab[1], lab[2], 1.0))
+        })
+        .collect::<Result<Vec<_>, LabBoundaryError>>()?;
+    let plan = parameters
+        .plan(dimensions)
+        .map_err(LabBoundaryError::ColorTransfer)?;
+    let lab_output = plan
+        .execute_with_cancel(&lab_pixels, &cancelled)
+        .map_err(LabBoundaryError::ColorTransfer)?;
+    lab_output
+        .into_iter()
+        .enumerate()
+        .map(|(pixel, value)| {
+            let channels = value.channels();
+            let rgb = from_lab
+                .apply_rgb([channels[0], channels[1], channels[2]], &cancelled)
+                .map_err(LabBoundaryError::Transform)?;
+            Ok(LinearRgb::new(
+                finite(rgb[0], pixel, RgbChannel::Red)?,
+                finite(rgb[1], pixel, RgbChannel::Green)?,
+                finite(rgb[2], pixel, RgbChannel::Blue)?,
+            ))
         })
         .collect()
 }

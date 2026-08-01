@@ -1,4 +1,5 @@
 use crate::operations::{
+    agx::AgxConfig,
     basicadj::BasicAdjConfig,
     bloom::BloomConfig,
     channelmixer::ChannelMixerConfig,
@@ -6,8 +7,10 @@ use crate::operations::{
     colorcontrast::ColorContrastConfig,
     colorcorrection::ColorCorrectionConfig,
     colorin::ColorInConfig,
+    colormapping::ColorMappingConfig,
     colorout::ColorOutConfig,
     colorreconstruction::ColorReconstructionConfig,
+    colortransfer::ColorTransferParameters,
     colorzones::ColorZonesPlan,
     crop::CropConfig,
     dither::DitherConfig,
@@ -18,10 +21,12 @@ use crate::operations::{
     highlights::HighlightsConfig,
     invert::InvertConfig,
     lenscorrection::LensCorrectionConfig,
+    levels::LevelsConfig,
     perspective::PerspectiveConfig,
     primaries::PrimariesConfig,
     rasterfile::RasterFileParametersV1,
     relight::RelightConfig,
+    rgblevels::RgbLevelsConfig,
     rotatepixels::{RotatePixelsConfig, RotatePixelsParametersV1},
     scalepixels::ScalePixelsConfig,
     shadhi::ShadhiConfig,
@@ -38,6 +43,7 @@ use rusttable_core::{
     FiniteF64, Operation, OperationId, OperationKey, ParameterName, ParameterValue,
 };
 
+mod agx;
 mod basicadj;
 mod channelmixer;
 mod compat;
@@ -52,24 +58,31 @@ mod censorize;
 mod clahe;
 mod colorcontrast;
 mod colorcorrection;
+mod colormapping;
+mod colortransfer;
 pub(crate) mod colorzones;
 mod defringe;
 mod effects;
 mod grain;
 mod legacy;
+mod levels;
 mod masks;
 mod retouch;
+mod rgblevels;
 mod spatial;
 mod spots;
 mod text;
 mod velvia;
 mod vibrance;
+pub(crate) use agx::compile_agx;
 pub(crate) use basicadj::compile_basicadj;
 pub(crate) use censorize::compile_censorize;
 pub(crate) use channelmixer::compile_channelmixer;
 pub(crate) use clahe::compile_clahe;
 pub(crate) use colorcontrast::compile_colorcontrast;
 pub(crate) use colorcorrection::compile_colorcorrection;
+pub(crate) use colormapping::compile_colormapping;
+pub(crate) use colortransfer::compile_colortransfer;
 pub(crate) use colorzones::compile_colorzones;
 pub(crate) use compat::{compile_dither, compile_invert};
 pub(crate) use defringe::compile_defringe;
@@ -77,9 +90,12 @@ pub(crate) use effects::{compile_bloom, compile_soften};
 pub(crate) use error::compile_opacity;
 pub(crate) use grain::compile_grain;
 pub(crate) use legacy::{compile_relight, compile_shadhi};
+pub(crate) use levels::compile_levels;
 pub(crate) use parameters::{
-    compile_scalar, compile_scalar_parameter, parameter_f64, parameter_integer, parameter_u32,
+    compile_scalar, compile_scalar_parameter, parameter_bool_default, parameter_f32_array,
+    parameter_f64, parameter_integer, parameter_u32,
 };
+pub(crate) use rgblevels::compile_rgblevels;
 pub(crate) use spatial::{compile_graduatednd, compile_vignette};
 use text::{invalid_parameters, optional_parameter_text, parameter_bool, parameter_text};
 pub(crate) use velvia::compile_velvia;
@@ -101,6 +117,9 @@ pub struct ProcessingOperation {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(clippy::large_enum_variant)]
 pub enum ProcessingOperationKind {
+    Agx {
+        config: AgxConfig,
+    },
     BasicAdj {
         config: BasicAdjConfig,
     },
@@ -154,6 +173,18 @@ pub enum ProcessingOperationKind {
     },
     LensCorrection {
         config: LensCorrectionConfig,
+    },
+    Levels {
+        config: LevelsConfig,
+    },
+    RgbLevels {
+        config: RgbLevelsConfig,
+    },
+    ColorTransfer {
+        parameters: Box<ColorTransferParameters>,
+    },
+    ColorMapping {
+        config: Box<ColorMappingConfig>,
     },
     Highlights {
         config: HighlightsConfig,
@@ -349,6 +380,9 @@ impl ProcessingOperation {
             kind: ProcessingOperationKind::Exposure { stops, black },
         })
     }
+    pub(crate) fn compile_agx(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_agx(operation)
+    }
     pub(crate) fn compile_basicadj(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_basicadj(operation)
     }
@@ -417,6 +451,22 @@ impl ProcessingOperation {
             opacity,
             kind: ProcessingOperationKind::Liquify { config },
         })
+    }
+    pub(crate) fn compile_levels(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_levels(operation)
+    }
+    pub(crate) fn compile_rgblevels(operation: &Operation) -> Result<Self, OperationCompileError> {
+        compile_rgblevels(operation)
+    }
+    pub(crate) fn compile_colortransfer(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_colortransfer(operation)
+    }
+    pub(crate) fn compile_colormapping(
+        operation: &Operation,
+    ) -> Result<Self, OperationCompileError> {
+        compile_colormapping(operation)
     }
     pub(crate) fn compile_relight(operation: &Operation) -> Result<Self, OperationCompileError> {
         compile_relight(operation)
@@ -582,6 +632,26 @@ impl ProcessingOperation {
                     roi_scale,
                     piece_iscale,
                 )
+            }
+            ProcessingOperationKind::ColorMapping { config } => {
+                let scale = piece_iscale / roi_scale;
+                crate::operations::colormapping::ColorMappingPlan::new_with_scale(
+                    (**config).clone(),
+                    dimensions,
+                    scale,
+                )
+                .map_err(|_| {
+                    crate::operations::OperationExecutionError::UnsupportedCapability(
+                        "Color Mapping could not resolve its native ROI scale",
+                    )
+                })?
+                .tiling(1)
+                .map(|tiling| tiling.overlap)
+                .map_err(|_| {
+                    crate::operations::OperationExecutionError::UnsupportedCapability(
+                        "Color Mapping could not resolve its dynamic neighborhood overlap",
+                    )
+                })
             }
             _ => Ok(0),
         }

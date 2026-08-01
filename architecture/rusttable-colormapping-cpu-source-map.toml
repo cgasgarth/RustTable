@@ -1,0 +1,102 @@
+schema = "rusttable.colormapping-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+status = "cpu-integrated"
+
+[[responsibility]]
+id = "parameter-abi-and-history"
+upstream_path = "src/iop/colormapping.c"
+upstream_symbol = "DT_MODULE_INTROSPECTION(1);dt_iop_colormapping_params_t"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "histogram-capture-and-inversion"
+upstream_path = "src/iop/colormapping.c"
+upstream_symbol = "capture_histogram;invert_histogram"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cluster-acquisition"
+upstream_path = "src/iop/colormapping.c"
+upstream_symbol = "kmeans;get_cluster"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "points-state-transition"
+upstream_path = "src/common/points.h"
+upstream_symbol = "dt_points_get_for"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "process-global-points-ownership"
+upstream_path = "src/common/points.h;darktable.points owner"
+upstream_symbol = "dt_points_init;dt_points_get;dt_points_cleanup"
+rust_path = "deferred: shared per-worker points owner and production injection"
+status = "deferred"
+
+[[responsibility]]
+id = "cluster-mapping-and-shepard-weights"
+upstream_path = "src/iop/colormapping.c;data/kernels/extended.cl"
+upstream_symbol = "get_cluster_mapping;get_clusters"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "cpu-histogram-transfer"
+upstream_path = "src/iop/colormapping.c"
+upstream_symbol = "process"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "bilateral-grid-coupled-helper"
+upstream_path = "src/common/bilateral.c;src/common/bilateral.h"
+upstream_symbol = "dt_bilateral_grid_size;dt_bilateral_init;dt_bilateral_splat;dt_bilateral_blur;dt_bilateral_slice"
+rust_path = "crates/rusttable-processing/src/common/bilateral.rs"
+status = "existing-dependency"
+
+[[responsibility]]
+id = "cpu-tiling-contract"
+upstream_path = "src/iop/colormapping.c;src/common/bilateral.c"
+upstream_symbol = "tiling_callback"
+rust_path = "crates/rusttable-processing/src/operations/colormapping/mod.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "colorspace-preview-helper"
+upstream_path = "src/iop/colormapping.c;src/common/colorspaces.c;src/common/colorspaces.h"
+upstream_symbol = "dt_colorspaces_get_profile;cmsCreateTransform;cmsDoTransform"
+rust_path = "deferred: GTK profile-preview ownership"
+status = "deferred"
+
+[[responsibility]]
+id = "opencl-histogram-and-mapping"
+upstream_path = "src/iop/colormapping.c;data/kernels/extended.cl"
+upstream_symbol = "process_cl;colormapping_histogram;colormapping_mapping"
+rust_path = "deferred: GPU and shader ownership"
+status = "deferred"
+
+[[responsibility]]
+id = "gui-acquisition-and-flowback"
+upstream_path = "src/iop/colormapping.c"
+upstream_symbol = "gui_init;process_clusters;reload_defaults"
+rust_path = "deferred: GTK acquisition and editor flowback ownership"
+status = "deferred"
+
+[[responsibility]]
+id = "production-routing"
+upstream_path = "src/iop/colormapping.c"
+upstream_symbol = "flags;default_colorspace;process integration"
+rust_path = "crates/rusttable-processing/src/registry;crates/rusttable-import/src/darktable/history.rs;crates/rusttable-pixelpipe/src/cpu.rs"
+status = "implemented"
+
+[[responsibility]]
+id = "outer-blending-and-masks"
+upstream_path = "src/iop/colormapping.c;src/develop/blend.c"
+upstream_symbol = "IOP_FLAGS_SUPPORTS_BLENDING;blendop"
+rust_path = "deferred: shared imported blend and mask materialization"
+status = "deferred"

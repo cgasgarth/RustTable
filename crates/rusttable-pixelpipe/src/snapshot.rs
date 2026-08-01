@@ -9,7 +9,12 @@ const CLIPPING_SNAPSHOT_KIND_TAG: u8 = 29;
 const COLORZONES_SNAPSHOT_KIND_TAG: u8 = 30;
 const SHARPEN_SNAPSHOT_KIND_TAG: u8 = 31;
 const CHANNEL_MIXER_SNAPSHOT_KIND_TAG: u8 = 32;
-const SNAPSHOT_KIND_TAGS: [u8; 33] = [
+const AGX_SNAPSHOT_KIND_TAG: u8 = 33;
+const LEVELS_SNAPSHOT_KIND_TAG: u8 = 34;
+const RGBLEVELS_SNAPSHOT_KIND_TAG: u8 = 35;
+const COLORTRANSFER_SNAPSHOT_KIND_TAG: u8 = 36;
+const COLORMAPPING_SNAPSHOT_KIND_TAG: u8 = 37;
+const SNAPSHOT_KIND_TAGS: [u8; 38] = [
     0,
     1,
     2,
@@ -43,6 +48,11 @@ const SNAPSHOT_KIND_TAGS: [u8; 33] = [
     COLORZONES_SNAPSHOT_KIND_TAG,
     SHARPEN_SNAPSHOT_KIND_TAG,
     CHANNEL_MIXER_SNAPSHOT_KIND_TAG,
+    AGX_SNAPSHOT_KIND_TAG,
+    LEVELS_SNAPSHOT_KIND_TAG,
+    RGBLEVELS_SNAPSHOT_KIND_TAG,
+    COLORTRANSFER_SNAPSHOT_KIND_TAG,
+    COLORMAPPING_SNAPSHOT_KIND_TAG,
 ];
 const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
 
@@ -449,6 +459,26 @@ fn write_operation_kind_core(hasher: &mut Sha256, kind: &ProcessingOperationKind
 #[allow(clippy::too_many_lines)]
 fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperationKind) {
     match kind {
+        ProcessingOperationKind::Agx { config } => {
+            hasher.update([AGX_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
+        }
+        ProcessingOperationKind::Levels { config } => {
+            hasher.update([LEVELS_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
+        }
+        ProcessingOperationKind::RgbLevels { config } => {
+            hasher.update([RGBLEVELS_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
+        }
+        ProcessingOperationKind::ColorTransfer { parameters } => {
+            hasher.update([COLORTRANSFER_SNAPSHOT_KIND_TAG]);
+            hasher.update(parameters.to_bytes());
+        }
+        ProcessingOperationKind::ColorMapping { config } => {
+            hasher.update([COLORMAPPING_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
+        }
         ProcessingOperationKind::ColorCorrection { config } => {
             hasher.update([8]);
             for value in config.committed_coefficients().as_array() {

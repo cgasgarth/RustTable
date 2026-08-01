@@ -1,0 +1,94 @@
+schema = "rusttable.rgblevels-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "rgblevels"
+rust_id = "rusttable.rgblevels"
+production_registration = "registered for typed unmasked full-opacity CPU execution with GPU, GTK, auto-analysis, configured profiles, masks, and outer blending deferred"
+integration_note = "Shared architecture, history import, snapshot identity, evaluator, and pixelpipe metadata now use the verified native 44-byte v1 ABI."
+
+[[responsibility]]
+id = "native-parameter-abi"
+upstream_path = "src/iop/rgblevels.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(1)", "dt_iop_rgblevels_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "replaced"
+notes = "The current native payload is 44 bytes: autoscale i32 at offset 0, preserve_colors i32 at offset 4, and levels[3][3] as nine f32 values at offset 8. Shared architecture metadata now records the verified 44-byte v1 payload with a typed decoder instead of the stale opaque 20-byte declaration."
+
+[[responsibility]]
+id = "native-defaults-and-history"
+upstream_path = "src/iop/rgblevels.c"
+upstream_symbols = ["init", "DT_MODULE_INTROSPECTION defaults"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "replaced"
+notes = "Defaults are linked channels, luminance preservation, and three copies of [0.0, 0.5, 1.0]. The module starts disabled; CMake DEFAULT_VISIBLE controls default listing visibility independently of activation. v1 is the only known version; there is no legacy_params migration. Unknown versions remain byte-preserved opaque values and cannot materialize."
+
+[[responsibility]]
+id = "commit-lut-and-channel-expansion"
+upstream_path = "src/iop/rgblevels.c"
+upstream_symbols = ["commit_params", "_compute_lut"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "replaced"
+notes = "Linked mode copies channel 0 levels into all three effective channels. LUT construction preserves the native 65536-entry table, double-precision pow calls narrowed to f32, and inv_gamma calculation order."
+
+[[responsibility]]
+id = "independent-cpu-equation"
+upstream_path = "src/iop/rgblevels.c; data/kernels/rgblevels.cl"
+upstream_symbols = ["process", "rgblevels_1c"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "replaced"
+notes = "Preserves lower clipping, upper powf extrapolation, in-range truncating LUT indexing, and independent per-channel versus linked color-preserving branches."
+
+[[responsibility]]
+id = "rgb-norm-and-profile-boundary"
+upstream_path = "src/common/rgb_norms.h; src/common/colorspaces_inline_conversions.h; src/common/iop_profile.h"
+upstream_symbols = ["dt_rgb_norm", "dt_camera_rgb_luminance", "dt_ioppr_get_rgb_matrix_luminance"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "replaced"
+notes = "All seven native norm IDs are represented. Missing work-profile evidence follows the native camera-luminance fallback; explicit profile evidence preserves optional TRC LUT/exponential evaluation and matrix row-one arithmetic. ICC acquisition and ownership remain outside this leaf."
+
+[[responsibility]]
+id = "alpha-and-format-boundary"
+upstream_path = "src/iop/rgblevels.c; src/common/dttypes.h; src/develop/imageop.h; src/develop/imageop.c"
+upstream_symbols = ["dt_iop_have_required_input_format", "process", "for_each_channel", "copy_pixel_nontemporal"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "replaced"
+notes = "The native CPU equations semantically read and write RGB only. Its adaptive for_each_channel loop may also touch a fourth SIMD-padding lane, but copy_pixel_nontemporal explicitly says that subsequent code must ignore that value unless alpha is set afterward; this non-distorting IOP does not set it. The safe bounded destination leaves its fourth lane deterministically zero on direct, linked-above-black, and linked-below-black paths without reading the input lane. A required-format failure uses fallible private copy-through before processing. The retained GPU oracle copies alpha and is not claimed by this CPU leaf."
+
+[[responsibility]]
+id = "cancellation-publication"
+upstream_path = "src/iop/rgblevels.c"
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/mod.rs"
+status = "bounded-leaf"
+notes = "Native OpenMP has no cancellation contract. Rust polls before and during the pixel loop, keeps output private, and returns no partial result on cancellation."
+
+[[responsibility]]
+id = "auto-levels-and-gui"
+upstream_path = "src/iop/rgblevels.c"
+upstream_symbols = ["_auto_levels", "_get_selected_area", "gui_init", "gui_changed", "gui_update", "init_presets"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/source_map.rs"
+status = "deferred"
+notes = "Histogram, preview-region geometry, GUI controls, presets, and history mutation require their shared owners and are not projected into the CPU leaf."
+
+[[responsibility]]
+id = "gpu-opencl"
+upstream_path = "src/iop/rgblevels.c; data/kernels/rgblevels.cl"
+upstream_symbols = ["process_cl", "rgblevels"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/source_map.rs"
+status = "deferred"
+notes = "Program 29 and kernel rgblevels are retained oracle data only. The registered operation advertises no GPU binding and therefore selects the canonical bounded CPU implementation."
+
+[[responsibility]]
+id = "production-routing"
+upstream_path = "src/iop/rgblevels.c and processing integration hubs"
+upstream_symbols = ["default_colorspace", "process"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/source_map.rs"
+status = "implemented"
+notes = "Typed descriptor/registry, v1 history import, snapshot identity, D50 built-in-profile CPU dispatch, source-shaped deterministic fourth-lane handling, zero-overlap tiling, and cancellation are integrated."
+
+[[responsibility]]
+id = "remaining-shared-capabilities"
+upstream_path = "src/iop/rgblevels.c; src/develop/blend.c; shared profile, GPU, analysis, and UI owners"
+upstream_symbols = ["flags", "process_cl", "_auto_levels", "gui_init", "dt_ioppr_get_rgb_matrix_luminance"]
+rust_path = "crates/rusttable-processing/src/operations/rgblevels/source_map.rs"
+status = "deferred"
+notes = "Imported masks/outer blending, configured ICC ownership, GPU, auto-analysis, and GTK remain explicitly fail-closed rather than approximated."

@@ -1,6 +1,14 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "26d71f8ce85a3f64ce672305a7391504484628ed1d9fe296fe7e54330a7ae25b"
+snapshot_hash = "a148386f78c0f2871126447d1eba6cb564a03d341b7a088bda6c80d9fdf0d743"
+
+[[operation]]
+rust_id = "rusttable.agx"
+compatibility_name = "agx"
+descriptor_version = 7
+parameter_version = 7
+implementation_version = 1
+status = "available"
 
 [[operation]]
 rust_id = "rusttable.ashift"
@@ -91,6 +99,14 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.colormapping"
+compatibility_name = "colormapping"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.colorout"
 compatibility_name = "colorout"
 descriptor_version = 7
@@ -103,6 +119,14 @@ rust_id = "rusttable.colorreconstruct"
 compatibility_name = "colorreconstruct"
 descriptor_version = 3
 parameter_version = 3
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.colortransfer"
+compatibility_name = "colortransfer"
+descriptor_version = 1
+parameter_version = 1
 implementation_version = 1
 status = "available"
 
@@ -211,6 +235,14 @@ implementation_version = 1
 status = "available"
 
 [[operation]]
+rust_id = "rusttable.levels"
+compatibility_name = "levels"
+descriptor_version = 2
+parameter_version = 2
+implementation_version = 1
+status = "available"
+
+[[operation]]
 rust_id = "rusttable.linear_offset"
 compatibility_name = "linear-offset"
 descriptor_version = 1
@@ -277,6 +309,14 @@ status = "available"
 [[operation]]
 rust_id = "rusttable.rgb_gain"
 compatibility_name = "rgbgain"
+descriptor_version = 1
+parameter_version = 1
+implementation_version = 1
+status = "available"
+
+[[operation]]
+rust_id = "rusttable.rgblevels"
+compatibility_name = "rgblevels"
 descriptor_version = 1
 parameter_version = 1
 implementation_version = 1

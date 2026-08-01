@@ -1,18 +1,20 @@
 use rusttable_color::{Pcs, ProfileClass, ProfileId, ProfileModel, ProfileParserVersion};
 use rusttable_core::{
     Edit, EditId, FiniteF64, Operation, OperationId, OperationKey, OperationOpacity, ParameterName,
-    ParameterValue, PhotoId, Revision,
+    ParameterText, ParameterValue, PhotoId, Revision,
 };
 use rusttable_image::{ColorEncoding, Orientation, SourceColor, SourceColorFallback};
 use rusttable_pixelpipe::{
-    CpuImplementation, CpuPipelineReceiptError, CpuPixelpipeError, CpuPixelpipeExecutor,
-    CpuPixelpipeOutputMode, CpuPixelpipeRequest, CpuPixelpipeSnapshot, CpuTilePlan,
-    CpuTilePlanError, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
+    CancellationReason, CancellationScope, CpuImplementation, CpuPipelineReceiptError,
+    CpuPixelpipeError, CpuPixelpipeExecutor, CpuPixelpipeOutputMode, CpuPixelpipeRequest,
+    CpuPixelpipeScaleContext, CpuPixelpipeSnapshot, CpuTilePlan, CpuTilePlanError,
+    PipelineGeneration, RgbaF32Channel, RgbaF32ColorEncoding, RgbaF32Descriptor, RgbaF32Image,
     RgbaF32ImageError, RgbaF32Pixel, RgbaF32SourceRepresentation,
 };
+use rusttable_processing::operations::colormapping::{FLAG_HAS_SOURCE_TARGET, HISTN};
 use rusttable_processing::{
-    CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage, SrgbChannel,
-    to_linear_srgb,
+    ColorMappingParametersV1, CompiledOperationGraph, RasterDimensions, SourceRgb, SourceRgbImage,
+    SrgbChannel, to_linear_srgb,
 };
 
 fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
@@ -29,6 +31,47 @@ fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
         }),
     )
     .expect("valid operation")
+}
+
+fn native_payload_operation(id: u128, key: &str, bytes: &[u8]) -> Operation {
+    Operation::new_with_opacity(
+        OperationId::new(id).expect("nonzero ID"),
+        OperationKey::new(key).expect("valid key"),
+        true,
+        OperationOpacity::ONE,
+        bytes.chunks(2_048).enumerate().map(|(index, chunk)| {
+            let mut encoded = String::with_capacity(chunk.len() * 2);
+            for byte in chunk {
+                use std::fmt::Write as _;
+                write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
+            }
+            (
+                ParameterName::new(format!("payload_{index}")).expect("payload parameter"),
+                ParameterValue::Text(ParameterText::new(encoded).expect("hex payload")),
+            )
+        }),
+    )
+    .expect("valid native-payload operation")
+}
+
+fn scale_sensitive_color_mapping_operation(id: u128) -> Operation {
+    let mut parameters = ColorMappingParametersV1::defaults();
+    parameters.flag = FLAG_HAS_SOURCE_TARGET;
+    parameters.n = 1;
+    parameters.equalization = 80.0;
+    for index in 0..HISTN {
+        let normalized = f32::from(u16::try_from(index).expect("histogram index fits u16"))
+            / f32::from(u16::try_from(HISTN - 1).expect("histogram extent fits u16"));
+        parameters.source_ihist[index] = 100.0 * normalized * normalized;
+        parameters.target_hist[index] = i32::try_from(index).expect("histogram index fits i32");
+    }
+    parameters.source_mean[0] = [-10.0, 15.0];
+    parameters.source_var[0] = [12.0, 18.0];
+    parameters.source_weight[0] = 1.0;
+    parameters.target_mean[0] = [5.0, -12.0];
+    parameters.target_var[0] = [16.0, 9.0];
+    parameters.target_weight[0] = 1.0;
+    native_payload_operation(id, "rusttable.colormapping", &parameters.to_bytes())
 }
 
 fn graph(operations: Vec<Operation>) -> CompiledOperationGraph {
@@ -93,6 +136,49 @@ fn tiled_image() -> RgbaF32Image {
         })
         .collect();
     RgbaF32Image::new(descriptor, pixels).expect("valid tiled input")
+}
+
+fn linear_tonal_image() -> RgbaF32Image {
+    let dimensions = RasterDimensions::new(5, 3).expect("nonzero dimensions");
+    let pixels = (0_u16..15)
+        .map(|index| {
+            let index = f32::from(index);
+            RgbaF32Pixel::new(
+                (index + 1.0) / 30.0,
+                (index + 2.0) / 30.0,
+                (index + 3.0) / 30.0,
+                (index + 4.0) / 30.0,
+            )
+        })
+        .collect();
+    RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LinearSrgbD65),
+        pixels,
+    )
+    .expect("valid linear tonal input")
+}
+
+fn color_mapping_scale_image() -> RgbaF32Image {
+    const WIDTH: u32 = 32;
+    const HEIGHT: u32 = 24;
+    let dimensions = RasterDimensions::new(WIDTH, HEIGHT).expect("nonzero dimensions");
+    let pixels = (0..dimensions.pixel_count())
+        .map(|index| {
+            let x = u32::try_from(index % u64::from(WIDTH)).expect("small x");
+            let y = u32::try_from(index / u64::from(WIDTH)).expect("small y");
+            let light = if (x / 4 + y / 3).is_multiple_of(2) {
+                0.14
+            } else {
+                0.76
+            };
+            RgbaF32Pixel::new(light, light * 0.68 + 0.12, 0.1 + (1.0 - light) * 0.4, 0.5)
+        })
+        .collect();
+    RgbaF32Image::new(
+        RgbaF32Descriptor::new(dimensions, RgbaF32ColorEncoding::LinearSrgbD65),
+        pixels,
+    )
+    .expect("valid scale-sensitive input")
 }
 
 fn lab_image() -> RgbaF32Image {
@@ -921,6 +1007,313 @@ fn tiled_execution_matches_full_frame_image_and_receipt() {
         assert_eq!(tiled.image(), full_frame.image());
         assert_eq!(tiled.receipt(), full_frame.receipt());
     }
+}
+
+#[test]
+fn ready_rgb_tonal_set_uses_cpu_routing_with_preserved_alpha_and_tiles() {
+    let operation_graph = graph(vec![
+        operation(901, "rusttable.rgblevels", &[("autoscale", 1.0)]),
+        operation(902, "rusttable.agx", &[("look_lift", 0.05)]),
+        operation(903, "rusttable.levels", &[]),
+    ]);
+    let input = linear_tonal_image();
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        operation_graph,
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed tonal snapshot");
+    let executor = CpuPixelpipeExecutor;
+    let full = executor.execute(&snapshot).expect("full tonal execution");
+    let tiled = executor
+        .execute_tiled(&snapshot, CpuTilePlan::new(2, 2).expect("tile plan"))
+        .expect("tiled tonal execution");
+
+    assert_eq!(full.image(), tiled.image());
+    assert_eq!(full.receipt(), tiled.receipt());
+    assert_eq!(
+        full.image().descriptor().color_encoding(),
+        RgbaF32ColorEncoding::LinearSrgbD65
+    );
+    assert!(
+        full.image()
+            .pixels()
+            .iter()
+            .zip(input.pixels())
+            .all(|(pixel, source)| {
+                source.alpha() > 0.0
+                    && pixel.alpha().to_bits() == source.alpha().to_bits()
+                    && [pixel.red(), pixel.green(), pixel.blue()]
+                        .into_iter()
+                        .all(f32::is_finite)
+            }),
+        "the operation-local zeroed spare lane must not replace separately tracked straight alpha"
+    );
+    assert_eq!(
+        full.receipt()
+            .nodes()
+            .iter()
+            .map(|node| node.operation_id().get())
+            .collect::<Vec<_>>(),
+        [901, 902, 903]
+    );
+}
+
+#[test]
+fn rgb_levels_direct_route_preserves_external_alpha_across_linked_and_direct_rgb_paths() {
+    let input = linear_tonal_image();
+    let executor = CpuPixelpipeExecutor;
+
+    for autoscale in [0.0, 1.0] {
+        let snapshot = CpuPixelpipeSnapshot::try_new(
+            input.clone(),
+            graph(vec![operation(
+                904,
+                "rusttable.rgblevels",
+                &[("autoscale", autoscale)],
+            )]),
+            CpuPixelpipeOutputMode::FullExport,
+        )
+        .expect("typed RGB Levels snapshot");
+        let output = executor
+            .execute(&snapshot)
+            .expect("direct RGB Levels execution");
+
+        assert_eq!(
+            output.image().descriptor().color_encoding(),
+            RgbaF32ColorEncoding::LinearSrgbD65
+        );
+        assert_eq!(
+            output
+                .receipt()
+                .nodes()
+                .iter()
+                .map(|node| node.operation_id().get())
+                .collect::<Vec<_>>(),
+            [904]
+        );
+        assert!(
+            output
+                .image()
+                .pixels()
+                .iter()
+                .zip(input.pixels())
+                .all(|(pixel, source)| {
+                    source.alpha() > 0.0
+                        && pixel.alpha().to_bits() == source.alpha().to_bits()
+                        && [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+                            .into_iter()
+                            .all(f32::is_finite)
+                }),
+            "the zeroed operation-local spare lane must remain separate from published straight alpha"
+        );
+    }
+}
+
+#[test]
+fn levels_cpu_route_preserves_lab_alpha_tiles_and_cancellation() {
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation(903, "rusttable.levels", &[])]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Levels snapshot");
+    let executor = CpuPixelpipeExecutor;
+    let full = executor.execute(&snapshot).expect("full Levels execution");
+    let tiled = executor
+        .execute_tiled(&snapshot, CpuTilePlan::new(7, 9).expect("tile plan"))
+        .expect("tiled Levels execution");
+
+    assert_eq!(full.image(), tiled.image());
+    assert_eq!(full.receipt(), tiled.receipt());
+    assert_eq!(
+        full.image().descriptor().color_encoding(),
+        RgbaF32ColorEncoding::LabD50
+    );
+    assert!(
+        full.image()
+            .pixels()
+            .iter()
+            .all(|pixel| pixel.alpha().to_bits() == 0.5_f32.to_bits())
+    );
+
+    let scope = CancellationScope::root(PipelineGeneration::new(904).expect("generation"));
+    scope.cancel(CancellationReason::EditChanged);
+    assert!(matches!(
+        executor.execute_tiled_with_cancellation(
+            &snapshot,
+            CpuTilePlan::new(7, 9).expect("tile plan"),
+            &scope,
+        ),
+        Err(CpuPixelpipeError::Cancelled(_))
+    ));
+}
+
+#[test]
+fn agx_parameters_participate_in_immutable_snapshot_identity() {
+    let input = linear_tonal_image();
+    let defaults = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        graph(vec![operation(905, "rusttable.agx", &[])]),
+        CpuPixelpipeOutputMode::Preview,
+    )
+    .expect("default AgX snapshot");
+    let lifted = CpuPixelpipeSnapshot::try_new(
+        input,
+        graph(vec![operation(905, "rusttable.agx", &[("look_lift", 0.1)])]),
+        CpuPixelpipeOutputMode::Preview,
+    )
+    .expect("changed AgX snapshot");
+
+    assert_ne!(defaults.identity(), lifted.identity());
+}
+
+#[test]
+fn color_mapping_routes_dynamic_tiling_and_preserves_lab_publication() {
+    let snapshot = CpuPixelpipeSnapshot::try_new(
+        lab_image(),
+        graph(vec![operation(906, "rusttable.colormapping", &[])]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Color Mapping snapshot");
+    let executor = CpuPixelpipeExecutor;
+    let full = executor
+        .execute(&snapshot)
+        .expect("full Color Mapping execution");
+    let tiled = executor
+        .execute_tiled(&snapshot, CpuTilePlan::new(7, 9).expect("tile plan"))
+        .expect("tiled Color Mapping execution");
+
+    assert_eq!(full.image(), tiled.image());
+    assert_eq!(full.receipt(), tiled.receipt());
+    assert_eq!(
+        full.image().descriptor().color_encoding(),
+        RgbaF32ColorEncoding::LabD50
+    );
+    assert!(
+        full.image()
+            .pixels()
+            .iter()
+            .all(|pixel| pixel.alpha().to_bits() == 0.5_f32.to_bits())
+    );
+}
+
+#[test]
+fn color_transfer_routes_full_frame_cancellation_and_snapshot_identity() {
+    let input = lab_image();
+    let transfer = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        graph(vec![operation(907, "rusttable.colortransfer", &[])]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Color Transfer snapshot");
+    let mapping = CpuPixelpipeSnapshot::try_new(
+        input,
+        graph(vec![operation(907, "rusttable.colormapping", &[])]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("typed Color Mapping snapshot");
+    assert_ne!(transfer.identity(), mapping.identity());
+
+    let executor = CpuPixelpipeExecutor;
+    let full = executor
+        .execute(&transfer)
+        .expect("full Color Transfer execution");
+    let tiled = executor
+        .execute_tiled(&transfer, CpuTilePlan::new(7, 9).expect("tile plan"))
+        .expect("full-frame Color Transfer fallback");
+    assert_eq!(full.image(), tiled.image());
+    assert_eq!(full.receipt(), tiled.receipt());
+    assert_eq!(full.receipt().snapshot_identity(), transfer.identity());
+
+    let scope = CancellationScope::root(PipelineGeneration::new(908).expect("generation"));
+    scope.cancel(CancellationReason::EditChanged);
+    assert!(matches!(
+        executor.execute_tiled_with_cancellation(
+            &transfer,
+            CpuTilePlan::new(7, 9).expect("tile plan"),
+            &scope,
+        ),
+        Err(CpuPixelpipeError::Cancelled(_))
+    ));
+}
+
+#[test]
+fn mixed_color_transfer_mapping_route_uses_nonunit_snapshot_scale() {
+    let operations = graph(vec![
+        operation(909, "rusttable.rgblevels", &[("autoscale", 1.0)]),
+        operation(910, "rusttable.colortransfer", &[]),
+        scale_sensitive_color_mapping_operation(911),
+    ]);
+    let input = color_mapping_scale_image();
+    let unit_snapshot = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        operations.clone(),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("unit-scale mixed Lab snapshot");
+    let scale = CpuPixelpipeScaleContext::new(0.04, 1.0).expect("nonunit pixelpipe scale");
+    let without_transfer_snapshot = CpuPixelpipeSnapshot::try_new(
+        input.clone(),
+        graph(vec![
+            operation(909, "rusttable.rgblevels", &[("autoscale", 1.0)]),
+            scale_sensitive_color_mapping_operation(911),
+        ]),
+        CpuPixelpipeOutputMode::FullExport,
+    )
+    .expect("scaled Lab snapshot without neutral transfer")
+    .with_scale_context(scale);
+    let scaled_snapshot =
+        CpuPixelpipeSnapshot::try_new(input, operations, CpuPixelpipeOutputMode::FullExport)
+            .expect("scaled mixed Lab snapshot")
+            .with_scale_context(scale);
+
+    let executor = CpuPixelpipeExecutor;
+    let unit = executor
+        .execute(&unit_snapshot)
+        .expect("unit-scale mixed Lab execution");
+    let without_transfer = executor
+        .execute(&without_transfer_snapshot)
+        .expect("scaled Lab execution without neutral transfer");
+    let scaled = executor
+        .execute(&scaled_snapshot)
+        .expect("scaled mixed Lab execution");
+
+    assert_ne!(unit_snapshot.identity(), scaled_snapshot.identity());
+    assert_eq!(
+        scaled
+            .receipt()
+            .nodes()
+            .iter()
+            .map(|node| node.operation_id().get())
+            .collect::<Vec<_>>(),
+        [909, 910, 911]
+    );
+    assert_eq!(
+        scaled.image().descriptor(),
+        without_transfer.image().descriptor()
+    );
+    assert!(
+        scaled
+            .image()
+            .pixels()
+            .iter()
+            .zip(without_transfer.image().pixels())
+            .all(|(with_transfer, reference)| with_transfer == reference),
+        "neutral Color Transfer must share Color Mapping's continuous Lab boundary"
+    );
+    assert!(
+        unit.image()
+            .pixels()
+            .iter()
+            .zip(scaled.image().pixels())
+            .any(|(unit, scaled)| {
+                (unit.red() - scaled.red()).abs() > 1.0e-5
+                    || (unit.green() - scaled.green()).abs() > 1.0e-5
+                    || (unit.blue() - scaled.blue()).abs() > 1.0e-5
+            }),
+        "Color Mapping must receive the snapshot scale inside the continuous Lab stage"
+    );
 }
 
 #[test]

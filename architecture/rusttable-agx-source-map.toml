@@ -1,0 +1,99 @@
+schema = "rusttable.agx-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+[[responsibility]]
+id = "parameter-abi-and-migration"
+upstream_path = "src/iop/agx.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_agx_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "The native v7 layout is 144 little-endian bytes. Every pre-v7 value is the unreleased-test special case and is replaced by the current scene-referred defaults; later unknown versions fail closed."
+
+[[responsibility]]
+id = "defaults-and-presets"
+upstream_path = "src/iop/agx.c"
+upstream_symbols = ["_set_default_curve_and_look_params", "_set_unmodified_primaries", "_set_blenderlike_primaries", "_set_smooth_primaries", "_set_blenderlike_params", "_make_punchy", "_set_scene_referred_default_params"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "Parameter defaults and source-defined curve/primaries preset values are available locally; GUI preset registration and workflow auto-application remain deferred."
+
+[[responsibility]]
+id = "tone-curve-equations"
+upstream_path = "src/iop/agx.c"
+upstream_symbols = ["_scale", "_sigmoid", "_scaled_sigmoid", "_fallback_toe", "_fallback_shoulder", "_apply_curve", "_calculate_tone_mapping_params", "_adjust_pivot"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "Preserves source f32 operation order, epsilon guards, gamma compensation, toe/shoulder fallback branches, and NaN-safe clamping."
+
+[[responsibility]]
+id = "look-hue-and-gamut"
+upstream_path = "src/iop/agx.c; src/common/colorspaces_inline_conversions.h"
+upstream_symbols = ["_agx_look", "_apply_slope_lift", "_lerp_hue", "_compress_into_gamut", "dt_RGB_2_HSV", "dt_HSV_2_RGB"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "The CPU leaf retains slope/lift f32 fused arithmetic, saturation luminance, circular hue interpolation, HSV branch order, and Blender luminance compensation."
+
+[[responsibility]]
+id = "custom-primaries-matrices"
+upstream_path = "src/iop/agx.c; src/common/custom_primaries.c; src/common/colorspaces.c; src/common/matrices.c; src/common/dttypes.h"
+upstream_symbols = ["_get_primaries_params", "_create_matrices", "dt_rotate_and_scale_primary", "dt_make_transposed_matrices_from_primaries_and_whitepoint", "dt_colormatrix_mul", "dt_apply_transposed_color_matrix", "mat3SSEinv"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "AgxProfile accepts caller-supplied matrix-shaper data. The retained sRGB, Rec2020, Display P3, and Adobe RGB values use native ICC D50 PCS colorants, media white point, and transposed matrices rather than their original D65 definition chromaticities."
+
+[[responsibility]]
+id = "profile-selection"
+upstream_path = "src/iop/agx.c; src/common/iop_profile.h"
+upstream_symbols = ["_agx_get_base_profile", "dt_ioppr_get_export_profile_type", "dt_ioppr_add_profile_info_to_list"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "The production CPU route resolves exact built-in sRGB, Rec2020, and Display P3 D50 matrix-shaper evidence and preserves supplied-profile selection plus the native Rec2020 export fallback. Configured external working/export profile transforms remain explicitly unavailable."
+
+[[responsibility]]
+id = "cpu-process-boundary"
+upstream_path = "src/iop/agx.c"
+upstream_symbols = ["process", "_agx_tone_mapping"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "Input NaNs become zero, infinities/out-of-range components clamp to +/-1e6, output is finite-checked, and the sanitised alpha channel is copied unchanged through the RGB operation."
+
+[[responsibility]]
+id = "cancellation-and-publication"
+upstream_path = "src/iop/agx.c"
+upstream_symbols = ["process"]
+rust_path = "crates/rusttable-processing/src/operations/agx/mod.rs"
+status = "implemented"
+notes = "Row-boundary cancellation and allocation validation are additive Rust safety boundaries; cancellation returns no partial output."
+
+[[responsibility]]
+id = "gpu-kernel"
+upstream_path = "data/kernels/agx.cl"
+upstream_symbols = ["kernel_agx", "dt_iop_agx_tone_mapping_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/agx/source_map.rs"
+status = "deferred"
+notes = "The retained OpenCL program is inspected but not compiled, edited, or claimed executable by this CPU-only leaf."
+
+[[responsibility]]
+id = "gtk-and-presets"
+upstream_path = "src/iop/agx.c"
+upstream_symbols = ["gui_init", "gui_changed", "gui_update", "init_presets", "color_picker_apply"]
+rust_path = "crates/rusttable-processing/src/operations/agx/source_map.rs"
+status = "deferred"
+notes = "GTK controls, color pickers, graph rendering, preset registration, and workflow auto-application require shared UI/history ownership."
+
+[[responsibility]]
+id = "production-routing"
+upstream_path = "src/iop/agx.c and processing integration hubs"
+upstream_symbols = ["default_colorspace", "process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/agx/source_map.rs"
+status = "implemented"
+notes = "Typed descriptor/registry, v7 and pre-v7 history import, evaluator dispatch, snapshot identity, built-in-profile CPU pixelpipe tiling, and cancellation are integrated."
+
+[[responsibility]]
+id = "remaining-shared-capabilities"
+upstream_path = "src/iop/agx.c and shared profile, blend, GPU, app, and UI owners"
+upstream_symbols = ["flags", "process_cl", "gui_init", "init_presets", "dt_ioppr_get_export_profile_type"]
+rust_path = "crates/rusttable-processing/src/operations/agx/source_map.rs"
+status = "deferred"
+notes = "Configured external profiles, imported masks/outer blending, GPU, GTK, app editing, presets, and retained-source deletion remain explicitly unavailable rather than approximated."

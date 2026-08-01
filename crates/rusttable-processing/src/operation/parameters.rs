@@ -123,6 +123,87 @@ pub(crate) fn parameter_integer(
     Ok(value as i32)
 }
 
+pub(crate) fn parameter_f32_array<const N: usize>(
+    operation: &Operation,
+    name: &'static str,
+    default: [f32; N],
+) -> Result<[f32; N], OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    let Some(value) = operation.parameter(&parameter) else {
+        return Ok(default);
+    };
+    let ParameterValue::Text(value) = value else {
+        return Err(OperationCompileError::WrongParameterType {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        });
+    };
+    let text = value.as_str().trim();
+    let Some(text) = text
+        .strip_prefix('[')
+        .and_then(|text| text.strip_suffix(']'))
+    else {
+        return Err(super::invalid_parameters(
+            operation,
+            format!("{name} must be a {N}-element vector"),
+        ));
+    };
+    let values = text
+        .split(',')
+        .map(str::trim)
+        .map(|value| {
+            value.parse::<f64>().map_err(|_| {
+                super::invalid_parameters(operation, format!("{name} contains a non-numeric value"))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if values.len() != N {
+        return Err(super::invalid_parameters(
+            operation,
+            format!("{name} must have exactly {N} values"),
+        ));
+    }
+    values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let value = rusttable_core::FiniteF64::new(value)
+                .map_err(|_| {
+                    super::invalid_parameters(operation, format!("{name}[{index}] must be finite"))
+                })
+                .and_then(|value| {
+                    FiniteF32::try_from(value).map_err(|_| {
+                        super::invalid_parameters(
+                            operation,
+                            format!("{name}[{index}] does not fit f32"),
+                        )
+                    })
+                })?;
+            Ok(value.get())
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .try_into()
+        .map_err(|_| super::invalid_parameters(operation, format!("{name} has an invalid shape")))
+}
+
+pub(crate) fn parameter_bool_default(
+    operation: &Operation,
+    name: &'static str,
+    default: bool,
+) -> Result<bool, OperationCompileError> {
+    let parameter = ParameterName::new(name).expect("static processing parameter");
+    match operation.parameter(&parameter) {
+        None => Ok(default),
+        Some(ParameterValue::Bool(value)) => Ok(*value),
+        Some(_) => Err(OperationCompileError::WrongParameterType {
+            operation_id: operation.id(),
+            key: operation.key().clone(),
+            parameter,
+        }),
+    }
+}
+
 pub(crate) fn parameter_u32(
     operation: &Operation,
     name: &'static str,
