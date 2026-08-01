@@ -1,18 +1,46 @@
 //! Source-derived tests for the production CPU Sharpen operation.
 //!
-#![allow(clippy::cast_precision_loss, clippy::float_cmp)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::float_cmp
+)]
 
 use rusttable_processing::RasterDimensions;
+use rusttable_processing::operations::sharpen::source_map::{
+    SHARPEN_SOURCE_MAP, SharpenPortStatus,
+};
 use rusttable_processing::operations::sharpen::{
-    SHARPEN_CHANNELS, SHARPEN_COMPATIBILITY_ID, SHARPEN_DEFAULT_AMOUNT, SHARPEN_DEFAULT_RADIUS,
-    SHARPEN_DEFAULT_THRESHOLD, SHARPEN_INPUT_ENCODING, SHARPEN_MAXR, SHARPEN_PARAMETER_BYTES,
-    SHARPEN_SCHEMA_VERSION, SharpenConfig, SharpenHistory, SharpenParameterError,
-    SharpenParametersV1, SharpenPixel, SharpenPlan,
+    DEFAULT_V1_FIXTURE, SHARPEN_CHANNELS, SHARPEN_COMPATIBILITY_ID, SHARPEN_DEFAULT_AMOUNT,
+    SHARPEN_DEFAULT_RADIUS, SHARPEN_DEFAULT_THRESHOLD, SHARPEN_INPUT_ENCODING, SHARPEN_MAXR,
+    SHARPEN_PARAMETER_BYTES, SHARPEN_SCHEMA_VERSION, SharpenConfig, SharpenHistory,
+    SharpenParameterError, SharpenParametersV1, SharpenPixel, SharpenPlan, sharpen_descriptor,
 };
 use rusttable_processing::operations::{OperationExecutionError, ReconstructionBudget};
 
 fn dimensions(width: u32, height: u32) -> RasterDimensions {
     RasterDimensions::new(width, height).expect("test dimensions are nonzero")
+}
+
+fn hex_digit(value: u8) -> u8 {
+    match value {
+        b'0'..=b'9' => value - b'0',
+        b'a'..=b'f' => value - b'a' + 10,
+        b'A'..=b'F' => value - b'A' + 10,
+        _ => panic!("invalid Sharpen fixture hex digit"),
+    }
+}
+
+fn default_fixture_bytes() -> [u8; SHARPEN_PARAMETER_BYTES] {
+    let encoded = DEFAULT_V1_FIXTURE.trim().as_bytes();
+    assert_eq!(encoded.len(), SHARPEN_PARAMETER_BYTES * 2);
+    let mut bytes = [0_u8; SHARPEN_PARAMETER_BYTES];
+    let (pairs, remainder) = encoded.as_chunks::<2>();
+    assert!(remainder.is_empty());
+    for (index, pair) in pairs.iter().enumerate() {
+        bytes[index] = (hex_digit(pair[0]) << 4) | hex_digit(pair[1]);
+    }
+    bytes
 }
 
 fn fixture(width: u32, height: u32) -> Vec<SharpenPixel> {
@@ -43,6 +71,47 @@ fn plan(width: u32, height: u32, radius: f32, amount: f32, threshold: f32) -> Sh
         1.0,
     )
     .expect("valid sharpen plan")
+}
+
+#[test]
+fn native_abi_and_default_fixture_are_exactly_represented() {
+    assert_eq!(
+        std::mem::size_of::<SharpenParametersV1>(),
+        SHARPEN_PARAMETER_BYTES
+    );
+    assert_eq!(
+        std::mem::align_of::<SharpenParametersV1>(),
+        std::mem::align_of::<f32>()
+    );
+    let bytes = default_fixture_bytes();
+    let parameters = SharpenParametersV1::from_bytes(&bytes).unwrap();
+    assert_eq!(parameters, SharpenParametersV1::defaults());
+    assert_eq!(parameters.to_bytes(), bytes);
+}
+
+#[test]
+fn descriptor_uses_native_cpu_memory_factor() {
+    let descriptor = sharpen_descriptor();
+    assert_eq!(descriptor.tiling.temporary_multiplier_milli, 2100);
+}
+
+#[test]
+fn source_map_marks_only_the_cpu_leaf_as_ported() {
+    assert!(SHARPEN_SOURCE_MAP.iter().any(|entry| {
+        entry.native_symbol.starts_with("process /") && entry.status == SharpenPortStatus::Ported
+    }));
+    assert!(SHARPEN_SOURCE_MAP.iter().any(|entry| {
+        entry.native_symbol.contains("sharpen_hblur")
+            && entry.status == SharpenPortStatus::ExplicitlyDeferred
+    }));
+    assert!(SHARPEN_SOURCE_MAP.iter().any(|entry| {
+        entry.native_symbol.contains("history dispatch")
+            && entry.status == SharpenPortStatus::ExplicitlyDeferred
+    }));
+    assert!(SHARPEN_SOURCE_MAP.iter().any(|entry| {
+        entry.native_symbol.contains("dt_iop_alloc_image_buffers")
+            && entry.status == SharpenPortStatus::ExistingDependency
+    }));
 }
 
 #[test]
@@ -83,21 +152,17 @@ fn defaults_ranges_and_commit_match_native_metadata() {
     assert_eq!(config.commit().amount(), SHARPEN_DEFAULT_AMOUNT);
     assert_eq!(config.commit().threshold(), SHARPEN_DEFAULT_THRESHOLD);
 
-    assert!(matches!(
-        SharpenConfig::new(-0.001, 0.5, 0.5),
-        Err(SharpenParameterError::OutOfRange("radius"))
-    ));
-    assert!(matches!(
-        SharpenConfig::new(2.0, 2.001, 0.5),
-        Err(SharpenParameterError::OutOfRange("amount"))
-    ));
-    assert!(matches!(
-        SharpenConfig::new(2.0, 0.5, 100.001),
-        Err(SharpenParameterError::OutOfRange("threshold"))
-    ));
+    // The `$MIN`/`$MAX` values are native UI metadata. `commit_params` copies
+    // finite persisted values without clamping them, while the radius planner
+    // still rejects a negative radius before it can become an invalid integer.
+    assert!(SharpenConfig::new(-0.001, 2.001, 100.001).is_ok());
     assert!(matches!(
         SharpenConfig::new(f32::NAN, 0.5, 0.5),
         Err(SharpenParameterError::NonFinite("radius"))
+    ));
+    assert!(matches!(
+        SharpenConfig::new(2.0, f32::INFINITY, 0.5),
+        Err(SharpenParameterError::NonFinite("amount"))
     ));
 }
 
@@ -117,6 +182,14 @@ fn malformed_and_nonfinite_payloads_are_rejected() {
             )
         )
     ));
+
+    // Native history has no commit-time range clamp; finite outliers remain
+    // byte-faithful until an importing/execution seam decides whether to run.
+    let outlier = SharpenParametersV1::new(-1.0, 3.0, 120.0);
+    assert_eq!(
+        SharpenParametersV1::from_bytes(&outlier.to_bytes()).unwrap(),
+        outlier
+    );
 }
 
 #[test]
@@ -148,6 +221,13 @@ fn radius_scaling_uses_native_ceil_and_maxr_quantization() {
     .unwrap();
     assert_eq!(capped.radius(), SHARPEN_MAXR);
 
+    let overflowed_config = SharpenConfig::new(f32::MAX, 0.5, 0.5).unwrap();
+    assert!(overflowed_config.commit().radius().is_infinite());
+    assert!(overflowed_config.commit().radius().is_sign_positive());
+    let overflowed = SharpenPlan::new(overflowed_config, dimensions, 1.0, 1.0)
+        .expect("finite radius commit overflow reaches native MAXR cap");
+    assert_eq!(overflowed.radius(), SHARPEN_MAXR);
+
     let weights = full_scale.gaussian_weights();
     assert_eq!(weights.len() % 4, 0);
     let active = &weights[..=2 * full_scale.radius() as usize];
@@ -157,6 +237,44 @@ fn radius_scaling_uses_native_ceil_and_maxr_quantization() {
             .iter()
             .all(|value| value.to_bits() == 0)
     );
+}
+
+#[test]
+fn gaussian_sigma_uses_native_double_intermediates_and_assignment_rounding() {
+    let operation = plan(11, 11, 2.0, 0.5, 0.5);
+    assert_eq!(operation.effective_radius().to_bits(), 5.0_f32.to_bits());
+    assert_eq!(operation.radius(), 5);
+
+    let effective_radius = f64::from(operation.effective_radius());
+    let native_sigma2 =
+        ((1.0_f64 / (2.5_f64 * 2.5_f64)) * effective_radius * effective_radius) as f32;
+    let f32_only_sigma2 = (1.0_f32 / (2.5_f32 * 2.5_f32))
+        * operation.effective_radius()
+        * operation.effective_radius();
+    assert_eq!(native_sigma2.to_bits(), 4.0_f32.to_bits());
+    assert_ne!(native_sigma2.to_bits(), f32_only_sigma2.to_bits());
+
+    let radius = i32::try_from(operation.radius()).expect("bounded native radius");
+    let mut expected = Vec::new();
+    let mut weight = 0.0_f32;
+    for offset in -radius..=radius {
+        let offset = offset as f32;
+        let value = (-(offset * offset) / (2.0_f32 * native_sigma2)).exp();
+        expected.push(value);
+        weight += value;
+    }
+    for value in &mut expected {
+        *value /= weight;
+    }
+
+    let actual = operation.gaussian_weights();
+    for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+        assert_eq!(
+            actual.to_bits(),
+            expected.to_bits(),
+            "native Gaussian weight {index}"
+        );
+    }
 }
 
 #[test]
@@ -254,6 +372,68 @@ fn a_b_and_alpha_are_preserved_bit_exactly() {
 }
 
 #[test]
+fn convolution_reads_only_lightness_and_preserves_chroma_alpha() {
+    let input = fixture(11, 11);
+    let mut changed_non_luma = input.clone();
+    for (index, pixel) in changed_non_luma.iter_mut().enumerate() {
+        *pixel = SharpenPixel::new(
+            pixel.lightness(),
+            1000.0 + index as f32,
+            -1000.0 - index as f32,
+            0.01 + index as f32,
+        );
+    }
+    let operation = plan(11, 11, 1.0, 1.25, 0.0);
+    let original_output = operation.execute(&input).unwrap();
+    let changed_output = operation.execute(&changed_non_luma).unwrap();
+    for ((original, changed), source) in original_output
+        .iter()
+        .zip(&changed_output)
+        .zip(&changed_non_luma)
+    {
+        assert_eq!(
+            original.lightness().to_bits(),
+            changed.lightness().to_bits()
+        );
+        assert_eq!(changed.a().to_bits(), source.a().to_bits());
+        assert_eq!(changed.b().to_bits(), source.b().to_bits());
+        assert_eq!(changed.alpha().to_bits(), source.alpha().to_bits());
+    }
+}
+
+#[test]
+fn scratch_budget_accounts_for_one_luma_float_per_pixel() {
+    let dimensions = dimensions(11, 11);
+    let pixel_count = (dimensions.width() * dimensions.height()) as usize;
+    let output_bytes = pixel_count * std::mem::size_of::<SharpenPixel>();
+    let temporary_bytes = dimensions.width() as usize * std::mem::size_of::<f32>();
+    // radius=2 commits to 5, so wd=11 and native wd4=3 (12 floats).
+    let kernel_bytes = 3 * 4 * std::mem::size_of::<f32>();
+    let required = output_bytes + temporary_bytes + kernel_bytes;
+    let config = SharpenConfig::defaults();
+    assert!(
+        SharpenPlan::new_with_budget(
+            config,
+            dimensions,
+            1.0,
+            1.0,
+            ReconstructionBudget::new(required),
+        )
+        .is_ok()
+    );
+    assert!(matches!(
+        SharpenPlan::new_with_budget(
+            config,
+            dimensions,
+            1.0,
+            1.0,
+            ReconstructionBudget::new(required - std::mem::size_of::<f32>()),
+        ),
+        Err(OperationExecutionError::MemoryBudgetExceeded { .. })
+    ));
+}
+
+#[test]
 fn malformed_frames_scales_and_nonfinite_pixels_fail_closed() {
     let valid = fixture(11, 11);
     let operation = plan(11, 11, 1.0, 1.0, 0.0);
@@ -276,6 +456,15 @@ fn malformed_frames_scales_and_nonfinite_pixels_fail_closed() {
     ));
     assert!(matches!(
         SharpenPlan::new(config, dimensions(11, 11), 1.0, 0.0),
+        Err(OperationExecutionError::UnsupportedCapability(_))
+    ));
+    assert!(matches!(
+        SharpenPlan::new(
+            SharpenConfig::new(-1.0, 0.5, 0.5).unwrap(),
+            dimensions(11, 11),
+            1.0,
+            1.0,
+        ),
         Err(OperationExecutionError::UnsupportedCapability(_))
     ));
 }

@@ -36,6 +36,9 @@ use rusttable_compat::soften::{
     SoftenHistoryDecodeFindingCode, SoftenHistoryStepDecode, decode_soften_history_step,
 };
 use rusttable_compat::{CompatHistoryStep, EnabledState};
+use rusttable_processing::operations::agx::{
+    AGX_COMPATIBILITY_ID, AGX_PARAMETER_BYTES_V7, AGX_SCHEMA_VERSION, AgxConfig, AgxHistory,
+};
 use rusttable_processing::operations::bloom::{BLOOM_PARAMETER_BYTES, BloomConfig, BloomHistory};
 use rusttable_processing::operations::colorcontrast::{
     COLOR_CONTRAST_V2_PARAMETER_BYTES, ColorContrastConfig, ColorContrastHistory,
@@ -43,9 +46,15 @@ use rusttable_processing::operations::colorcontrast::{
 use rusttable_processing::operations::colorcorrection::{
     COLORCORRECTION_V1_PARAMETER_BYTES, ColorCorrectionConfig, ColorCorrectionHistory,
 };
+use rusttable_processing::operations::colormapping::{
+    COLOR_MAPPING_COMPATIBILITY_ID, ColorMappingConfig, ColorMappingHistory,
+};
 use rusttable_processing::operations::colorreconstruction::{
     ColorReconstructionConfig, ColorReconstructionV1, ColorReconstructionV2, ColorReconstructionV3,
     migrate_v1 as migrate_colorreconstruction_v1, migrate_v2 as migrate_colorreconstruction_v2,
+};
+use rusttable_processing::operations::colortransfer::{
+    COLORTRANSFER_COMPATIBILITY_ID, COLORTRANSFER_SCHEMA_VERSION, ColorTransferParameters,
 };
 use rusttable_processing::operations::crop::{
     CROP_PARAMETER_BYTES, CropCodecError, CropConfig, CropParametersV3,
@@ -53,6 +62,13 @@ use rusttable_processing::operations::crop::{
 use rusttable_processing::operations::enlargecanvas::{
     ENLARGECANVAS_PARAMETER_BYTES, EnlargeCanvasConfig, EnlargeCanvasHistoryParameters,
     decode_history as decode_enlargecanvas_history,
+};
+use rusttable_processing::operations::levels::{
+    LEVELS_COMPATIBILITY_ID, LEVELS_PARAMETER_BYTES_V2, LEVELS_SCHEMA_VERSION, LevelsConfig,
+    LevelsHistory,
+};
+use rusttable_processing::operations::rgblevels::{
+    RGBLEVELS_COMPATIBILITY_ID, RGBLEVELS_PARAMETER_BYTES, RgbLevelsConfig, RgbLevelsHistory,
 };
 use rusttable_processing::operations::velvia::{
     VELVIA_V2_PARAMETER_BYTES, VelviaConfig, VelviaHistory,
@@ -97,6 +113,8 @@ pub enum DarktableHistoryDecodeFindingCode {
     InvalidEnabledState,
     /// Core parameters are decoded, but native blend/mask execution is not.
     OpaqueBlendSemantics,
+    /// Core parameters are decoded, but a native process-owned state transition is not materialized.
+    DeferredRuntimeState,
 }
 
 /// Actionable evidence explaining why a row was retained verbatim.
@@ -106,6 +124,63 @@ pub struct DarktableHistoryDecodeFinding {
     pub code: DarktableHistoryDecodeFindingCode,
     /// Bounded human-readable diagnostic.
     pub detail: String,
+}
+
+/// One decoded `AgX` core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedAgxHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: AgxConfig,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters: [u8; AGX_PARAMETER_BYTES_V7],
+    pub migrated: bool,
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
+/// One decoded Levels core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedLevelsHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: LevelsConfig,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters: [u8; LEVELS_PARAMETER_BYTES_V2],
+    pub migrated: bool,
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
+/// One decoded RGB Levels core whose complete Darktable row is not executable yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedRgbLevelsHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: RgbLevelsConfig,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters: [u8; RGBLEVELS_PARAMETER_BYTES],
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
+/// One decoded Color Mapping v1 core whose native blend/mask row remains pending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedColorMappingHistoryStep {
+    pub source: CompatHistoryStep,
+    pub config: Box<ColorMappingConfig>,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters: Vec<u8>,
+    pub execution_blocker: DarktableHistoryDecodeFinding,
+}
+
+/// One decoded Color Transfer v1 core whose process-owned acquisition state remains pending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedColorTransferHistoryStep {
+    pub source: CompatHistoryStep,
+    pub parameters: Box<ColorTransferParameters>,
+    pub enabled: bool,
+    pub source_version: u16,
+    pub canonical_parameters: Vec<u8>,
+    pub execution_blocker: DarktableHistoryDecodeFinding,
 }
 
 /// One decoded Bloom v1 core whose complete Darktable row is not executable yet.
@@ -275,6 +350,16 @@ pub struct DecodedColorZonesHistoryStep {
 /// Typed-but-pending result or a byte-preserving unsupported row.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DarktableHistoryStepDecode {
+    /// `AgX` parameters are decoded and normalized to v7 while blend/mask semantics remain pending.
+    AgxPendingBlend(DecodedAgxHistoryStep),
+    /// Levels parameters are decoded and normalized to v2 while blend/mask semantics remain pending.
+    LevelsPendingBlend(DecodedLevelsHistoryStep),
+    /// RGB Levels v1 parameters are decoded while blend/mask semantics remain pending.
+    RgbLevelsPendingBlend(DecodedRgbLevelsHistoryStep),
+    /// Color Mapping v1 parameters are decoded while blend/mask semantics remain pending.
+    ColorMappingPendingBlend(Box<DecodedColorMappingHistoryStep>),
+    /// Color Transfer v1 parameters are decoded while preview acquisition state remains pending.
+    ColorTransferPendingRuntime(Box<DecodedColorTransferHistoryStep>),
     /// Bloom v1 core parameters are decoded, while blend/mask semantics remain
     /// explicitly non-executable.
     BloomPendingBlend(DecodedBloomHistoryStep),
@@ -332,6 +417,11 @@ pub enum DarktableHistoryStepDecode {
 #[must_use]
 pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
     match step.operation.name.as_deref() {
+        Some(AGX_COMPATIBILITY_ID) => decode_agx_history_step(step),
+        Some(LEVELS_COMPATIBILITY_ID) => decode_levels_history_step(step),
+        Some(RGBLEVELS_COMPATIBILITY_ID) => decode_rgblevels_history_step(step),
+        Some(COLOR_MAPPING_COMPATIBILITY_ID) => decode_colormapping_history_step(step),
+        Some(COLORTRANSFER_COMPATIBILITY_ID) => decode_colortransfer_history_step(step),
         Some(BLOOM_COMPATIBILITY_NAME) => decode_bloom_history_step(step),
         Some(COLOR_CONTRAST_COMPATIBILITY_NAME) => decode_colorcontrast_history_step(step),
         Some(COLORCORRECTION_COMPATIBILITY_NAME) => decode_colorcorrection_history_step(step),
@@ -354,6 +444,266 @@ pub fn decode_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDeco
                 "Darktable operation {:?} has no typed import materializer",
                 step.operation.raw_name
             ),
+        ),
+    }
+}
+
+fn decode_agx_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "AgX") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match AgxHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(rusttable_processing::operations::agx::AgxCodecError::UnsupportedVersion(_)) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!("Darktable AgX v{source_version} parameters remain unsupported"),
+            );
+        }
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!("Darktable AgX v{source_version} parameters could not be decoded: {error}"),
+            );
+        }
+    };
+    let parameters = history.current();
+    let config = match AgxConfig::new(parameters) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!("Darktable AgX v{source_version} parameters are not executable: {error}"),
+            );
+        }
+    };
+    DarktableHistoryStepDecode::AgxPendingBlend(DecodedAgxHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        migrated: source_version != AGX_SCHEMA_VERSION,
+        execution_blocker: pending_blend_finding(step, "AgX"),
+    })
+}
+
+fn decode_levels_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Levels") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match LevelsHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Levels v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters = match history.current() {
+        Ok(parameters) => parameters,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!("Darktable Levels v{source_version} parameters remain opaque: {error}"),
+            );
+        }
+    };
+    let config = match LevelsConfig::new(parameters) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Levels v{source_version} parameters are not executable: {error}"
+                ),
+            );
+        }
+    };
+    DarktableHistoryStepDecode::LevelsPendingBlend(DecodedLevelsHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        migrated: source_version != LEVELS_SCHEMA_VERSION,
+        execution_blocker: pending_blend_finding(step, "Levels"),
+    })
+}
+
+fn decode_rgblevels_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "RGB Levels") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match RgbLevelsHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable RGB Levels v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters = match history.current() {
+        Ok(parameters) => parameters,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!("Darktable RGB Levels v{source_version} parameters remain opaque: {error}"),
+            );
+        }
+    };
+    let config = match RgbLevelsConfig::new(parameters) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable RGB Levels v{source_version} parameters are not executable: {error}"
+                ),
+            );
+        }
+    };
+    DarktableHistoryStepDecode::RgbLevelsPendingBlend(DecodedRgbLevelsHistoryStep {
+        source: step.clone(),
+        config,
+        enabled,
+        source_version,
+        canonical_parameters: parameters.to_bytes(),
+        execution_blocker: pending_blend_finding(step, "RGB Levels"),
+    })
+}
+
+fn decode_colormapping_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Color Mapping") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    let history = match ColorMappingHistory::decode(source_version, &step.operation_params.bytes) {
+        Ok(history) => history,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Mapping v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    let parameters = match history.current() {
+        Ok(parameters) => parameters,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+                format!(
+                    "Darktable Color Mapping v{source_version} parameters remain opaque: {error}"
+                ),
+            );
+        }
+    };
+    let canonical_parameters = parameters.to_bytes();
+    let config = match ColorMappingConfig::new(parameters) {
+        Ok(config) => config,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Mapping v{source_version} parameters are not executable: {error}"
+                ),
+            );
+        }
+    };
+    DarktableHistoryStepDecode::ColorMappingPendingBlend(Box::new(DecodedColorMappingHistoryStep {
+        source: step.clone(),
+        config: Box::new(config),
+        enabled,
+        source_version,
+        canonical_parameters,
+        execution_blocker: pending_blend_finding(step, "Color Mapping"),
+    }))
+}
+
+fn decode_colortransfer_history_step(step: &CompatHistoryStep) -> DarktableHistoryStepDecode {
+    let (source_version, enabled) = match decoded_row_header(step, "Color Transfer") {
+        Ok(header) => header,
+        Err(finding) => return preserved(step, finding.code, finding.detail),
+    };
+    if source_version != COLORTRANSFER_SCHEMA_VERSION {
+        return preserved(
+            step,
+            DarktableHistoryDecodeFindingCode::UnsupportedParameterVersion,
+            format!("Darktable Color Transfer v{source_version} parameters remain opaque"),
+        );
+    }
+    let parameters = match ColorTransferParameters::from_bytes(&step.operation_params.bytes) {
+        Ok(parameters) => parameters,
+        Err(error) => {
+            return preserved(
+                step,
+                DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+                format!(
+                    "Darktable Color Transfer v{source_version} parameters could not be decoded: {error}"
+                ),
+            );
+        }
+    };
+    if let Err(error) = parameters
+        .plan(rusttable_processing::RasterDimensions::new(1, 1).expect("unit dimensions are valid"))
+    {
+        return preserved(
+            step,
+            DarktableHistoryDecodeFindingCode::InvalidOperationParameters,
+            format!(
+                "Darktable Color Transfer v{source_version} parameters are not executable: {error}"
+            ),
+        );
+    }
+    let canonical_parameters = parameters.to_bytes();
+    DarktableHistoryStepDecode::ColorTransferPendingRuntime(Box::new(
+        DecodedColorTransferHistoryStep {
+            source: step.clone(),
+            parameters: Box::new(parameters),
+            enabled,
+            source_version,
+            canonical_parameters,
+            execution_blocker: DarktableHistoryDecodeFinding {
+                code: DarktableHistoryDecodeFindingCode::DeferredRuntimeState,
+                detail: "Darktable Color Transfer parameters are decoded, but preview acquisition, the process-owned points stream, and deprecated UI lifecycle remain deferred"
+                    .to_owned(),
+            },
+        },
+    ))
+}
+
+fn pending_blend_finding(
+    step: &CompatHistoryStep,
+    operation_name: &str,
+) -> DarktableHistoryDecodeFinding {
+    DarktableHistoryDecodeFinding {
+        code: DarktableHistoryDecodeFindingCode::OpaqueBlendSemantics,
+        detail: format!(
+            "Darktable {operation_name} core parameters are decoded, but blend version {:?}, blend/mask bytes, and multi-instance semantics remain opaque",
+            step.blend_version
         ),
     }
 }

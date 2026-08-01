@@ -6,8 +6,10 @@ mod history;
 pub use basicadj::*;
 pub use history::{
     DarktableHistoryDecodeFinding, DarktableHistoryDecodeFindingCode, DarktableHistoryStepDecode,
-    DecodedBasicAdjHistoryStep, DecodedChannelMixerHistoryStep, DecodedColorContrastHistoryStep,
-    DecodedColorCorrectionHistoryStep, DecodedColorZonesHistoryStep, DecodedSharpenHistoryStep,
+    DecodedAgxHistoryStep, DecodedBasicAdjHistoryStep, DecodedChannelMixerHistoryStep,
+    DecodedColorContrastHistoryStep, DecodedColorCorrectionHistoryStep,
+    DecodedColorMappingHistoryStep, DecodedColorTransferHistoryStep, DecodedColorZonesHistoryStep,
+    DecodedLevelsHistoryStep, DecodedRgbLevelsHistoryStep, DecodedSharpenHistoryStep,
     DecodedSoftenHistoryStep, DecodedVelviaHistoryStep, DecodedVibranceHistoryStep,
     decode_history_step,
 };

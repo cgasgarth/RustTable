@@ -1040,15 +1040,16 @@ pub static BUILTIN_OPERATIONS: &[OperationDefinitionFactory] = crate::builtin_op
 pub use basicadj::basicadj_definition;
 pub use masks::{mask_manager_definition, retouch_definition};
 pub use operations::{
-    bloom_definition, censorize_definition, channelmixer_definition, clahe_definition,
-    clipping_definition, colorcontrast_definition, colorzones_definition, crop_definition,
-    defringe_definition, dither_definition, enlargecanvas_definition, exposure_definition,
-    finalscale_definition, flip_definition, graduatednd_definition, grain_definition,
-    invert_definition, lenscorrection_definition, linear_offset_definition, liquify_definition,
+    agx_definition, bloom_definition, censorize_definition, channelmixer_definition,
+    clahe_definition, clipping_definition, colorcontrast_definition, colormapping_definition,
+    colortransfer_definition, colorzones_definition, crop_definition, defringe_definition,
+    dither_definition, enlargecanvas_definition, exposure_definition, finalscale_definition,
+    flip_definition, graduatednd_definition, grain_definition, invert_definition,
+    lenscorrection_definition, levels_definition, linear_offset_definition, liquify_definition,
     perspective_definition, rasterfile_definition, relight_definition, rgb_gain_definition,
-    rotatepixels_definition, scalepixels_definition, shadhi_definition, sharpen_definition,
-    soften_definition, temperature_definition, velvia_definition, vibrance_definition,
-    vignette_definition,
+    rgblevels_definition, rotatepixels_definition, scalepixels_definition, shadhi_definition,
+    sharpen_definition, soften_definition, temperature_definition, velvia_definition,
+    vibrance_definition, vignette_definition,
 };
 use operations::{hex, snapshot_hash, unavailable, validate_definition};
 pub use spots::spots_definition;

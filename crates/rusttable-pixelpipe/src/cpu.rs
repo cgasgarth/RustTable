@@ -476,6 +476,10 @@ impl CpuPixelpipeExecutor {
             return execute_lab_point_chain(request, input, plans, masks, node_scope.as_ref());
         }
 
+        if has_active_rgblevels(request) {
+            return execute_rgblevels_graph(request, input, plans, masks, node_scope.as_ref());
+        }
+
         if let Some(node) = request.graph().nodes().find(|node| {
             matches!(
                 node.operation().kind(),
@@ -626,7 +630,7 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
         return false;
     }
     let mut has_active_lab_operation = false;
-    let mut has_active_sharpen = false;
+    let mut has_active_continuous_lab_operation = false;
     let mut all_active_operations_are_lab = true;
     for node in request.graph().nodes() {
         let operation = node.operation();
@@ -641,15 +645,21 @@ fn is_lab_point_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> b
                 | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
                 | rusttable_processing::ProcessingOperationKind::Sharpen { .. }
                 | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
+                | rusttable_processing::ProcessingOperationKind::Levels { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
         );
         has_active_lab_operation |= is_lab_operation;
-        has_active_sharpen |= matches!(
+        has_active_continuous_lab_operation |= matches!(
             operation.kind(),
             rusttable_processing::ProcessingOperationKind::Sharpen { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
+                | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
         );
         all_active_operations_are_lab &= is_lab_operation;
     }
-    has_active_sharpen || (has_active_lab_operation && all_active_operations_are_lab)
+    has_active_continuous_lab_operation
+        || (has_active_lab_operation && all_active_operations_are_lab)
 }
 
 fn is_pure_lab_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bool {
@@ -664,6 +674,9 @@ fn is_pure_lab_chain(request: &CpuPixelpipeSnapshot, input: &RgbaF32Image) -> bo
                         | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
                         | rusttable_processing::ProcessingOperationKind::Sharpen { .. }
                         | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
+                        | rusttable_processing::ProcessingOperationKind::Levels { .. }
+                        | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
+                        | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
                 )
         })
 }
@@ -687,6 +700,9 @@ fn operation_uses_lab_stage(kind: &rusttable_processing::ProcessingOperationKind
             | rusttable_processing::ProcessingOperationKind::ColorZones { .. }
             | rusttable_processing::ProcessingOperationKind::Sharpen { .. }
             | rusttable_processing::ProcessingOperationKind::Vibrance { .. }
+            | rusttable_processing::ProcessingOperationKind::Levels { .. }
+            | rusttable_processing::ProcessingOperationKind::ColorTransfer { .. }
+            | rusttable_processing::ProcessingOperationKind::ColorMapping { .. }
     )
 }
 
@@ -925,6 +941,80 @@ fn execute_lab_point_chain(
                     .into_iter()
                     .map(ColorContrastPixel::channels)
                     .collect()
+            }
+            rusttable_processing::ProcessingOperationKind::Levels { config } => {
+                if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+                    return Err(CpuPixelpipeError::Evaluation {
+                        source: EvaluationError::OperationExecution {
+                            step_index: node.pipeline_step_index(),
+                            operation_id: operation.operation_id(),
+                            reason: "Levels imported masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+                        },
+                    });
+                }
+                let input = output
+                    .iter()
+                    .copied()
+                    .map(rusttable_processing::LevelsPixel::from_channels)
+                    .collect::<Vec<_>>();
+                let plan = rusttable_processing::LevelsPlan::new(*config, dimensions, None)
+                    .map_err(|error| levels_evaluation_error(node, error, scope))?;
+                plan.execute_with_cancel(&input, || {
+                    scope.is_some_and(|scope| scope.check().is_err())
+                })
+                .map_err(|error| levels_evaluation_error(node, error, scope))?
+                .into_iter()
+                .map(rusttable_processing::LevelsPixel::channels)
+                .collect()
+            }
+            rusttable_processing::ProcessingOperationKind::ColorTransfer { parameters } => {
+                if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+                    return Err(CpuPixelpipeError::Evaluation {
+                        source: EvaluationError::OperationExecution {
+                            step_index: node.pipeline_step_index(),
+                            operation_id: operation.operation_id(),
+                            reason: "Color Transfer masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+                        },
+                    });
+                }
+                let input = output
+                    .iter()
+                    .copied()
+                    .map(rusttable_processing::ColorTransferPixel::from_channels)
+                    .collect::<Vec<_>>();
+                parameters
+                    .plan(dimensions)
+                    .map_err(|error| sharpen_evaluation_error(node, error, scope))?
+                    .execute_with_cancel(&input, || {
+                        scope.is_some_and(|scope| scope.check().is_err())
+                    })
+                    .map_err(|error| sharpen_evaluation_error(node, error, scope))?
+                    .into_iter()
+                    .map(rusttable_processing::ColorTransferPixel::channels)
+                    .collect()
+            }
+            rusttable_processing::ProcessingOperationKind::ColorMapping { config } => {
+                if mask.is_some() || opacity.to_bits() != 1.0_f32.to_bits() {
+                    return Err(CpuPixelpipeError::Evaluation {
+                        source: EvaluationError::OperationExecution {
+                            step_index: node.pipeline_step_index(),
+                            operation_id: operation.operation_id(),
+                            reason: "Color Mapping masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+                        },
+                    });
+                }
+                let scale =
+                    request.scale_context().piece_iscale() / request.scale_context().roi_scale();
+                let plan = rusttable_processing::ColorMappingPlan::new_with_scale(
+                    (**config).clone(),
+                    dimensions,
+                    scale,
+                )
+                .map_err(|error| colormapping_plan_evaluation_error(node, error))?;
+                plan.execute_with_cancel(&output, || {
+                    scope.is_some_and(|scope| scope.check().is_err())
+                })
+                .map_err(|error| colormapping_evaluation_error(node, error, scope))?
             }
             rusttable_processing::ProcessingOperationKind::Vibrance { config } => {
                 let input = output
@@ -1190,6 +1280,57 @@ fn execute_sharpen_lab(
     Ok(())
 }
 
+fn levels_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: rusttable_processing::operations::OperationExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if source == rusttable_processing::operations::OperationExecutionError::Cancelled
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
+fn colormapping_plan_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: rusttable_processing::ColorMappingPlanError,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
+fn colormapping_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: rusttable_processing::ColorMappingExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if source == rusttable_processing::ColorMappingExecutionError::Cancelled
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
 fn sharpen_evaluation_error(
     node: &rusttable_processing::OperationGraphNode,
     source: rusttable_processing::operations::OperationExecutionError,
@@ -1368,6 +1509,195 @@ fn lab_point_transform_error(
     ))
 }
 
+fn has_active_rgblevels(request: &CpuPixelpipeSnapshot) -> bool {
+    request.graph().nodes().any(|node| {
+        operation_is_semantically_active(node.operation())
+            && matches!(
+                node.operation().kind(),
+                rusttable_processing::ProcessingOperationKind::RgbLevels { .. }
+            )
+    })
+}
+
+fn execute_rgblevels_graph(
+    request: &CpuPixelpipeSnapshot,
+    input: &RgbaF32Image,
+    plans: &BasicAdjPlanSet,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<(RgbaF32Image, Vec<CpuPixelpipeDiagnostic>), CpuPixelpipeError> {
+    let mut working = to_linear_working(input)?;
+    let mut alpha = input
+        .pixels()
+        .iter()
+        .map(|pixel| pixel.alpha())
+        .collect::<Vec<_>>();
+    for node in request.graph().nodes() {
+        if let Some(scope) = scope {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        if !operation_is_semantically_active(node.operation()) {
+            continue;
+        }
+        if matches!(
+            node.operation().kind(),
+            rusttable_processing::ProcessingOperationKind::RgbLevels { .. }
+        ) {
+            (working, alpha) = execute_rgblevels_working(&working, &alpha, node, masks, scope)?;
+        } else {
+            working = evaluate_graph_node_with_context_and_cancellation(
+                node,
+                &working,
+                Some(plans),
+                masks,
+                || scope.is_some_and(|scope| scope.check().is_err()),
+            )
+            .map_err(|source| cancellable_evaluation_error(source, scope))?;
+        }
+    }
+    if let Some(scope) = scope {
+        scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+    }
+    output_from_working_with_alpha(request.output_mode(), input, &working, &alpha)
+        .map(|image| (image, Vec::new()))
+}
+
+fn execute_rgblevels_working(
+    input: &WorkingRgbImage,
+    alpha: &[f32],
+    node: &rusttable_processing::OperationGraphNode,
+    masks: Option<&OperationMaskSet>,
+    scope: Option<&CancellationScope>,
+) -> Result<(WorkingRgbImage, Vec<f32>), CpuPixelpipeError> {
+    let dimensions = input.dimensions();
+    if alpha.len() != usize::try_from(dimensions.pixel_count()).unwrap_or(usize::MAX) {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: node.operation().operation_id(),
+                reason: "RGB Levels alpha shape does not match the working raster".to_owned(),
+            },
+        });
+    }
+    let operation = node.operation();
+    let config = match operation.kind() {
+        rusttable_processing::ProcessingOperationKind::RgbLevels { config } => *config,
+        _ => unreachable!("RGB Levels bridge is only called for RGB Levels"),
+    };
+    let mask = masks.and_then(|set| set.mask_for(operation.operation_id()));
+    if mask.is_some() || operation.opacity().get().to_bits() != 1.0_f32.to_bits() {
+        return Err(CpuPixelpipeError::Evaluation {
+            source: EvaluationError::OperationExecution {
+                step_index: node.pipeline_step_index(),
+                operation_id: operation.operation_id(),
+                reason: "RGB Levels imported masks and outer blending are deferred; only unmasked full-opacity execution is available".to_owned(),
+            },
+        });
+    }
+    let profile =
+        rusttable_processing::resolve_builtin_working_profile(input.frame()).map_err(|error| {
+            CpuPixelpipeError::Evaluation {
+                source: EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: operation.operation_id(),
+                    reason: error.to_string(),
+                },
+            }
+        })?;
+    let evidence =
+        rusttable_processing::RgbLevelsProfileEvidence::new_linear(profile.matrix_in_row_major());
+    let plan =
+        rusttable_processing::RgbLevelsPlan::new(config, Some(evidence)).map_err(|error| {
+            CpuPixelpipeError::Evaluation {
+                source: EvaluationError::OperationExecution {
+                    step_index: node.pipeline_step_index(),
+                    operation_id: operation.operation_id(),
+                    reason: error.to_string(),
+                },
+            }
+        })?;
+    let rgba = input
+        .pixels()
+        .zip(alpha)
+        .map(|(rgb, alpha)| {
+            rusttable_processing::RgbLevelsPixel::new(
+                rgb.red().get(),
+                rgb.green().get(),
+                rgb.blue().get(),
+                *alpha,
+            )
+        })
+        .collect::<Vec<_>>();
+    let candidate = plan
+        .execute_with_cancel(&rgba, || scope.is_some_and(|scope| scope.check().is_err()))
+        .map_err(|error| rgblevels_evaluation_error(node, error, scope))?;
+    let pixel_bytes = candidate
+        .len()
+        .saturating_mul(std::mem::size_of::<LinearRgb>());
+    let mut pixels = Vec::new();
+    pixels
+        .try_reserve_exact(candidate.len())
+        .map_err(|_| registered_stage_allocation_error(node, pixel_bytes))?;
+    let alpha_bytes = candidate.len().saturating_mul(std::mem::size_of::<f32>());
+    let mut output_alpha = Vec::new();
+    output_alpha
+        .try_reserve_exact(candidate.len())
+        .map_err(|_| registered_stage_allocation_error(node, alpha_bytes))?;
+    for (pixel_index, pixel) in candidate.into_iter().enumerate() {
+        if pixel_index % 1_024 == 0
+            && let Some(scope) = scope
+        {
+            scope.check().map_err(CpuPixelpipeError::Cancelled)?;
+        }
+        let channels = pixel.channels();
+        pixels.push(LinearRgb::new(
+            FiniteF32::new(channels[0])
+                .map_err(|_| rgblevels_nonfinite_output(node, pixel_index, "red"))?,
+            FiniteF32::new(channels[1])
+                .map_err(|_| rgblevels_nonfinite_output(node, pixel_index, "green"))?,
+            FiniteF32::new(channels[2])
+                .map_err(|_| rgblevels_nonfinite_output(node, pixel_index, "blue"))?,
+        ));
+        output_alpha.push(alpha[pixel_index]);
+    }
+    let output = WorkingRgbImage::new_with_frame(dimensions, pixels, input.frame())
+        .map_err(|error| CpuPixelpipeError::SourceColorPlan(error.to_string()))?;
+    Ok((output, output_alpha))
+}
+
+fn rgblevels_nonfinite_output(
+    node: &rusttable_processing::OperationGraphNode,
+    pixel_index: usize,
+    channel: &str,
+) -> CpuPixelpipeError {
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: format!("RGB Levels produced non-finite {channel} at pixel {pixel_index}"),
+        },
+    }
+}
+
+fn rgblevels_evaluation_error(
+    node: &rusttable_processing::OperationGraphNode,
+    source: rusttable_processing::RgbLevelsExecutionError,
+    scope: Option<&CancellationScope>,
+) -> CpuPixelpipeError {
+    if source == rusttable_processing::RgbLevelsExecutionError::Cancelled
+        && let Some(error) = scope.and_then(|scope| scope.check().err())
+    {
+        return CpuPixelpipeError::Cancelled(error);
+    }
+    CpuPixelpipeError::Evaluation {
+        source: EvaluationError::OperationExecution {
+            step_index: node.pipeline_step_index(),
+            operation_id: node.operation().operation_id(),
+            reason: source.to_string(),
+        },
+    }
+}
+
 fn has_active_soften(request: &CpuPixelpipeSnapshot) -> bool {
     request.graph().nodes().any(|node| {
         operation_is_semantically_active(node.operation())
@@ -1413,6 +1743,11 @@ fn execute_soften_graph(
                 masks,
                 scope,
             )?;
+        } else if matches!(
+            node.operation().kind(),
+            rusttable_processing::ProcessingOperationKind::RgbLevels { .. }
+        ) {
+            (working, alpha) = execute_rgblevels_working(&working, &alpha, node, masks, scope)?;
         } else {
             working = evaluate_graph_node_with_context_and_cancellation(
                 node,
@@ -2369,6 +2704,37 @@ mod tests {
                     .expect("inert Color Contrast graph")
                     .image(),
                 &baseline
+            );
+        }
+    }
+
+    #[test]
+    fn color_mapping_and_transfer_force_a_continuous_lab_stage_after_rgb_levels() {
+        let input = linear_colorcontrast_input();
+        for (operation_id, key) in [
+            (0xca01, "rusttable.colormapping"),
+            (0xca02, "rusttable.colortransfer"),
+        ] {
+            let snapshot = CpuPixelpipeSnapshot::new(
+                input.clone(),
+                operation_graph(vec![
+                    scalar_operation(
+                        0xca00,
+                        "rusttable.rgblevels",
+                        true,
+                        OperationOpacity::ONE,
+                        &[("autoscale", 1.0)],
+                    ),
+                    scalar_operation(operation_id, key, true, OperationOpacity::ONE, &[]),
+                ]),
+                CpuPixelpipeOutputMode::FullExport,
+            );
+            let lab_node = snapshot.graph().nodes().nth(1).expect("Lab operation node");
+
+            assert!(is_lab_point_chain(&snapshot, snapshot.input()), "{key}");
+            assert!(
+                operation_uses_lab_stage(lab_node.operation().kind()),
+                "{key}"
             );
         }
     }

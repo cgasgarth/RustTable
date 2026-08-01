@@ -1,0 +1,8 @@
+schema=rgblevels.v1
+payload_bytes=44
+payload_hex=0000000001000000000000000000003f0000803f000000000000003f0000803f000000000000003f0000803f
+field_order=autoscale,preserve_colors,levels[0][0],levels[0][1],levels[0][2],levels[1][0],levels[1][1],levels[1][2],levels[2][0],levels[2][1],levels[2][2]
+defaults=linked_channels,luminance,[0,0.5,1]x3
+migration_edges=[]
+alpha_cpu=independent_rgb_only_linked_scales_four_lanes
+gpu_alpha=preserved_deferred

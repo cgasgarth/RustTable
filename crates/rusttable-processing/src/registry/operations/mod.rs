@@ -16,13 +16,15 @@ use super::{
 };
 use crate::ProcessingOperation;
 use crate::descriptor::{
-    DescriptorId, OperationDescriptor, OperationFlags, bloom_descriptor, channelmixer_descriptor,
-    colorcontrast_descriptor, colorzones_descriptor, crop_descriptor, dither_descriptor,
+    DescriptorId, OperationDescriptor, OperationFlags, agx_descriptor, bloom_descriptor,
+    channelmixer_descriptor, colorcontrast_descriptor, colormapping_descriptor,
+    colortransfer_descriptor, colorzones_descriptor, crop_descriptor, dither_descriptor,
     enlargecanvas_descriptor, exposure_descriptor, finalscale_descriptor, flip_descriptor,
-    graduatednd_descriptor, grain_descriptor, invert_descriptor, linear_offset_descriptor,
-    relight_descriptor, rgb_gain_descriptor, rotatepixels_descriptor, scalepixels_descriptor,
-    shadhi_descriptor, sharpen_descriptor, soften_descriptor, temperature_descriptor,
-    velvia_descriptor, vibrance_descriptor, vignette_descriptor,
+    graduatednd_descriptor, grain_descriptor, invert_descriptor, levels_descriptor,
+    linear_offset_descriptor, relight_descriptor, rgb_gain_descriptor, rgblevels_descriptor,
+    rotatepixels_descriptor, scalepixels_descriptor, shadhi_descriptor, sharpen_descriptor,
+    soften_descriptor, temperature_descriptor, velvia_descriptor, vibrance_descriptor,
+    vignette_descriptor,
 };
 pub use clipping::clipping_definition;
 pub use liquify::liquify_definition;
@@ -236,6 +238,61 @@ fn prepare_grain(
 ) -> Result<PreparedCpuOperation, FactoryError> {
     PreparedCpuOperation::prepare(
         ProcessingOperation::compile_grain(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_agx(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_agx(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_levels(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_levels(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_rgblevels(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_rgblevels(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_colortransfer(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_colortransfer(operation).map_err(FactoryError::Operation)?,
+        descriptor,
+        crate::evaluate::execute_prepared_operation,
+    )
+}
+
+fn prepare_colormapping(
+    operation: &Operation,
+    descriptor: &DescriptorId,
+) -> Result<PreparedCpuOperation, FactoryError> {
+    PreparedCpuOperation::prepare(
+        ProcessingOperation::compile_colormapping(operation).map_err(FactoryError::Operation)?,
         descriptor,
         crate::evaluate::execute_prepared_operation,
     )
@@ -630,6 +687,116 @@ pub fn graduatednd_definition() -> OperationDefinition {
         false,
         std::iter::empty(),
     )
+}
+
+pub fn agx_definition() -> OperationDefinition {
+    geometry_definition(
+        agx_descriptor(),
+        prepare_agx,
+        &[
+            "iop.agx.params.v7",
+            "iop.agx.legacy-pre-v7-reset",
+            "iop.agx.cpu.native-curve-look-primaries",
+            "iop.agx.profile.d50-matrix-shaper-builtins",
+            "iop.agx.alpha-preserve",
+            "iop.agx.gpu-unavailable",
+            "iop.agx.profile-resolution-deferred",
+            "iop.agx.blend-mask-deferred",
+            "iop.agx.ui-deferred",
+        ],
+        RoiKind::Identity,
+        std::iter::empty(),
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "AgX GTK controls, pickers, presets, and workflow auto-application are not ported"
+            .to_owned(),
+    })
+}
+
+pub fn colortransfer_definition() -> OperationDefinition {
+    full_image_definition(
+        colortransfer_descriptor(),
+        prepare_colortransfer,
+        &[
+            "iop.colortransfer.params.v1-8280-byte-abi",
+            "iop.colortransfer.cpu.full-frame-lab",
+            "iop.colortransfer.points.thread-state",
+            "iop.colortransfer.alpha-preserve",
+            "iop.colortransfer.preview-acquisition-deferred",
+            "iop.colortransfer.gpu-ui-unavailable",
+        ],
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Color Transfer is deprecated; its preview acquisition lifecycle and GTK notice are not ported"
+            .to_owned(),
+    })
+}
+
+pub fn colormapping_definition() -> OperationDefinition {
+    geometry_definition(
+        colormapping_descriptor(),
+        prepare_colormapping,
+        &[
+            "iop.colormapping.params.v1-16600-byte-abi",
+            "iop.colormapping.cpu.histogram-cluster-bilateral",
+            "iop.colormapping.cpu.dynamic-overlap",
+            "iop.colormapping.cpu.cancellation-publication",
+            "iop.colormapping.points-owner-deferred",
+            "iop.colormapping.blend-mask-gpu-ui-deferred",
+        ],
+        RoiKind::Neighborhood,
+        std::iter::empty(),
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason:
+            "Color Mapping acquisition, profile-preview transforms, and GTK controls are not ported"
+                .to_owned(),
+    })
+}
+
+pub fn levels_definition() -> OperationDefinition {
+    geometry_definition(
+        levels_descriptor(),
+        prepare_levels,
+        &[
+            "iop.levels.params.v1-v2",
+            "iop.levels.cpu.lab-d50-lut",
+            "iop.levels.cpu.tile-cancellation",
+            "iop.levels.automatic-histogram-deferred",
+            "iop.levels.blend-mask-deferred",
+            "iop.levels.gpu-unavailable",
+            "iop.levels.deprecated-visibility",
+        ],
+        RoiKind::Identity,
+        [MigrationBinding::new(1, 2, "levels.migration.v1-v2")],
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "Levels histogram synchronization, pickers, and GTK controls are not ported"
+            .to_owned(),
+    })
+}
+
+pub fn rgblevels_definition() -> OperationDefinition {
+    geometry_definition(
+        rgblevels_descriptor(),
+        prepare_rgblevels,
+        &[
+            "iop.rgblevels.params.v1",
+            "iop.rgblevels.cpu.native-linked-independent",
+            "iop.rgblevels.profile.d50-matrix-luminance",
+            "iop.rgblevels.alpha-source-shaped",
+            "iop.rgblevels.cpu.tile-cancellation",
+            "iop.rgblevels.auto-levels-deferred",
+            "iop.rgblevels.blend-mask-deferred",
+            "iop.rgblevels.gpu-unavailable",
+        ],
+        RoiKind::Identity,
+        std::iter::empty(),
+    )
+    .with_ui_availability(OperationUiAvailability::Unavailable {
+        reason: "RGB Levels auto-analysis, profile lifecycle, and GTK controls are not ported"
+            .to_owned(),
+    })
 }
 
 pub fn relight_definition() -> OperationDefinition {
@@ -1241,6 +1408,11 @@ macro_rules! builtin_operations {
             $crate::registry::clahe_definition,
             $crate::registry::dither_definition,
             $crate::registry::grain_definition,
+            $crate::registry::colortransfer_definition,
+            $crate::registry::colormapping_definition,
+            $crate::registry::rgblevels_definition,
+            $crate::registry::agx_definition,
+            $crate::registry::levels_definition,
             $crate::registry::relight_definition,
             $crate::registry::color::colorcorrection_definition,
             $crate::registry::colorcontrast_definition,

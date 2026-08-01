@@ -36,8 +36,9 @@ pub use lab_boundary::{
 };
 use lab_boundary::{
     apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection,
-    apply_colorreconstruction_with_cancellation, apply_colorzones, apply_defringe, apply_relight,
-    apply_shadhi_with_cancellation, apply_vibrance,
+    apply_colormapping_with_cancellation, apply_colorreconstruction_with_cancellation,
+    apply_colortransfer_with_cancellation, apply_colorzones, apply_defringe,
+    apply_levels_with_cancellation, apply_relight, apply_shadhi_with_cancellation, apply_vibrance,
 };
 use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
@@ -409,6 +410,186 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
     }
     let before_mask = mask_route.working_rgb_blend().map(|_| pixels.to_vec());
     let result = match operation.kind() {
+        ProcessingOperationKind::Agx { config } => {
+            require_unblended_tonal_route(
+                step_index,
+                operation_id,
+                opacity,
+                mask.is_some(),
+                "AgX",
+            )?;
+            let profile = crate::operations::agx::resolve_builtin_working_profile(*frame)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let plan =
+                crate::operations::agx::AgxPlan::new_with_profile(*config, dimensions, profile)
+                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let rgba = pixels
+                .iter()
+                .copied()
+                .map(|pixel| {
+                    crate::operations::agx::AgxPixel::new(
+                        pixel.red().get(),
+                        pixel.green().get(),
+                        pixel.blue().get(),
+                        1.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let candidate =
+                plan.execute_with_cancel(&rgba, &cancelled)
+                    .map_err(|error| match error {
+                        crate::operations::agx::AgxExecutionError::Cancelled => {
+                            EvaluationError::Cancelled {
+                                step_index,
+                                operation_id,
+                            }
+                        }
+                        error => operation_plan_error(step_index, operation_id, error),
+                    })?;
+            let candidate = linear_rgb_from_rgba(
+                candidate
+                    .into_iter()
+                    .map(crate::operations::agx::AgxPixel::channels),
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
+        ProcessingOperationKind::Levels { config } => {
+            require_unblended_tonal_route(
+                step_index,
+                operation_id,
+                opacity,
+                mask.is_some(),
+                "Levels",
+            )?;
+            let candidate = apply_levels_with_cancellation(
+                *config,
+                pixels,
+                dimensions,
+                frame.encoding(),
+                &cancelled,
+            )
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
+        ProcessingOperationKind::ColorTransfer { parameters } => {
+            require_unblended_tonal_route(
+                step_index,
+                operation_id,
+                opacity,
+                mask.is_some(),
+                "Color Transfer",
+            )?;
+            let candidate = apply_colortransfer_with_cancellation(
+                parameters,
+                pixels,
+                dimensions,
+                frame.encoding(),
+                &cancelled,
+            )
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
+        ProcessingOperationKind::ColorMapping { config } => {
+            require_unblended_tonal_route(
+                step_index,
+                operation_id,
+                opacity,
+                mask.is_some(),
+                "Color Mapping",
+            )?;
+            let candidate = apply_colormapping_with_cancellation(
+                config,
+                pixels,
+                dimensions,
+                frame.encoding(),
+                &cancelled,
+            )
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
+        ProcessingOperationKind::RgbLevels { config } => {
+            require_unblended_tonal_route(
+                step_index,
+                operation_id,
+                opacity,
+                mask.is_some(),
+                "RGB Levels",
+            )?;
+            let profile = crate::operations::agx::resolve_builtin_working_profile(*frame)
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let evidence = crate::operations::rgblevels::RgbLevelsProfileEvidence::new_linear(
+                profile.matrix_in_row_major(),
+            );
+            let plan = crate::operations::rgblevels::RgbLevelsPlan::new(*config, Some(evidence))
+                .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let rgba = pixels
+                .iter()
+                .copied()
+                .map(|pixel| {
+                    crate::operations::rgblevels::RgbLevelsPixel::new(
+                        pixel.red().get(),
+                        pixel.green().get(),
+                        pixel.blue().get(),
+                        1.0,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let candidate =
+                plan.execute_with_cancel(&rgba, &cancelled)
+                    .map_err(|error| match error {
+                        crate::operations::rgblevels::RgbLevelsExecutionError::Cancelled => {
+                            EvaluationError::Cancelled {
+                                step_index,
+                                operation_id,
+                            }
+                        }
+                        error => operation_plan_error(step_index, operation_id, error),
+                    })?;
+            let candidate = linear_rgb_from_rgba(
+                candidate
+                    .into_iter()
+                    .map(crate::operations::rgblevels::RgbLevelsPixel::channels),
+                step_index,
+                operation_id,
+                pixel_index_offset,
+            )?;
+            pixels.copy_from_slice(&candidate);
+            Ok(())
+        }
         ProcessingOperationKind::BasicAdj { config } => {
             let plan = if let Some(plan) = basicadj_plans.and_then(|plans| plans.plan(operation_id))
             {
@@ -1074,6 +1255,75 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
         });
     }
     Ok(())
+}
+
+fn require_unblended_tonal_route(
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    opacity: f32,
+    has_mask: bool,
+    operation_name: &'static str,
+) -> Result<(), EvaluationError> {
+    if opacity.to_bits() != 1.0_f32.to_bits() {
+        return Err(EvaluationError::OperationExecution {
+            step_index,
+            operation_id,
+            reason: format!(
+                "{operation_name} outer blending is deferred; only full opacity is executable"
+            ),
+        });
+    }
+    if has_mask {
+        return Err(EvaluationError::OperationExecution {
+            step_index,
+            operation_id,
+            reason: format!(
+                "{operation_name} imported mask semantics are deferred and cannot be approximated"
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn linear_rgb_from_rgba(
+    channels: impl IntoIterator<Item = [f32; 4]>,
+    step_index: PipelineStepIndex,
+    operation_id: OperationId,
+    pixel_index_offset: usize,
+) -> Result<Vec<LinearRgb>, EvaluationError> {
+    channels
+        .into_iter()
+        .enumerate()
+        .map(|(local_index, channels)| {
+            let pixel_index = pixel_index_offset + local_index;
+            Ok(LinearRgb::new(
+                FiniteF32::new(channels[0]).map_err(|_| {
+                    EvaluationError::NonFiniteChannelResult {
+                        step_index,
+                        operation_id,
+                        pixel_index,
+                        channel: RgbChannel::Red,
+                    }
+                })?,
+                FiniteF32::new(channels[1]).map_err(|_| {
+                    EvaluationError::NonFiniteChannelResult {
+                        step_index,
+                        operation_id,
+                        pixel_index,
+                        channel: RgbChannel::Green,
+                    }
+                })?,
+                FiniteF32::new(channels[2]).map_err(|_| {
+                    EvaluationError::NonFiniteChannelResult {
+                        step_index,
+                        operation_id,
+                        pixel_index,
+                        channel: RgbChannel::Blue,
+                    }
+                })?,
+            ))
+        })
+        .collect()
 }
 
 fn operation_error(

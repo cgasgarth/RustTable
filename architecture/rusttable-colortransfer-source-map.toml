@@ -1,0 +1,71 @@
+schema = "rusttable.colortransfer-source-map.v1"
+issue = 395
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+
+# This map records the deprecated operation's typed history and full-frame CPU
+# integration. Preview acquisition ownership, GPU, and UI remain unavailable.
+
+[[responsibility]]
+id = "native-parameter-abi-and-state"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_colortransfer_flag_t", "dt_iop_colortransfer_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colortransfer/mod.rs"
+status = "implemented"
+notes = "The declaration and architecture contract agree on an 8280-byte four-byte-aligned payload containing flag, hist[2048], mean[5][2], var[5][2], and n."
+
+[[responsibility]]
+id = "l-histogram-capture-and-inversion"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["capture_histogram", "invert_histogram"]
+rust_path = "crates/rusttable-processing/src/operations/colortransfer/mod.rs"
+status = "implemented"
+notes = "The leaf retains 2048-bin L capture with the native three-float helper stride, cumulative normalization to HISTN-1, and the native lower-bound inverse lookup."
+
+[[responsibility]]
+id = "native-xorshift-and-ab-k-means"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["get_cluster", "get_clusters", "kmeans", "get_cluster_mapping"]
+rust_path = "crates/rusttable-processing/src/operations/colortransfer/mod.rs"
+status = "implemented"
+notes = "The serial bounded leaf uses persistent dt_points_get_for-compatible per-thread xorshift128+ state, native initialization/update ordering, ten iterations, 20-percent sampling, repeated inner updates, strict tie handling, and weighted cluster mapping."
+
+[[responsibility]]
+id = "lab-application-and-alpha"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["default_colorspace", "process"]
+rust_path = "crates/rusttable-processing/src/operations/colortransfer/mod.rs"
+status = "implemented"
+notes = "The native-style state machine captures only on preview ACQUIRE, passes every other non-APPLY state through, and applies the stored L inverse histogram and weighted a/b transfer with four-lane alpha preservation after three-float capture/k-means."
+
+[[responsibility]]
+id = "bounded-cancellation-and-allocation"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["process", "kmeans"]
+rust_path = "crates/rusttable-processing/src/operations/colortransfer/mod.rs"
+status = "implemented"
+notes = "Fixed-size histogram and cluster scratch, checked output reservation, a caller budget, row/sample cancellation polls, and private publication prevent unbounded or partial results."
+
+[[responsibility]]
+id = "deprecated-capability-honesty"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["flags", "deprecated_msg", "gui_init"]
+rust_path = "crates/rusttable-processing/src/operations/colortransfer/mod.rs"
+status = "implemented"
+notes = "CPU, descriptor, registry, typed history, and full-frame pixelpipe support are explicit; GPU and UI capabilities remain false, and preview acquisition remains unavailable."
+
+[[responsibility]]
+id = "production-cpu-registration"
+upstream_path = "src/iop/colortransfer.c"
+upstream_symbols = ["name", "flags", "default_colorspace", "process"]
+rust_path = "crates/rusttable-processing/src/registry;crates/rusttable-import/src/darktable/history.rs;crates/rusttable-pixelpipe/src/cpu.rs"
+status = "implemented"
+notes = "The 8280-byte typed payload is registered, snapshot-identified, decoded on import, and routed through the full-frame scalar CPU executor."
+
+[[responsibility]]
+id = "preview-acquisition-ui-and-source-deletion"
+upstream_path = "src/iop/colortransfer.c;src/common/points.h"
+upstream_symbols = ["gui_init", "deprecated_msg", "dt_points_get_for"]
+rust_path = "deferred: shared points owner, preview acquisition lifecycle, deprecated GTK notice, and retained-source deletion"
+status = "deferred"
+notes = "GPU is unavailable in native source; UI and process-owned acquisition state are not claimed by the CPU integration."

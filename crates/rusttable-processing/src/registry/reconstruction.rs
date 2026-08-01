@@ -8,6 +8,7 @@ use rusttable_core::Operation;
 
 pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> DescriptorId {
     match operation.kind() {
+        crate::ProcessingOperationKind::Agx { .. } => crate::descriptor::agx_descriptor().id,
         crate::ProcessingOperationKind::BasicAdj { .. } => {
             crate::descriptor::basicadj_descriptor().id
         }
@@ -111,6 +112,16 @@ pub(crate) fn operation_descriptor_for(operation: &ProcessingOperation) -> Descr
         }
         crate::ProcessingOperationKind::LensCorrection { .. } => {
             crate::descriptor::lenscorrection_descriptor().id
+        }
+        crate::ProcessingOperationKind::Levels { .. } => crate::descriptor::levels_descriptor().id,
+        crate::ProcessingOperationKind::RgbLevels { .. } => {
+            crate::descriptor::rgblevels_descriptor().id
+        }
+        crate::ProcessingOperationKind::ColorTransfer { .. } => {
+            crate::descriptor::colortransfer_descriptor().id
+        }
+        crate::ProcessingOperationKind::ColorMapping { .. } => {
+            crate::descriptor::colormapping_descriptor().id
         }
         crate::ProcessingOperationKind::Liquify { .. } => {
             crate::descriptor::liquify_descriptor().id

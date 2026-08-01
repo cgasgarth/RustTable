@@ -28,7 +28,11 @@ use crate::descriptor::{
 use crate::operations::{OperationExecutionError, ReconstructionBudget};
 use crate::{FiniteF32, RasterDimensions, RgbChannel};
 
+pub mod source_map;
 pub mod tiling;
+
+/// Operation-local source fixture for the native v1 default payload.
+pub const DEFAULT_V1_FIXTURE: &str = include_str!("fixtures/default_v1.hex");
 
 /// Stable compatibility identity of the retained native module.
 pub const SHARPEN_COMPATIBILITY_ID: &str = "sharpen";
@@ -57,12 +61,15 @@ pub const SHARPEN_CHANNELS: usize = 4;
 pub const SHARPEN_INPUT_ENCODING: &str = "Lab D50";
 
 /// Current native parameter payload in exact declaration order.
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SharpenParametersV1 {
     pub radius: f32,
     pub amount: f32,
     pub threshold: f32,
 }
+
+const _: () = assert!(std::mem::size_of::<SharpenParametersV1>() == SHARPEN_PARAMETER_BYTES);
 
 impl SharpenParametersV1 {
     #[must_use]
@@ -103,12 +110,25 @@ impl SharpenParametersV1 {
             f32::from_le_bytes(
                 bytes[start..start + std::mem::size_of::<f32>()]
                     .try_into()
-                    .expect("validated parameter range"),
+                    .expect("validated parameter byte range"),
             )
         };
         let parameters = Self::new(read(0), read(4), read(8));
-        SharpenConfig::try_from(parameters).map_err(SharpenCodecError::Parameters)?;
+        parameters
+            .validate_finite()
+            .map_err(SharpenCodecError::Parameters)?;
         Ok(parameters)
+    }
+
+    fn validate_finite(self) -> Result<(), SharpenParameterError> {
+        for (name, value) in [
+            ("radius", self.radius),
+            ("amount", self.amount),
+            ("threshold", self.threshold),
+        ] {
+            FiniteF32::new(value).map_err(|_| SharpenParameterError::NonFinite(name))?;
+        }
+        Ok(())
     }
 }
 
@@ -187,21 +207,19 @@ impl std::error::Error for SharpenCodecError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SharpenParameterError {
     NonFinite(&'static str),
-    OutOfRange(&'static str),
 }
 
 impl fmt::Display for SharpenParameterError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonFinite(name) => write!(formatter, "sharpen {name} is non-finite"),
-            Self::OutOfRange(name) => write!(formatter, "sharpen {name} is outside its range"),
         }
     }
 }
 
 impl std::error::Error for SharpenParameterError {}
 
-/// Finite, range-checked execution parameters.
+/// Finite execution parameters; the native slider ranges remain descriptor metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SharpenConfig {
     radius: FiniteF32,
@@ -255,24 +273,9 @@ impl TryFrom<SharpenParametersV1> for SharpenConfig {
 
     fn try_from(parameters: SharpenParametersV1) -> Result<Self, Self::Error> {
         Ok(Self {
-            radius: bounded(
-                "radius",
-                parameters.radius,
-                SHARPEN_RADIUS_MINIMUM,
-                SHARPEN_RADIUS_MAXIMUM,
-            )?,
-            amount: bounded(
-                "amount",
-                parameters.amount,
-                SHARPEN_AMOUNT_MINIMUM,
-                SHARPEN_AMOUNT_MAXIMUM,
-            )?,
-            threshold: bounded(
-                "threshold",
-                parameters.threshold,
-                SHARPEN_THRESHOLD_MINIMUM,
-                SHARPEN_THRESHOLD_MAXIMUM,
-            )?,
+            radius: finite_parameter("radius", parameters.radius)?,
+            amount: finite_parameter("amount", parameters.amount)?,
+            threshold: finite_parameter("threshold", parameters.threshold)?,
         })
     }
 }
@@ -394,7 +397,16 @@ impl SharpenPlan {
         }
         let committed = config.commit();
         let scaled_radius = committed.radius() * roi_scale / piece_iscale;
-        let radius = scaled_radius.ceil().min(SHARPEN_MAXR as f32) as u32;
+        if scaled_radius.is_nan() || scaled_radius < 0.0 {
+            return Err(OperationExecutionError::UnsupportedCapability(
+                "sharpen requires a non-negative scaled radius",
+            ));
+        }
+        let radius = if scaled_radius >= SHARPEN_MAXR as f32 {
+            SHARPEN_MAXR
+        } else {
+            scaled_radius.ceil() as u32
+        };
         let plan = Self {
             committed,
             dimensions,
@@ -445,8 +457,21 @@ impl SharpenPlan {
     pub fn execute_with_cancel<F: FnMut() -> bool>(
         &self,
         input: &[SharpenPixel],
-        mut cancelled: F,
+        cancelled: F,
     ) -> Result<Vec<SharpenPixel>, OperationExecutionError> {
+        self.execute_with_cancel_and_kernel_reservation(input, cancelled, |length| length)
+    }
+
+    fn execute_with_cancel_and_kernel_reservation<F, R>(
+        &self,
+        input: &[SharpenPixel],
+        mut cancelled: F,
+        kernel_reservation_length: R,
+    ) -> Result<Vec<SharpenPixel>, OperationExecutionError>
+    where
+        F: FnMut() -> bool,
+        R: FnOnce(usize) -> usize,
+    {
         let (width, height, expected) = self.shape(input)?;
         if cancelled() {
             return Err(OperationExecutionError::Cancelled);
@@ -460,20 +485,23 @@ impl SharpenPlan {
             return clone_pixels(input, expected);
         }
 
-        let kernel = gaussian_kernel(self.radius, self.effective_radius()).ok_or(
-            OperationExecutionError::AllocationFailed {
-                required: kernel_bytes(self.radius),
-            },
-        )?;
+        // Native `process()` already owns the output ROI when its internal
+        // buffers are requested. Preserve that pass-through destination before
+        // attempting the kernel and per-row scratch allocations: every native
+        // resource failure copies the input ROI through and returns success.
         let mut output = clone_pixels(input, expected)?;
-        let mut temporary = Vec::<[f32; SHARPEN_CHANNELS]>::new();
-        let temporary_bytes = width.saturating_mul(std::mem::size_of::<[f32; SHARPEN_CHANNELS]>());
-        temporary.try_reserve_exact(width).map_err(|_| {
-            OperationExecutionError::AllocationFailed {
-                required: temporary_bytes,
-            }
-        })?;
-        temporary.resize(width, [0.0; SHARPEN_CHANNELS]);
+        let Some(kernel) = gaussian_kernel_with_reservation(
+            self.radius,
+            self.effective_radius(),
+            kernel_reservation_length,
+        ) else {
+            return Ok(output);
+        };
+        let mut temporary = Vec::<f32>::new();
+        if temporary.try_reserve_exact(width).is_err() {
+            return Ok(output);
+        }
+        temporary.resize(width, 0.0);
 
         let radius = usize::try_from(self.radius).expect("radius is bounded");
         let threshold = self.committed.threshold();
@@ -489,13 +517,10 @@ impl SharpenPlan {
             let start_row = row - radius;
             let end_row = row + radius;
             for column in 0..width {
-                let mut sum = [0.0; SHARPEN_CHANNELS];
+                let mut sum = 0.0f32;
                 for source_row in start_row..=end_row {
                     let weight = kernel[source_row - start_row];
-                    let sample = input[source_row * width + column].channels();
-                    for channel in 0..SHARPEN_CHANNELS {
-                        sum[channel] += weight * sample[channel];
-                    }
+                    sum += weight * input[source_row * width + column].lightness();
                 }
                 temporary[column] = sum;
             }
@@ -503,7 +528,7 @@ impl SharpenPlan {
             for column in radius..width - radius {
                 let mut sum = 0.0f32;
                 for source_column in column - radius..=column + radius {
-                    sum += kernel[source_column - (column - radius)] * temporary[source_column][0];
+                    sum += kernel[source_column - (column - radius)] * temporary[source_column];
                 }
                 let index = row * width + column;
                 let source = input[index].channels();
@@ -613,12 +638,12 @@ impl SharpenPlan {
         let required = if identity {
             output_bytes
         } else {
-            let temporary_bytes = width
-                .checked_mul(std::mem::size_of::<[f32; SHARPEN_CHANNELS]>())
-                .ok_or(OperationExecutionError::MemoryBudgetExceeded {
+            let temporary_bytes = width.checked_mul(std::mem::size_of::<f32>()).ok_or(
+                OperationExecutionError::MemoryBudgetExceeded {
                     required: usize::MAX,
                     budget: self.budget.maximum_bytes(),
-                })?;
+                },
+            )?;
             output_bytes
                 .checked_add(temporary_bytes)
                 .and_then(|bytes| bytes.checked_add(kernel_bytes(self.radius)))
@@ -690,7 +715,7 @@ pub fn sharpen_descriptor() -> OperationDescriptor {
             alignment_pixels: tiling::SHARPEN_TILE_ALIGNMENT,
             minimum_tile_edge: 1,
             preferred_tile_edge: 256,
-            temporary_multiplier_milli: 100,
+            temporary_multiplier_milli: 2100,
             input_multiplier_milli: 1000,
             output_multiplier_milli: 1000,
         },
@@ -760,22 +785,22 @@ fn lab_predicate() -> ImagePredicate {
     }
 }
 
-fn bounded(
-    name: &'static str,
-    value: f32,
-    minimum: f32,
-    maximum: f32,
-) -> Result<FiniteF32, SharpenParameterError> {
-    if !value.is_finite() {
-        return Err(SharpenParameterError::NonFinite(name));
-    }
-    if !(minimum..=maximum).contains(&value) {
-        return Err(SharpenParameterError::OutOfRange(name));
-    }
-    Ok(FiniteF32::new(value).expect("finite value was checked"))
+fn finite_parameter(name: &'static str, value: f32) -> Result<FiniteF32, SharpenParameterError> {
+    FiniteF32::new(value).map_err(|_| SharpenParameterError::NonFinite(name))
 }
 
 fn gaussian_kernel(radius: u32, effective_radius: f32) -> Option<Vec<f32>> {
+    gaussian_kernel_with_reservation(radius, effective_radius, |length| length)
+}
+
+fn gaussian_kernel_with_reservation<R>(
+    radius: u32,
+    effective_radius: f32,
+    kernel_reservation_length: R,
+) -> Option<Vec<f32>>
+where
+    R: FnOnce(usize) -> usize,
+{
     if radius == 0 {
         return Some(vec![1.0, 0.0, 0.0, 0.0]);
     }
@@ -787,12 +812,19 @@ fn gaussian_kernel(radius: u32, effective_radius: f32) -> Option<Vec<f32>> {
     };
     let storage_len = usize::try_from(padded_words.checked_mul(4)?).ok()?;
     let active_len = usize::try_from(width).ok()?;
-    let sigma2 = (1.0f32 / (2.5f32 * 2.5f32)) * effective_radius * effective_radius;
-    if !sigma2.is_finite() || sigma2 <= 0.0 {
+    // In sharpen.c the unsuffixed 2.5 constants make the coefficient a double.
+    // That promotes each repeated f32 scaled-radius result for both ordered
+    // multiplications, followed by one conversion for the `float sigma2` assignment.
+    let effective_radius = f64::from(effective_radius);
+    let sigma2 = ((1.0_f64 / (2.5_f64 * 2.5_f64)) * effective_radius * effective_radius) as f32;
+    // Native `expf` still yields a valid flat kernel when sigma2 overflows to
+    // +infinity. Only zero and NaN make the source normalization unusable.
+    if sigma2.is_nan() || sigma2 <= 0.0 {
         return None;
     }
     let mut kernel = Vec::new();
-    kernel.try_reserve_exact(storage_len).ok()?;
+    let reservation_length = kernel_reservation_length(storage_len);
+    kernel.try_reserve_exact(reservation_length).ok()?;
     kernel.resize(storage_len, 0.0);
     let mut weight = 0.0f32;
     let radius_i32 = i32::try_from(radius).ok()?;
@@ -843,5 +875,41 @@ const fn lab_channel(channel: usize) -> RgbChannel {
         0 => RgbChannel::Red,
         1 => RgbChannel::Green,
         _ => RgbChannel::Blue,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kernel_try_reserve_failure_copies_input_roi_and_succeeds() {
+        let dimensions = RasterDimensions::new(3, 3).expect("nonzero dimensions");
+        let plan = SharpenPlan::new(
+            SharpenConfig::new(0.4, 1.0, 0.0).expect("finite parameters"),
+            dimensions,
+            1.0,
+            1.0,
+        )
+        .expect("valid plan");
+        let input = vec![SharpenPixel::new(50.0, -2.0, 3.0, 0.25); 9];
+        let mut allocation_attempts = 0;
+
+        let output = plan
+            .execute_with_cancel_and_kernel_reservation(
+                &input,
+                || false,
+                |requested| {
+                    allocation_attempts += 1;
+                    assert_eq!(requested, 4);
+                    // The production `try_reserve_exact` call receives this and
+                    // deterministically returns `TryReserveError::CapacityOverflow`.
+                    usize::MAX
+                },
+            )
+            .expect("native kernel allocation failure copies through");
+
+        assert_eq!(allocation_attempts, 1);
+        assert_eq!(output, input);
     }
 }

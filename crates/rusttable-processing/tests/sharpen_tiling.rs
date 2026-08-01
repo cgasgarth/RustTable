@@ -1,5 +1,7 @@
 //! Source-derived tests for `src/iop/sharpen.c` dynamic radius and tiling.
 
+#![allow(clippy::cast_possible_truncation)]
+
 use rusttable_processing::operations::sharpen::tiling::{
     SHARPEN_CPU_MEMORY_FACTOR, SHARPEN_MAX_BUFFER_FACTOR, SHARPEN_MAX_RADIUS,
     SHARPEN_RADIUS_MULTIPLIER, SHARPEN_TILE_ALIGNMENT, SHARPEN_TILING_OVERHEAD_BYTES, SharpenRoi,
@@ -33,6 +35,15 @@ fn native_radius_commit_quantization_and_cap_are_preserved() {
     let capped = SharpenTilingPlan::new(99.0, 1.0, 1.0).expect("native maximum");
     assert_f32_bits(capped.committed_radius(), 99.0 * SHARPEN_RADIUS_MULTIPLIER);
     assert_eq!(capped.radius(), SHARPEN_MAX_RADIUS);
+
+    let overflowed = SharpenTilingPlan::new(f32::MAX, 1.0, 1.0)
+        .expect("finite parameter may overflow during native commit");
+    assert!(overflowed.committed_radius().is_infinite());
+    assert!(overflowed.committed_radius().is_sign_positive());
+    assert_eq!(overflowed.radius(), SHARPEN_MAX_RADIUS);
+    let committed_overflow = SharpenTilingPlan::from_committed_radius(f32::INFINITY, 1.0, 1.0)
+        .expect("positive committed infinity reaches native cap");
+    assert_eq!(committed_overflow.radius(), SHARPEN_MAX_RADIUS);
 }
 
 #[test]
@@ -64,8 +75,10 @@ fn roi_in_scale_and_piece_iscale_resolve_the_dynamic_overlap() {
         SharpenTilingPlan::new(f32::INFINITY, 1.0, 1.0),
         Err(SharpenTilingError::NonFiniteRadius)
     );
+    let finite_outlier = SharpenTilingPlan::new(100.0, 1.0, 1.0).expect("native radius cap");
+    assert_eq!(finite_outlier.radius(), SHARPEN_MAX_RADIUS);
     assert_eq!(
-        SharpenTilingPlan::new(100.0, 1.0, 1.0),
+        SharpenTilingPlan::new(-0.1, 1.0, 1.0),
         Err(SharpenTilingError::RadiusOutOfRange)
     );
 }
@@ -235,7 +248,8 @@ fn sharpen_reference(
 
     let radius = plan.radius();
     let resolved = plan.committed_radius() * plan.roi_scale() / plan.input_scale();
-    let sigma2 = resolved * resolved / (SHARPEN_RADIUS_MULTIPLIER * SHARPEN_RADIUS_MULTIPLIER);
+    let resolved_f64 = f64::from(resolved);
+    let sigma2 = ((1.0_f64 / (2.5_f64 * 2.5_f64)) * resolved_f64 * resolved_f64) as f32;
     let mut kernel = (0..=radius * 2)
         .map(|offset| {
             let offset = i16::try_from(offset).expect("native radius is capped");

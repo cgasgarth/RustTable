@@ -6,6 +6,15 @@ name = "agx"
 module_version = 7
 parameter_size = 144
 parameter_layout_hash = "903a318cd6a5b889727c52038202b5b9db32ddd2b8e9ca8e994f07970aba2906"
+parameter_decoder = "rusttable.agx.decode.v7"
+default_enabled = false
+default_order = 155
+multi_instance = true
+supports_blend_masks = false
+input_color_space = "scene-linear"
+output_color_space = "scene-linear"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -67,8 +76,8 @@ line_end = 2571
 version = 7
 byte_size = 144
 layout_hash = "db9bed41f60be7904f90a3ae9880026e591be352806c4c8a371c59de54cddc54"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.agx.decode.v7"
+opaque_blocking = false
 fixture_id = "operation.agx.params.v7"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -3580,8 +3589,17 @@ evidence_hash = "5e9e1d68cbbb20b55ad181da13305edcad95b99c228f03bd9d6481df82b6b21
 [[operation]]
 name = "colormapping"
 module_version = 1
-parameter_size = 332
-parameter_layout_hash = "38477527dfeb3cc21ea6d6eb6606f8632f385b1a55cb98878ff1a54ffe43b284"
+parameter_size = 16600
+parameter_layout_hash = "9a802e076f0fe0c83968eef69acee347d616e45c1adf37bfe18a15c016048780"
+parameter_decoder = "rusttable.colormapping.decode.v1"
+default_enabled = false
+default_order = 105
+multi_instance = false
+supports_blend_masks = true
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -3630,11 +3648,17 @@ line_end = 802
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 332
-layout_hash = "b4bf0c28d02a25013a4100fd6ebb05be570d55f3ab420c83c63be8afc324ea8e"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 16600
+layout_hash = "9a802e076f0fe0c83968eef69acee347d616e45c1adf37bfe18a15c016048780"
+decoder = "rusttable.colormapping.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.colormapping.params.v1"
+abi_layouts = [
+  { target = "x86_64-unknown-linux-gnu", c_abi_model = "x86_64-unknown-linux-gnu", endianness = "little", pointer_width = 64, fields = [{ name = "flag", type_name = "dt_iop_colormapping_flag_t", enum_identity = "dt_iop_colormapping_flag_t", offset = 0, size = 4, alignment = 4 }, { name = "n", type_name = "int32_t", offset = 4, size = 4, alignment = 4 }, { name = "dominance", type_name = "float", offset = 8, size = 4, alignment = 4 }, { name = "equalization", type_name = "float", offset = 12, size = 4, alignment = 4 }, { name = "source_ihist", type_name = "float[2048]", array_extent = 2048, offset = 16, size = 8192, alignment = 4 }, { name = "source_mean", type_name = "float[5][2]", array_extent = 10, offset = 8208, size = 40, alignment = 4 }, { name = "source_var", type_name = "float[5][2]", array_extent = 10, offset = 8248, size = 40, alignment = 4 }, { name = "source_weight", type_name = "float[5]", array_extent = 5, offset = 8288, size = 20, alignment = 4 }, { name = "target_hist", type_name = "int32_t[2048]", array_extent = 2048, offset = 8308, size = 8192, alignment = 4 }, { name = "target_mean", type_name = "float[5][2]", array_extent = 10, offset = 16500, size = 40, alignment = 4 }, { name = "target_var", type_name = "float[5][2]", array_extent = 10, offset = 16540, size = 40, alignment = 4 }, { name = "target_weight", type_name = "float[5]", array_extent = 5, offset = 16580, size = 20, alignment = 4 }], padding = [], total_size = 16600, alignment = 4, layout_hash = "59b200251af9c46804ed6e5c0d7fb20ef961036a6de2d0d9ec7fda9698da2bc6", difference_from = [] },
+  { target = "aarch64-apple-darwin", c_abi_model = "aarch64-apple-darwin", endianness = "little", pointer_width = 64, fields = [{ name = "flag", type_name = "dt_iop_colormapping_flag_t", enum_identity = "dt_iop_colormapping_flag_t", offset = 0, size = 4, alignment = 4 }, { name = "n", type_name = "int32_t", offset = 4, size = 4, alignment = 4 }, { name = "dominance", type_name = "float", offset = 8, size = 4, alignment = 4 }, { name = "equalization", type_name = "float", offset = 12, size = 4, alignment = 4 }, { name = "source_ihist", type_name = "float[2048]", array_extent = 2048, offset = 16, size = 8192, alignment = 4 }, { name = "source_mean", type_name = "float[5][2]", array_extent = 10, offset = 8208, size = 40, alignment = 4 }, { name = "source_var", type_name = "float[5][2]", array_extent = 10, offset = 8248, size = 40, alignment = 4 }, { name = "source_weight", type_name = "float[5]", array_extent = 5, offset = 8288, size = 20, alignment = 4 }, { name = "target_hist", type_name = "int32_t[2048]", array_extent = 2048, offset = 8308, size = 8192, alignment = 4 }, { name = "target_mean", type_name = "float[5][2]", array_extent = 10, offset = 16500, size = 40, alignment = 4 }, { name = "target_var", type_name = "float[5][2]", array_extent = 10, offset = 16540, size = 40, alignment = 4 }, { name = "target_weight", type_name = "float[5]", array_extent = 5, offset = 16580, size = 20, alignment = 4 }], padding = [], total_size = 16600, alignment = 4, layout_hash = "13b3f33e43a71e2271131080ae3a8780b5b4fdc322364e2c56821188fe7b5ab4", difference_from = [] },
+  { target = "x86_64-pc-windows-msvc", c_abi_model = "x86_64-pc-windows-msvc", endianness = "little", pointer_width = 64, fields = [{ name = "flag", type_name = "dt_iop_colormapping_flag_t", enum_identity = "dt_iop_colormapping_flag_t", offset = 0, size = 4, alignment = 4 }, { name = "n", type_name = "int32_t", offset = 4, size = 4, alignment = 4 }, { name = "dominance", type_name = "float", offset = 8, size = 4, alignment = 4 }, { name = "equalization", type_name = "float", offset = 12, size = 4, alignment = 4 }, { name = "source_ihist", type_name = "float[2048]", array_extent = 2048, offset = 16, size = 8192, alignment = 4 }, { name = "source_mean", type_name = "float[5][2]", array_extent = 10, offset = 8208, size = 40, alignment = 4 }, { name = "source_var", type_name = "float[5][2]", array_extent = 10, offset = 8248, size = 40, alignment = 4 }, { name = "source_weight", type_name = "float[5]", array_extent = 5, offset = 8288, size = 20, alignment = 4 }, { name = "target_hist", type_name = "int32_t[2048]", array_extent = 2048, offset = 8308, size = 8192, alignment = 4 }, { name = "target_mean", type_name = "float[5][2]", array_extent = 10, offset = 16500, size = 40, alignment = 4 }, { name = "target_var", type_name = "float[5][2]", array_extent = 10, offset = 16540, size = 40, alignment = 4 }, { name = "target_weight", type_name = "float[5]", array_extent = 5, offset = 16580, size = 20, alignment = 4 }], padding = [], total_size = 16600, alignment = 4, layout_hash = "a79eb8783a6cabd951ee75a69840e96c8ca065012ae32f4396df6b3ac30befb5", difference_from = [] },
+]
+codec = { byte_size = 16600, decoder = "rusttable.colormapping.decode.v1", encoder = "rusttable.colormapping.encode.v1", byte_order = "little", fields = [{ name = "flag", kind = "i32-enum", offset = 0, size = 4, enum_values = [{ name = "neutral", value = 0 }, { name = "has_source", value = 1 }, { name = "has_target", value = 2 }, { name = "acquire", value = 4 }, { name = "get_source", value = 8 }, { name = "get_target", value = 16 }] }, { name = "n", kind = "i32", offset = 4, size = 4 }, { name = "dominance", kind = "f32", offset = 8, size = 4 }, { name = "equalization", kind = "f32", offset = 12, size = 4 }, { name = "source_ihist", kind = "f32-array", offset = 16, size = 8192, array_extent = 2048 }, { name = "source_mean", kind = "f32-array", offset = 8208, size = 40, array_extent = 10 }, { name = "source_var", kind = "f32-array", offset = 8248, size = 40, array_extent = 10 }, { name = "source_weight", kind = "f32-array", offset = 8288, size = 20, array_extent = 5 }, { name = "target_hist", kind = "i32-array", offset = 8308, size = 8192, array_extent = 2048 }, { name = "target_mean", kind = "f32-array", offset = 16500, size = 40, array_extent = 10 }, { name = "target_var", kind = "f32-array", offset = 16540, size = 40, array_extent = 10 }, { name = "target_weight", kind = "f32-array", offset = 16580, size = 20, array_extent = 5 }], preserves_padding = true, format = "darktable.native-le.v1" }
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colormapping.c"
@@ -4607,8 +4631,17 @@ reason = "WGPU may replace OpenCL local-memory and object-lifecycle mechanics, s
 [[operation]]
 name = "colortransfer"
 module_version = 1
-parameter_size = 92
-parameter_layout_hash = "c4f06a38c28838e62be19864d95b0621bec05b06852f024cd3f96f2a5d936e62"
+parameter_size = 8280
+parameter_layout_hash = "291eb0dc486255d733b5f8c68ae2d210e9889d8d0e96db37384b18754ef818dc"
+parameter_decoder = "rusttable.colortransfer.decode.v1"
+default_enabled = false
+default_order = 104
+multi_instance = false
+supports_blend_masks = false
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "full-frame"
 
 [[operation.evidence]]
 field = "registration"
@@ -4646,11 +4679,17 @@ line_end = 118
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 92
-layout_hash = "ec4b9039748b2c78b1731bc3096d7154d04e63589a56374467796ca0013ab427"
-decoder = "opaque"
-opaque_blocking = true
+byte_size = 8280
+layout_hash = "291eb0dc486255d733b5f8c68ae2d210e9889d8d0e96db37384b18754ef818dc"
+decoder = "rusttable.colortransfer.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.colortransfer.params.v1"
+abi_layouts = [
+  { target = "x86_64-unknown-linux-gnu", c_abi_model = "x86_64-unknown-linux-gnu", endianness = "little", pointer_width = 64, fields = [{ name = "flag", type_name = "dt_iop_colortransfer_flag_t", enum_identity = "dt_iop_colortransfer_flag_t", offset = 0, size = 4, alignment = 4 }, { name = "hist", type_name = "float[2048]", array_extent = 2048, offset = 4, size = 8192, alignment = 4 }, { name = "mean", type_name = "float[5][2]", array_extent = 10, offset = 8196, size = 40, alignment = 4 }, { name = "var", type_name = "float[5][2]", array_extent = 10, offset = 8236, size = 40, alignment = 4 }, { name = "n", type_name = "int32_t", offset = 8276, size = 4, alignment = 4 }], padding = [], total_size = 8280, alignment = 4, layout_hash = "6185c59d80b7cb58a6de9ba90f32f657e7dca69d44f415d0e8c3772997ef5832", difference_from = [] },
+  { target = "aarch64-apple-darwin", c_abi_model = "aarch64-apple-darwin", endianness = "little", pointer_width = 64, fields = [{ name = "flag", type_name = "dt_iop_colortransfer_flag_t", enum_identity = "dt_iop_colortransfer_flag_t", offset = 0, size = 4, alignment = 4 }, { name = "hist", type_name = "float[2048]", array_extent = 2048, offset = 4, size = 8192, alignment = 4 }, { name = "mean", type_name = "float[5][2]", array_extent = 10, offset = 8196, size = 40, alignment = 4 }, { name = "var", type_name = "float[5][2]", array_extent = 10, offset = 8236, size = 40, alignment = 4 }, { name = "n", type_name = "int32_t", offset = 8276, size = 4, alignment = 4 }], padding = [], total_size = 8280, alignment = 4, layout_hash = "dd4ec0cbce0b4a075b4bad18b6a8736f14de2926a79aa469482e9bfb28676cd9", difference_from = [] },
+  { target = "x86_64-pc-windows-msvc", c_abi_model = "x86_64-pc-windows-msvc", endianness = "little", pointer_width = 64, fields = [{ name = "flag", type_name = "dt_iop_colortransfer_flag_t", enum_identity = "dt_iop_colortransfer_flag_t", offset = 0, size = 4, alignment = 4 }, { name = "hist", type_name = "float[2048]", array_extent = 2048, offset = 4, size = 8192, alignment = 4 }, { name = "mean", type_name = "float[5][2]", array_extent = 10, offset = 8196, size = 40, alignment = 4 }, { name = "var", type_name = "float[5][2]", array_extent = 10, offset = 8236, size = 40, alignment = 4 }, { name = "n", type_name = "int32_t", offset = 8276, size = 4, alignment = 4 }], padding = [], total_size = 8280, alignment = 4, layout_hash = "62a1c3dae0b111899e83665f66809bdf8e1381c610420221d6ea649cfa9aaf14", difference_from = [] },
+]
+codec = { byte_size = 8280, decoder = "rusttable.colortransfer.decode.v1", encoder = "rusttable.colortransfer.encode.v1", byte_order = "little", fields = [{ name = "flag", kind = "i32-enum", offset = 0, size = 4, enum_values = [{ name = "acquire", value = 0 }, { name = "acquire2", value = 1 }, { name = "acquire3", value = 2 }, { name = "acquired", value = 3 }, { name = "apply", value = 4 }, { name = "neutral", value = 5 }] }, { name = "hist", kind = "f32-array", offset = 4, size = 8192, array_extent = 2048 }, { name = "mean", kind = "f32-array", offset = 8196, size = 40, array_extent = 10 }, { name = "var", kind = "f32-array", offset = 8236, size = 40, array_extent = 10 }, { name = "n", kind = "i32", offset = 8276, size = 4 }], preserves_padding = true, format = "darktable.native-le.v1" }
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
 source_path = "src/iop/colortransfer.c"
@@ -8221,6 +8260,15 @@ name = "levels"
 module_version = 2
 parameter_size = 28
 parameter_layout_hash = "b7dcce3cb8910c7dbebb57300b34d1903b509f53093e2f588a029bcf04014d6d"
+parameter_decoder = "rusttable.levels.decode.v2"
+default_enabled = false
+default_order = 125
+multi_instance = true
+supports_blend_masks = false
+input_color_space = "LabD50"
+output_color_space = "LabD50"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -8280,10 +8328,10 @@ line_end = 476
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 264
+byte_size = 16
 layout_hash = "9024b04b5791ef52ba24caa9a6a92b8927ec0239b917cab9a0502b0675cf4cb5"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.levels.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.levels.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -8299,8 +8347,8 @@ evidence_hash = "5d14581268c43b62484a17aaa5a3482612d26644c5c37ba1d86bf8a654ad0c0
 version = 2
 byte_size = 28
 layout_hash = "55c5d03eee92b554ed23e9937410826573cd52d56aa3434a7d7d6de3697bc8b8"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.levels.decode.v2"
+opaque_blocking = false
 fixture_id = "operation.levels.params.v2"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"
@@ -10079,8 +10127,17 @@ evidence_hash = "e656102350f8c5bd6f8c496d8de85b195b8bbd0d05f563cf63262e4f7c2861a
 [[operation]]
 name = "rgblevels"
 module_version = 1
-parameter_size = 20
+parameter_size = 44
 parameter_layout_hash = "4b91591263ca988f727d3b6a7eb17ca59f8224009ffaed418eedd38ea0ee3a1b"
+parameter_decoder = "rusttable.rgblevels.decode.v1"
+default_enabled = false
+default_order = 126
+multi_instance = true
+supports_blend_masks = false
+input_color_space = "scene-linear"
+output_color_space = "scene-linear"
+roi_behavior = "identity"
+tiling_requirement = "tiled"
 
 [[operation.evidence]]
 field = "registration"
@@ -10129,10 +10186,10 @@ line_end = 938
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 20
+byte_size = 44
 layout_hash = "78367ee700aeaf7d397d57e9a61fef57ed1a5a367dffce8d705681e4e0e94a76"
-decoder = "opaque"
-opaque_blocking = true
+decoder = "rusttable.rgblevels.decode.v1"
+opaque_blocking = false
 fixture_id = "operation.rgblevels.params.v1"
 [operation.parameter_versions.evidence]
 source_commit = "cfe57f3bbf5269bfacf31e832267279caa6938ad"

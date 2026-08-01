@@ -95,7 +95,7 @@ impl SharpenTilingPlan {
         if !parameter_radius.is_finite() {
             return Err(SharpenTilingError::NonFiniteRadius);
         }
-        if !(0.0..=99.0).contains(&parameter_radius) {
+        if parameter_radius < 0.0 {
             return Err(SharpenTilingError::RadiusOutOfRange);
         }
         let committed_radius = parameter_radius * SHARPEN_RADIUS_MULTIPLIER;
@@ -109,10 +109,13 @@ impl SharpenTilingPlan {
         roi_scale: f32,
         input_scale: f32,
     ) -> Result<Self, SharpenTilingError> {
-        if !committed_radius.is_finite() {
+        // A finite persisted radius can overflow to positive infinity in the
+        // native f32 commit multiplication. `ceilf(+inf)` then reaches the
+        // `MIN(MAXR, ...)` cap, so only NaN remains invalid at this seam.
+        if committed_radius.is_nan() {
             return Err(SharpenTilingError::NonFiniteRadius);
         }
-        if !(0.0..=99.0 * SHARPEN_RADIUS_MULTIPLIER).contains(&committed_radius) {
+        if committed_radius < 0.0 {
             return Err(SharpenTilingError::RadiusOutOfRange);
         }
         Self::resolve(
@@ -140,13 +143,13 @@ impl SharpenTilingPlan {
         // Preserve sharpen.c's operation order: d->radius * roi_in->scale /
         // piece->iscale, followed by ceilf and MIN(MAXR, ...).
         let scaled_radius = committed_radius * roi_scale / input_scale;
-        if !scaled_radius.is_finite() {
+        if scaled_radius.is_nan() || scaled_radius < 0.0 {
             return Err(SharpenTilingError::ArithmeticOverflow);
         }
-        let radius = if scaled_radius >= 12.0 {
+        let radius = if scaled_radius >= SHARPEN_MAX_RADIUS as f32 {
             SHARPEN_MAX_RADIUS
         } else {
-            // The validated value is finite, nonnegative, and below 12.
+            // The validated value is nonnegative and below the native cap.
             scaled_radius.ceil() as u32
         };
 
@@ -299,7 +302,7 @@ impl fmt::Display for SharpenTilingError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::NonFiniteRadius => "sharpen radius must be finite",
-            Self::RadiusOutOfRange => "sharpen radius is outside the native parameter range",
+            Self::RadiusOutOfRange => "sharpen radius must be non-negative",
             Self::InvalidRoiScale => "sharpen ROI scale must be finite and positive",
             Self::InvalidInputScale => "sharpen input scale must be finite and positive",
             Self::InvalidImageDimensions => "sharpen image dimensions must be nonzero",

@@ -55,6 +55,56 @@ fn operation(id: u128, key: &str, parameters: &[(&str, f64)]) -> Operation {
     .expect("operation")
 }
 
+#[test]
+fn larger_tonal_set_registers_typed_cpu_factories_with_honest_capabilities() {
+    let registry = builtin_registry();
+    let colortransfer = registry
+        .definition("rusttable.colortransfer")
+        .expect("Color Transfer definition");
+    assert!(
+        colortransfer
+            .descriptor()
+            .flags
+            .contains(OperationFlags::FULL_IMAGE)
+    );
+    assert!(
+        colortransfer
+            .descriptor()
+            .flags
+            .contains(OperationFlags::ANALYSIS)
+    );
+    assert!(colortransfer.gpu().is_none());
+    assert!(!colortransfer.ui_availability().is_usable());
+
+    let colormapping = registry
+        .definition("rusttable.colormapping")
+        .expect("Color Mapping definition");
+    assert!(
+        colormapping
+            .descriptor()
+            .flags
+            .contains(OperationFlags::TILEABLE)
+    );
+    assert!(!colormapping.descriptor().mask_blend.consumes_mask);
+    assert!(colormapping.gpu().is_none());
+    assert!(!colormapping.ui_availability().is_usable());
+
+    let transfer = registry
+        .prepare_cpu(&operation(50, "rusttable.colortransfer", &[]))
+        .expect("default Color Transfer factory");
+    assert!(matches!(
+        transfer.operation().kind(),
+        ProcessingOperationKind::ColorTransfer { .. }
+    ));
+    let mapping = registry
+        .prepare_cpu(&operation(51, "rusttable.colormapping", &[]))
+        .expect("default Color Mapping factory");
+    assert!(matches!(
+        mapping.operation().kind(),
+        ProcessingOperationKind::ColorMapping { .. }
+    ));
+}
+
 fn missing_cpu_definition() -> OperationDefinition {
     let builtin = &builtin_registry().definitions()[0];
     OperationDefinition::new(

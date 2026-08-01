@@ -241,6 +241,57 @@ fn mixed_exposure_sharpen_vibrance_executes_in_authored_order_and_tiles_exactly(
 }
 
 #[test]
+fn rgb_levels_and_sharpen_execute_in_both_authored_orders() {
+    let executor = CpuPixelpipeExecutor;
+    for (label, operations, expected_order) in [
+        (
+            "RGB Levels before Sharpen",
+            vec![
+                scalar_operation(63, "rusttable.rgblevels", &[("autoscale", 1.0)]),
+                sharpen_operation(64, 1.6, 0.7, 0.025),
+            ],
+            [63, 64],
+        ),
+        (
+            "Sharpen before RGB Levels",
+            vec![
+                sharpen_operation(64, 1.6, 0.7, 0.025),
+                scalar_operation(63, "rusttable.rgblevels", &[("autoscale", 1.0)]),
+            ],
+            [64, 63],
+        ),
+    ] {
+        let snapshot = CpuPixelpipeSnapshot::new(
+            linear_input(23, 17),
+            graph_from_operations(operations),
+            CpuPixelpipeOutputMode::FullExport,
+        );
+        let full = executor.execute(&snapshot).unwrap_or_else(|error| {
+            panic!("{label} must execute through the mixed RGB/Lab route: {error:?}")
+        });
+        let tiled = executor
+            .execute_tiled(&snapshot, CpuTilePlan::new(5, 4).expect("tile plan"))
+            .unwrap_or_else(|error| panic!("{label} tiled execution failed: {error:?}"));
+
+        assert_eq!(tiled.image(), full.image(), "{label}");
+        assert_eq!(
+            full.receipt()
+                .nodes()
+                .iter()
+                .map(|node| node.operation_id().get())
+                .collect::<Vec<_>>(),
+            expected_order,
+            "{label}"
+        );
+        assert!(full.image().pixels().iter().all(|pixel| {
+            [pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()]
+                .into_iter()
+                .all(f32::is_finite)
+        }));
+    }
+}
+
+#[test]
 fn nonunit_scale_multiple_neighborhoods_match_full_and_tiled_execution() {
     let scale = CpuPixelpipeScaleContext::new(0.5, 1.0).expect("native scale context");
     let snapshot = CpuPixelpipeSnapshot::new(
@@ -318,7 +369,9 @@ fn production_lab_route_matches_native_luma_equation_and_physical_borders() {
         .image()
         .clone();
 
-    let sigma2 = (1.6_f32 * 2.5).powi(2) / (2.5_f32 * 2.5);
+    let committed_radius = 2.5_f32 * 1.6_f32;
+    let effective_radius = f64::from(committed_radius);
+    let sigma2 = ((1.0_f64 / (2.5_f64 * 2.5_f64)) * effective_radius * effective_radius) as f32;
     let mut kernel = (0..=RADIUS * 2)
         .map(|offset| {
             let distance = offset as f32 - RADIUS as f32;
