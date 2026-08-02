@@ -5,6 +5,10 @@
 //! `src/gui/draw.h`, and `src/common/curve_tools.c`.
 
 #![forbid(unsafe_code)]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Darktable's color conversions and LUT interpolation preserve separate f32 multiply/add rounding"
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -250,13 +254,13 @@ impl CompiledToneCurveSet {
         }
     }
 
-    fn left_coefficients(&self, channel: usize) -> [f32; 3] {
+    const fn left_coefficients(&self, channel: usize) -> [f32; 3] {
         self.channels[channel].left_coefficients
     }
 }
 
 impl CompiledToneCurve {
-    fn with_left_coefficients(mut self, left_coefficients: [f32; 3]) -> Self {
+    const fn with_left_coefficients(mut self, left_coefficients: [f32; 3]) -> Self {
         self.left_coefficients = left_coefficients;
         self
     }
@@ -402,7 +406,9 @@ fn estimate_exp(x: [f32; 4], y: [f32; 4]) -> Result<[f32; 3], CurveCompileError>
         let yy = y[index] / y0;
         let xx = x[index] / x0;
         if yy > 0.0 && xx > 0.0 {
-            exponent += (y[index] / y0).ln() / (x[index] / x0).ln();
+            let y_log = (y[index] / y0).ln();
+            let x_log = (x[index] / x0).ln();
+            exponent += y_log / x_log;
             count += 1;
         }
     }
@@ -446,7 +452,7 @@ fn apply_profile_trc(value: f32, lut: &[f32], coefficients: [f32; 3], lut_size: 
     }
 }
 
-pub(crate) fn xyz_to_lab(xyz: [f32; 3], lab: &mut [f32; 3]) {
+pub(super) fn xyz_to_lab(xyz: [f32; 3], lab: &mut [f32; 3]) {
     let d50_inv = [1.0_f32 / 0.9642_f32, 1.0_f32, 1.0_f32 / 0.8249_f32];
     let epsilon = 216.0_f32 / 24389.0_f32;
     let kappa = 24389.0_f32 / 27.0_f32;
@@ -468,7 +474,7 @@ pub(crate) fn xyz_to_lab(xyz: [f32; 3], lab: &mut [f32; 3]) {
     }
 }
 
-pub(crate) fn lab_to_xyz(lab: [f32; 3], xyz: &mut [f32; 3]) {
+pub(super) fn lab_to_xyz(lab: [f32; 3], xyz: &mut [f32; 3]) {
     let f = [lab[1], lab[0], lab[2]];
     let offset = [0.0_f32, 16.0_f32, 0.0_f32];
     let coeff = [
@@ -511,13 +517,13 @@ fn xyz_to_prophoto(xyz: [f32; 3], rgb: &mut [f32; 3]) {
     rgb[2] = 1.2118128_f32 * xyz[2];
 }
 
-pub(crate) fn prophoto_to_lab(rgb: [f32; 3], lab: &mut [f32; 3]) {
+pub(super) fn prophoto_to_lab(rgb: [f32; 3], lab: &mut [f32; 3]) {
     let mut xyz = [0.0_f32; 3];
     prophoto_to_xyz(rgb, &mut xyz);
     xyz_to_lab(xyz, lab);
 }
 
-pub(crate) fn lab_to_prophoto(lab: [f32; 3], rgb: &mut [f32; 3]) {
+pub(super) fn lab_to_prophoto(lab: [f32; 3], rgb: &mut [f32; 3]) {
     let mut xyz = [0.0_f32; 3];
     lab_to_xyz(lab, &mut xyz);
     xyz_to_prophoto(xyz, rgb);

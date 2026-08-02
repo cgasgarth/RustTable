@@ -32,7 +32,7 @@ use tonecurve::{
 
 const PRODUCER_FIXTURE: &str = include_str!("fixtures/tonecurve/producers.txt");
 
-fn node(x: f32, y: f32) -> ToneCurveNode {
+const fn node(x: f32, y: f32) -> ToneCurveNode {
     ToneCurveNode::new(x, y)
 }
 
@@ -493,7 +493,7 @@ fn runtime_commit_order_and_deferred_surfaces_remain_explicit() {
     );
     let mut changed = defaults.clone();
     changed.tonecurve_type = [ToneCurveType::CubicSpline; CHANNELS];
-    runtime.commit_params(changed.clone(), true);
+    runtime.commit_params(changed, true);
     assert!(runtime.request_histogram());
     let _ = runtime.plan(None).unwrap();
     assert!(runtime.lut_is_built());

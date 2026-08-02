@@ -5,6 +5,10 @@
 //! dispatch, GPU, GTK, blending, and presets remain unavailable seams.
 
 #![forbid(unsafe_code)]
+#![expect(
+    clippy::suboptimal_flops,
+    reason = "Darktable's RGB norm equations preserve separate f32 multiply/add rounding"
+)]
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -362,7 +366,7 @@ pub struct ToneCurveRuntime {
 
 impl ToneCurveRuntime {
     #[must_use]
-    pub fn new(parameters: ToneCurveParametersV5) -> Self {
+    pub const fn new(parameters: ToneCurveParametersV5) -> Self {
         Self {
             parameters,
             compiled: None,
