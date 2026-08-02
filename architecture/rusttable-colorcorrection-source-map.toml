@@ -1,0 +1,543 @@
+schema = "rusttable.colorcorrection-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+rusttable_baseline = "7aaec20b8c845df5607e864130e23e643381d313"
+complete_native_source_read = true
+bounded_leaf_only = true
+production_routing_claimed = false
+
+direct_sources = [
+  "src/iop/colorcorrection.c",
+  "src/iop/iop_api.h",
+  "src/common/module_api.h",
+  "src/common/darktable.h",
+  "src/common/darktable.c",
+  "src/common/dttypes.h",
+  "src/develop/format.c",
+  "src/develop/imageop.h",
+  "src/develop/imageop.c",
+  "src/develop/imageop_gui.c",
+  "src/common/imagebuf.c",
+  "src/develop/tiling.c",
+  "src/develop/tiling.h",
+  "src/develop/pixelpipe_hb.c",
+  "src/develop/pixelpipe_cache.c",
+  "src/common/introspection.h",
+  "src/common/colorspaces.h",
+  "src/develop/blend.h",
+  "src/gui/presets.h",
+  "data/kernels/basic.cl",
+  "data/kernels/common.h",
+  "data/kernels/programs.conf",
+  "src/tests/benchmark/darktable-bench-3.4.xmp",
+  "CMakeLists.txt",
+  "DefineOptions.cmake",
+  "src/CMakeLists.txt",
+  "cmake/march-mtune.cmake",
+  "packaging/macosx/2_build_hb_darktable_default.sh",
+]
+
+[inventory]
+native_functions = [
+  "name",
+  "description",
+  "flags",
+  "default_group",
+  "default_colorspace",
+  "init_presets",
+  "process",
+  "process_cl",
+  "init_global",
+  "cleanup_global",
+  "commit_params",
+  "init_pipe",
+  "cleanup_pipe",
+  "gui_update",
+  "gui_init",
+  "gui_cleanup",
+  "dt_iop_colorcorrection_draw",
+  "dt_iop_colorcorrection_motion_notify",
+  "dt_iop_colorcorrection_button_press",
+  "dt_iop_colorcorrection_leave_notify",
+  "dt_iop_colorcorrection_scrolled",
+  "dt_iop_colorcorrection_key_press",
+]
+native_constants = [
+  "DT_MODULE_INTROSPECTION(1, dt_iop_colorcorrection_params_t)",
+  "DT_COLORCORRECTION_INSET = DT_PIXEL_APPLY_DPI(5)",
+  "DT_COLORCORRECTION_MAX = 40.0",
+  "COLORCORRECTION_DEFAULT_STEP = 0.5f",
+  "grid cells = 8",
+  "grid Lab L = 53.390011",
+  "saturation scroll delta = 0.1",
+  "OpenCL program = 2 (basic.cl)",
+  "OpenCL kernel = colorcorrection",
+  "default_tiling_callback identity ROI factor = factor_cl = 2.0",
+  "default_tiling_callback maxbuf = maxbuf_cl = 1.0",
+  "default_tiling_callback overhead = overlap = 0 and upper-left coordinate align = 1",
+  "default CMAKE_BUILD_TYPE = RelWithDebInfo when unspecified",
+  "non-custom Debug C flags append -O0; every Debug C build appends -D_DEBUG; GNU also appends -g3 -ggdb3",
+  "non-custom RelWithDebInfo C flags append -O2 -ftree-vectorize",
+  "non-custom Release C flags append -O3, contiguous -ffast + -math, and -fno-finite-math-only; GNU also appends -fexpensive-optimizations",
+  "process DT_IS_ALIGNED input/output = __builtin_assume_aligned(pointer, DT_CACHELINE_BYTES)",
+  "process DT_OMP_FOR() = OpenMP parallel-for default(firstprivate) schedule(static), or no pragma without _OPENMP",
+  "pixelpipe_hb output bufsize = bpp * roi_out.width * roi_out.height; default four-f32 Lab bpp = 16",
+  "pixelpipe_hb checks input/output DT_CACHELINE_BYTES alignment before CPU module dispatch",
+  "pixelpipe_cache owns requested-size cachelines, allocates/reallocates with dt_alloc_aligned, frees with dt_free_align, and accounts requested payload bytes",
+  "dt_tiling_piece_fits_host_memory computes float factor * width * height * bpp + overhead in f32 before size_t conversion",
+  "DT_CACHELINE_BYTES = 128 on Apple aarch64 and 64 otherwise; one cache line is 8 or 4 sixteen-byte pixels",
+  "DT_IS_ALIGNED_PIXEL = __builtin_assume_aligned(pointer, 16); DT_ALIGNED_PIXEL / dt_aligned_pixel_t = 16-byte-aligned four-float pixel",
+  "generic dt_alloc_aligned tail padding maxima = 127/63 bytes; Color Correction 16-byte-multiple raster requests tighten them to 112/48 bytes",
+  "custom-grid hia/hib/loa/lob have no Bauhaus numeric precision; generated saturation slider digits formula yields 2",
+]
+parameter_abi = "v1: five contiguous native f32 fields, 20 bytes on the retained ABI"
+parameter_order = ["hia", "hib", "loa", "lob", "saturation"]
+parameter_defaults = ["hia=+0/0x00000000", "hib=+0/0x00000000", "loa=+0/0x00000000", "lob=+0/0x00000000", "saturation=1/0x3f800000"]
+committed_order = ["a_scale", "a_base", "b_scale", "b_base", "saturation"]
+kernel_argument_order = ["saturation", "a_scale", "a_base", "b_scale", "b_base"]
+migration_edges = []
+native_name = "color correction"
+native_description = [
+  "correct white balance selectively for blacks and whites",
+  "corrective or creative",
+  "non-linear, Lab, display-referred",
+  "non-linear, Lab",
+  "non-linear, Lab, display-referred",
+]
+default_groups = ["color", "grading"]
+default_colorspace = "Lab"
+flags = ["include-in-styles", "supports-blending", "allow-tiling"]
+preset_order = ["warm tone", "warming filter", "cooling filter"]
+preset_tuples_v1_field_order = [
+  "warm tone: hia=0x00000000 hib=0x40400000 loa=0x00000000 lob=0x00000000 saturation=0x3f800000 enabled=true blend=DEVELOP_BLEND_CS_RGB_DISPLAY",
+  "warming filter: hia=0xbf733333 hib=0x40900000 loa=0x40633333 lob=0x00000000 saturation=0x3f800000 enabled=true blend=DEVELOP_BLEND_CS_RGB_DISPLAY",
+  "cooling filter: hia=0x3f733333 hib=0xc0900000 loa=0xc0633333 lob=0x80000000 saturation=0x3f800000 enabled=true blend=DEVELOP_BLEND_CS_RGB_DISPLAY",
+]
+benchmark_stack_neighbors = ["bilat instance 1", "colorcorrection instance 0", "colorcontrast instance 0"]
+native_source_equations = [
+  "a_scale = (hia - loa) / 100.0",
+  "a_base = loa",
+  "b_scale = (hib - lob) / 100.0",
+  "b_base = lob",
+  "out.L = in.L",
+  "out.a = saturation * (in.a + in.L * a_scale + a_base)",
+  "out.b = saturation * (in.b + in.L * b_scale + b_base)",
+  "out.channel4 = in.channel4",
+]
+rust_separate_rounding_equations = [
+  "a_scale = round_f32(f64(round_f32(hia - loa)) / 100.0_double)",
+  "b_scale = round_f32(f64(round_f32(hib - lob)) / 100.0_double)",
+  "scaled = round_f32(in.L * scale)",
+  "with_input = round_f32(opponent + scaled)",
+  "with_base = round_f32(with_input + base)",
+  "out.opponent = round_f32(saturation * with_base)",
+]
+
+[callback_provenance.module_api_defaults]
+origin = "src/common/module_api.h DEFAULT macro and src/iop/iop_api.h callback declarations"
+loader_rule = "if a DEFAULT module symbol is absent, assign the corresponding default_<function_name> callback"
+colorcorrection_required_symbols = ["name", "default_colorspace", "process"]
+colorcorrection_optional_symbols_defined = ["init_presets", "init_global", "cleanup_global", "gui_update", "gui_init", "gui_cleanup", "process_cl"]
+colorcorrection_default_symbols_defined = ["default_group", "flags", "description", "init_pipe", "commit_params", "cleanup_pipe"]
+colorcorrection_default_symbols_omitted = ["aliases", "deprecated_msg", "operation_tags", "operation_tags_filter", "input_format", "output_format", "input_colorspace", "output_colorspace", "blend_colorspace", "tiling_callback", "cleanup", "process_tiling", "process_tiling_cl"]
+introspection_default_symbols = "get_introspection/get_introspection_linear/get_p/get_f are supplied through the retained introspection generation path"
+local_default_evidence_used = ["four-channel float Lab input/output", "identity ROI tiling values"]
+shared_default_behavior_deferred = ["aliases/deprecation/tags", "blend colorspace integration", "module cleanup integration", "host/OpenCL tiled dispatch"]
+status = "source-evidence-only"
+
+[format_provenance.default_four_channel_lab]
+origin = "src/develop/format.c default_input_format/default_output_format reached through src/common/module_api.h fallback"
+channels = 4
+datatype = "TYPE_FLOAT"
+colorspace_route = "default input/output colorspace delegates to colorcorrection default_colorspace, IOP_CS_LAB"
+rust_boundary = "ColorCorrectionPixel plus local descriptor lab-f32x4 / LabD50 IO"
+status = "implemented-local-typed-boundary"
+
+[copy_provenance.wrong_format_roi]
+origin = "src/develop/imageop.c dt_iop_have_required_input_format calls src/common/imagebuf.c dt_iop_copy_image_roi with MIN(actual_channels, 4)"
+semantics = [
+  "equal width and height: copy the complete buffer",
+  "contained output ROI: copy each row from dx=roi_out.x-roi_in.x and dy=roi_out.y-roi_in.y",
+  "partially unavailable output ROI: copy available source locations and zero-fill unavailable locations",
+  "publish unsupported-input trouble and return false after copy-through",
+]
+rust_boundary = "typed four-channel Lab input rejects the wrong-format route before this shared adapter"
+status = "shared-roi-copy-deferred"
+
+[ui_precision_provenance.native_controls]
+origin = "src/iop/colorcorrection.c::gui_init and custom-grid callbacks; src/develop/imageop_gui.c::dt_bauhaus_slider_from_params"
+endpoint_parameters = ["hia", "hib", "loa", "lob"]
+endpoint_control = "custom drawing-area coordinates manipulated directly by pointer and key callbacks"
+endpoint_bauhaus_slider_created = false
+endpoint_native_numeric_precision = "none"
+endpoint_descriptor_precision = 0
+endpoint_descriptor_precision_status = "explicitly-deferred Rust placeholder; not a native UI contract"
+saturation_control = "dt_bauhaus_slider_from_params(self, N_(\"saturation\"))"
+saturation_introspection_range = [-3.0, 3.0]
+saturation_digits_formula = "MAX(2, -floorf(log10f(top/100)+.1)), top=fminf(max-min,fmaxf(fabsf(min),fabsf(max)))"
+saturation_formula_top = 3.0
+saturation_native_numeric_precision = 2
+status = "native saturation evidence plus deferred endpoint adaptation"
+
+[arithmetic_provenance.native_build_selection]
+origin = "root CMakeLists.txt; src/CMakeLists.txt"
+default_when_unspecified = "RelWithDebInfo"
+common_non_custom_profile_additions = ["compiler/target-derived MARCH", "-g"]
+custom_cflags_boundary = "profile optimization additions are inside NOT CUSTOM_CFLAGS; Debug -D_DEBUG is appended outside that conditional"
+compiler_toolchain_defaults_inventoried_as_fixed_flags = false
+
+[arithmetic_provenance.native_debug]
+origin = "src/CMakeLists.txt"
+build_type = "Debug"
+non_custom_c_flag_additions = ["-O0"]
+always_c_flag_additions = ["-D_DEBUG"]
+gnu_only_additions = ["-g3", "-ggdb3"]
+fast_math_added_by_repository = false
+portable_contraction_or_output_bits_claimed = false
+notes = "-O0/_DEBUG are inventoried source facts, not a claim that every compiler/target emits one portable sequence or signed-zero result."
+
+[arithmetic_provenance.native_default_relwithdebinfo]
+origin = "root CMakeLists.txt default selection; src/CMakeLists.txt profile additions"
+build_type = "RelWithDebInfo"
+selected_when_build_type_unspecified = true
+non_custom_c_flag_additions = ["-O2", "-ftree-vectorize"]
+fast_math_added_by_repository = false
+portable_contraction_or_output_bits_claimed = false
+notes = "Optimization, vectorization, compiler defaults, and target features leave contraction and emitted bits compiler/profile dependent even without the Release fast-math addition."
+
+[arithmetic_provenance.native_release]
+origin = "DefineOptions.cmake; src/CMakeLists.txt; cmake/march-mtune.cmake; packaging/macosx/2_build_hb_darktable_default.sh"
+build_type = "Release"
+custom_cflags_default = false
+appended_c_flags_except_fast_math = ["-O3", "-fno-finite-math-only"]
+fast_math_flag_fragments = ["-ffast", "-math"]
+fast_math_flag_reconstruction = "concatenate the two fragments with no separator"
+gnu_only_extra = "-fexpensive-optimizations"
+target_selection = "non-package AppleClang/default builds probe -march=native; emitted FMA instructions therefore remain compiler and target dependent"
+source_expression_allows = ["FMA contraction", "reassociation", "signed-zero algebraic transformation"]
+portable_source_order_bits_claimed = false
+optimized_native_signed_zero_equivalence_claimed = false
+notes = "The packaging helper's explicit Release request is not the root CMake default; Release remains one compiler/target-dependent native profile."
+
+[arithmetic_provenance.rust_cpu_adaptation]
+origin = "architecture/rusttable-numerics.toml forbids global fast-math and requires registration of every explicit .mul_add path"
+profile = "SeparateRoundings"
+explicit_mul_add_used = false
+exact_native_debug_bits_claimed = false
+exact_native_relwithdebinfo_bits_claimed = false
+exact_native_release_bits_claimed = false
+signed_zero_scope = "history/config/committed coefficient bits are not canonicalized; L and channel four are copied bit-for-bit; computed opponent zero signs follow the explicit separate f32 stages"
+discriminator = "hia=0x40f3f724 loa=0xbd4957c7 saturation=0x4023832c L=0x42c3c571 a=0xc2b3cff2"
+committed_a_scale_bits = "0x3d9d2503"
+chosen_output_a_bits = "0xc352a2c4"
+contracted_output_a_bits = "0xc352a2c3"
+notes = "The leaf deliberately selects a portable Rust SeparateRoundings adaptation rather than claiming either compiler-dependent native contraction outcome. The one-ULP discriminator stays hard-coded and both debug and release Rust tests assert the chosen bits."
+
+[execution_provenance.native_cpu_loop]
+origin = "src/iop/colorcorrection.c::process; src/common/darktable.h; src/common/dttypes.h"
+pointer_provider = "DT_IS_ALIGNED(x) expands to __builtin_assume_aligned(x, DT_CACHELINE_BYTES)"
+input_pointer_assumption = "DT_CACHELINE_BYTES"
+output_pointer_assumption = "DT_CACHELINE_BYTES"
+cacheline_bytes_apple_aarch64 = 128
+cacheline_bytes_other = 64
+aligned_pixel_assumption_provider = "src/common/darktable.h DT_IS_ALIGNED_PIXEL(x) expands to __builtin_assume_aligned(x, 16)"
+aligned_pixel_type_provider = "src/common/dttypes.h DT_ALIGNED_PIXEL is aligned(16); dt_aligned_pixel_t is float[4] with DT_ALIGNED_PIXEL"
+aligned_pixel_bytes = 16
+loop_provider = "DT_OMP_FOR() expands to an OpenMP parallel for with default(firstprivate) and schedule(static) when _OPENMP is defined"
+without_openmp = "DT_OMP_PRAGMA is empty, so the same native loop is serial"
+status = "native-source-evidence"
+
+[execution_provenance.native_pixelpipe_buffer_ownership]
+origin = "src/develop/pixelpipe_hb.c::_dev_pixelpipe_process_rec/_pixelpipe_process_on_CPU; src/develop/pixelpipe_cache.c::dt_dev_pixelpipe_cache_get; src/common/darktable.c::dt_alloc_aligned"
+format_owner = "pixelpipe_hb gets the output buffer descriptor and derives bpp before module dispatch"
+default_four_channel_lab_bytes_per_pixel = 16
+output_request_formula = "bpp * roi_out.width * roi_out.height"
+cache_owner = "pixelpipe_cache chooses/reuses a cacheline, frees a mismatched allocation, requests dt_alloc_aligned(size), records requested size, and frees cachelines at replacement/cleanup"
+cache_accounting = "cache.size and cache.allmem track requested payload bytes, not dt_round_size allocation bytes"
+process_owner = "Color Correction borrows the input/output cacheline pointers; it neither allocates nor frees them"
+alignment_gate = "_pixelpipe_process_on_CPU checks both pointers with dt_check_aligned before calling module->process"
+cacheline_alignment_bytes_apple_aarch64 = 128
+cacheline_alignment_bytes_other = 64
+pixels_per_cacheline_apple_aarch64 = 8
+pixels_per_cacheline_other = 4
+aligned_pixel_alignment_bytes = 16
+generic_allocator_max_tail_padding_apple_aarch64 = 127
+generic_allocator_max_tail_padding_other = 63
+colorcorrection_raster_max_tail_padding_apple_aarch64 = 112
+colorcorrection_raster_max_tail_padding_other = 48
+raster_tail_bound_reason = "every request is a multiple of the 16-byte pixel payload, so the largest nonzero residue is alignment-16 rather than alignment-1"
+status = "native-source-evidence"
+
+[execution_provenance.rust_serial_vec_adaptation]
+origin = "crates/rusttable-processing/src/operations/colorcorrection/execution.rs"
+adaptation = "serial ordinary-Vec boundary; not native pixelpipe-cache ownership or aligned allocation"
+storage = "ordinary Vec<ColorCorrectionPixel> private staging raster"
+pixel_payload_bytes = 16
+required_pixel_alignment_bytes = 4
+stronger_alignment_contract = false
+cacheline_alignment_claimed = false
+aligned_pixel_16_byte_contract_claimed = false
+loop = "serial iterator loop with bounded cancellation polls"
+openmp_or_parallel_schedule_claimed = false
+status = "implemented-rust-adaptation"
+notes = "The allocator may incidentally return a more-aligned address, but the implementation requires only align_of::<ColorCorrectionPixel>() and never applies a native aligned-pointer assumption."
+
+[tiling_provenance.native_default_identity_roi]
+origin = "retained src/develop/tiling.c::default_tiling_callback; Color Correction does not override tiling_callback"
+input_output_factor = 2.0
+input_output_factor_cl = 2.0
+maximum_buffer_factor = 1.0
+maximum_buffer_factor_cl = 1.0
+overhead_bytes = 0
+overlap_pixels = 0
+alignment_pixels = 1
+alignment_semantics = "upper-left x/y tile-coordinate modulus from dt_develop_tiling_t::align; not pointer or allocation alignment"
+preferred_tile_edge = "not supplied by native callback"
+
+[tiling_provenance.rust_transactional_policy]
+origin = "additive bounded-leaf policy, not a native default_tiling_callback value"
+input_multiplier_milli = 1000
+output_multiplier_milli = 1000
+temporary_staging_multiplier_milli = 1000
+minimum_tile_edge = 1
+preferred_tile_edge = 256
+overlap_pixels = 0
+alignment_pixels = 1
+alignment_semantics = "descriptor tile-coordinate policy; not a Vec memory-alignment promise"
+
+[tiling_provenance.native_to_rust_budget_mapping]
+native_input_output_multiplier_milli = 2000
+rust_preallocated_input_multiplier_milli = 1000
+rust_preallocated_destination_multiplier_milli = 1000
+rust_budgeted_private_staging_multiplier_milli = 1000
+rust_peak_multiplier_milli = 3000
+native_host_fit_source_expression = "const size_t total = factor * width * height * bpp + overhead"
+native_host_fit_evaluation_type = "f32: factor is float, so width, height, bpp, and overhead are converted into float as they enter the arithmetic expression"
+native_host_fit_size_conversion = "the rounded nonnegative f32 expression is converted to size_t only for assignment to total"
+native_host_fit_alignment_padding_bytes = 0
+boundary_width = 4097
+boundary_height = 4097
+boundary_factor = 2.0
+boundary_bytes_per_pixel = 16
+boundary_native_f32_bits = "0x4e001000"
+boundary_native_f32_then_size_bytes = 537133056
+boundary_checked_integer_bytes = 537133088
+boundary_native_shortfall_bytes = 32
+boundary_outcome = "with available=537133056, native source arithmetic reports factor-two fit while exact checked-integer factor-two payload does not"
+rust_budget_arithmetic = "checked pixel_count * sizeof(ColorCorrectionPixel); exactly one private candidate raster payload, deliberately not native f32-then-size_t arithmetic"
+native_allocator_generic_rounding = "dt_alloc_aligned rounds each requested size upward to DT_CACHELINE_BYTES; generic tail padding is 0..127 bytes on Apple aarch64 and 0..63 bytes otherwise"
+native_colorcorrection_raster_rounding = "pixelpipe requests are multiples of the 16-byte pixel payload, tightening tail padding to 0..112 bytes on Apple aarch64 and 0..48 bytes otherwise"
+native_posix_debug_allocator_extra = "after the older-FreeBSD and Windows branches, _DEBUG posix_memalign requests one additional DT_CACHELINE_BYTES block before returning an offset aligned pointer"
+rust_budgeted_alignment_padding_bytes = 0
+rust_budgeted_allocator_metadata_bytes = 0
+rust_reserve_exact_caveat = "Vec::try_reserve_exact may receive allocator-specific excess capacity; the caller budget is a checked payload-byte boundary, not total allocator-footprint accounting"
+notes = "Native factor 2 accounts for input plus output using f32 host-fit arithmetic. execute_into borrows that input and caller destination, then charges only its additive one-raster transactional candidate payload with checked integer arithmetic. This is a deliberate Rust adaptation. Native allocator rounding and POSIX Debug padding are recorded but are not relabeled as callback overhead or charged to the Rust ordinary-Vec payload budget."
+
+[ownership]
+native_parameter_owner = "history/module params; commit_params copies derived values into per-pixelpipe piece data"
+native_pipe_allocation = "init_pipe mallocs exactly sizeof(dt_iop_colorcorrection_data_t) into piece->data; commit_params initializes its five f32 fields"
+native_pipe_cleanup = "cleanup_pipe frees piece->data and immediately assigns NULL; piece owns the allocation from init_pipe through cleanup_pipe"
+native_execution_owner = "process borrows restrict input/output buffers under DT_IS_ALIGNED cache-line assumptions, reads immutable piece->data, and uses DT_OMP_FOR static OpenMP scheduling when enabled; emitted arithmetic remains compiler/profile dependent"
+native_pixelpipe_buffer_size_owner = "src/develop/pixelpipe_hb.c derives default four-channel Lab bpp=16 and requested cacheline payload bpp*width*height, checks DT_CACHELINE_BYTES alignment, and dispatches borrowed pointers to process"
+native_pixelpipe_cache_owner = "src/develop/pixelpipe_cache.c owns cacheline selection, requested-size accounting, dt_alloc_aligned allocation/reallocation, dt_free_align replacement/cleanup, and failure nulling; Color Correction owns none of those buffers"
+native_default_callback_owner = "src/common/module_api.h resolves omitted DEFAULT symbols to default_* functions; format.c, tiling.c, and imagebuf.c own the relevant shared default behavior"
+rust_parameter_owner = "ColorCorrectionConfig owns validated raw f32 bits without canonicalizing signed zero"
+rust_pipe_lifetime = "ColorCorrectionPlan owns committed coefficients and dimensions by value; construction initializes every field and Rust drop releases the value without a nullable allocation"
+rust_execution_owner = "execution borrows typed four-channel input, applies the documented SeparateRoundings adaptation, serially builds an ordinary-Vec private candidate at ColorCorrectionPixel's lower required alignment, and publishes only a complete finite result"
+rust_signed_zero_scope = "raw history/config and committed coefficient bits remain exact, L and channel four are copied bit-for-bit, and opponent outputs use the signs produced by the separate f32 operations; no broader optimized-native signed-zero equivalence is claimed"
+shared_wrong_format_owner = "shared format/pixelpipe integration must own MIN-channel ROI copy-through, zero padding/cropping, trouble publication, and false return; the bounded leaf does not implement it"
+native_tiling_owner = "retained default_tiling_callback owns factor/factor_cl=2 for identity ROI, maxbuf/maxbuf_cl=1, overhead=0, overlap=0, and upper-left coordinate align=1; that align field is unrelated to DT_IS_ALIGNED memory alignment, and Color Correction supplies no override"
+rust_tiling_policy_owner = "the bounded leaf owns the additive one-raster transactional staging multiplier and the minimum/preferred tile edges; coordinate alignment 1 and preferred edge 256 are Rust tile policy, not a memory-alignment claim"
+rust_budget_owner = "ColorCorrectionPlan charges its caller-provided budget only for the one-raster private candidate payload using checked integer arithmetic, with zero alignment-padding or allocator-metadata bytes; borrowed input and caller destination correspond to the native factor-2 allocation already present"
+native_ui_precision_owner = "src/develop/imageop_gui.c derives digits only for the generated saturation slider; src/iop/colorcorrection.c owns hia/hib/loa/lob as custom-grid coordinates with no numeric control precision"
+rust_endpoint_precision_owner = "the local descriptor uses precision 0 solely because ParameterDescriptor requires a value; endpoint GTK and any eventual numeric representation remain explicitly deferred"
+
+[writable_scope]
+paths = [
+  "architecture/rusttable-colorcorrection-source-map.toml",
+  "crates/rusttable-processing/src/operations/colorcorrection/",
+  "crates/rusttable-processing/tests/colorcorrection_leaf.rs",
+  "crates/rusttable-processing/tests/fixtures/colorcorrection-v1-benchmark.hex",
+]
+shared_hubs_writable = false
+retained_native_writable = false
+sibling_darktable_writable = false
+
+[behavior_tests]
+cases = [
+  "v1 20-byte declaration-order codec and exact benchmark XMP payload",
+  "empty native migration topology and byte-exact opaque future history",
+  "finite persisted values remain unclamped while non-finite parameters fail separately from raw f32 storage",
+  "cooling-filter signed-zero tuple plus scoped signed-zero history, coefficients, and separate-rounding process output",
+  "non-finite committed scales fail plan construction",
+  "mixed f32-subtract/double-divide/f32-narrow coefficient discriminator and separate-rounding Lab golden bits",
+  "Debug -O0/_DEBUG, default RelWithDebInfo, and Release additions are inventoried while the hia=0x40f3f724/loa=0xbd4957c7/saturation=0x4023832c/L=0x42c3c571/a=0xc2b3cff2 Rust profile discriminator produces chosen a=0xc352a2c4 rather than contracted a=0xc352a2c3",
+  "pixelpipe_hb derives 16-byte-per-pixel cache requests and enforces 64/128-byte alignment; pixelpipe_cache owns aligned allocation, payload-size accounting, replacement, failure, and cleanup",
+  "generic aligned-allocation tail maxima 127/63 tighten to 112/48 for 16-byte-multiple Color Correction rasters, while the serial ordinary-Vec Rust adaptation requires only four-byte alignment",
+  "native host-fit evaluates f32 before size_t conversion; the 4097x4097 factor-two boundary yields 537133056 native bytes versus 537133088 checked-integer bytes",
+  "native and Rust payload budgets add zero alignment padding while the native POSIX Debug branch requests one extra cache line",
+  "only saturation receives native two-digit Bauhaus precision; custom-grid endpoints have no native numeric precision and descriptor precision zero is explicitly deferred Rust policy",
+  "lightness and channel four are preserved",
+  "dimension, destination, non-finite input, and non-finite output failures",
+  "literal 1024 cancellation polling before work, during processing, and after private processing",
+  "size overflow and deterministic allocation-budget failure leave destination unchanged",
+  "identity-ROI native factor/factor_cl 2, maxbuf/maxbuf_cl 1, zero overhead/overlap, and alignment 1",
+  "hard-coded Rust input/output/staging multipliers 1/1/1 and preferred tile edge 256",
+  "source callback values remain distinct from additive Rust transactional and budget policy",
+  "module_api DEFAULT fallback inventory reaches four-channel float Lab format defaults",
+  "wrong-format MIN-channel ROI copy crops or zero-pads through imagebuf and remains explicitly shared/deferred",
+  "exact native name and five description strings plus local descriptor fields",
+  "source map covers pipe-data lifetime, exact preset tuples, bounded CPU responsibility, and deferred shared seams",
+]
+
+[[rust_caller]]
+path = "crates/rusttable-processing/src/operations/colorcorrection.rs"
+responsibility = "existing provisional shared codec/config/plan/descriptor"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-processing/src/operation/colorcorrection.rs"
+responsibility = "shared Operation compilation and parameter materialization"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-processing/src/descriptor/mod.rs"
+responsibility = "shared descriptor export"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-processing/src/registry/color.rs; crates/rusttable-processing/src/registry/operations/mod.rs; crates/rusttable-processing/src/registry/reconstruction.rs"
+responsibility = "registry factory, declaration order, and reconstruction"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-processing/src/evaluate/lab_boundary.rs; crates/rusttable-processing/src/evaluate/mod.rs"
+responsibility = "working-frame Lab conversion, masks, opacity, and transactional shared evaluation"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-pixelpipe/src/cpu.rs; crates/rusttable-pixelpipe/src/gpu.rs; crates/rusttable-pixelpipe/src/snapshot.rs"
+responsibility = "CPU/GPU dispatch, cancellation, publication, and snapshot identity"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-import/src/darktable/history.rs; crates/rusttable-compat/src/history/order.rs"
+responsibility = "Darktable history materialization and canonical operation order"
+status = "deferred-unmodified"
+
+[[rust_caller]]
+path = "crates/rusttable-ui/src/iop/colorcorrection.rs; crates/rusttable-app/src/composition/darkroom/edit.rs"
+responsibility = "GTK controls, edit routing, and persistence"
+status = "deferred-unmodified"
+
+[[responsibility]]
+id = "parameter-abi-and-current-history"
+upstream_path = "src/iop/colorcorrection.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_colorcorrection_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/codec.rs"
+status = "implemented"
+notes = "Only v1 is native. There is no legacy_params callback; all unknown versions remain opaque and non-executable."
+
+[[responsibility]]
+id = "local-descriptor-and-default-format"
+upstream_path = "src/iop/colorcorrection.c; src/common/module_api.h; src/iop/iop_api.h; src/develop/format.c; src/develop/imageop.h; src/common/colorspaces.h"
+upstream_symbols = ["name", "description", "flags", "default_group", "default_colorspace", "DEFAULT(input_format/output_format/input_colorspace/output_colorspace)", "default_input_format", "default_output_format"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/leaf.rs; crates/rusttable-processing/src/operations/colorcorrection/execution.rs"
+status = "implemented-local-only"
+notes = "OperationDescriptor plus local presentation evidence retain the exact untranslated native name and five dt_iop_set_description strings. The module_api fallback chain establishes four-channel TYPE_FLOAT IOP_CS_LAB input/output, represented locally by typed f32x4 Lab pixels; no shared callback or registry export is claimed."
+
+[[responsibility]]
+id = "commit-and-cpu-equations"
+upstream_path = "src/iop/colorcorrection.c"
+upstream_symbols = ["commit_params", "process"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/execution.rs"
+status = "implemented-rust-adaptation"
+notes = "Commit preserves f32 endpoint subtraction followed by double division and f32 narrowing. Process deliberately uses the repository SeparateRoundings profile rather than claiming exact compiler-dependent native Debug, default RelWithDebInfo, or Release order; raw signed-zero state is not canonicalized, while computed zero signs follow those explicit stages. Identity ROI, unbounded finite history, lightness, and channel four remain covered."
+
+[[responsibility]]
+id = "native-build-process-arithmetic-profiles"
+upstream_path = "CMakeLists.txt; DefineOptions.cmake; src/CMakeLists.txt; cmake/march-mtune.cmake; packaging/macosx/2_build_hb_darktable_default.sh; src/iop/colorcorrection.c"
+upstream_symbols = ["CMAKE_BUILD_TYPE", "CUSTOM_CFLAGS", "CMAKE_C_FLAGS_DEBUG", "CMAKE_C_FLAGS_RELWITHDEBINFO", "CMAKE_C_FLAGS_RELEASE", "MARCH", "process"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/execution.rs; crates/rusttable-processing/tests/colorcorrection_leaf.rs"
+status = "implemented-rust-adaptation"
+notes = "An unspecified root CMake build defaults to RelWithDebInfo. src/CMakeLists.txt adds non-custom Debug -O0 (plus unconditional -D_DEBUG and GNU -g3/-ggdb3), non-custom RelWithDebInfo -O2/-ftree-vectorize, and non-custom Release -O3, contiguous -ffast + -math, and -fno-finite-math-only (plus GNU -fexpensive-optimizations). Compiler defaults and target selection leave native contraction/results profile dependent; the explicit packaging Release request does not redefine the CMake default. RustTable deliberately selects separate f32 stages rather than claiming either native contraction outcome: the unchanged hard-coded discriminator yields a=0xc352a2c4, while contracting L*a_scale+a yields 0xc352a2c3."
+
+[[responsibility]]
+id = "pipe-data-allocation-and-lifetime"
+upstream_path = "src/iop/colorcorrection.c; src/iop/iop_api.h"
+upstream_symbols = ["dt_iop_colorcorrection_data_t", "init_pipe", "cleanup_pipe", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/execution.rs"
+status = "implemented-rust-ownership-boundary"
+notes = "Native malloc/free/NULL piece ownership maps to an always-initialized ColorCorrectionPlan that owns five committed f32 coefficients by value and releases them automatically; shared pixelpipe piece construction remains deferred."
+
+[[responsibility]]
+id = "finite-cancellation-publication-boundary"
+upstream_path = "src/iop/colorcorrection.c"
+upstream_symbols = ["process"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/execution.rs"
+status = "implemented-rust-boundary"
+notes = "Additive safe-Rust boundary rejects non-finite state/output, reports size/allocation failures, polls before work, at row or literal 1024-pixel boundaries, and after private processing, and never copies a partial candidate into caller storage."
+
+[[responsibility]]
+id = "cpu-buffer-ownership-alignment-and-loop-schedule"
+upstream_path = "src/iop/colorcorrection.c; src/develop/pixelpipe_hb.c; src/develop/pixelpipe_cache.c; src/develop/format.c; src/common/darktable.h; src/common/darktable.c; src/common/dttypes.h"
+upstream_symbols = ["_dev_pixelpipe_process_rec", "_pixelpipe_process_on_CPU", "dt_dev_pixelpipe_cache_get", "dt_alloc_aligned", "dt_free_align", "dt_check_aligned", "DT_IS_ALIGNED", "DT_IS_ALIGNED_PIXEL", "DT_OMP_FOR", "DT_OMP_PRAGMA", "DT_CACHELINE_BYTES", "DT_ALIGNED_PIXEL", "dt_aligned_pixel_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/execution.rs; crates/rusttable-processing/src/operations/colorcorrection/source_map.rs"
+status = "implemented-rust-adaptation"
+notes = "pixelpipe_hb derives the 16-byte-per-pixel payload request and verifies 64/128-byte cache-line alignment; pixelpipe_cache owns aligned allocation, requested-size accounting, replacement, and cleanup. Native process only borrows those buffers and uses static OpenMP scheduling when available. The bounded leaf instead serially traverses typed slices and stages into an ordinary Vec requiring only four-byte ColorCorrectionPixel alignment; it claims neither native cache ownership, pointer alignment, nor parallel scheduling."
+
+[[responsibility]]
+id = "tiling-and-budget-provenance"
+upstream_path = "src/iop/colorcorrection.c; src/iop/iop_api.h; src/develop/tiling.c; src/develop/tiling.h; src/develop/pixelpipe_hb.c; src/develop/pixelpipe_cache.c; src/common/darktable.h; src/common/darktable.c; src/common/dttypes.h"
+upstream_symbols = ["flags", "tiling_callback default", "default_tiling_callback", "dt_develop_tiling_t", "dt_tiling_piece_fits_host_memory", "dt_dev_pixelpipe_cache_get", "DT_CACHELINE_BYTES", "dt_alloc_aligned", "dt_round_size", "process"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/source_map.rs; crates/rusttable-processing/src/operations/colorcorrection/leaf.rs; crates/rusttable-processing/src/operations/colorcorrection/execution.rs"
+status = "implemented-local-source-and-rust-policy"
+notes = "For identity ROI, the retained callback owns combined input/output factor and factor_cl 2, maxbuf and maxbuf_cl 1, zero overhead/overlap, and upper-left coordinate alignment 1; that coordinate field is distinct from process pointer alignment. Native host-fit first computes in f32 and only then converts to size_t: at 4097x4097x16 factor two it yields 537133056 rather than the exact 537133088 bytes. The descriptor separately records Rust's 1x input, 1x output, and additive 1x transactional staging raster plus policy-only preferred edge 256, while ColorCorrectionPlan deliberately uses checked integer sizing. Native and Rust budgets count payload with no alignment padding. Generic dt_alloc_aligned padding maxima 127/63 tighten to 112/48 because these raster requests are 16-byte multiples; POSIX Debug requests one extra cache line. The serial Rust ordinary Vec makes no stronger alignment promise and the plan charges only the exact private staging payload."
+
+[[responsibility]]
+id = "wrong-format-copy-through"
+upstream_path = "src/develop/imageop.h; src/develop/imageop.c; src/common/imagebuf.c"
+upstream_symbols = ["dt_iop_have_required_input_format", "dt_iop_copy_image_roi", "dt_iop_image_copy"]
+rust_path = "shared processing/pixelpipe format adapter"
+status = "deferred-shared-roi-copy"
+notes = "The bounded leaf accepts only typed four-channel Lab samples. On a native mismatch, the helper copies MIN(actual_channels, 4): equal extents use a full copy, contained output uses dx/dy row cropping, and partial availability copies per location with zero fill before publishing module trouble and returning false. This ROI-aware copy behavior remains explicitly deferred to shared ownership."
+
+[[responsibility]]
+id = "opencl-kernel"
+upstream_path = "src/iop/colorcorrection.c; data/kernels/basic.cl; data/kernels/common.h; data/kernels/programs.conf"
+upstream_symbols = ["process_cl", "init_global", "cleanup_global", "colorcorrection", "readpixel"]
+rust_path = "shared GPU and pixelpipe hubs"
+status = "deferred"
+notes = "Program 2 and its source-ordered kernel arguments were inventoried, but no OpenCL/WGPU execution is claimed."
+
+[[responsibility]]
+id = "exact-preset-tuple-evidence"
+upstream_path = "src/iop/colorcorrection.c; src/develop/blend.h"
+upstream_symbols = ["init_presets"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/leaf.rs"
+status = "source-evidence-only"
+notes = "Retains all three v1 tuples in insertion order, enabled=true, RGB-display blend space, and cooling-filter lob=0x80000000; translation and dt_gui_presets_add_generic registration remain deferred."
+
+[[responsibility]]
+id = "ui-precision-provenance"
+upstream_path = "src/iop/colorcorrection.c; src/develop/imageop_gui.c"
+upstream_symbols = ["gui_init", "dt_bauhaus_slider_from_params", "dt_iop_colorcorrection_motion_notify", "dt_iop_colorcorrection_key_press"]
+rust_path = "crates/rusttable-processing/src/operations/colorcorrection/leaf.rs; crates/rusttable-processing/src/operations/colorcorrection/source_map.rs"
+status = "native-saturation-evidence-endpoints-deferred-adaptation"
+notes = "Only saturation is passed to dt_bauhaus_slider_from_params; its introspection range [-3,3] gives top=3 and digits=2. hia/hib/loa/lob are direct custom-grid coordinates with no native numeric precision. Their required local ParameterDescriptor precision is therefore zero and explicitly labeled a deferred Rust placeholder rather than a native two-digit contract."
+
+[[responsibility]]
+id = "preset-registration-ui-and-interaction"
+upstream_path = "src/iop/colorcorrection.c; src/develop/imageop_gui.c; src/common/colorspaces.h; src/develop/blend.h; src/gui/presets.h"
+upstream_symbols = ["dt_gui_presets_add_generic", "gui_update", "gui_init", "gui_cleanup", "dt_iop_colorcorrection_draw", "dt_iop_colorcorrection_motion_notify", "dt_iop_colorcorrection_button_press", "dt_iop_colorcorrection_leave_notify", "dt_iop_colorcorrection_scrolled", "dt_iop_colorcorrection_key_press"]
+rust_path = "shared UI, app, preset, and history hubs"
+status = "deferred"
+notes = "No translated preset registration, GTK controls, LCMS transform, drawing, pointer/scroll/key interaction, history publication, or GUI lifetime is claimed."
+
+[[responsibility]]
+id = "production-integration"
+upstream_path = "src/iop/colorcorrection.c and Rust shared integration hubs"
+upstream_symbols = ["history materialization", "registry", "operation order", "pixelpipe", "masks", "outer blending", "snapshot", "app routing"]
+rust_path = "shared processing, import, pixelpipe, UI, and app files"
+status = "deferred"
+notes = "Existing provisional shared modules were not modified or accepted as source-faithful by this bounded leaf."

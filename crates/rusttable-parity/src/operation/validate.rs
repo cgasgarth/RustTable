@@ -26,7 +26,7 @@ pub fn parse_operation_manifest(contents: &str) -> Result<OperationManifest, Sca
 ///
 /// Returns an error when a manifest invariant fails or serialization fails.
 pub fn render_operation_manifest(manifest: &OperationManifest) -> Result<String, ScanError> {
-    validate_operation_manifest(manifest)?;
+    validate_operation_manifest_shape(manifest)?;
     let mut rendered =
         toml::to_string_pretty(manifest).map_err(|error| ScanError::Serialization {
             message: error.to_string(),
@@ -46,7 +46,9 @@ pub fn render_operation_manifest(manifest: &OperationManifest) -> Result<String,
 /// # Errors
 ///
 /// Returns an error when any compatibility invariant is violated.
-pub fn validate_operation_manifest(manifest: &OperationManifest) -> Result<(), ScanError> {
+pub(crate) fn validate_operation_manifest_shape(
+    manifest: &OperationManifest,
+) -> Result<(), ScanError> {
     if manifest.schema_version != 3 {
         return Err(ScanError::InvalidManifest {
             message: format!(
@@ -70,6 +72,20 @@ pub fn validate_operation_manifest(manifest: &OperationManifest) -> Result<(), S
             });
         }
         validate_operation(manifest, operation)?;
+    }
+    Ok(())
+}
+
+/// Validates the manifest shape and the independent native provenance anchor.
+///
+/// # Errors
+///
+/// Returns a typed provenance error when an anchored operation record diverges from the
+/// checked-in contract.
+pub fn validate_operation_manifest(manifest: &OperationManifest) -> Result<(), ScanError> {
+    validate_operation_manifest_shape(manifest)?;
+    for operation in &manifest.operations {
+        super::trust_anchor::validate_native_operation_provenance(&manifest.reference, operation)?;
     }
     Ok(())
 }

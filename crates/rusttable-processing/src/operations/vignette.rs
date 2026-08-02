@@ -27,7 +27,7 @@ use crate::descriptor::{
 };
 use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel};
 
-use super::common::{OperationExecutionError, counter_tpdf, full_image_coordinate, validate_shape};
+use super::common::{OperationExecutionError, TeaState, validate_shape};
 
 pub const VIGNETTE_COMPATIBILITY_ID: &str = "vignette";
 pub const VIGNETTE_SCHEMA_VERSION: u16 = 4;
@@ -393,7 +393,6 @@ pub struct VignettePlan {
     fscale: f32,
     exp1: f32,
     exp2: f32,
-    seed: u64,
 }
 
 impl VignettePlan {
@@ -432,31 +431,49 @@ impl VignettePlan {
             dimensions,
             xscale,
             yscale,
-            center_x: 1.0 + config.center[0].get() * dimensions.width() as f32 * xscale / 2.0,
-            center_y: 1.0 + config.center[1].get() * dimensions.height() as f32 * yscale / 2.0,
+            center_x: dimensions.width() as f32 * (1.0 + config.center[0].get()) * xscale / 2.0,
+            center_y: dimensions.height() as f32 * (1.0 + config.center[1].get()) * yscale / 2.0,
             dscale,
             fscale,
             exp1,
             exp2,
-            seed: 0,
         })
     }
 
+    /// Retained for callers that used the provisional counter-noise API.
+    /// Native vignette state is initialized to zero for each operation, so the
+    /// compatibility seed cannot affect the source-derived result.
     #[must_use]
-    pub const fn with_seed(mut self, seed: u64) -> Self {
-        self.seed = seed;
+    pub const fn with_seed(self, _seed: u64) -> Self {
         self
     }
 
     pub fn execute(&self, input: &[LinearRgb]) -> Result<Vec<LinearRgb>, OperationExecutionError> {
-        validate_shape(self.dimensions, input)?;
-        self.execute_window(input, 0)
+        self.execute_with_cancel(input, || false)
     }
 
     pub fn execute_window(
         &self,
         input: &[LinearRgb],
         pixel_index_offset: usize,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        self.execute_window_with_cancel(input, pixel_index_offset, || false)
+    }
+
+    pub fn execute_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        cancelled: F,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        validate_shape(self.dimensions, input)?;
+        self.execute_window_with_cancel(input, 0, cancelled)
+    }
+
+    pub fn execute_window_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        cancelled: F,
     ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
         let total = usize::try_from(self.dimensions.pixel_count()).map_err(|_| {
             OperationExecutionError::DimensionsMismatch {
@@ -476,32 +493,87 @@ impl VignettePlan {
                 actual: end,
             });
         }
+        if input.is_empty() {
+            return Ok(Vec::new());
+        }
+        let width = usize::try_from(self.dimensions.width()).expect("width fits usize");
+        let mut tea_state = TeaState::new();
+        self.initialize_dither_state(pixel_index_offset, &mut tea_state);
         input
             .iter()
             .enumerate()
-            .map(|(local_index, pixel)| self.transform(*pixel, pixel_index_offset + local_index))
+            .map(|(local_index, pixel)| {
+                let absolute_index = pixel_index_offset + local_index;
+                if absolute_index.is_multiple_of(width) {
+                    if cancelled() {
+                        return Err(OperationExecutionError::Cancelled);
+                    }
+                    if absolute_index != pixel_index_offset {
+                        let row = absolute_index / width;
+                        tea_state.set_row(row, self.dimensions.height());
+                    }
+                }
+                self.transform(*pixel, absolute_index, &mut tea_state)
+            })
             .collect()
+    }
+
+    fn initialize_dither_state(&self, pixel_index_offset: usize, tea_state: &mut TeaState) {
+        if matches!(self.config.dithering, VignetteDither::Off) {
+            return;
+        }
+        let width = usize::try_from(self.dimensions.width()).expect("width fits usize");
+        let current_row = pixel_index_offset / width;
+        for row in 0..=current_row {
+            tea_state.set_row(row, self.dimensions.height());
+            let row_start = row * width;
+            let row_end = if row == current_row {
+                pixel_index_offset
+            } else {
+                row_start + width
+            };
+            for absolute_index in row_start..row_end {
+                if self.dither_applies(absolute_index) {
+                    let _ = tea_state.encrypt_and_tpdf();
+                }
+            }
+        }
+    }
+
+    fn dither_applies(&self, absolute_index: usize) -> bool {
+        let raw_weight = self.raw_weight(absolute_index);
+        raw_weight > 0.0
+            && raw_weight < 1.0
+            && !matches!(self.config.dithering, VignetteDither::Off)
+    }
+
+    fn raw_weight(&self, absolute_index: usize) -> f32 {
+        let width = usize::try_from(self.dimensions.width()).expect("width fits usize");
+        let x = absolute_index % width;
+        let y = absolute_index / width;
+        // Darktable evaluates the full-frame buffer at the pixel's integer corner
+        // coordinate (`i * xscale`, `j * yscale`), not a center-sampled normalized
+        // coordinate. Keep the absolute index so row/tile windows retain this equation.
+        let point_x = x as f32 * self.xscale;
+        let point_y = y as f32 * self.yscale;
+        let dx = (point_x - self.center_x).abs();
+        let dy = (point_y - self.center_y).abs();
+        let cplen = (dx.powf(self.exp1) + dy.powf(self.exp1)).powf(self.exp2);
+        (cplen - self.dscale) / self.fscale
     }
 
     fn transform(
         &self,
         pixel: LinearRgb,
         absolute_index: usize,
+        tea_state: &mut TeaState,
     ) -> Result<LinearRgb, OperationExecutionError> {
-        let (normalized_x, normalized_y) = full_image_coordinate(self.dimensions, absolute_index);
-        let point_x = (normalized_x + 1.0) * self.xscale;
-        let point_y = (normalized_y + 1.0) * self.yscale;
-        let dx = (point_x - self.center_x).abs();
-        let dy = (point_y - self.center_y).abs();
-        let cplen = (dx.powf(self.exp1) + dy.powf(self.exp1)).powf(self.exp2);
-        let raw_weight = (cplen - self.dscale) / self.fscale;
+        let raw_weight = self.raw_weight(absolute_index);
         let mut weight = raw_weight.clamp(0.0, 1.0);
         let mut dither = 0.0;
-        if (0.0..1.0).contains(&raw_weight) && !matches!(self.config.dithering, VignetteDither::Off)
-        {
+        if self.dither_applies(absolute_index) {
             weight = 0.5 - (std::f32::consts::PI * weight).cos() * 0.5;
-            dither =
-                self.config.dithering.amplitude() * counter_tpdf(self.seed, absolute_index as u64);
+            dither = self.config.dithering.amplitude() * tea_state.encrypt_and_tpdf();
         }
         let mut values = [pixel.red().get(), pixel.green().get(), pixel.blue().get()];
         if weight > 0.0 {

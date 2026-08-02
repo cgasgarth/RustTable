@@ -1,0 +1,7 @@
+schema=soften.v1
+source=src/tests/benchmark/darktable-bench-4.2.xmp:621-624
+payload_bytes=16
+payload_hex=713db2400000c842c3f5a83e713d8a40
+field_order=size,saturation,brightness,amount
+decoded_f32_bits=40b23d71,42c80000,3ea8f5c3,408a3d71
+migration_edges=[]

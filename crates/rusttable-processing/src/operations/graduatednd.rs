@@ -29,7 +29,7 @@ use crate::descriptor::{
 };
 use crate::{FiniteF32, LinearRgb, RasterDimensions, RgbChannel};
 
-use super::common::{OperationExecutionError, full_image_coordinate, validate_shape};
+use super::common::{OperationExecutionError, validate_shape};
 
 pub const GRADUATED_ND_COMPATIBILITY_ID: &str = "graduatednd";
 pub const GRADUATED_ND_SCHEMA_VERSION: u16 = 1;
@@ -258,9 +258,9 @@ fn bounded(
 pub struct GraduatedNdPlan {
     config: GraduatedNdConfig,
     dimensions: RasterDimensions,
-    sinv: f32,
-    cosv: f32,
-    transition_scale: f32,
+    length_base: f32,
+    length_inc_x: f32,
+    length_inc_y: f32,
     color: [f32; 3],
     color1: [f32; 3],
 }
@@ -273,8 +273,13 @@ impl GraduatedNdPlan {
         let angle = -config.rotation.get().to_radians();
         let sinv = angle.sin();
         let cosv = angle.cos();
-        let filter_radius = ((dimensions.width() as f32).hypot(dimensions.height() as f32))
-            / dimensions.height() as f32;
+        let width = dimensions.width() as f32;
+        let height = dimensions.height() as f32;
+        let half_width = width / 2.0;
+        let half_height = height / 2.0;
+        let width_inverse = 1.0 / half_width;
+        let height_inverse = 1.0 / half_height;
+        let filter_radius = half_width.hypot(half_height) / half_height;
         let hardness = 0.5 - config.hardness.get() / 100.0 * 0.45;
         let transition_scale = 0.5 / (filter_radius * hardness);
         if !transition_scale.is_finite() || transition_scale <= 0.0 {
@@ -282,6 +287,13 @@ impl GraduatedNdPlan {
                 "graduatednd transition is degenerate",
             ));
         }
+        let offset = config.offset.get() / 100.0 * 2.0;
+        // Native `process()` starts from the normalized left edge and subtracts
+        // the vertical component for each row. Keep the increments in the
+        // precomputed line equation so absolute tile indices remain frame-stable.
+        let length_base = (-sinv + cosv - 1.0 + offset) * transition_scale;
+        let length_inc_x = sinv * width_inverse * transition_scale;
+        let length_inc_y = -cosv * height_inverse * transition_scale;
         let mut color = hsl_to_rgb(config.hue.get(), config.saturation.get());
         if config.density.get() < 0.0 {
             color = color.map(|value| 1.0 - value);
@@ -289,23 +301,40 @@ impl GraduatedNdPlan {
         Ok(Self {
             config,
             dimensions,
-            sinv,
-            cosv,
-            transition_scale,
+            length_base,
+            length_inc_x,
+            length_inc_y,
             color,
             color1: color.map(|value| 1.0 - value),
         })
     }
 
     pub fn execute(&self, input: &[LinearRgb]) -> Result<Vec<LinearRgb>, OperationExecutionError> {
-        validate_shape(self.dimensions, input)?;
-        self.execute_window(input, 0)
+        self.execute_with_cancel(input, || false)
     }
 
     pub fn execute_window(
         &self,
         input: &[LinearRgb],
         pixel_index_offset: usize,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        self.execute_window_with_cancel(input, pixel_index_offset, || false)
+    }
+
+    pub fn execute_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        cancelled: F,
+    ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
+        validate_shape(self.dimensions, input)?;
+        self.execute_window_with_cancel(input, 0, cancelled)
+    }
+
+    pub fn execute_window_with_cancel<F: Fn() -> bool>(
+        &self,
+        input: &[LinearRgb],
+        pixel_index_offset: usize,
+        cancelled: F,
     ) -> Result<Vec<LinearRgb>, OperationExecutionError> {
         let total = usize::try_from(self.dimensions.pixel_count()).map_err(|_| {
             OperationExecutionError::DimensionsMismatch {
@@ -325,10 +354,17 @@ impl GraduatedNdPlan {
                 actual: end,
             });
         }
+        let width = usize::try_from(self.dimensions.width()).expect("width fits usize");
         input
             .iter()
             .enumerate()
-            .map(|(local_index, pixel)| self.transform(*pixel, pixel_index_offset + local_index))
+            .map(|(local_index, pixel)| {
+                let absolute_index = pixel_index_offset + local_index;
+                if absolute_index.is_multiple_of(width) && cancelled() {
+                    return Err(OperationExecutionError::Cancelled);
+                }
+                self.transform(*pixel, absolute_index)
+            })
             .collect()
     }
 
@@ -337,22 +373,29 @@ impl GraduatedNdPlan {
         pixel: LinearRgb,
         absolute_index: usize,
     ) -> Result<LinearRgb, OperationExecutionError> {
-        let (x, y) = full_image_coordinate(self.dimensions, absolute_index);
-        let offset = self.config.offset.get() / 100.0 * 2.0;
-        let length = (self.sinv * x + self.cosv * y - 1.0 + offset) * self.transition_scale;
-        let d = 2.0f32.powf(self.config.density.get() * (0.5 + length).clamp(0.0, 1.0));
-        let factor = [
-            self.color[0] + self.color1[0] * d,
-            self.color[1] + self.color1[1] * d,
-            self.color[2] + self.color1[2] * d,
-        ];
+        let width = usize::try_from(self.dimensions.width()).expect("width fits usize");
+        let x = absolute_index % width;
+        let y = absolute_index / width;
+        let length = self.length_base + x as f32 * self.length_inc_x + y as f32 * self.length_inc_y;
         let values = if self.config.density.get() >= 0.0 {
+            let density = 2.0f32.powf(self.config.density.get() * (0.5 + length).clamp(0.0, 1.0));
+            let factor = [
+                self.color[0] + self.color1[0] * density,
+                self.color[1] + self.color1[1] * density,
+                self.color[2] + self.color1[2] * density,
+            ];
             [
                 pixel.red().get() / factor[0],
                 pixel.green().get() / factor[1],
                 pixel.blue().get() / factor[2],
             ]
         } else {
+            let density = 2.0f32.powf(-self.config.density.get() * (0.5 - length).clamp(0.0, 1.0));
+            let factor = [
+                self.color[0] + self.color1[0] * density,
+                self.color[1] + self.color1[1] * density,
+                self.color[2] + self.color1[2] * density,
+            ];
             [
                 pixel.red().get() * factor[0],
                 pixel.green().get() * factor[1],

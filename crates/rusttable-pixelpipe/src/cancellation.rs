@@ -133,6 +133,7 @@ struct State {
     reason: Option<CancellationReason>,
     secondary: Vec<CancellationReason>,
     hooks: BTreeMap<u64, Box<dyn FnOnce(CancellationReason) + Send + 'static>>,
+    work_started_hooks: BTreeMap<u64, Box<dyn FnOnce() + Send + 'static>>,
 }
 
 struct Node {
@@ -171,6 +172,7 @@ impl CancellationToken {
                 reason: None,
                 secondary: Vec::new(),
                 hooks: BTreeMap::new(),
+                work_started_hooks: BTreeMap::new(),
             }),
             wake: Condvar::new(),
             next_hook: AtomicU64::new(1),
@@ -240,6 +242,18 @@ impl CancellationToken {
         Ok(())
     }
 
+    pub(crate) fn notify_work_started(&self) {
+        let hooks = self
+            .0
+            .state
+            .lock()
+            .map(|mut state| std::mem::take(&mut state.work_started_hooks))
+            .unwrap_or_default();
+        for hook in hooks.into_values() {
+            hook();
+        }
+    }
+
     /// Waits for cancellation without depending on an async runtime.
     #[must_use]
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
@@ -277,6 +291,22 @@ impl CancellationToken {
             callback.take().expect("cleanup callback is present")(reason);
         }
         CleanupRegistration {
+            node: Arc::downgrade(&self.0),
+            id,
+        }
+    }
+
+    pub fn register_work_started<F>(&self, callback: F) -> WorkStartedRegistration
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let id = self.0.next_hook.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut state) = self.0.state.lock()
+            && state.reason.is_none()
+        {
+            state.work_started_hooks.insert(id, Box::new(callback));
+        }
+        WorkStartedRegistration {
             node: Arc::downgrade(&self.0),
             id,
         }
@@ -386,6 +416,18 @@ impl CancellationScope {
     {
         self.token.register_cleanup(callback)
     }
+
+    /// Registers a one-shot callback invoked after a tile has begun execution.
+    pub fn register_work_started<F>(&self, callback: F) -> WorkStartedRegistration
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.token.register_work_started(callback)
+    }
+
+    pub(crate) fn notify_work_started(&self) {
+        self.token.notify_work_started();
+    }
 }
 
 /// RAII registration for a cancellation cleanup hook.
@@ -409,6 +451,31 @@ impl Drop for CleanupRegistration {
             && let Ok(mut state) = node.state.lock()
         {
             state.hooks.remove(&self.id);
+        }
+    }
+}
+
+/// RAII registration for a one-shot work-start callback.
+pub struct WorkStartedRegistration {
+    node: Weak<Node>,
+    id: u64,
+}
+
+impl fmt::Debug for WorkStartedRegistration {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("WorkStartedRegistration")
+            .field("id", &self.id)
+            .finish()
+    }
+}
+
+impl Drop for WorkStartedRegistration {
+    fn drop(&mut self) {
+        if let Some(node) = self.node.upgrade()
+            && let Ok(mut state) = node.state.lock()
+        {
+            state.work_started_hooks.remove(&self.id);
         }
     }
 }

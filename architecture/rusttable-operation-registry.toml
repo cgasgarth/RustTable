@@ -1,6 +1,6 @@
 schema = "rusttable.operation-registry.v1"
 build_id = "rusttable-processing.operation-registry.v1"
-snapshot_hash = "a148386f78c0f2871126447d1eba6cb564a03d341b7a088bda6c80d9fdf0d743"
+snapshot_hash = "d8fafd961aade92ba597fd4d182e9a0d211925e03fc1be5482924c2f93bc0e88"
 
 [[operation]]
 rust_id = "rusttable.agx"

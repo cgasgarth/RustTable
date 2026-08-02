@@ -1,0 +1,110 @@
+schema = "rusttable.dither-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "dither"
+rust_id = "rusttable.dither"
+production_registration = "existing pre-reset routing is outside this bounded leaf; integration must requalify history, imageio context, blending, alpha, and publication"
+
+[[responsibility]]
+id = "inventory-metadata-order"
+upstream_path = "src/iop/CMakeLists.txt; src/iop/dither.c; src/common/iop_order.c"
+upstream_symbols = ["add_iop(dither)", "name", "aliases", "default_group", "flags", "default_colorspace", "legacy_order", "v30_order", "v50_order"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs"
+status = "bounded-leaf"
+notes = "CMake registers dither without DEFAULT_VISIBLE. The module is disabled by default, belongs to corrective and technical groups, advertises shared blending, uses RGB, and appears at legacy order 67.5 and v3/v5 order 75. The generated inventory ordinal 90 is recorded separately and is not substituted for those native iop-order values. No registry, descriptor aggregation, or pixelpipe hub is changed here."
+
+[[responsibility]]
+id = "native-v1-v2-history-abi"
+upstream_path = "src/iop/dither.c; architecture/darktable-operations.toml"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(2)", "dt_iop_dither_params_t", "dt_iop_dither_params_v1_t"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs; crates/rusttable-processing/tests/fixtures/dither-params-v1.hex; crates/rusttable-processing/tests/fixtures/dither-params-v2.hex"
+status = "bounded-leaf"
+notes = "The enum, palette integer, radius, range[4], and damping occupy the source-declared 32 little-endian bytes. Public native v1/v2 history encode/decode accepts and emits exactly those 32 bytes; the checked-in fixtures are exact native rows. Qualified 168-byte v1 and 36-byte v2 repository slots are available only through explicitly named repository_envelope helpers and are not the ABI."
+
+[[responsibility]]
+id = "legacy-migration-and-opaque-history"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs"
+status = "bounded-leaf"
+notes = "The v1-to-v2 branch follows legacy_params by copying exactly the source-declared 32-byte v1 struct; no qualified-slot tail is admitted to the native migration. Unknown versions and unknown enum discriminants remain byte-exact opaque history and cannot be materialized as an executable config. Opaque decode and re-encode use bounded try_reserve-based copies and return the typed allocation failure."
+
+[[responsibility]]
+id = "defaults-and-preset"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["dt_iop_dither_params_t", "init_presets"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs; crates/rusttable-processing/tests/fixtures/dither-preset-v2.hex"
+status = "bounded-leaf"
+notes = "Module defaults are FSAUTO, palette/radius zero, range {0,0,1,1}, and -100 dB damping from introspection annotations. The native dither preset deliberately uses -200 dB; it has a separate exact fixture."
+
+[[responsibility]]
+id = "quantization-and-posterize-cpu"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["_quantize", "_get_posterize_levels", "_process_posterize"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs"
+status = "bounded-leaf"
+notes = "Posterize retains 2 through 8 levels, row-major RGB channel order, strict-greater-than-half rounding through ceilf, and unclipped finite inputs. The multiply/subtract contraction is explicit with f32 mul_add, followed by f32 ceil and reciprocal multiplication; no f64 arithmetic enters the CPU equation."
+
+[[responsibility]]
+id = "floyd-steinberg-cpu"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["_clipnan", "_rgb_to_gray", "_nearest_color", "_diffuse_error", "_get_dither_parameters", "_process_floyd_steinberg"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs"
+status = "bounded-leaf"
+notes = "The canonical scalar path clips the source once, handles tiny rasters without diffusion, quantizes row-major, and diffuses errors right/down-left/down/down-right with native 7/16, 3/16, 5/16, and 1/16 f32 weights. Luma and diffusion FMA boundaries are explicit. Auto and scale-derived level selection preserve export, preview/thumbnail, bit-depth, and gray/RGB decisions supplied by the typed leaf context."
+
+[[responsibility]]
+id = "random-dither-cpu"
+upstream_path = "src/iop/dither.c; src/common/tea.h"
+upstream_symbols = ["_process_random", "encrypt_tea", "tpdf"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs"
+status = "bounded-leaf"
+notes = "The deterministic canonical CPU leaf uses the native eight-round TEA state and exact key words (including 0x7e95761e), row seed j*height, one triangular-PDF sample shared by all RGB channels of a pixel, f32 powf damping, and post-add clipping. It models the one-thread scalar source ordering; qualification of OpenMP thread-state scheduling belongs to shared pixelpipe integration. The pre-audit compatibility seed remains API-compatible but is intentionally excluded from native arithmetic."
+
+[[responsibility]]
+id = "shape-finite-allocation-cancellation-publication"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["process", "_process_floyd_steinberg", "_process_random", "_process_posterize"]
+rust_path = "crates/rusttable-processing/src/operations/dither.rs; crates/rusttable-processing/tests/dither_strict.rs"
+status = "bounded-leaf"
+notes = "Typed RGB input is finite and shape-checked against RasterDimensions. Candidate and output buffers use try_reserve_exact, output conversion rejects non-finite arithmetic, cancellation is polled initially, at rows, and at no more than 1024-pixel intervals, and only a complete private output Vec is returned. Allocation failure, shape mismatch, cancellation, and non-finite output publish nothing."
+
+[[responsibility]]
+id = "shared-registry-compiler-and-snapshot"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["dt_iop_dither_params_t", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operation/compat.rs; crates/rusttable-processing/src/registry; crates/rusttable-processing/src/evaluate/mod.rs; crates/rusttable-pixelpipe/src/snapshot.rs"
+status = "deferred"
+notes = "Existing pre-reset routing still supplies a -200 dB fallback and derives a synthetic operation-ID seed even though native defaults are -100 dB and the native parameter ABI has no seed. Registry/history materialization, compiler defaults, cancellation propagation, and snapshot identity must be requalified together in a shared integration milestone; this leaf changes none of those hubs."
+
+[[responsibility]]
+id = "shared-imageio-format-and-fast-pipe"
+upstream_path = "src/iop/dither.c; src/imageio/imageio_common.h; src/develop/pixelpipe_hb.h"
+upstream_symbols = ["_get_dither_parameters", "dt_pipe_is_export", "dt_pipe_is_preview", "dt_pipe_is_thumb", "dt_pipe_is_fast"]
+rust_path = "crates/rusttable-pixelpipe; crates/rusttable-render"
+status = "deferred"
+notes = "The leaf accepts an explicit render context, but deriving scale, export precision/channel flags, preview/thumbnail state, display-referred profile format, and fast-pipe selection from immutable production snapshots is not changed here. The alternate two-row fast implementation is not claimed by this scalar leaf."
+
+[[responsibility]]
+id = "shared-blending-masks-alpha"
+upstream_path = "src/iop/dither.c; src/common/dttypes.h"
+upstream_symbols = ["IOP_FLAGS_SUPPORTS_BLENDING", "for_each_channel", "DT_PIXEL_SIMD_CHANNELS"]
+rust_path = "crates/rusttable-processing/src/operation_mask.rs; crates/rusttable-pixelpipe"
+status = "deferred"
+notes = "Shared blend/mask application remains outside the operation leaf. Native SIMD builds may touch the fourth spare lane while non-vector builds process three channels; RustTable's external alpha/preserved-channel publication boundary must be qualified centrally rather than guessed here."
+
+[[responsibility]]
+id = "gpu"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["process"]
+rust_path = "crates/rusttable-gpu"
+status = "deferred"
+notes = "The pinned module defines no process_cl callback or OpenCL kernel. This leaf claims CPU only and adds no GPU implementation or qualification."
+
+[[responsibility]]
+id = "gtk-ui-and-preset-persistence"
+upstream_path = "src/iop/dither.c"
+upstream_symbols = ["gui_changed", "gui_update", "gui_init", "init_presets"]
+rust_path = "crates/rusttable-ui; crates/rusttable-app"
+status = "deferred"
+notes = "The damping slider, method combobox, conditional visibility, translated labels, preset database transaction, edit persistence, and source-shaped GTK composition are recorded but not implemented or exposed by this CPU leaf."

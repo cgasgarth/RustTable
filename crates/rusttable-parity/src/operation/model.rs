@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -402,4 +404,17 @@ fn default_tolerance_class() -> String {
 pub(crate) struct OperationOverrideFile {
     #[serde(rename = "operation", default)]
     pub operations: Vec<OperationOverride>,
+}
+
+impl OperationOverrideFile {
+    pub(crate) fn duplicate_name(&self) -> Option<(String, usize, usize)> {
+        let mut first_positions = BTreeMap::new();
+        for (position, operation) in self.operations.iter().enumerate() {
+            let name = operation.name.trim().to_owned();
+            if let Some(first_position) = first_positions.insert(name.clone(), position) {
+                return Some((name, first_position, position));
+            }
+        }
+        None
+    }
 }

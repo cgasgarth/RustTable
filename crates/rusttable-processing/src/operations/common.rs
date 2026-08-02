@@ -149,57 +149,59 @@ fn hue_to_rgb(first: f32, second: f32, hue: f32) -> f32 {
     }
 }
 
-/// Returns the center-sampled normalized full-image coordinate for a pixel.
+/// The mutable two-word TEA state used by Darktable's per-operation dither.
 ///
-/// The coordinate is independent of a tile or row window. Callers pass the
-/// absolute raster index, not the index within a tile.
-pub(crate) fn full_image_coordinate(
-    dimensions: RasterDimensions,
-    absolute_index: usize,
-) -> (f32, f32) {
-    let width = usize::try_from(dimensions.width()).expect("validated width fits usize");
-    let x = absolute_index % width;
-    let y = absolute_index / width;
-    (
-        (2.0 * (x as f32 + 0.5) / dimensions.width() as f32) - 1.0,
-        (2.0 * (y as f32 + 0.5) / dimensions.height() as f32) - 1.0,
-    )
+/// The native implementation zero-initializes one state per worker, replaces
+/// word zero at the start of each row, and carries word one through every row.
+/// Rust executes the canonical CPU operation serially, so one state represents
+/// the operation's worker state without exposing scheduling-dependent output.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TeaState {
+    words: [u32; 2],
 }
 
-/// Counter-based triangular-PDF noise shared by point operations.
-///
-/// It has no mutable/thread-local state, so changing row or tile scheduling
-/// cannot change the result. The seed is the operation's cache identity; the
-/// caller owns any image-content/revision contribution to that identity.
-pub(crate) fn counter_tpdf(seed: u64, counter: u64) -> f32 {
-    let random = tea_word(seed, counter);
+impl TeaState {
+    #[must_use]
+    pub(crate) const fn new() -> Self {
+        Self { words: [0; 2] }
+    }
+
+    pub(crate) fn set_row(&mut self, row: usize, raster_height: u32) {
+        let row = u32::try_from(row).expect("validated row fits native unsigned int");
+        self.words[0] = row.wrapping_mul(raster_height);
+    }
+
+    pub(crate) fn encrypt_and_tpdf(&mut self) -> f32 {
+        encrypt_tea(&mut self.words);
+        tpdf(self.words[0])
+    }
+}
+
+fn encrypt_tea(state: &mut [u32; 2]) {
+    const KEY: [u32; 4] = [0xa341_316c, 0xc801_3ea4, 0xad90_777d, 0x7e95_761e];
+    let mut sum = 0_u32;
+    for _ in 0..8 {
+        sum = sum.wrapping_add(0x9e37_79b9);
+        state[0] = state[0].wrapping_add(
+            ((state[1] << 4).wrapping_add(KEY[0]))
+                ^ state[1].wrapping_add(sum)
+                ^ ((state[1] >> 5).wrapping_add(KEY[1])),
+        );
+        state[1] = state[1].wrapping_add(
+            ((state[0] << 4).wrapping_add(KEY[2]))
+                ^ state[0].wrapping_add(sum)
+                ^ ((state[0] >> 5).wrapping_add(KEY[3])),
+        );
+    }
+}
+
+fn tpdf(random: u32) -> f32 {
     let fraction = random as f32 / u32::MAX as f32;
     if fraction < 0.5 {
         (2.0 * fraction).sqrt() - 1.0
     } else {
         1.0 - (2.0 * (1.0 - fraction)).sqrt()
     }
-}
-
-fn tea_word(seed: u64, counter: u64) -> u32 {
-    let mut v0 = (seed as u32) ^ counter as u32;
-    let mut v1 = (seed >> 32) as u32 ^ (counter >> 32) as u32;
-    let key = [0xa341_316c_u32, 0xc801_3ea4, 0xad90_777d, 0x7e95_761d];
-    let mut sum = 0_u32;
-    for _ in 0..8 {
-        sum = sum.wrapping_add(0x9e37_79b9);
-        v0 = v0.wrapping_add(
-            ((v1 << 4).wrapping_add(key[0]))
-                ^ v1.wrapping_add(sum)
-                ^ ((v1 >> 5).wrapping_add(key[1])),
-        );
-        v1 = v1.wrapping_add(
-            ((v0 << 4).wrapping_add(key[2]))
-                ^ v0.wrapping_add(sum)
-                ^ ((v0 >> 5).wrapping_add(key[3])),
-        );
-    }
-    v0
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

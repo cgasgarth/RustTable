@@ -19,6 +19,41 @@ use crate::Result;
 const SOURCE_MAP_SCHEMA: &str = "rusttable.operation-source-map.v1";
 const PINNED_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
 
+fn verify_architecture_provenance(root: &Path) -> Result {
+    let manifest_path = root.join("architecture/darktable-operations.toml");
+    let overrides_path = root.join("architecture/operation-overrides.toml");
+    let manifest_source = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("operation provenance: manifest read failed: {error}"))?;
+    let overrides_source = fs::read_to_string(&overrides_path)
+        .map_err(|error| format!("operation provenance: overrides read failed: {error}"))?;
+    let manifest = rusttable_parity::parse_operation_manifest(&manifest_source)
+        .map_err(|error| format!("operation provenance: manifest parse failed: {error}"))?;
+    let overrides = rusttable_parity::parse_operation_overrides(&overrides_source)
+        .map_err(|error| format!("operation provenance: overrides parse failed: {error}"))?;
+    rusttable_parity::validate_architecture_provenance(&manifest, &overrides)
+        .map_err(|error| format!("operation provenance: trusted validation failed: {error}"))?;
+    verify_registry_source_map(root)
+}
+
+fn verify_registry_provenance(registry: &rusttable_processing::RegistrySnapshot) -> Result {
+    let entries = registry
+        .definitions()
+        .iter()
+        .map(|definition| {
+            let id = &definition.descriptor().id;
+            rusttable_parity::TrustedRegistryEntry {
+                compatibility_name: id.compatibility_name.clone(),
+                rust_id: id.rust_id.clone(),
+                descriptor_version: id.schema_version,
+                parameter_version: id.parameter_version,
+                implementation_version: id.implementation_version,
+            }
+        })
+        .collect::<Vec<_>>();
+    rusttable_parity::validate_trusted_registry_entries(&entries)
+        .map_err(|error| format!("operation registry: trusted validation failed: {error}"))
+}
+
 #[derive(Debug, Subcommand)]
 pub(crate) enum OperationSchemaCommand {
     /// Validate representative descriptors and their workspace ownership.
@@ -66,6 +101,7 @@ pub(crate) fn run_schema(root: &Path, command: &OperationSchemaCommand) -> Resul
                         .to_owned(),
                 );
             }
+            verify_architecture_provenance(root)?;
             for descriptor in [exposure_descriptor(), rgb_gain_descriptor()] {
                 descriptor
                     .validate()
@@ -100,6 +136,7 @@ pub(crate) fn run_stack(root: &Path, command: &OperationStackCommand) -> Result 
                         .to_owned(),
                 );
             }
+            verify_architecture_provenance(root)?;
             for template in [
                 OperationStackTemplate::raster_basic(),
                 OperationStackTemplate::raw_basic(),
@@ -120,7 +157,9 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
     let receipt_path = root.join("architecture/rusttable-operation-registry.toml");
     match command {
         OperationRegistryCommand::Generate => {
-            fs::write(&receipt_path, builtin_registry().receipt())
+            let registry = builtin_registry();
+            verify_registry_provenance(registry)?;
+            fs::write(&receipt_path, registry.receipt())
                 .map_err(|error| format!("operation registry: write failed: {error}"))?;
             eprintln!(
                 "operation registry generated (definitions={})",
@@ -132,12 +171,15 @@ pub(crate) fn run_registry(root: &Path, command: &OperationRegistryCommand) -> R
             against_manifest,
             execute_builtins,
         } => {
+            let registry = builtin_registry();
+            verify_registry_provenance(registry)?;
             let committed = fs::read_to_string(&receipt_path)
                 .map_err(|error| format!("operation registry: receipt read failed: {error}"))?;
             if committed != builtin_registry().receipt() {
                 return Err("operation registry receipt is stale; run cargo xtask operation-registry generate".to_owned());
             }
             if *against_manifest {
+                verify_architecture_provenance(root)?;
                 verify_registry_source_map(root)?;
                 let manifest =
                     fs::read_to_string(root.join("architecture/darktable-operations.toml"))
@@ -197,6 +239,7 @@ struct OperationCapabilitiesArtifact {
 }
 
 fn render_operation_capabilities(root: &Path) -> Result<String> {
+    verify_architecture_provenance(root)?;
     let manifest_path = root.join("architecture/darktable-operations.toml");
     let source = fs::read_to_string(&manifest_path)
         .map_err(|error| format!("operation manifest: read failed: {error}"))?;
@@ -206,6 +249,7 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
         .map_err(|error| format!("operation manifest: validation failed: {error}"))?;
 
     let registry = builtin_registry();
+    verify_registry_provenance(registry)?;
     let registry_closure = RegistryClosure::from_registry(registry)
         .map_err(|error| format!("operation manifest: registry failed: {error}"))?;
     let mut entries = registry_closure.entries.clone();
@@ -214,32 +258,49 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
             "darktable:{}:{}:v{}",
             operation.name, operation.reference_path, operation.module_version
         );
+        let registry_name = rusttable_parity::generated_compatibility_name(&operation.name);
+        let independently_trusted =
+            rusttable_parity::is_independently_trusted_manifest_name(&operation.name);
         let registered = registry
             .definitions()
             .iter()
-            .find(|definition| definition.descriptor().id.compatibility_name == operation.name);
+            .find(|definition| definition.descriptor().id.compatibility_name == registry_name);
         let (rust_id, status, implementation_crate, cpu_supported, gpu_supported, reason) =
-            match registered {
-                Some(definition) => {
-                    let (status, implementation_crate, cpu, gpu, reason) =
-                        registered_operation_capability(definition);
-                    (
-                        Some(definition.descriptor().id.rust_id.clone()),
-                        status,
-                        implementation_crate,
-                        cpu,
-                        gpu,
-                        reason,
-                    )
+            if independently_trusted {
+                match registered {
+                    Some(definition) => {
+                        let (status, implementation_crate, cpu, gpu, reason) =
+                            registered_operation_capability(definition);
+                        (
+                            Some(definition.descriptor().id.rust_id.clone()),
+                            status,
+                            implementation_crate,
+                            cpu,
+                            gpu,
+                            reason,
+                        )
+                    }
+                    None => (
+                        None,
+                        OperationClassification::IntentionallyUnsupportedBlocking,
+                        String::new(),
+                        operation.cpu_implementation != "none",
+                        !operation.opencl_kernels.is_empty(),
+                        Some("reference operation is not yet registered in RustTable".to_owned()),
+                    ),
                 }
-                None => (
-                    None,
-                    OperationClassification::IntentionallyUnsupportedBlocking,
+            } else {
+                (
+                    registered.map(|definition| definition.descriptor().id.rust_id.clone()),
+                    OperationClassification::ReferenceOnlyNonProduct,
                     String::new(),
-                    operation.cpu_implementation != "none",
-                    !operation.opencl_kernels.is_empty(),
-                    Some("reference operation is not yet registered in RustTable".to_owned()),
-                ),
+                    false,
+                    false,
+                    Some(
+                        "opaque/deferred: no independent trust contract; operation is reference-only"
+                            .to_owned(),
+                    ),
+                )
             };
         let descriptor_version = u16::try_from(operation.module_version)
             .map_err(|_| format!("operation manifest: version is too large: {identity}"))?;
@@ -273,6 +334,18 @@ fn render_operation_capabilities(root: &Path) -> Result<String> {
             reason,
         });
     }
+    let manifest_capability_records = entries
+        .iter()
+        .filter(|entry| entry.identity.starts_with("darktable:"))
+        .map(|entry| {
+            (
+                entry.compatibility_name.clone(),
+                format!("{:?}", entry.status),
+            )
+        })
+        .collect::<Vec<_>>();
+    rusttable_parity::validate_manifest_capability_accounting(&manifest_capability_records)
+        .map_err(|error| format!("operation manifest: capability accounting failed: {error}"))?;
     let closure = RegistryClosure::new(entries)
         .map_err(|error| format!("operation manifest: closure failed: {error}"))?;
     let artifact = OperationCapabilitiesArtifact {

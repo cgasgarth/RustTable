@@ -3,8 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use rusttable_parity::{
-    CodecField, EnumValue, ParameterCodec, ParameterValue, decode_parameter, encode_parameter,
-    render_operation_manifest, scan_operations_with_overrides, validate_operation_manifest,
+    CodecField, EnumValue, ParameterCodec, ParameterValue, ScanError, decode_parameter,
+    encode_parameter, parse_operation_overrides, render_operation_manifest,
+    scan_operations_with_overrides, validate_operation_manifest,
 };
 
 fn fixture_root(name: &str) -> PathBuf {
@@ -75,6 +76,221 @@ fn layout_blocks(path: &str) -> String {
         .expect("write ABI fixture");
     }
     value
+}
+
+fn scan_fixture_root(name: &str, cmake: &str, sources: &[(&str, &str)]) -> PathBuf {
+    let root = fixture_root(name);
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("src/iop")).expect("fixture iop directory");
+    fs::create_dir_all(root.join("data/kernels")).expect("fixture kernel directory");
+    fs::write(root.join("compile_commands.json"), "[]\n").expect("fixture compile commands");
+    fs::write(root.join("src/iop/CMakeLists.txt"), cmake).expect("fixture registration");
+    fs::write(root.join("data/kernels/programs.conf"), "basic.cl 0\n").expect("fixture programs");
+    fs::write(
+        root.join("data/kernels/basic.cl"),
+        "kernel void basic() {}\n",
+    )
+    .expect("fixture kernel");
+    for (name, content) in sources {
+        fs::write(root.join("src/iop").join(name), content).expect("fixture source");
+    }
+    root
+}
+
+#[test]
+fn source_scan_preserves_native_bloom_fields_with_audited_overrides() {
+    let retained_cmake = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/iop/CMakeLists.txt"),
+    )
+    .expect("read retained CMake");
+    let bloom_registration = retained_cmake
+        .lines()
+        .nth(67)
+        .expect("retained Bloom registration line");
+    let root = scan_fixture_root(
+        "native-bloom-with-audited-overrides",
+        &format!("{}\n{bloom_registration}\n", "\n".repeat(66)),
+        &[(
+            "bloom.c",
+            "DT_MODULE_INTROSPECTION(1, dt_iop_bloom_params_t)\nvoid process(void) {}\n",
+        )],
+    );
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    fs::copy(
+        repository.join("data/kernels/programs.conf"),
+        root.join("data/kernels/programs.conf"),
+    )
+    .expect("copy retained program registry");
+    fs::copy(
+        repository.join("data/kernels/bloom.cl"),
+        root.join("data/kernels/bloom.cl"),
+    )
+    .expect("copy retained Bloom program");
+    fs::write(
+        root.join(".rusttable-reference-commit"),
+        "cfe57f3bbf5269bfacf31e832267279caa6938ad\n",
+    )
+    .expect("fixture source identity");
+    let overrides_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../architecture/operation-overrides.toml");
+    let override_source = fs::read_to_string(&overrides_path).expect("read audited overrides");
+    let bloom_start = override_source
+        .find("[[operation]]\nname = \"bloom\"")
+        .expect("Bloom audited override");
+    let bloom_end = override_source[bloom_start..]
+        .find("\n[[operation]]")
+        .map_or(override_source.len(), |offset| bloom_start + offset);
+    let bloom_override_source = &override_source[bloom_start..bloom_end];
+    let bloom_override = parse_operation_overrides(bloom_override_source)
+        .expect("parse audited overrides")
+        .into_iter()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom audited override");
+    assert_eq!(
+        bloom_override.parameter_layout_hash.as_deref(),
+        Some("8dab7530b84521ba38cd18b5107129a5bec82a0cd667966484fc5317d0f267f0")
+    );
+    assert_eq!(bloom_override.default_order, Some(61));
+
+    let manifest =
+        scan_operations_with_overrides(&root, bloom_override_source).expect("scan retained source");
+    let bloom = manifest
+        .operations
+        .iter()
+        .find(|operation| operation.name == "bloom")
+        .expect("native Bloom operation");
+    assert_eq!(
+        bloom.parameter_layout_hash,
+        "1cdf4b1c74dea5b674e66a56795656a7a01cca14c97fbf0834c0bfbc2f608ae4"
+    );
+    assert_eq!(bloom.default_order, 67);
+    fs::remove_dir_all(root).expect("remove retained source fixture");
+}
+
+#[test]
+fn malformed_add_iop_registration_is_a_typed_extraction_error() {
+    let root = scan_fixture_root("malformed-add-iop", "add_iop()\n", &[]);
+    let error = scan_operations_with_overrides(&root, "").expect_err("malformed registration");
+    match error {
+        ScanError::OperationExtraction { operation, message } => {
+            assert_eq!(operation, "add_iop");
+            assert!(message.contains("CMakeLists.txt:1"));
+            assert!(message.contains("add_iop()"));
+            assert!(message.contains("no operation token"));
+        }
+        other => panic!("expected typed extraction error, got {other:?}"),
+    }
+    fs::remove_dir_all(root).expect("remove fixture");
+}
+
+#[test]
+fn duplicate_cmake_registration_is_a_typed_extraction_error() {
+    let root = scan_fixture_root(
+        "duplicate-cmake-registration",
+        "add_iop(alpha \"alpha.c\")\nadd_iop(alpha \"other.c\")\n",
+        &[("alpha.c", "void process(void) {}\n")],
+    );
+    let error = scan_operations_with_overrides(&root, "").expect_err("duplicate registration");
+    match error {
+        ScanError::OperationExtraction { operation, message } => {
+            assert_eq!(operation, "alpha");
+            assert!(message.contains("duplicate add_iop registration"));
+            assert!(message.contains("CMakeLists.txt:1"));
+            assert!(message.contains("CMakeLists.txt:2"));
+            assert!(message.contains("src/iop/alpha.c"));
+            assert!(message.contains("src/iop/other.c"));
+        }
+        other => panic!("expected typed extraction error, got {other:?}"),
+    }
+    fs::remove_dir_all(root).expect("remove fixture");
+}
+
+#[test]
+fn mutually_exclusive_cmake_branches_register_one_operation() {
+    let root = scan_fixture_root(
+        "mutually-exclusive-cmake-branches",
+        "if(GMIC_FOUND)\n  add_iop(lut3d \"lut3d.c\" \"lut3dgmic.cpp\")\nelse(GMIC_FOUND)\n  add_iop(lut3d \"lut3d.c\")\nendif(GMIC_FOUND)\n",
+        &[("lut3d.c", "void process(void) {}\n")],
+    );
+    let lut3d_override = overrides()
+        .split("\n[[operation]]\nname = \"zeta\"")
+        .next()
+        .expect("single operation override")
+        .replace("alpha", "lut3d");
+
+    let manifest = scan_operations_with_overrides(&root, &lut3d_override)
+        .expect("mutually exclusive branches are one registration");
+    assert_eq!(manifest.operations.len(), 1);
+    assert_eq!(manifest.operations[0].name, "lut3d");
+    fs::remove_dir_all(root).expect("remove fixture");
+}
+
+#[test]
+fn duplicate_registration_in_one_conditional_branch_remains_typed_error() {
+    let root = scan_fixture_root(
+        "duplicate-conditional-branch",
+        "if(GMIC_FOUND)\n  add_iop(alpha \"alpha.c\")\n  add_iop(alpha \"other.c\")\nendif(GMIC_FOUND)\n",
+        &[("alpha.c", "void process(void) {}\n")],
+    );
+    let error = scan_operations_with_overrides(&root, "").expect_err("duplicate registration");
+    match error {
+        ScanError::OperationExtraction { operation, message } => {
+            assert_eq!(operation, "alpha");
+            assert!(message.contains("duplicate add_iop registration"));
+            assert!(message.contains("CMakeLists.txt:2"));
+            assert!(message.contains("CMakeLists.txt:3"));
+        }
+        other => panic!("expected typed extraction error, got {other:?}"),
+    }
+    fs::remove_dir_all(root).expect("remove fixture");
+}
+
+#[test]
+fn duplicate_unknown_and_missing_overrides_are_rejected_before_application() {
+    let duplicate = "[[operation]]\nname = \"alpha\"\n[[operation]]\nname = \"alpha\"\n";
+    match parse_operation_overrides(duplicate) {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("duplicate override name"));
+            assert!(message.contains("entries 0 and 1"));
+        }
+        other => panic!("expected duplicate override error, got {other:?}"),
+    }
+    match parse_operation_overrides("[[operation]]\nname = \" alpha\"\n") {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("leading or trailing whitespace"));
+        }
+        other => panic!("expected canonical override name error, got {other:?}"),
+    }
+
+    let root = scan_fixture_root(
+        "override-name-validation",
+        "add_iop(alpha \"alpha.c\")\nadd_iop(zeta \"zeta.c\")\n",
+        &[
+            ("alpha.c", "void process(void) {}\n"),
+            ("zeta.c", "void process(void) {}\n"),
+        ],
+    );
+    let unknown = format!("[[operation]]\nname = \"unknown\"\n{}", overrides());
+    match scan_operations_with_overrides(&root, &unknown) {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("unknown"));
+            assert!(message.contains("absent from the architecture manifest"));
+        }
+        other => panic!("expected unknown override error, got {other:?}"),
+    }
+    let alpha_only = overrides()
+        .split("\n[[operation]]\nname = \"zeta\"")
+        .next()
+        .expect("alpha override")
+        .to_owned();
+    match scan_operations_with_overrides(&root, &alpha_only) {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("manifest/override name mismatch"));
+            assert!(message.contains("zeta"));
+        }
+        other => panic!("expected missing override error, got {other:?}"),
+    }
+    fs::remove_dir_all(root).expect("remove fixture");
 }
 
 #[test]

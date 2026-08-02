@@ -14,7 +14,10 @@ const LEVELS_SNAPSHOT_KIND_TAG: u8 = 34;
 const RGBLEVELS_SNAPSHOT_KIND_TAG: u8 = 35;
 const COLORTRANSFER_SNAPSHOT_KIND_TAG: u8 = 36;
 const COLORMAPPING_SNAPSHOT_KIND_TAG: u8 = 37;
-const SNAPSHOT_KIND_TAGS: [u8; 38] = [
+const RELIGHT_SNAPSHOT_KIND_TAG: u8 = 38;
+const VIGNETTE_SNAPSHOT_KIND_TAG: u8 = 39;
+const GRADUATED_ND_SNAPSHOT_KIND_TAG: u8 = 40;
+const SNAPSHOT_KIND_TAGS: [u8; 41] = [
     0,
     1,
     2,
@@ -53,6 +56,9 @@ const SNAPSHOT_KIND_TAGS: [u8; 38] = [
     RGBLEVELS_SNAPSHOT_KIND_TAG,
     COLORTRANSFER_SNAPSHOT_KIND_TAG,
     COLORMAPPING_SNAPSHOT_KIND_TAG,
+    RELIGHT_SNAPSHOT_KIND_TAG,
+    VIGNETTE_SNAPSHOT_KIND_TAG,
+    GRADUATED_ND_SNAPSHOT_KIND_TAG,
 ];
 const _: () = assert!(snapshot_kind_tags_are_unique(&SNAPSHOT_KIND_TAGS));
 
@@ -657,6 +663,20 @@ fn write_operation_kind_extended(hasher: &mut Sha256, kind: &ProcessingOperation
                 }
                 .to_bytes(),
             );
+        }
+        ProcessingOperationKind::Relight { config } => {
+            hasher.update([RELIGHT_SNAPSHOT_KIND_TAG]);
+            for value in [config.ev(), config.center(), config.width()] {
+                hasher.update(value.to_bits().to_le_bytes());
+            }
+        }
+        ProcessingOperationKind::Vignette { config } => {
+            hasher.update([VIGNETTE_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
+        }
+        ProcessingOperationKind::GraduatedNd { config } => {
+            hasher.update([GRADUATED_ND_SNAPSHOT_KIND_TAG]);
+            hasher.update(config.parameters().to_bytes());
         }
         ProcessingOperationKind::Velvia { config } => {
             hasher.update([26]);

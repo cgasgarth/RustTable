@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -8,7 +8,10 @@ use super::model::{
     OperationOverrideFile, ParameterCodec, PresetRecord, RoiContract, TilingContract,
 };
 use super::reference::{manifest_reference, reference_commit, reference_identity};
-use super::validate::validate_operation_manifest;
+use super::trust_anchor::{
+    NATIVE_SOURCE_COMMIT, validate_native_operation_provenance, validate_operation_overrides,
+};
+use super::validate::validate_operation_manifest_shape;
 use crate::ScanError;
 
 /// Extracts the registered IOPs and their persisted compatibility metadata.
@@ -47,7 +50,7 @@ pub fn scan_operations_with_identity(
     }
     let mut manifest = scan_operations_with_overrides(&identity.source_dir, overrides)?;
     manifest.reference = manifest_reference(identity);
-    validate_operation_manifest(&manifest)?;
+    super::validate::validate_operation_manifest(&manifest)?;
     Ok(manifest)
 }
 
@@ -85,49 +88,138 @@ pub fn scan_operations_with_overrides(
             message: "compile_commands.json must contain a JSON array".to_owned(),
         });
     }
-    let entries = parse_overrides(overrides)?;
+    let entries = parse_operation_overrides(overrides)?;
+    let source_identity = reference_identity(source);
     let cmake_path = source.join("src/iop/CMakeLists.txt");
     let cmake = read(source, &cmake_path)?;
     let programs = opencl_registry(source)?;
+    let native_operations = if source_identity.source_commit == NATIVE_SOURCE_COMMIT {
+        committed_native_operations()?
+    } else {
+        BTreeMap::new()
+    };
+    let mut registrations = BTreeMap::<String, (usize, String, Vec<(usize, usize)>)>::new();
+    let mut conditional_stack = Vec::new();
+    let mut next_conditional_id = 0;
     let mut operations = Vec::new();
     for (order, line) in cmake.lines().enumerate() {
         let tokens = cmake_tokens(line);
-        if tokens.first().map(String::as_str) != Some("add_iop") {
+        match cmake_conditional_command(&tokens) {
+            Some(CmakeConditionalCommand::If) => {
+                conditional_stack.push(ConditionalFrame {
+                    id: next_conditional_id,
+                    branch: 0,
+                });
+                next_conditional_id += 1;
+                continue;
+            }
+            Some(CmakeConditionalCommand::ElseIf | CmakeConditionalCommand::Else) => {
+                if let Some(frame) = conditional_stack.last_mut() {
+                    frame.branch += 1;
+                }
+                continue;
+            }
+            Some(CmakeConditionalCommand::EndIf) => {
+                conditional_stack.pop();
+                continue;
+            }
+            None => {}
+        }
+        if !is_add_iop_registration(line, &tokens) {
             continue;
         }
-        let Some(name) = tokens.get(1) else { continue };
-        let Some(file) = tokens.get(2) else {
+        let branch_path = conditional_stack
+            .iter()
+            .map(|frame| (frame.id, frame.branch))
+            .collect::<Vec<_>>();
+        let Some(name) = tokens.get(1).filter(|name| !name.trim().is_empty()) else {
+            return Err(operation_extraction_error(
+                &cmake_path,
+                order,
+                line,
+                "add_iop has no operation token",
+            ));
+        };
+        let Some(file) = tokens.get(2).filter(|file| !file.trim().is_empty()) else {
+            return Err(operation_extraction_error(
+                &cmake_path,
+                order,
+                line,
+                "add_iop has no source file token",
+            ));
+        };
+        let relative = format!("src/iop/{file}");
+        if let Some((first_order, first_relative, first_branch_path)) = registrations.get(name) {
+            if conditionally_exclusive(first_branch_path, &branch_path) {
+                // CMake selects one branch of an if/elseif/else group. Keep the
+                // first source-bearing registration as the operation identity;
+                // the alternate branch is not a second runtime registration.
+                continue;
+            }
             return Err(ScanError::OperationExtraction {
                 operation: name.clone(),
-                message: "add_iop has no source file".to_owned(),
+                message: format!(
+                    "duplicate add_iop registration: first at {}:{} ({first_relative}), again at {}:{} ({relative}); context: {:?}",
+                    cmake_path.display(),
+                    first_order + 1,
+                    cmake_path.display(),
+                    order + 1,
+                    line.trim(),
+                ),
             });
-        };
-        if operations
-            .iter()
-            .any(|operation: &Operation| operation.name == *name)
-        {
-            continue;
         }
-        let relative = format!("src/iop/{file}");
+        registrations.insert(name.clone(), (order, relative.clone(), branch_path));
         let path = source.join(&relative);
         let content = read(source, &path)?;
-        let mut operation = extract_operation(name, &relative, order, &content, &programs);
-        operation.default_enabled = tokens.iter().any(|token| token == "DEFAULT_VISIBLE");
-        if let Some(override_entry) = entries.iter().find(|entry| entry.name == *name) {
-            apply_override(&mut operation, override_entry);
+        let extracted = extract_operation(name, &relative, order, &content, &programs);
+        let default_enabled = tokens.iter().any(|token| token == "DEFAULT_VISIBLE");
+        let native = native_operations.get(name);
+        if let Some(native) = native {
+            validate_native_registration(&extracted, native, default_enabled)?;
         }
-        complete_generated_metadata(&mut operation, source);
-        resolve_opencl_references(&mut operation, source)?;
+        let mut operation = native.cloned().unwrap_or(extracted);
+        if native.is_none() {
+            operation.default_enabled = default_enabled;
+        }
         operations.push(operation);
+    }
+    let operation_names = operations
+        .iter()
+        .map(|operation| operation.name.clone())
+        .collect::<BTreeSet<_>>();
+    validate_operation_overrides(&entries, &operation_names)?;
+    let overrides_by_name = entries
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    for operation in &mut operations {
+        let override_entry = overrides_by_name
+            .get(operation.name.as_str())
+            .copied()
+            .ok_or_else(|| ScanError::InvalidOverrides {
+                message: format!(
+                    "manifest/override name mismatch: missing override for {}",
+                    operation.name
+                ),
+            })?;
+        if !native_operations.contains_key(&operation.name) {
+            // Audited records are validated separately from native records. They are only used
+            // to complete synthetic fixture operations; a native source operation must retain the
+            // checked-in cfe57 record unchanged.
+            apply_override(operation, override_entry);
+            complete_generated_metadata(operation, source);
+        }
+        resolve_opencl_references(operation, source)?;
+        validate_native_operation_provenance(&source_identity, operation)?;
     }
     operations.sort_by(|left, right| left.name.cmp(&right.name));
     let manifest = OperationManifest {
         schema_version: 3,
-        reference: reference_identity(source),
+        reference: source_identity,
         history: history_contract(),
         operations,
     };
-    validate_operation_manifest(&manifest)?;
+    validate_operation_manifest_shape(&manifest)?;
     Ok(manifest)
 }
 
@@ -782,15 +874,103 @@ fn history_contract() -> HistoryCompatibility {
     }
 }
 
-fn parse_overrides(contents: &str) -> Result<Vec<OperationOverride>, ScanError> {
+fn committed_native_operations() -> Result<BTreeMap<String, Operation>, ScanError> {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/darktable-operations.toml");
+    let contents = match fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(error) => {
+            return Err(ScanError::Io {
+                path: path.display().to_string(),
+                message: error.to_string(),
+            });
+        }
+    };
+    let manifest = toml::from_str::<OperationManifest>(&contents).map_err(|error| {
+        ScanError::InvalidManifest {
+            message: format!("read native operation seed: {error}"),
+        }
+    })?;
+    Ok(manifest
+        .operations
+        .into_iter()
+        .map(|operation| (operation.name.clone(), operation))
+        .collect())
+}
+
+fn validate_native_registration(
+    extracted: &Operation,
+    native: &Operation,
+    default_enabled: bool,
+) -> Result<(), ScanError> {
+    let operation = extracted.name.clone();
+    if extracted.reference_path != native.reference_path {
+        return Err(ScanError::OperationValidation {
+            operation,
+            message: format!(
+                "native source registration path differs from the committed manifest: source {:?}, manifest {:?}",
+                extracted.reference_path, native.reference_path
+            ),
+        });
+    }
+    if extracted.module_version != native.module_version {
+        return Err(ScanError::OperationValidation {
+            operation: extracted.name.clone(),
+            message: format!(
+                "native source module version differs from the committed manifest: source {}, manifest {}",
+                extracted.module_version, native.module_version
+            ),
+        });
+    }
+    if default_enabled != native.default_enabled {
+        return Err(ScanError::OperationValidation {
+            operation: extracted.name.clone(),
+            message: format!(
+                "native source default visibility differs from the committed manifest: source {}, manifest {}",
+                default_enabled, native.default_enabled
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Parses the typed operation override records used by code generation and provenance checks.
+///
+/// # Errors
+///
+/// Returns an error when the TOML cannot be represented by the override schema.
+pub fn parse_operation_overrides(contents: &str) -> Result<Vec<OperationOverride>, ScanError> {
     if contents.trim().is_empty() {
         return Ok(Vec::new());
     }
-    toml::from_str::<OperationOverrideFile>(contents)
-        .map(|file| file.operations)
-        .map_err(|error| ScanError::InvalidOverrides {
+    let file = toml::from_str::<OperationOverrideFile>(contents).map_err(|error| {
+        ScanError::InvalidOverrides {
             message: error.to_string(),
-        })
+        }
+    })?;
+    if let Some((name, first_position, second_position)) = file.duplicate_name() {
+        return Err(ScanError::InvalidOverrides {
+            message: format!(
+                "duplicate override name {name:?}: entries {first_position} and {second_position}"
+            ),
+        });
+    }
+    for (position, entry) in file.operations.iter().enumerate() {
+        if entry.name.trim().is_empty() {
+            return Err(ScanError::InvalidOverrides {
+                message: format!("override entry {position} has an empty operation name"),
+            });
+        }
+        if entry.name != entry.name.trim() {
+            return Err(ScanError::InvalidOverrides {
+                message: format!(
+                    "override entry {position} has leading or trailing whitespace in its operation name"
+                ),
+            });
+        }
+    }
+    Ok(file.operations)
 }
 
 fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
@@ -886,6 +1066,70 @@ fn apply_override(operation: &mut Operation, entry: &OperationOverride) {
     }
     if let Some(value) = &entry.presets {
         operation.presets.clone_from(value);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ConditionalFrame {
+    id: usize,
+    branch: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CmakeConditionalCommand {
+    If,
+    ElseIf,
+    Else,
+    EndIf,
+}
+
+fn cmake_conditional_command(tokens: &[String]) -> Option<CmakeConditionalCommand> {
+    match tokens.first().map(String::as_str) {
+        Some("if") => Some(CmakeConditionalCommand::If),
+        Some("elseif") => Some(CmakeConditionalCommand::ElseIf),
+        Some("else") => Some(CmakeConditionalCommand::Else),
+        Some("endif") => Some(CmakeConditionalCommand::EndIf),
+        _ => None,
+    }
+}
+
+fn conditionally_exclusive(
+    first_branch_path: &[(usize, usize)],
+    second_branch_path: &[(usize, usize)],
+) -> bool {
+    first_branch_path.iter().any(|(first_id, first_branch)| {
+        second_branch_path.iter().any(|(second_id, second_branch)| {
+            first_id == second_id && first_branch != second_branch
+        })
+    })
+}
+
+fn is_add_iop_registration(line: &str, tokens: &[String]) -> bool {
+    if tokens.first().map(String::as_str) == Some("add_iop") {
+        return true;
+    }
+    let trimmed = line.trim_start();
+    let Some(rest) = trimmed.strip_prefix("add_iop") else {
+        return false;
+    };
+    rest.is_empty()
+        || rest.starts_with(|character: char| character.is_ascii_whitespace() || character == '(')
+}
+
+fn operation_extraction_error(
+    cmake_path: &Path,
+    line_number: usize,
+    context: &str,
+    message: &str,
+) -> ScanError {
+    ScanError::OperationExtraction {
+        operation: "add_iop".to_owned(),
+        message: format!(
+            "{}:{}: {message}; source context: {:?}",
+            cmake_path.display(),
+            line_number + 1,
+            context.trim(),
+        ),
     }
 }
 

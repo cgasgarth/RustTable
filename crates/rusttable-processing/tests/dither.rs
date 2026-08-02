@@ -8,7 +8,7 @@ use rusttable_processing::descriptor::{OperationFlags, dither_descriptor};
 use rusttable_processing::operations::dither::{
     DitherBitDepth, DitherConfig, DitherHistory, DitherMethod, DitherParametersV1,
     DitherParametersV2, DitherPlan, DitherRenderContext, quantize_round_half_strictly_greater,
-    rgb_to_gray,
+    repository_envelope, rgb_to_gray,
 };
 use rusttable_processing::{FiniteF32, LinearRgb, RasterDimensions, builtin_registry};
 
@@ -21,22 +21,36 @@ fn pixel(value: f32) -> LinearRgb {
 }
 
 #[test]
-fn dither_codecs_preserve_fixed_fields_migrations_and_unknown_payloads() {
+fn dither_native_codecs_preserve_fixed_fields_migrations_and_unknown_payloads() {
     let v1 = DitherParametersV1::defaults();
-    assert_eq!(v1.to_bytes().len(), 168);
-    let v2 = DitherHistory::V1(v1.clone())
-        .migrate_v1()
-        .expect("migration");
-    assert_eq!(v2.to_bytes().len(), 36);
+    assert_eq!(v1.to_bytes().len(), 32);
+    let v2 = DitherHistory::V1(v1).migrate_v1().expect("migration");
+    assert_eq!(v2.to_bytes().len(), 32);
     assert_eq!(v2.method_id, DitherMethod::FsAuto.id());
-    assert_eq!(v2.opaque_source().expect("source").len(), 168);
+    assert_eq!(v2.to_bytes(), DitherParametersV2::defaults().to_bytes());
+
     let unknown = DitherHistory::decode(44, &[3, 1, 4]).expect("opaque");
-    assert_eq!(unknown.payload(), [3, 1, 4]);
+    assert_eq!(unknown.payload().expect("re-encode opaque"), [3, 1, 4]);
     let mut unknown_method_bytes = DitherParametersV2::defaults().to_bytes();
     unknown_method_bytes[0..4].copy_from_slice(&999_u32.to_le_bytes());
     let unknown_method = DitherHistory::decode(2, &unknown_method_bytes).expect("opaque");
-    assert_eq!(unknown_method.payload(), unknown_method_bytes);
-    assert_eq!(DitherParametersV2::defaults().to_bytes().len(), 36);
+    assert_eq!(
+        unknown_method.payload().expect("re-encode unknown method"),
+        unknown_method_bytes
+    );
+    assert_eq!(DitherParametersV2::defaults().to_bytes().len(), 32);
+}
+
+#[test]
+fn qualified_repository_envelopes_are_explicitly_separate_from_native_history() {
+    let parameters = DitherParametersV1::defaults();
+    let tail = [0xa5; repository_envelope::V1_TAIL_BYTES];
+    let qualified = repository_envelope::encode_v1(&parameters, &tail);
+    assert_eq!(qualified.len(), 168);
+    assert_eq!(&qualified[..32], &parameters.to_bytes());
+    let (decoded, decoded_tail) = repository_envelope::decode_v1(&qualified).expect("decode slot");
+    assert_eq!(decoded, parameters);
+    assert_eq!(decoded_tail, tail);
 }
 
 #[test]

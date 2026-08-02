@@ -1,0 +1,320 @@
+schema = "rusttable.bloom-source-map.v1"
+rusttable_baseline = "7aaec20b8c845df5607e864130e23e643381d313"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "bloom"
+rust_id = "rusttable.bloom"
+production_registration = "deferred; this bounded leaf is path-loaded only and does not replace the provisional shared bloom module or baseline production Bloom coverage"
+native_cpu_profile = "retained macOS Option A package lane: packaging/macosx/2_build_hb_darktable_default.sh overrides build.sh's RelWithDebInfo default with Release on Apple ARM Apple Clang"
+native_cpu_option_order = "src/CMakeLists.txt appends ${MARCH} and -g to CMAKE_C_FLAGS, then appends -O3, the fast-math enable option spelled by joining -f and fast-math, and -fno-finite-math-only to CMAKE_C_FLAGS_RELEASE in that order; the final option leaves __FAST_MATH__ undefined"
+native_cpu_march_mtune_source = "DefineOptions.cmake defaults BINARY_PACKAGE_BUILD=OFF for the selected default script; cmake/march-mtune.cmake therefore probes -march=native for AppleClang, then -mtune=native and -mtune=generic as fallbacks"
+native_cpu_math_helper_branch = "because __FAST_MATH__ is undefined, src/common/math.h selects the non-fast dt_fast_hypotf helper that calls hypotf; Bloom does not call that helper"
+native_cpu_profile_status = "the retained scripts pin the lane and flag order but not an Apple Clang version or host CPU; this leaf explicitly models only observed Bloom-local Release arithmetic points, including the folded f64 radius/strength transforms and two ordered screen FMAs, with hard-coded discriminators"
+writable_paths = [
+  "architecture/rusttable-bloom-source-map.toml",
+  "architecture/rusttable-numerics.toml",
+  "crates/rusttable-processing/src/operations/bloom/",
+  "crates/rusttable-processing/tests/bloom_leaf.rs",
+]
+retained_source_inputs = [
+  "src/iop/bloom.c",
+  "packaging/macosx/BUILD_hb.txt",
+  "packaging/macosx/2_build_hb_darktable_default.sh",
+  "build.sh",
+  "CMakeLists.txt",
+  "DefineOptions.cmake",
+  "cmake/march-mtune.cmake",
+  "src/CMakeLists.txt",
+  "src/iop/CMakeLists.txt",
+  "src/common/darktable.h",
+  "src/common/dttypes.h",
+  "src/common/iop_order.c",
+  "src/bauhaus/bauhaus.c",
+  "src/bauhaus/bauhaus.h",
+  "src/common/box_filters.h",
+  "src/common/box_filters.cc",
+  "src/common/imagebuf.h",
+  "src/common/imagebuf.c",
+  "src/common/math.h",
+  "src/common/opencl.h",
+  "src/control/control.h",
+  "src/develop/develop.h",
+  "src/develop/imageop.h",
+  "src/develop/imageop.c",
+  "src/develop/imageop_math.h",
+  "src/develop/imageop_gui.c",
+  "src/develop/imageop_gui.h",
+  "src/develop/pixelpipe.h",
+  "src/develop/pixelpipe_hb.h",
+  "src/develop/tiling.h",
+  "src/gui/accelerators.h",
+  "src/gui/gtk.h",
+  "src/iop/iop_api.h",
+  "data/kernels/bloom.cl",
+  "data/kernels/common.h",
+  "data/kernels/colorspace.h",
+  "data/kernels/programs.conf",
+]
+native_direct_caller_helper_inventory = [
+  "packaging/macosx/BUILD_hb.txt::Option A selects packaging/macosx/2_build_hb_darktable_default.sh; that script passes --build-type Release and overrides build.sh's RelWithDebInfo default",
+  "build.sh::the selected package command forwards CMAKE_BUILD_TYPE=Release; DefineOptions.cmake leaves BINARY_PACKAGE_BUILD at its OFF default",
+  "src/CMakeLists.txt::include(march-mtune) supplies ${MARCH}; generic C flags append ${MARCH} then -g, and Release C flags append -O3, the fast-math enable option spelled by joining -f and fast-math, then -fno-finite-math-only in source order",
+  "cmake/march-mtune.cmake::AppleClang with BINARY_PACKAGE_BUILD=OFF probes -march=native, then falls back to -mtune=native and -mtune=generic",
+  "src/iop/CMakeLists.txt::add_iop(bloom, bloom.c) routes the generated introspection translation unit into the inherited profile",
+  "src/iop/bloom.c::commit_params copies size, threshold, and strength verbatim; process consumes the committed values without introspection-range validation",
+  "src/develop/imageop_gui.c::dt_bauhaus_slider_from_params derives float-slider digits as MAX(2, -floorf(log10f(top/100)+.1)); each Bloom 0..100 range therefore produces exactly 2 digits",
+  "src/bauhaus/bauhaus.c::dt_bauhaus_slider_new_with_range_and_feedback and dt_bauhaus_slider_from_widget pass and store the derived digits value unchanged",
+  "src/common/math.h::__FAST_MATH__ is not defined by Apple Clang after the final -fno-finite-math-only option, so the non-fast dt_fast_hypotf branch calls hypotf; Bloom itself does not use that helper",
+  "src/common/box_filters.h::dt_box_mean and BOX_ITERATIONS declare the blur boundary",
+  "src/common/box_filters.cc::_compute_effective_height, _alloc_scratch_space, _box_mean, MAX_VECT, and dt_box_mean define scratch geometry, allocation failure, and pass order",
+  "src/common/darktable.h::dt_alloc_perthread, dt_alloc_perthread_float, dt_get_perthread, dt_get_num_threads, and DT_IS_ALIGNED define cache-line-rounded worker allocation and access",
+  "src/common/dttypes.h::DT_CACHELINE_BYTES selects 128 bytes for __APPLE__ plus __aarch64__",
+  "src/common/imagebuf.h and src/common/imagebuf.c::dt_iop_alloc_image_buffers and dt_iop_copy_image_roi define the temporary-lightness and copy-through boundaries",
+  "src/develop/imageop.h and src/develop/imageop.c::dt_iop_have_required_input_format define unsupported-format copy-through",
+  "src/develop/pixelpipe.h and src/develop/pixelpipe_hb.h::dt_iop_roi_t.scale and dt_dev_pixelpipe_iop_t.iscale supply radius scaling",
+  "src/develop/tiling.h plus src/iop/bloom.c::tiling_callback define factor, maxbuf, overlap, and alignment publication",
+  "data/kernels/bloom.cl, data/kernels/common.h, data/kernels/colorspace.h, data/kernels/programs.conf, and src/common/opencl.h define the deferred program-12 GPU path",
+]
+retained_versioned_order_evidence = [
+  "src/common/iop_order.c::v30_order has colorzones at 60.0 immediately followed by bloom at 61.0",
+  "crates/rusttable-compat/src/history/order.rs::V30_BUILT_IN_ORDER keeps colorzones immediately followed by bloom",
+]
+native_functions = [
+  "name",
+  "description",
+  "flags",
+  "default_group",
+  "default_colorspace",
+  "process",
+  "bucket_next",
+  "process_cl",
+  "tiling_callback",
+  "init_global",
+  "cleanup_global",
+  "commit_params",
+  "init_pipe",
+  "cleanup_pipe",
+  "gui_init",
+]
+native_types = [
+  "dt_iop_bloom_params_t: size, threshold, strength",
+  "dt_iop_bloom_gui_data_t: size, threshold, strength widgets",
+  "dt_iop_bloom_data_t: committed size, threshold, strength",
+  "dt_iop_bloom_global_data_t: threshold, hblur, vblur, mix kernel handles",
+]
+native_constants_order_defaults_equations = [
+  "DT_MODULE_INTROSPECTION version 1; three f32 fields in size/threshold/strength order; defaults 20/90/25; 0..100 ranges constrain introspection/UI only",
+  "commit_params copies every field verbatim and process applies no introspection-range rejection; the bounded Rust codec and config preserve every finite committed f32, while plan construction fails closed only when size would produce a negative or invalid box-filter radius",
+  "NUM_BUCKETS=4; OpenCL program=12; BOX_ITERATIONS=8; radius upper cap=256; box-filter MAX_VECT=16",
+  "selected retained C profile: packaging/macosx/2_build_hb_darktable_default.sh chooses Release; src/CMakeLists.txt appends -O3, the fast-math enable option spelled by joining -f and fast-math, then -fno-finite-math-only, leaving Apple Clang __FAST_MATH__ undefined while other selected optimizations remain available",
+  "selected Release radius order: size+1.0f rounds as float; fmin promotes to double; division/multiplication folds to one double 2.56 factor; assignment truncates to signed int; int*roi_in.scale/piece.iscale remains left-to-right float; ceilf returns float; upper-only float MIN precedes integer narrowing; size=-1 produces radius zero and a negative/invalid final radius such as size=-2 fails closed before box filtering",
+  "selected Release strength order: strength+1.0f rounds as float; fmin promotes to double; observed compiler output transforms reciprocal exp2 plus negation to positive exp2; division by 100 folds to double factor 0.01; one f32 narrowing occurs at exp2f; upper strength remains capped while lower finite values remain uncapped",
+  "threshold is copied and compared without a 0..100 clamp; comparison remains strict L > threshold",
+  "box-filter scratch footprint per native worker: max(N*width, height, 16*effective_height) floats, where effective_height starts at 2, doubles while right-shifting 2*radius+1, then clamps to height",
+  "dt_alloc_perthread rounds each worker's scratch bytes up to DT_CACHELINE_BYTES; the target __APPLE__ plus __aarch64__ branch uses 128 bytes",
+  "blur order: eight horizontal then vertical shrinking-edge box means; ordinary one-channel sums, differences, and hit-count division add no Bloom-local contraction point",
+  "selected Apple ARM Release compiler output contracts screen L to fma(fma(input_L,0.01,-1),100-blurred_L,100); the leaf intentionally models these two FMAs explicitly and copies a, b, and channel four bit-for-bit, including signed zero",
+  "tiling: CPU factor 2.30, OpenCL factor 3.00, maxbuf 1.00, overhead 0, overlap 5*radius (source-marked guess), align 1",
+  "UI order: size, threshold, strength; percent format; each 0..100 float slider has 2 digits from imageop_gui.c's MAX(2, -floorf(log10f(top/100)+.1)) helper and bauhaus.c stores that precision unchanged; exact deferred tooltips are inventoried below",
+  "v30 pixelpipe order: colorzones 60.0, then bloom 61.0; the rusttable-compat V30 history order preserves the same adjacency",
+]
+deferred_native_metadata_status = "deferred"
+deferred_native_description_strings = [
+  "apply Orton effect for a dreamy ethereal look",
+  "creative",
+  "non-linear, Lab, display-referred",
+  "non-linear, Lab",
+  "non-linear, Lab, display-referred",
+]
+deferred_native_default_group = "IOP_GROUP_EFFECT | IOP_GROUP_EFFECTS"
+deferred_native_tooltip_strings = [
+  "the size of bloom",
+  "the threshold of light",
+  "the strength of bloom",
+]
+preserved_baseline_test_target = "crates/rusttable-processing/tests/bloom.rs"
+preserved_baseline_test_sha256 = "b806e4e5c05075fe0fa3d0f0ccf8e1a1834ff03058cde9a0352c6309340e033d"
+preserved_baseline_test_status = "preserved byte-for-byte from RustTable baseline 7aaec20b8c845df5607e864130e23e643381d313; it continues to exercise the provisional production Bloom path and is outside this leaf's writable scope"
+existing_rust_callers = [
+  "crates/rusttable-processing/src/operations/bloom.rs",
+  "crates/rusttable-processing/src/descriptor/effects.rs",
+  "crates/rusttable-processing/src/operation/effects.rs",
+  "crates/rusttable-processing/src/registry/operations/mod.rs",
+  "crates/rusttable-processing/src/registry/reconstruction.rs",
+  "crates/rusttable-processing/src/evaluate/mod.rs",
+  "crates/rusttable-processing/src/evaluate/lab_boundary.rs",
+  "crates/rusttable-import/src/darktable/history.rs",
+  "crates/rusttable-pixelpipe/src/cpu.rs",
+  "crates/rusttable-pixelpipe/src/snapshot.rs",
+  "crates/rusttable-pixelpipe/src/gpu.rs",
+  "crates/rusttable-gpu/src/bloom.rs",
+  "crates/rusttable-ui/src/iop/bloom/",
+  "crates/rusttable-app/src/composition/darkroom/edit.rs",
+  "crates/rusttable-app/src/gtk_controller/darkroom_edit.rs",
+]
+existing_rust_test_targets = [
+  "crates/rusttable-processing/tests/bloom.rs (preserved baseline production target)",
+  "crates/rusttable-processing/tests/bloom_leaf.rs (path-loaded bounded leaf target)",
+]
+ownership_boundaries = [
+  "Native module params are copied verbatim by commit_params into calloc-owned per-pipe data released by cleanup_pipe; 0..100 introspection metadata does not narrow that committed domain.",
+  "Native global OpenCL kernel handles are created by init_global and released by cleanup_global.",
+  "Native process borrows caller input/output ROIs, owns and frees one temporary lightness image, and delegates scratch ownership to dt_box_mean.",
+  "The Rust leaf owns immutable finite config/dimensions and private temporary vectors; callers retain input and destination ownership.",
+  "BloomPlan retains the signed native radius boundary until validation: radius zero is executable, while negative or invalid radii are rejected before scratch sizing or box-filter execution.",
+  "Native dt_box_mean requests one max(N*width, height, 16*effective_height)-float slice per worker, then dt_alloc_perthread rounds each slice to a 128-byte target cache-line boundary. The leaf reports and budgets that cache-line-rounded one-worker request.",
+  "The shared Rust cancellable helper is deliberately sequential and requests an unpadded max(N*width, 16*effective_height)-float vector. BloomPlan reports this adaptation separately and never substitutes it for the retained requested-byte budget.",
+  "Rust destination publication is transactional: cancellation, finite failures, and ordinary allocation failures leave caller output unchanged; the source primary-allocation fallback alone publishes an input copy.",
+  "Existing shared Bloom operation, import, registry, pixelpipe, GPU, UI, and app owners remain untouched and do not call this path-loaded leaf.",
+]
+behavior_preserving_tests = [
+  "v1_codec_is_the_exact_three_float_native_declaration",
+  "signed_zero_round_trips_through_every_native_parameter_and_config_field",
+  "codec_preserves_nonfinite_bits_before_executable_validation",
+  "migration_is_v1_identity_and_unknown_histories_remain_opaque",
+  "commit_domain_accepts_every_finite_f32_independent_of_ui_ranges",
+  "local_descriptor_preserves_source_order_defaults_precision_and_truthful_capabilities",
+  "retained_cpu_opencl_and_tiling_constants_are_explicit_without_gpu_claims",
+  "radius_keeps_native_truncate_then_scaled_ceil_then_cap_order",
+  "size_negative_one_has_the_native_zero_radius_semantics",
+  "size_negative_two_rejects_the_invalid_signed_box_filter_radius",
+  "native_upper_caps_do_not_clamp_the_committed_threshold",
+  "plan_preflights_private_output_lightness_and_box_scratch_memory",
+  "tall_narrow_budget_uses_the_retained_per_thread_scratch_height_term",
+  "cacheline_rounding_sets_the_exact_width_33_native_budget_boundary",
+  "source_vector_matches_threshold_eight_box_means_and_release_screen_equation (bit exact)",
+  "eight_iteration_impulse_fixture_distinguishes_the_complete_blur_chain (bit exact)",
+  "selected_macos_release_strength_and_fused_mix_discriminators_are_bit_exact (0x3f80e3eb and 0x42ad2ec0)",
+  "primary_lightness_allocation_failure_copies_input_through",
+  "box_scratch_failure_uses_unblurred_threshold_buffer_before_screen_mix (bit exact)",
+  "cancellation_after_work_starts_never_publishes_partial_output",
+  "shape_and_finite_failures_leave_caller_destination_unchanged",
+]
+
+[[responsibility]]
+id = "native-parameter-abi"
+upstream_path = "src/iop/bloom.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(1)", "dt_iop_bloom_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "bounded-leaf"
+notes = "The v1 payload is exactly three little-endian IEEE-754 floats at offsets 0, 4, and 8 in declaration order: size, threshold, strength. The 12-byte typed codec preserves every source bit pattern. BloomConfig rejects only nonfinite values: native commit_params copies every finite f32 verbatim, while 0..100 remains descriptor/UI metadata rather than a commit constraint. BloomPlan separately rejects a finite size only when its source-ordered signed computation would produce a negative or invalid box-filter radius."
+
+[[responsibility]]
+id = "history-migration"
+upstream_path = "src/iop/bloom.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION(1)", "absence of legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "bounded-leaf"
+notes = "The retained module has only v1 and no legacy migration branch. Migration to v1 is therefore identity-only; unknown versions remain byte-exact opaque values and cannot execute."
+
+[[responsibility]]
+id = "operation-local-processing-descriptor"
+upstream_path = "src/iop/bloom.c; src/develop/imageop_gui.c; src/bauhaus/bauhaus.c"
+upstream_symbols = ["name", "flags", "default_colorspace", "dt_iop_bloom_params_t", "dt_bauhaus_slider_from_params", "dt_bauhaus_slider_new_with_range_and_feedback", "dt_bauhaus_slider_from_widget"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "bounded-leaf"
+notes = "The local processing descriptor preserves the compatibility name, v1 parameter declaration order, 0..100 UI ranges, 20/90/25 defaults, percent format, and exact precision 2 for all three sliders. imageop_gui.c derives that precision with MAX(2, -floorf(log10f(top/100)+.1)), which yields 2 for each 0..100 range, and bauhaus.c stores the passed digits unchanged. The descriptor also preserves Lab D50 four-channel input/output, style eligibility, blending metadata, and channel four. Those UI ranges do not narrow committed execution values. Native description strings and default-group metadata are explicitly excluded and deferred below. GPU, masks, UI, tiling publication, and production registration are not advertised as executable leaf capabilities."
+
+[[responsibility]]
+id = "native-description-and-default-group-metadata"
+upstream_path = "src/iop/bloom.c"
+upstream_symbols = ["description", "default_group"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs; crates/rusttable-ui"
+status = "deferred"
+notes = "The retained description tuple is exactly: 'apply Orton effect for a dreamy ethereal look'; 'creative'; 'non-linear, Lab, display-referred'; 'non-linear, Lab'; 'non-linear, Lab, display-referred'. The retained default group is exactly IOP_GROUP_EFFECT | IOP_GROUP_EFFECTS. OperationDescriptor has no leaf-local fields for this native metadata, bloom_descriptor().ui remains None, and the bounded leaf does not claim these facts are ported."
+
+[[responsibility]]
+id = "versioned-pixelpipe-order"
+upstream_path = "src/common/iop_order.c"
+upstream_symbols = ["v30_order", "colorzones at 60.0", "bloom at 61.0"]
+rust_path = "crates/rusttable-compat/src/history/order.rs"
+status = "deferred"
+notes = "Source-map ownership retains the v30 adjacency proof: Bloom is immediately after Color Zones. rusttable-compat already carries that exact colorzones/bloom history-order adjacency. This bounded leaf neither edits that shared owner nor claims production registry/order integration; reconciling the provisional production registry with the versioned compatibility order remains deferred to the shared integration owner."
+
+[[responsibility]]
+id = "native-release-arithmetic-profile"
+upstream_path = "packaging/macosx/BUILD_hb.txt; packaging/macosx/2_build_hb_darktable_default.sh; build.sh; DefineOptions.cmake; cmake/march-mtune.cmake; src/CMakeLists.txt; src/iop/CMakeLists.txt; src/common/math.h; src/iop/bloom.c"
+upstream_symbols = ["Option A", "--build-type Release", "BUILD_TYPE_DEFAULT=RelWithDebInfo", "BINARY_PACKAGE_BUILD", "MARCH", "CMAKE_C_FLAGS_RELEASE", "add_iop(bloom)", "#else __FAST_MATH__", "process"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs; architecture/rusttable-numerics.toml"
+status = "bounded-leaf"
+notes = "BUILD_hb.txt names the default package script as Option A. packaging/macosx/2_build_hb_darktable_default.sh is the selected script and explicitly passes Release, overriding build.sh's RelWithDebInfo default. DefineOptions.cmake leaves BINARY_PACKAGE_BUILD=OFF, so cmake/march-mtune.cmake probes -march=native for AppleClang, with -mtune=native then -mtune=generic fallbacks. src/CMakeLists.txt appends ${MARCH} and -g to generic C flags, then appends -O3, the fast-math enable option spelled by joining -f and fast-math, and finally -fno-finite-math-only to Release C flags. Under Apple Clang that final option leaves __FAST_MATH__ undefined, and src/common/math.h therefore selects its non-fast dt_fast_hypotf branch calling hypotf; Bloom does not call that helper. The scripts do not pin the Apple Clang version or host CPU, so the leaf does not infer a general __FAST_MATH__ profile. It models only the selected compiler output intentionally captured here: folded f64 radius and reciprocal-exp2 arithmetic plus two ordered screen FMAs. Explicit Rust helpers reproduce those choices in every Cargo profile; the numerics registry marks the screen contraction ExplicitFused, and hard-coded tests pin strength bits 0x3f80e3eb plus mix bits 0x42ad2ec0 against strict-rounding discriminators."
+
+[[responsibility]]
+id = "cpu-threshold-blur-screen"
+upstream_path = "src/iop/bloom.c; src/common/box_filters.cc; src/common/box_filters.h"
+upstream_symbols = ["process", "dt_box_mean", "BOX_ITERATIONS"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "bounded-leaf"
+notes = "Execution retains the source scalar boundaries under the selected macOS Release compiler output: size/strength additions round in float before native fmin promotes to double; radius uses the observed folded double 2.56 factor before signed int truncation; scaled radius multiplication/division and ceilf stay float; strength uses the observed positive exp2f transform after one f32 narrowing. A negative or invalid final signed radius fails closed before box filtering instead of being silently converted to zero. Valid plans then apply the uncapped strict lightness threshold, eight in-place horizontal-then-vertical shrinking-edge box means, and the two intentionally modeled ordered screen FMAs to L while copying a, b, and channel four bit-for-bit, including signed zero."
+
+[[responsibility]]
+id = "scaled-roi-radius"
+upstream_path = "src/iop/bloom.c; src/develop/pixelpipe.h; src/develop/pixelpipe_hb.h"
+upstream_symbols = ["dt_iop_roi_t.scale", "dt_dev_pixelpipe_iop_t.iscale", "process", "tiling_callback"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "bounded-leaf"
+notes = "The plan accepts explicit positive finite roi scale and piece input scale. It preserves the selected compiler output's folded double fmin/base calculation with factor 2.56 followed by signed int truncation, int-to-float conversion, left-to-right float multiply/divide, ceilf, upper-only float cap, and checked final narrowing. Hard-coded boundaries distinguish float addition and scaled-radius multiplication from widened variants; size=-1 pins the native radius/overlap zero success case, while size=-2 pins the typed InvalidBoxFilterRadius rejection rather than Rust's former saturating conversion to zero. The codec and BloomConfig still preserve both finite committed values, and 0..100 remains UI-only. The leaf exposes the retained five-radius overlap fact without claiming shared tile extraction or publication."
+
+[[responsibility]]
+id = "box-filter-scratch-layout-and-budget"
+upstream_path = "src/common/box_filters.cc; src/common/darktable.h; src/common/dttypes.h"
+upstream_symbols = ["MAX_VECT", "_compute_effective_height", "_alloc_scratch_space", "dt_alloc_perthread", "dt_alloc_perthread_float", "DT_CACHELINE_BYTES", "_box_mean"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs; crates/rusttable-processing/src/common/box_filters.rs"
+status = "bounded-leaf"
+notes = "Native first computes max(N*width, height, 16*effective_height) floats per worker, then dt_alloc_perthread rounds each worker slice to DT_CACHELINE_BYTES; the target Apple ARM branch sets 128 bytes. The leaf's deterministic budget includes one exact cache-line-rounded native worker request. Width 33, height 2, radius 2 therefore has 33 samples, 132 unpadded bytes, 256 requested bytes, and a 1576-byte complete plan boundary; both one-byte-short and lower sequential-adaptation budgets fail exactly. The tall-narrow 1x1024/radius-2 fixture independently pins the native height term. The shared Rust box_mean_with_cancel helper remains an unpadded sequential adaptation with max(N*width, 16*effective_height) scratch, reported separately; this leaf neither edits that shared owner nor claims identical thread/allocation topology. Native silent-return behavior after scratch allocation failure remains covered."
+
+[[responsibility]]
+id = "failure-cancellation-publication"
+upstream_path = "src/iop/bloom.c; src/common/imagebuf.c; src/common/box_filters.cc"
+upstream_symbols = ["dt_iop_alloc_image_buffers", "dt_iop_copy_image_roi", "dt_box_mean", "process"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "bounded-leaf"
+notes = "The caller-owned destination API publishes only after complete finite execution, remains unchanged on cancellation/error, and source-faithfully copies input through when the primary lightness allocation fails. A box-filter scratch allocation failure retains the threshold buffer and continues to the native Release-profile screen step, matching the helper's silent early return. The plan budgets the exact cache-line-rounded native one-worker request even though the shared sequential Rust helper has a lower unpadded layout; only thread/allocation topology is adapted, not failure publication semantics. The Vec API remains fail-closed because it has no pre-existing native destination."
+
+[[responsibility]]
+id = "input-format-fallback"
+upstream_path = "src/iop/bloom.c; src/develop/imageop.c; src/common/imagebuf.c"
+upstream_symbols = ["dt_iop_have_required_input_format", "dt_iop_copy_image_roi"]
+rust_path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+status = "deferred"
+notes = "The leaf type accepts only complete four-float Lab pixels, so the native unsupported-channel copy-through/trouble-message path remains with the shared pixelpipe format boundary rather than being approximated locally."
+
+[[responsibility]]
+id = "native-tiling-callback"
+upstream_path = "src/iop/bloom.c; src/develop/tiling.h"
+upstream_symbols = ["tiling_callback"]
+rust_path = "crates/rusttable-pixelpipe"
+status = "deferred"
+notes = "Retained facts are CPU factor 2.30, OpenCL factor 3.00, maxbuf 1.00, overhead 0, overlap 5 * radius (marked a source guess), and alignment 1. Shared budget selection, tile ROI expansion/cropping, and transactional frame publication are outside this leaf."
+
+[[responsibility]]
+id = "opencl-threshold-blur-mix"
+upstream_path = "src/iop/bloom.c; data/kernels/bloom.cl; data/kernels/programs.conf"
+upstream_symbols = ["NUM_BUCKETS", "bucket_next", "process_cl", "init_global", "cleanup_global", "bloom_threshold", "bloom_hblur", "bloom_vblur", "bloom_mix", "program 12"]
+rust_path = "crates/rusttable-gpu"
+status = "deferred"
+notes = "The retained OpenCL path owns four rotating temporary buckets, local-buffer sizing, eight horizontal/vertical passes, program 12 kernel lifetime, and CL error cleanup. This CPU-only leaf does not claim or route GPU execution."
+
+[[responsibility]]
+id = "pipe-state-and-commit"
+upstream_path = "src/iop/bloom.c"
+upstream_symbols = ["dt_iop_bloom_data_t", "commit_params", "init_pipe", "cleanup_pipe"]
+rust_path = "crates/rusttable-processing/src/operation; crates/rusttable-pixelpipe"
+status = "deferred"
+notes = "The leaf codec and BloomConfig model commit_params' value domain by preserving every finite f32 verbatim and keeping descriptor/UI ranges separate; nonfinite config remains rejected by the Rust boundary. BloomPlan adds only the safety boundary required before the native box filter: a finite size whose signed source-ordered calculation ends at a negative or invalid radius returns typed InvalidBoxFilterRadius. Shared operation compilation, snapshot identity, per-pipe ownership, and commit ordering remain outside its writable paths."
+
+[[responsibility]]
+id = "gui-and-blending"
+upstream_path = "src/iop/bloom.c; src/develop/imageop_gui.c; src/bauhaus/bauhaus.c"
+upstream_symbols = ["dt_iop_bloom_gui_data_t", "gui_init", "IOP_FLAGS_SUPPORTS_BLENDING", "dt_bauhaus_slider_from_params", "dt_bauhaus_slider_new_with_range_and_feedback", "dt_bauhaus_slider_from_widget"]
+rust_path = "crates/rusttable-ui; crates/rusttable-processing/src/evaluate; crates/rusttable-app"
+status = "deferred"
+notes = "The native control order is size, threshold, strength; each slider uses percent formatting. The exact 2-digit precision derived by imageop_gui.c for all three 0..100 ranges and retained by bauhaus.c is recorded in the leaf-local processing descriptor, but GTK composition remains deferred. The exact retained tooltip strings in that order are 'the size of bloom', 'the threshold of light', and 'the strength of bloom'. GTK composition, masks/blend-if, opacity, edit persistence, and app routing are intentionally not implemented by this CPU leaf."
+
+[[responsibility]]
+id = "shared-production-integration"
+upstream_path = "src/iop/bloom.c"
+upstream_symbols = ["process", "commit_params", "flags", "default_colorspace"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs; crates/rusttable-processing/src/evaluate/mod.rs; crates/rusttable-processing/src/registry; crates/rusttable-import; crates/rusttable-pixelpipe/src/cpu.rs; crates/rusttable-pixelpipe; crates/rusttable-ui; crates/rusttable-app"
+status = "deferred"
+notes = "The existing provisional crates/rusttable-processing/src/operations/bloom.rs and all shared callers remain untouched. In particular, evaluate/mod.rs still dispatches the provisional Lab boundary and pixelpipe/cpu.rs still classifies production Bloom as full-frame. The baseline crates/rusttable-processing/tests/bloom.rs target is preserved byte-for-byte and continues to test that shared production path. The new leaf deliberately has no operations/bloom/mod.rs, avoiding module-resolution ambiguity and preventing an accidental production-routing claim."

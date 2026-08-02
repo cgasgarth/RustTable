@@ -23,6 +23,13 @@ pub enum ScanError {
         operation: String,
         message: String,
     },
+    TrustedProvenance {
+        operation: String,
+        record: String,
+        field: String,
+        expected: String,
+        actual: String,
+    },
     UnknownOpenclKernel {
         operation: String,
         reference: String,
@@ -59,6 +66,16 @@ impl Display for ScanError {
                     "operation validation failed for {operation}: {message}"
                 )
             }
+            Self::TrustedProvenance {
+                operation,
+                record,
+                field,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "trusted provenance mismatch for {operation} ({record}) at {field}: expected {expected}, got {actual}"
+            ),
             Self::UnknownOpenclKernel {
                 operation,
                 reference,

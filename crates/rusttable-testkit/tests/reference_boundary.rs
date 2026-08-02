@@ -96,7 +96,7 @@ fn collect(path: &Path, extension: &str, paths: &mut Vec<PathBuf>) {
         let path = entry.path();
         if path
             .file_name()
-            .is_some_and(|name| name == "target" || name == ".git")
+            .is_some_and(|name| name == "target" || name == ".git" || name == ".claude")
         {
             continue;
         }
