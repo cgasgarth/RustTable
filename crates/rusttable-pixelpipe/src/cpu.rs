@@ -387,6 +387,9 @@ impl CpuPixelpipeExecutor {
                 .as_ref()
                 .map(|set| crop_masks(set, neighborhood_tile.input))
                 .transpose()?;
+            // Notify only after the node has produced a complete private tile.
+            // Cancellation from this hook is observed before the tile can be
+            // assembled or the final raster can be published.
             let (tile_output, _) = Self::execute_image_with_cancellation(
                 request,
                 &tile_input,
@@ -395,6 +398,7 @@ impl CpuPixelpipeExecutor {
                 tile_masks.as_ref(),
                 Some(scope),
             )?;
+            scope.notify_work_started();
             if neighborhood_overlap == 0 {
                 assemble_tile(
                     &mut assembled,
@@ -2246,6 +2250,10 @@ pub(crate) fn requires_full_frame_execution(request: &CpuPixelpipeSnapshot) -> b
                     | rusttable_processing::ProcessingOperationKind::Grain { .. }
                     | rusttable_processing::ProcessingOperationKind::Censorize { .. }
                     | rusttable_processing::ProcessingOperationKind::Clahe { .. }
+                    // These APIs require the full raster's dimensions and
+                    // absolute coordinates; do not expose them as tiles.
+                    | rusttable_processing::ProcessingOperationKind::Vignette { .. }
+                    | rusttable_processing::ProcessingOperationKind::GraduatedNd { .. }
             )
     })
 }

@@ -786,7 +786,8 @@ fn contracts_for_repository_path(path: &Path) -> Option<BTreeSet<Contract>> {
         | "architecture/operation-overrides.toml"
         | "architecture/operation-capabilities.json"
         | "architecture/rusttable-operation-registry.toml"
-        | "architecture/rusttable-operation-registry-source-map.toml" => {
+        | "architecture/rusttable-operation-registry-source-map.toml"
+        | "crates/rusttable-parity/src/operation/trust_anchor.rs" => {
             contracts.insert(Contract::Codegen);
             contracts.insert(Contract::Operations);
         }

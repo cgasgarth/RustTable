@@ -13,7 +13,13 @@ pub use operation::model::{
     ParameterVersion, PresetRecord, ReferenceIdentity, RoiContract, TargetCodec, TilingContract,
 };
 pub use operation::scan::{
-    scan_operations, scan_operations_with_identity, scan_operations_with_overrides,
+    parse_operation_overrides, scan_operations, scan_operations_with_identity,
+    scan_operations_with_overrides,
+};
+pub use operation::trust_anchor::{
+    TrustedRegistryEntry, generated_compatibility_name, is_independently_trusted_manifest_name,
+    validate_architecture_provenance, validate_manifest_capability_accounting,
+    validate_trusted_registry_entries,
 };
 pub use operation::validate::{
     canonical_layout_hash, parse_operation_manifest, render_operation_manifest,

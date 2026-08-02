@@ -1,0 +1,62 @@
+schema = "rusttable.colisa-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "colisa"
+rust_id = "rusttable.colisa"
+production_registration = "deferred; this deprecated operation-local CPU leaf is tested through a direct path and is not registered"
+
+[[responsibility]]
+id = "registration-metadata-defaults"
+upstream_path = "src/iop/CMakeLists.txt; src/iop/colisa.c"
+upstream_symbols = ["add_iop(colisa)", "DT_MODULE_INTROSPECTION(1)", "deprecated_msg", "flags", "default_group", "default_colorspace", "dt_iop_colisa_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
+status = "bounded-evidence"
+notes = "The leaf records native v1, disabled and deprecated status, Lab colorspace, tile/style/blend flags, basic/grading groups, and three source-declared [-1,1] defaults/ranges."
+
+[[responsibility]]
+id = "native-v1-codec-and-fixture"
+upstream_path = "src/iop/colisa.c"
+upstream_symbols = ["dt_iop_colisa_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colisa/mod.rs; crates/rusttable-processing/src/operations/colisa/fixtures/default_v1.hex"
+status = "bounded-leaf"
+notes = "The codec preserves the three contiguous little-endian f32 fields in 12 bytes. The fixture is the exact all-zero native default payload. Versions other than native v1 remain byte-exact opaque rows and cannot compile; no fictitious v2 migration is invented."
+
+[[responsibility]]
+id = "order-evidence"
+upstream_path = "src/common/iop_order.c"
+upstream_symbols = ["legacy_order", "v50_order", "v50_jpg_order"]
+rust_path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
+status = "bounded-evidence"
+notes = "The leaf records native order 47 in legacy/v5 RAW/v5 JPEG and generated inventory order 74; shared order tables remain untouched."
+
+[[responsibility]]
+id = "contrast-brightness-luts"
+upstream_path = "src/iop/colisa.c; src/develop/imageop_math.h"
+upstream_symbols = ["commit_params", "dt_iop_estimate_exp", "dt_iop_eval_exp"]
+rust_path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
+status = "bounded-leaf"
+notes = "Both 65536-entry tables preserve source branch order, f32 sqrt/powf operations, explicit fp-contract mul_add sites, lookup quantization, and four-point exponential extrapolation."
+
+[[responsibility]]
+id = "lab-cpu"
+upstream_path = "src/iop/colisa.c"
+upstream_symbols = ["process"]
+rust_path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
+status = "bounded-leaf"
+notes = "L runs through contrast then brightness with native below-100 lookup versus unbounded extrapolation branches; a and b receive the native saturation multiplier and lane four is preserved."
+
+[[responsibility]]
+id = "checked-execution-publication"
+upstream_path = "src/iop/colisa.c"
+upstream_symbols = ["process", "init_pipe", "cleanup_pipe"]
+rust_path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
+status = "bounded-leaf"
+notes = "The leaf requires Lab f32x4, checks shape/length and finite state, budgets two LUTs and output independently, uses try_reserve_exact, polls cancellation during planning and raster work, and swaps caller output only after full success."
+
+[[responsibility]]
+id = "shared-integration"
+upstream_path = "src/iop/colisa.c; data/kernels/basic.cl"
+upstream_symbols = ["process_cl", "gui_init", "IOP_FLAGS_SUPPORTS_BLENDING"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs; crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe; crates/rusttable-import; crates/rusttable-ui"
+status = "deferred"
+notes = "Registry/descriptor aggregation, history import, shared masks/blending, pixelpipe Lab boundary ownership, GPU kernel qualification, GTK, and presets remain absent. There is no image-dependent CPU analysis responsibility in this bounded leaf."

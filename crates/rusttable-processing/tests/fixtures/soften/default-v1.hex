@@ -1,0 +1,8 @@
+schema=soften.v1
+source=src/iop/soften.c:DT_MODULE_INTROSPECTION(1),dt_iop_soften_params_t
+payload_bytes=16
+payload_hex=000048420000c842c3f5a83e00004842
+field_order=size,saturation,brightness,amount
+defaults=50,100,0.33,50
+migration_edges=[]
+cpu_fourth_lane=source*(1-amount/100)

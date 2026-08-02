@@ -1,0 +1,201 @@
+schema = "rusttable.colorcontrast-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+leaf_baseline = "7aaec20b8c845df5607e864130e23e643381d313"
+production_routing = false
+
+[integration]
+numerics_policy_registry = "architecture/rusttable-numerics.toml"
+explicit_fma_source_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+explicit_fma_policy = "ExplicitFused"
+explicit_fma_registration = "present"
+
+[inventory]
+writable_paths = [
+  "architecture/rusttable-colorcontrast-source-map.toml",
+  "architecture/rusttable-numerics.toml",
+  "crates/rusttable-processing/src/operations/colorcontrast/",
+  "crates/rusttable-processing/tests/colorcontrast_leaf.rs",
+]
+existing_rust_callers = [
+  "crates/rusttable-processing/src/operations/colorcontrast.rs (existing provisional shared codec, descriptor, and point plan)",
+  "crates/rusttable-processing/src/operation/colorcontrast.rs (shared operation compiler)",
+  "crates/rusttable-processing/src/registry/mod.rs and registry/operations/mod.rs (shared definition and migration routing)",
+  "crates/rusttable-processing/src/evaluate/lab_boundary.rs and evaluate/mod.rs (Lab boundary and evaluator)",
+  "crates/rusttable-pixelpipe/src/cpu.rs, gpu.rs, and snapshot.rs (execution and publication routing)",
+  "crates/rusttable-gpu/src/point.rs and shader/registry.rs (provisional GPU point route)",
+  "crates/rusttable-compat/src/history/order.rs and crates/rusttable-import/src/darktable/history.rs (order and import)",
+  "crates/rusttable-app/src/gtk_controller/darkroom_edit.rs and crates/rusttable-ui/src/iop/colorcontrast.rs (app and GTK editing)",
+]
+behavior_preserving_tests = [
+  "native v1/v2 sizes, little-endian bytes, checked benchmark payload, and hard-coded signed-zero ABI bytes",
+  "exact direct v1-to-v2 migration with unbound forced to zero and opaque future history",
+  "descriptor parameter order, defaults, Lab contract, represented native metadata, and negative capability claims",
+  "native introspection and imageop_gui provenance for two-digit visible steepness sliders",
+  "finite committed state retaining raw f32 bits, including signed zero, with exact signed native unbound int",
+  "hard-coded signed-zero process output and deterministic fused Rust adaptation discriminator 0xc2e60bbb * 0x3f9aead4 + 0x40c88889 = 0xc304f1cf (not separate-rounding 0xc304f1d0)",
+  "bounded CLAMPS limits and overflow containment",
+  "dimension, non-finite, and output-overflow failures without destination publication",
+  "1024-pixel cancellation bound and final pre-publication cancellation gate",
+  "narrow four-lane equal-ROI API with native required-format image-buffer handling explicitly unavailable",
+  "point-operation tile equivalence and deterministic fourth-lane Rust adaptation",
+  "native cache-line, aligned-pixel, and nontemporal-store facts kept distinct from ordinary Vec scalar Rust storage",
+  "native DT_OMP_DECLARE_SIMD aligned(in,out:64) helper contract and both DT_OMP_FOR loop providers kept distinct from the serial row-major Rust scheduling/SIMD adaptation",
+  "source-derived default tiling factor, maxbuf, overhead, overlap, and alignment kept distinct from the Rust preferred edge, staging multiplier, and byte budget",
+]
+deferred_shared_responsibilities = [
+  "shared descriptor and operation enum replacement",
+  "registry, reconstruction, history materialization, and native operation order",
+  "pixelpipe CPU dispatch, cancellation token adaptation, snapshot identity, and publication",
+  "native required-format actual-channel copy-through with distinct input/output ROI cropping and zero-padding",
+  "native DT_PIXEL_SIMD_CHANNELS and for_each_channel three-versus-four-lane build policy",
+  "native DT_OMP_DECLARE_SIMD function vectorization and alignment contract plus both DT_OMP_FOR OpenMP static schedules; the serial row-major Rust traversal is an adaptation",
+  "GPU qualification and replacement of provisional GPU/OpenCL-adjacent routes",
+  "Darktable import materialization, application edit persistence, masks, blend-if, opacity, and outer blending",
+  "GTK controls, app wiring, aggregate architecture generation, and Cargo module exposure",
+  "noncontracting native compiler/target/profile combinations and any exact native numerical-equivalence claim",
+]
+
+[[responsibility]]
+id = "metadata-defaults-and-local-descriptor"
+upstream_path = "src/iop/colorcontrast.c; src/develop/imageop.h; src/common/colorspaces.h"
+upstream_symbols = ["name", "aliases", "flags", "default_group", "default_colorspace", "dt_iop_colorcontrast_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "Source-derived facts are the v2 declaration order a_steepness, a_offset, b_steepness, b_offset, unbound; steepness defaults 1.0 with UI bounds 0.0 through 5.0; zero offsets; native int default 1; names, flags, groups, and Lab colorspace. The operation-local descriptor is Rust policy: native has no equivalent contract that rejects non-finite samples, guarantees four initialized lanes, selects a preferred 256-pixel tile edge, or accounts a transactional staging raster. It advertises only this CPU leaf and is not registered. Native description values are tracked separately and deferred."
+
+[[responsibility]]
+id = "visible-steepness-slider-precision"
+upstream_path = "src/iop/colorcontrast.c; tools/introspection/parser.pm; src/common/introspection.h; src/develop/imageop_gui.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "parameter annotations", "dt_introspection_type_float_t", "dt_bauhaus_slider_from_params"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "implemented"
+notes = "colorcontrast.c:33-42 annotates both visible steepness floats with MIN 0.0 and MAX 5.0; tools/introspection/parser.pm:66-83 parses those annotations, and src/common/introspection.h:74-80 stores them as Float.Min and Float.Max. src/develop/imageop_gui.c:89-107 reads that metadata, derives top=5, computes digits=MAX(2, -floor(log10(top/100)+0.1))=2, and passes two digits to the sliders created at colorcontrast.c:304-319. The local descriptor therefore records precision 2 for a_steepness and b_steepness; hidden offsets retain precision 0 because native does not construct offset sliders. GTK construction remains deferred separately."
+
+[[responsibility]]
+id = "native-description"
+upstream_path = "src/iop/colorcontrast.c"
+upstream_symbols = ["description", "dt_iop_set_description"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "The five exact native description values at colorcontrast.c:81-89 are not represented by the operation-local descriptor and remain explicitly deferred."
+
+[[responsibility]]
+id = "parameter-abi-and-migration"
+upstream_path = "src/iop/colorcontrast.c"
+upstream_symbols = ["DT_MODULE_INTROSPECTION", "dt_iop_colorcontrast_params_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "implemented"
+notes = "Native v1 is four declaration-ordered floats (16 bytes); v2 appends a four-byte int (20 bytes). The codec retains every raw f32 bit pattern, including signed zero and non-finite payloads. The only source migration edge is v1 directly to v2 and sets unbound to zero. Unknown future histories remain byte-exact opaque values as additive Rust retention policy. Executable finite-parameter admission is mapped separately and is not claimed as native behavior."
+
+[[responsibility]]
+id = "required-input-format-imagebuf-boundary"
+upstream_path = "src/iop/colorcontrast.c; src/develop/imageop.c; src/develop/imageop.h; src/common/imagebuf.c; src/common/imagebuf.h"
+upstream_symbols = ["process", "dt_iop_have_required_input_format", "dt_iop_copy_image_roi"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "The typed leaf API is deliberately narrower: it accepts only already validated four-lane input with one shared RasterDimensions value, so input and output ROIs are identical. Native fallback copies min(actual channels, required channels), crops distinct ROIs, zero-pads unavailable locations, and publishes module trouble state. That shared image-buffer boundary is not approximated or claimed here."
+
+[[responsibility]]
+id = "explicit-fused-rounding-rust-adaptation"
+upstream_path = "src/iop/colorcontrast.c; src/iop/CMakeLists.txt; src/CMakeLists.txt; src/common/math.h"
+upstream_symbols = ["clamped_scaling", "process", "add_iop", "CMAKE_C_FLAGS_RELEASE", "__FAST_MATH__"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "src/iop/CMakeLists.txt:125 registers Color Contrast as an ordinary iop module with no arithmetic override; line 124 registers nlmeans and is not Color Contrast evidence. Native source spells multiplication plus addition. The retained Release defaults in src/CMakeLists.txt include O3 and compiler fast-math flags, but contraction remains compiler/target/profile dependent and no exact authoritative compiler/target tuple is established. Fused rounding is a deterministic Rust adaptation: explicit f32 mul_add maps input 0xc2e60bbb, slope 0x3f9aead4, and offset 0x40c88889 to 0xc304f1cf rather than the separately rounded 0xc304f1d0. Noncontracting native profiles are explicitly deferred; this does not claim native numerical equivalence. architecture/rusttable-numerics.toml registers crates/rusttable-processing/src/operations/colorcontrast/leaf.rs as ExplicitFused."
+
+[[responsibility]]
+id = "source-ordered-cpu-equations"
+upstream_path = "src/iop/colorcontrast.c; src/common/darktable.h"
+upstream_symbols = ["clamped_scaling", "process", "CLAMPS"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "Slope is [1, a_steepness, b_steepness, 1] and offset is [0, a_offset, b_offset, 0]. Any nonzero unbound int skips clipping; bounded a and b use the source CLAMPS comparison order at -128 and 128 while L and the Rust fourth lane use plus/minus FLT_MAX. Rust explicitly fuses multiply-add, deterministically initializes four lanes, and fails closed on non-finite input/output. Native C contraction is compiler/target/profile dependent, selects three or four lanes at build time, does not unconditionally guarantee alpha, and lets non-finite values flow through process; the Rust behaviors are adaptations rather than parity claims, and noncontracting native profiles remain deferred."
+
+[[responsibility]]
+id = "native-for-each-channel-lane-policy"
+upstream_path = "src/common/dttypes.h; src/develop/imageop.h; src/iop/colorcontrast.c"
+upstream_symbols = ["DT_PIXEL_SIMD_CHANNELS", "for_each_channel", "copy_pixel_nontemporal", "process"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "Native selects three active lanes under DT_NO_VECTORIZATION and four otherwise. copy_pixel_nontemporal may copy four lanes for architecture-specific vector stores, while its contract says later code must ignore alpha unless explicitly set. The leaf exposes ColorContrastLanePolicy::DeterministicFourLaneRustAdaptation and does not claim that native lane policy or unconditional alpha preservation is ported."
+
+[[responsibility]]
+id = "native-memory-alignment-and-store-policy"
+upstream_path = "src/iop/colorcontrast.c; src/common/darktable.h; src/common/dttypes.h; src/develop/imageop.h"
+upstream_symbols = ["DT_IS_ALIGNED", "DT_CACHELINE_BYTES", "dt_aligned_pixel_t", "copy_pixel_nontemporal", "dt_sfence", "dt_omploop_sfence"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "colorcontrast.c:184-185 applies DT_IS_ALIGNED to both input and output. src/common/darktable.h:188-192 maps that compiler assumption to DT_CACHELINE_BYTES; src/common/dttypes.h:41-60 sets 128 bytes on Apple AArch64 and 64 bytes otherwise and defines dt_aligned_pixel_t as a 16-byte-aligned four-float array. colorcontrast.c:151-162,193-203 publishes through copy_pixel_nontemporal, whose architecture-specific stores and visibility-fence obligations are defined at src/develop/imageop.h:603-656. The leaf instead uses ordinary Vec scalar Rust storage with ColorContrastPixel's natural f32 alignment, push, and copy_from_slice. That storage is a Rust adaptation and does not claim native cache-line alignment, aligned stack locals, nontemporal stores, or fences. The default tiling callback's one-pixel tile alignment and the Rust allocation budget are inventoried separately and must not be conflated with these memory/store facts."
+
+[[responsibility]]
+id = "native-openmp-scheduling-and-declare-simd"
+upstream_path = "src/iop/colorcontrast.c; src/common/darktable.h"
+upstream_symbols = ["DT_OMP_DECLARE_SIMD", "aligned(in,out:64)", "clamped_scaling", "unbounded DT_OMP_FOR", "bounded DT_OMP_FOR", "DT_OMP_PRAGMA"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs; crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "adapted"
+notes = "colorcontrast.c:152-163 attaches DT_OMP_DECLARE_SIMD(aligned(in,out:64) aligned(slope,offset,low,high)) to clamped_scaling, and both the unbounded and bounded process branches call DT_OMP_FOR() at colorcontrast.c:196 and 210. src/common/darktable.h:117-132 provides DT_OMP_PRAGMA and maps DT_OMP_DECLARE_SIMD to omp declare simd plus its clauses and DT_OMP_FOR to omp parallel for default(firstprivate) schedule(static) plus its clauses when _OPENMP is enabled; DT_OMP_PRAGMA is empty otherwise. ColorContrastPlan instead uses one serial row-major pixel traversal and a scalar channel loop. That scheduling/SIMD choice is a Rust adaptation; native OpenMP static scheduling, declare-SIMD function generation, and the 64-byte in/out alignment clause remain explicitly deferred."
+
+[[responsibility]]
+id = "commit-and-piece-lifetime"
+upstream_path = "src/iop/colorcontrast.c"
+upstream_symbols = ["commit_params", "init_pipe", "cleanup_pipe"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "Native mallocs piece data and commit_params copies all parameter float bit patterns, including NaN and infinity, without validation. Rust ownership replaces malloc/free, and ColorContrastConfig rejects non-finite executable parameters while retaining every accepted finite bit pattern, including signed zero. Finite rejection and ownership-driven lifetime are explicit Rust adaptations, not native parity."
+
+[[responsibility]]
+id = "finite-cancellation-and-transactional-publication"
+upstream_path = "src/iop/colorcontrast.c"
+upstream_symbols = ["process"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "Native process writes directly to its destination, has no cancellation callback, performs no finite input/output validation, and lets non-finite arithmetic follow the native equations. Rust rejects non-finite active-path input/output, polls cancellation at row boundaries and at most every 1024 pixels, checks once more before publication, and stages a complete raster so caller-owned output is unchanged on any failure. These are fail-closed Rust safeguards with no native equivalent."
+
+[[responsibility]]
+id = "native-default-tiling-and-rust-allocation-budget"
+upstream_path = "src/iop/colorcontrast.c; src/develop/tiling.c; src/develop/tiling.h"
+upstream_symbols = ["flags", "default_tiling_callback", "dt_develop_tiling_t"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+status = "adapted"
+notes = "Source-derived equal-ROI callback values are host factor 2.0 and factor_cl 2.0 (one input plus one output raster), maxbuf 1.0 and maxbuf_cl 1.0, overhead 0 bytes, overlap 0 pixels, and alignment 1 pixel. The Rust descriptor maps input and output to 1.0 each and preserves zero overlap/alignment 1, but minimum edge 1, preferred edge 256, and the extra 1.0 staging raster are Rust-only policy because native default_tiling_callback has no tile-edge preference or transactional staging. For width*height four-f32 pixels the leaf-owned element-payload budget is width*height*16 staging bytes, excluding allocator metadata and rounding; execute_into accounts input, destination, and staging as a three-raster resident payload budget with no fixed operation overhead."
+
+[[responsibility]]
+id = "raster-and-descriptor-dependencies"
+upstream_path = "src/iop/colorcontrast.c"
+upstream_symbols = ["dt_iop_roi_t", "default_colorspace"]
+rust_path = "crates/rusttable-processing/src/color.rs; crates/rusttable-processing/src/descriptor/mod.rs"
+status = "existing-dependency"
+notes = "The standalone leaf consumes the existing RasterDimensions, LabD50, and descriptor value contracts without editing their shared owners."
+
+[[responsibility]]
+id = "opencl-host-and-kernel"
+upstream_path = "src/iop/colorcontrast.c; data/kernels/extended.cl; data/kernels/common.h"
+upstream_symbols = ["process_cl", "init_global", "cleanup_global", "colorcontrast", "sampleri"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "Native program 8 and its colorcontrast OpenCL kernel were inspected, but this CPU leaf neither ports nor claims GPU execution. Existing provisional shared GPU modules are untouched."
+
+[[responsibility]]
+id = "gtk-controls"
+upstream_path = "src/iop/colorcontrast.c"
+upstream_symbols = ["gui_update", "gui_init"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "The native GUI exposes only the two steepness sliders and their source tooltips. GTK ownership and app edit wiring are outside this leaf; the source-derived two-digit visible-slider precision is represented and cited separately."
+
+[[responsibility]]
+id = "masks-and-outer-blending"
+upstream_path = "src/iop/colorcontrast.c; src/develop/blend.c"
+upstream_symbols = ["IOP_FLAGS_SUPPORTS_BLENDING"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "The native metadata fact is inventoried, but arbitrary blend modes, blend-if state, masks, and opacity composition are not approximated by the bounded point leaf."
+
+[[responsibility]]
+id = "shared-production-routing"
+upstream_path = "shared Rust integration hubs"
+upstream_symbols = ["history materialization", "operation order", "registry", "pixelpipe CPU and GPU dispatch", "snapshot identity", "import", "application editing", "UI"]
+rust_path = "crates/rusttable-processing/src/operations/colorcontrast/source_map.rs"
+status = "deferred"
+notes = "No shared descriptor, operation enum, registry, import, pixelpipe, GPU, UI, aggregate architecture, Cargo, or existing provisional Color Contrast module is modified or claimed by this leaf."

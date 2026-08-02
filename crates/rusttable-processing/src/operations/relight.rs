@@ -323,10 +323,20 @@ impl RelightPlan {
                 channel: RgbChannel::Red,
             });
         }
+        for (index, pixel) in input.iter().enumerate() {
+            if pixel.channels().iter().any(|value| !value.is_finite()) {
+                return Err(OperationExecutionError::NonFiniteResult {
+                    pixel: index,
+                    channel: RgbChannel::Red,
+                });
+            }
+        }
         if cancelled() {
             return Err(OperationExecutionError::Cancelled);
         }
-        if self.config.ev().to_bits() == 0.0f32.to_bits() || opacity.to_bits() == 0.0f32.to_bits() {
+        // Both signed zero opacities are valid no-op blends, but validation above
+        // is mandatory before returning the caller's unchanged finite raster.
+        if opacity == 0.0 {
             return Ok(input.to_vec());
         }
         let b = -1.0 + self.config.center() * 2.0;
@@ -341,14 +351,12 @@ impl RelightPlan {
                     return Err(OperationExecutionError::Cancelled);
                 }
                 let source = *pixel;
-                if source.channels().iter().any(|value| !value.is_finite()) {
-                    return Err(OperationExecutionError::NonFiniteResult {
-                        pixel: index,
-                        channel: RgbChannel::Red,
-                    });
-                }
                 let candidate = relit_lightness(source.lightness(), self.config, b, c);
-                let lightness = source.lightness() + (candidate - source.lightness()) * opacity;
+                let lightness = if opacity.to_bits() == 1.0_f32.to_bits() {
+                    candidate
+                } else {
+                    source.lightness() + (candidate - source.lightness()) * opacity
+                };
                 if !lightness.is_finite() {
                     return Err(OperationExecutionError::NonFiniteResult {
                         pixel: index,
@@ -378,8 +386,16 @@ fn relit_lightness(lightness: f32, config: RelightConfig, center: f32, width: f3
     let normalized = lightness / 100.0;
     let x = -1.0 + normalized * 2.0;
     let gaussian = (-(x - center) * (x - center) / (width * width)).exp();
-    let relight = 2.0f32.powf(config.ev() * gaussian.clamp(0.0, 1.0));
-    100.0 * (normalized * relight).clamp(0.0, 1.0)
+    let relight = 2.0f32.powf(config.ev() * native_clip(gaussian));
+    100.0 * native_clip(normalized * relight)
+}
+
+fn native_clip(value: f32) -> f32 {
+    if value >= 0.0 {
+        if value <= 1.0 { value } else { 1.0 }
+    } else {
+        0.0
+    }
 }
 
 #[must_use]

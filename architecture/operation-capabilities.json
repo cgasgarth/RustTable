@@ -2,7 +2,7 @@
   "schema": "rusttable.operation-capabilities.v1",
   "reference_commit": "cfe57f3bbf5269bfacf31e832267279caa6938ad",
   "reference_version": "5.7.0",
-  "registry_hash": "c25a7ad180cfc1f51e165a0f9338fe556d1e0fb43fa1178641ba6cc80545136e",
+  "registry_hash": "ebba064c337b7c26407938eba6f86b8296cb1c405aae1e4f43139b58a205d72e",
   "entries": [
     {
       "identity": "darktable:agx:src/iop/agx.c:v7",
@@ -57,11 +57,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 113,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:basecurve:src/iop/basecurve.c:v6",
@@ -80,11 +80,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 92,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:basicadj:src/iop/basicadj.c:v2",
@@ -119,11 +119,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 133,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:bilateral:src/iop/bilateral.cc:v1",
@@ -137,11 +137,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 102,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:bloom:src/iop/bloom.c:v1",
@@ -173,11 +173,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 153,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:borders:src/iop/borders.c:v4",
@@ -212,11 +212,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 114,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:cacorrectrgb:src/iop/cacorrectrgb.c:v1",
@@ -230,11 +230,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 151,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:censorize:src/iop/censorize.c:v1",
@@ -287,11 +287,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 148,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:clahe:src/iop/clahe.c:v1",
@@ -361,11 +361,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 82,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:colorbalancergb:src/iop/colorbalancergb.c:v5",
@@ -383,11 +383,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 150,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:colorchecker:src/iop/colorchecker.c:v2",
@@ -402,11 +402,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 85,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:colorcontrast:src/iop/colorcontrast.c:v2",
@@ -457,11 +457,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 157,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:colorharmonizer:src/iop/colorharmonizer.c:v1",
@@ -475,11 +475,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 64,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:colorin:src/iop/colorin.c:v7",
@@ -518,11 +518,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 127,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:colormapping:src/iop/colormapping.c:v1",
@@ -676,11 +676,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 110,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:denoiseprofile:src/iop/denoiseprofile.c:v12",
@@ -703,11 +703,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 134,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:diffuse:src/iop/diffuse.c:v2",
@@ -722,11 +722,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 152,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:dither:src/iop/dither.c:v2",
@@ -777,11 +777,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 80,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:exposure:src/iop/exposure.c:v7",
@@ -820,11 +820,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 138,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:filmicrgb:src/iop/filmicrgb.c:v6",
@@ -843,11 +843,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 146,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:finalscale:src/iop/finalscale.c:v1",
@@ -898,11 +898,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 75,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:globaltonemap:src/iop/globaltonemap.c:v3",
@@ -917,11 +917,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 132,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:graduatednd:src/iop/graduatednd.c:v1",
@@ -974,11 +974,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 137,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:highlights:src/iop/highlights.c:v4",
@@ -1013,11 +1013,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 68,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:hotpixels:src/iop/hotpixels.c:v1",
@@ -1031,11 +1031,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 116,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:invert:src/iop/invert.c:v2",
@@ -1059,7 +1059,7 @@
     {
       "identity": "darktable:lens:src/iop/lens.cc:v10",
       "compatibility_name": "lens",
-      "rust_id": null,
+      "rust_id": "rusttable.lenscorrection",
       "reference_path": "src/iop/lens.cc",
       "descriptor_version": 10,
       "parameter_versions": [
@@ -1073,14 +1073,14 @@
         9,
         10
       ],
-      "implementation_crate": "",
+      "implementation_crate": "rusttable-processing",
       "issue_sequence_id": 395,
       "order": 164,
       "cpu_supported": true,
-      "gpu_supported": true,
+      "gpu_supported": false,
       "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "status": "Implemented",
+      "reason": null
     },
     {
       "identity": "darktable:levels:src/iop/levels.c:v2",
@@ -1131,11 +1131,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 117,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:lowpass:src/iop/lowpass.c:v4",
@@ -1152,11 +1152,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 69,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:lut3d:src/iop/lut3d.c:v3",
@@ -1172,11 +1172,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 141,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:mask_manager:src/iop/mask_manager.c:v2",
@@ -1209,11 +1209,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 91,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:negadoctor:src/iop/negadoctor.c:v2",
@@ -1228,11 +1228,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 147,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:nlmeans:src/iop/nlmeans.c:v2",
@@ -1247,11 +1247,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 123,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:overexposed:src/iop/overexposed.c:v1",
@@ -1265,11 +1265,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 115,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:overlay:src/iop/overlay.c:v1",
@@ -1357,11 +1357,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 121,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:rawoverexposed:src/iop/rawoverexposed.c:v1",
@@ -1375,11 +1375,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 96,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:rawprepare:src/iop/rawprepare.c:v2",
@@ -1394,11 +1394,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 65,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:relight:src/iop/relight.c:v1",
@@ -1450,11 +1450,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 81,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:rgblevels:src/iop/rgblevels.c:v1",
@@ -1564,11 +1564,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 154,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:soften:src/iop/soften.c:v1",
@@ -1660,11 +1660,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 73,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:toneequal:src/iop/toneequal.c:v2",
@@ -1679,11 +1679,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 145,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:tonemap:src/iop/tonemap.cc:v1",
@@ -1697,11 +1697,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 72,
-      "cpu_supported": true,
+      "cpu_supported": false,
       "gpu_supported": false,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "darktable:velvia:src/iop/velvia.c:v2",
@@ -1797,11 +1797,11 @@
       "implementation_crate": "",
       "issue_sequence_id": 395,
       "order": 109,
-      "cpu_supported": true,
-      "gpu_supported": true,
-      "cpu_fallback": true,
-      "status": "IntentionallyUnsupportedBlocking",
-      "reason": "reference operation is not yet registered in RustTable"
+      "cpu_supported": false,
+      "gpu_supported": false,
+      "cpu_fallback": false,
+      "status": "ReferenceOnlyNonProduct",
+      "reason": "opaque/deferred: no independent trust contract; operation is reference-only"
     },
     {
       "identity": "rusttable.agx",

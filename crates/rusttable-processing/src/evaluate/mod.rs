@@ -38,7 +38,8 @@ use lab_boundary::{
     apply_bloom_with_cancellation, apply_colorcontrast, apply_colorcorrection,
     apply_colormapping_with_cancellation, apply_colorreconstruction_with_cancellation,
     apply_colortransfer_with_cancellation, apply_colorzones, apply_defringe,
-    apply_levels_with_cancellation, apply_relight, apply_shadhi_with_cancellation, apply_vibrance,
+    apply_levels_with_cancellation, apply_relight_with_cancellation,
+    apply_shadhi_with_cancellation, apply_vibrance,
 };
 use mask::{OperationMaskRoute, apply_mask_blend, validate_operation_mask};
 pub use output::EvaluationOutput;
@@ -922,9 +923,24 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             )
         }
         ProcessingOperationKind::Relight { config } => {
-            let candidate =
-                apply_relight(*config, pixels, dimensions, frame.encoding(), opacity)
-                    .map_err(|error| operation_plan_error(step_index, operation_id, error))?;
+            let candidate = apply_relight_with_cancellation(
+                *config,
+                pixels,
+                dimensions,
+                frame.encoding(),
+                opacity,
+                &cancelled,
+            )
+            .map_err(|error| {
+                if error.is_cancelled() {
+                    EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    }
+                } else {
+                    operation_plan_error(step_index, operation_id, error)
+                }
+            })?;
             pixels.copy_from_slice(&candidate);
             Ok(())
         }
@@ -1055,15 +1071,17 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             Ok(())
         }
         ProcessingOperationKind::Vignette { config } => {
-            let seed = u64::try_from(operation_id.get() & u128::from(u64::MAX))
-                .expect("masked operation ID fits")
-                ^ u64::try_from(operation_id.get() >> 64).expect("shifted operation ID fits");
             let plan = crate::operations::vignette::VignettePlan::new(*config, dimensions)
-                .map_err(|error| operation_error(step_index, operation_id, error))?
-                .with_seed(seed);
-            let candidate = plan
-                .execute_window(pixels, pixel_index_offset)
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
+            let candidate = plan
+                .execute_window_with_cancel(pixels, pixel_index_offset, &cancelled)
+                .map_err(|error| match error {
+                    OperationExecutionError::Cancelled => EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    },
+                    error => operation_error(step_index, operation_id, error),
+                })?;
             apply_reconstruction(
                 pixels,
                 &candidate,
@@ -1077,8 +1095,14 @@ pub(crate) fn apply_operation_with_profile_with_cancellation<C: Fn() -> bool>(
             let plan = crate::operations::graduatednd::GraduatedNdPlan::new(*config, dimensions)
                 .map_err(|error| operation_error(step_index, operation_id, error))?;
             let candidate = plan
-                .execute_window(pixels, pixel_index_offset)
-                .map_err(|error| operation_error(step_index, operation_id, error))?;
+                .execute_window_with_cancel(pixels, pixel_index_offset, &cancelled)
+                .map_err(|error| match error {
+                    OperationExecutionError::Cancelled => EvaluationError::Cancelled {
+                        step_index,
+                        operation_id,
+                    },
+                    error => operation_error(step_index, operation_id, error),
+                })?;
             apply_reconstruction(
                 pixels,
                 &candidate,

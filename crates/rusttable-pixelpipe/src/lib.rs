@@ -43,7 +43,7 @@ pub use cache::{
 pub use cancellation::{
     CancellationDeadline, CancellationError, CancellationReason, CancellationScope,
     CancellationStage, CancellationToken, CleanupRegistration, GenerationClock,
-    GenerationClockError,
+    GenerationClockError, WorkStartedRegistration,
 };
 pub use pipeline::publication::{
     CachePublicationPermit, GpuRetirement, ProductPublicationPermit, PublicationContext,

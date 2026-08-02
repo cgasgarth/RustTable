@@ -66,3 +66,31 @@ policy = "ExplicitFused"
 [[explicit_fma]]
 path = "crates/rusttable-render/src/diagnostics/raw_overexposed.rs"
 policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/bloom/leaf.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/colorcontrast/leaf.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/colisa/mod.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/dither.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/src/operations/splittoning/mod.rs"
+policy = "ExplicitFused"
+
+[[explicit_fma]]
+path = "crates/rusttable-processing/tests/profile_gamma_leaf.rs"
+policy = "ExplicitFused"

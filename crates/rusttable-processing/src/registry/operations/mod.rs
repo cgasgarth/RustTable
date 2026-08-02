@@ -660,7 +660,7 @@ pub fn vignette_definition() -> OperationDefinition {
         &[
             "iop.vignette.params.v1-v4",
             "iop.vignette.cpu.full-image",
-            "iop.vignette.noise.counter",
+            "iop.vignette.noise.tea-stateful",
             "iop.vignette.alpha-preserve",
         ],
         false,

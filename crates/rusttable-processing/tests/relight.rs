@@ -18,14 +18,6 @@ fn lab_pixel(lightness: f32, a: f32, b: f32, alpha: f32) -> RelightPixel {
     RelightPixel::new(lightness, a, b, alpha)
 }
 
-fn darktable_lightness(lightness: f32, ev: f32, center: f32, width: f32) -> f32 {
-    let normalized = lightness / 100.0;
-    let x = -1.0 + normalized * 2.0;
-    let c = (width / 10.0) / 2.0;
-    let gaussian = (-(x - (-1.0 + center * 2.0)) * (x - (-1.0 + center * 2.0)) / (c * c)).exp();
-    100.0 * (normalized * 2.0f32.powf(ev * gaussian.clamp(0.0, 1.0))).clamp(0.0, 1.0)
-}
-
 #[test]
 fn v1_payload_defaults_presets_and_unknown_history_are_typed() {
     let defaults = RelightParametersV1::defaults();
@@ -48,33 +40,95 @@ fn v1_payload_defaults_presets_and_unknown_history_are_typed() {
 }
 
 #[test]
-fn lab_fill_light_matches_darktable_and_preserves_colored_channels() {
-    let dimensions = RasterDimensions::new(4, 1).expect("dimensions");
-    let input = vec![
-        lab_pixel(8.0, 70.0, -40.0, 0.25),
-        lab_pixel(8.0, -70.0, 60.0, 0.5),
-        lab_pixel(-10.0, 12.0, -34.0, 0.75),
-        lab_pixel(120.0, -22.0, 18.0, 1.0),
-    ];
-    let config = RelightConfig::new(1.0, 0.08, 2.0).expect("config");
-    let plan = RelightPlan::new(config, dimensions);
-    let first = plan
-        .execute_lab(&input, 1.0, || false)
-        .expect("first execution");
-    let second = plan
-        .execute_lab(&input, 1.0, || false)
-        .expect("second execution");
-    assert_eq!(first, second);
-    for (source, output) in input.iter().zip(&first) {
-        assert!(
-            (output.lightness() - darktable_lightness(source.lightness(), 1.0, 0.08, 2.0)).abs()
-                < 1e-5
+fn lab_fill_light_matches_native_bit_fixture_and_preserves_colored_channels() {
+    // Derived from relight.c:123-143 and math.h:70-73.  The expected bits are
+    // deliberately not computed by a Rust equation or a tolerance reference.
+    let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
+    let input = [lab_pixel(43.25, -13.5, 22.25, 0.75)];
+    let plan = RelightPlan::new(
+        RelightConfig::new(0.75, 0.18, 5.5).expect("config"),
+        dimensions,
+    );
+    let output = plan
+        .execute_lab(&input, 0.37, || false)
+        .expect("native fixture execution");
+
+    assert_eq!(
+        output[0].channels().map(f32::to_bits),
+        [0x422e_26ed, 0xc158_0000, 0x41b2_0000, 0x3f40_0000]
+    );
+}
+
+#[test]
+fn relight_zero_signs_validate_inputs_and_follow_native_clip() {
+    let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
+
+    for ev in [0.0_f32, -0.0_f32] {
+        let plan = RelightPlan::new(
+            RelightConfig::new(ev, 0.0, 4.0).expect("zero EV configuration"),
+            dimensions,
         );
-        assert_eq!(output.a().to_bits(), source.a().to_bits());
-        assert_eq!(output.b().to_bits(), source.b().to_bits());
-        assert_eq!(output.alpha().to_bits(), source.alpha().to_bits());
+        let negative = plan
+            .execute_lab(&[lab_pixel(-10.0, 1.0, 2.0, 0.5)], 1.0, || false)
+            .expect("finite negative lightness");
+        assert_eq!(negative[0].lightness().to_bits(), 0.0_f32.to_bits());
+        let positive = plan
+            .execute_lab(&[lab_pixel(120.0, 1.0, 2.0, 0.5)], 1.0, || false)
+            .expect("finite positive lightness");
+        assert_eq!(positive[0].lightness().to_bits(), 100.0_f32.to_bits());
+
+        let signed_zero = plan
+            .execute_lab(&[lab_pixel(-0.0, 1.0, 2.0, 0.5)], 1.0, || false)
+            .expect("signed-zero lightness");
+        assert_eq!(signed_zero[0].lightness().to_bits(), (-0.0_f32).to_bits());
+
+        for opacity in [0.0_f32, -0.0_f32] {
+            for lightness in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                assert!(matches!(
+                    plan.execute_lab(
+                        &[lab_pixel(lightness, 1.0, 2.0, 0.5)],
+                        opacity,
+                        || false,
+                    ),
+                    Err(rusttable_processing::operations::OperationExecutionError::NonFiniteResult { .. })
+                ));
+            }
+        }
     }
-    assert_eq!(first[0].lightness(), first[1].lightness());
+}
+
+#[test]
+fn relight_opacity_nonfinite_and_signed_zero_boundaries_are_explicit() {
+    let dimensions = RasterDimensions::new(1, 1).expect("dimensions");
+    let input = [lab_pixel(43.25, -13.5, 22.25, 0.75)];
+    let plan = RelightPlan::new(
+        RelightConfig::new(0.75, 0.18, 5.5).expect("config"),
+        dimensions,
+    );
+
+    for opacity in [0.0_f32, -0.0_f32] {
+        let output = plan
+            .execute_lab(&input, opacity, || false)
+            .expect("signed-zero opacity is a no-op");
+        assert_eq!(
+            output[0].channels().map(f32::to_bits),
+            [0x422d_0000, 0xc158_0000, 0x41b2_0000, 0x3f40_0000]
+        );
+    }
+
+    for opacity in [f32::NAN, f32::INFINITY] {
+        assert!(matches!(
+            plan.execute_lab(&input, opacity, || false),
+            Err(rusttable_processing::operations::OperationExecutionError::NonFiniteResult { .. })
+        ));
+    }
+
+    for lightness in [f32::NAN, f32::INFINITY] {
+        assert!(matches!(
+            plan.execute_lab(&[lab_pixel(lightness, -13.5, 22.25, 0.75)], 1.0, || false,),
+            Err(rusttable_processing::operations::OperationExecutionError::NonFiniteResult { .. })
+        ));
+    }
 }
 
 #[test]

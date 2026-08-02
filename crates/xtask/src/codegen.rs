@@ -31,13 +31,26 @@ pub(crate) fn run(root: &Path, command: CodegenCommand) -> Result {
     }
 }
 
+fn validate_architecture_provenance(
+    manifest: &rusttable_parity::OperationManifest,
+    overrides: &[rusttable_parity::OperationOverride],
+) -> Result {
+    rusttable_parity::validate_architecture_provenance(manifest, overrides)
+        .map_err(|error| error.to_string())
+}
+
 pub(crate) fn verify_committed(root: &Path) -> Result {
     let path = root.join("architecture/darktable-operations.toml");
     let source =
         fs::read_to_string(&path).map_err(|error| format!("read {}: {error}", path.display()))?;
     let manifest =
         rusttable_parity::parse_operation_manifest(&source).map_err(|error| error.to_string())?;
-    rusttable_parity::validate_operation_manifest(&manifest).map_err(|error| error.to_string())?;
+    let overrides_path = root.join("architecture/operation-overrides.toml");
+    let overrides_source = fs::read_to_string(&overrides_path)
+        .map_err(|error| format!("read {}: {error}", overrides_path.display()))?;
+    let overrides = rusttable_parity::parse_operation_overrides(&overrides_source)
+        .map_err(|error| error.to_string())?;
+    validate_architecture_provenance(&manifest, &overrides)?;
     if manifest.reference.source_commit != PINNED_DARKTABLE_COMMIT {
         return Err(format!(
             "operation manifest uses {}, expected {PINNED_DARKTABLE_COMMIT}",
@@ -65,6 +78,11 @@ fn operations(root: &Path, arguments: &OperationsArgs) -> Result {
     }
     let manifest = rusttable_parity::scan_operations(&source, &overrides)
         .map_err(|error| error.to_string())?;
+    let overrides_source = fs::read_to_string(&overrides)
+        .map_err(|error| format!("read {}: {error}", overrides.display()))?;
+    let override_entries = rusttable_parity::parse_operation_overrides(&overrides_source)
+        .map_err(|error| error.to_string())?;
+    validate_architecture_provenance(&manifest, &override_entries)?;
     let rendered = rusttable_parity::render_operation_manifest(&manifest)
         .map_err(|error| error.to_string())?;
     if arguments.check {
@@ -111,5 +129,49 @@ fn absolute(root: &Path, path: &Path) -> PathBuf {
         path.to_path_buf()
     } else {
         root.join(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn canonical_architecture() -> (
+        rusttable_parity::OperationManifest,
+        Vec<rusttable_parity::OperationOverride>,
+    ) {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let manifest_source =
+            fs::read_to_string(root.join("architecture/darktable-operations.toml"))
+                .expect("read operation manifest");
+        let manifest = rusttable_parity::parse_operation_manifest(&manifest_source)
+            .expect("parse operation manifest");
+        let overrides_source =
+            fs::read_to_string(root.join("architecture/operation-overrides.toml"))
+                .expect("read operation overrides");
+        let overrides = rusttable_parity::parse_operation_overrides(&overrides_source)
+            .expect("parse operation overrides");
+        (manifest, overrides)
+    }
+
+    #[test]
+    fn source_validation_rejects_coordinated_manifest_and_override_omission() {
+        let (mut manifest, mut overrides) = canonical_architecture();
+        let omitted_name = manifest
+            .operations
+            .first()
+            .expect("canonical operation")
+            .name
+            .clone();
+        manifest.operations.remove(0);
+        overrides.retain(|entry| entry.name != omitted_name);
+
+        let error = validate_architecture_provenance(&manifest, &overrides)
+            .expect_err("coordinated omission must fail canonical validation");
+        assert!(
+            error.contains("operation_names"),
+            "unexpected error: {error}"
+        );
+        assert!(error.contains(&omitted_name), "unexpected error: {error}");
     }
 }

@@ -143,6 +143,7 @@ impl LabBoundaryError {
                 | Self::ColorTransfer(OperationExecutionError::Cancelled)
                 | Self::ColorReconstruction(OperationExecutionError::Cancelled)
                 | Self::Shadhi(OperationExecutionError::Cancelled)
+                | Self::Relight(OperationExecutionError::Cancelled)
         )
     }
 }
@@ -643,12 +644,13 @@ fn check_bilateral_cancellation<E, C: Fn() -> bool>(
     }
 }
 
-pub(crate) fn apply_relight(
+pub(crate) fn apply_relight_with_cancellation<C: Fn() -> bool>(
     config: RelightConfig,
     pixels: &[LinearRgb],
     dimensions: RasterDimensions,
     source_encoding: ColorEncoding,
     opacity: f32,
+    cancelled: C,
 ) -> Result<Vec<LinearRgb>, LabBoundaryError> {
     let to_lab = plan(source_encoding, ColorEncoding::LabD50)?;
     let from_lab = plan(ColorEncoding::LabD50, source_encoding)?;
@@ -660,7 +662,7 @@ pub(crate) fn apply_relight(
             let lab = to_lab
                 .apply_rgb(
                     [value.red().get(), value.green().get(), value.blue().get()],
-                    || false,
+                    &cancelled,
                 )
                 .map_err(LabBoundaryError::Transform)?;
             if lab.iter().any(|channel| !channel.is_finite()) {
@@ -674,7 +676,7 @@ pub(crate) fn apply_relight(
         .collect::<Result<Vec<_>, LabBoundaryError>>()?;
     let plan = RelightPlan::new(config, dimensions);
     let lab_output = plan
-        .execute_lab(&lab_pixels, opacity, || false)
+        .execute_lab(&lab_pixels, opacity, &cancelled)
         .map_err(LabBoundaryError::Relight)?;
     lab_output
         .into_iter()
@@ -682,7 +684,7 @@ pub(crate) fn apply_relight(
         .map(|(pixel, value)| {
             let channels = value.channels();
             let rgb = from_lab
-                .apply_rgb([channels[0], channels[1], channels[2]], || false)
+                .apply_rgb([channels[0], channels[1], channels[2]], &cancelled)
                 .map_err(LabBoundaryError::Transform)?;
             let red = finite(rgb[0], pixel, RgbChannel::Red)?;
             let green = finite(rgb[1], pixel, RgbChannel::Green)?;

@@ -1,0 +1,70 @@
+schema = "rusttable.splittoning-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "splittoning"
+rust_id = "rusttable.splittoning"
+production_registration = "deferred; this operation-local CPU leaf is tested through a direct path and is not registered"
+
+[[responsibility]]
+id = "registration-metadata-defaults"
+upstream_path = "src/iop/CMakeLists.txt; src/iop/splittoning.c"
+upstream_symbols = ["add_iop(splittoning)", "DT_MODULE_INTROSPECTION(1)", "flags", "default_group", "default_colorspace", "dt_iop_splittoning_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs"
+status = "bounded-evidence"
+notes = "The leaf records native v1, disabled-by-default state, RGB colorspace, tile/style/blend flags, effect/grading groups, and all six source defaults/ranges."
+
+[[responsibility]]
+id = "native-v1-codec-and-fixture"
+upstream_path = "src/iop/splittoning.c"
+upstream_symbols = ["dt_iop_splittoning_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs; crates/rusttable-processing/src/operations/splittoning/fixtures/default_v1.hex; crates/rusttable-processing/src/operations/splittoning/fixtures/authentic_platinotype_v1.hex"
+status = "bounded-leaf"
+notes = "The codec preserves six contiguous little-endian f32 fields in source order and 24 bytes. The fixtures cover the exact native default and the authentic platinotype preset, including executable balance=100.0f. Versions other than native v1 remain byte-exact opaque rows and cannot compile; no fictitious v2 is authored."
+
+[[responsibility]]
+id = "ui-bounds-versus-history-admission"
+upstream_path = "src/iop/splittoning.c"
+upstream_symbols = ["dt_iop_splittoning_params_t balance annotations", "init_presets authentic platinotype"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs; crates/rusttable-processing/tests/splittoning_leaf.rs"
+status = "bounded-leaf"
+notes = "The source UI annotation displays balance over 0..=1, while the executable finite history/preset path admits 0..=100 so authentic platinotype balance=100.0f reaches the all-shadow branch. Non-finite and out-of-range history values remain rejected; this does not widen the UI range."
+
+[[responsibility]]
+id = "order-evidence"
+upstream_path = "src/common/iop_order.c"
+upstream_symbols = ["legacy_order", "v50_order", "v50_jpg_order"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs"
+status = "bounded-evidence"
+notes = "The leaf records legacy order 62, v5 RAW/JPEG order 67, and generated inventory order 99 without editing shared order tables."
+
+[[responsibility]]
+id = "hsl-arithmetic"
+upstream_path = "src/common/colorspaces.h"
+upstream_symbols = ["rgb2hsl", "hue2rgb", "hsl2rgb"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs"
+status = "bounded-leaf"
+notes = "The helper port preserves source comparison order, fmax floors, tie branches, unsuffixed-literal f64 promotion followed by f32 narrowing, and explicit fp-contract mul_add sites."
+
+[[responsibility]]
+id = "splittoning-cpu"
+upstream_path = "src/iop/splittoning.c"
+upstream_symbols = ["process", "commit_params"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs"
+status = "bounded-leaf"
+notes = "Compression retains the two native double divisions. Shadow/highlight branches, CLIP comparison order, source/mix weights, and the native fourth-lane fade toward hsl2rgb's zero lane are preserved; mid-tones copy all four lanes."
+
+[[responsibility]]
+id = "checked-execution-publication"
+upstream_path = "src/iop/splittoning.c"
+upstream_symbols = ["dt_iop_have_required_input_format", "process", "init_pipe", "cleanup_pipe"]
+rust_path = "crates/rusttable-processing/src/operations/splittoning/mod.rs"
+status = "bounded-leaf"
+notes = "The leaf requires RGB f32x4, validates finite parameters/input/output and checked shape/length, budgets and fallibly allocates output, polls cancellation at bounded pixel intervals, and never swaps partial output into the caller destination."
+
+[[responsibility]]
+id = "shared-integration"
+upstream_path = "src/iop/splittoning.c; data/kernels/extended.cl"
+upstream_symbols = ["process_cl", "init_presets", "color_picker_apply", "gui_init", "IOP_FLAGS_SUPPORTS_BLENDING"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs; crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe; crates/rusttable-import; crates/rusttable-ui"
+status = "deferred"
+notes = "Registry/descriptor aggregation, history import, shared masks/blending, pixelpipe routing and external alpha ownership, GPU qualification, GTK/color-picker UI, and preset installation remain absent. No image-dependent CPU analysis is required by the point leaf."

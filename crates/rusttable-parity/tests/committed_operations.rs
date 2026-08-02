@@ -2,10 +2,55 @@ use std::fs;
 use std::path::Path;
 
 use rusttable_parity::{
-    OperationOverride, canonical_layout_hash, parse_operation_manifest, validate_operation_manifest,
+    Operation, OperationManifest, OperationOverride, ScanError, canonical_layout_hash,
+    parse_operation_manifest, parse_operation_overrides, validate_architecture_provenance,
+    validate_operation_manifest,
 };
 
 const PINNED_COMMIT: &str = "cfe57f3bbf5269bfacf31e832267279caa6938ad";
+const OPAQUE_DEFERRED: &[&str] = &[
+    "atrous",
+    "basecurve",
+    "bilat",
+    "bilateral",
+    "blurs",
+    "cacorrect",
+    "cacorrectrgb",
+    "channelmixerrgb",
+    "colorbalance",
+    "colorbalancergb",
+    "colorchecker",
+    "colorequal",
+    "colorharmonizer",
+    "colorize",
+    "demosaic",
+    "denoiseprofile",
+    "diffuse",
+    "equalizer",
+    "filmic",
+    "filmicrgb",
+    "gamma",
+    "globaltonemap",
+    "hazeremoval",
+    "highpass",
+    "hotpixels",
+    "lowlight",
+    "lowpass",
+    "lut3d",
+    "monochrome",
+    "negadoctor",
+    "nlmeans",
+    "overexposed",
+    "rawdenoise",
+    "rawoverexposed",
+    "rawprepare",
+    "rgbcurve",
+    "sigmoid",
+    "tonecurve",
+    "toneequal",
+    "tonemap",
+    "zonesystem",
+];
 
 #[derive(serde::Deserialize)]
 struct OperationOverridesFile {
@@ -74,6 +119,233 @@ fn committed_operation_manifest_is_valid_and_pinned() {
     validate_operation_manifest(&manifest).expect("validate committed operation manifest");
     assert_eq!(manifest.reference.source_commit, PINNED_COMMIT);
     assert!(!manifest.operations.is_empty());
+}
+
+fn canonical_architecture() -> (OperationManifest, Vec<OperationOverride>) {
+    let manifest_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/darktable-operations.toml");
+    let manifest_source = fs::read_to_string(manifest_path).expect("read operation manifest");
+    let manifest = parse_operation_manifest(&manifest_source).expect("parse operation manifest");
+    let overrides_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../architecture/operation-overrides.toml");
+    let overrides_source = fs::read_to_string(overrides_path).expect("read operation overrides");
+    let overrides =
+        parse_operation_overrides(&overrides_source).expect("parse operation overrides");
+    (manifest, overrides)
+}
+
+fn recompute_abi_layout_hashes(operation: &mut Operation) {
+    for layout in &mut operation.abi_layouts {
+        layout.layout_hash = canonical_layout_hash(layout);
+    }
+    for version in &mut operation.parameter_versions {
+        for layout in &mut version.abi_layouts {
+            layout.layout_hash = canonical_layout_hash(layout);
+        }
+    }
+}
+
+fn trusted_failure(result: Result<(), ScanError>, expected_operation: &str, expected_field: &str) {
+    match result {
+        Err(ScanError::TrustedProvenance {
+            operation, field, ..
+        }) => {
+            assert_eq!(operation, expected_operation);
+            assert!(field.contains(expected_field), "unexpected field: {field}");
+        }
+        other => panic!("expected trusted provenance failure, got {other:?}"),
+    }
+}
+
+#[test]
+fn architecture_override_set_rejects_duplicate_unknown_and_missing_names() {
+    let (manifest, overrides) = canonical_architecture();
+
+    let mut duplicate = overrides.clone();
+    duplicate.push(overrides[0].clone());
+    match validate_architecture_provenance(&manifest, &duplicate) {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("duplicate override name"));
+        }
+        other => panic!("expected duplicate override error, got {other:?}"),
+    }
+
+    let mut unknown = overrides.clone();
+    unknown[0].name = "not-in-architecture".to_owned();
+    match validate_architecture_provenance(&manifest, &unknown) {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("not-in-architecture"));
+            assert!(message.contains("absent from the architecture manifest"));
+        }
+        other => panic!("expected unknown override error, got {other:?}"),
+    }
+
+    let missing_name = overrides[0].name.clone();
+    let missing = overrides
+        .into_iter()
+        .filter(|entry| entry.name != missing_name)
+        .collect::<Vec<_>>();
+    match validate_architecture_provenance(&manifest, &missing) {
+        Err(ScanError::InvalidOverrides { message }) => {
+            assert!(message.contains("manifest/override name mismatch"));
+            assert!(message.contains(&missing_name));
+        }
+        other => panic!("expected missing override error, got {other:?}"),
+    }
+}
+
+#[test]
+fn coordinated_manifest_and_override_omission_is_rejected() {
+    let (mut manifest, mut overrides) = canonical_architecture();
+    let omitted_name = manifest
+        .operations
+        .first()
+        .expect("canonical operation")
+        .name
+        .clone();
+    manifest
+        .operations
+        .retain(|operation| operation.name != omitted_name);
+    overrides.retain(|entry| entry.name != omitted_name);
+
+    match validate_architecture_provenance(&manifest, &overrides) {
+        Err(ScanError::TrustedProvenance {
+            operation, field, ..
+        }) => {
+            assert_eq!(operation, "manifest");
+            assert_eq!(field, "operation_names");
+        }
+        other => panic!("expected coordinated omission error, got {other:?}"),
+    }
+}
+
+#[test]
+fn coordinated_temperature_substitution_is_rejected_after_local_hash_recomputation() {
+    let (mut manifest, mut overrides) = canonical_architecture();
+    let temperature = manifest
+        .operations
+        .iter()
+        .find(|operation| operation.name == "temperature")
+        .expect("Temperature manifest record")
+        .clone();
+    let bloom = manifest
+        .operations
+        .iter_mut()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom manifest record");
+    bloom.module_version = temperature.module_version;
+    bloom.parameter_size = temperature.parameter_size;
+    bloom
+        .parameter_layout_hash
+        .clone_from(&temperature.parameter_layout_hash);
+    bloom.parameter_versions = temperature.parameter_versions;
+    bloom.abi_layouts = temperature.abi_layouts;
+    bloom.codec = temperature.codec;
+    recompute_abi_layout_hashes(bloom);
+
+    let temperature_override = overrides
+        .iter()
+        .find(|operation| operation.name == "temperature")
+        .expect("Temperature override")
+        .clone();
+    let temperature_version = temperature_override
+        .parameter_versions
+        .as_ref()
+        .and_then(|versions| versions.last())
+        .expect("Temperature v4 override")
+        .clone();
+    let bloom_override = overrides
+        .iter_mut()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom override");
+    bloom_override.module_version = temperature_override.module_version;
+    bloom_override.parameter_size = temperature_override.parameter_size;
+    bloom_override
+        .parameter_layout_hash
+        .clone_from(&temperature_override.parameter_layout_hash);
+    bloom_override.parameter_decoder = Some(temperature_version.decoder.clone());
+    bloom_override.parameter_versions = Some(vec![temperature_version]);
+    for version in bloom_override
+        .parameter_versions
+        .as_mut()
+        .expect("mutated Bloom versions")
+    {
+        for layout in &mut version.abi_layouts {
+            layout.layout_hash = canonical_layout_hash(layout);
+        }
+    }
+
+    trusted_failure(
+        validate_architecture_provenance(&manifest, &overrides),
+        "bloom",
+        "module_version",
+    );
+}
+
+#[test]
+fn missing_override_source_commit_is_a_typed_provenance_failure() {
+    let (manifest, mut overrides) = canonical_architecture();
+    let bloom = overrides
+        .iter_mut()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom override");
+    bloom
+        .evidence
+        .as_mut()
+        .expect("Bloom evidence")
+        .first_mut()
+        .expect("Bloom registration evidence")
+        .evidence
+        .source_commit
+        .clear();
+    trusted_failure(
+        validate_architecture_provenance(&manifest, &overrides),
+        "bloom",
+        "source_commit",
+    );
+}
+
+#[test]
+fn per_version_decoder_changes_are_a_typed_provenance_failure() {
+    let (manifest, mut overrides) = canonical_architecture();
+    let bloom = overrides
+        .iter_mut()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom override");
+    bloom
+        .parameter_versions
+        .as_mut()
+        .expect("Bloom versions")
+        .first_mut()
+        .expect("Bloom v1")
+        .decoder = "rusttable.temperature.decode.v4".to_owned();
+    trusted_failure(
+        validate_architecture_provenance(&manifest, &overrides),
+        "bloom",
+        "parameter_versions[0].decoder",
+    );
+}
+
+#[test]
+fn source_map_changes_are_a_typed_provenance_failure() {
+    let (manifest, mut overrides) = canonical_architecture();
+    let bloom = overrides
+        .iter_mut()
+        .find(|operation| operation.name == "bloom")
+        .expect("Bloom override");
+    bloom
+        .evidence
+        .as_mut()
+        .expect("Bloom evidence")
+        .first_mut()
+        .expect("Bloom registration evidence")
+        .evidence
+        .source_path = Some("src/iop/temperature.c".to_owned());
+    trusted_failure(
+        validate_architecture_provenance(&manifest, &overrides),
+        "bloom",
+        "source_map_evidence_identity",
+    );
 }
 
 #[test]
@@ -1061,5 +1333,172 @@ fn colorzones_capability_closure_includes_cpu_and_gpu() {
         assert_eq!(entry["status"], "Implemented");
         assert_eq!(entry["cpu_supported"], true);
         assert_eq!(entry["gpu_supported"], true);
+    }
+}
+
+#[test]
+fn architecture_trust_accounting_keeps_aliases_and_opaque_records_explicit() {
+    let (manifest, overrides) = canonical_architecture();
+    validate_architecture_provenance(&manifest, &overrides)
+        .expect("canonical architecture provenance");
+
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../architecture/operation-capabilities.json");
+    let source = fs::read_to_string(path).expect("read operation capability closure");
+    let artifact: serde_json::Value =
+        serde_json::from_str(&source).expect("parse operation capability closure");
+    let entries = artifact["entries"]
+        .as_array()
+        .expect("operation capability entries");
+
+    assert_eq!(
+        rusttable_parity::generated_compatibility_name("lens"),
+        "lenscorrection"
+    );
+    assert_eq!(
+        rusttable_parity::generated_compatibility_name("linear_offset"),
+        "linear-offset"
+    );
+    assert_eq!(
+        rusttable_parity::generated_compatibility_name("rgb_gain"),
+        "rgbgain"
+    );
+    let mut generated_aliases =
+        ["lens", "linear_offset", "rgb_gain"].map(rusttable_parity::generated_compatibility_name);
+    generated_aliases.sort_unstable();
+    assert_eq!(
+        generated_aliases,
+        ["lenscorrection", "linear-offset", "rgbgain"]
+    );
+    assert!(rusttable_parity::is_independently_trusted_manifest_name(
+        "linear_offset"
+    ));
+    assert!(rusttable_parity::is_independently_trusted_manifest_name(
+        "rgb_gain"
+    ));
+    let lens = entries
+        .iter()
+        .find(|entry| entry["identity"] == "darktable:lens:src/iop/lens.cc:v10")
+        .expect("manifest lens capability entry");
+    assert_eq!(lens["compatibility_name"], "lens");
+    assert_eq!(lens["rust_id"], "rusttable.lenscorrection");
+    assert_eq!(lens["status"], "Implemented");
+    let lens_registry = entries
+        .iter()
+        .find(|entry| entry["identity"] == "rusttable.lenscorrection")
+        .expect("generated lens compatibility entry");
+    assert_eq!(lens_registry["compatibility_name"], "lenscorrection");
+    assert_eq!(lens_registry["status"], "Implemented");
+
+    let linear_offset = entries
+        .iter()
+        .find(|entry| entry["identity"] == "rusttable.linear_offset")
+        .expect("generated linear-offset compatibility entry");
+    assert_eq!(linear_offset["compatibility_name"], "linear-offset");
+    assert_eq!(linear_offset["status"], "Implemented");
+    let rgb_gain = entries
+        .iter()
+        .find(|entry| entry["identity"] == "rusttable.rgb_gain")
+        .expect("generated RGB gain compatibility entry");
+    assert_eq!(rgb_gain["compatibility_name"], "rgbgain");
+    assert_eq!(rgb_gain["status"], "Implemented");
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry["compatibility_name"] != "linear_offset")
+    );
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry["compatibility_name"] != "rgb_gain")
+    );
+
+    let manifest_entries = entries
+        .iter()
+        .filter(|entry| {
+            entry["identity"]
+                .as_str()
+                .is_some_and(|identity| identity.starts_with("darktable:"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(manifest_entries.len(), 93);
+    for name in OPAQUE_DEFERRED {
+        let matching = manifest_entries
+            .iter()
+            .filter(|entry| entry["compatibility_name"] == *name)
+            .collect::<Vec<_>>();
+        assert_eq!(matching.len(), 1, "manifest record accounting for {name}");
+        let entry = matching[0];
+        assert_eq!(entry["status"], "ReferenceOnlyNonProduct", "{name}");
+        assert!(
+            entry["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("opaque/deferred"))
+        );
+    }
+    let trusted_manifest_count = manifest_entries
+        .iter()
+        .filter(|entry| {
+            entry["compatibility_name"]
+                .as_str()
+                .is_some_and(rusttable_parity::is_independently_trusted_manifest_name)
+        })
+        .count();
+    assert_eq!(trusted_manifest_count, 52);
+    let registry_only_count = entries
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry["compatibility_name"].as_str(),
+                Some("linear-offset" | "rgbgain")
+            )
+        })
+        .count();
+    assert_eq!(registry_only_count, 2);
+    assert_eq!(trusted_manifest_count + registry_only_count, 54);
+    assert_eq!(manifest_entries.len() - trusted_manifest_count, 41);
+    // This 39 is a cross-domain summary, not a partition of native manifest rows: the two
+    // registry-only trusted contracts do not replace any of the 41 ordinary manifest records.
+    assert_eq!(
+        manifest_entries.len() - trusted_manifest_count - registry_only_count,
+        39
+    );
+    let accounting = manifest_entries
+        .iter()
+        .map(|entry| {
+            (
+                entry["compatibility_name"]
+                    .as_str()
+                    .expect("manifest compatibility name")
+                    .to_owned(),
+                entry["status"]
+                    .as_str()
+                    .expect("manifest status")
+                    .to_owned(),
+            )
+        })
+        .collect::<Vec<_>>();
+    rusttable_parity::validate_manifest_capability_accounting(&accounting)
+        .expect("manifest capability accounting");
+
+    for entry in manifest_entries {
+        let name = entry["compatibility_name"]
+            .as_str()
+            .expect("manifest compatibility name");
+        let status = entry["status"].as_str().expect("manifest status");
+        if rusttable_parity::is_independently_trusted_manifest_name(name) {
+            assert!(
+                matches!(
+                    status,
+                    "Implemented" | "DeprecatedImplemented" | "IntentionallyUnsupportedBlocking"
+                ),
+                "trusted manifest record lost its explicit product status: {name} ({status})"
+            );
+        } else {
+            assert!(
+                matches!(status, "ReferenceOnlyNonProduct" | "Opaque" | "Deferred"),
+                "untrusted manifest record acquired a product status: {name} ({status})"
+            );
+        }
     }
 }

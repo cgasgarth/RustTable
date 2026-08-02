@@ -9471,8 +9471,8 @@ line_end = 135
 
 [[operation.parameter_versions]]
 version = 1
-byte_size = 4
-layout_hash = "2c363eb22ca0cdd6eea1cceb70aac9b969b4228c7be693b5e6ac534d95524f9a"
+byte_size = 8
+layout_hash = "63d81ca88d8255603f54e7e660198dc3f59d43d8f94d0a3564005c4f58bf4f0c"
 decoder = "opaque"
 opaque_blocking = true
 fixture_id = "operation.profile_gamma.params.v1"

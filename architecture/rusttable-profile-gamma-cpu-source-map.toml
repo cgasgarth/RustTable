@@ -1,0 +1,70 @@
+schema = "rusttable.profile-gamma-cpu-source-map.v1"
+upstream_repository = "darktable-org/darktable"
+upstream_commit = "d8628e8103989bc4ef06dbfb9fd01f3809f884bf"
+compatibility_id = "profile_gamma"
+rust_id = "rusttable.profile_gamma"
+production_registration = "deferred; this operation-local CPU leaf is tested through a direct path and is not registered"
+
+[[responsibility]]
+id = "registration-metadata-defaults"
+upstream_path = "src/iop/CMakeLists.txt; src/iop/profile_gamma.c"
+upstream_symbols = ["add_iop(profile_gamma)", "DT_MODULE_INTROSPECTION(2)", "flags", "default_group", "default_colorspace", "dt_iop_profilegamma_params_t"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs"
+status = "bounded-evidence"
+notes = "The leaf records native version 2, disabled-by-default state, RGB colorspace, one-instance/tile/style/blend flags, groups, parameter defaults, and exact declared ranges without exposing a generic production editor."
+
+[[responsibility]]
+id = "native-v1-v2-codec"
+upstream_path = "src/iop/profile_gamma.c"
+upstream_symbols = ["dt_iop_profilegamma_params_v1_t", "dt_iop_profilegamma_params_v2_t", "legacy_params"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs"
+status = "bounded-leaf"
+notes = "v1 is the source-declared pair of contiguous floats (8 little-endian bytes) and is represented by the generated raw codec; v2 is the 4-byte enum followed by six floats (28 bytes). Unknown versions remain byte-exact opaque rows and cannot compile."
+
+[[responsibility]]
+id = "native-default-fixtures"
+upstream_path = "src/iop/profile_gamma.c"
+upstream_symbols = ["dt_iop_profilegamma_params_t field defaults"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/fixtures/default_v1.hex; crates/rusttable-processing/src/operations/profile_gamma/fixtures/default_v2.hex"
+status = "bounded-leaf"
+notes = "Fixtures are the exact little-endian native default field bytes: v1 linear/gamma and v2 mode plus all six floats."
+
+[[responsibility]]
+id = "order-evidence"
+upstream_path = "src/common/iop_order.c"
+upstream_symbols = ["legacy_order", "v50_order", "v50_jpg_order"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs"
+status = "bounded-evidence"
+notes = "The leaf records legacy 25, v5 RAW 26, v5 JPEG 28, and generated inventory order 103; no shared ordering table is edited."
+
+[[responsibility]]
+id = "gamma-lut-and-extrapolation"
+upstream_path = "src/iop/profile_gamma.c; src/develop/imageop_math.h"
+upstream_symbols = ["commit_params", "dt_iop_estimate_exp", "dt_iop_eval_exp"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs; crates/rusttable-processing/tests/profile_gamma_leaf.rs"
+status = "bounded-leaf"
+notes = "The 65536-entry LUT retains native branches and explicit C operand boundaries: in the linear<1 branch, unsuffixed 1.0 promotes the surrounding g/a expressions to double while gamma*linear and linear*(g-1) remain f32 subexpressions before assignment narrowing. The focused test has a non-default LUT golden for the resulting bits, plus explicit f32 powf and mul_add boundaries. Exponential coefficients retain source accumulation order."
+
+[[responsibility]]
+id = "log-and-gamma-cpu"
+upstream_path = "src/iop/profile_gamma.c; src/common/math.h"
+upstream_symbols = ["process", "fastlog2"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs"
+status = "bounded-leaf"
+notes = "The log path retains the 2^-16 floor and native fastlog2 bit approximation; gamma uses bounded LUT indices and exponential extrapolation. Native CPU gamma leaves lane four unwritten outside mask display, which safe Rust cannot publish; the leaf preserves lane four following native OpenCL and mask-display behavior and records final pixelpipe alpha/spare ownership as deferred."
+
+[[responsibility]]
+id = "checked-execution-publication"
+upstream_path = "src/iop/profile_gamma.c"
+upstream_symbols = ["process", "init_pipe", "cleanup_pipe"]
+rust_path = "crates/rusttable-processing/src/operations/profile_gamma/mod.rs"
+status = "bounded-leaf"
+notes = "Known RGB f32 formats, checked dimensions and lengths, finite parameters/input/output, explicit memory budgets, try_reserve_exact allocation, bounded cancellation polling, and candidate-before-swap publication fail without exposing partial output."
+
+[[responsibility]]
+id = "shared-integration-and-image-dependent-work"
+upstream_path = "src/iop/profile_gamma.c; data/kernels/basic.cl"
+upstream_symbols = ["process_cl", "apply_auto_grey", "apply_auto_black", "apply_auto_dynamic_range", "apply_autotune", "gui_init", "init_presets"]
+rust_path = "crates/rusttable-processing/src/operations/mod.rs; crates/rusttable-processing/src/registry; crates/rusttable-pixelpipe; crates/rusttable-import; crates/rusttable-ui"
+status = "deferred"
+notes = "Registry/descriptor aggregation, history materialization, shared masks/blending, pixelpipe routing, GPU kernels and qualification, GTK controls, presets, and image-picker analysis are intentionally absent. The leaf does not claim production routing."
